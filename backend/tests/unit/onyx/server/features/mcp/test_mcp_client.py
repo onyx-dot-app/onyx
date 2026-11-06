@@ -222,3 +222,48 @@ def test_media_notice_is_only_a_fallback(
     assert actual == expected
     if readable not in ("none", "empty_text"):
         assert json.loads(actual) == payload
+
+
+def test_call_tool_seeds_output_schema_and_avoids_list_tools() -> None:
+    session = AsyncMock(spec=ClientSession)
+    session.call_tool.return_value = CallToolResult(content=[])
+
+    asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
+
+    assert session._tool_output_schemas["lookup"] is None
+    session.initialize.assert_awaited_once()
+    session.call_tool.assert_awaited_once_with("lookup", {"id": 1})
+
+
+def test_call_tool_seeds_custom_output_schema() -> None:
+    session = AsyncMock(spec=ClientSession)
+    session.call_tool.return_value = CallToolResult(content=[])
+    schema = {"type": "object", "properties": {"success": {"type": "boolean"}}}
+
+    asyncio.run(
+        client._call_mcp_tool("lookup", {"id": 1}, output_schema=schema)(session)
+    )
+
+    assert session._tool_output_schemas["lookup"] == schema
+
+
+def test_call_tool_on_real_client_session_does_not_fetch_tools_list() -> None:
+    from unittest.mock import MagicMock
+
+    from mcp import types
+
+    session = ClientSession(MagicMock(), MagicMock())
+    session.initialize = AsyncMock(
+        return_value=types.InitializeResult(
+            protocolVersion="2024-11-05",
+            capabilities=types.ServerCapabilities(),
+            serverInfo=types.Implementation(name="test", version="1.0.0"),
+        )
+    )
+    session.send_request = AsyncMock(return_value=types.CallToolResult(content=[]))
+    session.list_tools = AsyncMock()
+
+    result = asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
+
+    assert isinstance(result, types.CallToolResult)
+    assert not session.list_tools.called

@@ -241,6 +241,11 @@ class MCPTool(Tool):
                         None,
                     )
 
+            output_schema = (
+                self._tool_definition.get("outputSchema")
+                if isinstance(self._tool_definition, dict)
+                else None
+            )
             tool_result = call_mcp_tool(
                 self.mcp_server.server_url,
                 self._mcp_tool_name,
@@ -249,6 +254,7 @@ class MCPTool(Tool):
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
                 auth=auth,
                 cancellation=invocation.cancellation,
+                output_schema=output_schema,
             )
 
             if tool_result.isError:
