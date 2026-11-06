@@ -7824,12 +7824,6 @@
             "description": "Select models to make available for this provider.",
             "title": "Models"
           },
-          "foldButton": {
-            "label": "Fold Models"
-          },
-          "moreButton": {
-            "label": "More Models"
-          },
           "refetch": {
             "label": "Refresh models",
             "errorToast": "Failed to fetch models"
@@ -7837,7 +7831,6 @@
           "row": {
             "defaultLabel": "Default Model",
             "decisionTag": {
-              "label": "Decision",
               "decisionOnly": "Decision model. Not available in the chat model picker.",
               "chatAndDecision": "Supports both chat and decision tasks."
             },
@@ -7846,9 +7839,6 @@
             },
             "setDefaultButton": {
               "label": "Set as Default"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -14352,6 +14342,10 @@
       },
       "labels": {
         "default": "Default"
+      },
+      "modelTypes": {
+        "decision": "Decision",
+        "vision": "Vision"
       }
     }
   },

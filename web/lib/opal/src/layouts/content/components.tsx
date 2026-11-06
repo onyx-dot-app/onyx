@@ -44,6 +44,9 @@ type ContentSuffix = "optional" | (string & {});
 /** A badge beside the title, with an optional hover tooltip. */
 type ContentBadge = BadgeProps;
 
+/** One badge, or several in order, beside the title. */
+type ContentBadges = ContentBadge | ContentBadge[];
+
 /** Starts a title edit from a control outside the content. */
 interface ContentEditHandle {
   startEditing: () => void;
@@ -180,8 +183,8 @@ type ContentFontProps =
       /** A status icon beside the title. */
       auxIcon?: ContentAuxIcon;
 
-      /** A badge beside the title. */
-      badge?: ContentBadge;
+      /** One badge, or a list of badges, beside the title. */
+      badge?: ContentBadges;
 
       orientation?: ContentOrientation;
     } & NoMoreIcons)
@@ -416,6 +419,7 @@ function Content({
   }
 
   const hasDescription = !!description && !!toPlainString(description);
+  const badges = badge === undefined ? [] : [badge].flat();
   const hasIconRow = !!(icon || MoreIcon1 || moreIcon2);
 
   return (
@@ -531,9 +535,11 @@ function Content({
                 );
               })()}
 
-            {badge && (
+            {badges.length > 0 && (
               <span className="opal-content-badge">
-                <Badge {...badge} />
+                {badges.map((b, i) => (
+                  <Badge key={i} {...b} />
+                ))}
               </span>
             )}
 
@@ -613,6 +619,7 @@ export {
   type ContentAuxIcon,
   type ContentSuffix,
   type ContentBadge,
+  type ContentBadges,
   type ContentEditHandle,
   type ContentDescriptionProps,
 };

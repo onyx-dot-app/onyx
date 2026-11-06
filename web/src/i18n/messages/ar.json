@@ -7824,12 +7824,6 @@
             "description": "اختر النماذج المراد إتاحتها لهذا الموفر.",
             "title": "النماذج"
           },
-          "foldButton": {
-            "label": "طي النماذج"
-          },
-          "moreButton": {
-            "label": "المزيد من النماذج"
-          },
           "refetch": {
             "label": "تحديث النماذج",
             "errorToast": "فشل جلب النماذج"
@@ -7837,7 +7831,6 @@
           "row": {
             "defaultLabel": "النموذج الافتراضي",
             "decisionTag": {
-              "label": "قرار",
               "decisionOnly": "نموذج لاتخاذ القرارات. غير متاح في قائمة نماذج الدردشة.",
               "chatAndDecision": "يدعم مهام الدردشة واتخاذ القرارات."
             },
@@ -7846,9 +7839,6 @@
             },
             "setDefaultButton": {
               "label": "تعيين كافتراضي"
-            },
-            "visionMarker": {
-              "title": "رؤية"
             }
           },
           "selectAllButton": {
@@ -14352,6 +14342,10 @@
       },
       "labels": {
         "default": "افتراضي"
+      },
+      "modelTypes": {
+        "decision": "قرار",
+        "vision": "رؤية"
       }
     }
   },

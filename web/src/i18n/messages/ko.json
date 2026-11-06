@@ -7824,12 +7824,6 @@
             "description": "이 제공자에서 사용할 모델을 선택하세요.",
             "title": "모델"
           },
-          "foldButton": {
-            "label": "모델 접기"
-          },
-          "moreButton": {
-            "label": "모델 더 보기"
-          },
           "refetch": {
             "label": "모델 새로고침",
             "errorToast": "모델을 가져오지 못했습니다"
@@ -7837,7 +7831,6 @@
           "row": {
             "defaultLabel": "기본 모델",
             "decisionTag": {
-              "label": "판단",
               "decisionOnly": "판단 모델입니다. 채팅 모델 선택기에는 표시되지 않습니다.",
               "chatAndDecision": "채팅과 판단 작업을 모두 지원합니다."
             },
@@ -7846,9 +7839,6 @@
             },
             "setDefaultButton": {
               "label": "기본으로 설정"
-            },
-            "visionMarker": {
-              "title": "비전"
             }
           },
           "selectAllButton": {
@@ -14352,6 +14342,10 @@
       },
       "labels": {
         "default": "기본"
+      },
+      "modelTypes": {
+        "decision": "판단",
+        "vision": "비전"
       }
     }
   },
