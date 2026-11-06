@@ -32,7 +32,7 @@ function SummaryMetric({
         {label}
       </Text>
       <span className="tabular-nums">
-        <Text font="heading-h3">{value}</Text>
+        <Text font="heading-section">{value}</Text>
       </span>
       <span className="block min-w-0 truncate" title={detail}>
         <Text font="secondary-body" color="text-03">
@@ -97,7 +97,7 @@ export default function PerUserUsagePanel({
       width="full"
       height="fit"
     >
-      <Text font="heading-h3">{t("panel.title")}</Text>
+      <Text font="heading-section">{t("panel.title")}</Text>
       {/* Holds the selected period, so visual tests mask it. */}
       <Text
         font="secondary-body"
@@ -213,7 +213,7 @@ export default function PerUserUsagePanel({
           width="full"
           height="fit"
         >
-          <Text font="heading-h3">{t("users.title")}</Text>
+          <Text font="heading-section">{t("users.title")}</Text>
           <Text font="secondary-body" color="text-03">
             {t("users.description")}
           </Text>

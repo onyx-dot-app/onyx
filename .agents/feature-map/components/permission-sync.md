@@ -117,8 +117,33 @@ connector_external_group_sync_generator_task -> _timed_perform_external_group_sy
   remove_stale_external_groups                rows a previous cycle left stale
   mark_old_external_groups_as_stale           commit at once
   group_sync_func yields ExternalUserGroup -> upsert_external_groups (stale=False)
+                 or SyncEntityFailure     -> sync_attempt_error row
   remove_stale_external_groups                rows this cycle did not confirm
 ```
+
+Google Drive (per user and per Google group) and Confluence (per user) skip a
+user or group they cannot read and yield a `SyncEntityFailure` for it. Users
+and groups are skipped whole, never yielded with part of their membership. A
+failed Drive user's remaining folders are skipped, and the folders already read
+stay with the permissions read for them. A folder's list can still be short:
+`get_permissions_by_ids` keeps the pages before a 403 or 404 and yields no
+failure for it. The stale sweep removes whatever was skipped. When more than
+half of the Drive users, Drive groups or Confluence listed users fail, the sync
+reports the collected failures and then fails whole. Confluence skips that cap
+while `CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC` is on, since the Onyx-users
+fallback reads users the listing could not. An attempt with a failure
+row ends `COMPLETED_WITH_ERRORS`. The row write takes the attempt lease lock,
+and its message is capped like an indexing error's.
+Admins list the rows with `GET /manage/admin/cc-pair/{id}/sync-errors` and
+resolve them without retry (`ee/onyx/db/sync_attempt_error.py`). The run feed
+counts them on the sync (`failed_users`, `failed_groups`), and a settled sync
+with an open row sits under Errors until it is resolved. A newer sync does not
+supersede it, so the Errors level, the open count and the row list agree.
+`entity_kind` narrows the list to users or groups, and `order=state` lists
+open rows first, as `/errors` does.
+Its activity card shows one chip per kind, which opens that kind's rows with
+Resolve only
+(`web/src/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover.tsx`).
 
 `upsert_external_groups` and `element_update_permissions` create the `User` rows
 for unknown emails (`db/users.py:batch_add_ext_perm_user_if_not_exists`). A

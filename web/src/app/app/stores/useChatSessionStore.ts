@@ -35,6 +35,9 @@ interface ChatSessionData {
 
   // Session-specific state (previously global)
   isFetchingChatMessages: boolean;
+  // Paged loading: the current branch has messages above the loaded ones.
+  hasOlderMessages: boolean;
+  isLoadingOlderMessages: boolean;
   uncaughtError: string | null;
   loadingError: string | null;
   isReady: boolean;
@@ -201,6 +204,8 @@ const createInitialSessionData = (
 
   // Session-specific state defaults
   isFetchingChatMessages: false,
+  hasOlderMessages: false,
+  isLoadingOlderMessages: false,
   uncaughtError: null,
   loadingError: null,
   isReady: true,
@@ -735,6 +740,26 @@ export const useIsReady = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.isReady ?? true;
+  });
+
+/** The open chat has older messages to load above the loaded ones. */
+export const useHasOlderMessages = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.hasOlderMessages ?? false;
+  });
+
+/** The open chat is loading a page of older messages. */
+export const useIsLoadingOlderMessages = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.isLoadingOlderMessages ?? false;
   });
 
 export const useIsFetchingChatMessages = () =>

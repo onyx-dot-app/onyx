@@ -366,7 +366,8 @@
         "context": 8192
       },
       "mode": "rerank",
-      "name": "Salesforce/Llama-Rank-V1"
+      "name": "Salesforce/Llama-Rank-V1",
+      "status": "deprecated"
     },
     "deepseek-ai/DeepSeek-R1": {
       "attachment": false,

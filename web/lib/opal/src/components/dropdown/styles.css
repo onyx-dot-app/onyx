@@ -168,6 +168,16 @@
   @apply ms-2 flex shrink-0 items-center;
 }
 
+/* Capped so a long note wraps instead of squeezing the title. */
+.opal-dropdown-info {
+  @apply ms-2 flex max-w-48 shrink-0 items-center self-center p-0.5 text-text-03;
+}
+
+/* A disabled row mutes its info like its title. */
+.interactive[data-disabled] .opal-dropdown-info {
+  color: var(--interactive-foreground);
+}
+
 .opal-dropdown-create-icon {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
 }

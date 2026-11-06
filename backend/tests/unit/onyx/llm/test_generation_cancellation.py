@@ -3,6 +3,7 @@ import pytest
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
+    CancelReason,
     cancellation_scope,
     current_cancellation,
 )
@@ -154,3 +155,20 @@ def test_stream_cancellation_preserves_partial_text_and_closes_client() -> None:
     assert len(errors) == 1
     assert completion.call_count == 1
     assert current_cancellation() is None
+
+
+@pytest.mark.parametrize("reason", ["requested", "deadline"])
+def test_generation_scope_preserves_parent_cancellation_reason(
+    reason: CancelReason,
+) -> None:
+    from onyx.llm.interfaces import GenerationContext
+    from onyx.llm.multi_llm import _generation_scope
+
+    parent = CancellationSignal()
+    with _generation_scope(
+        GenerationContext(cancellation=parent, total_timeout_s=10)
+    ) as child:
+        parent.cancel(reason)
+        assert child.reason == reason
+        with pytest.raises(AgentCancelled):
+            child.check()

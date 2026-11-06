@@ -1,5 +1,7 @@
 "use client";
 
+import { NavLink } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -12,13 +14,11 @@ import {
 } from "@/components/ui/table";
 import { InputSingleSelect } from "@opal/components";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
-import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
 import { DateRange } from "@opal/components";
 import { PageSelector } from "@/components/PageSelector";
-import Link from "next/link";
 import { FeedbackBadge } from "@/app/ee/admin/performance/query-history/FeedbackBadge";
 import KickoffCSVExport from "@/app/ee/admin/performance/query-history/KickoffCSVExport";
 import CardSection from "@/components/admin/CardSection";
@@ -86,10 +86,10 @@ function QueryHistoryTableRow({
       </TableCell>
       {/* Wrapping in <td> to avoid console warnings */}
       <td className="w-0 p-0">
-        <Link
+        <NavLink
           href={`/ee/admin/performance/query-history/${chatSessionMinimal.id}`}
           className="absolute w-full h-full start-0 top-0"
-        ></Link>
+        ></NavLink>
       </td>
     </TableRow>
   );

@@ -18,7 +18,7 @@ import * as externalAppsService from "@/app/craft/services/externalAppsService";
 import type { SkillCreationDraft } from "@/lib/skills/creationDraft";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
-const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
 const mockUseUserSkills = jest.fn();
 
 jest.mock("@/app/craft/services/externalAppsService");
@@ -60,9 +60,17 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     ),
 }));
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockRouterReplace }),
   usePathname: () => "/admin/craft/apps",
 }));
+
+beforeEach(() => {
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/admin/craft/apps");
+});
 
 const DESCRIPTOR: BuiltInExternalAppDescriptor = {
   app_type: "SLACK",
@@ -478,12 +486,12 @@ describe("ConfigureProviderModal", () => {
       screen.getByRole("menuitem", { name: /^Start from scratch/ })
     );
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
     expect(
       screen.getByRole("dialog", { name: "Discard unsaved changes?" })
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack"
     );
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
@@ -577,13 +585,13 @@ describe("ConfigureProviderModal", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
     expect(
       screen.getByRole("dialog", { name: "Discard unsaved changes?" })
     ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id"
     );
   });
@@ -696,12 +704,12 @@ describe("ConfigureProviderModal", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
     expect(
       screen.getByRole("dialog", { name: "Discard unsaved changes?" })
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=7&externalAppName=Slack&draft=draft-id"
     );
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();

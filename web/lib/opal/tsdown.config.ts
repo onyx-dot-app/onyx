@@ -62,6 +62,7 @@ export default defineConfig({
     "src/loaders/index.ts",
     "src/logos/index.ts",
     "src/hooks/index.ts",
+    "src/navigation/index.ts",
     "src/strings.tsx",
     "src/time.ts",
     "src/types.ts",

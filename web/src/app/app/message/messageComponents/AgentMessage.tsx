@@ -21,6 +21,7 @@ import { handleCopy } from "@/app/app/message/copyingUtils";
 import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
+import { GeneratedImageGrid } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
 import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline/hooks/usePacketProcessor";
 import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups";
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
@@ -150,8 +151,7 @@ const AgentMessage = React.memo(function AgentMessage({
     hasSteps,
     stopPacketSeen,
     stopReason,
-    isGeneratingImage,
-    generatedImageCount,
+    generatedImages,
     isComplete,
     onRenderComplete,
     finalAnswerComing,
@@ -292,7 +292,11 @@ const AgentMessage = React.memo(function AgentMessage({
   });
 
   // Streaming TTS integration
-  const { streamTTS, resetTTS, stopTTS } = useVoiceMode();
+  const { streamTTS, resetTTS, stopTTS, activeMessageNodeId } = useVoiceMode();
+  const activeTTSNodeIdRef = useRef(activeMessageNodeId);
+  useEffect(() => {
+    activeTTSNodeIdRef.current = activeMessageNodeId;
+  }, [activeMessageNodeId]);
   const ttsCompletedRef = useRef(false);
   const hasStreamedIncompleteRef = useRef(false);
   const hasObservedPacketGrowthRef = useRef(false);
@@ -379,10 +383,12 @@ const AgentMessage = React.memo(function AgentMessage({
     lastSeenPacketCountRef.current = packetCount ?? rawPackets.length;
   }, [nodeId]);
 
-  // Reset TTS when component unmounts or nodeId changes
+  // Reset TTS when this message unmounts or its nodeId changes, if it is the
+  // one speaking. A chat unmounts rows far from the viewport, and that must
+  // not stop another message's audio.
   useEffect(() => {
     return () => {
-      resetTTS();
+      if (activeTTSNodeIdRef.current === nodeId) resetTTS();
     };
   }, [nodeId, resetTTS]);
 
@@ -400,8 +406,7 @@ const AgentMessage = React.memo(function AgentMessage({
         stopReason={stopReason}
         hasDisplayContent={pacedDisplayGroups.length > 0}
         processingDurationSeconds={processingDurationSeconds}
-        isGeneratingImage={isGeneratingImage}
-        generatedImageCount={generatedImageCount}
+        generatedImageCount={generatedImages.length}
         finalAnswerComing={pacedFinalAnswerComing}
         toolProcessingDuration={toolProcessingDuration}
       />
@@ -419,6 +424,12 @@ const AgentMessage = React.memo(function AgentMessage({
           }
         }}
       >
+        {/* Images from every image generation step lead the answer */}
+        {generatedImages.length > 0 && (
+          <div className="mb-3">
+            <GeneratedImageGrid images={generatedImages} />
+          </div>
+        )}
         {pacedDisplayGroups.length > 0 && (
           <div ref={finalAnswerRef} className="flex flex-col gap-3">
             {authErrors.map((authError, i) => (
@@ -472,6 +483,11 @@ const AgentMessage = React.memo(function AgentMessage({
               {t("agentMessage.stoppedGeneration.text")}
             </Text>
           )}
+        {stopPacketSeen && stopReason === StopReason.TIMED_OUT && (
+          <Text as="p" font="secondary-body" color="text-04">
+            {t("agentMessage.timedOut.text")}
+          </Text>
+        )}
       </div>
 
       {/* Feedback buttons - only show when streaming and rendering complete */}

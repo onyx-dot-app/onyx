@@ -48,12 +48,11 @@ function flyoutRow(sub: PlusMenuFlyoutItem): DropdownMenuRow {
     onActivate: sub.onSelect,
     render: ({ highlighted, props }) => (
       <LineItemButton
+        font="main-ui-action"
         presentational
         selectVariant="select-heavy"
         interaction={highlighted ? "hover" : "rest"}
         rounding={2}
-        sizePreset="main-ui"
-        variant="section"
         icon={sub.icon}
         title={sub.label}
         description={sub.description}

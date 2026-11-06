@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 // Bottom-left floating banner: shows one banner-worthy notification at a time
 // (severity WARNING or louder — connector failures, license expiry, admin
 // announcements, trial notices), pageable via prev/next when more than one is
@@ -7,13 +8,12 @@
 // corner so it never covers the sidebar. Falls back to the viewport edge when
 // there is no content area.
 
-import { usePathname, useRouter } from "next/navigation";
+import { Section } from "@opal/layouts";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { cn, markdown } from "@opal/utils";
 import { timeAgo } from "@opal/time";
 import { SvgChevronLeft, SvgChevronRight, SvgX } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
 import { isAuthPath } from "@/lib/auth/paths";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { getNotificationIcon, openNotificationLink } from "@/lib/notifications";
@@ -70,7 +70,7 @@ export default function BannerQueue() {
   const t = useTranslations("chat.banners");
   const locale = useLocale();
   const pathname = usePathname();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { inlineStart: contentInlineStart } = useContainerCenter();
   const { current, hasMultiple, goToNext, goToPrevious, dismissCurrent } =
     useBannerQueue();
@@ -237,7 +237,7 @@ export default function BannerQueue() {
               <Button
                 prominence="secondary"
                 size="sm"
-                onClick={() => openNotificationLink(link, router)}
+                onClick={() => openNotificationLink(link, navigation)}
               >
                 {ctaLabel}
               </Button>

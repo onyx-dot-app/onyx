@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Text } from "@opal/components";
@@ -72,7 +72,7 @@ export default function ScheduledRunBanner({
       className="inline-flex min-w-0 max-w-full"
       data-testid="scheduled-run-banner"
     >
-      <Link
+      <NavLink
         href={taskDetailPath(data.task_id)}
         className={cn(
           "group inline-flex min-w-0 max-w-[5.75rem] items-center",
@@ -163,7 +163,7 @@ export default function ScheduledRunBanner({
             </Text>
           </span>
         </div>
-      </Link>
+      </NavLink>
     </div>
   );
 }

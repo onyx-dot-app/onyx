@@ -328,6 +328,22 @@ describe("model select options", () => {
       expect(rows).toHaveLength(2);
     });
 
+    test("labelSingleGroup keeps a lone provider's header, unfoldable", () => {
+      const only = providers.filter((p) => p.id === 1);
+      const [divider, ...rest] = buildModelSelectOptions(only, {
+        labelSingleGroup: true,
+      });
+      expect(rest).toHaveLength(0);
+      expect(divider && "options" in divider && divider.title).toBe("OpenAI");
+      expect(divider && "options" in divider && divider.foldable).toBeFalsy();
+      expect(
+        buildModelSelectOptions(only, {
+          grouped: false,
+          labelSingleGroup: true,
+        }).every((entry) => !("options" in entry))
+      ).toBe(true);
+    });
+
     test("an empty list yields no options", () => {
       expect(buildModelSelectOptions([])).toEqual([]);
     });

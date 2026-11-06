@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 import type { Route } from "next";
 import "@opal/core/interactive/shared.css";
 import React from "react";
@@ -133,7 +133,7 @@ function InteractiveContainer({
 
   if (href) {
     return (
-      <Link
+      <NavLink
         ref={ref as React.Ref<HTMLAnchorElement>}
         href={href as Route}
         target={target}

@@ -224,6 +224,8 @@ export interface BackendChatSession {
   is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
+  // Set on a paged load when the current branch has messages before the page.
+  has_older_messages?: boolean;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {
@@ -326,6 +328,8 @@ export interface RateLimitDetails {
   scope?: string;
   reset_at?: string; // ISO timestamp
   retry_after_seconds?: number;
+  // Set when the budget that ran out limits one model; other models still run.
+  model?: string;
 }
 
 export interface InputPrompt {

@@ -12,7 +12,7 @@ import {
   MessageCard,
   Modal,
   SelectCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
@@ -71,14 +71,13 @@ function StepCard({ step, dropped, disabled, onDroppedChange }: StepCardProps) {
     >
       <Section gap={2} alignItems="stretch" height="fit">
         <ContentAction
+          font="main-ui-action"
           title={title}
           description={t(`kind.${step.kind}.description`)}
-          sizePreset="main-ui"
-          variant="section"
-          tag={
+          badge={
             step.required
-              ? { title: t("required.label"), color: "amber" }
-              : { title: t("optional.label"), color: "gray" }
+              ? { title: t("required.label"), color: "pending" }
+              : { title: t("optional.label"), color: "default" }
           }
           rightChildren={
             step.required ? undefined : (
@@ -93,7 +92,7 @@ function StepCard({ step, dropped, disabled, onDroppedChange }: StepCardProps) {
         />
         <Section flexDirection="row" justifyContent="start" gap={1} wrap>
           {step.reasons.map((reason) => (
-            <Tag key={reason} title={t(`reason.${reason}`)} color="blue" />
+            <Badge key={reason} title={t(`reason.${reason}`)} color="info" />
           ))}
         </Section>
         {step.field_names.length > 0 && (
@@ -154,10 +153,9 @@ function ChoiceCard({
       onClick={onSelect}
     >
       <Content
+        font="main-ui-action"
         title={title}
         description={description}
-        sizePreset="main-ui"
-        variant="section"
         color="interactive"
       />
     </SelectCard>
@@ -243,10 +241,9 @@ function ValidationSection({
   return (
     <Section gap={2} alignItems="stretch" height="fit">
       <Content
+        font="main-ui-action"
         title={t(`outcome.${outcome}.title`)}
         description={t(`outcome.${outcome}.description`)}
-        sizePreset="main-ui"
-        variant="section"
       />
       {validation.validation_error !== null && (
         <MessageCard
@@ -393,20 +390,15 @@ export default function EditPlanModal({
               />
             ) : (
               <Content
+                font="main-ui-action"
                 title={t("validation.title")}
                 description={t("validation.unchanged")}
-                sizePreset="main-ui"
-                variant="section"
               />
             )}
 
             {(warnings.length > 0 || failedDryRuns.length > 0) && (
               <Section gap={2} alignItems="stretch" height="fit">
-                <Content
-                  title={t("warnings.title")}
-                  sizePreset="main-ui"
-                  variant="section"
-                />
+                <Content font="main-ui-action" title={t("warnings.title")} />
                 {warnings.map((note) => (
                   <MessageCard
                     key={note.kind}
@@ -420,11 +412,7 @@ export default function EditPlanModal({
 
             {infos.length > 0 && (
               <Section gap={2} alignItems="stretch" height="fit">
-                <Content
-                  title={t("notes.title")}
-                  sizePreset="main-ui"
-                  variant="section"
-                />
+                <Content font="main-ui-action" title={t("notes.title")} />
                 {infos.map((note) => (
                   <MessageCard
                     key={note.kind}
@@ -444,12 +432,11 @@ export default function EditPlanModal({
                 aria-label={t("reconciliation.title")}
               >
                 <Content
+                  font="main-ui-action"
                   title={t("reconciliation.title")}
                   description={t("reconciliation.description", {
                     fields: plan.reconciliation_choice.field_names.join(", "),
                   })}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 {plan.reconciliation_choice.options.map((option) => (
                   <ChoiceCard
@@ -472,10 +459,9 @@ export default function EditPlanModal({
                 aria-label={t("credential.title")}
               >
                 <Content
+                  font="main-ui-action"
                   title={t("credential.title")}
                   description={t("credential.description")}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 {plan.credential_choice.options.map((path) => (
                   <ChoiceCard
@@ -494,12 +480,11 @@ export default function EditPlanModal({
 
             <Section gap={2} alignItems="stretch" height="fit">
               <Content
+                font="main-ui-action"
                 title={t("steps.title")}
                 description={
                   steps.length === 0 ? t("steps.none") : t("steps.description")
                 }
-                sizePreset="main-ui"
-                variant="section"
               />
               {steps.map((step) => (
                 <StepCard
@@ -524,17 +509,15 @@ export default function EditPlanModal({
               canAddStep(plan, choices, "prune")) && (
               <Section gap={2} alignItems="stretch" height="fit">
                 <Content
+                  font="main-ui-action"
                   title={t("extra.title")}
                   description={t("extra.description")}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 {canAddStep(plan, choices, "full_reindex") && (
                   <ContentAction
+                    font="main-ui-action"
                     title={t("extra.fullReindex.title")}
                     description={t("extra.fullReindex.description")}
-                    sizePreset="main-ui"
-                    variant="section"
                     rightChildren={
                       <InputSwitch
                         checked={choices.addFullReindex}
@@ -549,10 +532,9 @@ export default function EditPlanModal({
                 )}
                 {canAddStep(plan, choices, "prune") && (
                   <ContentAction
+                    font="main-ui-action"
                     title={t("extra.prune.title")}
                     description={t("extra.prune.description")}
-                    sizePreset="main-ui"
-                    variant="section"
                     rightChildren={
                       <InputSwitch
                         checked={choices.addPrune}

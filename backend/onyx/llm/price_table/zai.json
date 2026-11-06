@@ -618,6 +618,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM-5V-Turbo",
       "open_weights": false,
       "reasoning": true,

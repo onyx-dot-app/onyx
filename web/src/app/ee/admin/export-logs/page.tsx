@@ -1,17 +1,18 @@
 "use client";
 
+import type { Route } from "next";
+import { type Navigation, useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { ContentAction, SettingsLayouts, toast } from "@opal/layouts";
+import { ContentAction, SettingsLayouts, toast, Section } from "@opal/layouts";
 import { Button, Card, MessageCard, Text } from "@opal/components";
 import { SvgDownload } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { downloadFile } from "@/lib/download";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.EXPORT_LOGS;
 
@@ -56,14 +57,21 @@ function extractFilename(response: Response): string {
 
 // Mirrors the export id into the URL (shallow, no navigation) so a refresh or
 // shared tab can re-attach to the export.
-function writeExportIdToUrl(exportId: string | null): void {
+function writeExportIdToUrl(
+  navigation: Navigation,
+  exportId: string | null
+): void {
   const url = new URL(window.location.href);
   if (exportId === null) {
     url.searchParams.delete(EXPORT_ID_QUERY_PARAM);
   } else {
     url.searchParams.set(EXPORT_ID_QUERY_PARAM, exportId);
   }
-  window.history.replaceState({}, "", url.toString());
+  // SAFETY: the current page with its query changed is a page of the app.
+  navigation.go(`${url.pathname}${url.search}` as Route, {
+    replace: true,
+    shallow: true,
+  });
 }
 
 type ExportLogsTranslate = ReturnType<
@@ -122,6 +130,7 @@ function WorkerStatusRow({
 export default function ExportLogsPage() {
   const t = useTranslations("admin.exportLogs");
   const adminRouteTitle = useAdminRouteTitle();
+  const navigation = useNavigation();
   const [exportId, setExportId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -148,9 +157,9 @@ export default function ExportLogsPage() {
     if (EXPORT_ID_PATTERN.test(fromUrl)) {
       setExportId(fromUrl);
     } else {
-      writeExportIdToUrl(null);
+      writeExportIdToUrl(navigation, null);
     }
-  }, []);
+  }, [navigation]);
 
   const { data: status, error: statusError } = useSWR<LogExportStatus>(
     exportId === null ? null : SWR_KEYS.logExportStatus(exportId),
@@ -195,9 +204,9 @@ export default function ExportLogsPage() {
       return;
     }
     consecutivePollFailuresRef.current = 0;
-    writeExportIdToUrl(null);
+    writeExportIdToUrl(navigation, null);
     setExportId(null);
-  }, [status, statusError, t]);
+  }, [status, statusError, t, navigation]);
 
   useEffect(() => {
     return () => {
@@ -289,7 +298,7 @@ export default function ExportLogsPage() {
       const body: { export_id: string } = await response.json();
       armedExportIdRef.current = body.export_id;
       setExportId(body.export_id);
-      writeExportIdToUrl(body.export_id);
+      writeExportIdToUrl(navigation, body.export_id);
     } catch (error) {
       console.error("Error starting log export:", error);
       toast.error(t("toasts.startFailed.message"));
@@ -346,8 +355,7 @@ export default function ExportLogsPage() {
         <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <ContentAction
-              sizePreset="main-ui"
-              variant="section"
+              font="main-ui-action"
               icon={SvgDownload}
               title={t("exportCard.title")}
               description={t("exportCard.description")}

@@ -4,6 +4,7 @@ import {
   OAuthConfigCreate,
   OAuthConfigUpdate,
 } from "@/lib/tools/types";
+import { loadPage } from "@opal/navigation";
 
 // Admin OAuth Config Management
 
@@ -112,10 +113,8 @@ export async function initiateOAuthFlow(
   returnPath: string,
   invalidUrlMessage: string
 ): Promise<void> {
-  window.location.href = await getOAuthAuthorizationUrl(
-    oauthConfigId,
-    returnPath,
-    invalidUrlMessage
+  loadPage(
+    await getOAuthAuthorizationUrl(oauthConfigId, returnPath, invalidUrlMessage)
   );
 }
 

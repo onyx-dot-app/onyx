@@ -38,10 +38,9 @@ function ResourcePopover({
             render: ({ props }) => (
               <div {...props} className="px-3 py-3">
                 <Content
+                  font="secondary-action"
                   icon={SvgEmpty}
                   title={t("sharedResources.popover.noResults.title")}
-                  sizePreset="secondary"
-                  variant="section"
                 />
               </div>
             ),

@@ -10,7 +10,15 @@ import {
   oauthTestStorageKey,
 } from "@/lib/oauth/testConnection";
 const query = new URLSearchParams();
-jest.mock("next/navigation", () => ({ useSearchParams: () => query }));
+const mockReplace = jest.fn();
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  usePathname: () => "/oauth-config/callback",
+  useRouter: () => ({ push: jest.fn(), replace: mockReplace }),
+  useSearchParams: () => query,
+}));
 beforeEach(() => {
   window.history.replaceState(null, "", "/oauth-config/callback");
   window.sessionStorage.clear();

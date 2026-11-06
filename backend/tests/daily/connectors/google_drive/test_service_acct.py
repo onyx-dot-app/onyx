@@ -372,6 +372,12 @@ def test_drive_one_only(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    # Every file has a type. Uploaded files always list a size, and Google
+    # editor files may or may not.
+    for doc in output.documents:
+        assert doc.source_mime_type, doc.semantic_identifier
+        if not doc.source_mime_type.startswith("application/vnd.google-apps."):
+            assert doc.source_size_bytes, doc.semantic_identifier
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,

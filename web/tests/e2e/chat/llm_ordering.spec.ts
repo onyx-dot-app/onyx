@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { verifyCurrentModel } from "@tests/e2e/utils/chatActions";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ensureImageGenerationEnabled } from "@tests/e2e/utils/agentUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
@@ -44,35 +44,26 @@ test.describe("LLM Ordering", () => {
     await page.goto("/app");
     await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 10000 });
 
-    const trigger = page.getByTestId("model-selector").locator("button").last();
-    const originalTriggerText = (await trigger.textContent())?.trim() ?? "";
+    const chatPage = new ChatPage(page);
+    const originalModelText = await chatPage.readModelPillText();
 
-    await trigger.click();
-    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+    await chatPage.openModelList();
+    await expect(chatPage.modelOptions.first()).toBeVisible({ timeout: 5000 });
 
-    const dialog = page.locator('[role="dialog"]');
-    const allModelItems = dialog.locator("[data-interactive-state]");
-    await expect(allModelItems.first()).toBeVisible({ timeout: 5000 });
-
-    const count = await allModelItems.count();
-    expect(count).toBeGreaterThan(0);
-
-    // Pick the first non-selected model so the trigger text changes after click
-    const nonSelectedItem = dialog
-      .locator('[data-interactive-state="empty"]')
-      .first();
+    // Pick the first non-selected model so the pill text changes after the switch
+    const nonSelectedItem = chatPage.unselectedModelOptions.first();
     const hasNonSelected = (await nonSelectedItem.count()) > 0;
-    const targetItem = hasNonSelected ? nonSelectedItem : allModelItems.first();
+    const targetItem = hasNonSelected
+      ? nonSelectedItem
+      : chatPage.modelOptions.first();
 
     await expect(targetItem).toBeVisible();
-    await targetItem.click();
-
-    // Verify the popover closed and the trigger updated
-    await expect(dialog).toBeHidden();
+    // Waits until the first pill shows the picked row's model.
+    await chatPage.chooseModelOption(targetItem);
+    await expect(chatPage.modelPills).toHaveCount(1);
 
     if (hasNonSelected) {
-      const updatedTriggerText = (await trigger.textContent())?.trim() ?? "";
-      expect(updatedTriggerText).not.toBe(originalTriggerText);
+      await chatPage.expectModelPillNot(originalModelText);
     }
   });
 });

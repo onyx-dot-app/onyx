@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -29,7 +29,7 @@ import {
   type MemberPlugin,
 } from "@/lib/plugins/member";
 import useScreenSize from "@/hooks/useScreenSize";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/utils";
 
@@ -55,6 +55,7 @@ export default function ChatPluginsPopover({
   const appPosition = useAppPosition();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   const { isMobile } = useScreenSize();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -73,15 +74,18 @@ export default function ChatPluginsPopover({
   const hasError = Boolean(errors.servers || errors.tools || errors.oauth);
   const returnTo =
     pathname === "/app"
-      ? `/app?${searchParams?.toString() ?? ""}`
+      ? `/app?${searchParams.toString()}`
       : `/app?agentId=${agent.id}`;
 
-  function handleBrowse() {
+  const browseLink = navigation.linkTo(memberPluginsHref(returnTo));
+
+  function handleBrowse(event: React.MouseEvent<HTMLElement>) {
     if (appPosition.chat() === null) {
       toolConfiguration.handOffToNewChatWith(agent.id, appPosition.project());
     }
     setOpen(false);
     onBrowse();
+    browseLink.onClick(event);
   }
 
   function connect(plugin: MemberPlugin) {
@@ -119,12 +123,11 @@ export default function ChatPluginsPopover({
       <Popover open={open} onOpenChange={changeOpen}>
         <Popover.Trigger asChild>
           <LineItemButton
+            font="main-ui-action"
             ref={trigger}
             disabled={disabled}
             icon={SvgPlug}
             title={t("chat.trigger.label")}
-            sizePreset="main-ui"
-            variant="section"
             rounding={2}
             interaction={open ? "hover" : "rest"}
             aria-label={t("chat.trigger.label")}
@@ -192,11 +195,11 @@ export default function ChatPluginsPopover({
             gap={1}
             footer={
               <LineItemButton
+                font="main-ui-action"
                 title={t("chat.browse.label")}
                 icon={SvgPlug}
-                href={memberPluginsHref(returnTo)}
+                href={browseLink.href}
                 onClick={handleBrowse}
-                sizePreset="main-ui"
                 padding={0}
                 rounding={2}
               />
@@ -206,7 +209,7 @@ export default function ChatPluginsPopover({
               <InputTypeIn
                 key="search"
                 ref={focusOnMount}
-                searchIcon
+                icon="search"
                 variant="internal"
                 value={search}
                 placeholder={t("chat.search.placeholder")}
@@ -257,6 +260,7 @@ export default function ChatPluginsPopover({
                 const enabled = isChatPluginEnabled(group, toolConfiguration);
                 return (
                   <LineItemButton
+                    font="main-ui-action"
                     key={`${reference.kind}:${reference.id}`}
                     title={name}
                     titleMaxLines={1}
@@ -274,7 +278,6 @@ export default function ChatPluginsPopover({
                           )
                         : SvgCodeFile
                     }
-                    sizePreset="main-ui"
                     padding={0}
                     rounding={2}
                     presentational

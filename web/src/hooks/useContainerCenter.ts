@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
 import useScreenSize from "@/hooks/useScreenSize";
 
 const SELECTOR = "[data-main-container]";
@@ -56,11 +55,10 @@ function measure(
  *
  * Uses a lazy `useState` initializer so the first render already has the
  * correct values (no flash), and a `ResizeObserver` to stay reactive when
- * the sidebar folds/unfolds. Re-subscribes on route changes because each
- * page renders its own `AppLayouts.Root`, replacing the DOM element.
+ * the sidebar folds/unfolds. Follows the element itself, because each chrome
+ * renders its own container and a navigation replaces it after the URL moves.
  */
 export default function useContainerCenter(): ContainerCenter {
-  const pathname = usePathname();
   const { isMediumScreen } = useScreenSize();
   const [container, setContainer] = useState<HTMLElement | null>(() => {
     if (typeof document === "undefined") return null;
@@ -80,24 +78,19 @@ export default function useContainerCenter(): ContainerCenter {
   });
 
   useEffect(() => {
-    const existing = document.querySelector<HTMLElement>(SELECTOR);
-    if (existing) {
-      setContainer(existing);
-      setRect(measure(existing) ?? NULL_MEASURE);
-      return;
-    }
-
-    // The container can mount after this hook (e.g. a root-level consumer
-    // renders before the auth shell reveals the chrome). Watch for it.
-    setContainer(null);
-    setRect(NULL_MEASURE);
-
-    const mutationObserver = new MutationObserver(() => {
+    let frame = 0;
+    const sync = () => {
+      frame = 0;
       const el = document.querySelector<HTMLElement>(SELECTOR);
-      if (!el) return;
-      setContainer(el);
-      setRect(measure(el) ?? NULL_MEASURE);
-      mutationObserver.disconnect();
+      setContainer((current) => (current === el ? current : el));
+      if (!el) setRect(NULL_MEASURE);
+    };
+    sync();
+    // The container can mount after this hook (e.g. a root-level consumer
+    // renders before the auth shell reveals the chrome), and a navigation to
+    // another chrome replaces it. Check once per frame of DOM changes.
+    const mutationObserver = new MutationObserver(() => {
+      if (frame === 0) frame = requestAnimationFrame(sync);
     });
     mutationObserver.observe(document.body, {
       childList: true,
@@ -106,8 +99,9 @@ export default function useContainerCenter(): ContainerCenter {
 
     return () => {
       mutationObserver.disconnect();
+      cancelAnimationFrame(frame);
     };
-  }, [pathname]);
+  }, []);
 
   useEffect(() => {
     if (!container) return;

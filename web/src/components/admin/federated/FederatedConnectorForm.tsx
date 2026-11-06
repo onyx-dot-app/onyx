@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useState, useEffect } from "react";
@@ -25,7 +26,6 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useRouter } from "next/navigation";
 import { richNodes } from "@opal/utils";
 import { AlertTriangle, Check, Loader2, Info } from "lucide-react";
 import BackButton from "@/refresh-components/buttons/BackButton";
@@ -218,7 +218,7 @@ export function FederatedConnectorForm({
   preloadedCredentialSchema,
 }: FederatedConnectorFormProps) {
   const t = useTranslations("admin.federated.form");
-  const router = useRouter();
+  const navigation = useNavigation();
   const sourceMetadata = getSourceMetadata(connector);
   const isEditMode = connectorId !== undefined;
 
@@ -424,7 +424,7 @@ export function FederatedConnectorForm({
         toast.success(result.message);
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing-status");
+          navigation.go("/admin/indexing-status");
         }, 500);
       } else {
         toast.error(result.message);
@@ -518,7 +518,7 @@ export function FederatedConnectorForm({
       if (result.success) {
         // Redirect after a short delay
         setTimeout(() => {
-          router.push("/admin/indexing-status");
+          navigation.go("/admin/indexing-status");
         }, 500);
       }
     } catch (error) {
@@ -878,7 +878,7 @@ export function FederatedConnectorForm({
       <Card className="px-8 py-4">
         <CardContent className="p-0">
           <form onSubmit={handleSubmit}>
-            <Text as="p" font="heading-h3" color="text-05">
+            <Text as="p" font="heading-section" color="text-05">
               {t("credentials.heading")}
             </Text>
             <Text as="p" font="main-ui-muted" color="text-05">
@@ -886,7 +886,7 @@ export function FederatedConnectorForm({
             </Text>
             <div className="space-y-4">{renderCredentialFields()}</div>
             <Divider />
-            <Text as="p" font="heading-h3" color="text-05">
+            <Text as="p" font="heading-section" color="text-05">
               {t("configuration.heading")}
             </Text>
             <div className="space-y-4">{renderConfigFields()}</div>

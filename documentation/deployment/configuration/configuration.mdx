@@ -272,6 +272,10 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
     `ONYX_AIRGAPPED`: Set to `true` on deployments with no internet access.
     Onyx then skips the outbound fetches for the recommended-model catalog, the model price table,
     and release notes from GitHub.
+
+    `WEBHOOK_PUBLIC_URL`: The public URL where providers reach the webhook server. It defaults to `WEB_DOMAIN`.
+    Set it when the API and web hosts are different, because the Helm webhook ingress is served from the API host.
+    Onyx shows callback URLs built from this value, and you paste them into each provider's console.
   </Accordion>
 
   <Accordion title="Craft Configuration">

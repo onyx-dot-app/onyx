@@ -110,17 +110,17 @@ export function AppPopup() {
                   </Text>
                 ),
                 h1: ({ children }) => (
-                  <Text as="p" font="heading-h1" color="text-03">
+                  <Text as="p" font="heading-hero" color="text-03">
                     {richNodes(children)}
                   </Text>
                 ),
                 h2: ({ children }) => (
-                  <Text as="p" font="heading-h2" color="text-03">
+                  <Text as="p" font="heading-headline" color="text-03">
                     {richNodes(children)}
                   </Text>
                 ),
                 h3: ({ children }) => (
-                  <Text as="p" font="heading-h3" color="text-03">
+                  <Text as="p" font="heading-section" color="text-03">
                     {richNodes(children)}
                   </Text>
                 ),

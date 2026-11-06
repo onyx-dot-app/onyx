@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
@@ -582,6 +582,29 @@ def get_cc_pair_groups_for_ids(
     return list(db_session.scalars(stmt).all())
 
 
+def get_data_access_group_names_for_cc_pairs(
+    db_session: Session,
+    cc_pair_ids: Collection[int],
+    visible_group_ids: set[int] | None,
+) -> dict[int, list[str]]:
+    """Each pair's data-access group names, sorted, kept to ``visible_group_ids``
+    unless it is None. Pairs with none are absent."""
+    if not cc_pair_ids or visible_group_ids == set():
+        return {}
+    stmt: Select[tuple[int, str]] = (
+        select(UserGroup__CCPairDataAccess.cc_pair_id, UserGroup.name)
+        .join(UserGroup, UserGroup.id == UserGroup__CCPairDataAccess.user_group_id)
+        .where(UserGroup__CCPairDataAccess.cc_pair_id.in_(cc_pair_ids))
+        .order_by(UserGroup.name)
+    )
+    if visible_group_ids is not None:
+        stmt = stmt.where(UserGroup.id.in_(visible_group_ids))
+    names: dict[int, list[str]] = {}
+    for cc_pair_id, name in db_session.execute(stmt):
+        names.setdefault(cc_pair_id, []).append(name)
+    return names
+
+
 # For use with our thread-level parallelism utils. Note that any relationships
 # you wish to use MUST be eagerly loaded, as the session will not be available
 # after this function to allow lazy loading.
@@ -837,7 +860,9 @@ def get_connector_credential_pairs_for_source(
 
 
 def _has_unresolved_entity_error() -> ColumnElement[bool]:
-    """Correlates to the enclosing query's IndexAttempt row."""
+    """Correlates to the enclosing query's IndexAttempt row. Reads
+    ``is_resolved`` alone, since an entity an admin resolved without retry
+    still needs its time range fetched again."""
     return (
         select(IndexAttemptError.id)
         .where(

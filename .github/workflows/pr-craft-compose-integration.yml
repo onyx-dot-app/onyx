@@ -139,6 +139,10 @@ jobs:
     name: build-image (${{ matrix.image }})
     needs: changes
     if: needs.changes.outputs.craft_compose == 'true'
+    # One output per matrix leg: each leg sets only its own image's digest.
+    outputs:
+      sandbox-digest: ${{ matrix.image == 'sandbox' && steps.build.outputs.digest || '' }}
+      backend-digest: ${{ matrix.image == 'backend' && steps.build.outputs.digest || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -186,6 +190,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and push ${{ matrix.image }} image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ${{ matrix.context }}
@@ -264,7 +269,8 @@ jobs:
       - name: Pull and tag prebuilt images
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          SANDBOX_DIGEST: ${{ needs.build-images.outputs.sandbox-digest }}
+          BACKEND_DIGEST: ${{ needs.build-images.outputs.backend-digest }}
         run: |
           set -eo pipefail
           retag() {
@@ -272,8 +278,8 @@ jobs:
             docker pull "$src"
             docker tag "$src" "$dst"
           }
-          retag "${ECR_CACHE}:craft-compose-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
-          retag "${ECR_CACHE}:craft-compose-backend-${RUN_ID}" "onyxdotapp/onyx-backend:latest"
+          retag "${ECR_CACHE}@${SANDBOX_DIGEST}" "${SANDBOX_CONTAINER_IMAGE}"
+          retag "${ECR_CACHE}@${BACKEND_DIGEST}" "onyxdotapp/onyx-backend:latest"
 
       - name: Create compose-external resources
         # docker-compose.craft.yml declares both as external. In prod install.sh

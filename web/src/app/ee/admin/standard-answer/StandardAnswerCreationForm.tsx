@@ -1,12 +1,12 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import { Form, Formik, ErrorMessage } from "formik";
-import { useRouter } from "next/navigation";
 import * as Yup from "yup";
 import {
   createStandardAnswer,
@@ -40,7 +40,7 @@ export const StandardAnswerCreationForm = ({
 }) => {
   const t = useTranslations("admin.standardAnswers");
   const isUpdate = existingStandardAnswer !== undefined;
-  const router = useRouter();
+  const navigation = useNavigation();
   const [categoryInput, setCategoryInput] = useState("");
 
   return (
@@ -98,7 +98,7 @@ export const StandardAnswerCreationForm = ({
             }
             formikHelpers.setSubmitting(false);
             if (response.ok) {
-              router.push(`/ee/admin/standard-answer?u=${Date.now()}`);
+              navigation.go(`/ee/admin/standard-answer?u=${Date.now()}`);
             } else {
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;

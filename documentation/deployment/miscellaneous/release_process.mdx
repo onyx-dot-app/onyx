@@ -135,9 +135,14 @@ These are tagged with a version number like `v5.0.0`.
 
     <AccordionGroup>
       <Accordion title="Docker Pull Images">
-        Specify the version tag in the environment.
+        Check out the Compose files of the same version, then specify the version tag in the environment.
+        New images need the services that their own Compose files define.
+        See [Upgrading](/deployment/local/docker#upgrading) to keep local edits to the Compose files.
 
         ```bash
+        git fetch origin tag v<MAJOR>.<MINOR>.<HOTFIX>
+        git switch --detach v<MAJOR>.<MINOR>.<HOTFIX>
+
         IMAGE_TAG=v<MAJOR>.<MINOR>.<HOTFIX> docker compose -f docker-compose.prod.yml up -d --pull always --force-recreate
         ```
       </Accordion>

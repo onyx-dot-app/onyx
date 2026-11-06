@@ -38,6 +38,7 @@ from slack_sdk.http_retry.state import RetryState
 from slack_sdk.web import SlackResponse
 
 from onyx.configs.constants import DocumentSource
+from onyx.configs.slack_configs import SLACK_API_URL
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.connectors.exceptions import SourceApiError
@@ -378,6 +379,7 @@ def make_slack_web_client(
         delay_key=delay_key,
         r=r,
         token=token,
+        base_url=SLACK_API_URL,
         retry_handlers=custom_retry_handlers,
     )
     return client
@@ -606,7 +608,9 @@ class SlackSourceOperations(SourceOperations):
             with self._client_build_lock:
                 if self._cached_fast_client is None:
                     self._cached_fast_client = WebClient(
-                        token=self._bot_token(), timeout=_FAST_TIMEOUT
+                        token=self._bot_token(),
+                        base_url=SLACK_API_URL,
+                        timeout=_FAST_TIMEOUT,
                     )
         return self._cached_fast_client
 
@@ -620,6 +624,7 @@ class SlackSourceOperations(SourceOperations):
         if not self._config().use_redis:
             return WebClient(
                 token=token,
+                base_url=SLACK_API_URL,
                 retry_handlers=[_connection_error_retry_handler(_MAX_RETRIES)],
             )
         tenant_id = self.credentials_provider.get_tenant_id()

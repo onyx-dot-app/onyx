@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   useId,
   useState,
@@ -30,7 +31,7 @@ import {
   Button,
   InputSingleSelect,
   MessageCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { Formik, Form, type FormikHelpers } from "formik";
@@ -123,6 +124,7 @@ export default function MCPAuthenticationPage({
   const formId = useId();
   const t = useTranslations("actions");
   const recommendedCopy = useTranslations("craft.llmPopover.recommended");
+  const navigation = useNavigation();
   const { appName } = useSettings();
   const { user } = useUser();
   const [initialValues] = useState(() => {
@@ -141,6 +143,9 @@ export default function MCPAuthenticationPage({
         recommendation.discovery.supports_automatic_registration === false
           ? ("own_client" as const)
           : ("automatic" as const),
+      oauth_cimd_enabled:
+        recommendation.kind !== "oauth" ||
+        recommendation.discovery.supports_client_metadata !== false,
     };
   });
   const [selectedAuthentication, setSelectedAuthentication] =
@@ -326,7 +331,7 @@ export default function MCPAuthenticationPage({
       clearMcpChatEnableIntent(chatEnableIntent);
       if (result.status === "authorization_required") {
         if (onAuthorize) onAuthorize(result.authorization_url);
-        else window.location.href = result.authorization_url;
+        else navigation.load(result.authorization_url);
         return;
       }
       persistedValues.current = values;
@@ -336,6 +341,15 @@ export default function MCPAuthenticationPage({
       });
       await onComplete();
     } catch (error) {
+      if (
+        error instanceof MCPOAuthError &&
+        error.reason === "client_metadata_rejected" &&
+        values.oauth_cimd_enabled
+      ) {
+        const registrationValues = { ...values, oauth_cimd_enabled: false };
+        await helpers.setValues(registrationValues, false);
+        return await handleSubmit(registrationValues, helpers);
+      }
       if (error instanceof MCPAuthValidationError) {
         helpers.setFieldError("oauth_additional_auth_params", error.message);
       }
@@ -431,7 +445,10 @@ export default function MCPAuthenticationPage({
                       rightChildren={
                         selectedAuthentication !== null &&
                         selectedAuthentication === recommendedAuthentication ? (
-                          <Tag title={recommendedCopy("label")} color="green" />
+                          <Badge
+                            title={recommendedCopy("label")}
+                            color="success"
+                          />
                         ) : undefined
                       }
                       options={[
@@ -557,19 +574,6 @@ export default function MCPAuthenticationPage({
                           }}
                         >
                           {t("mcpAuthModal.discovery.useOwnClient")}
-                        </Button>
-                      )}
-                      {connectionError.reason ===
-                        "client_metadata_rejected" && (
-                        <Button
-                          type="button"
-                          prominence="secondary"
-                          onClick={() => {
-                            setFieldValue("oauth_cimd_enabled", false);
-                            setConnectionError(null);
-                          }}
-                        >
-                          {t("mcpAuthModal.cimd.turnOff")}
                         </Button>
                       )}
                       {connectionError.reason === "discovery_failed" && (

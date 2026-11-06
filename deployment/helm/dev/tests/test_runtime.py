@@ -20,6 +20,24 @@ from runtime import Cluster, agent_stale, application_ready  # noqa: E402
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_telepresence_workloads_reads_cli_output_envelope(self) -> None:
+        workloads = [{"name": "api"}]
+        for payload in (workloads, {"cmd": "list", "stdout": workloads}):
+            with patch.object(
+                Cluster, "command", return_value=json.dumps(payload)
+            ) as command:
+                self.assertEqual(
+                    Cluster(Path.cwd()).telepresence_workloads(), workloads
+                )
+            command.assert_called_once_with(
+                "telepresence", "list", "--namespace", "onyx", "--output", "json"
+            )
+
+    def test_telepresence_status_uses_supported_output_flag(self) -> None:
+        with patch.object(Cluster, "command", return_value="{}") as command:
+            self.assertFalse(Cluster(Path.cwd()).intercept_active("api"))
+        command.assert_called_once_with("telepresence", "status", "--output", "json")
+
     def test_command_errors_report_stderr_without_disclosing_configuration(
         self,
     ) -> None:

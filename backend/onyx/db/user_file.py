@@ -7,6 +7,7 @@ from sqlalchemy import column, exists, func, or_, select, true, update, values
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from onyx.configs.constants import USER_FILE_PROCESSING_MAX_ATTEMPTS
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
 from onyx.file_store.models import ChatFileInput, FileDescriptor, UserFileMetadata
@@ -401,6 +402,28 @@ def any_user_file_reconcile_pending_for_users(
             )
         )
     )
+
+
+def consume_user_file_processing_attempt(
+    db_session: Session, user_file: UserFile
+) -> bool:
+    """Count one pickup and commit it before the slow work. Past the cap the
+    file is marked FAILED and False comes back."""
+    user_file.processing_attempts += 1
+    exhausted = user_file.processing_attempts > USER_FILE_PROCESSING_MAX_ATTEMPTS
+    if exhausted:
+        # A delete may have landed since the caller's status check. The row
+        # must stay DELETING or the delete sweep never finds it again.
+        db_session.execute(
+            update(UserFile)
+            .where(
+                UserFile.id == user_file.id,
+                UserFile.status != UserFileStatus.DELETING,
+            )
+            .values(status=UserFileStatus.FAILED)
+        )
+    db_session.commit()
+    return not exhausted
 
 
 def get_user_file_processing_info(

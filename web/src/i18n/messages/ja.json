@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "コミット"
+      },
+      "commitDate": {
+        "label": "コミット日時"
+      },
+      "instanceUrl": {
+        "label": "インスタンス URL"
+      },
+      "label": "情報",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "利用できません",
+      "version": {
+        "label": "バージョン"
+      }
+    },
     "accountFallback": {
       "label": "アカウント"
     },
@@ -154,7 +173,7 @@
         "title": "アクセス制御",
         "description": "このMCPを使用できるユーザーを選択します。",
         "public": {
-          "label": "公開",
+          "label": "組織",
           "description": "組織内の誰でもこのMCPを使用できます"
         },
         "groups": {
@@ -167,7 +186,6 @@
           "description": "管理しているグループを1つ以上選択してください。"
         },
         "retainedUsers": "{count, plural, other {#人のユーザーとも直接共有されています。}}",
-        "planTag": "Business",
         "planNote": "グループアクセスにはBusinessプランが必要です。"
       },
       "defaultChat": {
@@ -412,8 +430,7 @@
       },
       "cimd": {
         "label": "クライアントメタデータドキュメントを使用",
-        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。",
-        "turnOff": "クライアントメタデータドキュメントをオフにする"
+        "description": "オンの場合、プロバイダーは公開インターネット経由で {appName} のクライアントメタデータドキュメントを取得します。この {appName} インスタンスが非公開の場合はオフにしてください。その場合 {appName} は自動クライアント登録を使用します。"
       },
       "discovery": {
         "checking": "自動設定を確認しています…",
@@ -1115,18 +1132,6 @@
         "openapi": "OpenAPI プラグインを追加"
       },
       "catalog": {
-        "slack": {
-          "summary": "会話の検索とメッセージの送信",
-          "description": "会話の検索とメッセージの送信。登録済みのSlackアプリが必要です。"
-        },
-        "hubspot": {
-          "summary": "連絡先と取引を管理",
-          "description": "連絡先と取引を管理。HubSpot MCPコネクターが必要です。"
-        },
-        "asana": {
-          "summary": "タスクとプロジェクトを管理",
-          "description": "タスクとプロジェクトを管理。登録済みのOAuthクライアントが必要です。"
-        },
         "linear": {
           "summary": "課題、プロジェクト、チームを管理します",
           "description": "課題、プロジェクト、チームを管理します。"
@@ -1218,6 +1223,10 @@
       "blocked": "このURLは送信セキュリティ設定によってブロックされています。",
       "publicDetected": "認証は不要です",
       "oauthDetected": "OAuthを検出しました",
+      "clientMetadata": "クライアントメタデータドキュメント",
+      "clientMetadataSupported": "対応",
+      "clientMetadataUnsupported": "非対応",
+      "clientMetadataUnknown": "未確認",
       "manualRequired": "認証方法を手動で選択",
       "chooseAuthentication": "このサーバーの認証方法を確認できませんでした。以下から方法を選択してください。",
       "connect": "接続",
@@ -1445,6 +1454,9 @@
         "s3": {
           "description": "AWS ストレージバケット"
         },
+        "azureDatalake": {
+          "description": "Azure Data Lake Storage コンテナー内のファイル"
+        },
         "r2": {
           "description": "クラウドストレージバケット"
         },
@@ -1646,7 +1658,7 @@
             "label": "プライベート"
           },
           "public": {
-            "label": "公開"
+            "label": "組織"
           },
           "shared": {
             "label": "共有"
@@ -1920,7 +1932,7 @@
             "text": "このデプロイメントからアクセス制御が削除されます。**再インデックスが開始され**、検索結果に変更が反映されます。大きなインデックスでは時間がかかることがあります。"
           },
           "madePublic": {
-            "text": "**公開:** すべてのコネクタと、ユーザーグループに共有されているエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキル"
+            "text": "**組織に開放:** すべてのコネクタと、ユーザーグループに共有されているエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキル"
           },
           "reset": {
             "text": "**デフォルトにリセット:** カスタムブランディングとチャット保持ポリシー"
@@ -2223,8 +2235,9 @@
         "title": "チャット命名モデル"
       },
       "searchDecisionModel": {
-        "description": "取得したドキュメントを選び、追加するコンテキストの量を決めます。判定モデルは1回の呼び出しで順位付けします。言語モデルは従来どおり選択します。",
-        "title": "検索判定モデル"
+        "description": "取得したドキュメントを選び、追加するコンテキストの量を決めます。判断モデルは1回の呼び出しで順位付けします。言語モデルは従来どおり選択します。",
+        "title": "検索判断モデル",
+        "decisionSection": "判断モデル"
       },
       "taskModels": {
         "loadFailed": "タスクモデルを読み込めませんでした",
@@ -2405,7 +2418,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "チャット名の生成モデルの更新に失敗しました",
         "providerResolveFailed": "プロバイダーを解決できませんでした",
-        "searchDecisionUpdateFailed": "検索判定モデルを更新できませんでした",
+        "searchDecisionUpdateFailed": "検索判断モデルを更新できませんでした",
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "systemPromptUpdateFailed": "システムプロンプトの更新に失敗しました",
         "toolsUpdateFailed": "ツールの更新に失敗しました",
@@ -2635,7 +2648,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "削除"
+          "label": "コネクターを削除",
+          "description": "インデックス済みのドキュメントをすべて完全に削除します。"
         },
         "reIndex": {
           "tooltip": {
@@ -2674,7 +2688,7 @@
         },
         "syncPermissions": {
           "label": "権限を同期",
-          "description": "各ドキュメントを閲覧できるユーザーを今すぐソースから取得します。",
+          "description": "ソースからドキュメントの権限を取得します。",
           "tooltip": {
             "syncing": "権限の同期はすでに待機中または実行中です"
           }
@@ -2801,20 +2815,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} 件/分",
-        "indexingSpeedTooltip": "コネクター作成以降の1分あたりのインデックス済みドキュメント数",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
+        "deletionStarted": {
+          "value": "開始 {when}"
+        },
         "documents": {
           "totalLabel": "インデックス済みドキュメント合計",
-          "recentLabel": "最近処理されたドキュメント",
-          "syncedPermissionsLabel": "同期済みの権限",
-          "syncedMembershipsLabel": "同期済みのグループメンバーシップ"
+          "recentLabel": "最近処理したドキュメント",
+          "indexedLabel": "インデックス済みドキュメント"
         },
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
+          "lineTooltip": "{failures, plural, one {# 件の失敗} other {# 件の失敗}}、{errors, plural, one {# 件のエラー} other {# 件のエラー}}",
+          "barLabel": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}、{range}",
           "loadError": "グラフを読み込めませんでした。",
           "rangeFilter": "グラフのこの区間に作成された実行"
         },
@@ -2830,13 +2846,33 @@
         "title": "インデックス状況",
         "sync": {
           "permissionsTitle": "権限同期の状況",
-          "groupsTitle": "グループメンバーシップ同期の状況",
           "last": "最終同期 {when}",
           "never": "まだ同期されていません",
-          "neverTooltip": "インデックス済みのドキュメントは、権限が同期されるまで検索できない場合があります。",
-          "waitingForFirstIndex": "初回インデックス待ち"
+          "neverTooltip": "インデックス済みのドキュメントは、権限が同期されるまで検索できません。",
+          "waitingForFirstIndex": "初回インデックス待ち",
+          "docsLabel": "権限を同期したドキュメント",
+          "groupsLabel": "グループメンバーシップ"
         },
-        "accessTitle": "コネクターのドキュメントアクセス"
+        "actions": {
+          "showActivities": "アクティビティを表示",
+          "hideActivities": "アクティビティを非表示",
+          "viewDetails": "詳細を表示",
+          "hideDetails": "詳細を隠す",
+          "viewIndexingRun": "インデックスの実行を表示",
+          "viewPruningRun": "プルーニングの実行を表示",
+          "viewChecksRun": "チェックの実行を表示"
+        },
+        "types": {
+          "count": "{count, plural, other {ドキュメントの種類}}",
+          "header": "ドキュメントの種類",
+          "indexed": "インデックス済み",
+          "size": "サイズ",
+          "other": "その他",
+          "countWithSize": "{count}（{size}）",
+          "bytes": "バイト",
+          "loadError": "ドキュメントの種類を読み込めませんでした。",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",
@@ -2966,6 +3002,7 @@
           "all": "すべての種類",
           "indexing": "ドキュメントインデックス",
           "backfill": "ドキュメントのバックフィル",
+          "retry": "ドキュメントインデックス - 再試行",
           "doc_permission_sync": "権限の同期",
           "group_sync": "グループメンバーシップの同期",
           "pruning": "ドキュメントのプルーニング",
@@ -2973,9 +3010,10 @@
         },
         "detail": {
           "queued": "待機中",
+          "starting": "同期を開始中",
           "running": "実行中",
           "rate": "{rate} 件/分",
-          "finished": "{time}（{duration}）",
+          "runtime": "実行時間 {duration}",
           "rateFinished": "{rate} 件/分（{duration}）",
           "membershipRate": "{rate} メンバーシップ/分",
           "membershipRateFinished": "{rate} メンバーシップ/分（{duration}）"
@@ -2984,6 +3022,7 @@
           "stages": "ステージの指標を表示",
           "cancel": "キャンセル",
           "logs": "ログを表示",
+          "noLogs": "ログは記録されていません",
           "checks": "チェック結果を表示"
         },
         "warnings": {
@@ -3018,16 +3057,12 @@
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
-        "search": {
-          "placeholder": "実行エラーを検索…"
-        },
         "window": {
           "label": "期間",
           "all": "全期間",
           "h1": "過去 1 時間",
           "h24": "過去 24 時間",
-          "d7": "過去 7 日間",
-          "d30": "過去 30 日間"
+          "d7": "過去 7 日間"
         },
         "statusGroups": {
           "label": "ステータス",
@@ -3038,14 +3073,13 @@
           "canceled": "キャンセル済み"
         },
         "loadError": {
-          "title": "実行を読み込めませんでした。"
+          "title": "実行を読み込めませんでした。",
+          "retry": "再試行"
         },
         "empty": {
           "title": "最近のインデックス実行はありません",
           "filteredTitle": "このフィルターに一致する実行はありません。",
           "pastRuns": "{count, plural, other {過去の実行 # 件}}",
-          "view": "表示",
-          "viewAria": "{count, plural, other {過去の実行 # 件を表示}}",
           "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
         },
         "units": "{count, plural, other {件の実行}}",
@@ -3080,15 +3114,24 @@
           "all": "全レベル",
           "failures": "失敗",
           "errors": "エラー",
-          "other": "その他",
+          "running": "実行中",
+          "success": "成功",
+          "canceled": "キャンセル",
           "resolved": "解決済み",
-          "toggle": "フィルター"
+          "connectors": "コネクター",
+          "connectorsLoading": "コネクタを読み込み中…",
+          "connectorsLoadError": "コネクタを読み込めませんでした。",
+          "connectorsRetry": "再試行",
+          "toggleShow": "フィルターを表示",
+          "toggleHide": "フィルターを非表示"
         },
         "groups": {
           "failures": "{count, plural, =0 {失敗} other {失敗 # 件}}",
           "errors": "{count, plural, =0 {エラー} other {エラー # 件}}",
-          "other": "その他",
-          "resolved": "{count, plural, other {解決済み # 件}}"
+          "running": "実行中 {count, number} 件",
+          "resolved": "解決済み",
+          "success": "成功",
+          "canceled": "キャンセル"
         },
         "title": {
           "indexing": {
@@ -3099,9 +3142,8 @@
             "errors": "エラーを伴いインデックス作成が完了しました。",
             "resolved": "インデックス作成のエラーが解決されました。",
             "succeeded": "インデックスが正常に完了しました。",
-            "queued": "インデックスは待機中です。",
             "inProgress": "インデックス実行中。",
-            "canceled": "インデックスが停止しました。"
+            "canceled": "インデックスがキャンセルされました。"
           },
           "doc_permission_sync": {
             "failed": "権限の同期に失敗しました。",
@@ -3111,9 +3153,8 @@
             "errors": "エラーを伴い権限が同期されました。",
             "resolved": "権限同期のエラーが解決されました。",
             "succeeded": "権限の同期が正常に完了しました。",
-            "queued": "権限の同期は待機中です。",
             "inProgress": "権限を同期中。",
-            "canceled": "権限の同期が停止しました。"
+            "canceled": "権限の同期がキャンセルされました。"
           },
           "group_sync": {
             "failed": "グループメンバーシップの同期に失敗しました。",
@@ -3123,9 +3164,8 @@
             "errors": "エラーを伴いグループメンバーシップが同期されました。",
             "resolved": "グループメンバーシップ同期のエラーが解決されました。",
             "succeeded": "グループメンバーシップの同期が正常に完了しました。",
-            "queued": "グループメンバーシップの同期は待機中です。",
             "inProgress": "グループメンバーシップを同期中。",
-            "canceled": "グループ同期が停止しました。"
+            "canceled": "グループ同期がキャンセルされました。"
           },
           "pruning": {
             "failed": "プルーニングに失敗しました。",
@@ -3135,9 +3175,8 @@
             "errors": "プルーニングがエラーを伴って完了しました。",
             "resolved": "プルーニングのエラーが解決されました。",
             "succeeded": "プルーニングが正常に完了しました。",
-            "queued": "プルーニングは待機中です。",
             "inProgress": "プルーニングを実行中。",
-            "canceled": "プルーニングが停止しました。"
+            "canceled": "プルーニングがキャンセルされました。"
           },
           "checks": {
             "failed": "コネクタチェックに失敗しました。",
@@ -3147,9 +3186,8 @@
             "errors": "コネクタチェックがエラーを伴って完了しました。",
             "resolved": "コネクタチェックのエラーが解決されました。",
             "succeeded": "コネクタチェックに合格しました。",
-            "queued": "コネクタチェックは待機中です。",
             "inProgress": "コネクタチェックを実行中。",
-            "canceled": "コネクタチェックが停止しました。"
+            "canceled": "コネクタチェックがキャンセルされました。"
           }
         },
         "description": {
@@ -3164,22 +3202,18 @@
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
           "indexingItems": "{count, plural, other {# 件の項目が失敗}}",
-          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの権限の同期に失敗}}",
-          "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
           "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "users": "{count, plural, one {# 人のユーザーの同期に失敗} other {# 人のユーザーの同期に失敗}}",
+          "groups": "{count, plural, one {# 件のグループの同期に失敗} other {# 件のグループの同期に失敗}}",
           "resolved": "解決済み",
-          "resolvedDocs": "{count, plural, other {# 件の項目を解決}}",
           "superseded": "置き換え済み"
         },
         "more": "さらに表示",
         "empty": {
           "title": "最近のアクティビティはありません",
-          "resolved": "解決済みの実行はありません",
-          "filtered": "この検索に一致するものはありません。",
-          "failures": "失敗はありません",
-          "errors": "エラーはありません",
-          "other": "その他の実行はありません"
+          "past": "過去のアクティビティ",
+          "filtered": "この検索に一致するものはありません。"
         },
         "loadError": {
           "title": "アクティビティを読み込めませんでした。"
@@ -3187,19 +3221,32 @@
         "docs": {
           "title": "失敗した項目",
           "search": {
-            "placeholder": "項目を検索…"
+            "placeholder": "ドキュメントを検索…"
           },
-          "resolveAll": "すべて再試行",
-          "resolveAllTooltip": "この実行で失敗したすべてのドキュメントを再インデックス",
-          "resolveAllUnsupported": "このコネクタは個別のドキュメントを再インデックスできません。再試行するにはコネクタを再インデックスしてください。",
-          "resolveOne": "このドキュメントを再試行",
-          "retry": "{count, plural, other {# 件のドキュメントを再試行}}",
+          "resolveAll": "すべてのドキュメントを再試行",
+          "resolveOne": "ドキュメントを再試行",
+          "resolveWithoutRetry": "再試行せずに解決",
           "more": "さらに表示",
           "less": "折りたたむ",
           "unknownDocument": "不明なドキュメント",
-          "empty": "未解決のエラーはありません",
+          "empty": "失敗したドキュメントはありません",
           "loadError": "失敗した項目を読み込めませんでした。",
-          "open": "ドキュメントを開く"
+          "open": "ドキュメントを開く",
+          "resolvedGroup": "解決済みのエラー",
+          "resolvedWithoutRetry": "再試行せずに解決済み",
+          "resolvedByLaterRun": "後続の実行で解決済み"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "失敗したユーザー",
+            "search": "ユーザーを検索…",
+            "empty": "失敗したユーザーはいません"
+          },
+          "groups": {
+            "title": "失敗したグループ",
+            "search": "グループを検索…",
+            "empty": "失敗したグループはありません"
+          }
         },
         "trace": {
           "header": "スタックトレース • 実行 ID: {id}",
@@ -3207,17 +3254,18 @@
           "runId": "実行 ID: {id}"
         },
         "actions": {
-          "resolve": "解決"
+          "resolve": "解決",
+          "resolveWithoutRetry": "再試行せずに解決",
+          "retryDocs": "ドキュメントを再試行"
         },
         "resolveAll": {
-          "button": "表示中をすべて解決",
-          "title": "表示中の実行をすべて解決しますか？",
-          "description": "現在のフィルターに一致する{count, plural, other {# 件の実行}}を解決済みにします。ステータスはそのままで、解決済みの下に移動します。",
-          "fleetDescription": "操作権限のあるコネクターで、現在のフィルターに一致する{count, plural, other {# 件の実行}}を解決済みにします。ステータスはそのままで、解決済みの下に移動します。",
+          "button": "すべて解決",
+          "title": "表示中のアクティビティをすべて解決",
+          "body": "{count, plural, other {現在のフィルターに一致する # 件のアクティビティ（{failures}、{errors}）を解決します。Onyx は失敗した項目を再試行しません。アクティビティのステータスはそのままで、解決済みに移動します。}}",
+          "body2": "実行中の実行は新しいエラーを報告することがあり、それらは再び未解決として表示されます。解決済みのドキュメントは、後で失敗したドキュメントの一覧から再試行できます。",
+          "failures": "{count, plural, =0 {失敗なし} other {# 件の失敗}}",
+          "errors": "{count, plural, =0 {エラーのある実行なし} other {エラーのある実行 # 件}}",
           "confirm": "すべて解決"
-        },
-        "resolved": {
-          "label": "解決済み"
         }
       },
       "stageDetails": {
@@ -3229,10 +3277,22 @@
         "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
+        "noDocs": "インデックス作成が完了したドキュメントはありません",
+        "laterCanceled": "後続のステージはキャンセルされました",
+        "retry": "再試行",
         "uneven": {
           "tooltip": "このステージのバッチ時間は大きくばらついています"
         },
         "close": "ステージ詳細を閉じる"
+      },
+      "tabs": {
+        "configurations": "コネクター設定",
+        "indexing": "インデックス",
+        "indexingDisabled": "最初の実行が始まると利用できます。"
+      },
+      "indexingTab": {
+        "chartHeading": "ドキュメントのインデックス",
+        "runsHeading": "インデックス実行"
       }
     },
     "connectorTitle": {
@@ -3685,7 +3745,7 @@
         "documentAccess": {
           "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",
           "everyone": {
-            "description": "このコネクタでインデックスされたドキュメントは、組織内の全員に公開されます。",
+            "description": "このコネクタでインデックスされたドキュメントは、組織内の全員が利用できます。",
             "title": "組織内の全員"
           },
           "specificGroups": {
@@ -4593,6 +4653,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Azure Data Lake Storage コネクターを構成",
+          "fields": {
+            "account_name": {
+              "label": "ストレージアカウント名",
+              "description": "ストレージアカウントの名前（例: contosodata）。アカウントには階層型名前空間が必要です。"
+            },
+            "container_name": {
+              "label": "コンテナー名",
+              "description": "インデックスを作成するコンテナー（ファイルシステム）。"
+            },
+            "path_prefix": {
+              "label": "パスプレフィックス",
+              "description": "コンテナー内のディレクトリ（例: reports/2026）。コンテナー全体をインデックスする場合は空のままにします。"
+            }
+          }
+        },
         "r2": {
           "description": "R2 コネクターを設定",
           "fields": {
@@ -5195,6 +5272,8 @@
         "integrationToken": "{source} インテグレーショントークン",
         "accessKey": "{source} アクセスキー",
         "accessKeySecret": "{source} アクセスキーシークレット",
+        "storageAccountName": "ストレージアカウント名",
+        "accountKey": "{source} アカウントキー",
         "key": "{source} キー",
         "secret": "{source} シークレット",
         "roleArn": "{source} ロール ARN",
@@ -5216,6 +5295,7 @@
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
+        "azureDatalakeAccountKey": "Azure portal でストレージアカウントを開き、[セキュリティとネットワーク]、[アクセスキー] の順に開きます。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
@@ -5228,6 +5308,7 @@
           "certificateAuthentication": "証明書認証",
           "certificate": "証明書",
           "accessKeyAndSecret": "アクセスキーとシークレット",
+          "accountKey": "アカウントキー",
           "iamRole": "IAM ロール",
           "assumeRole": "ロールの引き受け",
           "serviceAccount": "サービスアカウント",
@@ -5240,6 +5321,9 @@
           "teamsCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。「添付ファイルを含める」に必要です。この機能は SharePoint からチャネルのファイルとその閲覧者を読み取ります。",
           "outlookClientSecret": "コネクタはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。",
           "outlookCertificate": "コネクタはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。",
+          "azureDatalakeClientSecret": "コネクターはアプリ登録のクライアントシークレットでサインインします。クライアント ID、ディレクトリ ID、シークレットを入力してください。コンテナーでアプリに Storage Blob Data Reader ロールを付与してください。",
+          "azureDatalakeCertificate": "コネクターはアプリ登録にアップロードされた証明書でサインインします。クライアント ID、ディレクトリ ID、PFX バンドルとそのパスワードを入力してください。コンテナーでアプリに Storage Blob Data Reader ロールを付与してください。",
+          "azureDatalakeAccountKey": "コネクターはストレージアカウントのキーで各リクエストに署名します。アカウント名とアクセスキーの 1 つを入力してください。",
           "s3AssumeRole": "このモードでは、Amazon EC2 インスタンスが既存のロールを引き受けて S3 にアクセスします。追加の認証情報は不要です。"
         }
       },
@@ -5622,7 +5706,7 @@
             "label": "非公開"
           },
           "public": {
-            "label": "公開"
+            "label": "組織"
           }
         },
         "connector": {
@@ -5743,7 +5827,7 @@
             "header": "名前"
           },
           "public": {
-            "header": "公開"
+            "header": "アクセス"
           },
           "status": {
             "header": "ステータス"
@@ -6276,28 +6360,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "上限を追加"
-        },
-        "costLimit": {
-          "header": "コスト上限",
-          "placeholder": "コスト上限",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "token レート制限は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。",
-        "section": {
-          "description": "このグループが指定期間内に使用できる token 数を制限します。",
-          "title": "Token レート制限"
-        },
-        "timeWindow": {
-          "header": "期間",
-          "unit": "(UTC 日数)"
-        },
-        "tokenLimit": {
-          "header": "Token 上限",
-          "placeholder": "Token 上限 (千単位)",
-          "unit": "(千単位)"
-        }
+        "disabledTooltip": "token レート制限は [Onyx の Enterprise 版](/admin/billing) でのみ利用できます。"
       },
       "builtIn": {
         "admin": {
@@ -6308,9 +6371,6 @@
           "name": "基本",
           "description": "基本権限を持つ全ユーザーのデフォルトグループ。"
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6590,11 +6650,24 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "接続済みの LLM プロバイダーの画像モデルです。チャットで使うには接続してください。",
+        "title": "利用可能なモデル"
+      },
       "configureSuccess": {
         "message": "プロバイダーを設定しました"
       },
+      "connectButton": {
+        "label": "接続"
+      },
+      "connectedModels": {
+        "title": "接続済みモデル"
+      },
       "deselectError": {
         "message": "選択を解除できませんでした"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} を切断"
       },
       "disconnectError": {
         "message": "接続を解除できませんでした"
@@ -6612,6 +6685,9 @@
         "header": {
           "description": "このプロバイダーに保存されている認証情報を削除します。",
           "title": "*{title}* の接続を解除"
+        },
+        "linkedHeader": {
+          "description": "LLMプロバイダーとその認証情報は接続されたままです。"
         },
         "noDefaultOption": {
           "description": "(画像生成を無効にする)",
@@ -6633,6 +6709,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} の接続を解除しました"
+      },
+      "editButton": {
+        "ariaLabel": "{title} を編集"
       },
       "emptyState": {
         "title": "チャットで使用する画像生成モデルを接続してください。"
@@ -6712,12 +6791,30 @@
         "description": "チャット内の画像生成に関する設定です。",
         "title": "画像生成"
       },
+      "linkError": {
+        "message": "モデルを接続できませんでした"
+      },
+      "linkSuccess": {
+        "message": "{title} を接続しました"
+      },
+      "linkedModel": {
+        "description": "{provider} から"
+      },
       "loadError": {
         "message": "設定を読み込めませんでした。ページを再読み込みしてください。"
       },
       "model": {
         "description": "チャットで画像を生成するモデルを選択してください。",
+        "placeholder": "デフォルトのモデルを選択",
         "title": "画像生成モデル"
+      },
+      "modelFilter": {
+        "all": "すべて",
+        "recommended": "おすすめ"
+      },
+      "noImageModels": {
+        "description": "言語モデルページで、画像モデルを提供する LLM プロバイダーを接続してください。接続済みプロバイダーのすべてのモデルを表示するには、[すべて] タブを開いてください。",
+        "title": "利用できる画像モデルがありません"
       },
       "providers": {
         "azureGptImage1": {
@@ -7028,7 +7125,6 @@
           "tag": "GPU推奨"
         },
         "legacy": {
-          "tag": "レガシー",
           "tooltip": "このモデルは新しいインデックスには選択できません。モデルを変更するまでは引き続き動作します。"
         },
         "selectButton": {
@@ -7081,9 +7177,6 @@
       "multipass": {
         "description": "ドキュメントをさまざまなサイズのチャンクとしてインデックスし、関連する情報源をより正確に特定します。",
         "disabledTooltip": "マルチパスインデックスは一時的に無効です。今後利用できるようになります。",
-        "tag": {
-          "label": "一時的に利用不可"
-        },
         "title": "マルチパスインデックス"
       },
       "openaiCompatible": {
@@ -7235,6 +7328,7 @@
       },
       "vectorQuantization": {
         "description": "ドキュメントのベクトルを少ないビット数で保存し、ベクトル検索のメモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。この設定のみを変更した場合、保存済みのベクトルからインデックスを再構築し、再埋め込みは行いません。",
+        "needsVersion": "OpenSearch {version} 以降が必要",
         "none": {
           "description": "32 ビットの完全な精度。",
           "label": "なし"
@@ -7247,7 +7341,8 @@
           "description": "ベクトル検索のメモリ使用量が約 4 分の 1。検索品質はほぼ低下しません。",
           "label": "7 ビット"
         },
-        "title": "ベクトル量子化"
+        "title": "ベクトル量子化",
+        "unsupportedTooltip": "このクラスターは OpenSearch {current} で動作しています。このレベルを使用するには、OpenSearch を {version} 以降にアップグレードしてください。"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {このコネクタは削除されます} other {これら # 個のコネクタは削除されます}}",
@@ -7362,37 +7457,26 @@
       }
     },
     "indexing": {
+      "addConnector": "コネクタを追加",
       "connectorCreated": {
         "toast": "コネクターを作成しました"
       },
       "overview": {
-        "connectors": {
-          "caption": "インデックス中 / 有効",
-          "label": "コネクタ"
-        },
-        "documents": {
-          "caption": "インデックス内",
-          "label": "ドキュメント",
-          "tooltip": "各コネクタのドキュメント数を合計するため、2 つのコネクタが持つドキュメントは 2 回数えられます。"
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "概要を読み込めませんでした。",
-        "processed": {
-          "caption": "期間内に処理",
-          "label": "ドキュメント",
-          "tooltip": "推定値です。各実行の件数は実行時間全体に均等に配分されます。ドキュメントは実行が処理するたびに数えられ、失敗したものも含まれるため、インデックス内のドキュメント数を超えることがあります。"
-        }
+        "activeConnectors": "アクティブなコネクタ",
+        "pausedConnectors": "一時停止中のコネクタ",
+        "indexingConnectors": "インデックス中のコネクタ",
+        "loadError": "概要を読み込めませんでした。"
       },
       "activities": {
         "title": "アクティビティ",
-        "history": "アクティビティ履歴をすべて表示",
-        "viewLogs": "ログを表示",
         "panel": {
-          "title": "アクティビティ履歴",
+          "title": "アクティビティ",
           "close": "パネルを閉じる",
           "pairTitle": "{name} のアクティビティ履歴"
+        },
+        "panelButton": {
+          "show": "アクティビティを表示",
+          "hide": "アクティビティを非表示"
         }
       },
       "list": {
@@ -7401,21 +7485,22 @@
         },
         "statusFilter": {
           "label": "ステータス",
-          "all": "すべてのステータス"
+          "all": "すべてのステータス",
+          "running": "進行中"
         },
         "counts": {
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
-          "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
+          "running": "{indexing, plural, other {インデックス中 # 件}}、{syncing, plural, other {同期中 # 件}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
           "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
           "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",
           "deleting": "{count, plural, other {# 件のコネクタを削除中}}"
         },
         "access": {
-          "public": "公開",
-          "private": "非公開",
-          "sync": "自動同期",
-          "sync_restricted": "自動同期（制限付き）"
+          "public": "組織全体に公開",
+          "private": "{count, plural, =0 {非公開} other {# 個のグループと共有}}",
+          "sync": "権限を自動同期",
+          "sync_restricted": "権限を自動同期"
         },
         "detail": {
           "queued": "キューの {position, selectordinal, other {#}} 番目",
@@ -7424,7 +7509,7 @@
         },
         "docs": {
           "label": "ドキュメント",
-          "processed": "{count, number} 件処理済み",
+          "processed": "最近 {count, number} 件処理済み",
           "processedTooltip": {
             "running": "現在の実行がこれまでに処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられるため、コネクタのドキュメント数を超えることがあります。",
             "finished": "前回の実行が処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられ、その後に削除されたドキュメントはコネクタの件数から外れるため、コネクタのドキュメント数を超えることがあります。"
@@ -7435,6 +7520,8 @@
           "manageFederated": "フェデレーテッドコネクタを管理",
           "expand": "詳細を表示",
           "collapse": "詳細を隠す",
+          "viewErrors": "エラーを表示",
+          "viewAllRuns": "すべての実行を表示",
           "pause": "一時停止",
           "resume": "再開"
         },
@@ -7447,7 +7534,8 @@
           "filteredTitle": "これらのフィルターに一致するコネクタはありません。"
         },
         "loadError": "コネクタを読み込めませんでした。",
-        "units": "{count, plural, other {件のコネクタ}}"
+        "units": "{count, plural, other {件のコネクタ}}",
+        "sourceGroup": "{source}（{count, number}）"
       },
       "title": "コネクタのインデックス状況"
     },
@@ -7960,9 +8048,6 @@
         "title": "チャットを開始するには、LLM プロバイダーを設定してください。"
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "デフォルト"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} を削除"
         },
@@ -9040,8 +9125,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "すべての公開ナレッジ",
-            "sublabel": "OnyxBot がすべての公開コネクターの情報に基づいて応答します"
+            "label": "組織全体のすべてのナレッジ",
+            "sublabel": "OnyxBot が組織全体のすべてのコネクターの情報に基づいて応答します"
           },
           "documentSets": {
             "label": "特定のドキュメントセット",
@@ -9806,169 +9891,6 @@
       },
       "placeholders": {
         "helpUrl": "https://docs.onyx.app"
-      }
-    },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "最大 {cost} または {tokens} tokens",
-          "cost": "最大 {cost}",
-          "none": "予算は未設定",
-          "tokens": "最大 {tokens} tokens"
-        },
-        "cadence": {
-          "label": "{days, plural, one {毎日 UTC 午前 0 時にリセット} other {# 日ごとに UTC 午前 0 時にリセット}}"
-        },
-        "deleteFailed": {
-          "error": "Token レート制限の削除に失敗しました"
-        },
-        "empty": {
-          "message": "上限はまだありません。使用量を抑えるには支出上限を作成してください。"
-        },
-        "loadFailed": {
-          "error": "Token レート制限の読み込みに失敗しました"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "{label} を削除",
-            "tooltip": "上限を削除"
-          },
-          "disable": {
-            "ariaLabel": "{label} を無効にする"
-          },
-          "enable": {
-            "ariaLabel": "{label} を有効にする"
-          },
-          "label": "{budget}、{cadence}"
-        },
-        "updateFailed": {
-          "error": "Token レート制限の更新に失敗しました"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "キャンセル"
-        },
-        "costBudget": {
-          "description": "リセット期間ごとの最大支出額です。コスト予算、token 予算、またはその両方を設定してください。",
-          "placeholder": "コスト上限なし",
-          "title": "コスト予算",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "コスト予算、token 予算、またはその両方を入力してください",
-          "costMax": "コスト予算の上限は ${amount, number} です",
-          "costMinCents": "コスト予算は $0.01 以上にしてください",
-          "costMoreThanZero": "コスト予算は 0 より大きい値にしてください",
-          "groupRequired": "ユーザーグループを選択してください",
-          "periodInteger": "日数は整数で入力してください",
-          "periodMin": "1 日以上を指定してください",
-          "periodRequired": "リセット期間を入力してください",
-          "scopeRequired": "適用範囲は必須項目です",
-          "tokenIncrement": "1,000 tokens 単位で指定してください",
-          "tokenInteger": "token 数は整数で入力してください",
-          "tokenMax": "Token 予算の上限は 1 兆です",
-          "tokenMin": "1,000 tokens 以上を指定してください"
-        },
-        "groupMenu": {
-          "empty": "ユーザーグループはまだありません。「ユーザーとグループ」から作成してください。"
-        },
-        "groupPicker": {
-          "placeholder": "グループを選択"
-        },
-        "header": {
-          "title": "支出上限を作成"
-        },
-        "period": {
-          "description": "予算は UTC 午前 0 時にリセットされます",
-          "title": "リセット期間",
-          "unit": "日"
-        },
-        "scope": {
-          "caption": {
-            "global": "ワークスペースの全員が 1 つの予算を共有します。",
-            "group": "{group} のメンバーが 1 つの予算を共有します。",
-            "groupUnchosen": "選択したグループのメンバーが 1 つの予算を共有します。",
-            "user": "各ユーザーが個別の予算を持ちます。"
-          },
-          "title": "適用範囲"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "ワークスペース"
-          },
-          "user": {
-            "title": "ユーザーごと"
-          },
-          "userGroup": {
-            "title": "ユーザーグループ"
-          }
-        },
-        "submit": {
-          "label": "上限を作成"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} または {tokens} tokens",
-            "tokens": "{tokens} tokens"
-          },
-          "global": "{days, plural, one {ワークスペースの全員が毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {ワークスペースの全員が # 日ごとに {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "group": "{days, plural, one {{group} のメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {{group} のメンバーが # 日ごとに {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "groupUnchosen": "{days, plural, one {選択したグループのメンバーが毎日 {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。} other {選択したグループのメンバーが # 日ごとに {budget} までを共有します。期間がリセットされるまで、使用はブロックされます。}}",
-          "user": "{days, plural, one {各ユーザーは毎日 {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。} other {各ユーザーは # 日ごとに {budget} まで使用できます。期間がリセットされるまで、使用はブロックされます。}}"
-        },
-        "tokenBudget": {
-          "description": "リセット期間ごとの最大 token 数",
-          "placeholder": "Token の上限なし",
-          "title": "Token 予算",
-          "unit": "tokens"
-        },
-        "userGroup": {
-          "description": "この予算を共有するグループを選択してください",
-          "title": "ユーザーグループ"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "支出上限を作成"
-        },
-        "createFailed": {
-          "error": "支出上限の作成に失敗しました"
-        },
-        "created": {
-          "message": "支出上限を作成しました。"
-        },
-        "embedded": {
-          "description": "ワークスペース、ユーザー、グループの使用量にガードレールを設定します。上限は設定を削除せずに、有効と無効を切り替えられます。",
-          "title": "支出上限を管理"
-        },
-        "global": {
-          "description": "グローバル上限は、すべてのユーザー、ユーザーグループ、API キーに適用されます。グローバル上限に達すると、これ以上 token を消費できません。"
-        },
-        "intro": {
-          "description": "支出上限を使うと、一定の期間に消費できる token 数を制御できます。",
-          "groupLimit": "ユーザーグループに上限を設定して、チームの支出を管理します。",
-          "toggleLimit": "必要に応じて上限を有効または無効にします。",
-          "userLimit": "ユーザーに上限を設定して、1 人のユーザーが使いすぎないようにします。",
-          "workspaceLimit": "ワークスペース全体に上限を設定して、チーム全体の支出を管理します。"
-        },
-        "tabs": {
-          "global": {
-            "name": "グローバル"
-          },
-          "groups": {
-            "name": "グループ"
-          },
-          "users": {
-            "name": "ユーザー"
-          }
-        },
-        "user": {
-          "description": "ユーザー上限は、各ユーザーに個別に適用されます。ユーザーが上限に達すると、token の消費が一時的にブロックされます。"
-        },
-        "userGroup": {
-          "description": "グループ上限は、グループ内のすべてのユーザーに適用されます。ユーザーが複数のグループに所属する場合は、最も緩やかな上限が適用されます。"
-        }
       }
     },
     "tracing": {
@@ -11099,6 +11021,200 @@
         "scoped": "追加または変更された項目のみ",
         "failures": "{count, plural, other {失敗 # 回}}"
       }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "支出上限を設定して、組織の LLM 支出を管理します。",
+        "loadFailed": "支出上限を読み込めませんでした。"
+      },
+      "workspace": {
+        "title": "ワークスペースの上限",
+        "description": "この組織のすべてのユーザーとアカウントに適用されます。",
+        "pool": {
+          "title": "共有予算",
+          "description": "リセット期間ごとに全員で共有する上限です。コスト上限、トークン上限、またはその両方を設定します。",
+          "empty": "ワークスペース全体の上限なし",
+          "target": "ワークスペース全体の上限",
+          "emptyDescription": "リセット期間ごとに全員で共有する上限です。"
+        },
+        "perUser": {
+          "title": "ユーザーごとの上限",
+          "description": "組織内の各ユーザーに個別に適用される上限です。コスト上限、トークン上限、またはその両方を設定します。",
+          "empty": "ユーザーごとの上限なし",
+          "target": "ユーザーごとの上限",
+          "emptyDescription": "組織内の各ユーザーに個別に適用される上限です。"
+        }
+      },
+      "groups": {
+        "title": "グループの上限",
+        "description": "この組織の特定のグループに適用されます。",
+        "add": {
+          "label": "グループの上限を追加"
+        },
+        "picker": {
+          "placeholder": "グループを選択",
+          "limitSet": "上限設定済み："
+        },
+        "members": "{count, plural, other {# 人のメンバー}}",
+        "empty": "ワークスペース、ユーザー、グループの利用にコスト/トークン上限を設定します。",
+        "pool": {
+          "title": "グループの共有予算",
+          "description": "このグループの全員で共有する上限です。コスト上限、トークン上限、またはその両方を設定します。",
+          "empty": "グループ共有予算なし",
+          "target": "グループ上限",
+          "emptyDescription": "このグループの全員で共有する上限です。",
+          "members": "{count, plural, other {# 人のメンバー}}"
+        },
+        "perMember": {
+          "title": "メンバーごとの上限",
+          "description": "このグループの各メンバーに個別に適用される上限です。コスト上限、トークン上限、またはその両方を設定します。",
+          "adminOnly": "メンバーごとの上限はメンバーをワークスペースの上限より引き上げられるため、管理者のみが変更できます。",
+          "empty": "メンバーごとの上限なし",
+          "target": "メンバーごとのグループ上限",
+          "emptyDescription": "このグループの各メンバーに個別に適用される上限です。",
+          "members": "メンバーごとの上限 • {count, plural, other {# 人のメンバー}}"
+        },
+        "kind": {
+          "placeholder": "上限の種類を選択"
+        },
+        "field": {},
+        "new": {
+          "title": "新しいグループ上限",
+          "pool": {
+            "description": "特定のグループの全員で共有する上限です。コスト上限、トークン上限、またはその両方を設定します。"
+          },
+          "perMember": {
+            "description": "特定のグループの各メンバーに個別に適用される上限です。コスト上限、トークン上限、またはその両方を設定します。"
+          }
+        }
+      },
+      "groupPage": {
+        "title": "支出上限",
+        "description": "このグループが LLM の利用に使える額を制限します。"
+      },
+      "card": {
+        "addLimit": "上限を追加",
+        "addModelBudget": "モデル予算を追加",
+        "modelBudget": {
+          "title": "モデル予算",
+          "description": "特定のモデルの支出に上限を設けます。これらは共有予算にも計上されます。"
+        },
+        "cancel": "キャンセル",
+        "save": "変更を保存",
+        "saved": "支出上限を保存しました",
+        "saveFailed": "支出上限を保存できませんでした: {error}",
+        "create": "上限を作成",
+        "reenable": "再度有効にする",
+        "disable": {
+          "tooltip": "すべての上限をオフにする"
+        },
+        "expand": {
+          "tooltip": "管理"
+        },
+        "collapse": {
+          "tooltip": "折りたたむ"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> または <b>{tokens}</b> トークン / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> トークン / {period}",
+          "period": {
+            "DAILY": "日",
+            "WEEKLY": "週",
+            "MONTHLY": "月"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, other {# 件のモデル予算}}",
+          "nextReset": "次回リセット: {at}",
+          "inactive": "無効な上限",
+          "used": "<b>{percent}%</b> 使用済み",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "アラート",
+        "description": "API で設定されたアラートのみの上限です。利用はブロックされず、ここで保存しても変更されません。",
+        "row": "{model}、{period}: {target}",
+        "allModels": "すべてのモデル",
+        "percent": "上限の {percent}%",
+        "tokens": "{tokens} トークン"
+      },
+      "row": {
+        "model": {
+          "title": "モデル",
+          "placeholder": "モデルを検索…"
+        },
+        "period": {
+          "title": "リセット期間",
+          "options": {
+            "DAILY": {
+              "title": "日次上限",
+              "description": "毎日リセット",
+              "helper": "毎日 00:00 UTC にリセットされます。"
+            },
+            "WEEKLY": {
+              "title": "週次上限",
+              "description": "毎週月曜日にリセット",
+              "helper": "毎週月曜日の 00:00 UTC にリセットされます。"
+            },
+            "MONTHLY": {
+              "title": "月次上限",
+              "description": "毎月1日にリセット",
+              "helper": "毎月1日の 00:00 UTC にリセットされます。"
+            }
+          }
+        },
+        "nextReset": "次回リセット",
+        "resetUsage": {
+          "label": "上限の使用量を今すぐリセット",
+          "done": "使用量をリセットしました。この上限は今から次回リセットまでの使用量を集計します。",
+          "failed": "使用量をリセットできませんでした: {error}"
+        },
+        "remove": {
+          "tooltip": "上限を削除"
+        },
+        "cost": {
+          "title": "コスト上限",
+          "placeholder": "コスト上限なし",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "トークン上限",
+          "placeholder": "トークン上限なし",
+          "suffix": "K",
+          "unit": "トークン"
+        },
+        "usage": {
+          "spent": "<mono>{amount}</mono> 使用済み",
+          "tokens": "<mono>{tokens}</mono> トークン使用済み",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "次のリセットまで利用はブロックされます。",
+            "model": "次のリセットまでモデルの利用はブロックされます。"
+          }
+        },
+        "whenReached": {
+          "title": "この上限に達したとき",
+          "blockAll": {
+            "title": "上限に達したらすべての使用をブロック",
+            "description": "チャット、検索、ボット、API 呼び出しを含むすべてのモデルの利用が、次のリセットまで停止します。"
+          },
+          "blockModel": {
+            "title": "上限に達したらモデルの使用をブロック",
+            "description": "チャット、ボット、API 呼び出しを含むこのモデルの利用が、次のリセットまで停止します。",
+            "summary": "上限に達したらモデルの使用をブロック"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "コストは 0.01 ドル以上、トークンは 1 兆以下に設定してください。",
+          "budgetRequired": "コスト上限、トークン上限、またはその両方を設定してください。",
+          "duplicate": "この期間は別の上限ですでに使用されています。",
+          "modelRequired": "モデルを選択してください。"
+        },
+        "edit": {
+          "tooltip": "編集"
+        }
+      }
     }
   },
   "agents": {
@@ -11111,6 +11227,9 @@
       },
       "pin": {
         "tooltip": "サイドバーにピン留め"
+      },
+      "pinFailed": {
+        "message": "ピン留めを更新できませんでした。もう一度お試しください。"
       },
       "share": {
         "tooltip": "エージェントを共有"
@@ -11418,7 +11537,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "公開権限を変更"
+          "ariaLabel": "組織の権限を変更"
         },
         "row": {
           "updateAccess": {
@@ -11502,16 +11621,18 @@
           "title": "プロンプトリマインダー"
         },
         "public": {
-          "label": "組織全体に公開"
+          "label": "組織で利用可能"
         }
       }
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {エージェント} other {エージェント}}"
+        "label": "{count, plural, one {#エージェント} other {#エージェント}}"
       },
       "empty": {
-        "description": "エージェントが見つかりません"
+        "description": "作成したエージェントと共有されたエージェントがここに表示されます。",
+        "filteredDescription": "選択したタブとフィルターに一致するエージェントはありません。",
+        "item": "エージェント"
       },
       "header": {
         "description": "あなたとチームのユースケースに合わせてAIの動作と知識をカスタマイズします。",
@@ -11525,9 +11646,6 @@
       },
       "page": {
         "ariaLabel": "エージェントページ"
-      },
-      "search": {
-        "placeholder": "エージェントを検索..."
       },
       "sections": {
         "all": {
@@ -12017,9 +12135,6 @@
         "builtin": {
           "label": "組み込み"
         },
-        "custom": {
-          "label": "カスタム"
-        },
         "invalid": {
           "label": "無効"
         },
@@ -12031,6 +12146,12 @@
         },
         "unavailable": {
           "label": "利用できません - クリックして詳細を表示"
+        },
+        "shared": {
+          "label": "共有"
+        },
+        "organization": {
+          "label": "組織"
         }
       },
       "toggle": {
@@ -12099,6 +12220,9 @@
       },
       "firstOpenLoader": {
         "ariaLabel": "チャットを読み込んでいます"
+      },
+      "olderMessagesLoader": {
+        "ariaLabel": "以前のメッセージを読み込んでいます"
       },
       "newChatButton": {
         "label": "新しいチャットを開始"
@@ -12553,6 +12677,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "ユーザーが生成を停止しました"
+        },
+        "timedOut": {
+          "text": "応答は制限時間に達したため停止しました。"
         }
       },
       "codeBlock": {
@@ -12688,9 +12815,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "画像生成"
-        },
         "emptyState": {
           "text": "生成された画像はありません"
         },
@@ -12700,11 +12824,11 @@
         "generatedStatus": {
           "text": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
         },
-        "generatingImagesStatus": {
-          "text": "画像を生成中..."
-        },
         "generatingStatus": {
           "text": "画像を生成中..."
+        },
+        "stoppedStatus": {
+          "text": "画像の生成を停止しました"
         }
       },
       "memoizedLink": {
@@ -12769,6 +12893,9 @@
         },
         "tryAgainNow": {
           "text": "今すぐ再試行できます。"
+        },
+        "otherModels": {
+          "text": "他のモデルは引き続き利用できます。"
         }
       },
       "resubmit": {
@@ -12865,9 +12992,6 @@
           },
           "executingTool": {
             "label": "ツールを実行中"
-          },
-          "generatingImage": {
-            "label": "画像を生成中..."
           },
           "generatingImages": {
             "label": "画像を生成中"
@@ -13219,14 +13343,14 @@
           "title": "所属組織"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "編集"
+          "canEdit": {
+            "label": "編集可能"
+          },
+          "canUse": {
+            "label": "使用可能"
           },
           "removeAccess": {
             "label": "アクセス権を削除"
-          },
-          "viewAndChat": {
-            "label": "閲覧とチャット"
           }
         },
         "privateOption": {
@@ -14082,11 +14206,11 @@
         "text": "読み込み中..."
       },
       "makePublic": {
-        "label": "この{objectName}を公開しますか？",
+        "label": "この{objectName}を組織で利用可能にしますか？",
         "subtext": "設定すると、この{objectName}は<b>すべての{publicToWhom}</b>が利用できるようになります。設定しない場合、<b>管理者</b>と、（ユーザーグループなどを通じて）この{objectName}へのアクセスを明示的に付与された<b>{publicToWhom}</b>のみがアクセスできます。"
       },
       "publicDisabled": {
-        "message": "この{objectName}は公開されており、すべてのユーザーが利用できます。"
+        "message": "この{objectName}は組織内の全員が利用できます。"
       },
       "usersFallback": {
         "text": "ユーザー"
@@ -14178,10 +14302,7 @@
       "upgrade": {
         "label": "プランをアップグレード"
       },
-      "availableFor": "{plan}で利用可能",
-      "beta": {
-        "title": "ベータ"
-      }
+      "availableFor": "{plan}で利用可能"
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -14215,6 +14336,34 @@
     },
     "appFooter": {
       "slogan": "オープンソース AI プラットフォーム"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "{item}がありません",
+        "title": "項目がありません"
+      },
+      "noResults": {
+        "description": "その検索語に一致する結果は見つかりませんでした。",
+        "itemTitle": "{item}が見つかりません",
+        "title": "結果が見つかりません"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "{item}を検索するか「/」キーでフォーカス...",
+      "placeholder": "検索するか「/」キーでフォーカス..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "アルファ",
+        "beta": "ベータ",
+        "comingSoon": "近日公開",
+        "deprecated": "非推奨",
+        "temporarilyUnavailable": "一時的に利用不可",
+        "legacy": "レガシー"
+      },
+      "labels": {
+        "default": "デフォルト"
+      }
     }
   },
   "craft": {
@@ -14736,6 +14885,10 @@
       },
       "plusMenu": {
         "tooltip": "ファイルやスキルを追加"
+      },
+      "contextRing": {
+        "label": "コンテキストウィンドウの使用量",
+        "tooltip": "コンテキストの {percent}% を使用"
       }
     },
     "interruptHint": {
@@ -14747,9 +14900,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "ホームに戻る"
       },
@@ -15250,6 +15400,10 @@
         "trigger": {
           "runNow": "1回実行",
           "schedule": "スケジュール"
+        },
+        "markAllViewed": {
+          "label": "すべて閲覧済みにする",
+          "error": "実行を閲覧済みにできませんでした。もう一度お試しください。"
         }
       },
       "scheduleEditor": {
@@ -15281,7 +15435,8 @@
           "tue": "火",
           "wed": "水"
         }
-      }
+      },
+      "unviewedResults": "新しい結果"
     },
     "todoList": {
       "empty": {
@@ -15994,14 +16149,16 @@
     "inputMultiUpload": {
       "placeholder": "ファイルを追加…",
       "dropToAdd": "ここにファイルをドロップして追加",
-      "dropToAddMore": "ここにドロップしてファイルをさらに追加"
+      "dropToAddMore": "ここにドロップしてファイルをさらに追加",
+      "select": "ファイルを選択"
     },
     "inputUpload": {
       "placeholder": "ファイルを追加…",
       "pasted": "貼り付けたテキスト",
       "attached": "ファイル添付済み",
       "dropToAdd": "ここにファイルをドロップして追加",
-      "dropToReplace": "ここにドロップしてファイルを置き換え"
+      "dropToReplace": "ここにドロップしてファイルを置き換え",
+      "select": "ファイルを選択"
     },
     "inputImage": {
       "alt": "画像",
@@ -16431,7 +16588,7 @@
       "row": {
         "contentPlaceholder": "以下の内容を 1〜2 文で簡潔に要約してください：",
         "promptPlaceholder": "要約",
-        "publicTooltip": "公開のプロンプトショートカットは削除できません。",
+        "publicTooltip": "組織全体のプロンプトショートカットは削除できません。",
         "removeAriaLabel": "ショートカットを削除"
       },
       "title": "プロンプトショートカット",
@@ -16655,6 +16812,12 @@
         },
         "webSearch": {
           "label": "Web 検索"
+        },
+        "skills": {
+          "label": "スキル"
+        },
+        "spendingLimits": {
+          "label": "支出上限"
         }
       },
       "sections": {
@@ -16968,6 +17131,9 @@
         "inspectFailed": "スキルバンドルの検査に失敗しました",
         "saveFailed": "スキルの保存に失敗しました",
         "saved": "「{name}」を保存しました"
+      },
+      "creationAccess": {
+        "title": "アクセス権"
       }
     },
     "modals": {
@@ -17006,6 +17172,13 @@
           "singleSkill": "スキルは一度に 1 つずつアップロードしてください。",
           "title": "ファイルの要件",
           "zip": "ZIP ファイルには SKILL.md ファイルを含める必要があります。"
+        },
+        "batch": {
+          "title": "アップロードするスキルのアクセス権",
+          "selected": "{count, plural, one {# 件のスキルバンドルを選択中} other {# 件のスキルバンドルを選択中}}",
+          "result": "{imported, plural, one {# 件のスキルをインポートしました} other {# 件のスキルをインポートしました}}。{failed, plural, one {# 件が失敗しました} other {# 件が失敗しました}}。",
+          "failure": "{name}: {reason}",
+          "requirement": "複数の ZIP ファイルを選択すると、スキルをまとめてインポートできます。各 ZIP にはスキルを 1 件含めてください。"
         }
       },
       "importGithub": {
@@ -17082,6 +17255,11 @@
         "unavailableFallback": "このスキルはインポートできません。",
         "unavailableTag": {
           "label": "インポート不可"
+        },
+        "sharing": {
+          "title": "インポートするスキルのアクセス権",
+          "configureButton": "アクセス権を設定",
+          "description": "これらのアクセス設定は、選択した{count, plural, one {# 件のスキル} other {# 件のスキル}}すべてに適用されます。"
         }
       },
       "nameConflict": {
@@ -17146,9 +17324,7 @@
         },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "{name} のアクセス権を更新",
-          "canUse": "使用可能",
-          "canEdit": "編集可能"
+          "ariaLabel": "{name} のアクセス権を更新"
         },
         "saveButton": {
           "label": "保存"
@@ -17190,11 +17366,15 @@
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
+      },
+      "tabs": {
+        "details": "詳細",
+        "sharing": "共有"
       }
     },
     "page": {
       "browse": {
-        "title": "スキルを閲覧"
+        "title": "スキルを選択"
       },
       "countSeparator": {
         "label": "{count, plural, one {スキル} other {スキル}}"
@@ -17222,8 +17402,8 @@
           "title": "一致するスキルがありません"
         },
         "noSkills": {
-          "description": "まだ共有されたカスタムスキルはなく、組み込みスキルも設定されていません。",
-          "title": "利用可能なスキルがありません"
+          "title": "カスタムスキルはまだありません",
+          "description": "スキルを作成またはインポートしてライブラリに追加してください。"
         }
       },
       "focusedApp": {
@@ -17260,6 +17440,9 @@
         "disableFailed": "{name}を無効にできませんでした",
         "enableFailed": "{name}を有効にできませんでした",
         "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。"
+      },
+      "builtins": {
+        "title": "組み込みスキル（{count, number}）"
       }
     },
     "sections": {
@@ -17315,6 +17498,34 @@
           "readFailed": "アップロードされたファイルを読み込めませんでした。"
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {組織内の全員がこのスキルにアクセスできます。} other {組織内の全員がこれらのスキルにアクセスできます。}}",
+      "selected": "{users, plural, one {# 人のユーザー} other {# 人のユーザー}}と{groups, plural, one {# 個のグループ} other {# 個のグループ}}に共有されています。",
+      "private": "{count, plural, one {このスキルにアクセスできるのは自分だけです。} other {これらのスキルにアクセスできるのは自分だけです。}}"
+    },
+    "bulk": {
+      "adminDescription": "組織全体のスキルとアクセス権を管理します。",
+      "selectAll": "表示中のカスタムスキルをすべて選択",
+      "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
+      "share": "共有",
+      "enable": "自分用に有効化",
+      "disable": "自分用に無効化",
+      "delete": "削除",
+      "selectSkill": "{name} を選択",
+      "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
+      "failed": "スキルを更新できませんでした。もう一度お試しください。",
+      "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",
+      "deleteTitle": "{count, plural, one {# 件のスキルを削除しますか？} other {# 件のスキルを削除しますか？}}",
+      "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したスキルを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のスキルをすべて削除します。この操作は元に戻せません。}}",
+      "shareTitle": "{count, plural, one {# 件のスキルのアクセス権を更新} other {# 件のスキルのアクセス権を更新}}",
+      "shareDescription": "選択したすべてのスキルに変更を適用します。変更しない設定は現在の値を維持します。",
+      "unchanged": "変更しない",
+      "everyone": "組織内の全員",
+      "invitedOnly": "招待されたユーザーとグループ",
+      "addAccessDescription": "選択したすべてのスキルに、これらのユーザーとグループを追加します。指定したユーザーとグループには選択した権限が設定されます。それ以外のユーザーの現在のアクセス権は変わりません。",
+      "apply": "{count, plural, one {# 件のスキルに適用} other {# 件のスキルに適用}}",
+      "moreActions": "その他の操作"
     }
   },
   "opensearchHealth": {

@@ -15,7 +15,8 @@ deployments only.
 - **A desktop user** installs the app for macOS, Windows or Linux. On first
   launch it asks for the server URL (default `https://cloud.onyx.app`), then
   shows the normal web app in a native window with global shortcuts and a
-  summon shortcut. On macOS the window has a custom titlebar. Links from a
+  summon shortcut. On macOS the window has a custom titlebar with Back and
+  Forward buttons. Links from a
   chat open in the system browser. A server that cannot be reached shows the
   settings page again.
 - **A visitor to a customer's site** sees a chat launcher or an inline chat
@@ -65,7 +66,9 @@ is the fallback page for a missing or unreachable server. It calls the Tauri
 commands `get_bootstrap_state`, `check_server_reachable` and `set_server_url`
 (`desktop/src-tauri/src/commands.rs`), then sends the webview to the server. On
 macOS, `desktop/src-tauri/src/window.rs:eval_titlebar_script` injects
-`desktop/src/titlebar.js` on every page load. The Rust side calls the server
+`desktop/src/titlebar.js` on every page load. It reserves the titlebar strip and
+keeps the root layout, toasts and modals below it, so installed apps stay
+correct against any server version. The Rust side calls the server
 only for `/api/version` and a reachability check. The webview holds the cookie
 session.
 
@@ -117,8 +120,13 @@ panel picks up the new session when the user returns.
    only for a native feature the webview calls. The same holds for each app
    command in the `generate_handler!` list in
    `desktop/src-tauri/src/main.rs`: `desktop/src-tauri/build.rs` declares no
-   app manifest, so Tauri allows every registered command, and a page from
-   any server can invoke it.
+   app manifest, so local pages (the bundled settings page) can call every
+   registered command, and Tauri rejects them from remote pages. Popup
+   windows (`popup-*` labels) get only `shell:default` from
+   `desktop/src-tauri/capabilities/popup.json`, because they can host an
+   OAuth provider or another third-party site. On macOS, wry 0.55 popups
+   share the opener's `WKUserContentController`, so their IPC runs with the
+   `main` grant.
 2. `os-opener-scheme-allowlist` **Only `http`, `https`, `mailto` and `tel`
    reach the OS opener.**
    `desktop/src-tauri/src/window.rs:is_externally_openable` gates popups and
@@ -130,21 +138,29 @@ panel picks up the new session when the user returns.
    a chat.** `should_open_in_external_browser` returns true only when the
    current URL is a chat session (`is_chat_session_url`: `/app` with a
    `chatId`), and then only for `mailto`, `tel` or an `http(s)` link to another
-   origin. This keeps the settings and login flows inside the app. Popups
-   (`window.open`, `target="_blank"`) go to the browser from every page.
-4. `widget-credential-public` **A widget credential is visible to anyone who
+   origin. This keeps the settings and login flows inside the app.
+4. `desktop-popup-routing` **Script popups stay in the app; plain links go to
+   the browser.** `desktop/src-tauri/src/window.rs:classify_new_window` opens
+   `about:blank`, same-origin pages and popups with size features in an app
+   window that keeps the session cookies and `window.opener`. OAuth flows
+   depend on this: they open `about:blank` inside the click, then navigate it
+   and wait for a `postMessage`. Other `http(s)` popups go to the browser.
+   `desktop/tests/webdriver_smoke.py` drives the real binary through these
+   rules, `confirm()` and downloads. Add a check there when the web app starts
+   to depend on a new browser behaviour.
+5. `widget-credential-public` **A widget credential is visible to anyone who
    can read the page.** The API key sits in an HTML attribute, or, for a
    self-hosted build, in the bundle (`widget/vite.config.ts` `define`). The
    widget keeps it in memory and never writes it to `sessionStorage`. Keep it
    that way, and tell integrators to use a scoped key.
-5. `widget-transcript-scoped-by-identity` **The stored widget transcript is
+6. `widget-transcript-scoped-by-identity` **The stored widget transcript is
    scoped by credential identity.**
    `widget/src/config/config.ts:deriveCredentialIdentity` uses the JWT `sub` or
    `email`, else a shared value. `widget/src/utils/storage.ts:loadSession`
    drops a session for another identity. A JWT with neither claim falls back
    to the shared value, so a second such visitor in the same tab can restore
    the transcript of the first.
-6. `widget-reset-cancels-send` **`resetConversation` must cancel a send at
+7. `widget-reset-cancels-send` **`resetConversation` must cancel a send at
    every stage.** The admin guide tells host pages to call it on sign-out or an
    account change, so a send that survives a reset shows the previous user's
    response to the next user in the same tab.
@@ -154,7 +170,7 @@ panel picks up the new session when the user returns.
    `this.abortController` is still its own controller, so a stale send cannot
    clear the state of a newer send. Keep all three when you add an await or a
    new step to a send.
-7. `widget-ignores-unknown-packets` **The widget stream fails only on a
+8. `widget-ignores-unknown-packets` **The widget stream fails only on a
    malformed line, a line with no `obj`, or an `error` packet.**
    `widget/src/services/api-service.ts:parseSSEStream` throws on a line that
    does not parse. `widget/src/services/stream-parser.ts:processPacket` throws
@@ -163,17 +179,17 @@ panel picks up the new session when the user returns.
    break the widget, but it shows nothing until `processPacket` handles it.
    A new line shape without `obj`, or a new use of the `error` packet, ends
    the send.
-8. `widget-bundle-outlives-backend` **A deployed widget bundle outlives the
+9. `widget-bundle-outlives-backend` **A deployed widget bundle outlives the
    backend version it was built for.** Customer sites keep the old widget
    bundle. A change to the request shape of `create-chat-session` or
    `send-chat-message`, or to an existing packet, breaks those embeds with no
    version check. Treat the attributes on `<onyx-chat-widget>` as a public API
    for the same reason.
-9. `widget-passthrough-single-tenant` **Widget passthrough needs a
+10. `widget-passthrough-single-tenant` **Widget passthrough needs a
    single-tenant deployment.** On cloud the tenant comes from the credential
    (`ee/onyx/server/middleware/tenant_tracking.py:_get_tenant_id_from_request`),
    and an external IdP token carries none.
-10. `extension-postmessage-origin-locked` **Extension `postMessage` channels
+11. `extension-postmessage-origin-locked` **Extension `postMessage` channels
    are origin-locked both ways.**
    `extensions/chrome/src/pages/panel.js:handleMessage` accepts a message only
    from the window of its own iframe and from `getIframeOrigin()`.
@@ -181,7 +197,7 @@ panel picks up the new session when the user returns.
    falls back to `"*"`. The new-tab messages `PREFERENCES_UPDATED` and
    `LOAD_NEW_PAGE` have no sender in the web app, so the origin check is their
    only guard. A failed check must reject the message.
-11. `widget-send-waits-for-idle` **The end of the stream does not enable
+12. `widget-send-waits-for-idle` **The end of the stream does not enable
     Send.** `widget/src/widget.ts:OnyxChatWidget.sendMessage` polls
     `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` before a
     send to an existing session and after every send, because the server can
@@ -191,7 +207,7 @@ panel picks up the new session when the user returns.
     backend without the status route answers 404, so a new bundle on an older
     server shows "no longer available" after the first answer
     ([[#widget-bundle-outlives-backend]]).
-12. `test-panel-signin-before-narrowing-hosts` **Test sign-in in the side panel
+13. `test-panel-signin-before-narrowing-hosts` **Test sign-in in the side panel
     before you narrow `<all_urls>`.** `extensions/chrome/manifest.json`
     requests `<all_urls>` host access and injects the selection icon on every
     page. The host grant may also be what lets the panel iframe send its
@@ -269,6 +285,11 @@ panel picks up the new session when the user returns.
 - Desktop: `cd desktop/src-tauri && cargo test && cargo clippy`. Tests sit in
   `#[cfg(test)]` modules next to the code. The clippy config warns on
   `unwrap`, `expect` and `panic`.
+  For runtime behaviour, build the app and run
+  `python3 desktop/tests/webdriver_smoke.py desktop/src-tauri/target/debug/onyx`
+  (needs `tauri-driver`, `WebKitWebDriver` and a display; Linux only).
+  WKWebView on macOS differs: check dialogs, popups and downloads there by
+  hand.
 - Widget: `cd widget && bun run type-check && bun run test` (tests in
   `widget/tests/`, also run by `.github/workflows/pr-quality-checks.yml`). By hand, send a message, reload,
   and confirm the transcript returns.

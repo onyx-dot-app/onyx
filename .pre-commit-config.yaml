@@ -3,6 +3,9 @@ default_install_hook_types:
   - post-checkout
   - post-merge
   - post-rewrite
+# Vendored upstream skills (.agents/skills/sync-vendored-skills.sh) are copied
+# verbatim, so our linters do not apply to them.
+exclude: ^\.agents/skills/greptile/
 repos:
   - repo: https://github.com/astral-sh/uv-pre-commit
     # From: https://github.com/astral-sh/uv-pre-commit/pull/53/commits/d30b4298e4fb63ce8609e29acdbcf4c9018a483c

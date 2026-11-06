@@ -1,19 +1,25 @@
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text } from "@opal/components";
+import { Text, type TextFont } from "@opal/components";
 import { cn } from "@opal/utils";
+
+// Line weights scale with the drawn size, so each size hands its pixel size to the illustration.
+const ILLUSTRATION_PX = { sm: 64, md: 120, lg: 120 } as const satisfies Record<
+  NonNullable<IllustrationContentProps["size"]>,
+  number
+>;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface IllustrationContentProps {
-  /** Text size for compact placeholders or spacious content panels. */
-  size?: "md" | "lg";
+  /** `sm` for a narrow panel (4rem art, muted title), `md` for compact placeholders, `lg` for spacious content panels. */
+  size?: "sm" | "md" | "lg";
 
-  /** Optional illustration rendered at 7.5rem × 7.5rem (120px), centered. */
+  /** Optional illustration rendered at 7.5rem × 7.5rem (120px), 4rem (64px) at `sm`, centered. */
   illustration?: IconFunctionComponent;
 
-  /** Main title text, center-aligned. Uses `font-main-content-emphasis`. */
+  /** Main title text, center-aligned. Uses `font-main-content-emphasis`, `font-main-ui-muted` at `sm`. */
   title: string | RichStr;
 
   /** Optional description below the title, center-aligned. Uses `font-secondary-body`. */
@@ -23,6 +29,11 @@ interface IllustrationContentProps {
 // ---------------------------------------------------------------------------
 // IllustrationContent
 // ---------------------------------------------------------------------------
+
+function titleFont(size: "sm" | "md" | "lg"): TextFont {
+  if (size === "lg") return "heading-section";
+  return size === "sm" ? "main-ui-muted" : "main-content-emphasis";
+}
 
 /**
  * A vertically-stacked, center-aligned layout for empty states, error pages,
@@ -65,10 +76,15 @@ function IllustrationContent({
   description,
   size = "md",
 }: IllustrationContentProps) {
+  const small = size === "sm";
   return (
     <div className="flex flex-col items-center gap-3 p-5 text-center">
       {Illustration && (
-        <Illustration aria-hidden="true" className="shrink-0 w-30 h-30" />
+        <Illustration
+          aria-hidden="true"
+          size={ILLUSTRATION_PX[size]}
+          className={cn("shrink-0", small ? "w-16 h-16" : "w-30 h-30")}
+        />
       )}
       <div
         className={cn(
@@ -77,8 +93,8 @@ function IllustrationContent({
         )}
       >
         <Text
-          font={size === "lg" ? "heading-h3" : "main-content-emphasis"}
-          color="text-04"
+          font={titleFont(size)}
+          color={small ? "text-03" : "text-04"}
           as="p"
         >
           {title}

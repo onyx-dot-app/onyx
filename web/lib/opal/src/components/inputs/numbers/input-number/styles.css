@@ -1,0 +1,30 @@
+@reference "#reference.css";
+
+.opal-input-number-value {
+  @apply flex min-w-0 flex-1 items-center;
+}
+
+/* The hidden copy of the text sets the column width the input fills. */
+/* The column grows with the text up to the free width; past that the input
+   scrolls its own text and the suffixes keep their place. */
+.opal-input-number-sizer {
+  @apply inline-grid min-w-0 overflow-hidden;
+  grid-template-columns: minmax(0, max-content);
+}
+
+/* Text pads 2px; the suffix sits flush against the value. */
+.opal-input-number-value-suffix {
+  @apply shrink-0;
+  margin-inline-start: -2px;
+}
+
+.opal-input-number-sizer::after {
+  content: attr(data-value);
+  @apply invisible h-0 ps-0.5 whitespace-pre;
+  grid-area: 1 / 1;
+}
+
+.opal-input-number-sizer > input {
+  grid-area: 1 / 1;
+  min-width: 1ch;
+}

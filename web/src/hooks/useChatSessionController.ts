@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
-import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -31,6 +30,7 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { useIncognito } from "@/providers/IncognitoProvider";
+import { chatPageUrl, reloadLatestChatPage } from "@/lib/chat/pagedSession";
 import type { ProjectFile } from "@/lib/projects/types";
 import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -40,6 +40,8 @@ import {
   settleChatSession,
 } from "@/lib/chat/settleChatSession";
 import { useTranslations } from "next-intl";
+import type { Route } from "next";
+import { useNavigation } from "@opal/navigation";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
 // strict mode) can't start a second tail for the same run.
@@ -47,7 +49,7 @@ const resumingRuns = new Set<number>();
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
-  searchParams: ReadonlyURLSearchParams;
+  searchParams: URLSearchParams;
   firstMessage?: string;
 
   // UI state setters
@@ -92,6 +94,7 @@ export default function useChatSessionController({
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
+  const navigation = useNavigation();
   const tReadiness = useTranslations("chat.readiness");
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
@@ -204,9 +207,7 @@ export default function useChatSessionController({
 
       let response: Response;
       try {
-        response = await fetch(
-          `/api/chat/get-chat-session/${existingChatSessionId}`
-        );
+        response = await fetch(chatPageUrl(existingChatSessionId));
       } catch (error) {
         if (!ownsFetch()) return;
         setIsFetchingChatMessages(existingChatSessionId, false);
@@ -352,6 +353,11 @@ export default function useChatSessionController({
         );
 
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
+        useChatSessionStore
+          .getState()
+          .updateSessionData(chatSession.chat_session_id, {
+            hasOlderMessages: chatSession.has_older_messages ?? false,
+          });
         chatSessionIdRef.current = chatSession.chat_session_id;
       }
 
@@ -578,7 +584,9 @@ export default function useChatSessionController({
             ? "?" + currentSearchParams.toString()
             : ""
         }`;
-        window.history.replaceState({}, "", newUrl);
+        // SAFETY: the current pathname with its query trimmed is a page of
+        // the app.
+        navigation.go(newUrl as Route, { replace: true, shallow: true });
       }
     }
   }, [
@@ -610,7 +618,26 @@ export default function useChatSessionController({
         if (message?.messageId) {
           // Makes actual API call to set message as latest in the DB so we can
           // edit this message and so it sticks around on page reload
-          patchMessageToBeLatest(message.messageId);
+          const saved = patchMessageToBeLatest(message.messageId);
+
+          // A branch's messages below the selected one may not be loaded yet.
+          // Once the server has the new branch, load its last page.
+          const branch = getLatestMessageChain(newMessageTree);
+          const nextId = branch[branch.length - 1]?.latestChildNodeId;
+          if (
+            currentSessionId &&
+            nextId !== null &&
+            nextId !== undefined &&
+            !newMessageTree.has(nextId)
+          ) {
+            void saved.then((response) => {
+              if (response.ok) return reloadLatestChatPage(currentSessionId);
+              console.error("Failed to save the selected branch", {
+                messageId: message.messageId,
+                status: response.status,
+              });
+            });
+          }
         } else {
           console.error("Message has no messageId", nodeId);
         }

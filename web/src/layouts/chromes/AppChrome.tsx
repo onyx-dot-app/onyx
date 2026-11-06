@@ -30,7 +30,6 @@ import {
   ChatExportFormat,
 } from "@/lib/chat/exportChatSession";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import { useRouter } from "next/navigation";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
@@ -64,7 +63,9 @@ import {
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { PendingRoute, useNavigation } from "@opal/navigation";
+import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -115,7 +116,7 @@ function Header() {
     refreshChatSessions,
     removeSession,
   } = useChatSessions();
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
@@ -186,7 +187,7 @@ function Header() {
       }
       removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
-      router.replace("/app");
+      navigation.go("/app", { replace: true });
       setDeleteModalOpen(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
@@ -197,7 +198,7 @@ function Header() {
     refreshChatSessions,
     removeSession,
     fetchProjects,
-    router,
+    navigation,
   ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
@@ -230,14 +231,14 @@ function Header() {
     setIncognitoEnabled(false);
     setCurrentMessageFiles([]);
     if (sessionId) {
-      router.replace("/app");
+      navigation.go("/app", { replace: true });
     }
   }, [
     currentChatSessionId,
     setIncognitoEnabled,
     setCurrentMessageFiles,
     removeSession,
-    router,
+    navigation,
   ]);
 
   const handleExport = useCallback(
@@ -535,8 +536,11 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
+                {/* Only for the chat on screen: during a navigation to another
+                    chat, the URL's session is still the one these act on. */}
                 {appPosition.isChat() &&
                   currentChatSession &&
+                  currentChatSession.id === appPosition.chat() &&
                   !incognitoEnabled && (
                     <FrostedDiv className="flex shrink flex-row items-center">
                       <Button
@@ -632,7 +636,7 @@ function Footer() {
 // AppChrome
 // ---------------------------------------------------------------------------
 
-interface AppChromeProps {
+export interface AppChromeProps {
   children: React.ReactNode;
 }
 
@@ -747,7 +751,11 @@ export default function AppChrome({ children }: AppChromeProps) {
 
             {/* Header */}
             <Header />
-            <RootLayout.MainContent>{children}</RootLayout.MainContent>
+            <RootLayout.MainContent>
+              <PendingRoute base="/app" loader={<AppChromeLoader />}>
+                {children}
+              </PendingRoute>
+            </RootLayout.MainContent>
             <Footer />
           </div>
           {rightPanel}

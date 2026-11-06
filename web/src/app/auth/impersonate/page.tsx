@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 
-import { useRouter } from "next/navigation";
 import { Formik, Form, FormikHelpers } from "formik";
 import * as Yup from "yup";
 import { toast } from "@opal/layouts";
@@ -14,7 +14,7 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 
 export default function ImpersonatePage() {
   const t = useTranslations("auth");
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const ImpersonateSchema = Yup.object().shape({
     email: Yup.string()
@@ -46,7 +46,7 @@ export default function ImpersonatePage() {
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
-        router.push("/app");
+        navigation.go("/app");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : genericError);
@@ -60,7 +60,7 @@ export default function ImpersonatePage() {
         <div className="w-full flex flex-col items-center justify-center mb-6">
           <Text
             as="p"
-            font="heading-h3"
+            font="heading-section"
             color="text-05"
             textPosition="text-center"
           >

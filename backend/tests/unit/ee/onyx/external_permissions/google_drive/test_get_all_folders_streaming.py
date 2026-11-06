@@ -11,6 +11,7 @@ from ee.onyx.external_permissions.google_drive.group_sync import (
     _get_all_folders,
     _get_all_google_groups,
 )
+from ee.onyx.external_permissions.models import SyncEntityFailure
 from onyx.connectors.google_drive.drive_access import (
     DriveMember,
     DriveRole,
@@ -20,6 +21,7 @@ from onyx.connectors.google_drive.source_operations import (
     DriveFolderScope,
     GoogleDriveSourceOperations,
 )
+from onyx.db.enums import SyncEntityKind
 
 _ADMIN = "admin@example.com"
 _ORGANIZER = "organizer@example.com"
@@ -457,6 +459,36 @@ def test_user_failures_are_counted_across_both_passes() -> None:
                 expand_group=_no_groups,
             )
         )
+
+
+def test_failed_user_is_reported_once_across_passes() -> None:
+    """A user whose listings fail is reported as one entity failure, even when
+    both the owned and the not-owned pass fail, since the task files a row for
+    every failure yielded. A failed shared drive is not an entity: its members
+    recover it in the user pass."""
+    connector = _make_connector(["a@example.com", "b@example.com", "c@example.com"])
+
+    def listing(**kwargs: Any) -> Iterator[dict[str, Any]]:
+        if kwargs["user_email"] in ("a@example.com", _ORGANIZER):
+            raise RuntimeError("drive unavailable")
+        return iter([])
+
+    connector.ops.list_folders_with_permissions.side_effect = listing
+
+    items = list(
+        _get_all_folders(
+            google_drive_connector=connector,
+            skip_folders_without_permissions=True,
+            drive_members={"d1": [_member(_ORGANIZER)]},
+            expand_group=_no_groups,
+        )
+    )
+
+    failures = [item for item in items if isinstance(item, SyncEntityFailure)]
+    assert [(failure.kind, failure.id) for failure in failures] == [
+        (SyncEntityKind.USER, "a@example.com")
+    ]
+    assert "drive unavailable" in failures[0].message
 
 
 def test_get_all_folders_enforces_crawl_deadline() -> None:

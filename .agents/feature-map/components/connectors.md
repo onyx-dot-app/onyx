@@ -132,6 +132,61 @@ writes the state and the steps in one transaction, and beat tasks run the
 steps. A stored plan applies only to the pair state it was computed from
 (`connectors/edit_plan/store.py:ensure_base_state_matches`).
 
+**Pushed events.** A source that pushes instead of being polled declares one
+`WebhookSourceSpec` (`onyx/connectors/event_inbox/source_registry.py`): a
+parser, a signature verifier, and an optional handshake responder. Deliveries
+become rows in `connector_event_inbox` (`onyx/db/connector_event_inbox.py`),
+keyed `(pair, event_key)` so a redelivery writes nothing, and
+`EventInboxConnector` (`onyx/connectors/event_inbox/connector.py`) drains them
+inside an ordinary docfetching run. A claim takes every due row of each
+document it touches, not a flat row count, and claims for one pair are
+serialized, so one document never splits across batches or attempts. The
+drain keeps only the newest change per document: `claim_events` picks it in
+SQL and loads only the winners, and `superseded_by_newer_events` checks it
+against rows earlier claims took. An event pair has no poll interval:
+`background/celery/tasks/docprocessing/utils.py:should_index` runs it when
+its inbox holds a due or unsettled row (`event_pair_has_work`), whatever its
+`refresh_freq`. After a failed attempt it waits a fixed backoff before the
+next run. The factory returns
+that drain for an
+`EVENT` pair, so the source's own connector class is never loaded, and the run
+injects the pair and attempt ids because neither is stored config. One
+consequence: the probes dispatch on the connector class
+(`ee/onyx/connectors/perm_sync_valid.py:_VALIDATOR_BY_CONNECTOR_CLASS`), so an
+event pair runs neither the source's `validate_perm_sync` nor its
+`validate_connector_settings`. Both pass silently rather than failing.
+
+A spec gets one `POST /webhook/<slug>` on the webhook server
+(`onyx/webhook_server/routes.py`), built at startup. The route exists whether
+or not the source is set up; what opens it is an active `EVENT` pair, because
+without one there is no ACL to attribute a document to
+([[#handshake-after-verification]] governs the order within it). A source's
+parser, verifier and responder are each contained: the parser and responder
+answer 400 and the verifier 401, because a 5xx makes a provider retry a body
+that will never parse. A delivery belongs to the active pair whose secret it verifies
+against, so each account of a source signs with its own; an unsigned source
+serves one pair and refuses a delivery when several are active. Single tenant only; the webhook server refuses to start under
+`MULTI_TENANT`.
+
+A handler is given the pair's decrypted credential JSON alongside the row
+(`onyx/connectors/event_inbox/credentials.py:pair_secrets`), so a provider
+that pushes a link rather than a body can fetch it. That fetch is why the
+claim session closes before any handler runs, and why a failed handler
+returns to the queue with backoff until `MAX_EVENT_ATTEMPTS`, then fails: a
+timeout is not a payload the next run will also reject. A claim whose index
+attempt was deleted is released for the same reason -- nothing else would
+ever settle it, and `claim_events` reads only PENDING rows. An attempt that
+ends `COMPLETED_WITH_ERRORS` completes the rows whose documents stored and
+retries the rest the same bounded way, by its `IndexAttemptError` rows.
+
+Every write of a connector for a registered event source stores `input_type`
+as `EVENT` whatever the caller sent
+(`onyx/db/connector.py:_settle_event_input_type`, called from both
+`create_connector` and `update_connector`), because the registry settles it
+and a client cannot know. A pair stored as `poll` would never drain its
+queue, and would look healthy doing it, whether it was created that way or
+edited into it.
+
 **Source gateways.** A source can put every remote call in one
 `SourceOperations` subclass in `<source>/source_operations.py`, which indexing,
 EE permission sync and capability checks all call. To list them, run
@@ -145,6 +200,10 @@ hash, so a change to the setting re-indexes each file on its next fetch. Pass
 the setting at every extraction site; list them with
 `git grep -n 'skip_content=' -- backend/onyx/connectors`. [[indexing-pipeline]]
 owns the chunking of the sections.
+
+**Storage files.** An object-storage connector builds each `Document` from a
+downloaded file with
+`connectors/cross_connector_utils/storage_file_document.py:build_storage_file_document`.
 
 ---
 
@@ -183,7 +242,8 @@ owns the chunking of the sections.
    `connectors/sharepoint/connector.py:SharepointConnectorCheckpoint` does.
 6. `honor-time-window` **Honor the `start` and `end` window.** A poll or
    checkpointed connector that ignores it re-reads everything or misses
-   changes. A slim listing that filters by the indexing start must set
+   changes. The event drain is the exception: its queue holds exactly the
+   reported changes. A slim listing that filters by the indexing start must set
    `slim_listing_honors_indexing_start`. Prune then lists only documents from
    that date, and deletes older ones
    (`connectors/interfaces.py:prune_listing_honors_indexing_start`). A dated
@@ -242,6 +302,15 @@ owns the chunking of the sections.
     goes through `web/src/lib/connectors/utils.ts:withoutFormOnlyFields`. A new
     call site that skips it fails validation, because typed configs use
     `extra="forbid"`.
+13. `handshake-after-verification` **A webhook handshake responder runs only
+    after the signature verifies.** A responder answers a provider's
+    endpoint-validation challenge with the shared secret applied to
+    caller-chosen input, so running it on an unverified request is a signing
+    oracle: ask for the secret over the exact message the verifier checks,
+    then replay the answer as a signature. `WebhookSourceSpec` offers no way
+    to reverse the order, and `onyx/webhook_server/routes.py` calls the
+    responder after `spec.verifier`. A provider that signs challenges
+    differently needs its own challenge verifier, not an earlier responder.
 
 ---
 
@@ -258,6 +327,18 @@ owns the chunking of the sections.
 
 ## Known issues
 
+- **A model swap can lose pushed events.** `check_for_indexing` can run a
+  PRESENT and a FUTURE attempt for one pair, and both drain
+  `connector_event_inbox`. The claim is exclusive, so whichever attempt takes
+  a row indexes it into its own index alone and the other index never sees
+  that change. A polled source re-reads and recovers; a queue consumed once
+  does not. Unreachable while no source is registered. Resolve it before the
+  first one is: either scope the claim per index, or keep event pairs out of
+  the two-run path.
+- **A delete event leaves its document indexed.** A handler returns None for
+  a delete, so the row settles and nothing removes the document. An event
+  pair has no prune run either. Resolve it before a source that reports
+  deletes ships.
 - **`backend/onyx/connectors/README.md` lags the code.** It names `connectors/factory.py`
   for the source mapping (in `connectors/registry.py`) and omits configs and gateways.
   Do not follow it as the add-a-connector checklist; use the recipe below.

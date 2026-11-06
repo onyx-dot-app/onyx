@@ -273,7 +273,7 @@ export class IndexSettingsPage {
     const listbox = this.page.getByRole("listbox", { name: "Select model" });
     await expect(listbox).toBeVisible();
     await this.page
-      .getByRole("textbox", { name: "Search" })
+      .getByRole("searchbox", { name: "Search" })
       .and(this.page.locator(":focus"))
       .fill(displayName);
     await listbox.getByRole("option", { name: displayName }).click();
@@ -318,6 +318,34 @@ export class IndexSettingsPage {
     await expect(this.page.getByText("A full re-index will run.")).toHaveCount(
       0
     );
+  }
+
+  /**
+   * Opens the Vector Quantization list and checks one level: whether it can be
+   * picked, and the note beside it when it cannot. Closes the list after.
+   */
+  async expectVectorQuantizationOption(
+    label: string,
+    expected: { disabled: boolean; note?: string }
+  ): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Vector Quantization" })
+      .getByRole("combobox")
+      .click();
+    const option: Locator = this.page
+      .getByRole("listbox", { name: "Select an option" })
+      .getByRole("option")
+      .filter({ hasText: label });
+    if (expected.disabled) {
+      await expect(option).toBeDisabled();
+    } else {
+      await expect(option).toBeEnabled();
+    }
+    if (expected.note) {
+      await expect(option).toContainText(expected.note);
+    }
+    await this.page.keyboard.press("Escape");
   }
 
   /** Pick a Vector Quantization level by its option title, e.g. "1-bit". */

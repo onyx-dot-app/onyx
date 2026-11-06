@@ -61,7 +61,6 @@ export interface CommandMenuFilterProps {
    */
   value: string;
   children: string;
-  icon?: React.FunctionComponent<IconProps>;
   isApplied?: boolean; // When true, renders as non-interactive group label
   onSelect?: () => void;
 }

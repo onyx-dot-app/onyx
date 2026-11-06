@@ -422,6 +422,8 @@ export interface DeletionAttemptSnapshot {
   connector_id: number;
   credential_id: number;
   status: TaskStatus;
+  // When the running deletion took its fence, null while it only waits to start.
+  started_at: string | null;
 }
 
 // DOCUMENT SETS

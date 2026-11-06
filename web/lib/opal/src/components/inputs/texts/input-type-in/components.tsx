@@ -5,6 +5,10 @@ import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button } from "@opal/components";
+import {
+  InputContainer,
+  InputTitleLine,
+} from "@opal/components/inputs/container";
 import { useOpalStrings } from "@opal/strings";
 import type { InputVariants, WithoutStyles } from "@opal/types";
 
@@ -25,11 +29,13 @@ export interface InputTypeInProps extends WithoutStyles<
 > {
   ref?: React.Ref<HTMLInputElement>;
   variant?: InputVariants;
-  prefixText?: string;
-  searchIcon?: boolean;
-  /** Leading icon (a select's chosen option icon). Renders after `searchIcon`. */
-  icon?: IconFunctionComponent;
-  /** Content before the text, after `prefixText` (a chosen value shown as a tag). */
+  /**
+   * Leading icon. `"search"` shows the search icon and renders a native
+   * `type="search"` field; a component shows that icon (a select's chosen
+   * option icon).
+   */
+  icon?: "search" | IconFunctionComponent;
+  /** Content before the text, after the leading icon (a chosen value shown as a tag). */
   leftChildren?: React.ReactNode;
   rightChildren?: React.ReactNode;
   /** Show the clear (×) button when the field has a value. */
@@ -47,7 +53,7 @@ export interface InputTypeInProps extends WithoutStyles<
 }
 
 /**
- * A styled text input with support for a search icon, prefix text,
+ * A styled text input with support for a leading icon,
  * a clear button, and an optional right section slot.
  *
  * @example
@@ -56,7 +62,7 @@ export interface InputTypeInProps extends WithoutStyles<
  * <InputTypeIn value={value} onChange={(e) => setValue(e.target.value)} />
  *
  * // With search icon
- * <InputTypeIn searchIcon placeholder="Search..." value={q} onChange={...} />
+ * <InputTypeIn icon="search" placeholder="Search..." value={q} onChange={...} />
  *
  * // Error state
  * <InputTypeIn variant="error" value={value} onChange={...} />
@@ -78,9 +84,7 @@ export interface InputTypeInProps extends WithoutStyles<
 export default function InputTypeIn({
   ref,
   variant = "primary",
-  prefixText,
   leftChildren,
-  searchIcon,
   icon: Icon,
   rightChildren,
   clearButton = false,
@@ -89,6 +93,7 @@ export default function InputTypeIn({
   value,
   onChange,
   name,
+  type = "text",
   ...props
 }: InputTypeInProps) {
   const strings = useOpalStrings();
@@ -96,12 +101,10 @@ export default function InputTypeIn({
   const isReadOnly = readOnly || variant === "readOnly";
 
   return (
-    <div
-      role="presentation"
-      data-variant={variant}
-      data-open={open || undefined}
-      className="opal-input"
-      onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
+    <InputContainer
+      variant={variant}
+      open={open}
+      focusTarget={(root) => root.querySelector("input")}
       onKeyDown={(e) => {
         // Escape on a control beside the field (the clear button, a reveal
         // toggle, a chevron) returns focus to the field. It does so even when
@@ -111,40 +114,29 @@ export default function InputTypeIn({
         if (input && e.target !== input) input.focus();
       }}
     >
-      {searchIcon && (
-        <div className="opal-input-leading-icon">
-          <SvgSearch className="opal-input-leading-icon-svg" />
-        </div>
-      )}
+      <InputTitleLine
+        icon={Icon === "search" ? SvgSearch : Icon}
+        iconMuted={Icon === "search"}
+      >
+        {leftChildren}
 
-      {Icon && (
-        <div className="opal-input-leading-icon">
-          <Icon className="opal-input-leading-icon-svg opal-input-option-icon" />
-        </div>
-      )}
-
-      {prefixText && (
-        <span className="select-none pointer-events-none font-main-ui-body text-text-02 ps-0.5">
-          {prefixText}
-        </span>
-      )}
-
-      {leftChildren}
-
-      <input
-        ref={ref}
-        type="text"
-        // dir="auto": typed text decides the direction so punctuation sits on the
-        // correct side. While empty it inherits the page direction (see styles.css).
-        dir="auto"
-        name={name}
-        disabled={disabled}
-        readOnly={isReadOnly}
-        value={value}
-        onChange={onChange}
-        className="opal-input-field"
-        {...props}
-      />
+        <input
+          ref={ref}
+          // Chrome ignores autocomplete="off" when it guesses a text field takes
+          // a saved card; it does not offer cards in search fields.
+          type={Icon === "search" ? "search" : type}
+          // dir="auto": typed text decides the direction so punctuation sits on the
+          // correct side. While empty it inherits the page direction (see styles.css).
+          dir="auto"
+          name={name}
+          disabled={disabled}
+          readOnly={isReadOnly}
+          value={value}
+          onChange={onChange}
+          className="opal-input-field"
+          {...props}
+        />
+      </InputTitleLine>
 
       {clearButton && !rightChildren && !disabled && !isReadOnly && (
         <div className={cn(value === "" && "invisible")}>
@@ -172,6 +164,6 @@ export default function InputTypeIn({
       )}
 
       {rightChildren}
-    </div>
+    </InputContainer>
   );
 }

@@ -29,7 +29,8 @@ source selection stay on the device.
 The user cannot regenerate or edit a message, give feedback, compare models,
 use voice, or take a photo with the camera. Tool activity (search, code,
 image generation, deep research, memory) shows as an empty step in the
-timeline. Only the answer text and reasoning render.
+timeline. Answer text and reasoning render. Generated images from all steps
+appear once above the answer, with their full contents visible.
 
 After an answer ends, Send stays disabled until the server confirms that the
 session is idle. A send that the server does not accept keeps its draft.
@@ -200,9 +201,9 @@ the sources.
 
 ## Known issues
 
-- **Only text and reasoning render.** Every tool family falls through to
+- **Tool timeline details are not rendered.** Every tool family falls through to
   `null` in `components/chat/renderers/findRenderer.ts`. The comments mark each
-  slot as planned work.
+  slot as planned work. Generated images render separately above the answer.
 - **The mobile enum keeps packet types that the backend never sends**
   (`MESSAGE_END`, `TOP_LEVEL_BRANCHING`), and `chat/messageProcessor.ts` still
   checks `MESSAGE_END` for `isComplete` ([[streaming-protocol]]).

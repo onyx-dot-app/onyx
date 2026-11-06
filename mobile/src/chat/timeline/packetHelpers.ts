@@ -20,6 +20,15 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.DEEP_RESEARCH_PLAN_START,
 ]);
 
+// Nested output shares its parent's group but does not end it.
+export const isNestedPacket = (packet: Packet): boolean =>
+  packet.placement.sub_turn_index != null;
+
+export const isGroupEndPacket = (packet: Packet): boolean =>
+  !isNestedPacket(packet) &&
+  (packet.obj.type === PacketType.SECTION_END ||
+    packet.obj.type === PacketType.ERROR);
+
 export const isResearchAgentPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 

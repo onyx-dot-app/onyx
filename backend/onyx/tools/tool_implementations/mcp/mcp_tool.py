@@ -13,8 +13,13 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import mark_connection_config_reauth_required
 from onyx.db.models import MCPConnectionConfig, MCPServer
+from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.server.features.mcp.client import call_mcp_tool, has_unauthorized_response
+from onyx.server.features.mcp.client import (
+    call_mcp_tool,
+    has_unauthorized_response,
+    process_mcp_result,
+)
 from onyx.server.features.mcp.credentials import (
     ResolvedMCPCredentials,
     uses_user_managed_headers,
@@ -153,6 +158,16 @@ class MCPTool(Tool):
             parameters=_normalize_parameters_schema(self._tool_definition),
         )
 
+    def _error_result(self, message: JsonValue) -> ToolResult:
+        error_result = {"error": message}
+        return ToolResult(
+            details=CustomToolCallSummary(
+                tool_name=self._name, response_type="json", tool_result=error_result
+            ),
+            content=json.dumps(error_result),
+            is_error=True,
+        )
+
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         _start = time.monotonic()
         _server = self.mcp_server.name
@@ -193,19 +208,8 @@ class MCPTool(Tool):
                     self._name,
                 )
 
-                error_result = {"error": auth_error_msg}
-                content = json.dumps(error_result)
-
                 outcome = MCPToolCallStatus.AUTH_ERROR
-                return ToolResult(
-                    details=CustomToolCallSummary(
-                        tool_name=self._name,
-                        response_type="json",
-                        tool_result=error_result,
-                    ),
-                    content=content,
-                    is_error=True,
-                )
+                return self._error_result(auth_error_msg)
 
             # For OAuth servers, construct OAuthClientProvider so the MCP SDK
             # can refresh expired tokens automatically
@@ -244,12 +248,21 @@ class MCPTool(Tool):
                 connection_headers=headers,
                 transport=self.mcp_server.transport or MCPTransport.STREAMABLE_HTTP,
                 auth=auth,
+                cancellation=invocation.cancellation,
             )
+
+            if tool_result.isError:
+                # A server-reported tool failure does not reject its credentials.
+                message = _tool_result_value(process_mcp_result(tool_result))
+                logger.info("MCP tool '%s' reported an error", self._name)
+                return self._error_result(message)
 
             logger.info("MCP tool '%s' executed successfully", self._name)
 
             # Format the tool result for response
-            tool_result_dict = {"tool_result": _tool_result_value(tool_result)}
+            tool_result_dict = {
+                "tool_result": _tool_result_value(process_mcp_result(tool_result))
+            }
             content = json.dumps(tool_result_dict)
 
             response = ToolResult(
@@ -263,6 +276,9 @@ class MCPTool(Tool):
             outcome = MCPToolCallStatus.SUCCESS
             return response
 
+        except AgentCancelled:
+            outcome = MCPToolCallStatus.CANCELLED
+            raise
         except Exception as e:
             credentials = self._resolved_credentials
             unauthorized_response = has_unauthorized_response(e)
@@ -300,21 +316,8 @@ class MCPTool(Tool):
                     f"Please use the MCP dropdown in the chat bar to update your credentials "
                     f"for the {self.mcp_server.name} server. Original error: {str(e)}"
                 )
-                error_result = {"error": auth_error_msg}
-            else:
-                error_result = {"error": f"Tool execution failed: {str(e)}"}
-
-            content = json.dumps(error_result)
-
-            return ToolResult(
-                details=CustomToolCallSummary(
-                    tool_name=self._name,
-                    response_type="json",
-                    tool_result=error_result,
-                ),
-                content=content,
-                is_error=True,
-            )
+                return self._error_result(auth_error_msg)
+            return self._error_result(f"Tool execution failed: {str(e)}")
         finally:
             record_mcp_client_tool_outcome(
                 server_name=_server,

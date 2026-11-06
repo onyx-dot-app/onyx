@@ -1897,6 +1897,9 @@ configMap:
   LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_ACL_READ_CONCURRENCY: ""
   HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
@@ -1922,6 +1925,10 @@ configMap:
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
+  # Slack cloud for all Slack features: the bot, the connector, federated
+  # search, Slack OAuth and the Craft Slack app. Default
+  # https://slack.com/api/. Set to https://slack-gov.com/api/ for GovSlack.
+  SLACK_API_URL: ""
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
@@ -1981,6 +1988,26 @@ craft:
   # Empty (default) = the chart-deployed proxy, covered by the podSelector (incl. the
   # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
   proxyExtraCIDRs: []
+  # Opt-in check that sandbox nodes can run Firecracker. Runs one pod per
+  # sandbox node (sandboxPod.nodeSelector + tolerations) and writes
+  # PASS/FAIL/WARN lines to the pod log. See README "Check your nodes for
+  # Craft Firecracker". Does not need ENABLE_CRAFT.
+  firecrackerPreflight:
+    enabled: false
+    # Image with POSIX sh, awk, grep and GNU coreutils. Empty = the sandbox
+    # image. The prepuller only caches it when Craft and sandboxImagePrepull
+    # are on; otherwise the first preflight pod pulls it.
+    image: ""
+    # Extended resource of a KVM device plugin (for example
+    # "devices.kubevirt.io/kvm"). Set it to run the check unprivileged.
+    # Empty = privileged, because the container device cgroup blocks
+    # /dev/kvm otherwise.
+    kvmDeviceResource: ""
+    # Node directory on the filesystem that will hold sandbox data. The
+    # filesystem type, XFS reflink and free disk checks run here.
+    scratchHostPath: /var/lib/onyx-craft-fc-preflight
+    # Free disk below this is a WARN.
+    minFreeDiskGi: 50
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.

@@ -1,4 +1,5 @@
 "use client";
+import { redirect, useSearchParams } from "@opal/navigation";
 import React, { useState } from "react";
 import { resetPassword } from "../forgot-password/utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -6,7 +7,6 @@ import Title from "@/components/ui/title";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import Link from "next/link";
 import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
@@ -14,7 +14,6 @@ import { FieldLabel } from "@/components/Field";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { toast } from "@opal/layouts";
 import { Spinner } from "@/components/Spinner";
-import { redirect, useSearchParams } from "next/navigation";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useTranslations } from "next-intl";
 
@@ -22,7 +21,7 @@ const ResetPasswordPage: React.FC = () => {
   const t = useTranslations("auth");
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
-  const token = searchParams?.get("token");
+  const token = searchParams.get("token");
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
     redirect("/auth/login");
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 import {
@@ -19,12 +20,10 @@ import React, {
   useState,
 } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import { Collapsible } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import {
@@ -617,7 +616,7 @@ export default function ChatPreferencesPage() {
   const betaTag = useBetaTag();
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const s = settings;
   // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
@@ -725,13 +724,13 @@ export default function ChatPreferencesPage() {
           );
         }
 
-        router.refresh();
+        navigation.refresh();
         await mutate(SWR_KEYS.settings);
       } catch (error) {
         toast.error(t("toasts.settingsUpdateFailed"));
       }
     },
-    [settings, router, t]
+    [settings, navigation, t]
   );
 
   return (
@@ -929,15 +928,14 @@ export default function ChatPreferencesPage() {
                   >
                     <Section width="fit" alignItems="start">
                       <Content
+                        font="main-content-emphasis"
                         title={t("connectors.title")}
                         description={t("connectors.description")}
-                        sizePreset="main-content"
-                        variant="section"
                       />
                     </Section>
                     {uniqueSources.length > 0 && (
                       <Button
-                        href="/admin/indexing-status"
+                        {...navigation.linkTo("/admin/indexing-status")}
                         prominence="tertiary"
                         rightIcon={SvgExternalLink}
                       >
@@ -965,9 +963,9 @@ export default function ChatPreferencesPage() {
                           <div key={source} className="w-40">
                             <Card padding={2} border="solid">
                               <Content
+                                font="main-ui-action"
                                 icon={meta.icon}
                                 title={meta.displayName}
-                                sizePreset="main-ui"
                               />
                             </Card>
                           </div>

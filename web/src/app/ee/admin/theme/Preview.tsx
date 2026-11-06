@@ -1,6 +1,6 @@
 "use client";
 
-import { OverflowText, Text } from "@opal/components";
+import { Text } from "@opal/components";
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { Components } from "react-markdown";
@@ -59,17 +59,15 @@ export type PreviewHighlightTarget =
 
 function PreviewLogo({
   logoSrc,
-  forceOnyxIcon,
   size,
   className,
 }: {
   logoSrc?: string;
-  forceOnyxIcon?: boolean;
   size: number;
   className?: string;
 }) {
   const t = useTranslations("admin.theme");
-  return logoSrc && !forceOnyxIcon ? (
+  return logoSrc ? (
     <img
       src={logoSrc}
       alt={t("preview.logo.alt")}
@@ -198,25 +196,20 @@ function PreviewStart({
             )}
           >
             {logoDisplayStyle !== "name_only" && (
-              <PreviewLogo
-                logoSrc={logoSrc}
-                size={16}
-                forceOnyxIcon={
-                  logoDisplayStyle === "logo_and_name" &&
-                  !applicationDisplayName
-                }
-              />
+              <PreviewLogo logoSrc={logoSrc} size={16} />
             )}
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (
-              <OverflowText
+              <Text
+                maxLines={1}
+                overflowTooltip
                 as="p"
                 textPosition="text-start"
                 font="main-ui-action"
                 color="text-04"
               >
                 {applicationDisplayName || "Onyx"}
-              </OverflowText>
+              </Text>
             )}
           </div>
         </div>
@@ -235,7 +228,7 @@ function PreviewStart({
               <PreviewLogo logoSrc={logoSrc} size={18} />
               <div className="max-w-[260px]">
                 <Text
-                  font="heading-h3"
+                  font="heading-section"
                   color="text-04"
                   wordWrap="wrap-break-word"
                 >

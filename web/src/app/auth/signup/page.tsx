@@ -1,8 +1,8 @@
+import { redirect } from "@opal/navigation";
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
-import { redirect } from "next/navigation";
 import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
@@ -77,7 +77,7 @@ const Page = async (props: {
           )}
         >
           <div className="w-full">
-            <Text as="p" font="heading-h2" color="text-05">
+            <Text as="p" font="heading-headline" color="text-05">
               {cloud
                 ? t("signup.cloudSignupHeading.title")
                 : t("signup.createAccountHeading.title")}

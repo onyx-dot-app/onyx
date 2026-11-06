@@ -362,14 +362,14 @@ it("shows disabled tools and applies explicit bulk actions only to the draft", a
   ).toBeChecked();
   expect(updateToolsStatus).not.toHaveBeenCalled();
   await user.type(
-    screen.getByRole("textbox", { name: messages.actions.mcpTools.search }),
+    screen.getByRole("searchbox", { name: messages.actions.mcpTools.search }),
     "missing"
   );
   expect(
     screen.getByText(messages.actions.toolsList.empty.searchMessage)
   ).toBeVisible();
   await user.clear(
-    screen.getByRole("textbox", { name: messages.actions.mcpTools.search })
+    screen.getByRole("searchbox", { name: messages.actions.mcpTools.search })
   );
   await user.click(
     screen.getByRole("button", {
@@ -400,7 +400,7 @@ it("searches policy rows while bulk policy changes include hidden enabled tools"
   );
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
   await user.type(
-    screen.getByRole("textbox", { name: messages.actions.mcpTools.search }),
+    screen.getByRole("searchbox", { name: messages.actions.mcpTools.search }),
     "Display"
   );
   expect(screen.getAllByRole("listitem")).toHaveLength(1);

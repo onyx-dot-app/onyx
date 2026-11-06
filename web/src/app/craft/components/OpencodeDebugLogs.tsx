@@ -409,7 +409,7 @@ function StatusBar({
 
       <div className="flex-1 min-w-0">
         <InputTypeIn
-          searchIcon
+          icon="search"
           placeholder={t("filter.placeholder")}
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}

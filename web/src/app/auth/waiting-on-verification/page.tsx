@@ -1,7 +1,7 @@
+import { redirect } from "@opal/navigation";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS } from "@/lib/auth/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
-import { redirect } from "next/navigation";
 import { User } from "@/lib/types";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
 import { FoldableLogo } from "@/lib/app/components";
