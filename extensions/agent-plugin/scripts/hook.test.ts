@@ -64,7 +64,8 @@ function session(env: Record<string, string>) {
   // Async so the test's own server can answer the hook's prefetch.
   const run = async (host: Host, input: Record<string, unknown>) => {
     const proc = Bun.spawn({
-      cmd: ["bun", HOOK, ...(host === "codex" ? ["codex"] : [])],
+      // No .env from the working directory either.
+      cmd: ["bun", "--no-env-file", HOOK, ...(host === "codex" ? ["codex"] : [])],
       stdin: Buffer.from(JSON.stringify({ session_id: id, ...input })),
       env: { ...baseEnv, ...env, CLAUDE_PLUGIN_DATA: dataDir },
       stdout: "pipe",
