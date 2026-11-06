@@ -15,6 +15,9 @@
    rounded shape. The grid row is the toast's space in the stack. */
 .opal-toast {
   display: grid;
+  /* A modal dialog sets pointer-events: none on <body>; a toast stays
+     usable above it. */
+  pointer-events: auto;
   /* minmax(0, 1fr): the column must not grow to fit a long title, or the
      title's one-line clamp would never cut it off. */
   grid-template-columns: minmax(0, 1fr);
