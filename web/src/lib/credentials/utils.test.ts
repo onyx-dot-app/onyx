@@ -38,7 +38,22 @@ function buildCredential(
 }
 
 describe("credential edit helpers", () => {
-  it("includes optional template fields omitted from stored credential json", () => {
+  it("includes optional template fields omitted from stored credential json for Jira and JSM", () => {
+    const jsmCredential = buildCredential({
+      credential_json: {
+        jira_api_token: "masked-jsm-token",
+      },
+      source: ValidSources.JiraServiceManagement,
+    });
+    expect(
+      getEditableCredentialFields(
+        jsmCredential,
+        ValidSources.JiraServiceManagement
+      )
+    ).toEqual({
+      jira_user_email: null,
+      jira_api_token: "masked-jsm-token",
+    });
     const credential = buildCredential({
       credential_json: {
         jira_api_token: "masked-token",
@@ -131,6 +146,34 @@ const MESSAGES: CredentialValidationMessages = {
   fileRequired: (field) => `file required: ${field}`,
   authMethodRequired: "auth method required",
 };
+
+describe("JSM authentication validation", () => {
+  const jsmSchema = createValidationSchema(
+    CREDENTIAL_SPECS[ValidSources.JiraServiceManagement],
+    MESSAGES
+  );
+
+  it("rejects missing or blank jira_api_token and accepts valid Cloud or PAT credentials", () => {
+    expect(jsmSchema.isValidSync({})).toBe(false);
+    expect(jsmSchema.isValidSync({ jira_user_email: "agent@example.com" })).toBe(
+      false
+    );
+    expect(jsmSchema.isValidSync({ jira_api_token: "   " })).toBe(false);
+    expect(
+      jsmSchema.isValidSync({
+        jira_user_email: "not-an-email",
+        jira_api_token: "token",
+      })
+    ).toBe(false);
+    expect(jsmSchema.isValidSync({ jira_api_token: "pat-token" })).toBe(true);
+    expect(
+      jsmSchema.isValidSync({
+        jira_user_email: "agent@example.com",
+        jira_api_token: "cloud-token",
+      })
+    ).toBe(true);
+  });
+});
 
 describe("createValidationSchema", () => {
   const schema = createValidationSchema(
