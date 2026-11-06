@@ -68,7 +68,7 @@ With prefetch on, the hook posts each question prompt to `POST /api/search/raw`,
 
 The request has a 3 second budget inside a 5 second hook timeout. A search that fails or times out injects the plain directive instead and never blocks the prompt. Each prompt is sent to your Onyx server, and results are filtered by your Onyx document permissions, the same as in the Onyx chat. The raw route needs an Onyx server that has it, and an older server returns 404, which the hook treats as a failed search.
 
-With strict retrieval also on, a question turn that ends on the prefetch alone gets one `Stop` hook instruction: if the answer relies on company knowledge beyond what the prefetch returned, run the full search now and revise. The hook skips the continuation Claude Code marks as stop-hook driven, so it nudges once per turn.
+With strict retrieval also on, a question turn that ends on the prefetch alone gets one `Stop` hook instruction: if the answer relies on company knowledge beyond what the prefetch returned, run the full search now and revise. The hook skips the continuation both hosts mark as stop-hook driven, so it nudges once per turn.
 
 ## Files
 
@@ -79,7 +79,7 @@ With strict retrieval also on, a question turn that ends on the prefetch alone g
 | `.claude-plugin/marketplace.json` | The hosted marketplace: the plugin version and its release zip URL |
 | `.mcp.json` | The remote Onyx MCP server, loaded upfront |
 | `hooks/hooks.json` | The prompt hook, the strict-retrieval gate and the stop nudge |
-| `hooks/codex.json` | The same hooks for Codex |
+| `hooks/codex.json` | The hooks for Codex, with its events and tool names |
 | `scripts/onyx-hook` | Runtime launcher for the hook |
 | `scripts/hook.ts` | Hook implementation for both hosts |
 | `skills/onyx/SKILL.md` | Tells Claude when and how to use Onyx |
@@ -90,7 +90,7 @@ Typecheck with `bunx tsgo --noEmit -p extensions/claude-code/tsconfig.json` and 
 
 The plugin version lives in the marketplace entry, not in `plugin.json`, so Claude Code can see a new version before it downloads the zip. To release:
 
-1. Set `version` and the release URL in `.claude-plugin/marketplace.json` to the new version and merge that change.
+1. Set `version` and the release URL in `.claude-plugin/marketplace.json`, and `version` in `.codex-plugin/plugin.json`, to the new version and merge that change.
 2. Push the tag `claude-code-plugin/v<version>` on the merged commit.
 
-The `release-claude-code-plugin` workflow checks the tag against the marketplace entry, zips this directory, and uploads it to a GitHub release at the listed URL. Users who added the marketplace get the new version on their next `/plugin marketplace update onyx` or through auto-update.
+The `release-claude-code-plugin` workflow checks the tag against both versions and the download URL, zips this directory, and uploads it to a GitHub release at the listed URL. Users who added the marketplace get the new version on their next `/plugin marketplace update onyx` or through auto-update.

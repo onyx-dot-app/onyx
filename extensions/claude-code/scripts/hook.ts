@@ -24,13 +24,14 @@ const MIN_PROMPT_CHARS = 15;
 const MAX_RESULTS = 5;
 const MAX_CONTENT_CHARS = 1500;
 // Past 10,000 characters Claude Code swaps additionalContext for a file path.
+// Codex spills past the additionalContextLimit that hooks/codex.json sets.
 const MAX_CONTEXT_CHARS = 9_500;
 const STATE_TTL_MS = 24 * 60 * 60 * 1000;
 // Claude Code names the bundled server plugin_onyx_onyx. Codex users add it as onyx.
 const OWN_SERVER_PATTERN = /^(plugin_onyx_onyx|onyx)$/;
-// hooks/codex.json passes "codex". The hosts share the event schema except for
-// how a Stop hook continues the turn.
-const HOST: "claude" | "codex" = process.argv[2] === "codex" ? "codex" : "claude";
+// hooks/codex.json passes "codex". The hosts share the hook input and output
+// shapes except for how a Stop hook continues the turn.
+const IS_CODEX = process.argv[2] === "codex";
 const RETRIEVAL_TOOL_PATTERN = /search|query|retriev|lookup|find|fetch/i;
 const FULL_SEARCH_CALL = "search_indexed_documents on the Onyx MCP server";
 // No network call, so it is the default and the fallback when a prefetch fails.
@@ -80,11 +81,10 @@ type SearchTarget = {
   token: string;
 };
 
-// search is null without a URL and token, which only the prefetch needs.
+// prefetch is null unless it is turned on and has the URL and token it needs.
 type PluginConfig = {
-  search: SearchTarget | null;
+  prefetch: SearchTarget | null;
   strict: boolean;
-  prefetch: boolean;
 };
 
 // consulted: the strict gate is open for this prompt. Set by a full search,
@@ -116,15 +116,14 @@ function flag(name: string): boolean {
 function readConfig(): PluginConfig {
   const url = option("ONYX_URL");
   const token = option("ONYX_API_TOKEN");
-  const search = url && token ? { url: url.replace(/\/+$/, ""), token } : null;
-  const prefetch = flag("ONYX_PREFETCH");
-  if (prefetch && !search) {
+  const target = url && token ? { url: url.replace(/\/+$/, ""), token } : null;
+  const wanted = flag("ONYX_PREFETCH");
+  if (wanted && !target) {
     console.error("onyx plugin: prefetch needs ONYX_URL and ONYX_API_TOKEN");
   }
   return {
-    search,
+    prefetch: wanted ? target : null,
     strict: flag("ONYX_STRICT_RETRIEVAL"),
-    prefetch: prefetch && search !== null,
   };
 }
 
@@ -299,7 +298,8 @@ function prefetchContext(results: SearchResult[] | null): string {
 async function userPrompt(input: HookInput, config: PluginConfig): Promise<void> {
   pruneStaleState();
   const prompt = (input.prompt ?? "").trim();
-  // Codex replays the Stop nudge as a user prompt, and its state is already saved.
+  // Codex replays the Stop nudge as a user prompt. Treating it as a question
+  // would reset the gate and prefetch the nudge text.
   if (prompt === STOP_FEEDBACK) {
     return;
   }
@@ -308,13 +308,13 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
     saveState(input.session_id, { consulted: true, awaitingFullSearch: false });
     return;
   }
-  if (!config.prefetch || !config.search) {
+  if (!config.prefetch) {
     emitContext("UserPromptSubmit", STEER_CONTEXT);
     saveState(input.session_id, { consulted: false, awaitingFullSearch: false });
     return;
   }
   const { consulted, results } = await search(
-    config.search,
+    config.prefetch,
     prompt.slice(0, MAX_QUERY_CHARS),
   );
   emitContext("UserPromptSubmit", prefetchContext(results));
@@ -326,7 +326,7 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
 
 function isOtherRetrievalTool(tool: string): boolean {
   if (!tool.startsWith("mcp__")) {
-    // Only the matcher's built-in search tools arrive without the MCP prefix.
+    // Only Claude Code's WebSearch arrives without the MCP prefix.
     return true;
   }
   // Split at the last separator: Onyx tool names contain none, a server name may.
@@ -365,7 +365,7 @@ function stop(input: HookInput, config: PluginConfig): void {
   if (!readState(input.session_id)?.awaitingFullSearch) {
     return;
   }
-  if (HOST === "codex") {
+  if (IS_CODEX) {
     emit({ decision: "block", reason: STOP_FEEDBACK });
     return;
   }
@@ -382,7 +382,8 @@ async function main(): Promise<void> {
     case "PreToolUse":
       preTool(input, config);
       break;
-    // A failed call still counts: Onyx was asked, so the gate opens.
+    // A failed call, which Claude Code reports as PostToolUseFailure, still
+    // counts: Onyx was asked, so the gate opens.
     case "PostToolUse":
     case "PostToolUseFailure":
       writeState(input.session_id, { consulted: true, awaitingFullSearch: false });

@@ -30,7 +30,7 @@
   (one directory with a Claude Code manifest in `.claude-plugin/` and a
   Codex manifest in `.codex-plugin/`, listed for Codex by the repo
   marketplace in `.agents/plugins/`). In
-  Claude Code the plugin connects the MCP server with the user's token; in
+  Claude Code the plugin connects the MCP server with the user's token. In
   Codex the user adds the server as `onyx` with `codex mcp add`. Through a
   `UserPromptSubmit` hook the plugin tells
   the model with every question prompt to call `search_indexed_documents`

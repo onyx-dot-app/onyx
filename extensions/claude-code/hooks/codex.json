@@ -27,7 +27,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__(onyx|plugin_onyx_onyx)__search_indexed_documents",
+        "matcher": "mcp__onyx__search_indexed_documents",
         "hooks": [
           {
             "type": "command",
