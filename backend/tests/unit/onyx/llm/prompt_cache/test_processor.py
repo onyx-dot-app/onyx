@@ -114,9 +114,12 @@ def test_multimodal_continuation_preserves_input_and_cache_control() -> None:
     assert isinstance(processed[0], UserMessage)
     assert processed[0].content == [
         TextContentPart(text="Document"),
-        ImageContentPart(image_url=ImageUrlDetail(url="https://example.com/image")),
+        ImageContentPart(
+            image_url=ImageUrlDetail(url="https://example.com/image"),
+            cache_control={"type": "ephemeral"},
+        ),
         TextContentPart(text="Question"),
     ]
-    assert processed[0].cache_control == {"type": "ephemeral"}
+    assert processed[0].cache_control is None
     assert prefix == original_prefix
     assert suffix == original_suffix

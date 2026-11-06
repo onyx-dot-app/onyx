@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
@@ -11,25 +11,41 @@ from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transfor
 def _add_anthropic_cache_control(
     messages: Sequence[ChatCompletionMessage],
 ) -> Sequence[ChatCompletionMessage]:
-    """Add cache_control parameters to messages for Anthropic caching.
+    """Mark the head, context before the newest question, and the prefix tail.
 
-    Anthropic allows up to 4 cache breakpoints. We mark the last cacheable
-    message (tail of the prefix) and, when there is more than one, the first
-    (usually the system prompt): the head breakpoint keeps the stable prefix
-    readable when history truncation moves the tail breakpoint.
-
-    Args:
-        messages: Messages to transform
-
-    Returns:
-        Messages with cache_control added
+    The context breakpoint allows different questions to reuse shared files.
+    The tail also caches the question and tool rounds as the conversation grows.
+    These boundaries use at most three of Anthropic's four breakpoints.
     """
-    result: list[ChatCompletionMessage] = list(messages)
-    result[-1] = result[-1].model_copy(update={"cache_control": {"type": "ephemeral"}})
-    if len(result) > 1:
-        result[0] = result[0].model_copy(
-            update={"cache_control": {"type": "ephemeral"}}
-        )
+    result = list(messages)
+    if not result:
+        return result
+    latest_user = next(
+        (
+            index
+            for index in range(len(result) - 1, -1, -1)
+            if isinstance(result[index], UserMessage)
+        ),
+        0,
+    )
+    boundaries = {0, len(result) - 1}
+    if latest_user > 0:
+        boundaries.add(latest_user - 1)
+    for index in boundaries:
+        message = result[index]
+        cache_control = {"type": "ephemeral"}
+        if isinstance(message.content, list):
+            if not message.content:
+                continue
+            content = [
+                *message.content[:-1],
+                message.content[-1].model_copy(update={"cache_control": cache_control}),
+            ]
+            result[index] = message.model_copy(
+                update={"content": content, "cache_control": None}
+            )
+        else:
+            result[index] = message.model_copy(update={"cache_control": cache_control})
     return result
 
 
@@ -56,7 +72,7 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
         """Prepare messages for Anthropic caching.
 
         Anthropic requires cache_control parameter on cacheable messages.
-        We add cache_control={"type": "ephemeral"} to all cacheable prefix messages.
+        We mark the head, context boundary, and tail of the cacheable prefix.
 
         Args:
             cacheable_prefix: Optional cacheable prefix

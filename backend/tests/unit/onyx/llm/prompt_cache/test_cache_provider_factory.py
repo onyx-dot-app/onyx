@@ -135,7 +135,7 @@ def test_direct_providers_unchanged() -> None:
     )
 
 
-def test_anthropic_marks_head_and_tail_breakpoints() -> None:
+def test_anthropic_marks_head_context_and_tail_breakpoints() -> None:
     prefix: list[ChatCompletionMessage] = [
         SystemMessage(content="system prompt"),
         UserMessage(content="earlier turn"),
@@ -152,7 +152,7 @@ def test_anthropic_marks_head_and_tail_breakpoints() -> None:
     )
 
     assert processed[0].cache_control == {"type": "ephemeral"}
-    assert processed[1].cache_control is None
+    assert processed[1].cache_control == {"type": "ephemeral"}
     assert processed[2].cache_control == {"type": "ephemeral"}
     assert processed[3].cache_control is None
 

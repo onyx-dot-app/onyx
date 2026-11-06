@@ -98,7 +98,11 @@ compaction candidate. The list on each model call:
 The notices and reminders change between steps, so they stay after the stable
 prefix. Prompt assembly marks the stable part as cacheable
 (`chat/prompt_formatting.py:prepare_model_messages`), and provider-side prefix
-caching uses it. Separately, the LLM adapter marks
+caching uses it. Anthropic breakpoints mark the head, the context before the newest
+user message, and the tail. This lets different questions reuse shared files while
+tool rounds reuse the growing history. List-valued messages carry their breakpoint
+on the final content block so image prefixes reach the provider cache.
+Separately, the LLM adapter marks
 every tool result with an explicit breakpoint on supported OpenAI and Azure API requests
 (`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`). Requests with no
 tool results keep implicit caching. `prepare_prompt` copies
