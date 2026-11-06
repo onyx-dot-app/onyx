@@ -825,9 +825,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     self.user_db = tenant_user_db
 
                 user_count = await get_user_count()
-                is_admin = (
-                    user_count == 0
-                    or user_create.email in get_default_admin_user_emails()
+                # The public register path (safe) never yields a verified
+                # address, so it cannot claim a seeded admin email here.
+                is_admin = user_count == 0 or (
+                    not safe
+                    and bool(user_create.is_verified)
+                    and user_create.email in get_default_admin_user_emails()
                 )
 
                 # Lock + check on the same session that does the insert.
@@ -1381,7 +1384,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # Assign user to the appropriate default group (Admin or Basic).
             # Must happen inside the try block while tenant context is active,
             # otherwise get_session_with_current_tenant() targets the wrong schema.
-            is_admin = user_count == 1 or user.email in get_default_admin_user_emails()
+            # Seeded admin emails need a proven address; unverified password
+            # signups get the grant in on_after_verify instead.
+            is_admin = user_count == 1 or (
+                user.is_verified and user.email in get_default_admin_user_emails()
+            )
             with get_session_with_current_tenant() as db_session:
                 assign_user_to_default_groups__no_commit(
                     db_session, user, is_admin=is_admin
@@ -1451,10 +1458,37 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             AuditAction.REGISTER,
             AuditOutcome.SUCCESS,
             actor=AuditActor(user_id=str(user.id), email=user.email),
-            # This is the only record of the first-user and
-            # DEFAULT_ADMIN_USER_EMAILS admin grants; neither one goes through
-            # the admin-access route.
+            # Records the first-user and DEFAULT_ADMIN_USER_EMAILS admin grants
+            # at signup; neither one goes through the admin-access route. A
+            # grant at verification is recorded in on_after_verify.
             extra={"is_admin": is_admin},
+        )
+
+    async def on_after_verify(
+        self,
+        user: User,
+        request: Optional[Request] = None,  # noqa: ARG002
+    ) -> None:
+        # Verification proves the address, so a seeded admin email that
+        # registered unverified gets the Admin group now.
+        if user.email not in get_default_admin_user_emails():
+            return
+        with get_session_with_current_tenant() as db_session:
+            assign_user_to_default_groups__no_commit(db_session, user, is_admin=True)
+            db_session.commit()
+        logger.notice("Granted seeded admin access to verified user %s", user.id)
+        # This grant skips the admin-access route, so record it here.
+        emit_audit_event(
+            AuditAction.USER_ROLE_CHANGE,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+            resource_type="user",
+            resource_id=str(user.id),
+            extra={
+                "target_email": user.email,
+                "is_admin": True,
+                "source": "seeded_admin_email_verified",
+            },
         )
 
     async def on_after_forgot_password(

@@ -1325,3 +1325,167 @@ class TestStandardUpgradeVerification:
 
         assert sync_user.is_verified is expected_verified
         assert sync_user.account_type == AccountType.STANDARD
+
+
+class TestSeededAdminEmails:
+    """A seeded admin email grants Admin only to a proven address: an SSO/JWT
+    identity (verified at creation) or a password signup after verification."""
+
+    SEEDED_EMAIL = "seeded-admin@corp.com"
+
+    @pytest.fixture
+    def mock_assign(self) -> Iterator[MagicMock]:
+        with (
+            patch(
+                "onyx.auth.users.get_default_admin_user_emails",
+                return_value=[self.SEEDED_EMAIL],
+            ),
+            patch("onyx.auth.users.get_session_with_current_tenant"),
+            patch("onyx.auth.users.assign_user_to_default_groups__no_commit") as assign,
+        ):
+            yield assign
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("is_verified", "expected_admin"),
+        [
+            pytest.param(False, False, id="unverified-password-signup"),
+            pytest.param(True, True, id="verified-sso-identity"),
+        ],
+    )
+    @patch("onyx.auth.users.emit_audit_event")
+    @patch(
+        "onyx.auth.users.fetch_ee_implementation_or_noop",
+        return_value=MagicMock(return_value=None),
+    )
+    @patch("onyx.auth.users.mt_cloud_telemetry")
+    @patch("onyx.auth.users.mt_cloud_identify_user")
+    @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock, return_value=5)
+    @patch(
+        "onyx.auth.users.resolve_tenant_for_user",
+        new_callable=AsyncMock,
+        return_value="public",
+    )
+    async def test_register_grants_admin_only_when_verified(
+        self,
+        mock_resolve_tenant: AsyncMock,  # noqa: ARG002
+        mock_get_user_count: AsyncMock,  # noqa: ARG002
+        mock_identify: MagicMock,  # noqa: ARG002
+        mock_telemetry: MagicMock,  # noqa: ARG002
+        mock_fetch_ee: MagicMock,  # noqa: ARG002
+        mock_audit: MagicMock,  # noqa: ARG002
+        mock_assign: MagicMock,
+        is_verified: bool,
+        expected_admin: bool,
+    ) -> None:
+        user = MagicMock(
+            id=uuid4(),
+            email=self.SEEDED_EMAIL,
+            is_verified=is_verified,
+            account_type=AccountType.STANDARD,
+        )
+
+        await UserManager(MagicMock()).on_after_register(user)
+
+        mock_assign.assert_called_once()
+        assert mock_assign.call_args.kwargs["is_admin"] is expected_admin
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("email", "expected_grant"),
+        [
+            pytest.param(SEEDED_EMAIL, True, id="seeded-email"),
+            pytest.param("someone@corp.com", False, id="other-email"),
+        ],
+    )
+    @patch("onyx.auth.users.emit_audit_event")
+    async def test_verify_grants_admin_to_seeded_email(
+        self,
+        mock_audit: MagicMock,
+        mock_assign: MagicMock,
+        email: str,
+        expected_grant: bool,
+    ) -> None:
+        user = MagicMock(
+            id=uuid4(),
+            email=email,
+            is_verified=True,
+            account_type=AccountType.STANDARD,
+        )
+
+        await UserManager(MagicMock()).on_after_verify(user)
+
+        if expected_grant:
+            mock_assign.assert_called_once()
+            assert mock_assign.call_args.kwargs["is_admin"] is True
+            mock_audit.assert_called_once()
+        else:
+            mock_assign.assert_not_called()
+            mock_audit.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("safe", "is_verified", "expected_admin"),
+        [
+            pytest.param(True, True, False, id="public-register-cannot-claim"),
+            pytest.param(False, False, False, id="trusted-but-unverified"),
+            pytest.param(False, True, True, id="trusted-and-verified"),
+        ],
+    )
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    @patch("onyx.auth.users.verify_email_is_invited")
+    @patch("onyx.auth.users.get_user_count", new_callable=AsyncMock, return_value=5)
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.get_security_settings")
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    async def test_placeholder_upgrade_grants_admin_only_when_verified(
+        self,
+        mock_get_settings: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_fetch_ee: MagicMock,
+        mock_session_manager: MagicMock,
+        mock_get_user_count: AsyncMock,  # noqa: ARG002
+        mock_verify_invited: MagicMock,  # noqa: ARG002
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_assign: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+        safe: bool,
+        is_verified: bool,
+        expected_admin: bool,
+    ) -> None:
+        mock_get_settings.return_value = SimpleNamespace(
+            password_auth_enabled=True, valid_email_domains=()
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="public")
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        placeholder = MagicMock(id=uuid4(), account_type=AccountType.EXT_PERM_USER)
+
+        user_db = MagicMock()
+        user_db.session.run_sync = AsyncMock(return_value=placeholder)
+        user_db.get = AsyncMock(return_value=placeholder)
+        user_manager = UserManager(user_db)
+        _mock_user_manager_methods(user_manager)
+        user_manager.get_by_email = AsyncMock(return_value=placeholder)
+        upgrade = MagicMock()
+        user_manager._upgrade_user_to_standard__sync = upgrade
+
+        with patch(
+            "fastapi_users.BaseUserManager.create",
+            new_callable=AsyncMock,
+            side_effect=exceptions.UserAlreadyExists(),
+        ):
+            await user_manager.create(
+                UserCreate(
+                    email=self.SEEDED_EMAIL,
+                    password="SecurePassword123!",
+                    is_verified=is_verified,
+                ),
+                safe=safe,
+            )
+
+        upgrade.assert_called_once()
+        assert upgrade.call_args.args[2] is expected_admin
