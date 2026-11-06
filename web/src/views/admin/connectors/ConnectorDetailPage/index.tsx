@@ -110,7 +110,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [timeWindow, setTimeWindow] = useState<PickedWindow>(() =>
     pickWindow("24h")
   );
-  // A picked span of the chart zooms it and narrows the runs and activity to it.
+  // A picked span of the chart brushes it and narrows the runs and activity to it.
   const [sliceRange, setSliceRange] = useState<SliceRange | null>(null);
   // The span belongs to the old chart, so a new window drops it.
   const changeWindow = (picked: PickerWindow) => {

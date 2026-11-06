@@ -5,8 +5,9 @@
 
    A coloured pill around a `Content`, which draws the icon and title. The
    height comes from the title's line and the padding: 4 is a 12px
-   `figure-small-value` line with 2px padding (1rem); 6 is a 16px
-   `secondary-body` line with 4px padding (1.5rem).
+   `figure-small-value` line with 2px padding (1rem); 5 is a 16px
+   `secondary-body` line with 2px padding (1.25rem); 6 is that line with
+   4px padding (1.5rem).
    --------------------------------------------------------------------------- */
 
 .opal-badge {

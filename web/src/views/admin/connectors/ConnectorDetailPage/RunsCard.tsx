@@ -107,7 +107,7 @@ export interface RunsCardProps {
   /** A chart span that narrows the list inside the shared window. The shared picker shows it, and its X calls `onClearRange`. */
   range?: SliceRange | null;
   onClearRange?: () => void;
-  /** Called when a row's stage or checks popover opens or closes, so the page can step back around it. */
+  /** Called when a run line's stage details or check results open or close, so the page can step back around it. */
   onFocusChange?: (focused: boolean) => void;
 }
 
@@ -600,10 +600,11 @@ export default function RunsCard({
           </Section>
           {actions}
         </Section>
+        {/* 4 px around run lines, so a 640 px column leaves their LineLayout above its 620 px wrap. */}
         <Section
           alignItems="stretch"
           gap={1}
-          padding={2}
+          padding={1}
           height="fit"
           className="rounded-b-16 border-t border-border-01 bg-background-tint-01"
         >

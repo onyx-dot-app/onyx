@@ -12,8 +12,8 @@ import { cn } from "@opal/utils";
 // Types
 // ---------------------------------------------------------------------------
 
-/** Height on the Tailwind scale: `4` is 1rem, `6` is 1.5rem. */
-type BadgeSize = 4 | 6;
+/** Height on the Tailwind scale: `4` is 1rem, `5` is 1.25rem, `6` is 1.5rem. */
+type BadgeSize = 4 | 5 | 6;
 
 // Takes no DOM attributes. The ref and anything a popover trigger injects at
 // runtime still reach the root, so one can wrap a Badge. For a tooltip, use

@@ -1,19 +1,24 @@
 "use client";
 
+import { useRef } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
+import { Badge, Button, Card, Text, Tooltip } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { cn } from "@opal/utils";
 import {
   SvgAlertCircle,
   SvgAlertTriangle,
   SvgCheckCircle,
+  SvgDocFile,
   SvgFileMinus,
   SvgFilePlus,
   SvgFileRefresh,
   SvgFiles,
   SvgListCheck,
+  SvgRefreshCw,
   SvgScissors,
   SvgSlowMotion,
+  SvgStackLine,
   SvgUser,
   SvgUserShield,
   SvgUsers,
@@ -35,17 +40,18 @@ import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import {
+  isRetryRun,
   runKindLabelKey,
   runStatusTag,
 } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
-import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
-import CheckRunPopoverContent, {
-  CheckRunTrigger,
-} from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
-import StageDetailsPopoverContent, {
-  StageDetailsTrigger,
-} from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
+import { CheckRunCard } from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
+import { StageDetailsCard } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
+import { RunDetailsHint } from "@/views/admin/connectors/ConnectorDetailPage/InlineDetails";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import LineLayout, {
+  LineIconLabel,
+  LineTags,
+} from "@/views/admin/connectors/shared/LineLayout";
 
 export const RUN_KIND_ICONS = {
   indexing: SvgFiles,
@@ -54,6 +60,17 @@ export const RUN_KIND_ICONS = {
   pruning: SvgScissors,
   checks: SvgListCheck,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
+
+/** A run's kind glyph. A retry reads apart from the pair's regular indexing. */
+export function runKindIcon(run: CCPairRun): IconFunctionComponent {
+  return isRetryRun(run) ? SvgRefreshCw : RUN_KIND_ICONS[run.kind];
+}
+
+/** A run line's glyph: a retry keeps its own, and any other run shows the slow-motion glyph while it runs. */
+function runIcon(run: CCPairRun): IconFunctionComponent {
+  if (isActive(run) && !isRetryRun(run)) return SvgSlowMotion;
+  return runKindIcon(run);
+}
 
 /** The run's results that have a row: checks that apply to the pair. */
 export function shownCheckResults(
@@ -165,7 +182,7 @@ export function runMinutes(run: CCPairRun): number | null {
   return ms === null ? null : Math.max(0, Math.round(ms / 60_000));
 }
 
-/** A run's length in its two largest units, such as "16s", "4m 12s" or "1h 5m", narrow so the row's detail keeps to one line. */
+/** A run's length in its two largest units in short form, such as "16 sec", "4 min 12 sec" or "1 hr 5 min". */
 function formatRunLength(
   format: ReturnType<typeof useFormatter>,
   ms: number
@@ -176,7 +193,7 @@ function formatRunLength(
     { unit: "minute", value: Math.floor(total / 60) % 60 },
     { unit: "second", value: total % 60 },
   ];
-  // From the largest nonzero unit, or seconds for an instant run. A zero trailing unit is dropped, as in "2m" or "1h".
+  // From the largest nonzero unit, or seconds for an instant run. A zero trailing unit is dropped, as in "2 min" or "1 hr".
   const first = units.findIndex((part) => part.value > 0);
   const from = first === -1 ? units.length - 1 : first;
   return format.list(
@@ -184,7 +201,7 @@ function formatRunLength(
       .slice(from, from + 2)
       .filter((part, index) => index === 0 || part.value > 0)
       .map(({ unit, value }) =>
-        format.number(value, { style: "unit", unit, unitDisplay: "narrow" })
+        format.number(value, { style: "unit", unit, unitDisplay: "short" })
       ),
     { type: "unit", style: "narrow" }
   );
@@ -215,14 +232,14 @@ function finishedRunRate(run: CCPairRun): number | null {
   return count / (ms / 60_000);
 }
 
-/** What a running permission or group sync moves per minute since it started, or `null` before it starts. */
+/** What a running permission or group sync moves per minute since it started, or `null` until it has moved something. */
 function syncRate(run: CCPairRun, now: number): number | null {
   if (run.kind !== "doc_permission_sync" && run.kind !== "group_sync") {
     return null;
   }
   const started = run.attempt.time_started;
   const count = rateCount(run);
-  if (started === null || count === null) return null;
+  if (started === null || count === null || count === 0) return null;
   const minutes = (now - new Date(started).getTime()) / 60_000;
   if (minutes <= 0) return null;
   return count / minutes;
@@ -234,17 +251,41 @@ export const RATE_FORMAT = {
   maximumFractionDigits: 2,
 } as const;
 
-/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min", or `null` for any other run. */
-export function useSyncRateLabel(): (run: CCPairRun) => string | null {
+/** What an active index or sync run moves per minute so far, or `null` before it has a rate. */
+function liveRate(run: CCPairRun, now: number): number | null {
+  if (!isActive(run)) return null;
+  if (run.kind === "indexing") return getDocsProcessedPerMinute(run.attempt);
+  return syncRate(run, now);
+}
+
+/** Labels a rate in docs, or memberships for a group sync, per minute, with the run's length once it has ended. */
+function useRateLabel(): (
+  run: CCPairRun,
+  rate: number,
+  duration?: string
+) => string {
   const t = useTranslations("admin.connector.runs.detail");
   const format = useFormatter();
+  return (run, rate, duration) => {
+    const shown = format.number(rate, RATE_FORMAT);
+    const memberships = run.kind === "group_sync";
+    if (duration === undefined) {
+      return t(memberships ? "membershipRate" : "rate", { rate: shown });
+    }
+    return t(memberships ? "membershipRateFinished" : "rateFinished", {
+      rate: shown,
+      duration,
+    });
+  };
+}
+
+/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min", or `null` for any other run. */
+export function useSyncRateLabel(): (run: CCPairRun) => string | null {
+  const rateLabel = useRateLabel();
   return (run) => {
     if (!isActive(run)) return null;
     const rate = syncRate(run, Date.now());
-    if (rate === null) return null;
-    return t(run.kind === "group_sync" ? "membershipRate" : "rate", {
-      rate: format.number(rate, RATE_FORMAT),
-    });
+    return rate === null ? null : rateLabel(run, rate);
   };
 }
 
@@ -311,14 +352,13 @@ interface CountProps {
 /** A small count with its icon, such as new or removed documents. */
 function Count({ icon: Icon, value, tooltip, look }: CountProps) {
   const format = useFormatter();
+  // A run line's sub-counts say only what moved.
+  if (look === "plain" && value === 0) return null;
   if (look === "tag") {
     return (
-      <Badge
-        icon={Icon}
-        title={format.number(value)}
-        color="default"
-        tooltip={tooltip}
-      />
+      <Tooltip tooltip={tooltip} side="top">
+        <Badge icon={Icon} title={format.number(value)} color="default" />
+      </Tooltip>
     );
   }
   return (
@@ -529,14 +569,14 @@ export interface RunRowProps {
   canCancel: boolean;
   onCancel: () => void;
   onViewLogs: () => void;
-  /** Whether the row's stage or checks popover is open. The open row is raised. */
+  /** Whether the line's stage details or check results show under it. The open line is raised. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Another row's popover is open, so this row steps back. */
+  /** Another line's details are open, so this line steps back. */
   dimmed: boolean;
 }
 
-/** One run in the pair's run list: what ran and when, how it ended, and what it moved. */
+/** One run in the pair's run list: what ran and when, how it ended, and what it moved, with its stage details or check results inline under it. */
 export default function RunRow({
   run,
   canCancel,
@@ -548,186 +588,168 @@ export default function RunRow({
 }: RunRowProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
-  const syncRateLabel = useSyncRateLabel();
+  const rateLabel = useRateLabel();
+  const hintRef = useRef<HTMLElement>(null);
   const tag = runStatusTag(run);
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
+  const hasChecks =
+    run.kind === "checks" && shownCheckResults(run.attempt).length > 0;
 
   const finished = finishedAt(run);
-  // A finished index or sync run shows its rate and keeps its finish time in the tooltip.
-  const finishedRate = finishedRunRate(run);
+  // The detail no longer carries the finish time, so the tooltip does.
   const finishedTime =
-    finishedRate === null || finished === null
-      ? undefined
-      : formatDateTimeLog(finished);
+    finished === null ? undefined : formatDateTimeLog(finished);
 
-  // Queued, then the live rate, then the rate or the time it finished at, and how long it took.
+  // Before it ends: the live rate, Starting sync until a run with a rate has one, else Running.
+  // Once it ends: the rate and how long it took, or only how long for a run with no rate or one that moved nothing.
   function detail(): string {
-    if (run.attempt.status === "not_started") return t("detail.queued");
-    if (run.kind === "indexing" && active) {
-      const rate = getDocsProcessedPerMinute(run.attempt);
-      if (rate !== null) {
-        return t("detail.rate", { rate: format.number(rate, RATE_FORMAT) });
-      }
+    if (finished === null) {
+      const rate = liveRate(run, Date.now());
+      if (rate !== null) return rateLabel(run, rate);
+      return active && rateCount(run) !== null
+        ? t("detail.starting")
+        : t("detail.running");
     }
-    const liveSyncRate = syncRateLabel(run);
-    if (liveSyncRate !== null) return liveSyncRate;
-    if (finished === null) return t("detail.running");
     const ms = runDurationMs(run);
     if (ms === null) return formatDateTimeLog(finished);
     const duration = formatRunLength(format, ms);
-    if (finishedRate !== null) {
-      return t(
-        run.kind === "group_sync"
-          ? "detail.membershipRateFinished"
-          : "detail.rateFinished",
-        { rate: format.number(finishedRate, RATE_FORMAT), duration }
-      );
-    }
-    return t("detail.finished", {
-      time: formatDateTimeLog(finished),
-      duration,
-    });
+    const rate = finishedRunRate(run);
+    if (rate === null) return t("detail.runtime", { duration });
+    return rateLabel(run, rate, duration);
   }
 
   const warnings = runWarnings(run);
   const emphasized = active || failed || warnings > 0;
   const hasLogs = runErrorText(run) !== null;
+  // Logs stay a hover action on a clean run and show outright once something went wrong.
+  const logsShown = failed || warnings > 0 || hasLogs;
 
-  // The stage details popover spans the row, so the row is its anchor.
+  function toggle() {
+    onOpenChange(!open);
+  }
+
+  // Focus goes back to the hint, as it did when a popover closed.
+  function close() {
+    onOpenChange(false);
+    hintRef.current?.focus();
+  }
+
   return (
     <Section
       alignItems="stretch"
+      gap={1}
       height="fit"
       className={focusDimClass(dimmed)}
     >
-      <Popover open={open} onOpenChange={onOpenChange}>
-        <Popover.Anchor asChild>
-          <Card
-            color="background-tint-00"
-            border="none"
-            rounding={2}
-            padding={1}
-            shadow={open ? "md" : "none"}
-          >
+      <Card
+        padding={1}
+        shadow={open ? "md" : "none"}
+        className="group/run-line"
+        data-testid="run-row"
+      >
+        <LineLayout
+          variant="run"
+          a={
+            // Below 640 px the wrapped line sets the time before the type on one line.
             <Section
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="center"
+              alignItems="start"
               gap={1}
               height="fit"
+              className="@max-[38.75rem]:flex-row-reverse @max-[38.75rem]:items-center @max-[38.75rem]:justify-end"
             >
-              <Section
-                alignItems="start"
-                gap={1}
-                padding={1}
-                height="fit"
-                className="min-w-0 flex-1"
+              <LineIconLabel
+                icon={runIcon(run)}
+                label={t(`kinds.${runKindLabelKey(run)}`)}
+              />
+              <Text
+                font={emphasized ? "secondary-action" : "secondary-body"}
+                color={emphasized ? "text-04" : "text-03"}
+                wordWrap="whitespace-nowrap"
               >
-                <Content
-                  font="secondary-body"
-                  icon={active ? SvgSlowMotion : RUN_KIND_ICONS[run.kind]}
-                  title={t(`kinds.${runKindLabelKey(run)}`)}
-                  titleColor="text-03"
-                  width="fit"
-                />
-                <Text
-                  font={emphasized ? "secondary-action" : "secondary-body"}
-                  color={emphasized ? "text-04" : "text-03"}
-                >
-                  {formatDateTimeLog(run.time_created)}
-                </Text>
-              </Section>
-
-              <Section
-                alignItems="start"
-                gap={1}
-                padding={1}
-                width={12}
-                height="fit"
-                className="shrink-0"
-              >
-                <Section
-                  flexDirection="row"
-                  justifyContent="start"
-                  gap={1}
-                  width="fit"
-                  height="fit"
-                >
-                  <StatusTagPill tag={tag} />
-                  {run.kind === "indexing" && run.attempt.is_new_model && (
-                    <Badge
-                      title={t("newModel.label")}
-                      color="info"
-                      tooltip={t("newModel.tooltip")}
-                    />
-                  )}
-                  {run.kind === "indexing" && (
-                    <StageDetailsTrigger open={open} />
-                  )}
-                  {run.kind === "checks" &&
-                    shownCheckResults(run.attempt).length > 0 && (
-                      <CheckRunTrigger open={open} />
-                    )}
-                  <RunWarningsTag run={run} />
-                </Section>
-                <Tooltip tooltip={finishedTime} side="top">
-                  <Text font="secondary-body" color="text-03">
-                    {detail()}
-                  </Text>
-                </Tooltip>
-              </Section>
-
-              <Section
-                alignItems="end"
-                gap={1}
-                padding={1}
-                width={9}
-                height="fit"
-                className="shrink-0"
-              >
-                <RunFigures run={run} />
-              </Section>
-
-              <Section
-                flexDirection="row"
-                justifyContent="end"
-                gap={1}
-                width={3.5}
-                height="fit"
-                className="shrink-0"
-              >
-                {canCancel && run.kind === "indexing" && active && (
-                  <Button
-                    icon={SvgXCircle}
-                    prominence="tertiary"
-                    size="sm"
-                    tooltip={t("actions.cancel")}
-                    aria-label={t("actions.cancel")}
-                    onClick={onCancel}
-                  />
-                )}
-                {hasLogs && (
-                  <Button
-                    icon={SvgAlertTriangle}
-                    prominence="tertiary"
-                    size="sm"
-                    tooltip={t("actions.logs")}
-                    aria-label={t("actions.logs")}
-                    onClick={onViewLogs}
-                  />
-                )}
-              </Section>
+                {formatDateTimeLog(run.time_created)}
+              </Text>
             </Section>
-          </Card>
-        </Popover.Anchor>
-        {run.kind === "indexing" && (
-          <StageDetailsPopoverContent indexAttemptId={run.attempt.id} />
-        )}
-        {run.kind === "checks" && shownCheckResults(run.attempt).length > 0 && (
-          <CheckRunPopoverContent run={run.attempt} />
-        )}
-      </Popover>
+          }
+          b={
+            <>
+              <LineTags tag={tag}>
+                {run.kind === "indexing" && run.attempt.is_new_model && (
+                  <Tooltip tooltip={t("newModel.tooltip")} side="top">
+                    <Badge title={t("newModel.label")} color="info" />
+                  </Tooltip>
+                )}
+                {run.kind === "indexing" && (
+                  <RunDetailsHint
+                    icon={SvgStackLine}
+                    label={t("actions.stages")}
+                    open={open}
+                    onClick={toggle}
+                    ref={hintRef}
+                  />
+                )}
+                {hasChecks && (
+                  <RunDetailsHint
+                    icon={SvgListCheck}
+                    label={t("actions.checks")}
+                    open={open}
+                    onClick={toggle}
+                    ref={hintRef}
+                  />
+                )}
+                <RunWarningsTag run={run} />
+              </LineTags>
+              <Tooltip tooltip={finishedTime} side="top">
+                <Text font="secondary-body" color="text-03">
+                  {detail()}
+                </Text>
+              </Tooltip>
+            </>
+          }
+          c={<RunFigures run={run} />}
+          d={
+            <>
+              {canCancel && run.kind === "indexing" && active && (
+                <Button
+                  icon={SvgXCircle}
+                  prominence="internal"
+                  size="sm"
+                  tooltip={t("actions.cancel")}
+                  aria-label={t("actions.cancel")}
+                  onClick={onCancel}
+                />
+              )}
+              <div
+                className={cn(
+                  !logsShown &&
+                    "opacity-0 transition-opacity focus-within:opacity-100 group-hover/run-line:opacity-100 no-hover:opacity-100"
+                )}
+              >
+                {/* Every line has the action, and a run that recorded no trace or message has nothing to open. */}
+                <Button
+                  icon={SvgDocFile}
+                  prominence="internal"
+                  size="sm"
+                  tooltip={t(hasLogs ? "actions.logs" : "actions.noLogs")}
+                  aria-label={t("actions.logs")}
+                  disabled={!hasLogs}
+                  onClick={onViewLogs}
+                />
+              </div>
+            </>
+          }
+        />
+      </Card>
+      {open && run.kind === "indexing" && (
+        <StageDetailsCard
+          indexAttemptId={run.attempt.id}
+          noDocs={!active && run.attempt.total_docs_indexed === 0}
+          onClose={close}
+        />
+      )}
+      {open && run.kind === "checks" && hasChecks && (
+        <CheckRunCard run={run.attempt} onClose={close} />
+      )}
     </Section>
   );
 }

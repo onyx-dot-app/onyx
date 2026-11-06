@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { cn } from "@opal/utils";
 import {
   SvgListCheck,
   SvgOrganization,
@@ -55,12 +56,14 @@ const FIRST_RUN_STATUSES = new Set<ConnectorCredentialPairStatus>([
 
 interface StatBlockProps {
   title?: string | RichStr;
+  /** Holds the design's 188px instead of sharing the row, so a wider picker label beside it never moves it. */
+  fixed?: boolean;
   children: React.ReactNode;
 }
 /** One column of a card: a titled status tag, or a figure over its label. */
-function StatBlock({ title, children }: StatBlockProps) {
+function StatBlock({ title, fixed = false, children }: StatBlockProps) {
   return (
-    // Columns share the row evenly and wrap below 12rem, so three fit at 640px.
+    // Columns share the row evenly, or hold 188px when fixed, and wrap below 188px, so three fit at 640px.
     <Section
       alignItems="start"
       justifyContent="start"
@@ -68,7 +71,10 @@ function StatBlock({ title, children }: StatBlockProps) {
       padding={2}
       width="auto"
       height="fit"
-      className="grow basis-0 min-w-48"
+      className={cn(
+        "min-w-[11.75rem]",
+        fixed ? "shrink-0 basis-[11.75rem]" : "grow basis-0"
+      )}
     >
       {title !== undefined && (
         <Text font="secondary-action" color="text-04">
@@ -87,7 +93,7 @@ interface FigureStatBlockProps {
 function FigureStatBlock({ value, label }: FigureStatBlockProps) {
   const locale = useLocale();
   return (
-    <StatBlock>
+    <StatBlock fixed>
       <Text font="main-content-emphasis" color="text-04">
         {value.toLocaleString(locale)}
       </Text>
@@ -395,53 +401,64 @@ export default function StatusCard({
               justifyContent="start"
               gap={1}
               height="fit"
-              wrap
             >
-              <FigureStatBlock
-                value={ccPair.num_docs_indexed}
-                label={t("documents.totalLabel")}
-              />
-              {paused && showsDocSync && syncedDocs !== null && (
+              {/* The figures wrap among themselves, so the picker keeps the first line and a picked span's longer label never pushes the chart down. */}
+              <Section
+                flexDirection="row"
+                alignItems="start"
+                justifyContent="start"
+                gap={1}
+                width="auto"
+                height="fit"
+                // basis-0 lets the figures give way to the picker, since width="auto" adds shrink-0.
+                className="min-w-0 grow basis-0"
+                wrap
+              >
                 <FigureStatBlock
-                  value={syncedDocs}
-                  label={t("documents.syncedPermissionsLabel")}
+                  value={ccPair.num_docs_indexed}
+                  label={t("documents.totalLabel")}
                 />
-              )}
-              {paused && showsGroupSync && syncedMemberships !== null && (
-                <FigureStatBlock
-                  value={syncedMemberships}
-                  label={t("documents.syncedMembershipsLabel")}
-                />
-              )}
-              {chart && (
-                <>
+                {paused && showsDocSync && syncedDocs !== null && (
+                  <FigureStatBlock
+                    value={syncedDocs}
+                    label={t("documents.syncedPermissionsLabel")}
+                  />
+                )}
+                {paused && showsGroupSync && syncedMemberships !== null && (
+                  <FigureStatBlock
+                    value={syncedMemberships}
+                    label={t("documents.syncedMembershipsLabel")}
+                  />
+                )}
+                {chart && (
                   <FigureStatBlock
                     value={recent}
                     label={t("documents.recentLabel")}
                   />
-                  <Section
-                    flexDirection="row"
-                    justifyContent="end"
-                    alignItems="center"
-                    gap={1}
-                    width="auto"
-                    height="fit"
-                    className="grow basis-0"
-                    wrap
-                  >
-                    <ThroughputWindowPicker
-                      windows={PAIR_WINDOWS}
-                      value={timeWindow}
-                      onChange={onTimeWindowChange}
-                      selection={range}
-                      onClearSelection={
-                        onRangeChange === undefined
-                          ? undefined
-                          : () => onRangeChange(null)
-                      }
-                    />
-                  </Section>
-                </>
+                )}
+              </Section>
+              {chart && (
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  alignItems="center"
+                  gap={1}
+                  width="fit"
+                  height="fit"
+                  className="shrink-0"
+                >
+                  <ThroughputWindowPicker
+                    windows={PAIR_WINDOWS}
+                    value={timeWindow}
+                    onChange={onTimeWindowChange}
+                    selection={range}
+                    onClearSelection={
+                      onRangeChange === undefined
+                        ? undefined
+                        : () => onRangeChange(null)
+                    }
+                  />
+                </Section>
               )}
             </Section>
             {chart && (

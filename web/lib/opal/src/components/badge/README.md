@@ -2,7 +2,7 @@
 
 **Import:** `import { Badge, type BadgeProps } from "@opal/components";`
 
-A small coloured label for status, category or metadata: an icon and a title in a tinted pill, drawn by a `Content`. It does nothing on click. `size` is the height on the Tailwind scale: `4` is 1rem (a `figure-small-value` title, 2px padding, 4px corners), `6` is 1.5rem (a `secondary-body` title, 4px padding, 8px corners).
+A small coloured label for status, category or metadata: an icon and a title in a tinted pill, drawn by a `Content`. It does nothing on click. `size` is the height on the Tailwind scale: `4` is 1rem (a `figure-small-value` title, 2px padding, 4px corners), `5` is 1.25rem (a `secondary-body` title, 2px padding, 4px corners), `6` is 1.5rem (a `secondary-body` title, 4px padding, 8px corners).
 
 For a removable, clickable or tag-field pill, use [`Tag`](../tag/README.md). For a hover tooltip, pass `tooltip`; do not wrap the badge in `Tooltip`, which nests inside the title's own tooltip. `Badge` takes no DOM attributes, but its ref and the props a wrapping popover trigger injects still reach its root.
 
@@ -18,7 +18,7 @@ the [Content README](../../layouts/content/README.md#colours)). `titleColor` ove
 | `icon`    | `IconFunctionComponent`            | —              | Optional icon before the title |
 | `color`   | `StatusColor`                   | `"default"`    | Status color                   |
 | `titleColor` | `Exclude<TextColor, "inherit">` | per `color` | Overrides the label colour, as on `Content` |
-| `size`    | `4 \| 6`                           | `4`            | Height on the Tailwind scale   |
+| `size`    | `4 \| 5 \| 6`                      | `4`            | Height on the Tailwind scale   |
 | `tooltip` | `string \| RichStr`                | —              | Shown on every hover. Replaces the full-title tooltip, so a cut title shows only this |
 
 ### `color`

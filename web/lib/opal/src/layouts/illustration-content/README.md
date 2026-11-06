@@ -34,7 +34,7 @@ Empty states and placeholder screens share a recurring pattern: a large illustra
 
 | Prop           | Type                    | Default        | Description                                                                                                      |
 | -------------- | ----------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `illustration` | `IconFunctionComponent` | —              | Optional illustration component rendered at 7.5rem × 7.5rem, centered. Works with any `@opal/illustrations` SVG. |
+| `illustration` | `IconFunctionComponent` | —              | Optional illustration component rendered at 7.5rem × 7.5rem, centered. Works with any `@opal/illustrations` SVG. It receives `size={120}` to match, since the line weight follows `size`, not the CSS size. |
 | `title`        | `string`                | **(required)** | Main title text, center-aligned.                                                                                 |
 | `description`  | `string`                | —              | Optional description below the title, center-aligned.                                                            |
 

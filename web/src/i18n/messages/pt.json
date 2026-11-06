@@ -2828,6 +2828,8 @@
         "throughput": {
           "ariaLabel": "Documentos indexados ao longo do tempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
+          "lineTooltip": "{failures, plural, one {# falha} other {# falhas}}, {errors, plural, one {# erro} other {# erros}}",
+          "barLabel": "{count, plural, one {# documento} other {# documentos}}, {range}",
           "loadError": "Não foi possível carregar o gráfico.",
           "rangeFilter": "Execuções criadas neste trecho do gráfico"
         },
@@ -2979,6 +2981,7 @@
           "all": "Todos os tipos",
           "indexing": "Índice de documentos",
           "backfill": "Preenchimento de documentos",
+          "retry": "Índice de documentos - Nova tentativa",
           "doc_permission_sync": "Sincronização de permissões",
           "group_sync": "Sincronização de membros de grupos",
           "pruning": "Limpeza de documentos",
@@ -2986,9 +2989,10 @@
         },
         "detail": {
           "queued": "Na fila",
+          "starting": "Iniciando sincronização",
           "running": "Em execução",
           "rate": "{rate} documentos/min",
-          "finished": "{time} ({duration})",
+          "runtime": "Tempo de execução {duration}",
           "rateFinished": "{rate} documentos/min ({duration})",
           "membershipRate": "{rate} associações/min",
           "membershipRateFinished": "{rate} associações/min ({duration})"
@@ -2997,6 +3001,7 @@
           "stages": "Ver métricas por etapa",
           "cancel": "Cancelar",
           "logs": "Ver logs",
+          "noLogs": "Nenhum registro gravado",
           "checks": "Ver resultados das verificações"
         },
         "warnings": {
@@ -3242,6 +3247,9 @@
         "calls": "Lotes",
         "averageTime": "Tempo médio",
         "maxTime": "Tempo máximo",
+        "noDocs": "Nenhum documento concluiu a indexação",
+        "laterCanceled": "Etapas posteriores canceladas",
+        "retry": "Tentar novamente",
         "uneven": {
           "tooltip": "Os tempos por lote variam muito nesta etapa"
         },

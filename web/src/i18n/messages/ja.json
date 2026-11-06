@@ -2828,6 +2828,8 @@
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
+          "lineTooltip": "{failures, plural, one {# 件の失敗} other {# 件の失敗}}、{errors, plural, one {# 件のエラー} other {# 件のエラー}}",
+          "barLabel": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}、{range}",
           "loadError": "グラフを読み込めませんでした。",
           "rangeFilter": "グラフのこの区間に作成された実行"
         },
@@ -2979,6 +2981,7 @@
           "all": "すべての種類",
           "indexing": "ドキュメントインデックス",
           "backfill": "ドキュメントのバックフィル",
+          "retry": "ドキュメントインデックス - 再試行",
           "doc_permission_sync": "権限の同期",
           "group_sync": "グループメンバーシップの同期",
           "pruning": "ドキュメントのプルーニング",
@@ -2986,9 +2989,10 @@
         },
         "detail": {
           "queued": "待機中",
+          "starting": "同期を開始中",
           "running": "実行中",
           "rate": "{rate} 件/分",
-          "finished": "{time}（{duration}）",
+          "runtime": "実行時間 {duration}",
           "rateFinished": "{rate} 件/分（{duration}）",
           "membershipRate": "{rate} メンバーシップ/分",
           "membershipRateFinished": "{rate} メンバーシップ/分（{duration}）"
@@ -2997,6 +3001,7 @@
           "stages": "ステージの指標を表示",
           "cancel": "キャンセル",
           "logs": "ログを表示",
+          "noLogs": "ログは記録されていません",
           "checks": "チェック結果を表示"
         },
         "warnings": {
@@ -3242,6 +3247,9 @@
         "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
+        "noDocs": "インデックス作成が完了したドキュメントはありません",
+        "laterCanceled": "後続のステージはキャンセルされました",
+        "retry": "再試行",
         "uneven": {
           "tooltip": "このステージのバッチ時間は大きくばらついています"
         },

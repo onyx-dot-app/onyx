@@ -276,7 +276,13 @@ interface CCPairRunClosure {
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
 export type CCPairRun = CCPairRunClosure &
   (
-    | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
+    | {
+        kind: "indexing";
+        time_created: string;
+        attempt: IndexAttemptSnapshot;
+        /** A targeted re-index of chosen documents, not a run over the whole pair. Absent from an API that predates retry runs. */
+        is_retry?: boolean;
+      }
     | {
         kind: "doc_permission_sync";
         time_created: string;
@@ -392,4 +398,21 @@ export interface CCPairThroughputResponse {
   docs_indexed: number[];
   /** `ended` is null while the run is still going. */
   runs: { started: string; ended: string | null; status: ValidStatuses }[];
+  /** Absent from an API a deploy behind. */
+  slices?: CCPairThroughputSlice[];
+}
+
+/** One slice of the throughput window. Slices align to the caller's clock when their width divides a day. A running run is in every slice from its start to now. */
+export interface CCPairThroughputSlice {
+  start: string;
+  end: string;
+  docs_indexed: number;
+  runs: CCPairThroughputSliceRun[];
+}
+
+/** `resolved` is true once an admin resolved the run or a newer run superseded it. */
+export interface CCPairThroughputSliceRun {
+  attempt_id: number;
+  status: ValidStatuses;
+  resolved: boolean;
 }
