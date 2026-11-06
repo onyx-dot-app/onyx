@@ -35,8 +35,7 @@ import type { User } from "@/lib/types";
 function renderNameColumn(email: string, row: UserRow) {
   return (
     <Content
-      sizePreset="main-ui"
-      variant="section"
+      font="main-ui-action"
       title={row.personal_name ?? email}
       description={row.personal_name ? email : undefined}
     />
@@ -260,7 +259,7 @@ export default function UsersTable({
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         placeholder={t("table.search.placeholder")}
-        searchIcon
+        icon="search"
       />
       <UserFilters
         selectedAccountTypes={selectedAccountTypes}

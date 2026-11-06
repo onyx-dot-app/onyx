@@ -218,6 +218,8 @@ def drive_item_document(
         external_access=external_access or ExternalAccess.empty(),
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         file_id=content.staged_file_id,
+        source_mime_type=item.mime_type,
+        source_size_bytes=item.size,
     )
 
 

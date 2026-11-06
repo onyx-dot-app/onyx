@@ -552,10 +552,9 @@ export default function SkillEditorPage({
                     <Card border="solid" rounding={4} padding={2}>
                       <Section gap={2} alignItems="stretch" height="auto">
                         <Content
+                          font="main-content-emphasis"
                           title={t("editor.import.title")}
                           description={t("editor.import.description")}
-                          sizePreset="main-content"
-                          variant="section"
                         />
                         <SkillFilesPicker
                           disabled={filesUploadDisabled}
@@ -592,10 +591,9 @@ export default function SkillEditorPage({
 
               <Section alignItems="stretch">
                 <Content
+                  font="main-content-emphasis"
                   title={t("editor.details.title")}
                   description={t("editor.details.description")}
-                  sizePreset="main-content"
-                  variant="section"
                 />
                 <InputVertical
                   withLabel="name"
@@ -665,10 +663,9 @@ export default function SkillEditorPage({
                   gap={2}
                 >
                   <Content
+                    font="main-content-emphasis"
                     title={t("editor.instructions.title")}
                     description={t("editor.instructions.description")}
-                    sizePreset="main-content"
-                    variant="section"
                   />
                   <InstructionsDisplayModeToggle
                     value={instructionsDisplayMode}
@@ -704,10 +701,9 @@ export default function SkillEditorPage({
 
               <Section gap={2} alignItems="stretch" height="auto">
                 <Content
+                  font="main-content-emphasis"
                   title={t("editor.files.title")}
                   description={t("editor.files.description")}
-                  sizePreset="main-content"
-                  variant="section"
                 />
                 <Card border="solid" rounding={4}>
                   <SkillFileTree

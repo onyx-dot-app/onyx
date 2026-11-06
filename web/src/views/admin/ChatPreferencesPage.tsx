@@ -928,10 +928,9 @@ export default function ChatPreferencesPage() {
                   >
                     <Section width="fit" alignItems="start">
                       <Content
+                        font="main-content-emphasis"
                         title={t("connectors.title")}
                         description={t("connectors.description")}
-                        sizePreset="main-content"
-                        variant="section"
                       />
                     </Section>
                     {uniqueSources.length > 0 && (
@@ -964,9 +963,9 @@ export default function ChatPreferencesPage() {
                           <div key={source} className="w-40">
                             <Card padding={2} border="solid">
                               <Content
+                                font="main-ui-action"
                                 icon={meta.icon}
                                 title={meta.displayName}
-                                sizePreset="main-ui"
                               />
                             </Card>
                           </div>

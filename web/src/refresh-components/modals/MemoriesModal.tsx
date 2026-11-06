@@ -275,7 +275,7 @@ export default function MemoriesModal({
               placeholder={t("modal.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              searchIcon
+              icon="search"
             />
             <Button
               disabled={!canAddMemory}

@@ -103,7 +103,7 @@ export default function SharedChatDisplay({
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
           <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 px-8 py-4">
-            <Text as="p" font="heading-h2" color="text-04">
+            <Text as="p" font="heading-headline" color="text-04">
               {chatSession.description || t("header.untitledChat.title")}
             </Text>
             <div className="flex flex-col items-end">

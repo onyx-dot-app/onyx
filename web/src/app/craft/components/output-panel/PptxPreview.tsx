@@ -132,7 +132,7 @@ export default function PptxPreview({
         padding={8}
       >
         <SvgFileText size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
+        <Text font="heading-section" color="text-03">
           {t("error.title")}
         </Text>
         <div className="text-center max-w-md">

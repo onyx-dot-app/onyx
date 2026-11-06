@@ -1045,7 +1045,7 @@ const AppInputBar = React.memo(
                     {[
                       ...sortedFilteredPrompts.map((prompt, index) => (
                         <LineItemButton
-                          sizePreset="main-ui"
+                          font="main-ui-action"
                           rounding={2}
                           key={prompt.id}
                           state={
@@ -1063,7 +1063,7 @@ const AppInputBar = React.memo(
                       )),
                       sortedFilteredPrompts.length > 0 ? null : undefined,
                       <LineItemButton
-                        sizePreset="main-ui"
+                        font="main-ui-action"
                         rounding={2}
                         key="create-new"
                         {...navigation.linkTo("/app/settings/chat-preferences")}

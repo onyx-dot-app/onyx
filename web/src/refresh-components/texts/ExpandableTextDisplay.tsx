@@ -336,7 +336,7 @@ export default function ExpandableTextDisplay({
           <div className="flex items-start justify-between px-4 py-3">
             <div className="flex flex-col">
               <DialogPrimitive.Title asChild>
-                <Text as="span" color="text-04" font="heading-h3">
+                <Text as="span" color="text-04" font="heading-section">
                   {title}
                 </Text>
               </DialogPrimitive.Title>

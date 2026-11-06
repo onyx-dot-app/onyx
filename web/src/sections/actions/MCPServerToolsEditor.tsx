@@ -183,7 +183,7 @@ export default function MCPServerToolsEditor({
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-40 flex-1">
           <InputTypeIn
-            searchIcon
+            icon="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("mcpTools.search")}

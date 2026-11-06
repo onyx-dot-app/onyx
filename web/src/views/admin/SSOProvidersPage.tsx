@@ -204,12 +204,11 @@ export default function SSOProvidersPage() {
               return (
                 <Card key={provider.id} border="solid" rounding={4}>
                   <ContentAction
+                    font="main-ui-action"
                     icon={SSO_PROVIDER_DETAILS[provider.provider_type].icon}
                     title={provider.display_name}
                     suffix={SSO_PROVIDER_DETAILS[provider.provider_type].label}
                     description={provider.redirect_uri}
-                    sizePreset="main-ui"
-                    variant="section"
                     padding={1}
                     rightChildren={
                       <div

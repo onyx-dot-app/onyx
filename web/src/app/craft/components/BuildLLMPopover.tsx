@@ -264,8 +264,7 @@ export function BuildLLMPopover({
         ref={isSelected ? selectedItemRef : undefined}
       >
         <LineItemButton
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           state={isSelected ? "selected" : "empty"}
           description={description}
           icon={rowIcon !== groupIcon ? rowIcon : undefined}

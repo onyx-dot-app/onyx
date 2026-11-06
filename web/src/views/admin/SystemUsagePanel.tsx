@@ -211,7 +211,7 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
 
   const header = (
     <Section alignItems="stretch" gap={0.125} height="fit">
-      <Text font="heading-h3">{t("panel.title")}</Text>
+      <Text font="heading-section">{t("panel.title")}</Text>
       <Text font="secondary-body" color="text-03">
         {usage
           ? t("panel.description", {
@@ -261,19 +261,23 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
             <Text font="secondary-body" color="text-03">
               {t("summary.spend.label")}
             </Text>
-            <Text font="heading-h3">{formatCost(totalCostCents, locale)}</Text>
+            <Text font="heading-section">
+              {formatCost(totalCostCents, locale)}
+            </Text>
           </Section>
           <Section alignItems="start" gap={0.125} width="fit" height="fit">
             <Text font="secondary-body" color="text-03">
               {t("summary.tokens.label")}
             </Text>
-            <Text font="heading-h3">{formatTokens(totalTokens, locale)}</Text>
+            <Text font="heading-section">
+              {formatTokens(totalTokens, locale)}
+            </Text>
           </Section>
           <Section alignItems="start" gap={0.125} width="fit" height="fit">
             <Text font="secondary-body" color="text-03">
               {t("summary.unattributed.label")}
             </Text>
-            <Text font="heading-h3">
+            <Text font="heading-section">
               {formatCost(unattributedCostCents, locale)}
             </Text>
           </Section>

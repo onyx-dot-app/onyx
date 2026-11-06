@@ -140,11 +140,10 @@ export default function FederatedOAuthModal() {
               >
                 <Section alignItems="start" height="fit">
                   <ContentAction
+                    font="main-content-emphasis"
                     icon={sourceMetadata.icon}
                     title={sourceMetadata.displayName}
                     description={sourceMetadata.category}
-                    sizePreset="main-content"
-                    variant="section"
                     rightChildren={
                       <Button
                         prominence="secondary"

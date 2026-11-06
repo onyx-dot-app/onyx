@@ -134,7 +134,7 @@ export function GridSearchInput({
   return (
     <InputTypeIn
       ref={search.inputRef}
-      searchIcon
+      icon="search"
       clearButton
       placeholder={placeholder}
       value={value}

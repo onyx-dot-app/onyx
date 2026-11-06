@@ -265,8 +265,7 @@ export default function OpenAPIPluginDetailPage({
             ) : !tool ? (
               <div className="flex flex-col items-start gap-4">
                 <Content
-                  sizePreset="section"
-                  variant="section"
+                  font="heading-section-muted"
                   title={t(
                     loadError
                       ? "plugins.openapi.loadFailed"
@@ -336,8 +335,7 @@ export default function OpenAPIPluginDetailPage({
                     ) : (
                       <>
                         <Content
-                          sizePreset="main-ui"
-                          variant="section"
+                          font="main-ui-action"
                           title={tool.name}
                           description={
                             tool.description || t("plugins.openapi.readOnly")
@@ -383,8 +381,7 @@ export default function OpenAPIPluginDetailPage({
                         />
                       ) : (
                         <Content
-                          sizePreset="main-ui"
-                          variant="section"
+                          font="main-ui-action"
                           title={t("mcpDetail.authentication")}
                           description={authDescription}
                         />
@@ -394,7 +391,7 @@ export default function OpenAPIPluginDetailPage({
                 <Tabs.Content value="tools">
                   <div className="flex flex-col gap-4">
                     <InputTypeIn
-                      searchIcon
+                      icon="search"
                       value={toolSearch}
                       onChange={(event) => setToolSearch(event.target.value)}
                       placeholder={t("mcpTools.search")}
