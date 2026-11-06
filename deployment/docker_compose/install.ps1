@@ -926,6 +926,9 @@ function Main {
     if (-not (Ensure-OnyxFile $envTemplateDest "$($script:GitHubRawUrl)/env.template" "env.template")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\app.conf.template") "$($script:NginxBaseUrl)/app.conf.template" "nginx/app.conf.template")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") "$($script:NginxBaseUrl)/run-nginx.sh" "nginx/run-nginx.sh")) { exit 1 }
+    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\mcp.conf.inc.template") "$($script:NginxBaseUrl)/mcp.conf.inc.template" "nginx/mcp.conf.inc.template")) { exit 1 }
+    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\mcp_upstream.conf.inc.template") "$($script:NginxBaseUrl)/mcp_upstream.conf.inc.template" "nginx/mcp_upstream.conf.inc.template")) { exit 1 }
+    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\webhook.conf.inc") "$($script:NginxBaseUrl)/webhook.conf.inc" "nginx/webhook.conf.inc")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "README.md") "$($script:GitHubRawUrl)/README.md" "README.md")) { exit 1 }
 
     $gitkeep = Join-Path $script:InstallRoot "data\nginx\local\.gitkeep"

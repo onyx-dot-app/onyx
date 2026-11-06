@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "cli/v*.*.*"
+  workflow_dispatch:
 
 jobs:
   pypi:
