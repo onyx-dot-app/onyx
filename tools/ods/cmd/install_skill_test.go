@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -435,6 +438,84 @@ func TestInstallSkill_readsSkillsFromTheAgentContextDirectory(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(repoRoot, projectSkillsDir, "decoy")); !os.IsNotExist(err) {
 		t.Fatalf("expected only agent-context/ to be read, got %v", err)
 	}
+}
+
+func TestInstallSkill_workspaceSetupSourceDoesNotChangeIntegrations(t *testing.T) {
+	for _, layout := range []struct {
+		name      string
+		skillRoot string
+		setupRoot string
+	}{
+		{name: "root"},
+		{name: "nested", skillRoot: agentContextDir, setupRoot: agentContextDir},
+		{name: "root-setup-nested-skills", skillRoot: agentContextDir},
+	} {
+		for _, hasTiers := range []bool{false, true} {
+			name := fmt.Sprintf("%s/tiers=%t", layout.name, hasTiers)
+			t.Run(name, func(t *testing.T) {
+				home, repoRoot := skillEnv(t)
+				checkout := t.TempDir()
+				source := filepath.Join(checkout, layout.skillRoot)
+				if err := os.MkdirAll(source, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if hasTiers {
+					skillWriteSource(t, source)
+				}
+				setup := filepath.Join(checkout, layout.setupRoot, "scripts", "setup_agents.py")
+				deployWriteFile(t, setup, "# workspace setup\n")
+				deployWriteFile(t, filepath.Join(home, ".claude", "settings.json"), "{}\n")
+				deployWriteFile(t, filepath.Join(repoRoot, claudeMDFile), "custom instructions\n")
+				deployWriteFile(t, filepath.Join(repoRoot, projectSkillsDir, "review", "SKILL.md"), "custom skill\n")
+				deployWriteFile(t, filepath.Join(repoRoot, ".cursor", "rules", "custom.mdc"), "custom rule\n")
+				beforeHome := skillTreeContents(t, home)
+				beforeRepo := skillTreeContents(t, repoRoot)
+
+				_, err := skillRun(t, "--source", checkout, "--no-pull", "--agent", "claude-code,codex,cursor")
+				if err == nil || !strings.Contains(err.Error(), "workspace setup") || !strings.Contains(err.Error(), setup) {
+					t.Fatalf("expected an error pointing to %s, got %v", setup, err)
+				}
+				if !reflect.DeepEqual(beforeHome, skillTreeContents(t, home)) {
+					t.Fatal("workspace setup source changed home integrations")
+				}
+				if !reflect.DeepEqual(beforeRepo, skillTreeContents(t, repoRoot)) {
+					t.Fatal("workspace setup source changed repo integrations or git exclusions")
+				}
+			})
+		}
+	}
+}
+
+func skillTreeContents(t *testing.T, root string) map[string]string {
+	t.Helper()
+	files := make(map[string]string)
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			files[path+string(filepath.Separator)] = ""
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			files[path] = "symlink:" + target
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files[path] = string(content)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }
 
 func TestInstallSkill_sourceWithoutSkillsIsAnError(t *testing.T) {

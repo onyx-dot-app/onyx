@@ -29,7 +29,8 @@ type agentContextSkill struct {
 // discoverAgentContextSkills reads the enforced/ and skills/ tiers of the
 // agent-context/ directory of an internal infra repo checkout. A source with no
 // agent-context/ directory is treated as the root of an old onyx-llm-context
-// checkout. A missing tier directory is not an error.
+// checkout. A missing tier directory is not an error. Sources with a workspace
+// installer must use that entry point so the skill links and hooks stay aligned.
 func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 	// The Claude installer builds symlinks and @imports from these paths, so a
 	// relative --source must not leak into them.
@@ -37,9 +38,15 @@ func discoverAgentContextSkills(source string) ([]agentContextSkill, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve source path: %w", err)
 	}
-	if info, err := os.Stat(filepath.Join(source, agentContextDir)); err == nil && info.IsDir() {
+	if err := checkWorkspaceSetupSource(source, ""); err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(filepath.Join(source, agentContextDir))
+	nested := err == nil && info.IsDir()
+	if nested {
 		source = filepath.Join(source, agentContextDir)
-	} else if !hasSkillTier(source) {
+	}
+	if !nested && !hasSkillTier(source) {
 		return nil, fmt.Errorf(
 			"no %s/ directory found in %s\n  Update the checkout (git pull) or re-run with --clone",
 			agentContextDir, source,
