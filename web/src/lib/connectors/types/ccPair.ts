@@ -77,6 +77,8 @@ export interface CCPairFullInfo {
   has_named_checks: boolean;
   // Why the first index attempt waits, or null once it can start.
   indexing_hold: IndexingHold | null;
+  // Place by age in the index queue, from 1, while an attempt of the pair waits there.
+  queue_position: number | null;
 }
 
 /** Mirrors `IndexingHoldReason` in `backend/onyx/connectors/capability_checks/indexing_hold_models.py`. */
@@ -175,18 +177,30 @@ export interface ExternalGroupSyncAttemptSnapshot {
   total_users_processed: number;
   total_groups_processed: number;
   total_group_memberships_synced: number;
+  /** Users and groups the sync could not read, resolved ones included. */
+  failed_users: number;
+  failed_groups: number;
+  /** Of those, the ones no admin resolved. */
+  open_error_count: number;
   time_created: string;
   time_started: string | null;
   time_finished: string | null;
 }
 
-/** Mirrors `CCPairRunKind` in `backend/onyx/db/enums.py`. */
-export type CCPairRunKind =
-  | "indexing"
-  | "doc_permission_sync"
-  | "group_sync"
-  | "pruning"
-  | "checks";
+/** Mirrors `CCPairRunKind` in `backend/onyx/db/enums.py`. A list, so input such as a query param can be checked against it. */
+export const CC_PAIR_RUN_KINDS = [
+  "indexing",
+  "doc_permission_sync",
+  "group_sync",
+  "pruning",
+  "checks",
+] as const;
+
+export type CCPairRunKind = (typeof CC_PAIR_RUN_KINDS)[number];
+
+export function isCCPairRunKind(value: string): value is CCPairRunKind {
+  return CC_PAIR_RUN_KINDS.some((kind) => kind === value);
+}
 
 /** Mirrors `SyncStatus`: how a prune stands. */
 export type PruneRunStatus = "in_progress" | "success" | "failed" | "canceled";
@@ -276,7 +290,13 @@ interface CCPairRunClosure {
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
 export type CCPairRun = CCPairRunClosure &
   (
-    | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
+    | {
+        kind: "indexing";
+        time_created: string;
+        attempt: IndexAttemptSnapshot;
+        /** A targeted re-index of chosen documents, not a run over the whole pair. Absent from an API that predates retry runs. */
+        is_retry?: boolean;
+      }
     | {
         kind: "doc_permission_sync";
         time_created: string;
@@ -297,6 +317,22 @@ export interface CCPairRunsResponse {
   total_items: number;
   kinds: CCPairRunKind[];
   status_counts: Record<CCPairRunStatusGroup, number>;
+}
+
+/** Mirrors `DocumentTypeCount`: a type's size is complete only when `sized_count` equals `count`. */
+export interface DocumentTypeCount {
+  mime_type: string;
+  count: number;
+  sized_count: number;
+  size_bytes: number | null;
+}
+
+/** Mirrors `CCPairDocumentTypeBreakdown`, the pair's indexed documents per source MIME type. */
+export interface CCPairDocumentTypeBreakdown {
+  types: DocumentTypeCount[];
+  untyped_count: number;
+  /** The read hit its statement timeout, so the empty lists mean unknown, not zero. */
+  timed_out: boolean;
 }
 
 /** An activity level that holds open runs, as the batch resolve routes take it. */
@@ -322,6 +358,11 @@ export interface CCPairRunsQuery {
   resolved: boolean | null;
 }
 
+export type IndexAttemptErrorResolvedReason =
+  | "retry"
+  | "later_run"
+  | "without_retry";
+
 export interface IndexAttemptError {
   id: number;
   connector_credential_pair_id: number;
@@ -336,13 +377,38 @@ export interface IndexAttemptError {
   failed_time_range_end: string | null;
 
   failure_message: string;
+  /** Closed by a run, a retry or a legacy resolve. A row resolved without retry keeps it false, so a retry by error id still takes it. */
   is_resolved: boolean;
+  /** How the error closed. `null` while open and on rows closed before reasons were recorded. */
+  resolved_reason: IndexAttemptErrorResolvedReason | null;
+  /** The run that closed it, for `later_run` and `retry`. Null once that run is deleted. */
+  resolved_by_index_attempt_id: number | null;
+  resolved_at: string | null;
 
   time_created: string;
 
   index_attempt_id: number;
 
   error_type: string | null;
+}
+
+/** Mirrors `SyncEntityKind` in `backend/onyx/db/enums.py`. */
+export type SyncEntityKind = "user" | "group";
+
+/** A user or group a group sync skipped whole. Mirrors `SyncAttemptErrorSnapshot` in `backend/ee/onyx/server/documents/models.py`. */
+export interface SyncAttemptError {
+  id: number;
+  connector_credential_pair_id: number;
+  external_group_sync_attempt_id: number;
+  entity_kind: SyncEntityKind;
+  entity_id: string;
+  entity_name: string | null;
+  failure_message: string;
+  time_created: string;
+  /** Stays false on a row resolved without retry. */
+  is_resolved: boolean;
+  resolved_reason: "without_retry" | null;
+  resolved_at: string | null;
 }
 
 export interface PaginatedIndexAttemptErrors {
@@ -392,4 +458,21 @@ export interface CCPairThroughputResponse {
   docs_indexed: number[];
   /** `ended` is null while the run is still going. */
   runs: { started: string; ended: string | null; status: ValidStatuses }[];
+  /** Absent from an API a deploy behind. */
+  slices?: CCPairThroughputSlice[];
+}
+
+/** One slice of the throughput window. Slices align to the caller's clock when their width divides a day. A running run is in every slice from its start to now. */
+export interface CCPairThroughputSlice {
+  start: string;
+  end: string;
+  docs_indexed: number;
+  runs: CCPairThroughputSliceRun[];
+}
+
+/** `resolved` is true once an admin resolved the run or a newer run superseded it. */
+export interface CCPairThroughputSliceRun {
+  attempt_id: number;
+  status: ValidStatuses;
+  resolved: boolean;
 }

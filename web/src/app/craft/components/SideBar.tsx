@@ -1,11 +1,13 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { memo, useCallback, useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
-import { useRouter, usePathname } from "next/navigation";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
+import UnseenMarker from "@/app/craft/components/UnseenMarker";
+import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import {
   useSession,
   useSessionHistory,
@@ -21,10 +23,9 @@ import {
   toast,
   useSidebarState,
 } from "@opal/layouts";
-import RefreshText from "@/refresh-components/texts/Text";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
-import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { richNodes } from "@opal/utils";
+import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
+import { AccountPopover } from "@/lib/app/components";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";
@@ -233,20 +234,23 @@ function BuildSessionButton({
                   onClose={() => setRenaming(false)}
                 />
               ) : shouldAnimate ? (
-                // Opal Text takes string children only; this wraps <TypewriterText>.
-                <RefreshText
+                <Text
                   as="p"
                   data-state={isActive ? "active" : "inactive"}
-                  className="line-clamp-1 break-all text-start"
-                  mainUiBody
+                  color="text-05"
+                  maxLines={1}
+                  wordWrap="break-all"
+                  textPosition="text-start"
                 >
-                  <TypewriterText
-                    text={historyItem.title}
-                    charSpeed={25}
-                    animateOnMount={true}
-                    onAnimationComplete={() => setShouldAnimate(false)}
-                  />
-                </RefreshText>
+                  {richNodes(
+                    <TypewriterText
+                      text={historyItem.title}
+                      charSpeed={25}
+                      animateOnMount={true}
+                      onAnimationComplete={() => setShouldAnimate(false)}
+                    />
+                  )}
+                </Text>
               ) : (
                 historyItem.title
               )}
@@ -272,8 +276,10 @@ function BuildSessionButton({
 
 const MemoizedBuildSidebarInner = memo(() => {
   const t = useTranslations("craft.sideBar");
+  const tTasks = useTranslations("craft.tasks");
+  const unviewedTaskCount = useUnviewedScheduledTaskCount();
   const { folded } = useSidebarState();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { requestNavigation } = useUnsavedChangesNavigation();
   const pathname = usePathname();
   const session = useSession();
@@ -299,8 +305,8 @@ const MemoizedBuildSidebarInner = memo(() => {
 
   // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
   const navigate = useCallback(
-    (destination: Route) => requestNavigation(() => router.push(destination)),
-    [requestNavigation, router]
+    (destination: Route) => requestNavigation(() => navigation.go(destination)),
+    [requestNavigation, navigation]
   );
 
   const handleNewBuild = useCallback(
@@ -327,22 +333,17 @@ const MemoizedBuildSidebarInner = memo(() => {
       // (one click back from any subagent transcript you were viewing).
       requestNavigation(() => {
         returnToMainAgent(sessionId);
-        router.push(
+        navigation.go(
           `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
         );
       });
     },
-    [requestNavigation, router, returnToMainAgent]
+    [requestNavigation, navigation, returnToMainAgent]
   );
-
-  const showLogoWhenFolded = useShowLogoWhenFolded();
 
   return (
     <SidebarLayouts.Root foldable>
-      <SidebarLayouts.Header
-        renderAppLogo={renderSidebarLogo}
-        showLogoWhenFolded={showLogoWhenFolded}
-      >
+      <BrandedSidebarHeader>
         <div className="flex flex-col gap-0.5">
           <SidebarTab
             icon={SvgEditBig}
@@ -355,6 +356,14 @@ const MemoizedBuildSidebarInner = memo(() => {
             icon={SvgClock}
             onClick={() => navigate(CRAFT_TASKS_PATH)}
             selected={pathname.startsWith(CRAFT_TASKS_PATH)}
+            rightChildren={
+              unviewedTaskCount > 0 ? (
+                <UnseenMarker
+                  label={tTasks("unviewedResults")}
+                  className="pointer-events-none"
+                />
+              ) : undefined
+            }
           >
             {t("scheduledTasks.label")}
           </SidebarTab>
@@ -373,7 +382,7 @@ const MemoizedBuildSidebarInner = memo(() => {
             {t("plugins.label")}
           </SidebarTab>
         </div>
-      </SidebarLayouts.Header>
+      </BrandedSidebarHeader>
       <SidebarLayouts.Body scrollKey="build-sidebar">
         {!folded && (
           <>

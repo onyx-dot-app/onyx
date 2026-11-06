@@ -82,6 +82,7 @@ class TestSecret(StrEnum):
     TEAMS_APPLICATION_ID = "teams-application-id"
     TEAMS_DIRECTORY_ID = "teams-directory-id"
     TEAMS_SECRET = "teams-secret"
+    ADLS_ACCOUNT_KEY = "adls-account-key"
     BITBUCKET_WORKSPACE = "bitbucket-workspace"
     BITBUCKET_API_TOKEN = "bitbucket-api-token"
     FIREFLIES_API_KEY = "fireflies-api-key"

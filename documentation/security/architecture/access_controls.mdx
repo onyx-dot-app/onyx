@@ -1,0 +1,94 @@
+---
+title: "Access Controls"
+description: "How Onyx authenticates users and limits what they can see and do"
+icon: "lock"
+---
+
+## Authentication
+
+All editions of Onyx support email and password login. An admin can turn password login off, set a password policy,
+and limit sign-ups to approved email domains under **Admin Panel > Security & Hardening**.
+
+Admins add single sign-on (SSO) providers under **Admin Panel > SSO Providers**. Onyx supports Google,
+OpenID Connect (OIDC), and SAML 2.0 providers such as Okta and Microsoft Entra ID.
+
+- One enabled SSO provider works in every edition.
+- More than one enabled SSO provider at the same time requires the Business or Enterprise plan.
+- SCIM provisioning from your identity provider (**Admin Panel > SCIM**) requires the Enterprise plan.
+
+Onyx Cloud shows one login page for every workspace. A user enters an email address first,
+and the page shows the SSO buttons that the user's workspace exposes.
+
+Sessions are held in a cookie. Log out ends the session immediately.
+An admin password reset signs out all of that user's sessions and revokes their personal access tokens.
+
+For setup guides, see [Authentication](/deployment/authentication/basic),
+[SSO Providers](/deployment/authentication/sso_providers), and [SCIM](/deployment/authentication/scim).
+
+## Non-human access
+
+- **Personal access tokens (PATs)**: a user creates PATs in their user settings. A PAT acts as that
+  user and can be limited to specific scopes. Admins can switch PAT creation off for the Basic group.
+- **Service accounts**: an admin issues API keys under **Admin Panel > Service Accounts**. A service
+  account gets its capabilities from the groups it belongs to. Business or Enterprise plan.
+- **MCP server**: external LLM clients use a PAT or API key to search Onyx through its MCP server,
+  with the same document permissions as the token's owner.
+
+Onyx stores only a hash of each token. The raw value is shown once, at creation.
+
+## Role-Based Access Control (RBAC)
+
+Onyx grants permissions to groups. A user receives the permissions of every group they belong to.
+
+- **Basic**: the default group every user joins. Standard access to chat, search, and personal resources.
+- **Admin**: the group that grants full access to the Admin Panel.
+- **Custom groups**: grant specific capabilities, such as managing connectors, agents, or query history.
+  Create them under **Admin Panel > Manage User Groups** (Business or Enterprise plan).
+- **Group Manager**: a user who manages one group's members and resources without
+  organization-wide permissions.
+
+Admins can limit these resources to users and groups:
+
+- Agents
+- Connectors (who manages them, and who can read their documents)
+- Document Sets
+- LLM providers and models
+- MCP servers
+- Skills
+- Token rate limits
+
+For the full model, see [Understanding Permissions](/admins/permissions/understanding_permissions).
+
+## Document Access
+
+Every indexed document carries an access control list (ACL). Onyx applies the user's ACL as a filter on every search,
+so a user only sees documents they are permitted to see. Users never manage this directly.
+
+An admin picks a **Document Access** option for each connector:
+
+| Option | Who can see the documents | Plan |
+| --- | --- | --- |
+| **Everyone in Your Organization** | Every Onyx user | All editions |
+| **Specific Groups** | Members of the selected user groups | Business or Enterprise |
+| **Sync with (source)** | Users who can see the document in the source system (Google Drive, Confluence, Slack, and so on) | Business or Enterprise |
+| **Sync with (source)**, restricted to groups | Users who pass both the source permissions and a user group check. Turn on **Allow Group Restrictions on Permission-Synced Connectors** under **Security & Hardening** first. | Business or Enterprise |
+
+Permission sync mirrors the source permissions on a schedule.
+An admin can also start a sync with **Sync Permissions** on the connector page.
+**Specific Groups** needs no calls to the source system, which some deployments prefer.
+
+In the Community Edition, connector documents are public to every user,
+or visible only to the user who owns the connector credential.
+
+## Anonymous and incognito access
+
+- **Allow Anonymous Users** (**Admin Panel > Chat Preferences**) lets signed-out visitors chat with
+  public documents only. It is off by default.
+- **Incognito Chats** (**Admin Panel > Security & Hardening**) lets users start chats that Onyx does not
+  store. The admin chooses who may use it. It is off by default.
+
+## Audit trail
+
+Admins with the matching permission review **Query History** (Business or Enterprise)
+and export log bundles (**Export Logs**, Enterprise). Security events such as logins, group changes,
+and credential access are written as structured audit logs. See [Audit Logs](/admins/auditing/audit_logs).

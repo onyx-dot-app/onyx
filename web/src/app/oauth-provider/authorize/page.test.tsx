@@ -4,6 +4,9 @@ import Page from "@/app/oauth-provider/authorize/page";
 import OAuthProviderConsent from "@/sections/oauth-provider/OAuthProviderConsent";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   notFound: jest.fn(() => {
     throw new Error("notFound");
   }),

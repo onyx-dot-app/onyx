@@ -1,6 +1,6 @@
 "use client";
 
-import { FeedbackType } from "@/app/app/interfaces";
+import { FeedbackType } from "@/app/app/types";
 import { Button } from "@opal/components";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useModal } from "@opal/components";

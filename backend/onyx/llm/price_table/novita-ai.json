@@ -686,7 +686,7 @@
       },
       "family": "ling",
       "limit": {
-        "context": 262144,
+        "context": 1000000,
         "output": 262144
       },
       "modalities": {
@@ -1281,6 +1281,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.3,
+        "cache_write": 3,
         "input": 3,
         "output": 15
       },
@@ -1311,6 +1312,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
+        "cache_write": 2,
         "input": 2,
         "output": 10
       },
@@ -1341,6 +1343,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.2,
+        "cache_write": 4,
         "input": 4,
         "output": 20
       },
@@ -1876,6 +1879,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.016,
+        "cache_write": 0.2,
         "input": 0.15,
         "output": 0.47
       },
@@ -1906,6 +1910,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.25,
+        "cache_write": 2.5,
         "input": 2,
         "output": 6
       },

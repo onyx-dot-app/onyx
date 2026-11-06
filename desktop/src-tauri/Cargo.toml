@@ -29,6 +29,12 @@ window-vibrancy = "0.7.1"
 url = "2.5"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6.4"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "objc2-core-foundation"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSResponder", "NSTextField", "NSView", "NSWindow"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 

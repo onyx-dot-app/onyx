@@ -47,8 +47,6 @@ export interface TimelineUIStateInput {
   parallelActiveStepSupportsCollapsedStreaming: boolean;
   /** Whether the parallel active step has renderable collapsed streaming content */
   parallelActiveStepHasCollapsedContent: boolean;
-  /** Whether image generation is in progress */
-  isGeneratingImage: boolean;
   /** Whether final answer is coming (MESSAGE_START received) */
   finalAnswerComing: boolean;
 }
@@ -62,7 +60,7 @@ export interface TimelineUIStateResult {
   isStreaming: boolean;
   /** Whether completed (stop packet seen) */
   isCompleted: boolean;
-  /** Whether actively executing tools (streaming without display content, or generating image) */
+  /** Whether actively executing tools (streaming without display content) */
   isActivelyExecuting: boolean;
 
   // Display flags
@@ -107,7 +105,6 @@ export function useTimelineUIState(
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
     } = input;
 
@@ -116,9 +113,9 @@ export function useTimelineUIState(
 
     if (!hasPackets && !hasDisplayContent && !stopPacketSeen) {
       uiState = TimelineUIState.EMPTY;
-    } else if (hasDisplayContent && !hasPackets && !isGeneratingImage) {
+    } else if (hasDisplayContent && !hasPackets) {
       uiState = TimelineUIState.DISPLAY_CONTENT_ONLY;
-    } else if (!stopPacketSeen && (!hasDisplayContent || isGeneratingImage)) {
+    } else if (!stopPacketSeen && !hasDisplayContent) {
       // Actively executing tools
       uiState = lastTurnGroup?.isParallel
         ? TimelineUIState.STREAMING_PARALLEL
@@ -139,8 +136,7 @@ export function useTimelineUIState(
       uiState === TimelineUIState.COMPLETED_COLLAPSED ||
       uiState === TimelineUIState.COMPLETED_EXPANDED ||
       uiState === TimelineUIState.STOPPED;
-    const isActivelyExecuting =
-      !stopPacketSeen && (!hasDisplayContent || isGeneratingImage);
+    const isActivelyExecuting = !stopPacketSeen && !hasDisplayContent;
 
     // Parallel tabs in header only when collapsed during streaming
     const showParallelTabs =

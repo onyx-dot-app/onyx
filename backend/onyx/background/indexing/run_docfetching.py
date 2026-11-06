@@ -39,6 +39,7 @@ from onyx.connectors.capability_checks.recorder import (
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.connector_runner import ConnectorRunner
+from onyx.connectors.event_inbox.connector import EventInboxConnector
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
@@ -65,6 +66,7 @@ from onyx.db.enums import (
     AccessType,
     CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
+    IndexingMode,
     IndexingStatus,
     IndexModelStatus,
 )
@@ -84,6 +86,8 @@ from onyx.db.index_attempt_metrics import (
 )
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import Connector, Credential, IndexAttempt, SearchSettings
+from onyx.db.port_attempt import reindex_finalizing
+from onyx.db.search_settings import get_search_settings_by_id
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
@@ -114,6 +118,9 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger(propagate=False)
+
+# How often a running FUTURE attempt re-checks whether the reindex finalizes.
+_FINALIZING_RECHECK_INTERVAL_S = 60
 
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
 
@@ -219,6 +226,14 @@ def _get_connector_runner(
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
             )
+
+            # The drain needs the pair and the attempt, which are the run's,
+            # not stored config, so the factory cannot supply them.
+            if isinstance(runnable_connector, EventInboxConnector):
+                runnable_connector.set_event_context(
+                    cc_pair_id=attempt.connector_credential_pair_id,
+                    index_attempt_id=attempt.id,
+                )
 
             # Validate the connector settings.
             if not INTEGRATION_TESTS_MODE:
@@ -602,11 +617,19 @@ def connector_document_extraction(
             cc_pair_id, index_attempt_id, is_backfill=is_backfill
         )
 
-        # Clear the indexing trigger if it was set, to prevent duplicate indexing
-        # attempts. A backfill does not serve the trigger, so it leaves it set.
+        # Clear the indexing trigger this attempt serves, to prevent duplicate
+        # indexing attempts. A backfill serves none, a FUTURE attempt serves none
+        # (the trigger is for the current index), and a REINDEX trigger is served
+        # only by a run from the beginning: a full run held back during a reindex
+        # keeps its trigger until that run.
+        trigger = index_attempt.connector_credential_pair.indexing_trigger
+        serves_trigger = trigger == IndexingMode.UPDATE or (
+            trigger == IndexingMode.REINDEX and index_attempt.from_beginning
+        )
         if (
-            not index_attempt.is_backfill
-            and index_attempt.connector_credential_pair.indexing_trigger is not None
+            serves_trigger
+            and not index_attempt.is_backfill
+            and index_attempt.search_settings.status == IndexModelStatus.PRESENT
         ):
             logger.info(
                 "Clearing indexing trigger: cc_pair=%s trigger=%s",
@@ -629,13 +652,21 @@ def connector_document_extraction(
             index_attempt.connector_credential_pair.last_successful_index_time
             is not None
         )
-        # Use higher priority for first-time indexing to ensure new connectors
-        # get processed before re-indexing of existing connectors
-        docprocessing_priority = (
-            OnyxCeleryPriority.MEDIUM
-            if has_successful_attempt
-            else OnyxCeleryPriority.HIGH
+        # First-time indexing goes before refreshes of indexed connectors. While a
+        # port-flow reindex finalizes, FUTURE batches go first: the swap waits on them.
+        if not has_successful_attempt or (
+            not is_primary
+            and reindex_finalizing(db_session, index_attempt.search_settings)
+        ):
+            docprocessing_priority = OnyxCeleryPriority.HIGH
+        else:
+            docprocessing_priority = OnyxCeleryPriority.MEDIUM
+        # A FUTURE attempt that started before the last port finished re-checks
+        # while it runs, so its later batches get the finalizing boost too.
+        recheck_finalizing = (
+            not is_primary and docprocessing_priority != OnyxCeleryPriority.HIGH
         )
+        last_finalizing_check = time.monotonic()
 
         earliest_index_time = (
             db_connector.indexing_start.timestamp()
@@ -847,6 +878,20 @@ def connector_document_extraction(
                         index_attempt.search_settings.status,
                         index_attempt_id,
                     )
+                    if (
+                        recheck_finalizing
+                        and time.monotonic() - last_finalizing_check
+                        >= _FINALIZING_RECHECK_INTERVAL_S
+                    ):
+                        last_finalizing_check = time.monotonic()
+                        if reindex_finalizing(
+                            db_session_tmp,
+                            get_search_settings_by_id(
+                                db_session_tmp, index_attempt.search_settings_id
+                            ),
+                        ):
+                            docprocessing_priority = OnyxCeleryPriority.HIGH
+                            recheck_finalizing = False
 
                 # save record of any failures at the connector level
                 if failure is not None:

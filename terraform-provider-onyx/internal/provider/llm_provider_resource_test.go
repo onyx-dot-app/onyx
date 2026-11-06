@@ -62,11 +62,21 @@ resource "onyx_llm_provider" "test" {
       name                = "gpt-6-sol"
       is_visible          = false
       custom_display_name = "Cheap GPT-6 Astra"
+
+      reasoning_effort_max     = "high"
+      reasoning_effort_default = "low"
+      temperature_default      = 0.5
     },
   ]
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckTypeSetElemNestedAttrs("onyx_llm_provider.test", "model_configurations.*", map[string]string{
+						"name":                     "gpt-6-sol",
+						"reasoning_effort_max":     "high",
+						"reasoning_effort_default": "low",
+						"temperature_default":      "0.5",
+					}),
 					resource.TestCheckResourceAttr("onyx_llm_provider.test", "name", "tf-acc-openai-renamed"),
 					resource.TestCheckResourceAttr("onyx_llm_provider.test", "model_configurations.#", "2"),
 					resource.TestCheckResourceAttr("onyx_llm_provider.test", "api_key", "sk-tf-acc-fake-key-rotated"),

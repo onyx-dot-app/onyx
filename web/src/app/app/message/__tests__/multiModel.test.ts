@@ -1,4 +1,4 @@
-import { Message } from "@/app/app/interfaces";
+import { Message } from "@/app/app/types";
 import {
   chooseImplicitPreferred,
   getMultiModelChildren,

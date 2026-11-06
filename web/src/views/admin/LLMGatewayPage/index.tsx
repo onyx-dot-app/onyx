@@ -1,15 +1,14 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import { Content, InputHorizontal } from "@opal/layouts";
 import { Card, InputSwitch, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
-import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
@@ -20,7 +19,7 @@ const route = ADMIN_ROUTES.LLM_GATEWAY;
 export default function LLMGatewayPage() {
   const t = useTranslations("admin.llmGateway");
   const plans = usePlans();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enabled = settings.llm_gateway_enabled ?? true;
@@ -28,7 +27,7 @@ export default function LLMGatewayPage() {
   async function save(checked: boolean) {
     try {
       await updateAdminSettings({ llm_gateway_enabled: checked });
-      router.refresh();
+      navigation.refresh();
       await mutate(SWR_KEYS.settings);
     } catch {
       toast.error(t("toasts.settingsUpdateFailed"));
@@ -46,10 +45,9 @@ export default function LLMGatewayPage() {
       <SettingsLayouts.Body>
         <Section gap={3} alignItems="stretch">
           <Content
+            font="main-content-emphasis"
             title={t("access.title")}
             description={t("access.description")}
-            sizePreset="main-content"
-            variant="section"
           />
           <Card border="solid" rounding={4}>
             <Disabled

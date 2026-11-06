@@ -1,0 +1,90 @@
+---
+title: "Bitbucket"
+description: "Index pull requests from your Bitbucket Cloud repositories"
+---
+
+## How it works
+
+The Bitbucket connector indexes pull requests from a Bitbucket Cloud workspace. You can index the whole workspace,
+every repository in one or more projects, or specific repositories.
+
+- It indexes `OPEN`, `MERGED`, and `DECLINED` pull requests, with their titles and descriptions.
+- It also keeps the author, reviewers, state, created and updated times, and a link back to the pull request.
+
+Onyx pulls new and changed pull requests every 30 minutes by default. You can change this under **Schedule**.
+
+**Sync with Bitbucket** is not offered.
+The access type can only be **Everyone in Your Organization** or **Specific Groups**.
+
+## Setting up
+
+<Note>
+  This connector works with Bitbucket Cloud only.
+</Note>
+
+### Authorization
+
+The Bitbucket connector authenticates with an Atlassian API token.
+
+<Steps>
+  <Step title="Create a scoped token">
+    In Bitbucket,
+    open **Settings → Atlassian account settings → Security → Create and manage API tokens** and select **Create API
+    token with scopes**.
+  </Step>
+
+  <Step title="Name the token">
+    Give the API token a name and an expiry date, select **Bitbucket** as the app, then select **Next**.
+  </Step>
+
+  <Step title="Select scopes">
+    Select these scopes and select **Next**:
+
+    - **Projects**: `read:project:bitbucket`
+    - **Repositories**: `read:repository:bitbucket`
+    - **Pull Requests**: `read:pullrequest:bitbucket`
+  </Step>
+
+  <Step title="Create the token">
+    Select **Create token** and copy the API token. It is shown once and cannot be retrieved later.
+  </Step>
+</Steps>
+
+For the most up-to-date instructions,
+refer to the [official Bitbucket
+documentation](https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/).
+
+### Indexing
+
+<Steps>
+  <Step title="Connect a Bitbucket account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Bitbucket**. Under **Authentication Account**,
+    select **New Bitbucket Account** and enter:
+
+    - **Bitbucket Account Email**: The email address of the Atlassian account that owns the token.
+    - **API Token**: The API token you created.
+
+    ![Bitbucket account form](/assets/admins/connectors/bitbucket/BitbucketConnectorCred.webp)
+  </Step>
+
+  <Step title="Choose what to index">
+    - **Workspace**: The workspace slug from your Bitbucket URL, `https://bitbucket.org/{WORKSPACE}/...`.
+    - **Bitbucket Content to Index**: Pick one tab.
+    - **Specific Repositories**: Enter comma-separated **Repository Slugs**, such as `repo1,repo2`.
+    - **Project(s)**: Enter comma-separated **Project Key(s)**, such as `PROJ1,PROJ2`,
+    to index every repository in those projects.
+    - **Workspace**: Index every repository in the workspace that the account can read.
+
+    ![Bitbucket connector form](/assets/admins/connectors/bitbucket/BitbucketConnector.webp)
+  </Step>
+
+  <Step title="Choose who can see the pull requests">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. Onyx checks the token and workspace before it saves the connector.
+    Open **Admin Panel → Indexing Status**, select the connector, and confirm its first indexing attempt completes.
+  </Step>
+</Steps>

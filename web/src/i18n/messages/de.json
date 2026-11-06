@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "Commit"
+      },
+      "commitDate": {
+        "label": "Commit-Datum"
+      },
+      "instanceUrl": {
+        "label": "Instanz-URL"
+      },
+      "label": "Info",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "Nicht verfügbar",
+      "version": {
+        "label": "Version"
+      }
+    },
     "accountFallback": {
       "label": "Konto"
     },
@@ -154,7 +173,7 @@
         "title": "Zugriffssteuerung",
         "description": "Wählen Sie, wer diesen MCP verwenden kann.",
         "public": {
-          "label": "Öffentlich",
+          "label": "Organisation",
           "description": "Alle in Ihrer Organisation können diesen MCP verwenden"
         },
         "groups": {
@@ -167,7 +186,6 @@
           "description": "Wählen Sie mindestens eine Gruppe, die Sie verwalten."
         },
         "retainedUsers": "{count, plural, one {Auch direkt mit # Benutzer geteilt.} other {Auch direkt mit # Benutzern geteilt.}}",
-        "planTag": "Business",
         "planNote": "Gruppenzugriff erfordert einen Business-Tarif."
       },
       "defaultChat": {
@@ -412,8 +430,7 @@
       },
       "cimd": {
         "label": "Client-Metadatendokument verwenden",
-        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung.",
-        "turnOff": "Client-Metadatendokument deaktivieren"
+        "description": "Wenn aktiviert, ruft der Anbieter das Client-Metadatendokument von {appName} über das öffentliche Internet ab. Schalten Sie dies aus, wenn diese {appName}-Instanz privat ist. {appName} verwendet dann stattdessen die automatische Client-Registrierung."
       },
       "discovery": {
         "checking": "Automatische Einrichtung wird geprüft…",
@@ -1115,18 +1132,6 @@
         "openapi": "OpenAPI-Plugin hinzufügen"
       },
       "catalog": {
-        "slack": {
-          "summary": "Unterhaltungen durchsuchen und Nachrichten senden",
-          "description": "Unterhaltungen durchsuchen und Nachrichten senden. Erfordert eine registrierte Slack-App."
-        },
-        "hubspot": {
-          "summary": "Mit Kontakten und Deals arbeiten",
-          "description": "Mit Kontakten und Deals arbeiten. Erfordert einen HubSpot-MCP-Konnektor."
-        },
-        "asana": {
-          "summary": "Aufgaben und Projekte verwalten",
-          "description": "Aufgaben und Projekte verwalten. Erfordert einen registrierten OAuth-Client."
-        },
         "linear": {
           "summary": "Issues, Projekte und Teams verwalten",
           "description": "Issues, Projekte und Teams verwalten."
@@ -1218,6 +1223,10 @@
       "blocked": "Diese URL wird durch Ihre ausgehenden Sicherheitseinstellungen blockiert.",
       "publicDetected": "Keine Authentifizierung erforderlich",
       "oauthDetected": "OAuth erkannt",
+      "clientMetadata": "Client-Metadatendokument",
+      "clientMetadataSupported": "Unterstützt",
+      "clientMetadataUnsupported": "Nicht unterstützt",
+      "clientMetadataUnknown": "Nicht geprüft",
       "manualRequired": "Authentifizierung manuell auswählen",
       "chooseAuthentication": "Die Authentifizierungsmethode dieses Servers konnte nicht ermittelt werden. Wählen Sie unten eine Methode aus.",
       "connect": "Verbinden",
@@ -1254,7 +1263,7 @@
       "decisionModel": {
         "title": "Entscheidungsmodell",
         "openAiDecisionsModelName": "OpenAI-Entscheidungen (GPT-6 Luna)",
-        "description": "Wählen Sie ein Modell für künftige Klassifizierungs- und Prüffunktionen. Onyx verwendet dieses Modell noch nicht.",
+        "description": "Die interne Suche nutzt dieses Modell, um Ergebnisse zu ordnen und den Umfang des Kontexts festzulegen. Sie können es auch in den Chat-Einstellungen festlegen.",
         "clear": "Löschen",
         "notConfigured": "Nicht konfiguriert",
         "saveFailed": "Entscheidungsmodell konnte nicht aktualisiert werden"
@@ -1444,6 +1453,9 @@
         },
         "s3": {
           "description": "AWS-Storage-Buckets"
+        },
+        "azureDatalake": {
+          "description": "Dateien in Azure Data Lake Storage-Containern"
         },
         "r2": {
           "description": "Cloud-Storage-Buckets"
@@ -1646,7 +1658,7 @@
             "label": "Privat"
           },
           "public": {
-            "label": "Öffentlich"
+            "label": "Organisation"
           },
           "shared": {
             "label": "Geteilt"
@@ -1920,7 +1932,7 @@
             "text": "Zugriffskontrollen werden aus dieser Bereitstellung entfernt. **Dies startet eine Neuindexierung**, damit die Suchergebnisse die Änderung widerspiegeln, was bei einem großen Index eine Weile dauern kann."
           },
           "madePublic": {
-            "text": "**Öffentlich gemacht:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
+            "text": "**Für Ihre Organisation freigegeben:** Alle Konnektoren sowie alle Agenten, Dokumentensätze, LLM-Anbieter, MCP-Server und Skills, die mit einer Benutzergruppe geteilt wurden;"
           },
           "reset": {
             "text": "**Auf Standard zurückgesetzt:** Benutzerdefiniertes Branding und Chat-Aufbewahrungsrichtlinie."
@@ -2222,9 +2234,10 @@
         "description": "Erstellt Sitzungstitel. Ein schnelles, kostengünstiges Modell eignet sich gut.",
         "title": "Modell für Chat-Benennung"
       },
-      "searchSelectionModel": {
-        "description": "Wählt abgerufene Dokumente aus und prüft sie. Ein schnelles, kostengünstiges Modell kann die Suchkosten senken, aber die Antwortqualität beeinträchtigen.",
-        "title": "Modell für Suchauswahl"
+      "searchDecisionModel": {
+        "description": "Wählt gefundene Dokumente aus und entscheidet, wie viel Kontext hinzukommt. Ein Entscheidungsmodell ordnet sie in einem Aufruf. Ein Sprachmodell wählt sie wie bisher aus.",
+        "title": "Such-Entscheidungsmodell",
+        "decisionSection": "Entscheidungsmodelle"
       },
       "taskModels": {
         "loadFailed": "Aufgabenmodelle konnten nicht geladen werden",
@@ -2405,7 +2418,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Modell zur Chat-Benennung konnte nicht aktualisiert werden",
         "providerResolveFailed": "Der Anbieter konnte nicht aufgelöst werden",
-        "searchSelectionUpdateFailed": "Modell für die Dokumentauswahl konnte nicht aktualisiert werden",
+        "searchDecisionUpdateFailed": "Such-Entscheidungsmodell konnte nicht aktualisiert werden",
         "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
         "systemPromptUpdateFailed": "Der System-Prompt konnte nicht aktualisiert werden",
         "toolsUpdateFailed": "Die Tools konnten nicht aktualisiert werden",
@@ -2635,7 +2648,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Löschen"
+          "label": "Konnektor löschen",
+          "description": "Alle indexierten Dokumente dauerhaft entfernen."
         },
         "reIndex": {
           "tooltip": {
@@ -2674,7 +2688,7 @@
         },
         "syncPermissions": {
           "label": "Berechtigungen synchronisieren",
-          "description": "Jetzt aus der Quelle abrufen, wer welches Dokument lesen darf.",
+          "description": "Dokumentberechtigungen aus der Quelle abrufen.",
           "tooltip": {
             "syncing": "Eine Berechtigungssynchronisierung ist bereits geplant oder läuft"
           }
@@ -2801,20 +2815,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} Dok./Min.",
-        "indexingSpeedTooltip": "Indexierte Dokumente pro Minute seit dem Anlegen des Konnektors",
         "lastIndexed": {
           "value": "Zuletzt indexiert {when}"
         },
+        "deletionStarted": {
+          "value": "Gestartet {when}"
+        },
         "documents": {
           "totalLabel": "Indexierte Dokumente gesamt",
-          "recentLabel": "Kürzlich verarbeitete Dokumente",
-          "syncedPermissionsLabel": "Synchronisierte Berechtigungen",
-          "syncedMembershipsLabel": "Synchronisierte Gruppenmitgliedschaften"
+          "recentLabel": "Zuletzt verarbeitete Dokumente",
+          "indexedLabel": "Indexierte Dokumente"
         },
         "throughput": {
           "ariaLabel": "Indexierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
+          "lineTooltip": "{failures, plural, one {# Fehlschlag} other {# Fehlschläge}}, {errors, plural, one {# Fehler} other {# Fehler}}",
+          "barLabel": "{count, plural, one {# Dokument} other {# Dokumente}}, {range}",
           "loadError": "Das Diagramm konnte nicht geladen werden.",
           "rangeFilter": "In diesem Abschnitt des Diagramms erstellte Läufe"
         },
@@ -2830,13 +2846,33 @@
         "title": "Indexierungsstatus",
         "sync": {
           "permissionsTitle": "Status der Berechtigungssynchronisierung",
-          "groupsTitle": "Status der Synchronisierung der Gruppenmitgliedschaften",
           "last": "Zuletzt synchronisiert {when}",
           "never": "Noch nicht synchronisiert",
-          "neverTooltip": "Indexierte Dokumente sind möglicherweise erst durchsuchbar, wenn ihre Berechtigungen synchronisiert sind.",
-          "waitingForFirstIndex": "Wartet auf die erste Indexierung"
+          "neverTooltip": "Indexierte Dokumente sind erst durchsuchbar, wenn ihre Berechtigungen synchronisiert sind.",
+          "waitingForFirstIndex": "Wartet auf die erste Indexierung",
+          "docsLabel": "Dokumente mit synchronisierten Berechtigungen",
+          "groupsLabel": "Gruppenmitgliedschaften"
         },
-        "accessTitle": "Dokumentzugriff des Konnektors"
+        "actions": {
+          "showActivities": "Aktivitäten anzeigen",
+          "hideActivities": "Aktivitäten ausblenden",
+          "viewDetails": "Details anzeigen",
+          "hideDetails": "Details ausblenden",
+          "viewIndexingRun": "Indexierungslauf anzeigen",
+          "viewPruningRun": "Bereinigungslauf anzeigen",
+          "viewChecksRun": "Prüflauf anzeigen"
+        },
+        "types": {
+          "count": "{count, plural, one {Dokumenttyp} other {Dokumenttypen}}",
+          "header": "Dokumenttyp",
+          "indexed": "Indexiert",
+          "size": "Größe",
+          "other": "Andere",
+          "countWithSize": "{count} ({size})",
+          "bytes": "Byte",
+          "loadError": "Die Dokumenttypen konnten nicht geladen werden.",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindexierung erfolgreich gestartet",
@@ -2966,6 +3002,7 @@
           "all": "Alle Arten",
           "indexing": "Dokumentindex",
           "backfill": "Dokument-Nachindexierung",
+          "retry": "Dokumentindex - Wiederholung",
           "doc_permission_sync": "Berechtigungssync",
           "group_sync": "Gruppenmitgliedschaftssync",
           "pruning": "Dokumentbereinigung",
@@ -2973,9 +3010,10 @@
         },
         "detail": {
           "queued": "In Warteschlange",
+          "starting": "Synchronisierung startet",
           "running": "Läuft",
           "rate": "{rate} Dok./Min.",
-          "finished": "{time} ({duration})",
+          "runtime": "Laufzeit {duration}",
           "rateFinished": "{rate} Dok./Min. ({duration})",
           "membershipRate": "{rate} Mitgliedschaften/Min.",
           "membershipRateFinished": "{rate} Mitgliedschaften/Min. ({duration})"
@@ -2984,6 +3022,7 @@
           "stages": "Phasenmetriken anzeigen",
           "cancel": "Abbrechen",
           "logs": "Logs anzeigen",
+          "noLogs": "Keine Protokolle aufgezeichnet",
           "checks": "Prüfergebnisse anzeigen"
         },
         "warnings": {
@@ -3018,16 +3057,12 @@
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}",
           "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
-        "search": {
-          "placeholder": "Fehler der Läufe durchsuchen…"
-        },
         "window": {
           "label": "Zeitraum",
           "all": "Gesamter Zeitraum",
           "h1": "Letzte Stunde",
           "h24": "Letzte 24 Stunden",
-          "d7": "Letzte 7 Tage",
-          "d30": "Letzte 30 Tage"
+          "d7": "Letzte 7 Tage"
         },
         "statusGroups": {
           "label": "Status",
@@ -3038,14 +3073,13 @@
           "canceled": "Abgebrochen"
         },
         "loadError": {
-          "title": "Die Läufe konnten nicht geladen werden."
+          "title": "Die Läufe konnten nicht geladen werden.",
+          "retry": "Erneut versuchen"
         },
         "empty": {
           "title": "Keine aktuellen Indexläufe",
           "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
           "pastRuns": "{count, plural, one {# vergangener Lauf} other {# vergangene Läufe}}",
-          "view": "Anzeigen",
-          "viewAria": "{count, plural, one {# vergangenen Lauf anzeigen} other {# vergangene Läufe anzeigen}}",
           "description": "Läufe werden im Hintergrund geplant und erscheinen eventuell erst nach kurzer Zeit."
         },
         "units": "{count, plural, one {Lauf} other {Läufe}}",
@@ -3080,15 +3114,24 @@
           "all": "Alle Ebenen",
           "failures": "Fehlschläge",
           "errors": "Fehler",
-          "other": "Sonstige",
+          "running": "Laufend",
+          "success": "Erfolgreich",
+          "canceled": "Abgebrochen",
           "resolved": "Behoben",
-          "toggle": "Filter"
+          "connectors": "Konnektoren",
+          "connectorsLoading": "Konnektoren werden geladen…",
+          "connectorsLoadError": "Die Konnektoren konnten nicht geladen werden.",
+          "connectorsRetry": "Erneut versuchen",
+          "toggleShow": "Filter anzeigen",
+          "toggleHide": "Filter ausblenden"
         },
         "groups": {
           "failures": "{count, plural, =0 {Fehlschläge} one {# Fehlschlag} other {# Fehlschläge}}",
           "errors": "{count, plural, =0 {Fehler} one {# Fehler} other {# Fehler}}",
-          "other": "Sonstige",
-          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}"
+          "running": "{count, number} Laufend",
+          "resolved": "Behoben",
+          "success": "Erfolgreich",
+          "canceled": "Abgebrochen"
         },
         "title": {
           "indexing": {
@@ -3099,9 +3142,8 @@
             "errors": "Indexierung mit Fehlern abgeschlossen.",
             "resolved": "Indexierungsfehler behoben.",
             "succeeded": "Indexierung erfolgreich abgeschlossen.",
-            "queued": "Indexierung in der Warteschlange.",
             "inProgress": "Indexierung läuft.",
-            "canceled": "Indexierung gestoppt."
+            "canceled": "Indexierung abgebrochen."
           },
           "doc_permission_sync": {
             "failed": "Berechtigungssynchronisierung fehlgeschlagen.",
@@ -3111,9 +3153,8 @@
             "errors": "Berechtigungen mit Fehlern synchronisiert.",
             "resolved": "Fehler der Berechtigungssynchronisierung behoben.",
             "succeeded": "Berechtigungen erfolgreich synchronisiert.",
-            "queued": "Berechtigungssynchronisierung in der Warteschlange.",
             "inProgress": "Berechtigungen werden synchronisiert.",
-            "canceled": "Berechtigungssynchronisierung gestoppt."
+            "canceled": "Berechtigungssynchronisierung abgebrochen."
           },
           "group_sync": {
             "failed": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen.",
@@ -3123,9 +3164,8 @@
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert.",
             "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben.",
             "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert.",
-            "queued": "Gruppensynchronisierung in der Warteschlange.",
             "inProgress": "Gruppenmitgliedschaften werden synchronisiert.",
-            "canceled": "Gruppensynchronisierung gestoppt."
+            "canceled": "Gruppensynchronisierung abgebrochen."
           },
           "pruning": {
             "failed": "Bereinigung fehlgeschlagen.",
@@ -3135,9 +3175,8 @@
             "errors": "Bereinigung mit Fehlern abgeschlossen.",
             "resolved": "Bereinigungsfehler behoben.",
             "succeeded": "Bereinigung erfolgreich abgeschlossen.",
-            "queued": "Bereinigung in der Warteschlange.",
             "inProgress": "Bereinigung läuft.",
-            "canceled": "Bereinigung gestoppt."
+            "canceled": "Bereinigung abgebrochen."
           },
           "checks": {
             "failed": "Konnektor-Prüfungen fehlgeschlagen.",
@@ -3147,9 +3186,8 @@
             "errors": "Konnektor-Prüfungen mit Fehlern abgeschlossen.",
             "resolved": "Fehler der Konnektor-Prüfungen behoben.",
             "succeeded": "Konnektor-Prüfungen bestanden.",
-            "queued": "Konnektor-Prüfungen in der Warteschlange.",
             "inProgress": "Konnektor-Prüfungen laufen.",
-            "canceled": "Konnektor-Prüfungen gestoppt."
+            "canceled": "Konnektor-Prüfungen abgebrochen."
           }
         },
         "description": {
@@ -3164,22 +3202,18 @@
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "indexingItems": "{count, plural, one {# Element fehlgeschlagen} other {# Elemente fehlgeschlagen}}",
-          "doc_permission_sync": "{count, plural, one {Berechtigungen von # Dokument nicht synchronisiert} other {Berechtigungen von # Dokumenten nicht synchronisiert}}",
-          "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+          "users": "{count, plural, one {# Benutzer nicht synchronisiert} other {# Benutzer nicht synchronisiert}}",
+          "groups": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "resolved": "Behoben",
-          "resolvedDocs": "{count, plural, one {# Element behoben} other {# Elemente behoben}}",
           "superseded": "Abgelöst"
         },
         "more": "Mehr anzeigen",
         "empty": {
           "title": "Keine aktuellen Aktivitäten",
-          "resolved": "Keine behobenen Läufe",
-          "filtered": "Nichts passt zu dieser Suche.",
-          "failures": "Keine Fehlschläge",
-          "errors": "Keine Fehler",
-          "other": "Keine weiteren Läufe"
+          "past": "Frühere Aktivitäten",
+          "filtered": "Nichts passt zu dieser Suche."
         },
         "loadError": {
           "title": "Die Aktivität konnte nicht geladen werden."
@@ -3187,19 +3221,32 @@
         "docs": {
           "title": "Fehlgeschlagene Elemente",
           "search": {
-            "placeholder": "Elemente durchsuchen…"
+            "placeholder": "Dokumente durchsuchen…"
           },
-          "resolveAll": "Alle erneut versuchen",
-          "resolveAllTooltip": "Alle fehlgeschlagenen Dokumente dieses Laufs neu indexieren",
-          "resolveAllUnsupported": "Dieser Konnektor kann einzelne Dokumente nicht neu indexieren. Indexieren Sie den Konnektor neu, um sie erneut zu versuchen.",
-          "resolveOne": "Dieses Dokument erneut versuchen",
-          "retry": "{count, plural, one {# Dokument erneut versuchen} other {# Dokumente erneut versuchen}}",
+          "resolveAll": "Alle Dokumente erneut versuchen",
+          "resolveOne": "Dokument erneut versuchen",
+          "resolveWithoutRetry": "Ohne erneuten Versuch beheben",
           "more": "Mehr",
           "less": "Weniger",
           "unknownDocument": "Unbekanntes Dokument",
-          "empty": "Keine offenen Fehler",
+          "empty": "Keine fehlgeschlagenen Dokumente",
           "loadError": "Die fehlgeschlagenen Elemente konnten nicht geladen werden.",
-          "open": "Dokument öffnen"
+          "open": "Dokument öffnen",
+          "resolvedGroup": "Behobene Fehler",
+          "resolvedWithoutRetry": "Ohne erneuten Versuch behoben",
+          "resolvedByLaterRun": "Durch späteren Lauf behoben"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Fehlgeschlagene Benutzer",
+            "search": "Benutzer durchsuchen…",
+            "empty": "Keine fehlgeschlagenen Benutzer"
+          },
+          "groups": {
+            "title": "Fehlgeschlagene Gruppen",
+            "search": "Gruppen durchsuchen…",
+            "empty": "Keine fehlgeschlagenen Gruppen"
+          }
         },
         "trace": {
           "header": "Stacktrace • Lauf-ID: {id}",
@@ -3207,17 +3254,18 @@
           "runId": "Lauf-ID: {id}"
         },
         "actions": {
-          "resolve": "Beheben"
+          "resolve": "Beheben",
+          "resolveWithoutRetry": "Ohne erneuten Versuch beheben",
+          "retryDocs": "Dokumente erneut versuchen"
         },
         "resolveAll": {
-          "button": "Alle angezeigten beheben",
-          "title": "Alle angezeigten Läufe beheben?",
-          "description": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
-          "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, bei den Konnektoren, die Sie verwalten, als behoben markiert. Die Läufe behalten ihren Status und erscheinen unter „Behoben“.",
+          "button": "Alle beheben",
+          "title": "Alle angezeigten Aktivitäten beheben",
+          "body": "{count, plural, one {Damit wird # Aktivität behoben, die dem aktuellen Filter entspricht: {failures} und {errors}. Onyx versucht ihre fehlgeschlagenen Elemente nicht erneut. Die Aktivität behält ihren Status und erscheint unter „Behoben“.} other {Damit werden # Aktivitäten behoben, die dem aktuellen Filter entsprechen: {failures} und {errors}. Onyx versucht ihre fehlgeschlagenen Elemente nicht erneut. Die Aktivitäten behalten ihren Status und erscheinen unter „Behoben“.}}",
+          "body2": "Ein noch laufender Lauf kann neue Fehler melden. Diese erscheinen wieder als offen. Ein behobenes Dokument können Sie später in seiner Liste fehlgeschlagener Dokumente erneut versuchen.",
+          "failures": "{count, plural, =0 {keine Fehlschläge} one {# Fehlschlag} other {# Fehlschläge}}",
+          "errors": "{count, plural, =0 {keine Läufe mit Fehlern} one {# Lauf mit Fehlern} other {# Läufe mit Fehlern}}",
           "confirm": "Alle beheben"
-        },
-        "resolved": {
-          "label": "Behoben"
         }
       },
       "stageDetails": {
@@ -3229,10 +3277,22 @@
         "calls": "Batches",
         "averageTime": "Durchschnittszeit",
         "maxTime": "Maximalzeit",
+        "noDocs": "Keine Dokumente fertig indexiert",
+        "laterCanceled": "Spätere Phasen abgebrochen",
+        "retry": "Erneut versuchen",
         "uneven": {
           "tooltip": "Die Batch-Zeiten dieser Phase schwanken stark"
         },
         "close": "Phasendetails schließen"
+      },
+      "tabs": {
+        "configurations": "Konnektor-Konfigurationen",
+        "indexing": "Indexierung",
+        "indexingDisabled": "Verfügbar, sobald der erste Lauf startet."
+      },
+      "indexingTab": {
+        "chartHeading": "Dokumentindexierung",
+        "runsHeading": "Indexläufe"
       }
     },
     "connectorTitle": {
@@ -3685,7 +3745,7 @@
         "documentAccess": {
           "description": "Legen Sie fest, wer auf die von diesem Konnektor indexierten Dokumente zugreifen kann.",
           "everyone": {
-            "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation öffentlich.",
+            "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation verfügbar.",
             "title": "Alle in Ihrer Organisation"
           },
           "specificGroups": {
@@ -4593,6 +4653,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Azure Data Lake Storage-Connector konfigurieren",
+          "fields": {
+            "account_name": {
+              "label": "Name des Speicherkontos",
+              "description": "Der Name des Speicherkontos, z. B. contosodata. Das Konto muss einen hierarchischen Namespace haben."
+            },
+            "container_name": {
+              "label": "Containername",
+              "description": "Der Container (Dateisystem), der indiziert wird."
+            },
+            "path_prefix": {
+              "label": "Pfadpräfix",
+              "description": "Ein Verzeichnis im Container, z. B. reports/2026. Leer lassen, um den ganzen Container zu indizieren."
+            }
+          }
+        },
         "r2": {
           "description": "R2-Konnektor konfigurieren",
           "fields": {
@@ -5195,6 +5272,8 @@
         "integrationToken": "{source}-Integrationstoken",
         "accessKey": "{source}-Zugriffsschlüssel",
         "accessKeySecret": "{source}-Zugriffsschlüssel-Geheimnis",
+        "storageAccountName": "Name des Speicherkontos",
+        "accountKey": "{source}-Kontoschlüssel",
         "key": "{source}-Schlüssel",
         "secret": "{source}-Geheimnis",
         "roleArn": "{source}-Rollen-ARN",
@@ -5216,6 +5295,7 @@
         "jiraUserEmail": "Erforderlich für Jira Cloud.",
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indexiert wird.",
         "youtrackToken": "Ein permanentes Token eines YouTrack-Benutzers, der alle zu indexierenden Projekte lesen kann. Erstellen Sie es in Ihrem YouTrack-Profil unter Kontosicherheit.",
+        "azureDatalakeAccountKey": "Öffnen Sie im Azure-Portal das Speicherkonto, dann Sicherheit + Netzwerkbetrieb, dann Zugriffsschlüssel.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder Ihre selbst gehostete URL.",
         "pfxFile": "Laden Sie die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
         "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
@@ -5228,6 +5308,7 @@
           "certificateAuthentication": "Zertifikatsauthentifizierung",
           "certificate": "Zertifikat",
           "accessKeyAndSecret": "Zugriffsschlüssel und Secret",
+          "accountKey": "Kontoschlüssel",
           "iamRole": "IAM-Rolle",
           "assumeRole": "Rolle übernehmen",
           "serviceAccount": "Dienstkonto",
@@ -5240,6 +5321,9 @@
           "teamsCertificate": "Der Konnektor meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an. Erforderlich für „Anhänge einbeziehen“, das Kanaldateien und ihre Leser aus SharePoint liest.",
           "outlookClientSecret": "Der Konnektor meldet sich mit einem Client-Secret der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und das Secret an.",
           "outlookCertificate": "Der Konnektor meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, das PFX-Paket und sein Passwort an.",
+          "azureDatalakeClientSecret": "Der Connector meldet sich mit einem geheimen Clientschlüssel der App-Registrierung an. Geben Sie die Client-ID, die Verzeichnis-ID und den Schlüssel an. Weisen Sie der App die Rolle Storage Blob Data Reader für den Container zu.",
+          "azureDatalakeCertificate": "Der Connector meldet sich mit einem Zertifikat an, das in die App-Registrierung hochgeladen wurde. Geben Sie die Client-ID, die Verzeichnis-ID, die PFX-Datei und ihr Kennwort an. Weisen Sie der App die Rolle Storage Blob Data Reader für den Container zu.",
+          "azureDatalakeAccountKey": "Der Connector signiert jede Anfrage mit einem Schlüssel des Speicherkontos. Geben Sie den Kontonamen und einen seiner Zugriffsschlüssel an.",
           "s3AssumeRole": "In diesem Modus übernimmt die Amazon-EC2-Instanz ihre vorhandene Rolle, um auf S3 zuzugreifen. Es sind keine weiteren Anmeldedaten erforderlich."
         }
       },
@@ -5622,7 +5706,7 @@
             "label": "Privat"
           },
           "public": {
-            "label": "Öffentlich"
+            "label": "Organisation"
           }
         },
         "connector": {
@@ -5743,7 +5827,7 @@
             "header": "Name"
           },
           "public": {
-            "header": "Öffentlich"
+            "header": "Zugriff"
           },
           "status": {
             "header": "Status"
@@ -5808,6 +5892,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {# Datei hochgeladen} other {# Dateien hochgeladen}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {# Datei hochgeladen} other {# Dateien hochgeladen}}, unvollständig: {error}"
         }
       },
       "sensitiveWarning": {
@@ -6217,13 +6304,6 @@
           "title": "Gruppenberechtigungen"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} verwendet jetzt gruppenbasierte Berechtigungen. Der Zugriff wird pro Gruppe konfiguriert, sodass sich die Berechtigungen eines Benutzers aus allen Gruppen ergeben, denen er angehört.",
-        "learnMore": {
-          "label": "Mehr erfahren"
-        },
-        "title": "Die Berechtigungen haben sich geändert."
-      },
       "sharedResources": {
         "agent": {
           "description": "Agent"
@@ -6273,28 +6353,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "Limit hinzufügen"
-        },
-        "costLimit": {
-          "header": "Kostenlimit",
-          "placeholder": "Kostenlimit",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Token-Ratenlimits sind nur in der [Enterprise-Version von Onyx](/admin/billing) verfügbar.",
-        "section": {
-          "description": "Begrenzen Sie die Anzahl der Token, die diese Gruppe in einem bestimmten Zeitraum verwenden darf.",
-          "title": "Token-Ratenlimit"
-        },
-        "timeWindow": {
-          "header": "Zeitfenster",
-          "unit": "(UTC-Tage)"
-        },
-        "tokenLimit": {
-          "header": "Token-Limit",
-          "placeholder": "Token-Limit (Tausend)",
-          "unit": "(Tausend)"
-        }
+        "disabledTooltip": "Token-Ratenlimits sind nur in der [Enterprise-Version von Onyx](/admin/billing) verfügbar."
       },
       "builtIn": {
         "admin": {
@@ -6305,9 +6364,6 @@
           "name": "Basis",
           "description": "Standardgruppe für alle Benutzer mit Basisberechtigungen."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6587,11 +6643,24 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Bildmodelle Ihrer verbundenen LLM-Anbieter. Verbinden Sie eines, um es im Chat zu verwenden.",
+        "title": "Verfügbare Modelle"
+      },
       "configureSuccess": {
         "message": "Anbieter erfolgreich konfiguriert"
       },
+      "connectButton": {
+        "label": "Verbinden"
+      },
+      "connectedModels": {
+        "title": "Verbundene Modelle"
+      },
       "deselectError": {
         "message": "Auswahl konnte nicht aufgehoben werden"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} trennen"
       },
       "disconnectError": {
         "message": "Trennung fehlgeschlagen"
@@ -6609,6 +6678,9 @@
         "header": {
           "description": "Dadurch werden die gespeicherten Anmeldedaten für diesen Anbieter entfernt.",
           "title": "*{title}* trennen"
+        },
+        "linkedHeader": {
+          "description": "Der LLM-Anbieter und seine Zugangsdaten bleiben verbunden."
         },
         "noDefaultOption": {
           "description": "(Bilderzeugung deaktivieren)",
@@ -6630,6 +6702,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} getrennt"
+      },
+      "editButton": {
+        "ariaLabel": "{title} bearbeiten"
       },
       "emptyState": {
         "title": "Verbinden Sie ein Modell zur Bilderzeugung, um es im Chat zu verwenden."
@@ -6709,12 +6784,30 @@
         "description": "Einstellungen für die Bilderzeugung im Chat.",
         "title": "Bilderzeugung"
       },
+      "linkError": {
+        "message": "Modell konnte nicht verbunden werden"
+      },
+      "linkSuccess": {
+        "message": "{title} verbunden"
+      },
+      "linkedModel": {
+        "description": "Von {provider}"
+      },
       "loadError": {
         "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."
       },
       "model": {
         "description": "Wählen Sie ein Modell, um Bilder im Chat zu erzeugen.",
+        "placeholder": "Standardmodell auswählen",
         "title": "Modell zur Bilderzeugung"
+      },
+      "modelFilter": {
+        "all": "Alle",
+        "recommended": "Empfohlen"
+      },
+      "noImageModels": {
+        "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt. Öffnen Sie den Tab „Alle“, um jedes Modell Ihrer verbundenen Anbieter zu sehen.",
+        "title": "Keine Bildmodelle verfügbar"
       },
       "providers": {
         "azureGptImage1": {
@@ -6995,11 +7088,6 @@
           "description": "{appName} verbindet sich mit diesem Modell auf Ihrem {provider}-Proxy."
         }
       },
-      "maxImageSize": {
-        "description": "Bilder über dieser Größe werden übersprungen, um den Ressourcenverbrauch zu begrenzen.",
-        "suffix": "(MB)",
-        "title": "Maximale Bildgröße für die Analyse"
-      },
       "modal": {
         "cancelButton": {
           "label": "Abbrechen"
@@ -7030,7 +7118,6 @@
           "tag": "GPU empfohlen"
         },
         "legacy": {
-          "tag": "Veraltet",
           "tooltip": "Sie können dieses Modell nicht für einen neuen Index auswählen. Es funktioniert weiter, bis Sie das Modell wechseln."
         },
         "selectButton": {
@@ -7045,11 +7132,6 @@
         "addCustomModel": {
           "label": "Benutzerdefiniertes Modell hinzufügen"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Verbinden Sie einen LiteLLM-Proxy, ein Azure-OpenAI-Deployment, ein Bifrost-Gateway oder einen OpenAI-kompatiblen Endpunkt. Den Modellnamen geben Sie selbst an. Für LiteLLM, Azure und OpenAI-kompatible Endpunkte geben Sie auch die Dimension an.",
-          "selfHostedDescription": "Betreiben Sie ein Hugging-Face-Embedding-Modell, das nicht in der Liste oben steht. Modellname, Dimension und Präfixe geben Sie selbst an.",
-          "title": "Erweitert: eigenes Modell oder eigenen Proxy verwenden"
-        },
         "cloudTab": {
           "label": "Cloud-basiert"
         },
@@ -7057,6 +7139,7 @@
           "title": "Richten Sie ein benutzerdefiniertes Embedding-Modell ein."
         },
         "customModels": {
+          "hint": "Verwenden Sie ein mit [SentenceTransformers](https://www.sbert.net/) kompatibles Modell, das auf [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending) verfügbar ist. {appName} lädt das Modell herunter, um es für das Self-Hosting einzurichten. Die Kompatibilität ist nicht garantiert.",
           "title": "Benutzerdefinierte Modelle"
         },
         "foldModels": {
@@ -7087,9 +7170,6 @@
       "multipass": {
         "description": "Indexieren Sie Dokumente als Chunks unterschiedlicher Größe, um relevante Quellen besser zu erkennen.",
         "disabledTooltip": "Die Multipass-Indexierung ist vorübergehend deaktiviert und wird in Zukunft verfügbar sein.",
-        "tag": {
-          "label": "vorübergehend nicht verfügbar"
-        },
         "title": "Multipass-Indexierung"
       },
       "openaiCompatible": {
@@ -7241,6 +7321,7 @@
       },
       "vectorQuantization": {
         "description": "Speichern Sie Dokumentvektoren mit weniger Bits, damit die Vektorsuche weniger Speicher benötigt. Weniger Bits können die Suchqualität verringern. Wenn Sie nur diese Einstellung ändern, wird der Index aus den gespeicherten Vektoren neu aufgebaut, ohne erneutes Embedding.",
+        "needsVersion": "Erfordert OpenSearch {version}+",
         "none": {
           "description": "Volle 32-Bit-Genauigkeit.",
           "label": "Keine"
@@ -7253,7 +7334,8 @@
           "description": "Etwa 4-mal weniger Speicher für die Vektorsuche. Fast kein Verlust an Suchqualität.",
           "label": "7 Bit"
         },
-        "title": "Vektorquantisierung"
+        "title": "Vektorquantisierung",
+        "unsupportedTooltip": "Dieser Cluster läuft mit OpenSearch {current}. Aktualisieren Sie OpenSearch auf {version} oder höher, um diese Stufe zu verwenden."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {Dieser Konnektor wird gelöscht} other {Diese # Konnektoren werden gelöscht}}",
@@ -7297,11 +7379,11 @@
             "off": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente. Der Zugriff auf Konnektorebene ist ausgeschaltet.",
             "shadow": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente und vergleicht sie mit dem Zugriff auf Konnektorebene."
           },
-          "title": "Aktualisierung des Konnektorzugriffs abgeschlossen"
+          "title": "Aktualisierung des Konnektorzugriffs abgeschlossen."
         },
         "notStarted": {
           "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Er startet in wenigen Minuten.",
-          "title": "Aktualisierung des Konnektorzugriffs noch nicht gestartet"
+          "title": "Aktualisierung des Konnektorzugriffs noch nicht gestartet."
         },
         "progress": {
           "ariaLabel": "Fortschritt der Aktualisierung des Konnektorzugriffs"
@@ -7342,7 +7424,7 @@
         },
         "loadError": {
           "description": "Laden Sie die Seite neu, um es erneut zu versuchen.",
-          "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden"
+          "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden."
         }
       },
       "embeddingRateLimit": {
@@ -7350,18 +7432,14 @@
         "description": "Begrenzt, wie viele Embedding-Anfragen die Indexierung in einem Zeitfenster sendet, über alle Indexierungs-Worker hinweg. Beim Erreichen des Limits wartet die Indexierung und versucht es erneut, statt fehlzuschlagen, sodass Worker weniger neue Arbeit annehmen. Ein Batch schlägt nur fehl, wenn er zu lange wartet. Suchanfragen sind nicht begrenzt.",
         "requests": {
           "title": "Anfragen pro Zeitfenster",
-          "description": "Leer lassen für kein Limit.",
-          "placeholder": "Kein Limit"
+          "description": "Die maximale Anzahl an Embedding-Anfragen, die die Indexierung in einem Zeitfenster senden darf. Leer lassen für kein Limit.",
+          "placeholder": "Kein Limit",
+          "suffix": "Anfragen"
         },
         "period": {
           "title": "Länge des Zeitfensters",
-          "description": "Zum Beispiel 60 für ein Limit pro Minute.",
-          "suffix": "(Sekunden)"
-        },
-        "restoreDefault": "Standard wiederherstellen",
-        "validation": {
-          "requests": "Geben Sie eine ganze Zahl von 1 bis {max, number} ein, oder lassen Sie das Feld für kein Limit leer.",
-          "period": "Geben Sie eine ganze Zahl von Sekunden von 1 bis {max, number} ein."
+          "description": "Wie lange ein Zeitfenster dauert. Verwenden Sie 60 für ein Limit pro Minute.",
+          "suffix": "Sekunden"
         },
         "toasts": {
           "failed": "Das Limit konnte nicht gespeichert werden."
@@ -7372,37 +7450,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Konnektor hinzufügen",
       "connectorCreated": {
         "toast": "Konnektor erfolgreich erstellt"
       },
       "overview": {
-        "connectors": {
-          "caption": "Indexierend / aktiv",
-          "label": "Konnektoren"
-        },
-        "documents": {
-          "caption": "Im Index",
-          "label": "Dokumente",
-          "tooltip": "Summiert die Dokumente jedes Konnektors, daher zählt ein Dokument, das zwei Konnektoren enthalten, doppelt."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "Die Übersicht konnte nicht geladen werden.",
-        "processed": {
-          "caption": "Im Zeitraum verarbeitet",
-          "label": "Dokumente",
-          "tooltip": "Ein Schätzwert, da die Zahl jedes Laufs gleichmäßig über seine Laufzeit verteilt wird. Ein Dokument zählt jedes Mal, wenn ein Lauf es verarbeitet, auch fehlgeschlagene, daher kann die Zahl größer sein als die Dokumente im Index."
-        }
+        "activeConnectors": "Aktive Konnektoren",
+        "pausedConnectors": "Pausierte Konnektoren",
+        "indexingConnectors": "Indexierende Konnektoren",
+        "loadError": "Die Übersicht konnte nicht geladen werden."
       },
       "activities": {
         "title": "Aktivitäten",
-        "history": "Vollständiger Aktivitätsverlauf",
-        "viewLogs": "Logs anzeigen",
         "panel": {
-          "title": "Aktivitätsverlauf",
+          "title": "Aktivitäten",
           "close": "Bereich schließen",
           "pairTitle": "Aktivitätsverlauf von {name}"
+        },
+        "panelButton": {
+          "show": "Aktivitäten anzeigen",
+          "hide": "Aktivitäten ausblenden"
         }
       },
       "list": {
@@ -7411,21 +7478,22 @@
         },
         "statusFilter": {
           "label": "Status",
-          "all": "Alle Status"
+          "all": "Alle Status",
+          "running": "In Bearbeitung"
         },
         "counts": {
           "indexed": "{count, plural, one {# Konnektor indexiert} other {# Konnektoren indexiert}}",
-          "indexing": "{count, plural, one {# Konnektor indexiert gerade} other {# Konnektoren indexieren gerade}}",
+          "running": "{indexing, plural, other {# in Indexierung}}, {syncing, plural, other {# in Synchronisierung}}",
           "failed": "{count, plural, one {# Konnektor fehlgeschlagen} other {# Konnektoren fehlgeschlagen}}",
           "paused": "{count, plural, one {# Konnektor pausiert} other {# Konnektoren pausiert}}",
           "scheduled": "{count, plural, one {# Konnektor geplant} other {# Konnektoren geplant}}",
           "deleting": "{count, plural, one {# Konnektor wird gelöscht} other {# Konnektoren werden gelöscht}}"
         },
         "access": {
-          "public": "Öffentlich",
-          "private": "Privat",
-          "sync": "Auto-Sync",
-          "sync_restricted": "Auto-Sync, eingeschränkt"
+          "public": "Öffentlich für Ihre Organisation",
+          "private": "{count, plural, =0 {Privat} one {Mit # Gruppe geteilt} other {Mit # Gruppen geteilt}}",
+          "sync": "Automatische Berechtigungssynchronisierung",
+          "sync_restricted": "Automatische Berechtigungssynchronisierung"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.}} in der Warteschlange",
@@ -7434,7 +7502,7 @@
         },
         "docs": {
           "label": "Dokumente",
-          "processed": "{count, number} verarbeitet",
+          "processed": "{count, number} kürzlich verarbeitet",
           "processedTooltip": {
             "running": "Dokumente, die der aktuelle Lauf bisher verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet, zählt doppelt, daher kann die Zahl größer sein als die Dokumente des Konnektors.",
             "finished": "Dokumente, die der letzte Lauf verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet hat, zählt doppelt, und seitdem entfernte Dokumente zählen nicht mehr zum Konnektor, daher kann die Zahl größer sein als die Dokumente des Konnektors."
@@ -7445,6 +7513,8 @@
           "manageFederated": "Föderierten Konnektor verwalten",
           "expand": "Details anzeigen",
           "collapse": "Details ausblenden",
+          "viewErrors": "Fehler anzeigen",
+          "viewAllRuns": "Alle Läufe anzeigen",
           "pause": "Pausieren",
           "resume": "Fortsetzen"
         },
@@ -7457,7 +7527,8 @@
           "filteredTitle": "Keine Konnektoren entsprechen diesen Filtern."
         },
         "loadError": "Die Konnektoren konnten nicht geladen werden.",
-        "units": "{count, plural, one {Konnektor} other {Konnektoren}}"
+        "units": "{count, plural, one {Konnektor} other {Konnektoren}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "Indexierungsstatus der Konnektoren"
     },
@@ -7970,9 +8041,6 @@
         "title": "Richten Sie einen LLM-Anbieter ein, um mit dem Chatten zu beginnen."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Standard"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} löschen"
         },
@@ -9050,8 +9118,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "Gesamtes öffentliches Wissen",
-            "sublabel": "OnyxBot antwortet auf Basis der Informationen aus allen öffentlichen Konnektoren"
+            "label": "Gesamtes organisationsweites Wissen",
+            "sublabel": "OnyxBot antwortet auf Basis der Informationen aus allen organisationsweiten Konnektoren"
           },
           "documentSets": {
             "label": "Bestimmte Dokumentensätze",
@@ -9818,169 +9886,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "Bis zu {cost} oder {tokens} Token",
-          "cost": "Bis zu {cost}",
-          "none": "Kein Budget festgelegt",
-          "tokens": "Bis zu {tokens} Token"
-        },
-        "cadence": {
-          "label": "{days, plural, one {Wird jeden Tag um Mitternacht UTC zurückgesetzt} other {Wird alle # Tage um Mitternacht UTC zurückgesetzt}}"
-        },
-        "deleteFailed": {
-          "error": "Das Token-Ratenlimit konnte nicht gelöscht werden"
-        },
-        "empty": {
-          "message": "Noch keine Limits. Erstellen Sie ein Ausgabenlimit, um die Nutzung zu begrenzen."
-        },
-        "loadFailed": {
-          "error": "Die Token-Ratenlimits konnten nicht geladen werden"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "{label} löschen",
-            "tooltip": "Limit löschen"
-          },
-          "disable": {
-            "ariaLabel": "{label} deaktivieren"
-          },
-          "enable": {
-            "ariaLabel": "{label} aktivieren"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "Das Token-Ratenlimit konnte nicht aktualisiert werden"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "Abbrechen"
-        },
-        "costBudget": {
-          "description": "Maximale Ausgaben pro Zurücksetzungszeitraum. Legen Sie ein Kostenbudget, ein Token-Budget oder beides fest.",
-          "placeholder": "Kein Kostenlimit",
-          "title": "Kostenbudget",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "Geben Sie ein Kostenbudget, ein Token-Budget oder beides ein",
-          "costMax": "Das maximale Kostenbudget beträgt {amount, number} $",
-          "costMinCents": "Das Kostenbudget muss mindestens 0,01 $ betragen",
-          "costMoreThanZero": "Das Kostenbudget muss größer als 0 sein",
-          "groupRequired": "Wählen Sie eine Benutzergruppe aus",
-          "periodInteger": "Geben Sie eine ganze Anzahl von Tagen ein",
-          "periodMin": "Verwenden Sie mindestens 1 Tag",
-          "periodRequired": "Geben Sie einen Zurücksetzungszeitraum ein",
-          "scopeRequired": "Der Zielbereich ist ein Pflichtfeld",
-          "tokenIncrement": "Verwenden Sie Schritte von 1.000 Token",
-          "tokenInteger": "Geben Sie eine ganze Anzahl von Token ein",
-          "tokenMax": "Das maximale Token-Budget beträgt 1 Billion",
-          "tokenMin": "Verwenden Sie mindestens 1.000 Token"
-        },
-        "groupMenu": {
-          "empty": "Noch keine Benutzergruppen. Erstellen Sie eine unter Benutzer & Gruppen."
-        },
-        "groupPicker": {
-          "placeholder": "Gruppe auswählen"
-        },
-        "header": {
-          "title": "Ausgabenlimit erstellen"
-        },
-        "period": {
-          "description": "Budgets werden um Mitternacht UTC zurückgesetzt",
-          "title": "Zurücksetzungszeitraum",
-          "unit": "Tage"
-        },
-        "scope": {
-          "caption": {
-            "global": "Alle im Arbeitsbereich teilen sich ein Budget.",
-            "group": "Die Mitglieder von {group} teilen sich ein Budget.",
-            "groupUnchosen": "Die Mitglieder der gewählten Gruppe teilen sich ein Budget.",
-            "user": "Jeder Benutzer erhält ein eigenes Budget."
-          },
-          "title": "Gilt für"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "Arbeitsbereich"
-          },
-          "user": {
-            "title": "Pro Benutzer"
-          },
-          "userGroup": {
-            "title": "Benutzergruppe"
-          }
-        },
-        "submit": {
-          "label": "Limit erstellen"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} oder {tokens} Token",
-            "tokens": "{tokens} Token"
-          },
-          "global": "{days, plural, one {Alle im Arbeitsbereich teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Alle im Arbeitsbereich teilen sich alle # Tage bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
-          "group": "{days, plural, one {Die Mitglieder von {group} teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Die Mitglieder von {group} teilen sich alle # Tage bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
-          "groupUnchosen": "{days, plural, one {Die Mitglieder der gewählten Gruppe teilen sich täglich bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Die Mitglieder der gewählten Gruppe teilen sich alle # Tage bis zu {budget}. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}",
-          "user": "{days, plural, one {Jeder Benutzer kann täglich bis zu {budget} ausgeben. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.} other {Jeder Benutzer kann alle # Tage bis zu {budget} ausgeben. Die Nutzung wird blockiert, bis der Zeitraum zurückgesetzt wird.}}"
-        },
-        "tokenBudget": {
-          "description": "Maximale Anzahl an Token pro Zurücksetzungszeitraum",
-          "placeholder": "Kein Token-Limit",
-          "title": "Token-Budget",
-          "unit": "Token"
-        },
-        "userGroup": {
-          "description": "Wählen Sie, welche Gruppe sich dieses Budget teilt",
-          "title": "Benutzergruppe"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "Ausgabenlimit erstellen"
-        },
-        "createFailed": {
-          "error": "Das Ausgabenlimit konnte nicht erstellt werden"
-        },
-        "created": {
-          "message": "Ausgabenlimit erstellt!"
-        },
-        "embedded": {
-          "description": "Legen Sie Leitplanken für die Nutzung durch den Arbeitsbereich, Benutzer und Gruppen fest. Limits können aktiviert oder deaktiviert werden, ohne ihre Konfiguration zu löschen.",
-          "title": "Ausgabenlimits verwalten"
-        },
-        "global": {
-          "description": "Globale Limits gelten für alle Benutzer, Benutzergruppen und API-Schlüssel. Wenn das globale Limit erreicht ist, können keine weiteren Token verbraucht werden."
-        },
-        "intro": {
-          "description": "Mit Ausgabenlimits steuern Sie, wie viele Token in einem bestimmten Zeitraum verbraucht werden dürfen.",
-          "groupLimit": "Legen Sie Limits für Benutzergruppen fest, um die Ausgaben von Teams zu steuern.",
-          "toggleLimit": "Aktivieren und deaktivieren Sie Limits nach Bedarf.",
-          "userLimit": "Legen Sie Limits für Benutzer fest, damit kein einzelner Benutzer zu viel verbraucht.",
-          "workspaceLimit": "Legen Sie ein arbeitsbereichsweites Limit für die Gesamtausgaben Ihres Teams fest."
-        },
-        "tabs": {
-          "global": {
-            "name": "Global"
-          },
-          "groups": {
-            "name": "Gruppen"
-          },
-          "users": {
-            "name": "Benutzer"
-          }
-        },
-        "user": {
-          "description": "Benutzerlimits gelten für jeden Benutzer einzeln. Wenn ein Benutzer ein Limit erreicht, kann er vorübergehend keine Token mehr verbrauchen."
-        },
-        "userGroup": {
-          "description": "Gruppenlimits gelten für alle Benutzer einer Gruppe. Gehört ein Benutzer mehreren Gruppen an, gilt das großzügigste Limit."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM-Aufruf-Traces werden nicht mehr an **{label}** gesendet. Bereits gesendete Traces sind nicht betroffen.",
@@ -10335,13 +10240,6 @@
           "label": "Benutzer einladen"
         },
         "title": "Benutzer & Anfragen"
-      },
-      "permissionsNotice": {
-        "description": "{appName} verwendet jetzt gruppenbasierte Berechtigungen. Die Rollen Curator und Global Curator wurden durch konfigurierbare Gruppenberechtigungen ersetzt, mit Managern pro Gruppe für eine eingegrenzte Verwaltung.",
-        "learnMoreButton": {
-          "label": "Mehr erfahren"
-        },
-        "title": "Die Berechtigungen haben sich geändert"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -11109,6 +11007,200 @@
         "scoped": "Nur hinzugefügte oder geänderte Elemente",
         "failures": "{count, plural, one {# Fehler} other {# Fehler}}"
       }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "Legen Sie Ausgabenlimits fest, um die LLM-Ausgaben Ihrer Organisation abzusichern.",
+        "loadFailed": "Ausgabenlimits konnten nicht geladen werden."
+      },
+      "workspace": {
+        "title": "Arbeitsbereichslimits",
+        "description": "Gelten für alle Benutzer und Konten in dieser Organisation.",
+        "pool": {
+          "title": "Gemeinsames Budget",
+          "description": "Gemeinsames Limit für alle pro Zurücksetzungszeitraum. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides.",
+          "empty": "Kein globales Workspace-Limit",
+          "target": "Globales Workspace-Limit",
+          "emptyDescription": "Gemeinsames Limit für alle pro Zurücksetzungszeitraum."
+        },
+        "perUser": {
+          "title": "Limit pro Benutzer",
+          "description": "Eigenes Limit für jeden Benutzer der Organisation. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides.",
+          "empty": "Kein Limit pro Benutzer",
+          "target": "Globales Limit pro Benutzer",
+          "emptyDescription": "Eigenes Limit für jeden Benutzer der Organisation."
+        }
+      },
+      "groups": {
+        "title": "Gruppenlimits",
+        "description": "Gelten für bestimmte Gruppen in dieser Organisation.",
+        "add": {
+          "label": "Gruppenlimit hinzufügen"
+        },
+        "picker": {
+          "placeholder": "Gruppe auswählen",
+          "limitSet": "Limit festgelegt:"
+        },
+        "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+        "empty": "Legen Sie Kosten-/Tokenlimits für die Nutzung von Arbeitsbereich, Benutzern und Gruppen fest.",
+        "pool": {
+          "title": "Gemeinsames Gruppenbudget",
+          "description": "Gemeinsames Limit für alle in dieser Gruppe. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides.",
+          "empty": "Kein gemeinsames Gruppenbudget",
+          "target": "Gruppenlimit",
+          "emptyDescription": "Gemeinsames Limit für alle in dieser Gruppe.",
+          "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}"
+        },
+        "perMember": {
+          "title": "Limit pro Mitglied",
+          "description": "Eigenes Limit für jedes Mitglied dieser Gruppe. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides.",
+          "adminOnly": "Nur ein Administrator kann Limits pro Mitglied ändern, da sie ein Mitglied über das Arbeitsbereichslimit heben können.",
+          "empty": "Kein Limit pro Mitglied",
+          "target": "Gruppenlimit pro Mitglied",
+          "emptyDescription": "Eigenes Limit für jedes Mitglied dieser Gruppe.",
+          "members": "Limit pro Mitglied • {count, plural, one {# Mitglied} other {# Mitglieder}}"
+        },
+        "kind": {
+          "placeholder": "Limittyp auswählen"
+        },
+        "field": {},
+        "new": {
+          "title": "Neues Gruppenlimit",
+          "pool": {
+            "description": "Gemeinsames Limit für alle in einer bestimmten Gruppe. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides."
+          },
+          "perMember": {
+            "description": "Eigenes Limit für jedes Mitglied einer bestimmten Gruppe. Legen Sie ein Kosten- oder Tokenlimit fest, oder beides."
+          }
+        }
+      },
+      "groupPage": {
+        "title": "Ausgabenlimits",
+        "description": "Begrenzen Sie, was diese Gruppe für LLM-Nutzung ausgeben kann."
+      },
+      "card": {
+        "addLimit": "Limit hinzufügen",
+        "addModelBudget": "Modellbudget hinzufügen",
+        "modelBudget": {
+          "title": "Modellbudget",
+          "description": "Begrenzen Sie die Ausgaben für bestimmte Modelle. Diese zählen auch zum gemeinsamen Budget."
+        },
+        "cancel": "Abbrechen",
+        "save": "Änderungen speichern",
+        "saved": "Ausgabenlimits gespeichert",
+        "saveFailed": "Ausgabenlimits konnten nicht gespeichert werden: {error}",
+        "create": "Limit erstellen",
+        "reenable": "Wieder aktivieren",
+        "disable": {
+          "tooltip": "Alle Limits deaktivieren"
+        },
+        "expand": {
+          "tooltip": "Verwalten"
+        },
+        "collapse": {
+          "tooltip": "Einklappen"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> oder <b>{tokens}</b> Tokens / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> Tokens / {period}",
+          "period": {
+            "DAILY": "Tag",
+            "WEEKLY": "Woche",
+            "MONTHLY": "Monat"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, one {# Modellbudget} other {# Modellbudgets}}",
+          "nextReset": "Nächste Zurücksetzung: {at}",
+          "inactive": "Inaktives Limit",
+          "used": "<b>{percent} %</b> verbraucht",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "Warnungen",
+        "description": "Reine Warnlimits, die über die API festgelegt wurden. Sie blockieren die Nutzung nicht und bleiben beim Speichern hier unverändert.",
+        "row": "{model}, {period}: {target}",
+        "allModels": "Alle Modelle",
+        "percent": "{percent} % des Limits",
+        "tokens": "{tokens} Token"
+      },
+      "row": {
+        "model": {
+          "title": "Modell",
+          "placeholder": "Modelle suchen…"
+        },
+        "period": {
+          "title": "Zurücksetzungszeitraum",
+          "options": {
+            "DAILY": {
+              "title": "Tageslimit",
+              "description": "Wird täglich zurückgesetzt",
+              "helper": "Wird täglich um 00:00 UTC zurückgesetzt."
+            },
+            "WEEKLY": {
+              "title": "Wochenlimit",
+              "description": "Wird jeden Montag zurückgesetzt",
+              "helper": "Wird jeden Montag um 00:00 UTC zurückgesetzt."
+            },
+            "MONTHLY": {
+              "title": "Monatslimit",
+              "description": "Wird am 1. jedes Monats zurückgesetzt",
+              "helper": "Wird am 1. jedes Monats um 00:00 UTC zurückgesetzt."
+            }
+          }
+        },
+        "nextReset": "Nächste Zurücksetzung",
+        "resetUsage": {
+          "label": "Limitnutzung jetzt zurücksetzen",
+          "done": "Nutzung zurückgesetzt. Dieses Limit zählt ab jetzt bis zur nächsten Zurücksetzung.",
+          "failed": "Nutzung konnte nicht zurückgesetzt werden: {error}"
+        },
+        "remove": {
+          "tooltip": "Limit entfernen"
+        },
+        "cost": {
+          "title": "Kostenlimit",
+          "placeholder": "Kein Kostenlimit",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "Tokenlimit",
+          "placeholder": "Kein Tokenlimit",
+          "suffix": "Tsd.",
+          "unit": "Tokens"
+        },
+        "usage": {
+          "spent": "<mono>{amount}</mono> ausgegeben",
+          "tokens": "<mono>{tokens}</mono> Tokens verbraucht",
+          "percent": "{percent} %",
+          "blocked": {
+            "all": "Die Nutzung wird bis zum nächsten Zurücksetzen gesperrt.",
+            "model": "Die Modellnutzung wird bis zum nächsten Zurücksetzen gesperrt."
+          }
+        },
+        "whenReached": {
+          "title": "Wenn dieses Limit erreicht ist",
+          "blockAll": {
+            "title": "Alle Nutzung beim Limit blockieren",
+            "description": "Die Nutzung aller Modelle, einschließlich Chat, Suche, Bot und API-Aufrufen, stoppt bis zum nächsten Zurücksetzen."
+          },
+          "blockModel": {
+            "title": "Modellnutzung beim Limit blockieren",
+            "description": "Die Nutzung dieses Modells, einschließlich Chat, Bot und API-Aufrufen, stoppt bis zum nächsten Zurücksetzen.",
+            "summary": "Modellnutzung beim Limit blockieren"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "Legen Sie Kosten von mindestens 0,01 $ und höchstens 1 Billion Tokens fest.",
+          "budgetRequired": "Legen Sie ein Kosten- oder Tokenlimit fest, oder beides.",
+          "duplicate": "Ein anderes Limit verwendet diesen Zeitraum bereits.",
+          "modelRequired": "Wählen Sie ein Modell."
+        },
+        "edit": {
+          "tooltip": "Bearbeiten"
+        }
+      }
     }
   },
   "agents": {
@@ -11121,6 +11213,9 @@
       },
       "pin": {
         "tooltip": "An Seitenleiste anheften"
+      },
+      "pinFailed": {
+        "message": "Die Anheftung konnte nicht aktualisiert werden. Versuche es erneut."
       },
       "share": {
         "tooltip": "Agent teilen"
@@ -11428,7 +11523,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "Öffentliche Berechtigung ändern"
+          "ariaLabel": "Organisationsberechtigung ändern"
         },
         "row": {
           "updateAccess": {
@@ -11512,16 +11607,18 @@
           "title": "Prompt-Erinnerungen"
         },
         "public": {
-          "label": "Öffentlich für Ihre Organisation"
+          "label": "Für Ihre Organisation verfügbar"
         }
       }
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {Agent} other {Agenten}}"
+        "label": "{count, plural, one {# Agent} other {# Agenten}}"
       },
       "empty": {
-        "description": "Keine Agenten gefunden"
+        "description": "Agenten, die du erstellst oder die mit dir geteilt werden, erscheinen hier.",
+        "filteredDescription": "Keine Agenten passen zum gewählten Tab und zu den Filtern.",
+        "item": "Agenten"
       },
       "header": {
         "description": "Passen Sie das Verhalten und Wissen der KI für Ihre Anwendungsfälle und die Ihres Teams an.",
@@ -11535,9 +11632,6 @@
       },
       "page": {
         "ariaLabel": "Agenten-Seite"
-      },
-      "search": {
-        "placeholder": "Agenten suchen..."
       },
       "sections": {
         "all": {
@@ -12027,9 +12121,6 @@
         "builtin": {
           "label": "Integriert"
         },
-        "custom": {
-          "label": "Benutzerdefiniert"
-        },
         "invalid": {
           "label": "Ungültig"
         },
@@ -12041,6 +12132,12 @@
         },
         "unavailable": {
           "label": "Nicht verfügbar - klicken Sie, um mehr zu erfahren"
+        },
+        "shared": {
+          "label": "Geteilt"
+        },
+        "organization": {
+          "label": "Organisation"
         }
       },
       "toggle": {
@@ -12106,6 +12203,12 @@
       },
       "failedFiles": {
         "toast": "{count, plural, one {Eine Datei ist fehlgeschlagen und wurde entfernt: {names}} other {Dateien sind fehlgeschlagen und wurden entfernt: {names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "Chat wird geladen"
+      },
+      "olderMessagesLoader": {
+        "ariaLabel": "Ältere Nachrichten werden geladen"
       },
       "newChatButton": {
         "label": "Neuen Chat starten"
@@ -12341,7 +12444,9 @@
           "speakingPlaceholder": "{appName} spricht..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Warten, bis die angehängten Dateien verarbeitet sind"
+          "processingFilesTooltip": "Warten, bis die angehängten Dateien verarbeitet sind",
+          "stoppingLabel": "Wird gestoppt…",
+          "reloadLabel": "Erneut prüfen"
         },
         "tabReadingButton": {
           "readLabel": "Diesen Tab lesen",
@@ -12558,6 +12663,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "Der Benutzer hat die Generierung gestoppt"
+        },
+        "timedOut": {
+          "text": "Die Antwort wurde gestoppt, weil sie ihr Zeitlimit erreicht hat."
         }
       },
       "codeBlock": {
@@ -12693,9 +12801,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "Bildgenerierung"
-        },
         "emptyState": {
           "text": "Keine Bilder generiert"
         },
@@ -12705,11 +12810,11 @@
         "generatedStatus": {
           "text": "{count, plural, one {# Bild generiert} other {# Bilder generiert}}"
         },
-        "generatingImagesStatus": {
-          "text": "Bilder werden generiert..."
-        },
         "generatingStatus": {
           "text": "Bild wird generiert..."
+        },
+        "stoppedStatus": {
+          "text": "Bildgenerierung gestoppt"
         }
       },
       "memoizedLink": {
@@ -12774,6 +12879,9 @@
         },
         "tryAgainNow": {
           "text": "Sie können es jetzt erneut versuchen."
+        },
+        "otherModels": {
+          "text": "Andere Modelle sind weiterhin verfügbar."
         }
       },
       "resubmit": {
@@ -12870,9 +12978,6 @@
           },
           "executingTool": {
             "label": "Führt Werkzeug aus"
-          },
-          "generatingImage": {
-            "label": "Bild wird generiert..."
           },
           "generatingImages": {
             "label": "Bilder werden generiert"
@@ -13224,14 +13329,14 @@
           "title": "Ihre Organisation"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Bearbeiten"
+          "canEdit": {
+            "label": "Kann bearbeiten"
+          },
+          "canUse": {
+            "label": "Kann verwenden"
           },
           "removeAccess": {
             "label": "Zugriff entfernen"
-          },
-          "viewAndChat": {
-            "label": "Ansehen & Chatten"
           }
         },
         "privateOption": {
@@ -13646,6 +13751,10 @@
       "incognito": {
         "title": "Sie sind inkognito"
       }
+    },
+    "readiness": {
+      "stopFailed": "Die Antwort konnte nicht gestoppt werden. Versuche es erneut.",
+      "checkFailed": "Das Ende der Antwort konnte nicht bestätigt werden. Prüfe erneut, bevor du eine weitere Nachricht sendest."
     }
   },
   "common": {
@@ -14083,11 +14192,11 @@
         "text": "Wird geladen..."
       },
       "makePublic": {
-        "label": "Diesen {objectName} öffentlich machen?",
+        "label": "Diesen {objectName} für Ihre Organisation verfügbar machen?",
         "subtext": "Wenn aktiviert, kann dieser {objectName} von <b>allen {publicToWhom}</b> verwendet werden. Andernfalls haben nur <b>Administratoren</b> und <b>{publicToWhom}</b>, denen explizit Zugriff auf diesen {objectName} gewährt wurde (z. B. über eine Benutzergruppe), Zugriff."
       },
       "publicDisabled": {
-        "message": "Dieser {objectName} ist öffentlich und für alle Benutzer verfügbar."
+        "message": "Dieser {objectName} ist für alle in Ihrer Organisation verfügbar."
       },
       "usersFallback": {
         "text": "Benutzer"
@@ -14179,10 +14288,7 @@
       "upgrade": {
         "label": "Tarif upgraden"
       },
-      "availableFor": "Verfügbar im {plan}",
-      "beta": {
-        "title": "beta"
-      }
+      "availableFor": "Verfügbar im {plan}"
     },
     "placeholders": {
       "email": "e-mail@ihrefirma.com",
@@ -14216,6 +14322,34 @@
     },
     "appFooter": {
       "slogan": "Open-Source-KI-Plattform"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "Keine {item}",
+        "title": "Keine Elemente"
+      },
+      "noResults": {
+        "description": "Es wurden keine Ergebnisse gefunden, die zu diesem Suchbegriff passen.",
+        "itemTitle": "Keine {item} gefunden",
+        "title": "Keine Ergebnisse gefunden"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "{item} durchsuchen oder \"/\" drücken, um zu fokussieren...",
+      "placeholder": "Suchen oder \"/\" drücken, um zu fokussieren..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "beta",
+        "comingSoon": "demnächst",
+        "deprecated": "veraltet",
+        "temporarilyUnavailable": "vorübergehend nicht verfügbar",
+        "legacy": "legacy"
+      },
+      "labels": {
+        "default": "Standard"
+      }
     }
   },
   "craft": {
@@ -14737,6 +14871,10 @@
       },
       "plusMenu": {
         "tooltip": "Dateien oder Skills hinzufügen"
+      },
+      "contextRing": {
+        "label": "Nutzung des Kontextfensters",
+        "tooltip": "{percent} % des Kontexts genutzt"
       }
     },
     "interruptHint": {
@@ -14748,9 +14886,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "Zur Startseite"
       },
@@ -15251,6 +15386,10 @@
         "trigger": {
           "runNow": "Einmal ausführen",
           "schedule": "Zeitplan"
+        },
+        "markAllViewed": {
+          "label": "Alle als angesehen markieren",
+          "error": "Ausführungen konnten nicht als angesehen markiert werden. Versuchen Sie es erneut."
         }
       },
       "scheduleEditor": {
@@ -15282,7 +15421,8 @@
           "tue": "Di",
           "wed": "Mi"
         }
-      }
+      },
+      "unviewedResults": "Neue Ergebnisse"
     },
     "todoList": {
       "empty": {
@@ -15842,6 +15982,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Einrichtung abschließen"
+      },
+      "nextButton": {
+        "label": "Weiter"
+      },
       "progress": {
         "label": "Schritt {current} von {total}"
       }
@@ -15853,13 +15999,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# Modell verbunden} other {# Modelle verbunden}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM-kompatible APIs",
-        "title": "Benutzerdefinierter LLM-Anbieter"
-      },
       "description": "{appName} unterstützt sowohl selbst gehostete Modelle als auch gängige Anbieter.",
       "edit": {
         "ariaLabel": "LLM-Anbieter bearbeiten"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "Anzeigen"
+        },
+        "description": "Im Admin-Bereich einrichten",
+        "title": "Weitere Anbieter"
       },
       "providerCard": {
         "connect": {
@@ -15867,7 +16016,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Anbieter-Einstellungen"
-        }
+        },
+        "settingsLoadError": "Die Einstellungen dieses Anbieters konnten nicht geladen werden. Versuche es erneut."
       },
       "title": "Verbinden Sie Ihre LLM-Modelle"
     },
@@ -15894,28 +16044,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "Einrichtung abschließen"
-        },
-        "title": "Alles bereit. Prüfen Sie die optionalen Einstellungen oder klicken Sie auf „Einrichtung abschließen“"
-      },
       "llmSetup": {
-        "button": {
-          "label": "Weiter"
-        },
-        "title": "Fast geschafft! Verbinden Sie Ihre Modelle, um mit dem Chatten zu beginnen."
+        "title": "Verbinden Sie ein Modell, um zu chatten."
       },
       "name": {
-        "button": {
-          "label": "Weiter"
-        },
-        "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
+        "title": "Sagen Sie uns, wie wir Sie nennen sollen."
       },
-      "welcome": {
-        "button": {
-          "label": "Los geht’s"
-        },
+      "optionalSetup": {
+        "title": "Richten Sie einige optionale Extras ein."
+      },
+      "postStep": {
+        "title": "Alles ist bereit."
+      },
+      "preStep": {
         "title": "Nehmen wir uns einen Moment Zeit für die Einrichtung."
       }
     }
@@ -15994,14 +16135,16 @@
     "inputMultiUpload": {
       "placeholder": "Dateien hinzufügen…",
       "dropToAdd": "Dateien hier ablegen, um sie hinzuzufügen",
-      "dropToAddMore": "Hier ablegen, um weitere Dateien hinzuzufügen"
+      "dropToAddMore": "Hier ablegen, um weitere Dateien hinzuzufügen",
+      "select": "Dateien auswählen"
     },
     "inputUpload": {
       "placeholder": "Datei hinzufügen…",
       "pasted": "Eingefügter Text",
       "attached": "Datei angehängt",
       "dropToAdd": "Datei hier ablegen, um sie hinzuzufügen",
-      "dropToReplace": "Hier ablegen, um die Datei zu ersetzen"
+      "dropToReplace": "Hier ablegen, um die Datei zu ersetzen",
+      "select": "Datei auswählen"
     },
     "inputImage": {
       "alt": "Bild",
@@ -16431,7 +16574,7 @@
       "row": {
         "contentPlaceholder": "Geben Sie eine kurze Zusammenfassung des Folgenden in 1–2 Sätzen an:",
         "promptPlaceholder": "Zusammenfassen",
-        "publicTooltip": "Öffentliche Prompt-Shortcuts können nicht gelöscht werden.",
+        "publicTooltip": "Organisationsweite Prompt-Shortcuts können nicht gelöscht werden.",
         "removeAriaLabel": "Shortcut entfernen"
       },
       "title": "Prompt-Shortcuts",
@@ -16655,6 +16798,12 @@
         },
         "webSearch": {
           "label": "Websuche"
+        },
+        "skills": {
+          "label": "Skills"
+        },
+        "spendingLimits": {
+          "label": "Ausgabenlimits"
         }
       },
       "sections": {
@@ -16968,6 +17117,9 @@
         "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
         "saveFailed": "Skill konnte nicht gespeichert werden",
         "saved": "„{name}“ gespeichert"
+      },
+      "creationAccess": {
+        "title": "Zugriff"
       }
     },
     "modals": {
@@ -17006,6 +17158,13 @@
           "singleSkill": "Laden Sie jeweils nur einen Skill hoch.",
           "title": "Dateianforderungen",
           "zip": "ZIP-Dateien müssen eine SKILL.md-Datei enthalten."
+        },
+        "batch": {
+          "title": "Zugriff auf hochgeladene Skills",
+          "selected": "{count, plural, one {# Skill-Paket ausgewählt} other {# Skill-Pakete ausgewählt}}",
+          "result": "{imported, plural, one {# Skill importiert} other {# Skills importiert}}. {failed, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "Wählen Sie mehrere ZIP-Dateien aus, um Skills gemeinsam zu importieren. Jede ZIP-Datei muss einen Skill enthalten."
         }
       },
       "importGithub": {
@@ -17082,6 +17241,11 @@
         "unavailableFallback": "Dieser Skill kann nicht importiert werden.",
         "unavailableTag": {
           "label": "Nicht importierbar"
+        },
+        "sharing": {
+          "title": "Zugriff auf importierte Skills",
+          "configureButton": "Zugriff konfigurieren",
+          "description": "Diese Zugriffseinstellungen gelten für {count, plural, one {den ausgewählten Skill} other {alle # ausgewählten Skills}}."
         }
       },
       "nameConflict": {
@@ -17146,9 +17310,7 @@
         },
         "ownerLabel": "Eigentümer",
         "permissionMenu": {
-          "ariaLabel": "Zugriff für {name} aktualisieren",
-          "canUse": "Kann verwenden",
-          "canEdit": "Kann bearbeiten"
+          "ariaLabel": "Zugriff für {name} aktualisieren"
         },
         "saveButton": {
           "label": "Speichern"
@@ -17190,11 +17352,15 @@
       },
       "placeholders": {
         "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
+      },
+      "tabs": {
+        "details": "Details",
+        "sharing": "Freigabe"
       }
     },
     "page": {
       "browse": {
-        "title": "Skills durchsuchen"
+        "title": "Skills auswählen"
       },
       "countSeparator": {
         "label": "{count, plural, one {Skill} other {Skills}}"
@@ -17222,8 +17388,8 @@
           "title": "Keine passenden Skills"
         },
         "noSkills": {
-          "description": "Es wurden noch keine benutzerdefinierten Skills mit Ihnen geteilt und es sind keine integrierten Skills konfiguriert.",
-          "title": "Keine Skills verfügbar"
+          "title": "Noch keine benutzerdefinierten Skills",
+          "description": "Erstellen oder importieren Sie einen Skill, um ihn Ihrer Bibliothek hinzuzufügen."
         }
       },
       "focusedApp": {
@@ -17260,6 +17426,9 @@
         "disableFailed": "{name} konnte nicht deaktiviert werden",
         "enableFailed": "{name} konnte nicht aktiviert werden",
         "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden."
+      },
+      "builtins": {
+        "title": "Integrierte Skills ({count, number})"
       }
     },
     "sections": {
@@ -17315,6 +17484,34 @@
           "readFailed": "Der Upload konnte nicht gelesen werden."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Alle in der Organisation können auf diesen Skill zugreifen.} other {Alle in der Organisation können auf diese Skills zugreifen.}}",
+      "selected": "Freigegeben für {users, plural, one {# Person} other {# Personen}} und {groups, plural, one {# Gruppe} other {# Gruppen}}.",
+      "private": "{count, plural, one {Nur Sie können auf diesen Skill zugreifen.} other {Nur Sie können auf diese Skills zugreifen.}}"
+    },
+    "bulk": {
+      "adminDescription": "Skills und Zugriff in Ihrer Organisation verwalten.",
+      "selectAll": "Alle sichtbaren benutzerdefinierten Skills auswählen",
+      "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
+      "share": "Teilen",
+      "enable": "Für mich aktivieren",
+      "disable": "Für mich deaktivieren",
+      "delete": "Löschen",
+      "selectSkill": "{name} auswählen",
+      "updated": "{count, plural, one {# Skill aktualisiert} other {# Skills aktualisiert}}",
+      "failed": "Skills konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
+      "partialFailure": "{count, plural, one {# Skill konnte nicht aktualisiert werden} other {# Skills konnten nicht aktualisiert werden}}",
+      "deleteTitle": "{count, plural, one {# Skill löschen?} other {# Skills löschen?}}",
+      "deleteDescription": "{count, plural, one {Der ausgewählte Skill wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Skills werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
+      "shareTitle": "{count, plural, one {Zugriff für # Skill aktualisieren} other {Zugriff für # Skills aktualisieren}}",
+      "shareDescription": "Diese Änderungen auf jeden ausgewählten Skill anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
+      "unchanged": "Unverändert lassen",
+      "everyone": "Alle in der Organisation",
+      "invitedOnly": "Eingeladene Personen und Gruppen",
+      "addAccessDescription": "Diese Personen und Gruppen zu jedem ausgewählten Skill hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
+      "apply": "{count, plural, one {Auf # Skill anwenden} other {Auf # Skills anwenden}}",
+      "moreActions": "Weitere Aktionen"
     }
   },
   "opensearchHealth": {

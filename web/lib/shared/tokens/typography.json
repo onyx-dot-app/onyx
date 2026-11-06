@@ -10,5 +10,9 @@
   "font-kh-teka": {
     "value": "\"KH Teka\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
     "type": "fontFamily"
+  },
+  "font-sf-pro": {
+    "value": "\"SF Pro\", \"SF Pro Text\", -apple-system, BlinkMacSystemFont, system-ui,\n    sans-serif",
+    "type": "fontFamily"
   }
 }

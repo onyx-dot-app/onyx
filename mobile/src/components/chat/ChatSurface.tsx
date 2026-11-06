@@ -147,14 +147,9 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     submit(
       message ?? draft.text,
       draft.descriptors,
-      () => {
-        // `onAccepted` runs only once the session exists — a failed create throws before it — and
-        // everything from here to the route change is synchronous. That makes it the one moment
-        // we can say "this send created the session", which a null → non-null id alone cannot.
-        if (sessionId == null) composerTools.notePendingSend(sentWithAgent);
-        clearDraft();
-      },
+      clearDraft,
       composerTools.resolveToolOptions(),
+      () => composerTools.notePendingSend(sentWithAgent),
     );
   };
 

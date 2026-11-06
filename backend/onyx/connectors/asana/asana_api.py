@@ -3,8 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from typing import Dict
 
-import asana
-
+from onyx.connectors.asana.source_operations import AsanaSourceOperations
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,24 +35,23 @@ class AsanaTask:
         return f"ID: {self.id}\nTitle: {self.title}\nLast modified: {self.last_modified}\nText: {self.text}"
 
 
+def project_skipped_for_team(project: dict, team_gid: str | None) -> bool:
+    """Whether the team filter skips a project: a private project of another
+    team. The filter applies only when no project ids are selected."""
+    if not team_gid or project.get("privacy_setting") != "private":
+        return False
+    return (project.get("team") or {}).get("gid") != team_gid
+
+
 class AsanaAPI:
     def __init__(
-        self, api_token: str, workspace_gid: str, team_gid: str | None
+        self, ops: AsanaSourceOperations, workspace_gid: str, team_gid: str | None
     ) -> None:
-        self._user = None
+        self._user: dict | None = None
+        self.ops = ops
         self.workspace_gid = workspace_gid
         self.team_gid = team_gid
-
-        self.configuration = asana.Configuration()
-        self.api_client = asana.ApiClient(self.configuration)
-        self.tasks_api = asana.TasksApi(self.api_client)
-        self.stories_api = asana.StoriesApi(self.api_client)
-        self.users_api = asana.UsersApi(self.api_client)
-        self.project_api = asana.ProjectsApi(self.api_client)
-        self.workspaces_api = asana.WorkspacesApi(self.api_client)
-
         self.api_error_count = 0
-        self.configuration.access_token = api_token
         self.task_count = 0
 
     def get_tasks(
@@ -62,11 +60,9 @@ class AsanaAPI:
         """Get all tasks from the projects with the given gids that were modified since the given date.
         If project_gids is None, get all tasks from all projects in the workspace."""
         logger.info("Starting to fetch Asana projects")
-        projects = self.project_api.get_projects(
-            opts={
-                "workspace": self.workspace_gid,
-                "opt_fields": "gid,name,archived,modified_at",
-            }
+        projects = self.ops.iterate_projects(
+            workspace_gid=self.workspace_gid,
+            opt_fields="gid,name,archived,modified_at",
         )
         start_seconds = int(time.mktime(datetime.now().timetuple()))
         projects_list = []
@@ -110,10 +106,8 @@ class AsanaAPI:
         seen_task_gids: set[str],
         project_gids: list[str] | None,
     ) -> Iterator[AsanaTask]:
-        project = self.project_api.get_project(project_gid, opts={})
+        project = self.ops.get_project(project_gid=project_gid)
         project_name = project.get("name", project_gid)
-        team = project.get("team") or {}
-        team_gid = team.get("gid")
 
         if project.get("archived"):
             logger.info("Skipping archived project: %s (%s)", project_name, project_gid)
@@ -122,12 +116,7 @@ class AsanaAPI:
         # picked specific projects via `project_gids`, respect that choice
         # regardless of team membership — those projects were explicitly
         # opted in upstream by the project_gid filter in get_tasks.
-        if (
-            project.get("privacy_setting") == "private"
-            and self.team_gid
-            and team_gid != self.team_gid
-            and project_gids is None
-        ):
+        if project_gids is None and project_skipped_for_team(project, self.team_gid):
             logger.info(
                 "Skipping private project not in configured team: %s (%s)",
                 project_name,
@@ -143,14 +132,14 @@ class AsanaAPI:
             project_gid,
         )
 
-        opts = {
-            "opt_fields": "name,memberships,memberships.project,completed_at,completed_by,created_at,"
+        tasks_from_api = self.ops.iterate_project_tasks(
+            project_gid=project_gid,
+            opt_fields="name,memberships,memberships.project,completed_at,completed_by,created_at,"
             "created_by,custom_fields,dependencies,due_at,due_on,external,html_notes,liked,likes,"
             "modified_at,notes,num_hearts,parent,projects,resource_subtype,resource_type,start_on,"
             "workspace,permalink_url",
-            "modified_since": start_date,
-        }
-        tasks_from_api = self.tasks_api.get_tasks_for_project(project_gid, opts)
+            modified_since=start_date,
+        )
         for data in tasks_from_api:
             gid = data["gid"]
             if gid in seen_task_gids:
@@ -227,9 +216,8 @@ class AsanaAPI:
 
     def _fetch_and_add_comments(self, task_gid: str) -> str:
         text = ""
-        stories_opts: Dict[str, str] = {}
         story_start = time.time()
-        stories = self.stories_api.get_stories_for_task(task_gid, stories_opts)
+        stories = self.ops.iterate_task_stories(task_gid=task_gid)
 
         story_count = 0
         comment_count = 0
@@ -237,8 +225,8 @@ class AsanaAPI:
         for story in stories:
             story_count += 1
             if story["resource_subtype"] == "comment_added":
-                comment = self.stories_api.get_story(
-                    story["gid"], opts={"opt_fields": "text,created_by,created_at"}
+                comment = self.ops.get_story(
+                    story_gid=story["gid"], opt_fields="text,created_by,created_at"
                 )
                 commenter = self.get_user(comment["created_by"]["gid"])["name"]
                 text += f"Comment by {commenter}: {comment['text']}\n\n"
@@ -257,7 +245,7 @@ class AsanaAPI:
     def get_user(self, user_gid: str) -> Dict:
         if self._user is not None:
             return self._user
-        self._user = self.users_api.get_user(user_gid, {"opt_fields": "name,email"})
+        self._user = self.ops.get_user(user_gid=user_gid, opt_fields="name,email")
 
         if not self._user:
             logger.warning(

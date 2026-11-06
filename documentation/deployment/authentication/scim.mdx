@@ -1,0 +1,122 @@
+---
+title: "SCIM"
+description: "Automated user and group provisioning with SCIM 2.0"
+icon: "arrows-rotate"
+---
+
+import EnterpriseEditionInfo from "/snippets/enterprise-edition-info.mdx";
+
+<EnterpriseEditionInfo />
+
+SCIM (System for Cross-domain Identity Management) lets your identity provider create, update,
+and deactivate Onyx users and groups for you. Onyx supports SCIM 2.0 with Okta and Microsoft Entra ID.
+
+SCIM is not a sign-in method.
+Users still sign in with a password or an [SSO provider](/deployment/authentication/sso_providers).
+Use SCIM together with SSO so that accounts exist before the first sign-in and go away when a user leaves.
+
+## What SCIM Does
+
+- **Provisioning**: creates an Onyx user when you assign the person to the SCIM app.
+- **Updates**: keeps the name, email, and active status in sync.
+- **Deprovisioning**:
+  deactivates the Onyx user when you unassign the person or deactivate them in the identity provider.
+- **Group sync**: creates Onyx user groups from the identity provider's groups and keeps the members in sync.
+
+Users that SCIM manages show **SCIM synced** at **Admin Panel → Permissions → Users**.
+
+## Generate a SCIM Token
+
+1. Go to **Admin Panel → Permissions → SCIM**.
+2. Click **Generate SCIM Token**.
+3. Copy the token. Onyx shows the token one time only.
+
+The identity provider authenticates with this token as a bearer token. The token does not expire.
+
+To replace the token, click **Regenerate Token**. The old token stops working at once.
+Update the identity provider with the new token.
+
+## Configure Your Identity Provider
+
+Use these values in the identity provider's SCIM settings:
+
+- **Base URL / Tenant URL**: `https://<your-onyx-domain>/scim/v2`
+- **Authentication**: Bearer token (Okta: **HTTP Header**; Entra ID: **Secret Token**),
+  with the token from the previous step.
+- **Unique identifier**: `userName` (email).
+
+<Tabs>
+  <Tab title="Okta">
+    1. Open your Onyx app integration in the Okta admin console. If you use the Onyx OIDC or SAML app,
+    enable SCIM on its **General** tab.
+    2. On the **Provisioning** tab, click **Configure API Integration** and enable it.
+    3. Set **SCIM connector base URL** to `https://<your-onyx-domain>/scim/v2`.
+    4. Set **Unique identifier field for users** to `userName` and **Authentication Mode** to **HTTP Header**. Paste the token.
+    5. Click **Test API Credentials**, then **Save**.
+    6. Under **Provisioning → To App**, enable **Create Users**, **Update User Attributes**, and **Deactivate Users**.
+    7. Assign users and push groups on the **Assignments** and **Push Groups** tabs.
+  </Tab>
+
+  <Tab title="Microsoft Entra ID">
+    1. In the Entra admin center, open your Onyx enterprise application and select **Provisioning**.
+    2. Set **Provisioning Mode** to **Automatic**.
+    3. Set **Tenant URL** to `https://<your-onyx-domain>/scim/v2` and paste the token as **Secret Token**.
+    4. Click **Test Connection**, then **Save**.
+    5. Assign users and groups to the application and turn provisioning on. Entra ID syncs about every 40 minutes.
+  </Tab>
+</Tabs>
+
+## Verifying the Connection
+
+1. Assign one test user to the app in the identity provider.
+2. In Onyx, go to **Admin Panel → Permissions → SCIM** and check that the status is **Connected**.
+3. Go to **Admin Panel → Permissions → Users** and confirm the user exists with **SCIM synced**.
+
+## Behavior Notes
+
+- Onyx matches a SCIM user to an existing Onyx account by email. The existing account is adopted and keeps its data.
+- SCIM cannot move or adopt an admin or group manager account. Change the user's role in Onyx first,
+  or manage that account by hand.
+- A deactivated user cannot sign in. Their chats and data stay in Onyx.
+  Reactivate the user in the identity provider to restore access.
+- Groups that SCIM manages are user groups in **Admin Panel → Permissions → Groups**.
+  Edit the members in the identity provider, not in Onyx.
+- Provisioned users count toward your seat limit.
+
+## Supported Attributes
+
+Onyx publishes its schema at `/scim/v2/Schemas`, `/scim/v2/ResourceTypes`, and `/scim/v2/ServiceProviderConfig`.
+These discovery endpoints do not need a token.
+
+### User Attributes
+
+| Attribute                                    | Onyx field                            |
+| -------------------------------------------- | ------------------------------------- |
+| `userName`                                   | Email (unique identifier)             |
+| `name.givenName`, `name.familyName`, `name.formatted` | Display name                 |
+| `emails[].value`                             | Email                                 |
+| `active`                                     | Active or deactivated                 |
+| `externalId`                                 | Identity provider ID                  |
+| `department`, `manager` (enterprise extension) | Stored for the user                 |
+
+### Group Attributes
+
+| Attribute          | Onyx field                   |
+| ------------------ | ---------------------------- |
+| `displayName`      | Group name                   |
+| `members[]`        | Group members (by user ID)   |
+| `externalId`       | Identity provider ID         |
+
+### Supported Operations
+
+| Feature            | Supported                                          |
+| ------------------ | -------------------------------------------------- |
+| Users and Groups   | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`            |
+| Filtering          | Yes, for example `userName eq "jane@example.com"`  |
+| Pagination         | Yes, up to 500 results per page                    |
+| PATCH              | Yes                                                |
+| Bulk operations    | No                                                 |
+| Sorting            | No                                                 |
+| Change password    | No                                                 |
+
+`DELETE /scim/v2/Users/{id}` deactivates the user. It does not remove the account or its data.

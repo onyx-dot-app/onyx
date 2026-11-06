@@ -50,6 +50,7 @@ class IndexAttemptStage(str, PyEnum):
     ENRICHMENT_PREP = "ENRICHMENT_PREP"
     VECTOR_DB_WRITE = "VECTOR_DB_WRITE"
     POST_INDEX_DB_UPDATE = "POST_INDEX_DB_UPDATE"
+    # No longer recorded; kept so stored rows from older attempts still load.
     COORD_LOCK_ACQUIRE_WAIT = "COORD_LOCK_ACQUIRE_WAIT"
     COORDINATION_UPDATE = "COORDINATION_UPDATE"
     FINALIZATION = "FINALIZATION"

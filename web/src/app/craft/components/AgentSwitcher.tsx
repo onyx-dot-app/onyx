@@ -129,12 +129,11 @@ export default function AgentSwitcher() {
       onActivate: selectMainAgent,
       render: ({ highlighted, props }) => (
         <LineItemButton
+          font="main-ui-action"
           presentational
           selectVariant="select-heavy"
           interaction={highlighted ? "hover" : "rest"}
           rounding={2}
-          sizePreset="main-ui"
-          variant="section"
           icon={SvgSparkle}
           state={!isViewingSubagent ? "selected" : "empty"}
           title={titleLabel ?? t("mainAgent.label")}
@@ -150,12 +149,11 @@ export default function AgentSwitcher() {
         onActivate: () => selectSubagent(s.sessionId),
         render: ({ highlighted, props }) => (
           <LineItemButton
+            font="main-ui-action"
             presentational
             selectVariant="select-heavy"
             interaction={highlighted ? "hover" : "rest"}
             rounding={2}
-            sizePreset="main-ui"
-            variant="section"
             icon={SvgCpu}
             state={
               s.sessionId === viewedSubagentSessionId ? "selected" : "empty"

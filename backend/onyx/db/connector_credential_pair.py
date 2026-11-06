@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
@@ -582,6 +582,29 @@ def get_cc_pair_groups_for_ids(
     return list(db_session.scalars(stmt).all())
 
 
+def get_data_access_group_names_for_cc_pairs(
+    db_session: Session,
+    cc_pair_ids: Collection[int],
+    visible_group_ids: set[int] | None,
+) -> dict[int, list[str]]:
+    """Each pair's data-access group names, sorted, kept to ``visible_group_ids``
+    unless it is None. Pairs with none are absent."""
+    if not cc_pair_ids or visible_group_ids == set():
+        return {}
+    stmt: Select[tuple[int, str]] = (
+        select(UserGroup__CCPairDataAccess.cc_pair_id, UserGroup.name)
+        .join(UserGroup, UserGroup.id == UserGroup__CCPairDataAccess.user_group_id)
+        .where(UserGroup__CCPairDataAccess.cc_pair_id.in_(cc_pair_ids))
+        .order_by(UserGroup.name)
+    )
+    if visible_group_ids is not None:
+        stmt = stmt.where(UserGroup.id.in_(visible_group_ids))
+    names: dict[int, list[str]] = {}
+    for cc_pair_id, name in db_session.execute(stmt):
+        names.setdefault(cc_pair_id, []).append(name)
+    return names
+
+
 # For use with our thread-level parallelism utils. Note that any relationships
 # you wish to use MUST be eagerly loaded, as the session will not be available
 # after this function to allow lazy loading.
@@ -802,10 +825,19 @@ def lock_connector_credential_pair_row(
     """Row-locks the pair (FOR UPDATE) and reloads it. The lock holds until the
     caller commits or rolls back.
 
-    Lock order: the Redis attempt-creation lock (when taken), then this row,
-    then the pair's index attempt rows. Attempt creation and status changes
-    that stop indexing (pause, delete) take this lock, so they run one after
-    the other."""
+    Lock order: the Redis attempt-creation lock (when taken), the pair's open
+    doc permission sync attempt (a pause takes it first), then this row, then
+    the pair's index attempt rows and its queued permission sync attempts.
+    Attempt creation and status changes that stop indexing (pause, delete)
+    take this lock, so they run one after the other. A doc permission sync
+    attempt is created under a key share lock on this row, so it waits for
+    them too. Deletion's final cleanup deletes the pair's attempt rows before
+    this row, without this lock.
+
+    Never wait under this lock for a running sync's attempt row. The sync's
+    writes hold that row while they wait for this one: a group sync write
+    through its foreign key to this row, a doc sync write through another
+    writer that needs this row."""
     return db_session.execute(
         select(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
@@ -827,8 +859,10 @@ def get_connector_credential_pairs_for_source(
     return list(db_session.scalars(stmt).unique().all())
 
 
-def _has_unresolved_entity_error() -> ColumnElement[bool]:
-    """Correlates to the enclosing query's IndexAttempt row."""
+def has_unresolved_entity_error() -> ColumnElement[bool]:
+    """Correlates to the enclosing query's IndexAttempt row. Reads
+    ``is_resolved`` alone, since an entity an admin resolved without retry
+    still needs its time range fetched again."""
     return (
         select(IndexAttemptError.id)
         .where(
@@ -881,7 +915,7 @@ def get_last_successful_attempt_poll_range_end(
                 IndexAttempt.status == IndexingStatus.SUCCESS,
                 and_(
                     IndexAttempt.status == IndexingStatus.COMPLETED_WITH_ERRORS,
-                    ~_has_unresolved_entity_error(),
+                    ~has_unresolved_entity_error(),
                 ),
             ),
             IndexAttempt.is_backfill.is_(False),

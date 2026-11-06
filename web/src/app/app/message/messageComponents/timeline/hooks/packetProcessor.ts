@@ -7,19 +7,26 @@ import {
   SearchToolDocumentsDelta,
   FetchToolDocuments,
   Stop,
-  ImageGenerationToolDelta,
+  GeneratedImage,
   MessageStart,
   ToolCallArgumentDelta,
   isCodeInterpreterToolType,
 } from "@/app/app/services/streamingModels";
-import { CitationMap } from "@/app/app/interfaces";
+import { CitationMap } from "@/app/app/types";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   isActualToolCallPacket,
   isToolPacket,
   isDisplayPacket,
 } from "@/app/app/services/packetUtils";
-import { parseToolKey } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import {
+  getToolKey,
+  parseToolKey,
+} from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import {
+  isGroupEndPacket,
+  isNestedPacket,
+} from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // Re-export parseToolKey for consumers that import from this module
 export { parseToolKey };
@@ -50,8 +57,7 @@ export interface ProcessorState {
   displayGroupKeys: Set<string>;
 
   // Image generation status
-  isGeneratingImage: boolean;
-  generatedImageCount: number;
+  generatedImages: GeneratedImage[];
 
   // Streaming status
   finalAnswerComing: boolean;
@@ -89,8 +95,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     groupKeysWithSectionEnd: new Set(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
-    isGeneratingImage: false,
-    generatedImageCount: 0,
+    generatedImages: [],
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
@@ -103,12 +108,6 @@ export function createInitialState(nodeId: number): ProcessorState {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-function getGroupKey(packet: Packet): string {
-  const turnIndex = packet.placement.turn_index;
-  const tabIndex = packet.placement.tab_index ?? 0;
-  return `${turnIndex}-${tabIndex}`;
-}
 
 function injectSectionEnd(state: ProcessorState, groupKey: string): void {
   if (state.groupKeysWithSectionEnd.has(groupKey)) {
@@ -167,8 +166,6 @@ function hasContentPackets(packets: Packet[]): boolean {
 const FINAL_ANSWER_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.MESSAGE_START,
   PacketType.MESSAGE_DELTA,
-  PacketType.IMAGE_GENERATION_TOOL_START,
-  PacketType.IMAGE_GENERATION_TOOL_DELTA,
 ]);
 
 // ============================================================================
@@ -237,10 +234,30 @@ function handleDocumentPacket(state: ProcessorState, packet: Packet): void {
   }
 }
 
+function handleImagePacket(state: ProcessorState, packet: Packet): void {
+  if (packet.obj.type !== PacketType.IMAGE_GENERATION_TOOL_DELTA) {
+    return;
+  }
+  const delta = packet.obj;
+  const seenFileIds = new Set(state.generatedImages.map((i) => i.file_id));
+  const newImages: GeneratedImage[] = [];
+  for (const image of delta.images ?? []) {
+    if (seenFileIds.has(image.file_id)) continue;
+    seenFileIds.add(image.file_id);
+    newImages.push(image);
+  }
+  if (newImages.length > 0) {
+    // A new array, so memoized consumers see the change
+    state.generatedImages = [...state.generatedImages, ...newImages];
+  }
+}
+
 function handleStreamingStatusPacket(
   state: ProcessorState,
   packet: Packet
 ): void {
+  if (isNestedPacket(packet)) return;
+
   // Check if final answer is coming
   if (FINAL_ANSWER_PACKET_TYPES_SET.has(packet.obj.type as PacketType)) {
     state.finalAnswerComing = true;
@@ -315,26 +332,25 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   handleTurnTransition(state, packet);
 
   // Track group key
-  const groupKey = getGroupKey(packet);
+  const groupKey = getToolKey(
+    packet.placement.turn_index,
+    packet.placement.tab_index
+  );
   state.seenGroupKeys.add(groupKey);
 
   // Track SECTION_END and ERROR packets (both indicate completion)
-  if (
-    packet.obj.type === PacketType.SECTION_END ||
-    packet.obj.type === PacketType.ERROR
-  ) {
+  if (isGroupEndPacket(packet)) {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
-
-  // Check if this is the first packet in the group (before adding)
-  const existingGroup = state.groupedPacketsMap.get(groupKey);
-  const isFirstPacket = !existingGroup;
 
   // Add packet to group
   addPacketToGroup(state, packet, groupKey);
 
-  // Categorize on first packet of each group
-  if (isFirstPacket) {
+  // Debug and control packets can precede the first rendered packet.
+  if (
+    !state.toolGroupKeys.has(groupKey) &&
+    !state.displayGroupKeys.has(groupKey)
+  ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
     }
@@ -343,16 +359,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
     }
   }
 
-  // Track image generation for header display (regardless of group position)
-  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START) {
-    state.isGeneratingImage = true;
-  }
-
-  // Count generated images from DELTA packets
-  if (packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA) {
-    const delta = packet.obj as ImageGenerationToolDelta;
-    state.generatedImageCount += delta.images?.length ?? 0;
-  }
+  handleImagePacket(state, packet);
 
   // Handle specific packet types
   handleCitationPacket(state, packet);

@@ -1,0 +1,67 @@
+---
+title: "Service Accounts before v4.7"
+description: "Create and manage API keys in Onyx versions before v4.7"
+icon: "key"
+---
+
+<Info>
+  This page applies to Onyx versions before **v4.7**. For Onyx v4.7 and later,
+  see [Service Accounts](/admins/user_management/api_keys).
+</Info>
+
+API Keys provide programmatic access to Onyx APIs.
+
+<Note>
+  API Keys exist as distinct users in Onyx, allowing you to trace activity and manage permissions at the key level.
+</Note>
+
+## API Key Types
+
+Each key is created with a role, and that role decides what the key can reach:
+
+<AccordionGroup>
+  <Accordion title="Admin API Keys" icon="shield-check">
+    Can access all endpoints, including those pre-fixed with `admin/`.
+
+    **⚠️ Use with caution:** Admin keys have unrestricted access to your Onyx instance.
+  </Accordion>
+
+  <Accordion title="Basic API Keys" icon="key">
+    Can access the non-admin endpoints like Search, Chat, Agents, and Actions.
+
+    **✅ Recommended:** Most users should use Basic API Keys for application development.
+  </Accordion>
+
+  <Accordion title="Limited API Keys" icon="lock">
+    Read-only Agent access. Can post messages to Chat endpoints, but cannot read chat history.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  Looking for user-scoped tokens?
+  Any user can create a [Personal Access Token](/developers/overview_legacy#personal-access-tokens)
+  from **Settings** > **Accounts & Access** to authenticate API requests as themselves.
+</Tip>
+
+## Creating API Keys
+
+Only Admins can create and manage API keys.
+
+<Steps>
+  <Step title="Create New API Key">
+    Go to **Admin Panel → Service Accounts**, click **New Service Account**, give the key a name,
+    and select the role for your use case.
+
+    <img className="rounded-image" src="/assets/admins/user_management/legacy/create_api_key.webp" alt="Create API Key interface with the Limited, Basic, and Admin role options"/>
+  </Step>
+
+  <Step title="Save and Copy Key">
+    After creation, immediately copy and securely store the API key. It is shown only once.
+  </Step>
+</Steps>
+
+From the Service Accounts page, you can regenerate, rename, or delete your API keys.
+
+<Warning>
+  Regenerating a key revokes the old one. Any application still using it stops working until you give it the new key.
+</Warning>

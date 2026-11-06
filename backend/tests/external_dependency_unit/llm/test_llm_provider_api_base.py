@@ -25,7 +25,7 @@ from onyx.db.llm import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.manage.llm.api import _mask_string, put_llm_provider
 from onyx.server.manage.llm.api import test_llm_configuration as run_llm_config_test
 from onyx.server.manage.llm.models import (
@@ -524,7 +524,7 @@ def test_upload_with_custom_config_then_change(
     # List to capture LLM inputs passed to test_llm
     captured_llms: list = []
 
-    def capture_test_llm(llm: LLM) -> str:
+    def capture_test_llm(llm: LitellmLLM) -> str:
         """Captures the LLM input and returns None (success)."""
         captured_llms.append(llm)
         return ""
@@ -701,9 +701,9 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
         "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
         "vertex_location": "global",
     }
-    captured_llms: list[LLM] = []
+    captured_llms: list[LitellmLLM] = []
 
-    def capture_test_llm(llm: LLM) -> str:
+    def capture_test_llm(llm: LitellmLLM) -> str:
         captured_llms.append(llm)
         return ""
 
@@ -766,9 +766,9 @@ def test_vertex_workload_identity_provider_create(
     name = f"test-provider-vertex-wif-{uuid4().hex[:8]}"
     provider = LlmProviderNames.VERTEX_AI.value
     default_model_name = "gemini-2.5-pro"
-    captured_llms: list[LLM] = []
+    captured_llms: list[LitellmLLM] = []
 
-    def capture_test_llm(llm: LLM) -> str:
+    def capture_test_llm(llm: LitellmLLM) -> str:
         captured_llms.append(llm)
         return ""
 
@@ -881,9 +881,9 @@ def test_vertex_service_account_backwards_compat_routes_credentials(
         "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
         "vertex_location": "global",
     }
-    captured_llms: list[LLM] = []
+    captured_llms: list[LitellmLLM] = []
 
-    def capture_test_llm(llm: LLM) -> str:
+    def capture_test_llm(llm: LitellmLLM) -> str:
         captured_llms.append(llm)
         return ""
 

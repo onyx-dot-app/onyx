@@ -56,9 +56,11 @@ for (const theme of THEMES) {
         const expectedHeader = SLUG_TO_HEADER[slug];
         if (expectedHeader) {
           await expect(
+            // Exact text: "Chats" must not match "Delete All Chats" still on
+            // screen from the previous tab.
             page
-              .locator(".opal-content-md-header")
-              .filter({ hasText: expectedHeader })
+              .locator(".opal-content-title-row")
+              .getByText(expectedHeader, { exact: true })
               .first()
           ).toBeVisible({ timeout: 10_000 });
         } else {

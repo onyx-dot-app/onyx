@@ -9,7 +9,8 @@ import {
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/lib/projects/svc";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { ChatSession } from "@/app/app/interfaces";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { ChatSession } from "@/app/app/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/lib/agents/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -54,6 +55,7 @@ function ProjectChatItem({
   afterRefresh,
 }: ProjectChatItemProps) {
   const t = useTranslations("chat");
+  const appPosition = useAppPosition();
   const tSidebar = useTranslations("sidebar");
   const locale = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -228,7 +230,8 @@ function ProjectChatItem({
 
       <Hoverable.Root group={chat.id} width="full">
         <LineItemButton
-          href={`/app?chatId=${chat.id}`}
+          font="main-ui-action"
+          {...appPosition.linkToChat(chat.id)}
           group={chat.id}
           icon={icon}
           title={chat.name || UNNAMED_CHAT}
@@ -239,7 +242,6 @@ function ProjectChatItem({
                 })
               : undefined
           }
-          sizePreset="main-ui"
           interaction={menuOpen ? "active" : undefined}
           rightChildren={
             <Hoverable.Item group={chat.id} variant="appear-on-hover">

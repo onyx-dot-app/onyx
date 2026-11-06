@@ -15,7 +15,7 @@ from onyx.server.documents.models import (
     IndexingStatus,
     InputType,
 )
-from onyx.server.query_and_chat.streaming_models import GeneratedImage
+from onyx.tools.models import GeneratedImage
 
 """
 These data models are used to represent the data on the testing side of things.
@@ -143,6 +143,7 @@ class DATestImageGenerationConfig(BaseModel):
     llm_provider_id: int
     llm_provider_name: str
     is_default: bool
+    llm_provider_owned: bool = True
 
 
 class DATestDocumentSet(BaseModel):
@@ -197,8 +198,8 @@ class DAQueryHistoryEntry(DATestChatSession):
 
 
 class ToolName(str, Enum):
-    INTERNET_SEARCH = "internet_search"
-    INTERNAL_SEARCH = "run_search"
+    INTERNET_SEARCH = "web_search"
+    INTERNAL_SEARCH = "internal_search"
     IMAGE_GENERATION = "generate_image"
 
 
@@ -219,6 +220,8 @@ class ToolCallDebug(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     stack_trace: str
+    error_code: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class StreamedResponse(BaseModel):

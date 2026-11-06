@@ -10,7 +10,7 @@ Logs are available in Process Compose and `.zed/logs/`.
 For CLI access, use `process-compose --port 18080`.
 
 For VPN or proxy certificate errors, see
-[manual CA setup](../docs/craft/dev/local-kubernetes.md#vpn-or-proxy-certificate-errors).
+[Refresh images](../deployment/helm/dev/README.md#refresh-images).
 
 Startup uses `make craft-intercept`. It reuses an active intercept and retries a known stale-agent failure after restarting the API deployment.
 The API and workers use the shared Craft launcher to read deployed settings and secrets into memory.

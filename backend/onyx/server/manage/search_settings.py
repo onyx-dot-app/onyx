@@ -64,6 +64,7 @@ from onyx.db.port_attempt import (
     port_backfill_has_pending_work,
 )
 from onyx.db.search_settings import (
+    cc_pairs_with_full_run_in_progress,
     clear_reclaim_intent__no_commit,
     create_search_settings,
     delete_search_settings,
@@ -105,6 +106,8 @@ from onyx.server.manage.models import (
     FullModelVersionResponse,
     ReindexProgress,
     UnstructuredApiKeyRequest,
+    VectorQuantizationLevelSupport,
+    VectorQuantizationSupport,
 )
 from onyx.server.models import IdReturn
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
@@ -147,6 +150,8 @@ def set_new_search_settings(
     Only one re-index runs at a time. This raises CONFLICT instead of superseding an
     existing one: either a secondary FUTURE is already in flight, or an INSTANT
     switchover is still backfilling the live index. Cancel the running re-index first.
+    It also raises CONFLICT while a connector runs a full re-index or a backfill on
+    PRESENT (see cc_pairs_with_full_run_in_progress).
 
     Embedding models only move forward: legacy models are refused as a new target,
     except for a re-index with the PRESENT model (see _check_embedding_model_target).
@@ -230,6 +235,22 @@ def set_new_search_settings(
             OnyxErrorCode.CONFLICT,
             "A re-index is already in progress. Cancel it before starting a new one.",
         )
+
+    # A connector that crawls from the beginning or backfills during the port adds
+    # documents FUTURE's incremental catch-up never fetches. The connector
+    # endpoints refuse such runs once the reindex exists and the beat holds queued
+    # ones until the swap; refuse the reindex while one is already running.
+    if search_settings_new.switchover_type != SwitchoverType.INSTANT:
+        running_full_runs = cc_pairs_with_full_run_in_progress(
+            db_session, search_settings.id
+        )
+        if running_full_runs:
+            names = ", ".join(f"'{name}'" for _, name in running_full_runs[:5])
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                f"A full re-index or backfill is running or queued for {names}. "
+                "Wait for it to finish before starting a re-index.",
+            )
 
     # Upgrade-only: a new target must be the PRESENT model or a selectable model.
     # Runs before anything below writes or commits.
@@ -521,6 +542,31 @@ def _check_embedding_model_target(
         raise _not_selectable_error(request, spec)
 
 
+def _format_version(version: tuple[int, int]) -> str:
+    return f"{version[0]}.{version[1]}"
+
+
+def _min_opensearch_version(
+    vector_quantization: VectorQuantization,
+) -> tuple[int, int] | None:
+    """The oldest OpenSearch that can index this level, or None if any can."""
+    lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
+    if lucene_scalar_quantization is None:
+        return None
+    return lucene_scalar_quantization.min_opensearch_version
+
+
+def _is_supported(
+    vector_quantization: VectorQuantization,
+    cluster_version: tuple[int, int] | None,
+) -> bool:
+    """A cluster that does not report its version is not restricted."""
+    min_version: tuple[int, int] | None = _min_opensearch_version(vector_quantization)
+    return (
+        min_version is None or cluster_version is None or cluster_version >= min_version
+    )
+
+
 def _validate_vector_quantization_supported(
     vector_quantization: VectorQuantization,
 ) -> None:
@@ -530,13 +576,14 @@ def _validate_vector_quantization_supported(
     error instead of a failed index creation. A cluster that does not report
     its OpenSearch version is not checked.
     """
-    lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
-    if lucene_scalar_quantization is None or DISABLE_VECTOR_DB:
+    min_version: tuple[int, int] | None = _min_opensearch_version(vector_quantization)
+    if min_version is None or DISABLE_VECTOR_DB:
         return
     with OpenSearchClient() as opensearch_client:
         cluster_version = opensearch_client.get_opensearch_version()
-    min_version = lucene_scalar_quantization.min_opensearch_version
-    if cluster_version is not None and cluster_version < min_version:
+    if cluster_version is not None and not _is_supported(
+        vector_quantization, cluster_version
+    ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"The {vector_quantization.value} vector quantization needs OpenSearch "
@@ -759,6 +806,38 @@ def delete_search_settings_endpoint(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/vector-quantization-support", dependencies=[Depends(require_vector_db)])
+def get_vector_quantization_support(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> VectorQuantizationSupport:
+    """Which vector quantization levels the OpenSearch cluster can index, so the
+    admin UI can disable a level before a reindex request is rejected."""
+    with OpenSearchClient() as opensearch_client:
+        cluster_version: tuple[int, int] | None = (
+            opensearch_client.get_opensearch_version()
+        )
+    levels: list[VectorQuantizationLevelSupport] = []
+    for vector_quantization in VectorQuantization:
+        min_version: tuple[int, int] | None = _min_opensearch_version(
+            vector_quantization
+        )
+        levels.append(
+            VectorQuantizationLevelSupport(
+                vector_quantization=vector_quantization,
+                supported=_is_supported(vector_quantization, cluster_version),
+                min_opensearch_version=(
+                    _format_version(min_version) if min_version else None
+                ),
+            )
+        )
+    return VectorQuantizationSupport(
+        opensearch_version=(
+            _format_version(cluster_version) if cluster_version else None
+        ),
+        levels=levels,
+    )
 
 
 @router.get("/get-current-search-settings")

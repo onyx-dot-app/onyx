@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { TurnGroup } from "../transformers";
+import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
+import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
 import {
   PacketType,
   SearchToolPacket,
@@ -24,8 +25,7 @@ export interface TimelineHeaderResult {
  */
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
-  stopReason?: StopReason,
-  isGeneratingImage?: boolean
+  stopReason?: StopReason
 ): TimelineHeaderResult {
   const t = useTranslations("chat.messages.timeline");
   const locale = useLocale();
@@ -34,15 +34,6 @@ export function useTimelineHeader(
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
     const thinkingHeader = t("header.thinkingEllipsis.label");
-
-    // If generating image with no tool packets, show image generation header
-    if (isGeneratingImage && !hasPackets) {
-      return {
-        headerText: t("header.generatingImage.label"),
-        hasPackets,
-        userStopped,
-      };
-    }
 
     if (!hasPackets) {
       return { headerText: thinkingHeader, hasPackets, userStopped };
@@ -59,7 +50,9 @@ export function useTimelineHeader(
       return { headerText: thinkingHeader, hasPackets, userStopped };
     }
 
-    const firstPacket = currentStep.packets[0];
+    const firstPacket = currentStep.packets.find(
+      (packet) => isToolPacket(packet, false) || isDisplayPacket(packet)
+    );
     if (!firstPacket) {
       return { headerText: thinkingHeader, hasPackets, userStopped };
     }
@@ -162,5 +155,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: thinkingHeader, hasPackets, userStopped };
-  }, [turnGroups, stopReason, isGeneratingImage, t, locale]);
+  }, [turnGroups, stopReason, t, locale]);
 }

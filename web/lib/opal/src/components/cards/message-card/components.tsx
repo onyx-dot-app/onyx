@@ -8,7 +8,7 @@ import type {
   RichStr,
   Rounding,
   ShadowVariants,
-  StatusVariants,
+  StatusColor,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
 import { ContentAction } from "@opal/layouts";
@@ -20,6 +20,7 @@ import {
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgClock,
+  SvgHourglass,
   SvgX,
   SvgXOctagon,
 } from "@opal/icons";
@@ -32,7 +33,7 @@ import { useOpalStrings } from "@opal/strings";
 
 interface MessageCardBaseProps {
   /** Visual variant controlling background, border, and icon. @default "default" */
-  variant?: StatusVariants;
+  variant?: StatusColor;
 
   /** Override the default variant icon. */
   icon?: IconFunctionComponent;
@@ -112,7 +113,7 @@ type MessageCardProps = MessageCardBaseProps &
 // ---------------------------------------------------------------------------
 
 const VARIANT_CONFIG: Record<
-  StatusVariants,
+  StatusColor,
   { icon: IconFunctionComponent; iconClass: string; color: CardColor }
 > = {
   default: {
@@ -139,6 +140,11 @@ const VARIANT_CONFIG: Record<
     icon: SvgClock,
     iconClass: "stroke-theme-amber-05",
     color: "theme-amber-01",
+  },
+  queued: {
+    icon: SvgHourglass,
+    iconClass: "stroke-theme-purple-05",
+    color: "theme-purple-01",
   },
   error: {
     icon: SvgXOctagon,
@@ -244,14 +250,13 @@ function MessageCard({
         <div className="opal-message-card-layout">
           <div style={{ padding: spacingToRem(innerPadding) }}>
             <ContentAction
+              font="main-ui-action"
               icon={(props) => (
                 <Icon {...props} className={cn(props.className, iconClass)} />
               )}
               title={title}
               description={description}
               titleMaxLines={titleMaxLines}
-              sizePreset="main-ui"
-              variant="section"
               rightChildren={right}
               padding={contentPadding}
             />

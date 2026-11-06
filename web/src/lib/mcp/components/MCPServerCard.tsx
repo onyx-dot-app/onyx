@@ -116,7 +116,7 @@ export default function MCPServerCard({
               <InputTypeIn
                 placeholder={t("editor.mcp.searchTools.placeholder")}
                 variant="internal"
-                searchIcon
+                icon="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 // Searching only makes sense against a visible list.

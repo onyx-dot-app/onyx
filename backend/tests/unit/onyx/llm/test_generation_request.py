@@ -137,6 +137,7 @@ def test_invoke_preserves_options_and_returns_shared_content() -> None:
                 "name": "lookup",
                 "description": "Find facts",
                 "parameters": {},
+                "strict": False,
             },
         }
     ]

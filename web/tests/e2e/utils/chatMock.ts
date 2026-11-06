@@ -67,26 +67,25 @@ export interface ImageGenStreamOptions {
   fileId: string;
   revisedPrompt: string;
   message: string;
+  /** Adds an internal search step between the image step and the answer. */
+  searchAfterImage?: boolean;
 }
 
-export function buildMockImageGenStream({
-  fileId,
-  revisedPrompt,
-  message,
-}: ImageGenStreamOptions): string {
-  const { userMessageId, agentMessageId } = nextMessageIds();
+interface MockPlacement {
+  turn_index: number;
+  tab_index: number;
+  sub_turn_index?: number;
+}
 
-  const packets = [
+function imageGenerationPackets(
+  placement: MockPlacement,
+  fileId: string,
+  revisedPrompt: string
+): Record<string, unknown>[] {
+  return [
+    { placement, obj: { type: "image_generation_start" } },
     {
-      user_message_id: userMessageId,
-      reserved_assistant_message_id: agentMessageId,
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "image_generation_start" },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
+      placement,
       obj: {
         type: "image_generation_final",
         images: [
@@ -99,12 +98,20 @@ export function buildMockImageGenStream({
         ],
       },
     },
+    { placement, obj: { type: "section_end" } },
+  ];
+}
+
+function answerPackets(
+  turnIndex: number,
+  agentMessageId: number,
+  message: string,
+  fileId: string
+): Record<string, unknown>[] {
+  const placement = { turn_index: turnIndex, tab_index: 0 };
+  return [
     {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "section_end" },
-    },
-    {
-      placement: { turn_index: 1, tab_index: 0 },
+      placement,
       obj: {
         type: "message_start",
         id: `mock-${agentMessageId}`,
@@ -112,15 +119,45 @@ export function buildMockImageGenStream({
         final_documents: null,
       },
     },
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: { type: "stop", stop_reason: "finished" },
-    },
+    { placement, obj: { type: "stop", stop_reason: "finished" } },
     {
       message_id: agentMessageId,
       citations: {},
       files: [{ id: fileId, type: "image" }],
     },
+  ];
+}
+
+export function buildMockImageGenStream({
+  fileId,
+  revisedPrompt,
+  message,
+  searchAfterImage = false,
+}: ImageGenStreamOptions): string {
+  const { userMessageId, agentMessageId } = nextMessageIds();
+  const search = { turn_index: 1, tab_index: 0 };
+
+  const packets = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    ...imageGenerationPackets(
+      { turn_index: 0, tab_index: 0 },
+      fileId,
+      revisedPrompt
+    ),
+    ...(searchAfterImage
+      ? [
+          { placement: search, obj: { type: "search_tool_start" } },
+          {
+            placement: search,
+            obj: { type: "search_tool_queries_delta", queries: ["onyx"] },
+          },
+          { placement: search, obj: { type: "section_end" } },
+        ]
+      : []),
+    ...answerPackets(searchAfterImage ? 2 : 1, agentMessageId, message, fileId),
   ];
 
   return serializePackets(packets);

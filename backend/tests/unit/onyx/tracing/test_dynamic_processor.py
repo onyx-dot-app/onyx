@@ -1,13 +1,21 @@
 """Unit tests for the live-reload behavior of DynamicTracingProcessor."""
 
+import os
 from typing import Any, cast
 from unittest.mock import patch
 
-from onyx.tracing.dynamic_processor import DynamicTracingProcessor
+from onyx.tracing.dynamic_processor import (
+    DynamicTracingProcessor,
+    _build_langfuse_processor,
+)
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
-from onyx.tracing.provider_config import BraintrustConfig, EffectiveTracingConfig
+from onyx.tracing.provider_config import (
+    BraintrustConfig,
+    EffectiveTracingConfig,
+    LangfuseConfig,
+)
 
 RESOLVE = "onyx.tracing.dynamic_processor.resolve_effective_tracing_config"
 BUILD = "onyx.tracing.dynamic_processor.build_delegates"
@@ -145,3 +153,14 @@ def test_in_flight_trace_keeps_its_original_delegates() -> None:
         # A brand-new trace uses the current (`new`) delegates.
         proc.on_trace_start(_trace("t2"))
         assert "on_trace_start" in new.calls
+
+
+def test_langfuse_client_sends_v4_ingestion_header() -> None:
+    config = LangfuseConfig(secret_key="sk", public_key="pk", host=None)
+    with (
+        patch.dict(os.environ),
+        patch("langfuse.Langfuse") as mock_langfuse,
+    ):
+        _build_langfuse_processor(config)
+    headers = mock_langfuse.call_args.kwargs["additional_headers"]
+    assert headers["x-langfuse-ingestion-version"] == "4"

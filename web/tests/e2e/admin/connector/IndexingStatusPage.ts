@@ -9,14 +9,36 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 const MANAGE_LINK_NAME = "Manage";
+// The session choice that keeps the fleet Activities panel hidden.
+const FLEET_PANEL_OPEN_KEY = "onyx.activityPanel.open.fleet";
+const ADD_CONNECTOR_NAME = "Add Connector";
 
 export class IndexingStatusPage {
   readonly page: Page;
   readonly pageTitle: Locator;
+  readonly addConnectorLink: Locator;
+  /** The counts card over the graph card. */
+  readonly overview: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.pageTitle = page.locator('[aria-label="admin-page-title"]');
+    this.addConnectorLink = page.getByRole("link", {
+      name: ADD_CONNECTOR_NAME,
+      exact: true,
+    });
+    this.overview = page.getByTestId("indexing-overview");
+  }
+
+  /**
+   * Keep the fleet Activities panel hidden on the next navigation. It opens by
+   * default whenever the fleet has errors, which moves the whole layout.
+   * Call before `goto()`.
+   */
+  async hidePanelBeforeNavigation() {
+    await this.page.addInitScript((key: string) => {
+      sessionStorage.setItem(key, "false");
+    }, FLEET_PANEL_OPEN_KEY);
   }
 
   async goto() {
@@ -25,9 +47,9 @@ export class IndexingStatusPage {
   }
 
   /**
-   * The card for an individual connector, located by its exact name. Every
-   * connector is listed flat, so the card is the stable signal that the list
-   * has rendered with data.
+   * The card for an individual connector, located by its exact name. Rows sit
+   * in open source groups, so the card is the stable signal that the list has
+   * rendered with data.
    */
   connectorRow(connectorName: string): Locator {
     return this.page
@@ -36,7 +58,7 @@ export class IndexingStatusPage {
       .first();
   }
 
-  /** The link to the connector's detail page, offered only on rows the viewer can manage. */
+  /** The link to the connector's detail page. On a row the viewer cannot manage, Manage is a disabled button, not a link. */
   manageLink(connectorName: string): Locator {
     // Exact, so a connector whose name contains "manage" does not match through its own name link.
     return this.connectorRow(connectorName).getByRole("link", {
@@ -46,11 +68,15 @@ export class IndexingStatusPage {
   }
 
   /**
-   * Wait for a connector's card to render so we don't snapshot the loading
-   * skeleton, then settle the network before any screenshot.
+   * Wait for a connector's card and the overview's chart to render so we don't
+   * snapshot a loading skeleton, then settle the network before any screenshot.
    */
   async waitForConnector(connectorName: string) {
     await expect(this.connectorRow(connectorName)).toBeVisible({
+      timeout: 15_000,
+    });
+    // Counted, not seen: an empty bin's bar has no height, so it is never visible.
+    await expect(this.overview.getByTestId("chart-bar")).not.toHaveCount(0, {
       timeout: 15_000,
     });
     await this.page.waitForLoadState("networkidle");

@@ -190,7 +190,6 @@ function transformValues(
 
   return {
     modelName,
-    imageProviderId: imageProvider.image_provider_id,
     provider: "azure",
     apiKey: values.api_key,
     apiBase,

@@ -16,6 +16,7 @@ from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from starlette.concurrency import run_in_threadpool
 from starlette.types import Lifespan
 
 from onyx import __version__
@@ -29,6 +30,7 @@ from onyx.auth.users import (
     verify_user_auth_secret,
 )
 from onyx.cache.interface import CacheBackendType
+from onyx.chat.execution import chat_turn_work
 from onyx.configs.app_configs import (
     API_SERVER_THREADPOOL_SIZE,
     APP_API_PREFIX,
@@ -52,6 +54,7 @@ from onyx.configs.app_configs import (
     USER_AUTH_SECRET,
     WEB_DOMAIN,
 )
+from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.async_sql_engine import (
     get_sqlalchemy_async_engine,
@@ -85,6 +88,8 @@ from onyx.server.documents.targeted_reindex import router as targeted_reindex_ro
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
+from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
+from onyx.server.features.build.sandbox_nodes import sandbox_node_router
 from onyx.server.features.build.static_preview import (
     public_router as static_preview_router,
 )
@@ -452,6 +457,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     try:
         yield
     finally:
+        try:
+            # Chat may outlive its HTTP reader and still need DB and tracing services.
+            if not await run_in_threadpool(
+                chat_turn_work.wait_idle, CHAT_EXECUTION_TIMEOUT_S
+            ):
+                logger.error("Chat turns did not drain before API shutdown")
+        except Exception:
+            logger.exception("Failed to drain chat turns on shutdown")
+
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.
         from onyx.tracing.setup import shutdown_tracing
@@ -587,6 +601,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, targeted_reindex_router)
     include_router_with_global_prefix_prepended(application, projects_router)
     include_router_with_global_prefix_prepended(application, public_build_router)
+    if SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER:
+        include_router_with_global_prefix_prepended(application, sandbox_node_router)
     include_router_with_global_prefix_prepended(application, static_preview_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, build_admin_router)

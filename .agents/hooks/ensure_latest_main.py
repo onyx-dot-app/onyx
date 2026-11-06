@@ -12,8 +12,10 @@ and tells the agent to rebase on it, but only when the branch has to be updated:
    days old.
 
 A branch that is merely a few commits behind, recently, gets no message; neither
-does one that already contains `origin/main`. Both agents add a `SessionStart`
-hook's stdout to the model's context.
+does one that already contains `origin/main`. The message goes out as JSON in
+`hookSpecificOutput.additionalContext`, which both agents add to the model's
+context. Plain text would not do: Codex parses stdout that starts with `[` or `{`
+as JSON and drops it with an error when that fails.
 
 On `UserPromptSubmit` it repeats the check for a long session, but fetches at most
 once an hour per checkout (the time of the last attempt is the mtime of
@@ -34,6 +36,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
+
+from agent_hook_io import give_feedback
 
 _REMOTE = "origin"
 _BRANCH = "main"
@@ -299,11 +304,12 @@ def _skipped() -> bool:
     return os.environ.get(_SKIP_ENV, "").strip().lower() in _TRUTHY
 
 
-def _read_payload() -> tuple[Path, bool]:
-    """The directory to check and whether this is a `UserPromptSubmit` event.
+def _read_payload() -> tuple[Path, str, dict[str, Any]]:
+    """The directory to check, the hook event, and the payload.
 
     The hook payload arrives as JSON on stdin; anything that is not an object, or
-    has fields of the wrong type, is ignored in favor of the current directory.
+    has fields of the wrong type, is ignored in favor of the current directory and
+    a `SessionStart` event.
     """
     decoded: object
     try:
@@ -314,14 +320,17 @@ def _read_payload() -> tuple[Path, bool]:
     cwd = payload.get("cwd")
     event = payload.get("hook_event_name")
     start = Path(cwd) if isinstance(cwd, str) and cwd else Path(os.getcwd())
-    return start, event == "UserPromptSubmit"
+    if not isinstance(event, str) or not event:
+        event = "SessionStart"
+    return start, event, payload
 
 
 def main() -> int:
     """Run the check for one hook event; always exits 0."""
     if _skipped():
         return 0
-    start, quiet = _read_payload()
+    start, event, payload = _read_payload()
+    quiet = event == "UserPromptSubmit"
     try:
         top = _git(start, "rev-parse", "--show-toplevel")
         if not top:
@@ -337,7 +346,7 @@ def main() -> int:
     except Exception:  # a session-start hook must never break the session
         return 0
     if report:
-        print(report)
+        give_feedback(payload, event, report)
     return 0
 
 

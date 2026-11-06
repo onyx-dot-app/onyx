@@ -22,7 +22,7 @@ import {
 } from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
 import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   processContent,
   useMarkdownComponents,
@@ -167,7 +167,8 @@ export const ResearchAgentRenderer: MessageRenderer<
   const markdownComponents = useMarkdownComponents(
     state,
     processedReportContent,
-    "text-text-03 font-main-ui-body"
+    "main-ui-body",
+    "text-03"
   );
 
   // Stable callbacks to avoid creating new functions on every render
@@ -195,9 +196,11 @@ export const ResearchAgentRenderer: MessageRenderer<
           status: null,
           content: (
             <div className="flex flex-col ps-(--timeline-common-text-padding)">
-              <Text as="p" text04 mainUiMuted className="mb-1">
-                {t("researchAgent.report.title")}
-              </Text>
+              <div className="mb-1">
+                <Text as="p" font="main-ui-muted" color="text-04">
+                  {t("researchAgent.report.title")}
+                </Text>
+              </div>
               <ExpandableTextDisplay
                 title={t("researchAgent.report.title")}
                 content={fullReportContent}
@@ -260,10 +263,10 @@ export const ResearchAgentRenderer: MessageRenderer<
           status: null,
           content: (
             <div className="flex flex-col ps-(--timeline-common-text-padding)">
-              <Text as="p" text04 mainUiMuted>
+              <Text as="p" font="main-ui-muted" color="text-04">
                 {t("researchAgent.task.title")}
               </Text>
-              <Text as="p" text03 mainUiMuted>
+              <Text as="p" font="main-ui-muted" color="text-03">
                 {researchTask}
               </Text>
             </div>
@@ -303,7 +306,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           isHover={isHover}
         >
           <div className="ps-(--timeline-common-text-padding)">
-            <Text as="p" text02 mainUiMuted>
+            <Text as="p" font="main-ui-muted" color="text-02">
               {researchTask}
             </Text>
           </div>

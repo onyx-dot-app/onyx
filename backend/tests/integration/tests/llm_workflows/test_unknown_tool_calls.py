@@ -2,7 +2,6 @@ from typing import Any
 from uuid import UUID
 
 from onyx.configs.constants import DocumentSource
-from onyx.prompts.tool_prompts import TOOL_CALL_FAILURE_PROMPT
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -18,6 +17,7 @@ from tests.integration.mock_services.mock_llm_server.models import (
 )
 
 _UNKNOWN_TOOL_NAME = "tool_that_does_not_exist"
+_UNAVAILABLE_TOOL_RESULT = f"Tool {_UNKNOWN_TOOL_NAME} is unavailable for this step."
 
 
 def _setup(admin_user: DATestUser) -> UUID:
@@ -96,23 +96,24 @@ def test_unknown_call_in_mixed_batch_gets_failure_response(
     assert response.full_message == "The answer is 42."
 
     packet_types = [packet["obj"]["type"] for packet in response.packets]
-    assert packet_types.count(StreamingType.SEARCH_TOOL_START.value) == 1
+    assert packet_types.count(StreamingType.SEARCH_TOOL_START.value) == 2
 
-    # The merged search call is listed once; the unknown call follows it.
+    # Batched retrieval preserves each model call and its matching result.
     _, answer_request = mock_llm.requests_in("chat")
     assert _assistant_tool_call_ids(answer_request) == [
-        ["call_search_alpha", "call_unknown_tool"]
+        ["call_search_alpha", "call_search_beta", "call_unknown_tool"]
     ]
     assert answer_request.tool_result_ids() == [
         "call_search_alpha",
+        "call_search_beta",
         "call_unknown_tool",
     ]
-    assert answer_request.tool_result("call_unknown_tool") == TOOL_CALL_FAILURE_PROMPT
-    assert answer_request.tool_result("call_search_beta") is None
+    assert answer_request.tool_result("call_unknown_tool") == _UNAVAILABLE_TOOL_RESULT
+    assert answer_request.tool_result("call_search_beta") is not None
 
     replayed = _replayed_packet_types(chat_session_id, admin_user)
-    assert replayed.count(StreamingType.SEARCH_TOOL_START.value) == 1
-    assert StreamingType.CUSTOM_TOOL_START.value not in replayed
+    assert replayed.count(StreamingType.SEARCH_TOOL_START.value) == 2
+    assert replayed.count(StreamingType.CUSTOM_TOOL_START.value) == 1
 
 
 def test_all_unknown_calls_get_failure_responses_and_retry(
@@ -150,8 +151,8 @@ def test_all_unknown_calls_get_failure_responses_and_retry(
     _, retry_request = mock_llm.requests_in("chat")
     assert _assistant_tool_call_ids(retry_request) == [["call_only_unknown"]]
     assert retry_request.tool_result_ids() == ["call_only_unknown"]
-    assert retry_request.tool_result("call_only_unknown") == TOOL_CALL_FAILURE_PROMPT
+    assert retry_request.tool_result("call_only_unknown") == _UNAVAILABLE_TOOL_RESULT
 
     replayed = _replayed_packet_types(chat_session_id, admin_user)
     assert StreamingType.SEARCH_TOOL_START.value not in replayed
-    assert StreamingType.CUSTOM_TOOL_START.value not in replayed
+    assert replayed.count(StreamingType.CUSTOM_TOOL_START.value) == 1

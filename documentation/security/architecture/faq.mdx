@@ -1,0 +1,67 @@
+---
+title: "FAQ"
+description: "General questions about Onyx security"
+icon: "comments-question"
+---
+
+### Are documents and queries sent to third-party LLMs?
+
+Yes. You choose the LLM providers, or connect Onyx to a self-hosted LLM so that nothing leaves your network.
+Onyx sends to the LLM only the context that the asking user is permitted to see.
+
+### Is any data used for model training?
+
+No. Onyx does not train or fine-tune any model on your data.
+
+### Where is my data stored?
+
+Data storage location depends on your deployment choice.
+See the [Data Storage page](/security/architecture/data_storage) for more information.
+
+### Does Onyx have access to my data?
+
+For self-hosted deployments, the Onyx team does not receive **any** of your team's data.
+Onyx sends anonymous usage telemetry (versions, health, counts, and timings, never document content, names,
+or credentials). Set `DISABLE_TELEMETRY=true` to turn it off.
+
+### Does the app support SSO (SAML, OIDC, SCIM)?
+
+Yes. Google, OIDC, and SAML login work in every edition.
+More than one enabled SSO provider at the same time requires the Business or Enterprise plan.
+SCIM provisioning requires the Enterprise plan. See [SSO Providers](/deployment/authentication/sso_providers)
+and [SCIM](/deployment/authentication/scim).
+
+### Can I keep chats out of the Admin Panel?
+
+Yes. Admins can hide query history and set a chat retention period under **Admin Panel > Chat Preferences**,
+and can allow Incognito Chats under **Admin Panel > Security & Hardening**.
+
+### Does Onyx produce audit logs?
+
+Yes. Onyx writes security events (logins, group and permission changes, credential access)
+as structured JSON logs that you can ship to any SIEM. See [Audit Logs](/admins/auditing/audit_logs).
+
+### What encryption standards does Onyx use?
+
+Onyx Cloud uses AES-256-GCM for data at rest and TLS 1.3 for data in transit. For self-hosted deployments,
+the admin who deploys the system configures these.
+
+### What is Onyx's security incident notification process?
+
+Onyx communicates security incidents to customers according to severity and impact,
+with detailed incident reports and remediation steps. For Community Edition users,
+Onyx shares incidents through its standard community channels (Slack, Discord, mailing list).
+
+### Does the vendor cache, index, or replicate internal documents?
+
+Yes. Onyx indexes connected documents inside your deployment.
+This index provides the context retrieval that the core user flows depend on.
+
+### How often are penetration tests performed? Are results available?
+
+Penetration tests are done yearly and results are shareable after execution of an NDA.
+Container scans run regularly and results are available.
+
+### What compliance standards does Onyx meet?
+
+Onyx is SOC 2 Type II and GDPR compliant.

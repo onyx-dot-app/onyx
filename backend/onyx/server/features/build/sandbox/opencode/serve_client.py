@@ -1,6 +1,5 @@
 """HTTP client for ``opencode serve`` — the only transport Onyx Craft
-uses to drive in-sandbox agent turns. Design lives in
-``docs/craft/features/opencode-serve-client.md``.
+uses to drive in-sandbox agent turns.
 
 Public surface:
 
@@ -8,6 +7,31 @@ Public surface:
 - :class:`ClientTimeouts`
 
 Sandbox-event types come from :mod:`onyx.server.features.build.sandbox.event_schema`.
+
+Event-stream rules. Each rule prevents a bug that this translator had:
+
+1. A turn has many steps. opencode sets ``time.completed`` on the
+   ``message.updated`` of EVERY step (tool-call step, answer step, ...). Only
+   ``session.idle`` or ``session.status`` with ``status.type == "idle"`` ends
+   the turn. ``message.updated`` only caches role, finish reason, and errors.
+2. ``session.status.status`` is a tagged union (``idle``/``busy``/``retry``).
+   Compare ``status["type"]``, not ``status``. Build test fixtures from
+   captured payloads, not hand-typed shapes.
+3. ``message.part.delta`` can arrive up to ~300 ms before the
+   ``message.updated`` that gives its role. ``_is_assistant_message``
+   REST-fetches an unknown message once (``get_message``) and caches the
+   result. Do not buffer deltas until metadata arrives: a stream drop would
+   lose them.
+4. ``/event`` does not support ``Last-Event-ID``. After a reconnect, the
+   cumulative ``part.text`` on the next ``message.part.updated`` fills the gap
+   (``_reconcile_part_text``).
+5. The stream is a hint; opencode's REST state is the truth. When the stream
+   is ambiguous, read REST state. Do not add compensating stream logic.
+
+``permission.asked`` for ``connect_app`` drives the connect-card flow. Every
+other category is auto-allowed with a WARN log: production ``opencode.json``
+allows all categories, so an ask means the config is missing a category.
+The HTTP Basic username is ``OPENCODE_SERVER_USERNAME`` (``"opencode"``).
 """
 
 from __future__ import annotations
@@ -976,8 +1000,7 @@ class OpencodeServeClient:
     sourcing the per-pod password, resolving the pod IP, and choosing the
     LLM model live in the sandbox manager. This client just speaks HTTP.
 
-    See ``docs/craft/features/opencode-serve-client.md`` for the full
-    design.
+    See the module docstring for the event-stream rules.
     """
 
     def __init__(

@@ -1,4 +1,6 @@
 import abc
+import builtins
+from collections.abc import Collection
 from enum import Enum
 
 from redis.exceptions import RedisError
@@ -68,7 +70,7 @@ class CacheLock(abc.ABC):
 
 
 class CacheBackend(abc.ABC):
-    """Thin abstraction over a key-value cache with TTL, locks, and blocking lists.
+    """Thin abstraction over a cache with TTL, locks, sets, and blocking lists.
 
     Covers the subset of Redis operations used outside of Celery. When
     CACHE_BACKEND=postgres, a PostgreSQL-backed implementation is used instead.
@@ -109,7 +111,41 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def delete_prefix(self, prefix: str) -> None:
+        """Delete tenant-local keys with this literal, nonempty prefix.
+
+        Concurrent writers can add keys during deletion. Callers must stop or
+        fence writers before using this operation for teardown.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def exists(self, key: str) -> bool:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        """Return existing keys without reading their values."""
+        raise NotImplementedError
+
+    # -- sets --------------------------------------------------------------
+
+    @abc.abstractmethod
+    def set_add(self, key: str, member: str | bytes) -> None:
+        """Add a member atomically; adding an existing member does nothing.
+
+        Use set_* methods for collections. Key/value and TTL methods do not
+        address their PostgreSQL member rows.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        """Read at most limit members without removing them. Ordering is unspecified."""
         raise NotImplementedError
 
     # -- TTL ---------------------------------------------------------------

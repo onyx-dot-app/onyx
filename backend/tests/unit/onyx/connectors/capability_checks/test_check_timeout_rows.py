@@ -144,6 +144,7 @@ def test_the_timeout_text_names_the_guard_s_time_limit(
 
 
 _SIGN_IN_CHECKS: dict[DocumentSource, tuple[str, set[str]]] = {
+    DocumentSource.ASANA: ("Asana", {"asana_token"}),
     DocumentSource.CONFLUENCE: (
         "Confluence",
         {"confluence_auth", "confluence_scoped_token_auth"},

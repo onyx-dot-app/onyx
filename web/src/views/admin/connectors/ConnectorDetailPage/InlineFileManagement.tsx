@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { useEffect, useState, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Pagination } from "@opal/components";
+import { Button, Pagination, Text } from "@opal/components";
 import {
   Table,
   TableBody,
@@ -23,7 +23,6 @@ import { toast } from "@opal/layouts";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { Modal } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
 import {
   SvgCheck,
   SvgEdit,
@@ -175,7 +174,7 @@ export default function InlineFileManagement({
 
   if (error) {
     return (
-      <Text as="p" className="text-error">
+      <Text as="p" color="status-error-05">
         {t("fileManagement.loadError", { message: error.message })}
       </Text>
     );
@@ -188,7 +187,7 @@ export default function InlineFileManagement({
     <>
       {/* Header with Edit/Save buttons */}
       <div className="flex justify-between items-center mb-4">
-        <Text as="p" mainUiBody>
+        <Text as="p" font="main-ui-body" color="text-05">
           {t("fileManagement.header.title", { count: totalFiles })}
         </Text>
         <div className="flex gap-2">
@@ -230,9 +229,16 @@ export default function InlineFileManagement({
 
       {/* File List */}
       {totalFilesOnServer === 0 && filesToAdd.length === 0 ? (
-        <Text as="p" mainUiMuted className="text-center py-8">
-          {t("fileManagement.empty.description")}
-        </Text>
+        <div className="py-8">
+          <Text
+            as="p"
+            font="main-ui-muted"
+            color="text-05"
+            textPosition="text-center"
+          >
+            {t("fileManagement.empty.description")}
+          </Text>
+        </div>
       ) : (
         <div className="border rounded-lg overflow-hidden mb-4">
           {/* Scrollable container with max height */}
@@ -330,7 +336,7 @@ export default function InlineFileManagement({
                     )}
                     <TableCell className="font-medium">
                       {file.name}
-                      <Text as="p" figureSmallValue>
+                      <Text as="p" font="figure-small-value" color="text-05">
                         {t("fileManagement.newBadge.label")}
                       </Text>
                     </TableCell>
@@ -392,43 +398,31 @@ export default function InlineFileManagement({
           <Modal.Body>
             {selectedFilesToRemove.size > 0 && (
               <div className="p-3 bg-red-50 dark:bg-red-900/10 rounded-md">
-                <Text
-                  as="p"
-                  mainUiBody
-                  className="font-semibold text-red-800 dark:text-red-200"
-                >
+                <Text as="p" font="main-ui-action" color="status-error-05">
                   {t("fileManagement.confirmModal.removeSummary", {
                     count: selectedFilesToRemove.size,
                   })}
                 </Text>
-                <Text
-                  as="p"
-                  secondaryBody
-                  className="text-red-700 dark:text-red-300 mt-1"
-                >
-                  {t("fileManagement.confirmModal.removeDetails")}
-                </Text>
+                <div className="mt-1">
+                  <Text as="p" font="secondary-body" color="status-error-05">
+                    {t("fileManagement.confirmModal.removeDetails")}
+                  </Text>
+                </div>
               </div>
             )}
 
             {filesToAdd.length > 0 && (
               <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-md">
-                <Text
-                  as="p"
-                  mainUiBody
-                  className="font-semibold text-green-800 dark:text-green-200"
-                >
+                <Text as="p" font="main-ui-action" color="status-success-05">
                   {t("fileManagement.confirmModal.addSummary", {
                     count: filesToAdd.length,
                   })}
                 </Text>
-                <Text
-                  as="p"
-                  secondaryBody
-                  className="text-green-700 dark:text-green-300 mt-1"
-                >
-                  {t("fileManagement.confirmModal.addDetails")}
-                </Text>
+                <div className="mt-1">
+                  <Text as="p" font="secondary-body" color="status-success-05">
+                    {t("fileManagement.confirmModal.addDetails")}
+                  </Text>
+                </div>
               </div>
             )}
           </Modal.Body>

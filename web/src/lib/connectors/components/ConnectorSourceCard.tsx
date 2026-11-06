@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useMemo } from "react";
 import { type SourceMetadata } from "@/lib/connectors/types/source";
 import type { Route } from "next";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
@@ -31,8 +31,8 @@ export default function ConnectorSourceCard({
   navigationUrl,
 }: ConnectorSourceCardProps) {
   const t = useTranslations("admin.addConnector");
-  const router = useRouter();
-  const navigate = () => router.push(navigationUrl);
+  const navigation = useNavigation();
+  const navigate = () => navigation.go(navigationUrl);
   const SourceIcon = sourceMetadata.icon;
   // The catalog shows its logos a step larger than `main-ui` content does:
   // 20px instead of 16px. The size is fixed here, so the 16px that Content
@@ -58,15 +58,16 @@ export default function ConnectorSourceCard({
       onClick={navigate}
     >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
+        // Logos read small at 16px; they fill the 20px line instead.
+        enlargedIcon
         title={sourceMetadata.displayName}
         description={description}
         // One line keeps the cards even; a cut title or description shows in
         // a tooltip.
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         gapping={0}
         rightChildren={

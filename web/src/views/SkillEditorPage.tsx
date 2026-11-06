@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
@@ -10,7 +11,6 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
-import { useRouter } from "next/navigation";
 import {
   Button,
   Card,
@@ -20,6 +20,7 @@ import {
   InputTypeIn,
   MessageCard,
   Tooltip,
+  Text,
 } from "@opal/components";
 import { SvgAlertTriangle, SvgBlocks, SvgShare, SvgTrash } from "@opal/icons";
 import {
@@ -27,9 +28,9 @@ import {
   InputHorizontal,
   InputVertical,
   SettingsLayouts,
+  Section,
   toast,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -52,7 +53,9 @@ import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
 import {
+  emptySkillSharingDraft,
   serializeSkillSharing,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
@@ -82,7 +85,7 @@ export default function SkillEditorPage({
   const isCreating = skillId === undefined;
   const hasAppContext = externalAppId !== undefined;
   const isCreatingForApp = isCreating && hasAppContext;
-  const router = useRouter();
+  const navigation = useNavigation();
   const { isAdmin, user } = useUser();
   const creationDraft = useMemo(
     () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
@@ -112,13 +115,11 @@ export default function SkillEditorPage({
   const [creationSharing, setCreationSharing] =
     useState<SkillSharingDraft | null>(null);
   const sharingDraft: SkillSharingDraft = {
-    owner: user ? { id: user.id, email: user.email } : null,
-    ownership_vacant: false,
-    user_permission: "OWNER",
-    user_shares: [],
-    group_shares: [],
+    ...emptySkillSharingDraft(
+      name || t("editor.header.createTitle"),
+      user ? { id: user.id, email: user.email } : null
+    ),
     public_permission: isCreatingForApp ? "VIEWER" : null,
-    installation_policy: "AVAILABLE",
     external_app: isCreatingForApp ? { name: externalAppName ?? "" } : null,
     ...creationSharing,
     name: name || t("editor.header.createTitle"),
@@ -206,7 +207,7 @@ export default function SkillEditorPage({
     !isSaving;
 
   function leaveEditor() {
-    router.push(
+    navigation.go(
       hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
     );
   }
@@ -261,10 +262,11 @@ export default function SkillEditorPage({
           console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(t("editor.toasts.created", { name: created.name }));
-        router.replace(
+        navigation.go(
           isCreatingForApp
             ? externalAppAdminUrl(externalAppId)
-            : "/craft/v1/skills"
+            : "/craft/v1/skills",
+          { replace: true }
         );
         return;
       }
@@ -490,7 +492,7 @@ export default function SkillEditorPage({
           }
           cancel={handleCancel}
           actions={[
-            ...(canManageSkill && (isCreating || skill)
+            ...(canManageSkill && !isCreating && skill
               ? [
                   <Button
                     key="sharing"
@@ -517,9 +519,9 @@ export default function SkillEditorPage({
 
         <SettingsLayouts.Body>
           {!isCreating && isLoading && (
-            <div className="flex min-h-40 items-center justify-center">
+            <Section height="auto" className="min-h-40">
               <IconLoader />
-            </div>
+            </Section>
           )}
 
           {!isCreating && error && !isLoading && (
@@ -550,10 +552,9 @@ export default function SkillEditorPage({
                     <Card border="solid" rounding={4} padding={2}>
                       <Section gap={2} alignItems="stretch" height="auto">
                         <Content
+                          font="main-content-emphasis"
                           title={t("editor.import.title")}
                           description={t("editor.import.description")}
-                          sizePreset="main-content"
-                          variant="section"
                         />
                         <SkillFilesPicker
                           disabled={filesUploadDisabled}
@@ -577,12 +578,22 @@ export default function SkillEditorPage({
                 </>
               )}
 
+              {isCreating && (
+                <SkillSharingSummary
+                  title={t("editor.creationAccess.title")}
+                  draft={sharingDraft}
+                  count={1}
+                  configureLabel={t("editor.management.sharing.edit.label")}
+                  disabled={fieldsLocked}
+                  onConfigure={() => setShareOpen(true)}
+                />
+              )}
+
               <Section alignItems="stretch">
                 <Content
+                  font="main-content-emphasis"
                   title={t("editor.details.title")}
                   description={t("editor.details.description")}
-                  sizePreset="main-content"
-                  variant="section"
                 />
                 <InputVertical
                   withLabel="name"
@@ -644,18 +655,23 @@ export default function SkillEditorPage({
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               <Section alignItems="stretch">
-                <div className="flex w-full items-start justify-between gap-2">
+                <Section
+                  height="auto"
+                  flexDirection="row"
+                  alignItems="start"
+                  justifyContent="between"
+                  gap={2}
+                >
                   <Content
+                    font="main-content-emphasis"
                     title={t("editor.instructions.title")}
                     description={t("editor.instructions.description")}
-                    sizePreset="main-content"
-                    variant="section"
                   />
                   <InstructionsDisplayModeToggle
                     value={instructionsDisplayMode}
                     onChange={setInstructionsDisplayMode}
                   />
-                </div>
+                </Section>
 
                 <Card border="solid" rounding={4} padding={2}>
                   {instructionsDisplayMode === "raw" ? (
@@ -685,10 +701,9 @@ export default function SkillEditorPage({
 
               <Section gap={2} alignItems="stretch" height="auto">
                 <Content
+                  font="main-content-emphasis"
                   title={t("editor.files.title")}
                   description={t("editor.files.description")}
-                  sizePreset="main-content"
-                  variant="section"
                 />
                 <Card border="solid" rounding={4}>
                   <SkillFileTree

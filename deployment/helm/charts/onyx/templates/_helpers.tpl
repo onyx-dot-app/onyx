@@ -85,6 +85,27 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+"true" when the api-server runs as its own service account with read access to
+pods, pod logs, and events for the admin log export. dig: a --reuse-values
+upgrade from a release without logExport.kubernetes keeps it off.
+*/}}
+{{- define "onyx.logExportKubernetesEnabled" -}}
+{{- if eq (toString (dig "kubernetes" "enabled" false (.Values.logExport | default dict))) "true" -}}true{{- end -}}
+{{- end }}
+
+{{/*
+The api-server's service account: a dedicated one when the log export reads the
+Kubernetes API, so no other Onyx pod gets that access.
+*/}}
+{{- define "onyx.apiServerServiceAccountName" -}}
+{{- if eq (include "onyx.logExportKubernetesEnabled" .) "true" -}}
+{{- include "onyx.resourceName" (list . "api-server") -}}
+{{- else -}}
+{{- include "onyx.serviceAccountName" . -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Render a container securityContext. Kubernetes rejects
 allowPrivilegeEscalation=false alongside privileged or CAP_SYS_ADMIN, so the
 default is dropped when an override asks for either.

@@ -4,8 +4,10 @@ Emits one JSON line per security-relevant action (auth, admin-config /
 access-control change, credential access) on the ``onyx.audit`` logger tree.
 Field names and the action taxonomy are shaped toward OCSF so the stream maps
 onto OCSF event classes (Authentication / Account Change / User Access
-Management / Group Management / API Activity) and drops into any SIEM. See
-``docs/AUDIT_LOGGING.md`` for the schema + export path.
+Management / Group Management / API Activity) and drops into any SIEM. The
+customer schema and export guide is
+``documentation/admins/auditing/audit_logs.mdx``; update it when the schema or
+the ``AuditAction`` taxonomy changes. ``AuditAction`` values are append-only.
 
 Invariants (from the ``credential_audit`` seed): never raise into the caller
 (emission sits on hot paths), never log a secret, always tenant-tag, and dedup

@@ -4,13 +4,14 @@ from uuid import uuid4
 import pytest
 from fastapi import Request
 
-from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import PromptMetadata
 from onyx.configs.constants import MessageType
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import ChatMessage, LLMProvider, ModelConfiguration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import LLM, LLMConfig
+from onyx.llm.models import AssistantMessage, TextContent
 from onyx.secondary_llm_flows.chat_session_naming import (
     DEFAULT_CHAT_SESSION_NAME,
     get_fallback_chat_session_name,
@@ -173,11 +174,9 @@ def test_configured_naming_model_names_chat_without_session_model(
     }
     generate.assert_called_once_with(
         chat_history=[
-            ChatMessageSimple(
-                message="Charge for tokens used",
-                message_type=MessageType.ASSISTANT,
-                token_count=2000,
-                image_files=None,
+            AssistantMessage(
+                content=[TextContent(text="Charge for tokens used")],
+                metadata=PromptMetadata(token_count=2000),
             )
         ],
         llm=naming_llm,
@@ -219,6 +218,9 @@ def test_unset_utilities_check_session_provider_cost_once(
             "onyx.server.query_and_chat.chat_backend.check_llm_cost_limit_for_provider"
         ) as session_cost,
         patch(
+            "onyx.server.query_and_chat.chat_backend.check_model_spend_limits"
+        ) as session_model_limits,
+        patch(
             "onyx.server.query_and_chat.chat_backend.get_llm_token_counter",
             return_value=len,
         ),
@@ -248,6 +250,9 @@ def test_unset_utilities_check_session_provider_cost_once(
         db_session=session_factory.return_value.__enter__.return_value,
         tenant_id="naming-tenant",
         llm_provider_api_key="session-key",
+    )
+    session_model_limits.assert_called_once_with(
+        user, naming_llm.config.model_configuration_id
     )
     utility_cost.assert_not_called()
 

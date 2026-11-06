@@ -60,6 +60,24 @@ def test_merge_litellm_skips_non_gap_fill_chat_models() -> None:
     assert all(not section["models"] for section in providers.values())
 
 
+def test_merge_litellm_marks_past_deprecation_date_non_chat_models() -> None:
+    providers = _providers()
+    image = {"litellm_provider": "openai", "mode": "image_generation"}
+    merge_litellm(
+        providers,
+        {
+            "img-retired": {**image, "deprecation_date": "2020-01-01"},
+            "img-retiring": {**image, "deprecation_date": "2999-01-01"},
+            "img-live": image,
+        },
+    )
+
+    models = providers["openai"]["models"]
+    assert models["img-retired"]["status"] == "deprecated"
+    assert "status" not in models["img-retiring"]
+    assert "status" not in models["img-live"]
+
+
 def test_merge_litellm_keeps_existing_rates() -> None:
     providers = _providers()
     providers["anthropic"]["models"]["claude-x"] = {

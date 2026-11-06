@@ -35,6 +35,8 @@ from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 
 # Rows per read.
 ROW_LIMIT: int = 1000
+# Error text read for classification. Only its category leaves the deployment.
+ERROR_SAMPLE_CHARS: int = 2048
 # A slow read stops here, so telemetry never adds long queries to a busy database.
 _STATEMENT_TIMEOUT: str = "1500ms"
 _RUNNING_INDEXING: tuple[IndexingStatus, ...] = (
@@ -81,6 +83,15 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
             ConnectorCredentialPair.access_type.in_(
                 (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
             ).label("permission_sync_enabled"),
+            ConnectorCredentialPair.last_time_perm_sync.label(
+                "last_permission_sync_at"
+            ),
+            ConnectorCredentialPair.last_time_external_group_sync.label(
+                "last_group_sync_at"
+            ),
+            ConnectorCredentialPair.perm_sync_pending_since.label(
+                "permission_sync_pending_since"
+            ),
             Connector.connector_specific_config.label("config"),
         )
         .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)
@@ -144,7 +155,7 @@ def attempt_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
 
     def latest_error(column: Any) -> Any:
         return (
-            select(func.left(column, 2048))
+            select(func.left(column, ERROR_SAMPLE_CHARS))
             .where(unresolved)
             .order_by(IndexAttemptError.id.desc())
             .limit(1)
@@ -164,9 +175,10 @@ def attempt_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             IndexAttempt.completed_batches,
             IndexAttempt.time_started.label("started_at"),
             IndexAttempt.time_updated,
+            IndexAttempt.end_time.label("ended_at"),
             IndexAttempt.last_progress_time.label("last_progress_at"),
             IndexAttempt.last_heartbeat_time.label("last_heartbeat_at"),
-            func.left(IndexAttempt.error_msg, 2048).label("error_sample"),
+            func.left(IndexAttempt.error_msg, ERROR_SAMPLE_CHARS).label("error_sample"),
             latest_error(IndexAttemptError.error_type).label("item_error_type"),
             latest_error(IndexAttemptError.failure_message).label("item_error_sample"),
             select(func.count())
@@ -235,6 +247,7 @@ def _job(
     groups_processed: int | None = 0,
     memberships_synced: int | None = 0,
     error_count: int | None = 0,
+    error_sample: str | None = None,
     last_progress_at: datetime | None = None,
     last_heartbeat_at: datetime | None = None,
 ) -> dict[str, Any]:
@@ -252,6 +265,7 @@ def _job(
         "groups_processed": groups_processed or 0,
         "memberships_synced": memberships_synced or 0,
         "error_count": error_count or 0,
+        "error_sample": error_sample,
         "last_progress_at": last_progress_at,
         "last_heartbeat_at": last_heartbeat_at,
     }
@@ -308,6 +322,9 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             DocPermissionSyncAttempt.status,
             DocPermissionSyncAttempt.total_docs_synced,
             DocPermissionSyncAttempt.docs_with_permission_errors,
+            func.left(DocPermissionSyncAttempt.error_message, ERROR_SAMPLE_CHARS).label(
+                "error_sample"
+            ),
             DocPermissionSyncAttempt.time_created,
             DocPermissionSyncAttempt.time_started,
             DocPermissionSyncAttempt.time_finished,
@@ -338,6 +355,7 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             revision_at=attempt.revision_at,
             docs_processed=attempt.total_docs_synced,
             error_count=attempt.docs_with_permission_errors,
+            error_sample=attempt.error_sample,
             last_progress_at=attempt.last_progress_at,
             last_heartbeat_at=attempt.heartbeat_at,
         )
@@ -357,9 +375,9 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             ExternalGroupPermissionSyncAttempt.total_users_processed,
             ExternalGroupPermissionSyncAttempt.total_groups_processed,
             ExternalGroupPermissionSyncAttempt.total_group_memberships_synced,
-            ExternalGroupPermissionSyncAttempt.error_message.is_not(None).label(
-                "has_error"
-            ),
+            func.left(
+                ExternalGroupPermissionSyncAttempt.error_message, ERROR_SAMPLE_CHARS
+            ).label("error_sample"),
             ExternalGroupPermissionSyncAttempt.time_created,
             ExternalGroupPermissionSyncAttempt.time_started,
             ExternalGroupPermissionSyncAttempt.time_finished,
@@ -393,7 +411,7 @@ def job_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
             users_processed=group.total_users_processed,
             groups_processed=group.total_groups_processed,
             memberships_synced=group.total_group_memberships_synced,
-            error_count=int(group.has_error),
+            error_sample=group.error_sample,
             last_progress_at=group.last_progress_at,
             last_heartbeat_at=group.heartbeat_at,
         )
@@ -491,6 +509,16 @@ def email_domain_rows(db_session: Session) -> list[dict[str, Any]]:
         .limit(ROW_LIMIT)
     )
     return [dict(row) for row in db_session.execute(statement).mappings()]
+
+
+def standard_user_count(db_session: Session) -> int:
+    """How many standard accounts exist. Never who they are."""
+    statement = (
+        select(func.count())
+        .select_from(User)
+        .where(User.account_type == AccountType.STANDARD)
+    )
+    return db_session.execute(statement).scalar_one()
 
 
 def license_row(db_session: Session) -> dict[str, Any]:

@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "커밋"
+      },
+      "commitDate": {
+        "label": "커밋 날짜"
+      },
+      "instanceUrl": {
+        "label": "인스턴스 URL"
+      },
+      "label": "정보",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "사용할 수 없음",
+      "version": {
+        "label": "버전"
+      }
+    },
     "accountFallback": {
       "label": "계정"
     },
@@ -154,7 +173,7 @@
         "title": "액세스 제어",
         "description": "이 MCP를 사용할 수 있는 사용자를 선택하세요.",
         "public": {
-          "label": "공개",
+          "label": "조직",
           "description": "조직의 누구나 이 MCP를 사용할 수 있습니다"
         },
         "groups": {
@@ -167,7 +186,6 @@
           "description": "관리하는 그룹을 하나 이상 선택하세요."
         },
         "retainedUsers": "{count, plural, other {사용자 #명과도 직접 공유됩니다.}}",
-        "planTag": "Business",
         "planNote": "그룹 액세스에는 Business 요금제가 필요합니다."
       },
       "defaultChat": {
@@ -412,8 +430,7 @@
       },
       "cimd": {
         "label": "클라이언트 메타데이터 문서 사용",
-        "description": "켜면 공급자가 공용 인터넷을 통해 {appName}의 클라이언트 메타데이터 문서를 가져옵니다. 이 {appName} 인스턴스가 비공개이면 끄세요. 그러면 {appName}은(는) 자동 클라이언트 등록을 사용합니다.",
-        "turnOff": "클라이언트 메타데이터 문서 끄기"
+        "description": "켜면 공급자가 공용 인터넷을 통해 {appName}의 클라이언트 메타데이터 문서를 가져옵니다. 이 {appName} 인스턴스가 비공개이면 끄세요. 그러면 {appName}은(는) 자동 클라이언트 등록을 사용합니다."
       },
       "discovery": {
         "checking": "자동 설정 확인 중…",
@@ -1115,18 +1132,6 @@
         "openapi": "OpenAPI 플러그인 추가"
       },
       "catalog": {
-        "slack": {
-          "summary": "대화를 검색하고 메시지를 보냅니다",
-          "description": "대화를 검색하고 메시지를 보냅니다. 등록된 Slack 앱이 필요합니다."
-        },
-        "hubspot": {
-          "summary": "연락처와 거래를 관리합니다",
-          "description": "연락처와 거래를 관리합니다. HubSpot MCP 커넥터가 필요합니다."
-        },
-        "asana": {
-          "summary": "작업과 프로젝트를 관리합니다",
-          "description": "작업과 프로젝트를 관리합니다. 등록된 OAuth 클라이언트가 필요합니다."
-        },
         "linear": {
           "summary": "이슈, 프로젝트, 팀을 관리합니다",
           "description": "이슈, 프로젝트, 팀을 관리합니다."
@@ -1218,6 +1223,10 @@
       "blocked": "아웃바운드 보안 설정에 의해 차단된 URL입니다.",
       "publicDetected": "인증이 필요하지 않습니다",
       "oauthDetected": "OAuth 감지됨",
+      "clientMetadata": "클라이언트 메타데이터 문서",
+      "clientMetadataSupported": "지원됨",
+      "clientMetadataUnsupported": "지원되지 않음",
+      "clientMetadataUnknown": "확인되지 않음",
       "manualRequired": "인증 방법 직접 선택",
       "chooseAuthentication": "이 서버의 인증 방법을 확인할 수 없습니다. 아래에서 방법을 선택하세요.",
       "connect": "연결",
@@ -1254,7 +1263,7 @@
       "decisionModel": {
         "title": "판단 모델",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "향후 분류 및 검토 기능에 사용할 모델을 선택하세요. Onyx는 아직 이 모델을 사용하지 않습니다.",
+        "description": "내부 검색은 이 모델로 결과의 순위를 매기고 추가할 컨텍스트의 양을 정합니다. 채팅 환경설정에서도 설정할 수 있습니다.",
         "clear": "해제",
         "notConfigured": "설정되지 않음",
         "saveFailed": "판단 모델을 업데이트하지 못했습니다"
@@ -1444,6 +1453,9 @@
         },
         "s3": {
           "description": "AWS 스토리지 버킷"
+        },
+        "azureDatalake": {
+          "description": "Azure Data Lake Storage 컨테이너의 파일"
         },
         "r2": {
           "description": "클라우드 스토리지 버킷"
@@ -1646,7 +1658,7 @@
             "label": "비공개"
           },
           "public": {
-            "label": "공개"
+            "label": "조직"
           },
           "shared": {
             "label": "공유됨"
@@ -1920,7 +1932,7 @@
             "text": "이 배포에서 액세스 제어가 제거됩니다. **재인덱싱이 시작되어** 검색 결과에 변경 사항이 반영되며, 인덱스가 크면 시간이 걸릴 수 있습니다."
           },
           "madePublic": {
-            "text": "**공개:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
+            "text": "**조직에 개방:** 모든 커넥터와 사용자 그룹에 공유된 에이전트, 문서 세트, LLM 제공자, MCP 서버, 스킬"
           },
           "reset": {
             "text": "**기본값으로 재설정:** 사용자 지정 브랜딩과 채팅 보존 정책"
@@ -2222,9 +2234,10 @@
         "description": "세션 제목을 생성합니다. 빠르고 저렴한 모델이 적합합니다.",
         "title": "채팅 이름 지정 모델"
       },
-      "searchSelectionModel": {
-        "description": "검색된 문서를 선택하고 확인합니다. 빠르고 저렴한 모델은 검색 비용을 줄일 수 있지만 답변 품질에 영향을 줄 수 있습니다.",
-        "title": "검색 문서 선택 모델"
+      "searchDecisionModel": {
+        "description": "검색된 문서를 선택하고 추가할 컨텍스트의 양을 결정합니다. 판단 모델은 한 번의 호출로 순위를 매깁니다. 언어 모델은 이전처럼 선택합니다.",
+        "title": "검색 판단 모델",
+        "decisionSection": "판단 모델"
       },
       "taskModels": {
         "loadFailed": "작업 모델을 불러오지 못했습니다",
@@ -2405,7 +2418,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "채팅 이름 생성 모델을 업데이트하지 못했습니다",
         "providerResolveFailed": "제공자를 확인할 수 없습니다",
-        "searchSelectionUpdateFailed": "검색 선택 모델을 업데이트하지 못했습니다",
+        "searchDecisionUpdateFailed": "검색 판단 모델을 업데이트하지 못했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "systemPromptUpdateFailed": "시스템 프롬프트를 업데이트하지 못했습니다",
         "toolsUpdateFailed": "도구를 업데이트하지 못했습니다",
@@ -2635,7 +2648,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "삭제"
+          "label": "커넥터 삭제",
+          "description": "인덱싱된 모든 문서를 영구적으로 제거합니다."
         },
         "reIndex": {
           "tooltip": {
@@ -2674,7 +2688,7 @@
         },
         "syncPermissions": {
           "label": "권한 동기화",
-          "description": "각 문서를 읽을 수 있는 사용자를 지금 소스에서 가져옵니다.",
+          "description": "소스에서 문서 권한을 가져옵니다.",
           "tooltip": {
             "syncing": "권한 동기화가 이미 대기 중이거나 실행 중입니다"
           }
@@ -2801,20 +2815,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "분당 {speed}개 문서",
-        "indexingSpeedTooltip": "커넥터 생성 이후 분당 인덱싱된 문서 수",
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },
+        "deletionStarted": {
+          "value": "시작 {when}"
+        },
         "documents": {
           "totalLabel": "전체 인덱싱 완료 문서",
-          "recentLabel": "최근 처리된 문서",
-          "syncedPermissionsLabel": "동기화된 권한",
-          "syncedMembershipsLabel": "동기화된 그룹 멤버십"
+          "recentLabel": "최근에 처리된 문서",
+          "indexedLabel": "인덱싱된 문서"
         },
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
           "tooltip": "{count, plural, one {문서 #개} other {문서 #개}}",
+          "lineTooltip": "{failures, plural, one {실패 #건} other {실패 #건}}, {errors, plural, one {오류 #건} other {오류 #건}}",
+          "barLabel": "{count, plural, one {문서 #개} other {문서 #개}}, {range}",
           "loadError": "차트를 불러올 수 없습니다.",
           "rangeFilter": "차트의 이 구간에 생성된 실행"
         },
@@ -2830,13 +2846,33 @@
         "title": "인덱싱 상태",
         "sync": {
           "permissionsTitle": "권한 동기화 상태",
-          "groupsTitle": "그룹 멤버십 동기화 상태",
           "last": "마지막 동기화 {when}",
           "never": "아직 동기화되지 않음",
-          "neverTooltip": "인덱싱된 문서는 권한이 동기화될 때까지 검색되지 않을 수 있습니다.",
-          "waitingForFirstIndex": "첫 인덱싱 대기 중"
+          "neverTooltip": "인덱싱된 문서는 권한이 동기화될 때까지 검색되지 않습니다.",
+          "waitingForFirstIndex": "첫 인덱싱 대기 중",
+          "docsLabel": "권한이 동기화된 문서",
+          "groupsLabel": "그룹 멤버십"
         },
-        "accessTitle": "커넥터 문서 액세스"
+        "actions": {
+          "showActivities": "활동 표시",
+          "hideActivities": "활동 숨기기",
+          "viewDetails": "세부 정보 보기",
+          "hideDetails": "세부 정보 숨기기",
+          "viewIndexingRun": "인덱싱 실행 보기",
+          "viewPruningRun": "정리 실행 보기",
+          "viewChecksRun": "검사 실행 보기"
+        },
+        "types": {
+          "count": "{count, plural, other {문서 유형}}",
+          "header": "문서 유형",
+          "indexed": "인덱싱됨",
+          "size": "크기",
+          "other": "기타",
+          "countWithSize": "{count} ({size})",
+          "bytes": "바이트",
+          "loadError": "문서 유형을 불러오지 못했습니다.",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "전체 재인덱싱을 시작했습니다",
@@ -2966,6 +3002,7 @@
           "all": "모든 유형",
           "indexing": "문서 인덱스",
           "backfill": "문서 백필",
+          "retry": "문서 인덱스 - 재시도",
           "doc_permission_sync": "권한 동기화",
           "group_sync": "그룹 멤버십 동기화",
           "pruning": "문서 정리",
@@ -2973,9 +3010,10 @@
         },
         "detail": {
           "queued": "대기 중",
+          "starting": "동기화 시작 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({duration})",
+          "runtime": "실행 시간 {duration}",
           "rateFinished": "분당 {rate}개 문서 ({duration})",
           "membershipRate": "{rate} 멤버십/분",
           "membershipRateFinished": "{rate} 멤버십/분 ({duration})"
@@ -2984,6 +3022,7 @@
           "stages": "단계별 지표 보기",
           "cancel": "취소",
           "logs": "로그 보기",
+          "noLogs": "기록된 로그 없음",
           "checks": "검사 결과 보기"
         },
         "warnings": {
@@ -3018,16 +3057,12 @@
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
-        "search": {
-          "placeholder": "실행 오류 검색…"
-        },
         "window": {
           "label": "기간",
           "all": "전체 기간",
           "h1": "최근 1시간",
           "h24": "최근 24시간",
-          "d7": "최근 7일",
-          "d30": "최근 30일"
+          "d7": "최근 7일"
         },
         "statusGroups": {
           "label": "상태",
@@ -3038,14 +3073,13 @@
           "canceled": "취소됨"
         },
         "loadError": {
-          "title": "실행 목록을 불러오지 못했습니다."
+          "title": "실행 목록을 불러오지 못했습니다.",
+          "retry": "다시 시도"
         },
         "empty": {
           "title": "최근 인덱싱 실행이 없습니다",
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
           "pastRuns": "{count, plural, other {지난 실행 #개}}",
-          "view": "보기",
-          "viewAria": "{count, plural, other {지난 실행 #개 보기}}",
           "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
         },
         "units": "{count, plural, other {실행}}",
@@ -3080,15 +3114,24 @@
           "all": "전체 수준",
           "failures": "실패",
           "errors": "오류",
-          "other": "기타",
+          "running": "실행 중",
+          "success": "성공",
+          "canceled": "취소됨",
           "resolved": "해결됨",
-          "toggle": "필터"
+          "connectors": "커넥터",
+          "connectorsLoading": "커넥터 불러오는 중…",
+          "connectorsLoadError": "커넥터를 불러올 수 없습니다.",
+          "connectorsRetry": "다시 시도",
+          "toggleShow": "필터 표시",
+          "toggleHide": "필터 숨기기"
         },
         "groups": {
           "failures": "{count, plural, =0 {실패} other {실패 #개}}",
           "errors": "{count, plural, =0 {오류} other {오류 #개}}",
-          "other": "기타",
-          "resolved": "{count, plural, other {해결됨 #개}}"
+          "running": "실행 중 {count, number}개",
+          "resolved": "해결됨",
+          "success": "성공",
+          "canceled": "취소됨"
         },
         "title": {
           "indexing": {
@@ -3099,9 +3142,8 @@
             "errors": "오류와 함께 인덱싱 완료.",
             "resolved": "인덱싱 오류 해결됨.",
             "succeeded": "인덱싱이 성공적으로 완료됨.",
-            "queued": "인덱싱 대기 중.",
             "inProgress": "인덱싱 진행 중.",
-            "canceled": "인덱싱 중지됨."
+            "canceled": "인덱싱 취소됨."
           },
           "doc_permission_sync": {
             "failed": "권한 동기화 실패.",
@@ -3111,9 +3153,8 @@
             "errors": "오류와 함께 권한 동기화됨.",
             "resolved": "권한 동기화 오류 해결됨.",
             "succeeded": "권한 동기화가 성공적으로 완료됨.",
-            "queued": "권한 동기화 대기 중.",
             "inProgress": "권한 동기화 중.",
-            "canceled": "권한 동기화 중지됨."
+            "canceled": "권한 동기화 취소됨."
           },
           "group_sync": {
             "failed": "그룹 멤버십 동기화 실패.",
@@ -3123,9 +3164,8 @@
             "errors": "오류와 함께 그룹 멤버십 동기화됨.",
             "resolved": "그룹 멤버십 동기화 오류 해결됨.",
             "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨.",
-            "queued": "그룹 멤버십 동기화 대기 중.",
             "inProgress": "그룹 멤버십 동기화 중.",
-            "canceled": "그룹 동기화 중지됨."
+            "canceled": "그룹 동기화 취소됨."
           },
           "pruning": {
             "failed": "정리 실패.",
@@ -3135,9 +3175,8 @@
             "errors": "오류와 함께 정리 완료됨.",
             "resolved": "정리 오류 해결됨.",
             "succeeded": "정리가 성공적으로 완료됨.",
-            "queued": "정리 대기 중.",
             "inProgress": "정리 진행 중.",
-            "canceled": "정리 중지됨."
+            "canceled": "정리 취소됨."
           },
           "checks": {
             "failed": "커넥터 검사 실패.",
@@ -3147,9 +3186,8 @@
             "errors": "오류와 함께 커넥터 검사 완료됨.",
             "resolved": "커넥터 검사 오류 해결됨.",
             "succeeded": "커넥터 검사 통과.",
-            "queued": "커넥터 검사 대기 중.",
             "inProgress": "커넥터 검사 진행 중.",
-            "canceled": "커넥터 검사 중지됨."
+            "canceled": "커넥터 검사 취소됨."
           }
         },
         "description": {
@@ -3164,22 +3202,18 @@
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
           "indexingItems": "{count, plural, other {항목 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {문서 #개의 권한 동기화 실패}}",
-          "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
+          "users": "{count, plural, one {사용자 #명 동기화 실패} other {사용자 #명 동기화 실패}}",
+          "groups": "{count, plural, one {그룹 #개 동기화 실패} other {그룹 #개 동기화 실패}}",
           "resolved": "해결됨",
-          "resolvedDocs": "{count, plural, other {항목 #개 해결됨}}",
           "superseded": "대체됨"
         },
         "more": "더 보기",
         "empty": {
           "title": "최근 활동이 없습니다",
-          "resolved": "해결된 실행이 없습니다",
-          "filtered": "이 검색과 일치하는 항목이 없습니다.",
-          "failures": "실패가 없습니다",
-          "errors": "오류가 없습니다",
-          "other": "다른 실행이 없습니다"
+          "past": "이전 활동",
+          "filtered": "이 검색과 일치하는 항목이 없습니다."
         },
         "loadError": {
           "title": "활동을 불러올 수 없습니다."
@@ -3187,19 +3221,32 @@
         "docs": {
           "title": "실패한 항목",
           "search": {
-            "placeholder": "항목 검색…"
+            "placeholder": "문서 검색…"
           },
-          "resolveAll": "모두 다시 시도",
-          "resolveAllTooltip": "이 실행에서 실패한 모든 문서를 다시 색인",
-          "resolveAllUnsupported": "이 커넥터는 개별 문서를 다시 색인할 수 없습니다. 다시 시도하려면 커넥터를 다시 색인하세요.",
-          "resolveOne": "이 문서 다시 시도",
-          "retry": "{count, plural, other {문서 #개 다시 시도}}",
+          "resolveAll": "모든 문서 재시도",
+          "resolveOne": "문서 재시도",
+          "resolveWithoutRetry": "재시도 없이 해결",
           "more": "더 보기",
           "less": "접기",
           "unknownDocument": "알 수 없는 문서",
-          "empty": "미해결 오류가 없습니다",
+          "empty": "실패한 문서가 없습니다",
           "loadError": "실패한 항목을 불러올 수 없습니다.",
-          "open": "문서 열기"
+          "open": "문서 열기",
+          "resolvedGroup": "해결된 오류",
+          "resolvedWithoutRetry": "재시도 없이 해결됨",
+          "resolvedByLaterRun": "이후 실행에서 해결됨"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "실패한 사용자",
+            "search": "사용자 검색…",
+            "empty": "실패한 사용자가 없습니다"
+          },
+          "groups": {
+            "title": "실패한 그룹",
+            "search": "그룹 검색…",
+            "empty": "실패한 그룹이 없습니다"
+          }
         },
         "trace": {
           "header": "스택 트레이스 • 실행 ID: {id}",
@@ -3207,17 +3254,18 @@
           "runId": "실행 ID: {id}"
         },
         "actions": {
-          "resolve": "해결"
+          "resolve": "해결",
+          "resolveWithoutRetry": "재시도 없이 해결",
+          "retryDocs": "문서 재시도"
         },
         "resolveAll": {
-          "button": "표시된 항목 모두 해결",
-          "title": "표시된 실행을 모두 해결할까요?",
-          "description": "현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
-          "fleetDescription": "관리 권한이 있는 커넥터에서 현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
+          "button": "모두 해결",
+          "title": "표시된 활동 모두 해결",
+          "body": "{count, plural, other {현재 필터와 일치하는 활동 #개({failures}, {errors})를 해결합니다. Onyx는 실패한 항목을 재시도하지 않습니다. 활동은 상태를 유지한 채 해결됨으로 이동합니다.}}",
+          "body2": "아직 실행 중인 실행은 새 오류를 보고할 수 있으며, 이 오류는 다시 열린 상태로 표시됩니다. 해결된 문서는 나중에 실패한 문서 목록에서 재시도할 수 있습니다.",
+          "failures": "{count, plural, =0 {실패 없음} other {실패 #개}}",
+          "errors": "{count, plural, =0 {오류가 있는 실행 없음} other {오류가 있는 실행 #개}}",
           "confirm": "모두 해결"
-        },
-        "resolved": {
-          "label": "해결됨"
         }
       },
       "stageDetails": {
@@ -3229,10 +3277,22 @@
         "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
+        "noDocs": "인덱싱을 완료한 문서가 없습니다",
+        "laterCanceled": "이후 단계가 취소됨",
+        "retry": "다시 시도",
         "uneven": {
           "tooltip": "이 단계의 배치 시간 편차가 큽니다"
         },
         "close": "단계 세부 정보 닫기"
+      },
+      "tabs": {
+        "configurations": "커넥터 구성",
+        "indexing": "인덱싱",
+        "indexingDisabled": "첫 실행이 시작되면 사용할 수 있습니다."
+      },
+      "indexingTab": {
+        "chartHeading": "문서 인덱싱",
+        "runsHeading": "인덱싱 실행"
       }
     },
     "connectorTitle": {
@@ -3685,7 +3745,7 @@
         "documentAccess": {
           "description": "이 커넥터가 색인한 문서에 액세스할 수 있는 사용자를 관리합니다.",
           "everyone": {
-            "description": "이 커넥터가 색인한 문서는 조직의 모든 사용자에게 공개됩니다.",
+            "description": "이 커넥터로 인덱싱된 문서는 조직의 모든 구성원이 사용할 수 있습니다.",
             "title": "조직의 모든 사용자"
           },
           "specificGroups": {
@@ -4593,6 +4653,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Azure Data Lake Storage 커넥터 구성",
+          "fields": {
+            "account_name": {
+              "label": "스토리지 계정 이름",
+              "description": "스토리지 계정의 이름(예: contosodata). 계정에 계층 구조 네임스페이스가 있어야 합니다."
+            },
+            "container_name": {
+              "label": "컨테이너 이름",
+              "description": "인덱싱할 컨테이너(파일 시스템)입니다."
+            },
+            "path_prefix": {
+              "label": "경로 접두사",
+              "description": "컨테이너의 디렉터리(예: reports/2026). 전체 컨테이너를 인덱싱하려면 비워 두세요."
+            }
+          }
+        },
         "r2": {
           "description": "R2 커넥터 구성",
           "fields": {
@@ -5195,6 +5272,8 @@
         "integrationToken": "{source} 통합 토큰",
         "accessKey": "{source} 액세스 키",
         "accessKeySecret": "{source} 액세스 키 시크릿",
+        "storageAccountName": "스토리지 계정 이름",
+        "accountKey": "{source} 계정 키",
         "key": "{source} 키",
         "secret": "{source} 시크릿",
         "roleArn": "{source} 역할 ARN",
@@ -5216,6 +5295,7 @@
         "jiraUserEmail": "Jira Cloud에 필요합니다.",
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "youtrackToken": "인덱싱할 모든 프로젝트를 읽을 수 있는 YouTrack 사용자의 영구 토큰입니다. YouTrack 프로필의 계정 보안에서 만드세요.",
+        "azureDatalakeAccountKey": "Azure Portal에서 스토리지 계정을 열고 보안 + 네트워킹, 액세스 키를 차례로 엽니다.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
         "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
@@ -5228,6 +5308,7 @@
           "certificateAuthentication": "인증서 인증",
           "certificate": "인증서",
           "accessKeyAndSecret": "액세스 키 및 시크릿",
+          "accountKey": "계정 키",
           "iamRole": "IAM 역할",
           "assumeRole": "역할 수임",
           "serviceAccount": "서비스 계정",
@@ -5240,6 +5321,9 @@
           "teamsCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요. 첨부 파일 포함에 필요하며, 이 기능은 SharePoint에서 채널 파일과 해당 열람자를 읽습니다.",
           "outlookClientSecret": "커넥터가 앱 등록의 클라이언트 시크릿으로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 시크릿을 입력하세요.",
           "outlookCertificate": "커넥터가 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 비밀번호를 입력하세요.",
+          "azureDatalakeClientSecret": "커넥터는 앱 등록의 클라이언트 암호로 로그인합니다. 클라이언트 ID, 디렉터리 ID, 암호를 입력하세요. 컨테이너에서 앱에 Storage Blob Data Reader 역할을 부여하세요.",
+          "azureDatalakeCertificate": "커넥터는 앱 등록에 업로드된 인증서로 로그인합니다. 클라이언트 ID, 디렉터리 ID, PFX 번들과 그 암호를 입력하세요. 컨테이너에서 앱에 Storage Blob Data Reader 역할을 부여하세요.",
+          "azureDatalakeAccountKey": "커넥터는 스토리지 계정의 키로 각 요청에 서명합니다. 계정 이름과 액세스 키 중 하나를 입력하세요.",
           "s3AssumeRole": "이 모드를 선택하면 Amazon EC2 인스턴스가 기존 역할을 수임하여 S3에 액세스합니다. 추가 자격 증명은 필요하지 않습니다."
         }
       },
@@ -5622,7 +5706,7 @@
             "label": "비공개"
           },
           "public": {
-            "label": "공개"
+            "label": "조직"
           }
         },
         "connector": {
@@ -5743,7 +5827,7 @@
             "header": "이름"
           },
           "public": {
-            "header": "공개"
+            "header": "액세스"
           },
           "status": {
             "header": "상태"
@@ -5808,6 +5892,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {파일 #개 업로드됨} other {파일 #개 업로드됨}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {파일 #개 업로드됨} other {파일 #개 업로드됨}}, 불완전: {error}"
         }
       },
       "sensitiveWarning": {
@@ -6217,13 +6304,6 @@
           "title": "그룹 권한"
         }
       },
-      "permissionsChanged": {
-        "description": "이제 {appName}는 그룹 기반 권한을 사용합니다. 접근 권한은 그룹별로 설정하므로, 사용자의 권한은 그 사용자가 속한 모든 그룹의 권한을 합친 것입니다.",
-        "learnMore": {
-          "label": "자세히 알아보기"
-        },
-        "title": "권한이 변경되었습니다."
-      },
       "sharedResources": {
         "agent": {
           "description": "에이전트"
@@ -6273,28 +6353,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "한도 추가"
-        },
-        "costLimit": {
-          "header": "비용 한도",
-          "placeholder": "비용 한도",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Token 사용량 제한은 [Onyx 엔터프라이즈 버전](/admin/billing)에서만 사용할 수 있습니다.",
-        "section": {
-          "description": "이 그룹이 지정된 기간 동안 사용할 수 있는 token 수를 제한합니다.",
-          "title": "Token 사용량 제한"
-        },
-        "timeWindow": {
-          "header": "시간 범위",
-          "unit": "(UTC 기준 일수)"
-        },
-        "tokenLimit": {
-          "header": "Token 한도",
-          "placeholder": "Token 한도(천 단위)",
-          "unit": "(천 단위)"
-        }
+        "disabledTooltip": "Token 사용량 제한은 [Onyx 엔터프라이즈 버전](/admin/billing)에서만 사용할 수 있습니다."
       },
       "builtIn": {
         "admin": {
@@ -6305,9 +6364,6 @@
           "name": "기본",
           "description": "기본 권한을 가진 모든 사용자의 기본 그룹입니다."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6587,11 +6643,24 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "연결된 LLM 공급자의 이미지 모델입니다. 채팅에서 사용하려면 연결하세요.",
+        "title": "사용 가능한 모델"
+      },
       "configureSuccess": {
         "message": "제공업체를 설정했습니다"
       },
+      "connectButton": {
+        "label": "연결"
+      },
+      "connectedModels": {
+        "title": "연결된 모델"
+      },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
+      },
+      "disconnectButton": {
+        "ariaLabel": "{title} 연결 해제"
       },
       "disconnectError": {
         "message": "연결 해제에 실패했습니다"
@@ -6609,6 +6678,9 @@
         "header": {
           "description": "이 제공업체에 저장된 자격 증명을 삭제합니다.",
           "title": "*{title}* 연결 해제"
+        },
+        "linkedHeader": {
+          "description": "LLM 공급자와 해당 자격 증명은 연결된 상태로 유지됩니다."
         },
         "noDefaultOption": {
           "description": "(이미지 생성 비활성화)",
@@ -6630,6 +6702,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} 연결을 해제했습니다"
+      },
+      "editButton": {
+        "ariaLabel": "{title} 편집"
       },
       "emptyState": {
         "title": "채팅에서 사용할 이미지 생성 모델을 연결하세요."
@@ -6709,12 +6784,30 @@
         "description": "채팅 내 이미지 생성 설정입니다.",
         "title": "이미지 생성"
       },
+      "linkError": {
+        "message": "모델을 연결하지 못했습니다"
+      },
+      "linkSuccess": {
+        "message": "{title} 연결됨"
+      },
+      "linkedModel": {
+        "description": "{provider}에서 제공"
+      },
       "loadError": {
         "message": "구성을 불러오지 못했습니다. 페이지를 새로고침하세요."
       },
       "model": {
         "description": "채팅에서 이미지를 생성할 모델을 선택하세요.",
+        "placeholder": "기본 모델 선택",
         "title": "이미지 생성 모델"
+      },
+      "modelFilter": {
+        "all": "전체",
+        "recommended": "추천"
+      },
+      "noImageModels": {
+        "description": "언어 모델 페이지에서 이미지 모델을 제공하는 LLM 공급자를 연결하세요. 연결된 공급자의 모든 모델을 보려면 전체 탭을 여세요.",
+        "title": "사용 가능한 이미지 모델이 없습니다"
       },
       "providers": {
         "azureGptImage1": {
@@ -6995,11 +7088,6 @@
           "description": "{appName}가 {provider} 프록시에서 이 모델에 연결합니다."
         }
       },
-      "maxImageSize": {
-        "description": "이 크기를 초과하는 이미지는 리소스 사용을 제한하기 위해 건너뜁니다.",
-        "suffix": "(MB)",
-        "title": "분석할 최대 이미지 크기"
-      },
       "modal": {
         "cancelButton": {
           "label": "취소"
@@ -7030,7 +7118,6 @@
           "tag": "GPU 권장"
         },
         "legacy": {
-          "tag": "레거시",
           "tooltip": "이 모델은 새 인덱스에 선택할 수 없습니다. 모델을 변경하기 전까지는 계속 작동합니다."
         },
         "selectButton": {
@@ -7045,11 +7132,6 @@
         "addCustomModel": {
           "label": "사용자 지정 모델 추가"
         },
-        "bringYourOwn": {
-          "cloudDescription": "LiteLLM 프록시, Azure OpenAI 배포, Bifrost 게이트웨이 또는 OpenAI 호환 엔드포인트를 연결합니다. 모델 이름은 직접 입력합니다. LiteLLM, Azure, OpenAI 호환 엔드포인트는 차원도 입력합니다.",
-          "selfHostedDescription": "위 목록에 없는 Hugging Face 임베딩 모델을 실행합니다. 모델 이름, 차원, 접두사는 직접 입력합니다.",
-          "title": "고급: 자체 모델 또는 프록시 사용"
-        },
         "cloudTab": {
           "label": "클라우드 기반"
         },
@@ -7057,6 +7139,7 @@
           "title": "사용자 지정 embedding 모델을 설정하세요."
         },
         "customModels": {
+          "hint": "[Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending)에서 제공되는 [SentenceTransformers](https://www.sbert.net/) 호환 모델을 사용하세요. {appName}이(가) 셀프 호스팅을 위해 모델을 다운로드합니다. 호환성은 보장되지 않습니다.",
           "title": "사용자 지정 모델"
         },
         "foldModels": {
@@ -7087,9 +7170,6 @@
       "multipass": {
         "description": "문서를 다양한 크기의 청크로 인덱싱하여 관련 소스를 더 정확하게 찾습니다.",
         "disabledTooltip": "멀티패스 인덱싱은 일시적으로 사용할 수 없으며 추후 제공될 예정입니다.",
-        "tag": {
-          "label": "일시적으로 사용 불가"
-        },
         "title": "멀티패스 인덱싱"
       },
       "openaiCompatible": {
@@ -7241,6 +7321,7 @@
       },
       "vectorQuantization": {
         "description": "문서 벡터를 더 적은 비트로 저장하여 벡터 검색의 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다. 이 설정만 변경하면 저장된 벡터로 인덱스를 다시 구축하며, 다시 임베딩하지 않습니다.",
+        "needsVersion": "OpenSearch {version} 이상 필요",
         "none": {
           "description": "32비트 전체 정밀도.",
           "label": "없음"
@@ -7253,7 +7334,8 @@
           "description": "벡터 검색 메모리 사용량 약 4배 감소. 검색 품질 저하가 거의 없습니다.",
           "label": "7비트"
         },
-        "title": "벡터 양자화"
+        "title": "벡터 양자화",
+        "unsupportedTooltip": "이 클러스터는 OpenSearch {current}을(를) 실행 중입니다. 이 수준을 사용하려면 OpenSearch를 {version} 이상으로 업그레이드하세요."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {이 커넥터는 삭제됩니다} other {이 # 개의 커넥터는 삭제됩니다}}",
@@ -7297,11 +7379,11 @@
             "off": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용합니다. 커넥터 수준 액세스는 꺼져 있습니다.",
             "shadow": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용하고 커넥터 수준 액세스와 비교합니다."
           },
-          "title": "커넥터 액세스 업데이트 완료"
+          "title": "커넥터 액세스 업데이트 완료."
         },
         "notStarted": {
           "description": "백그라운드 작업이 검색 인덱스의 기존 청크에 커넥터 ID를 추가합니다. 몇 분 안에 시작됩니다.",
-          "title": "커넥터 액세스 업데이트가 시작되지 않았습니다"
+          "title": "커넥터 액세스 업데이트가 시작되지 않았습니다."
         },
         "progress": {
           "ariaLabel": "커넥터 액세스 업데이트 진행률"
@@ -7342,7 +7424,7 @@
         },
         "loadError": {
           "description": "페이지를 새로 고쳐 다시 시도하세요.",
-          "title": "커넥터 액세스 업데이트를 불러올 수 없습니다"
+          "title": "커넥터 액세스 업데이트를 불러올 수 없습니다."
         }
       },
       "embeddingRateLimit": {
@@ -7350,18 +7432,14 @@
         "description": "인덱싱이 일정 시간 동안 보내는 임베딩 요청 수를 모든 인덱싱 워커에 걸쳐 제한합니다. 한도에 도달하면 인덱싱은 실패하지 않고 대기한 후 다시 시도하므로 워커는 새 작업을 덜 가져갑니다. 배치는 너무 오래 기다린 경우에만 실패합니다. 검색 쿼리는 제한되지 않습니다.",
         "requests": {
           "title": "시간 범위당 요청 수",
-          "description": "비워 두면 한도가 없습니다.",
-          "placeholder": "한도 없음"
+          "description": "인덱싱이 한 시간 범위 동안 보낼 수 있는 임베딩 요청의 최대 개수입니다. 비워 두면 한도가 없습니다.",
+          "placeholder": "한도 없음",
+          "suffix": "요청"
         },
         "period": {
           "title": "시간 범위 길이",
-          "description": "예: 분당 한도는 60.",
-          "suffix": "(초)"
-        },
-        "restoreDefault": "기본값 복원",
-        "validation": {
-          "requests": "1부터 {max, number}까지의 정수를 입력하거나, 한도를 없애려면 비워 두세요.",
-          "period": "1부터 {max, number}까지의 정수 초를 입력하세요."
+          "description": "한 시간 범위의 길이입니다. 분당 한도를 두려면 60을 입력하세요.",
+          "suffix": "초"
         },
         "toasts": {
           "failed": "요청 한도를 저장하지 못했습니다."
@@ -7372,37 +7450,26 @@
       }
     },
     "indexing": {
+      "addConnector": "커넥터 추가",
       "connectorCreated": {
         "toast": "커넥터를 생성했습니다"
       },
       "overview": {
-        "connectors": {
-          "caption": "인덱싱 중 / 활성",
-          "label": "커넥터"
-        },
-        "documents": {
-          "caption": "인덱스에 있음",
-          "label": "문서",
-          "tooltip": "각 커넥터의 문서 수를 더하므로 두 커넥터에 있는 문서는 두 번 계산됩니다."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "개요를 불러올 수 없습니다.",
-        "processed": {
-          "caption": "기간 내 처리됨",
-          "label": "문서",
-          "tooltip": "추정치입니다. 각 실행의 수는 실행 시간 전체에 고르게 나누어집니다. 문서는 실행이 처리할 때마다 계산되며 실패한 문서도 포함되므로 인덱스에 있는 문서 수보다 많을 수 있습니다."
-        }
+        "activeConnectors": "활성 커넥터",
+        "pausedConnectors": "일시 중지된 커넥터",
+        "indexingConnectors": "인덱싱 중인 커넥터",
+        "loadError": "개요를 불러올 수 없습니다."
       },
       "activities": {
         "title": "활동",
-        "history": "전체 활동 기록",
-        "viewLogs": "로그 보기",
         "panel": {
-          "title": "활동 기록",
+          "title": "활동",
           "close": "패널 닫기",
           "pairTitle": "{name} 활동 기록"
+        },
+        "panelButton": {
+          "show": "활동 표시",
+          "hide": "활동 숨기기"
         }
       },
       "list": {
@@ -7411,21 +7478,22 @@
         },
         "statusFilter": {
           "label": "상태",
-          "all": "모든 상태"
+          "all": "모든 상태",
+          "running": "진행 중"
         },
         "counts": {
           "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",
-          "indexing": "{count, plural, other {커넥터 #개 인덱싱 중}}",
+          "running": "{indexing, plural, other {인덱싱 중 #개}}, {syncing, plural, other {동기화 중 #개}}",
           "failed": "{count, plural, other {커넥터 #개 실패}}",
           "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}",
           "scheduled": "{count, plural, other {커넥터 #개 예약됨}}",
           "deleting": "{count, plural, other {커넥터 #개 삭제 중}}"
         },
         "access": {
-          "public": "공개",
-          "private": "비공개",
-          "sync": "자동 동기화",
-          "sync_restricted": "자동 동기화(제한됨)"
+          "public": "조직 전체에 공개",
+          "private": "{count, plural, =0 {비공개} other {그룹 #개와 공유됨}}",
+          "sync": "권한 자동 동기화",
+          "sync_restricted": "권한 자동 동기화"
         },
         "detail": {
           "queued": "대기열 {position, selectordinal, other {#}}번째",
@@ -7434,7 +7502,7 @@
         },
         "docs": {
           "label": "문서",
-          "processed": "{count, number}개 처리됨",
+          "processed": "최근 {count, number}개 처리됨",
           "processedTooltip": {
             "running": "현재 실행이 지금까지 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되므로 커넥터의 문서 수보다 많을 수 있습니다.",
             "finished": "마지막 실행이 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되고 그 후 삭제된 문서는 커넥터 수에서 빠지므로 커넥터의 문서 수보다 많을 수 있습니다."
@@ -7445,6 +7513,8 @@
           "manageFederated": "페더레이션 커넥터 관리",
           "expand": "세부 정보 보기",
           "collapse": "세부 정보 숨기기",
+          "viewErrors": "오류 보기",
+          "viewAllRuns": "모든 실행 보기",
           "pause": "일시 중지",
           "resume": "재개"
         },
@@ -7457,7 +7527,8 @@
           "filteredTitle": "이 필터와 일치하는 커넥터가 없습니다."
         },
         "loadError": "커넥터를 불러올 수 없습니다.",
-        "units": "{count, plural, other {개 커넥터}}"
+        "units": "{count, plural, other {개 커넥터}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "커넥터 인덱싱 상태"
     },
@@ -7970,9 +8041,6 @@
         "title": "채팅을 시작하려면 LLM 제공자를 설정하세요."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "기본"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} 삭제"
         },
@@ -9050,8 +9118,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "모든 공개 지식",
-            "sublabel": "OnyxBot이 모든 공개 커넥터의 정보를 바탕으로 응답하도록 합니다"
+            "label": "조직 전체의 모든 지식",
+            "sublabel": "OnyxBot이 조직 전체의 모든 커넥터 정보를 바탕으로 응답하도록 합니다"
           },
           "documentSets": {
             "label": "특정 문서 세트",
@@ -9818,169 +9886,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "최대 {cost} 또는 {tokens} tokens",
-          "cost": "최대 {cost}",
-          "none": "설정된 예산 없음",
-          "tokens": "최대 {tokens} tokens"
-        },
-        "cadence": {
-          "label": "{days, plural, one {매일 UTC 자정에 초기화} other {#일마다 UTC 자정에 초기화}}"
-        },
-        "deleteFailed": {
-          "error": "token 사용 한도를 삭제하지 못했습니다"
-        },
-        "empty": {
-          "message": "아직 한도가 없습니다. 사용량을 제한하려면 지출 한도를 생성하세요."
-        },
-        "loadFailed": {
-          "error": "token 사용 한도를 불러오지 못했습니다"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "{label} 삭제",
-            "tooltip": "한도 삭제"
-          },
-          "disable": {
-            "ariaLabel": "{label} 비활성화"
-          },
-          "enable": {
-            "ariaLabel": "{label} 활성화"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "token 사용 한도를 업데이트하지 못했습니다"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "취소"
-        },
-        "costBudget": {
-          "description": "초기화 주기당 최대 지출액입니다. 비용 예산, token 예산 또는 둘 다 설정하세요.",
-          "placeholder": "비용 한도 없음",
-          "title": "비용 예산",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "비용 예산, token 예산 또는 둘 다 입력하세요",
-          "costMax": "최대 비용 예산은 ${amount, number}입니다",
-          "costMinCents": "비용 예산은 최소 $0.01이어야 합니다",
-          "costMoreThanZero": "비용 예산은 0보다 커야 합니다",
-          "groupRequired": "사용자 그룹을 선택하세요",
-          "periodInteger": "일수를 정수로 입력하세요",
-          "periodMin": "최소 1일 이상이어야 합니다",
-          "periodRequired": "초기화 주기를 입력하세요",
-          "scopeRequired": "대상 범위는 필수 항목입니다",
-          "tokenIncrement": "1,000 tokens 단위로 입력하세요",
-          "tokenInteger": "token 수를 정수로 입력하세요",
-          "tokenMax": "최대 token 예산은 1조입니다",
-          "tokenMin": "최소 1,000 tokens 이상이어야 합니다"
-        },
-        "groupMenu": {
-          "empty": "아직 사용자 그룹이 없습니다. 사용자 및 그룹에서 그룹을 생성하세요."
-        },
-        "groupPicker": {
-          "placeholder": "그룹 선택"
-        },
-        "header": {
-          "title": "지출 한도 생성"
-        },
-        "period": {
-          "description": "예산은 UTC 자정에 초기화됩니다",
-          "title": "초기화 주기",
-          "unit": "일"
-        },
-        "scope": {
-          "caption": {
-            "global": "워크스페이스의 모든 사용자가 하나의 예산을 공유합니다.",
-            "group": "{group} 그룹의 구성원이 하나의 예산을 공유합니다.",
-            "groupUnchosen": "선택한 그룹의 구성원이 하나의 예산을 공유합니다.",
-            "user": "각 사용자가 자신의 예산을 갖습니다."
-          },
-          "title": "적용 대상"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "워크스페이스"
-          },
-          "user": {
-            "title": "사용자별"
-          },
-          "userGroup": {
-            "title": "사용자 그룹"
-          }
-        },
-        "submit": {
-          "label": "한도 생성"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} 또는 {tokens} tokens",
-            "tokens": "{tokens} tokens"
-          },
-          "global": "{days, plural, one {워크스페이스의 모든 사용자가 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {워크스페이스의 모든 사용자가 #일마다 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "group": "{days, plural, one {{group} 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {{group} 그룹의 구성원이 #일마다 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "groupUnchosen": "{days, plural, one {선택한 그룹의 구성원이 매일 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {선택한 그룹의 구성원이 #일마다 최대 {budget}까지 함께 사용합니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}",
-          "user": "{days, plural, one {각 사용자가 매일 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.} other {각 사용자가 #일마다 최대 {budget}까지 사용할 수 있습니다. 주기가 초기화될 때까지 사용이 차단됩니다.}}"
-        },
-        "tokenBudget": {
-          "description": "초기화 주기당 최대 token 수",
-          "placeholder": "token 한도 없음",
-          "title": "Token 예산",
-          "unit": "tokens"
-        },
-        "userGroup": {
-          "description": "이 예산을 공유할 그룹을 선택하세요",
-          "title": "사용자 그룹"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "지출 한도 생성"
-        },
-        "createFailed": {
-          "error": "지출 한도를 생성하지 못했습니다"
-        },
-        "created": {
-          "message": "지출 한도를 생성했습니다!"
-        },
-        "embedded": {
-          "description": "워크스페이스, 사용자, 그룹의 사용량에 가드레일을 설정하세요. 한도는 구성을 삭제하지 않고 활성화하거나 비활성화할 수 있습니다.",
-          "title": "지출 한도 관리"
-        },
-        "global": {
-          "description": "전역 한도는 모든 사용자, 사용자 그룹, API 키에 적용됩니다. 전역 한도에 도달하면 더 이상 token을 사용할 수 없습니다."
-        },
-        "intro": {
-          "description": "지출 한도를 사용하면 지정한 기간에 사용할 수 있는 token 수를 제어할 수 있습니다.",
-          "groupLimit": "사용자 그룹에 한도를 설정하여 팀의 지출을 제어하세요.",
-          "toggleLimit": "필요에 따라 한도를 활성화하거나 비활성화하세요.",
-          "userLimit": "사용자에게 한도를 설정하여 한 사용자가 너무 많이 지출하지 않도록 하세요.",
-          "workspaceLimit": "팀 전체 지출에 대해 워크스페이스 전역 한도를 설정하세요."
-        },
-        "tabs": {
-          "global": {
-            "name": "전역"
-          },
-          "groups": {
-            "name": "그룹"
-          },
-          "users": {
-            "name": "사용자"
-          }
-        },
-        "user": {
-          "description": "사용자 한도는 각 사용자에게 개별적으로 적용됩니다. 사용자가 한도에 도달하면 일시적으로 token 사용이 차단됩니다."
-        },
-        "userGroup": {
-          "description": "그룹 한도는 그룹 내 모든 사용자에게 적용됩니다. 사용자가 여러 그룹에 속한 경우 가장 관대한 한도가 적용됩니다."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM 호출 추적 정보가 더 이상 **{label}**(으)로 전송되지 않습니다. 이미 전송된 추적 정보는 영향을 받지 않습니다.",
@@ -10335,13 +10240,6 @@
           "label": "사용자 초대"
         },
         "title": "사용자 및 요청"
-      },
-      "permissionsNotice": {
-        "description": "{appName}는 이제 그룹 기반 권한을 사용합니다. Curator와 Global Curator 역할은 구성 가능한 그룹 권한으로 대체되었으며, 그룹별 관리자가 제한된 범위에서 관리합니다.",
-        "learnMoreButton": {
-          "label": "자세히 알아보기"
-        },
-        "title": "권한이 변경되었습니다"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -11109,6 +11007,200 @@
         "scoped": "추가되거나 변경된 항목만",
         "failures": "{count, plural, other {실패 #회}}"
       }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "지출 한도를 설정해 조직의 LLM 지출을 관리하세요.",
+        "loadFailed": "지출 한도를 불러오지 못했습니다."
+      },
+      "workspace": {
+        "title": "워크스페이스 한도",
+        "description": "이 조직의 모든 사용자와 계정에 적용됩니다.",
+        "pool": {
+          "title": "공유 예산",
+          "description": "초기화 기간마다 모두가 공유하는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
+          "empty": "워크스페이스 전체 한도 없음",
+          "target": "워크스페이스 전체 한도",
+          "emptyDescription": "초기화 기간마다 모두가 공유하는 한도입니다."
+        },
+        "perUser": {
+          "title": "사용자별 한도",
+          "description": "조직의 각 사용자에게 개별로 적용되는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
+          "empty": "사용자별 한도 없음",
+          "target": "사용자별 한도",
+          "emptyDescription": "조직의 각 사용자에게 개별로 적용되는 한도입니다."
+        }
+      },
+      "groups": {
+        "title": "그룹 한도",
+        "description": "이 조직의 특정 그룹에 적용됩니다.",
+        "add": {
+          "label": "그룹 한도 추가"
+        },
+        "picker": {
+          "placeholder": "그룹 선택",
+          "limitSet": "한도 설정됨:"
+        },
+        "members": "{count, plural, other {멤버 #명}}",
+        "empty": "워크스페이스, 사용자, 그룹 사용량에 비용/토큰 한도를 설정하세요.",
+        "pool": {
+          "title": "그룹 공유 예산",
+          "description": "이 그룹의 모두가 공유하는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
+          "empty": "그룹 공유 예산 없음",
+          "target": "그룹 한도",
+          "emptyDescription": "이 그룹의 모두가 공유하는 한도입니다.",
+          "members": "{count, plural, other {멤버 #명}}"
+        },
+        "perMember": {
+          "title": "멤버별 한도",
+          "description": "이 그룹의 각 구성원에게 개별로 적용되는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
+          "adminOnly": "멤버별 한도는 멤버를 워크스페이스 한도보다 높일 수 있으므로 관리자만 변경할 수 있습니다.",
+          "empty": "구성원별 한도 없음",
+          "target": "구성원별 그룹 한도",
+          "emptyDescription": "이 그룹의 각 구성원에게 개별로 적용되는 한도입니다.",
+          "members": "구성원별 한도 • {count, plural, other {멤버 #명}}"
+        },
+        "kind": {
+          "placeholder": "한도 유형 선택"
+        },
+        "field": {},
+        "new": {
+          "title": "새 그룹 한도",
+          "pool": {
+            "description": "특정 그룹의 모두가 공유하는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요."
+          },
+          "perMember": {
+            "description": "특정 그룹의 각 구성원에게 개별로 적용되는 한도입니다. 비용 한도, 토큰 한도 또는 둘 다 설정하세요."
+          }
+        }
+      },
+      "groupPage": {
+        "title": "지출 한도",
+        "description": "이 그룹이 LLM 사용에 쓸 수 있는 금액을 제한합니다."
+      },
+      "card": {
+        "addLimit": "한도 추가",
+        "addModelBudget": "모델 예산 추가",
+        "modelBudget": {
+          "title": "모델 예산",
+          "description": "특정 모델의 지출에 한도를 둡니다. 이 지출은 공유 예산에도 포함됩니다."
+        },
+        "cancel": "취소",
+        "save": "변경 사항 저장",
+        "saved": "지출 한도를 저장했습니다",
+        "saveFailed": "지출 한도를 저장하지 못했습니다: {error}",
+        "create": "한도 만들기",
+        "reenable": "다시 사용",
+        "disable": {
+          "tooltip": "모든 한도 끄기"
+        },
+        "expand": {
+          "tooltip": "관리"
+        },
+        "collapse": {
+          "tooltip": "접기"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> 또는 <b>{tokens}</b> 토큰 / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> 토큰 / {period}",
+          "period": {
+            "DAILY": "일",
+            "WEEKLY": "주",
+            "MONTHLY": "월"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, other {모델 예산 #개}}",
+          "nextReset": "다음 초기화: {at}",
+          "inactive": "비활성 한도",
+          "used": "<b>{percent}%</b> 사용",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "알림",
+        "description": "API로 설정된 알림 전용 한도입니다. 사용을 차단하지 않으며 여기서 저장해도 바뀌지 않습니다.",
+        "row": "{model}, {period}: {target}",
+        "allModels": "모든 모델",
+        "percent": "한도의 {percent}%",
+        "tokens": "토큰 {tokens}개"
+      },
+      "row": {
+        "model": {
+          "title": "모델",
+          "placeholder": "모델 검색…"
+        },
+        "period": {
+          "title": "초기화 주기",
+          "options": {
+            "DAILY": {
+              "title": "일일 한도",
+              "description": "매일 초기화",
+              "helper": "매일 00:00 UTC에 초기화됩니다."
+            },
+            "WEEKLY": {
+              "title": "주간 한도",
+              "description": "매주 월요일 초기화",
+              "helper": "매주 월요일 00:00 UTC에 초기화됩니다."
+            },
+            "MONTHLY": {
+              "title": "월간 한도",
+              "description": "매월 1일 초기화",
+              "helper": "매월 1일 00:00 UTC에 초기화됩니다."
+            }
+          }
+        },
+        "nextReset": "다음 초기화",
+        "resetUsage": {
+          "label": "지금 한도 사용량 초기화",
+          "done": "사용량을 초기화했습니다. 이 한도는 지금부터 다음 초기화까지의 사용량을 집계합니다.",
+          "failed": "사용량을 초기화하지 못했습니다: {error}"
+        },
+        "remove": {
+          "tooltip": "한도 제거"
+        },
+        "cost": {
+          "title": "비용 한도",
+          "placeholder": "비용 한도 없음",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "토큰 한도",
+          "placeholder": "토큰 한도 없음",
+          "suffix": "K",
+          "unit": "토큰"
+        },
+        "usage": {
+          "spent": "<mono>{amount}</mono> 사용",
+          "tokens": "<mono>{tokens}</mono> 토큰 사용",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "다음 초기화 때까지 사용이 차단됩니다.",
+            "model": "다음 초기화 때까지 모델 사용이 차단됩니다."
+          }
+        },
+        "whenReached": {
+          "title": "이 한도에 도달하면",
+          "blockAll": {
+            "title": "한도 도달 시 모든 사용 차단",
+            "description": "채팅, 검색, 봇, API 호출을 포함한 모든 모델의 사용이 다음 초기화까지 중지됩니다."
+          },
+          "blockModel": {
+            "title": "한도 도달 시 모델 사용 차단",
+            "description": "채팅, 봇, API 호출을 포함한 이 모델의 사용이 다음 초기화까지 중지됩니다.",
+            "summary": "한도 도달 시 모델 사용 차단"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "비용은 0.01달러 이상, 토큰은 1조 개 이하로 설정하세요.",
+          "budgetRequired": "비용 한도, 토큰 한도 또는 둘 다 설정하세요.",
+          "duplicate": "다른 한도가 이미 이 주기를 사용하고 있습니다.",
+          "modelRequired": "모델을 선택하세요."
+        },
+        "edit": {
+          "tooltip": "편집"
+        }
+      }
     }
   },
   "agents": {
@@ -11121,6 +11213,9 @@
       },
       "pin": {
         "tooltip": "사이드바에 고정"
+      },
+      "pinFailed": {
+        "message": "고정 상태를 업데이트하지 못했습니다. 다시 시도하세요."
       },
       "share": {
         "tooltip": "에이전트 공유"
@@ -11428,7 +11523,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "공개 권한 변경"
+          "ariaLabel": "조직 권한 변경"
         },
         "row": {
           "updateAccess": {
@@ -11512,16 +11607,18 @@
           "title": "프롬프트 리마인더"
         },
         "public": {
-          "label": "조직에 공개"
+          "label": "조직에서 사용 가능"
         }
       }
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {에이전트} other {에이전트}}"
+        "label": "{count, plural, one {# 에이전트} other {# 에이전트}}"
       },
       "empty": {
-        "description": "에이전트를 찾을 수 없음"
+        "description": "직접 만든 에이전트와 공유받은 에이전트가 여기에 표시됩니다.",
+        "filteredDescription": "선택한 탭과 필터에 맞는 에이전트가 없습니다.",
+        "item": "에이전트"
       },
       "header": {
         "description": "나와 팀의 사용 사례에 맞게 AI의 동작과 지식을 맞춤 설정하세요.",
@@ -11535,9 +11632,6 @@
       },
       "page": {
         "ariaLabel": "에이전트 페이지"
-      },
-      "search": {
-        "placeholder": "에이전트 검색..."
       },
       "sections": {
         "all": {
@@ -12027,9 +12121,6 @@
         "builtin": {
           "label": "기본 제공"
         },
-        "custom": {
-          "label": "사용자 지정"
-        },
         "invalid": {
           "label": "잘못됨"
         },
@@ -12041,6 +12132,12 @@
         },
         "unavailable": {
           "label": "사용 불가 - 클릭하여 자세히 보기"
+        },
+        "shared": {
+          "label": "공유됨"
+        },
+        "organization": {
+          "label": "조직"
         }
       },
       "toggle": {
@@ -12106,6 +12203,12 @@
       },
       "failedFiles": {
         "toast": "{count, plural, one {파일 처리에 실패하여 제거되었습니다: {names}} other {파일 처리에 실패하여 제거되었습니다: {names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "채팅을 불러오는 중"
+      },
+      "olderMessagesLoader": {
+        "ariaLabel": "이전 메시지를 불러오는 중"
       },
       "newChatButton": {
         "label": "새 채팅 시작"
@@ -12341,7 +12444,9 @@
           "speakingPlaceholder": "{appName}가 말하는 중..."
         },
         "sendButton": {
-          "processingFilesTooltip": "첨부 파일 처리가 끝나기를 기다리는 중"
+          "processingFilesTooltip": "첨부 파일 처리가 끝나기를 기다리는 중",
+          "stoppingLabel": "중지 중…",
+          "reloadLabel": "다시 확인"
         },
         "tabReadingButton": {
           "readLabel": "이 탭 읽기",
@@ -12558,6 +12663,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "사용자가 생성을 중지했습니다"
+        },
+        "timedOut": {
+          "text": "응답이 시간 제한에 도달하여 중지되었습니다."
         }
       },
       "codeBlock": {
@@ -12693,9 +12801,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "이미지 생성"
-        },
         "emptyState": {
           "text": "생성된 이미지 없음"
         },
@@ -12705,11 +12810,11 @@
         "generatedStatus": {
           "text": "{count, plural, one {이미지 #개 생성됨} other {이미지 #개 생성됨}}"
         },
-        "generatingImagesStatus": {
-          "text": "이미지 생성 중..."
-        },
         "generatingStatus": {
           "text": "이미지 생성 중..."
+        },
+        "stoppedStatus": {
+          "text": "이미지 생성 중지됨"
         }
       },
       "memoizedLink": {
@@ -12774,6 +12879,9 @@
         },
         "tryAgainNow": {
           "text": "지금 다시 시도할 수 있습니다."
+        },
+        "otherModels": {
+          "text": "다른 모델은 계속 사용할 수 있습니다."
         }
       },
       "resubmit": {
@@ -12870,9 +12978,6 @@
           },
           "executingTool": {
             "label": "도구 실행 중"
-          },
-          "generatingImage": {
-            "label": "이미지 생성 중..."
           },
           "generatingImages": {
             "label": "이미지 생성 중"
@@ -13224,14 +13329,14 @@
           "title": "내 조직"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "편집"
+          "canEdit": {
+            "label": "편집 가능"
+          },
+          "canUse": {
+            "label": "사용 가능"
           },
           "removeAccess": {
             "label": "액세스 제거"
-          },
-          "viewAndChat": {
-            "label": "보기 및 채팅"
           }
         },
         "privateOption": {
@@ -13646,6 +13751,10 @@
       "incognito": {
         "title": "시크릿 모드입니다"
       }
+    },
+    "readiness": {
+      "stopFailed": "응답을 중지하지 못했습니다. 다시 시도하세요.",
+      "checkFailed": "응답이 완료되었는지 확인하지 못했습니다. 다른 메시지를 보내기 전에 다시 확인하세요."
     }
   },
   "common": {
@@ -14083,11 +14192,11 @@
         "text": "불러오는 중..."
       },
       "makePublic": {
-        "label": "이 {objectName}을(를) 공개하시겠습니까?",
+        "label": "이 {objectName}을(를) 조직에서 사용할 수 있게 하시겠습니까?",
         "subtext": "설정하면 이 {objectName}은(는) <b>모든 {publicToWhom}</b>이 사용할 수 있습니다. 그렇지 않으면 <b>관리자</b>와 (예: 사용자 그룹을 통해) 이 {objectName}에 대한 액세스 권한을 명시적으로 부여받은 <b>{publicToWhom}</b>만 액세스할 수 있습니다."
       },
       "publicDisabled": {
-        "message": "이 {objectName}은(는) 공개되어 모든 사용자가 사용할 수 있습니다."
+        "message": "이 {objectName}은(는) 조직의 모든 구성원이 사용할 수 있습니다."
       },
       "usersFallback": {
         "text": "사용자"
@@ -14179,10 +14288,7 @@
       "upgrade": {
         "label": "플랜 업그레이드"
       },
-      "availableFor": "{plan}에서 사용 가능",
-      "beta": {
-        "title": "베타"
-      }
+      "availableFor": "{plan}에서 사용 가능"
     },
     "placeholders": {
       "email": "ireum@hoesa.com",
@@ -14216,6 +14322,34 @@
     },
     "appFooter": {
       "slogan": "오픈 소스 AI 플랫폼"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "{item} 없음",
+        "title": "항목이 없습니다"
+      },
+      "noResults": {
+        "description": "해당 검색어와 일치하는 결과를 찾을 수 없습니다.",
+        "itemTitle": "{item} 검색 결과 없음",
+        "title": "결과가 없습니다"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "{item} 검색 또는 \"/\"를 눌러 포커스...",
+      "placeholder": "검색하거나 \"/\"를 눌러 포커스..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "알파",
+        "beta": "베타",
+        "comingSoon": "출시 예정",
+        "deprecated": "지원 중단",
+        "temporarilyUnavailable": "일시적으로 사용 불가",
+        "legacy": "레거시"
+      },
+      "labels": {
+        "default": "기본"
+      }
     }
   },
   "craft": {
@@ -14737,6 +14871,10 @@
       },
       "plusMenu": {
         "tooltip": "파일 또는 스킬 추가"
+      },
+      "contextRing": {
+        "label": "컨텍스트 창 사용량",
+        "tooltip": "컨텍스트 {percent}% 사용"
       }
     },
     "interruptHint": {
@@ -14748,9 +14886,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "홈으로 돌아가기"
       },
@@ -15251,6 +15386,10 @@
         "trigger": {
           "runNow": "한 번 실행",
           "schedule": "예약"
+        },
+        "markAllViewed": {
+          "label": "모두 확인한 것으로 표시",
+          "error": "실행을 확인함으로 표시할 수 없습니다. 다시 시도하세요."
         }
       },
       "scheduleEditor": {
@@ -15282,7 +15421,8 @@
           "tue": "화",
           "wed": "수"
         }
-      }
+      },
+      "unviewedResults": "새 결과"
     },
     "todoList": {
       "empty": {
@@ -15842,6 +15982,12 @@
       }
     },
     "header": {
+      "finishButton": {
+        "label": "설정 완료"
+      },
+      "nextButton": {
+        "label": "다음"
+      },
       "progress": {
         "label": "{total}단계 중 {current}단계"
       }
@@ -15853,13 +15999,16 @@
       "connectedCount": {
         "label": "{count, plural, one {모델 #개 연결됨} other {모델 #개 연결됨}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM 호환 API",
-        "title": "사용자 지정 LLM 제공자"
-      },
       "description": "{appName}는 자체 호스팅 모델과 널리 쓰이는 제공자를 모두 지원합니다.",
       "edit": {
         "ariaLabel": "LLM 제공자 편집"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "보기"
+        },
+        "description": "관리자 패널에서 설정",
+        "title": "더 많은 제공업체"
       },
       "providerCard": {
         "connect": {
@@ -15867,7 +16016,8 @@
         },
         "settingsButton": {
           "ariaLabel": "제공자 설정"
-        }
+        },
+        "settingsLoadError": "이 공급자의 설정을 불러올 수 없습니다. 다시 시도하세요."
       },
       "title": "LLM 모델 연결"
     },
@@ -15894,28 +16044,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "설정 완료"
-        },
-        "title": "모든 준비가 끝났습니다. 선택 설정을 확인하거나 설정 완료를 클릭하세요"
-      },
       "llmSetup": {
-        "button": {
-          "label": "다음"
-        },
-        "title": "거의 다 됐습니다! 모델을 연결하고 채팅을 시작하세요."
+        "title": "모델을 연결해 채팅을 시작하세요."
       },
       "name": {
-        "button": {
-          "label": "다음"
-        },
-        "title": "잠시 설정을 진행하겠습니다."
+        "title": "어떻게 불러 드릴지 알려 주세요."
       },
-      "welcome": {
-        "button": {
-          "label": "시작하기"
-        },
+      "optionalSetup": {
+        "title": "몇 가지 선택 기능을 설정하세요."
+      },
+      "postStep": {
+        "title": "모든 준비가 끝났습니다."
+      },
+      "preStep": {
         "title": "잠시 설정을 진행하겠습니다."
       }
     }
@@ -15994,14 +16135,16 @@
     "inputMultiUpload": {
       "placeholder": "파일 추가…",
       "dropToAdd": "여기에 파일을 놓아 추가",
-      "dropToAddMore": "여기에 놓아 파일 더 추가"
+      "dropToAddMore": "여기에 놓아 파일 더 추가",
+      "select": "파일 선택"
     },
     "inputUpload": {
       "placeholder": "파일 추가…",
       "pasted": "붙여넣은 텍스트",
       "attached": "파일 첨부됨",
       "dropToAdd": "여기에 파일을 놓아 추가",
-      "dropToReplace": "여기에 놓아 파일 바꾸기"
+      "dropToReplace": "여기에 놓아 파일 바꾸기",
+      "select": "파일 선택"
     },
     "inputImage": {
       "alt": "이미지",
@@ -16431,7 +16574,7 @@
       "row": {
         "contentPlaceholder": "다음 내용을 1~2문장으로 간결하게 요약하세요:",
         "promptPlaceholder": "요약",
-        "publicTooltip": "공개 프롬프트 단축어는 삭제할 수 없습니다.",
+        "publicTooltip": "조직 전체 프롬프트 단축어는 삭제할 수 없습니다.",
         "removeAriaLabel": "단축어 제거"
       },
       "title": "프롬프트 단축어",
@@ -16655,6 +16798,12 @@
         },
         "webSearch": {
           "label": "웹 검색"
+        },
+        "skills": {
+          "label": "스킬"
+        },
+        "spendingLimits": {
+          "label": "지출 한도"
         }
       },
       "sections": {
@@ -16968,6 +17117,9 @@
         "inspectFailed": "스킬 번들을 검사하지 못했습니다",
         "saveFailed": "스킬을 저장하지 못했습니다",
         "saved": "\"{name}\"을(를) 저장했습니다"
+      },
+      "creationAccess": {
+        "title": "액세스"
       }
     },
     "modals": {
@@ -17006,6 +17158,13 @@
           "singleSkill": "한 번에 스킬 하나만 업로드하세요.",
           "title": "파일 요구 사항",
           "zip": "ZIP 파일에는 SKILL.md 파일이 있어야 합니다."
+        },
+        "batch": {
+          "title": "업로드할 스킬의 액세스",
+          "selected": "{count, plural, one {스킬 번들 #개 선택됨} other {스킬 번들 #개 선택됨}}",
+          "result": "{imported, plural, one {스킬 #개 가져옴} other {스킬 #개 가져옴}}. {failed, plural, one {#개 실패} other {#개 실패}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "여러 ZIP 파일을 선택하여 스킬을 함께 가져오세요. 각 ZIP에는 스킬 하나가 포함되어야 합니다."
         }
       },
       "importGithub": {
@@ -17082,6 +17241,11 @@
         "unavailableFallback": "이 스킬은 가져올 수 없습니다.",
         "unavailableTag": {
           "label": "가져올 수 없음"
+        },
+        "sharing": {
+          "title": "가져올 스킬의 액세스",
+          "configureButton": "액세스 설정",
+          "description": "이 액세스 설정은 선택한 {count, plural, one {스킬 #개} other {스킬 #개}} 모두에 적용됩니다."
         }
       },
       "nameConflict": {
@@ -17146,9 +17310,7 @@
         },
         "ownerLabel": "소유자",
         "permissionMenu": {
-          "ariaLabel": "{name}의 접근 권한 변경",
-          "canUse": "사용 가능",
-          "canEdit": "편집 가능"
+          "ariaLabel": "{name}의 접근 권한 변경"
         },
         "saveButton": {
           "label": "저장"
@@ -17190,11 +17352,15 @@
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
+      },
+      "tabs": {
+        "details": "세부 정보",
+        "sharing": "공유"
       }
     },
     "page": {
       "browse": {
-        "title": "스킬 둘러보기"
+        "title": "스킬 선택"
       },
       "countSeparator": {
         "label": "{count, plural, one {스킬} other {스킬}}"
@@ -17222,8 +17388,8 @@
           "title": "일치하는 스킬 없음"
         },
         "noSkills": {
-          "description": "아직 공유된 사용자 지정 스킬이 없으며 구성된 기본 제공 스킬도 없습니다.",
-          "title": "사용 가능한 스킬 없음"
+          "title": "아직 사용자 지정 스킬이 없습니다",
+          "description": "스킬을 만들거나 가져와 라이브러리에 추가하세요."
         }
       },
       "focusedApp": {
@@ -17260,6 +17426,9 @@
         "disableFailed": "{name}을(를) 비활성화하지 못했습니다",
         "enableFailed": "{name}을(를) 활성화하지 못했습니다",
         "refreshFailed": "{name}이(가) 업데이트되었지만 스킬 목록을 새로고침할 수 없습니다."
+      },
+      "builtins": {
+        "title": "기본 제공 스킬 ({count, number})"
       }
     },
     "sections": {
@@ -17315,6 +17484,34 @@
           "readFailed": "업로드한 파일을 읽지 못했습니다."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {조직의 모든 사용자가 이 스킬에 액세스할 수 있습니다.} other {조직의 모든 사용자가 이 스킬들에 액세스할 수 있습니다.}}",
+      "selected": "{users, plural, one {#명} other {#명}} 및 {groups, plural, one {#개 그룹} other {#개 그룹}}과 공유되었습니다.",
+      "private": "{count, plural, one {나만 이 스킬에 액세스할 수 있습니다.} other {나만 이 스킬들에 액세스할 수 있습니다.}}"
+    },
+    "bulk": {
+      "adminDescription": "조직 전체의 스킬과 액세스를 관리합니다.",
+      "selectAll": "표시된 모든 사용자 지정 스킬 선택",
+      "selected": "{count, plural, one {#개 선택됨} other {#개 선택됨}}",
+      "share": "공유",
+      "enable": "내 스킬 활성화",
+      "disable": "내 스킬 비활성화",
+      "delete": "삭제",
+      "selectSkill": "{name} 선택",
+      "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
+      "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",
+      "partialFailure": "{count, plural, one {스킬 #개를 업데이트하지 못했습니다} other {스킬 #개를 업데이트하지 못했습니다}}",
+      "deleteTitle": "{count, plural, one {스킬 #개를 삭제할까요?} other {스킬 #개를 삭제할까요?}}",
+      "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
+      "shareTitle": "{count, plural, one {스킬 #개의 액세스 업데이트} other {스킬 #개의 액세스 업데이트}}",
+      "shareDescription": "선택한 모든 스킬에 변경 사항을 적용합니다. 변경하지 않은 설정은 현재 값을 유지합니다.",
+      "unchanged": "변경하지 않음",
+      "everyone": "조직의 모든 사용자",
+      "invitedOnly": "초대한 사용자 및 그룹",
+      "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
+      "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
+      "moreActions": "추가 작업"
     }
   },
   "opensearchHealth": {

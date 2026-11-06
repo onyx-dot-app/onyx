@@ -459,7 +459,7 @@ def doctor(args: argparse.Namespace) -> int:
             report("FAIL", "Sandbox PodTemplate unavailable; run make craft-up")
 
     if available["telepresence"]:
-        result = probe("telepresence", "status", "--format", "json")
+        result = probe("telepresence", "status", "--output", "json")
         status = (
             json.loads(result.stdout)
             if result is not None and result.returncode == 0
@@ -635,7 +635,7 @@ def pause_resume(args: argparse.Namespace) -> None:
     if args.command == "pause":
         # Never quit a Telepresence connection to another cluster.
         status = json.loads(
-            run("telepresence", "status", "--format", "json", capture=True)
+            run("telepresence", "status", "--output", "json", capture=True)
         )
         connection = status.get("user_daemon", {})
         if connection.get("kubernetes_context") == f"kind-{args.cluster_name}":

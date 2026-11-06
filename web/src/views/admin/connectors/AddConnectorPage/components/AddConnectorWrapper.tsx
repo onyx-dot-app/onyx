@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import {
   type ReactNode,
   useCallback,
@@ -22,7 +23,6 @@ import {
 } from "@/lib/connectors/utils";
 import { Formik, type FormikErrors } from "formik";
 import * as Yup from "yup";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { PageLoader, IconLoader } from "@opal/loaders";
 import {
@@ -277,7 +277,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
   // The string-pair editor (InputKeyValue) shows these same messages.
   const keyValueT = useTranslations("opal.keyValue");
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   // Whether the source's checks can run on a schedule (Run Checks Every).
   const [hasNamedChecks, setHasNamedChecks] = useState(false);
@@ -493,7 +493,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   // the pair's id, the status page lists it.
   const onSuccess = (ccPairId: number | null) => {
     toast.success(indexingT("connectorCreated.toast"));
-    router.push(
+    navigation.go(
       ccPairId === null
         ? "/admin/indexing-status"
         : `/admin/connector/${ccPairId}`
@@ -627,11 +627,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
     setCreatingConnector(true);
     try {
-      const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
-        setTimeout(
-          () => resolve({ isTimeout: true }),
-          CONNECTOR_CREATION_TIMEOUT_MS
-        )
+      const timeoutPromise = new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), CONNECTOR_CREATION_TIMEOUT_MS)
       );
 
       const connectorData: ConnectorBase<any> = {
@@ -715,14 +712,12 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         return;
       })();
 
-      const result = (await Promise.race([
-        connectorCreationPromise,
+      const result = await Promise.race([
+        connectorCreationPromise.then(() => "created" as const),
         timeoutPromise,
-      ])) as {
-        isTimeout?: true;
-      };
+      ]);
 
-      if (result.isTimeout) {
+      if (result === "timeout") {
         timeoutErrorHappenedRef.current = true;
         toast.error(
           t("add.timeout.toast", {
@@ -860,9 +855,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
               // fields and the checks hold back Create, not the form, so a
               // check run never locks the field that started it.
               const formUnlocked: boolean = canCreate;
-              const formLockReason: string | undefined = formUnlocked
-                ? undefined
-                : (selectAccountMessage ?? undefined);
+              // The same reason whether or not the form is locked: Disabled
+              // only shows it while locked, and a steady tooltip keeps the
+              // form mounted across a lock toggle.
+              const formLockReason: string | undefined =
+                selectAccountMessage ?? undefined;
               // Non-required checks never block Create.
               const createReady: boolean =
                 configUnlocked && (noCredentials || checks.createReady);
@@ -922,7 +919,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                         prominence="secondary"
                         disabled={busy}
                         onClick={() =>
-                          router.push(
+                          navigation.go(
                             edit
                               ? `/admin/connector/${edit.ccPair.id}`
                               : "/admin/connectors"
@@ -973,7 +970,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           <Button
                             prominence="secondary"
                             onClick={() =>
-                              router.push(
+                              navigation.go(
                                 `/admin/connectors/${connector}?mode=federated`
                               )
                             }
@@ -1186,7 +1183,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           );
                           if (outcome.kind === "applied") {
                             toast.success(editT("applied.toast"));
-                            router.push(`/admin/connector/${edit.ccPair.id}`);
+                            navigation.go(`/admin/connector/${edit.ccPair.id}`);
                           }
                           return outcome;
                         }}
@@ -1213,9 +1210,9 @@ export default function AddConnectorWrapper({
   connector,
 }: AddConnectorWrapperProps) {
   const t = useTranslations("admin.connectorsList");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
-  const mode = searchParams?.get("mode"); // 'federated' or 'regular'
+  const mode = searchParams.get("mode"); // 'federated' or 'regular'
 
   useToastFromQuery({
     oauth_failed: {
@@ -1233,7 +1230,7 @@ export default function AddConnectorWrapper({
         />
         <SettingsLayouts.Body>
           <div className="me-auto">
-            <Button onClick={() => router.push("/admin/indexing-status")}>
+            <Button onClick={() => navigation.go("/admin/indexing-status")}>
               {t("invalidConnector.homeButton.label")}
             </Button>
           </div>

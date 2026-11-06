@@ -1,5 +1,5 @@
+import { loadPage, useSearchParams } from "@opal/navigation";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import type { IconFunctionComponent } from "@opal/types";
 import {
   ExternalAppUserResponse,
@@ -134,7 +134,7 @@ export function mcpServerToConnectable(server: MCPServer): ConnectableApp {
     saveCredentials: async (values) => {
       await saveMCPUserCredentials(server.id, values, server.transport);
       if (server.auth_type === MCPAuthenticationType.OAUTH) {
-        window.location.href = await startOAuth();
+        loadPage(await startOAuth());
       }
     },
     disconnect: userConnectable ? () => disconnectMCPServer(server.id) : null,

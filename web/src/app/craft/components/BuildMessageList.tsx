@@ -16,7 +16,7 @@ import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { RATE_LIMITED_ERROR_CODE } from "@/app/app/interfaces";
+import { RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";

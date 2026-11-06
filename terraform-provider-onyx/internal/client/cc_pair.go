@@ -14,30 +14,35 @@ const (
 	CCPairStatusPaused = "PAUSED"
 )
 
-// CCPairCreate mirrors ConnectorCredentialPairMetadata. Every field is
-// create-only: no endpoint updates them afterwards.
+// CCPairCreate mirrors ConnectorCredentialPairMetadata. Onyx v4.8 has no
+// route that updates access_type, auto_sync_options, groups or
+// processing_mode after create. DataAccess (Onyx v5.0+) is sent only when set,
+// and has its own update route (SetCCPairDataAccess).
 type CCPairCreate struct {
 	Name            string         `json:"name"`
 	AccessType      string         `json:"access_type"`
 	AutoSyncOptions map[string]any `json:"auto_sync_options"`
 	Groups          []int64        `json:"groups"`
+	DataAccess      *[]int64       `json:"data_access,omitempty"`
 	ProcessingMode  string         `json:"processing_mode"`
 }
 
-// CCPair mirrors the parts of CCPairFullInfo the provider manages. The read
-// model carries no groups, auto_sync_options or processing_mode, so those
-// stay whatever Terraform recorded at create time.
+// CCPair mirrors the parts of CCPairFullInfo the provider manages. Groups,
+// AutoSyncOptions and ProcessingMode are returned since Onyx v4.8.
 type CCPair struct {
-	ID                     int64      `json:"id"`
-	Name                   string     `json:"name"`
-	Status                 string     `json:"status"`
-	AccessType             string     `json:"access_type"`
-	Connector              Connector  `json:"connector"`
-	Credential             Credential `json:"credential"`
-	NumDocsIndexed         int64      `json:"num_docs_indexed"`
-	LastIndexAttemptStatus *string    `json:"last_index_attempt_status"`
-	DeletionFailureMessage *string    `json:"deletion_failure_message"`
-	Indexing               bool       `json:"indexing"`
+	ID                     int64          `json:"id"`
+	Name                   string         `json:"name"`
+	Status                 string         `json:"status"`
+	AccessType             string         `json:"access_type"`
+	Connector              Connector      `json:"connector"`
+	Credential             Credential     `json:"credential"`
+	NumDocsIndexed         int64          `json:"num_docs_indexed"`
+	LastIndexAttemptStatus *string        `json:"last_index_attempt_status"`
+	DeletionFailureMessage *string        `json:"deletion_failure_message"`
+	Indexing               bool           `json:"indexing"`
+	Groups                 []int64        `json:"groups"`
+	AutoSyncOptions        map[string]any `json:"auto_sync_options"`
+	ProcessingMode         string         `json:"processing_mode"`
 }
 
 // ccPairIdentifier mirrors ConnectorCredentialPairIdentifier: the deletion
@@ -98,6 +103,48 @@ func (c *Client) SetCCPairName(ctx context.Context, id int64, name string) error
 func (c *Client) SetCCPairStatus(ctx context.Context, id int64, status string) error {
 	path := fmt.Sprintf("/manage/admin/cc-pair/%d/status", id)
 	return c.doJSON(ctx, http.MethodPut, path, ccPairStatusUpdate{Status: status}, nil)
+}
+
+type ccPairDataAccess struct {
+	Groups []UserGroupNamedRef `json:"groups"`
+}
+
+type ccPairDataAccessUpdate struct {
+	GroupIDs []int64 `json:"group_ids"`
+}
+
+func (d ccPairDataAccess) groupIDs() []int64 {
+	ids := make([]int64, 0, len(d.Groups))
+	for _, group := range d.Groups {
+		ids = append(ids, group.ID)
+	}
+	return ids
+}
+
+// GetCCPairDataAccess returns the groups whose members may read a private or
+// sync_restricted pair, limited to the groups the caller can see. Enterprise
+// Edition, Onyx v5.0+: older servers and Community Edition answer 404.
+func (c *Client) GetCCPairDataAccess(ctx context.Context, id int64) ([]int64, error) {
+	var resp ccPairDataAccess
+	path := fmt.Sprintf("/manage/admin/cc-pair/%d/data-access", id)
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return resp.groupIDs(), nil
+}
+
+// SetCCPairDataAccess replaces the data-access groups and returns the stored
+// set. Onyx keeps current groups the caller cannot see.
+func (c *Client) SetCCPairDataAccess(ctx context.Context, id int64, groupIDs []int64) ([]int64, error) {
+	if groupIDs == nil {
+		groupIDs = []int64{}
+	}
+	var resp ccPairDataAccess
+	path := fmt.Sprintf("/manage/admin/cc-pair/%d/data-access", id)
+	if err := c.doJSON(ctx, http.MethodPut, path, ccPairDataAccessUpdate{GroupIDs: groupIDs}, &resp); err != nil {
+		return nil, err
+	}
+	return resp.groupIDs(), nil
 }
 
 // DeleteCCPair schedules deletion of a cc-pair and the documents it indexed.

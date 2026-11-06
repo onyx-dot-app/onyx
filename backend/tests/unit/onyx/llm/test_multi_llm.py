@@ -15,10 +15,15 @@ from litellm.types.utils import (
     StreamingChoices,
 )
 from litellm.types.utils import Function as LiteLLMFunction
+from pydantic import JsonValue
 
 import onyx.llm.model_request
+import onyx.llm.model_response
+import onyx.llm.models
+from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.cost_overrides import CostOverrideRates
+from onyx.llm.factory import get_llm
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_request import (
@@ -30,7 +35,14 @@ from onyx.llm.model_request import (
     UserMessage,
 )
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
-from onyx.llm.models import NamedToolChoice, ReasoningEffort, ToolChoiceOptions, Usage
+from onyx.llm.models import (
+    GenerationRequest,
+    NamedToolChoice,
+    ReasoningEffort,
+    ToolChoiceOptions,
+    Usage,
+)
+from onyx.llm.models import UserMessage as AppUserMessage
 from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMRateLimitError,
@@ -38,6 +50,7 @@ from onyx.llm.multi_llm import (
     _consume_stream_until_deadline,
     temporary_env_and_lock,
 )
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.framework.create import generation_span, trace
 
 VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS = [
@@ -78,7 +91,6 @@ def _model_response_to_assistant_message(response: ModelResponse) -> AssistantMe
             for tc in message.tool_calls
         ]
     return AssistantMessage(
-        role="assistant",
         content=message.content,
         tool_calls=tool_calls,
     )
@@ -139,7 +151,6 @@ def _accumulate_stream_to_assistant_message(
         ]
 
     return AssistantMessage(
-        role="assistant",
         content=accumulated_content or None,
         tool_calls=tool_calls,
     )
@@ -170,7 +181,6 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
                 choices=[
                     litellm.Choices(
                         delta=_create_delta(
-                            role="assistant",
                             tool_calls=[
                                 ChatCompletionDeltaToolCall(
                                     id="call_1",
@@ -207,7 +217,7 @@ def test_multiple_tool_calls(default_multi_llm: LitellmLLM) -> None:
         ]
 
         # Define available tools
-        tools = [
+        tools: list[dict[str, JsonValue]] = [
             {
                 "type": "function",
                 "function": {
@@ -293,7 +303,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
                 choices=[
                     litellm.Choices(
                         delta=_create_delta(
-                            role="assistant",
                             tool_calls=[
                                 ChatCompletionDeltaToolCall(
                                     id="call_1",
@@ -361,7 +370,7 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             UserMessage(content="What's the weather and time in New York?")
         ]
 
-        tools = [
+        tools: list[dict[str, JsonValue]] = [
             {
                 "type": "function",
                 "function": {
@@ -609,8 +618,8 @@ def test_claude_adaptive_thinking_uses_output_config(
         assert "budget_tokens" not in kwargs["thinking"]
 
 
-def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
-    # No signed blocks to replay costs us `thinking`, not the effort.
+def test_claude_adaptive_thinking_stays_on_after_tool_call() -> None:
+    # The requested setting is sent on every request of the tool loop.
     llm = LitellmLLM(
         api_key="test_key",
         model_provider=LlmProviderNames.LITELLM_PROXY,
@@ -630,7 +639,7 @@ def test_claude_adaptive_thinking_sends_output_config_after_tool_call() -> None:
         list(llm.stream_raw(_tool_cycle_prompt(), reasoning_effort=ReasoningEffort.LOW))
 
         kwargs = mock_completion.call_args.kwargs
-        assert "thinking" not in kwargs
+        assert kwargs["thinking"] == {"type": "adaptive"}
         assert kwargs["output_config"] == {"effort": "low"}
 
 
@@ -746,7 +755,9 @@ def test_reasoning_off_for_gemini_uses_lowest_accepted_level(
         assert "reasoning" not in kwargs
 
 
-def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
+def test_keeps_temperature_for_other_models(
+    default_multi_llm: LitellmLLM,
+) -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
 
@@ -2471,15 +2482,22 @@ def test_strip_tool_content_converts_assistant_tool_calls_to_text() -> None:
     # Assistant with tool calls → plain text
     assert result[1]["role"] == "assistant"
     assert "tool_calls" not in result[1]
+    assert isinstance(result[1]["content"], str)
     assert "Let me search." in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "[Tool Call]" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "search" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "tc_1" in result[1]["content"]
 
     # Tool response → user message
     assert result[2]["role"] == "user"
+    assert isinstance(result[2]["content"], str)
     assert "[Tool Result]" in result[2]["content"]
+    assert isinstance(result[2]["content"], str)
     assert "tc_1" in result[2]["content"]
+    assert isinstance(result[2]["content"], str)
     assert "Found 3 results about cats." in result[2]["content"]
 
     # Final assistant message unchanged
@@ -2505,6 +2523,7 @@ def test_strip_tool_content_handles_assistant_with_no_text_content() -> None:
 
     result = _strip_tool_content_from_messages(messages)
     assert result[0]["role"] == "assistant"
+    assert isinstance(result[0]["content"], str)
     assert "[Tool Call]" in result[0]["content"]
     assert "tool_calls" not in result[0]
 
@@ -2551,13 +2570,17 @@ def test_strip_tool_content_handles_list_content_blocks() -> None:
 
     # Assistant: list content flattened + tool call appended
     assert result[0]["role"] == "assistant"
+    assert isinstance(result[0]["content"], str)
     assert "Searching now." in result[0]["content"]
+    assert isinstance(result[0]["content"], str)
     assert "[Tool Call]" in result[0]["content"]
     assert isinstance(result[0]["content"], str)
 
     # Tool: list content flattened into user message
     assert result[1]["role"] == "user"
+    assert isinstance(result[1]["content"], str)
     assert "result A" in result[1]["content"]
+    assert isinstance(result[1]["content"], str)
     assert "result B" in result[1]["content"]
     assert isinstance(result[1]["content"], str)
 
@@ -2599,6 +2622,7 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
 
     # Both tool results merged into one user message
     merged = result[2]["content"]
+    assert isinstance(merged, str)
     assert "tc_1" in merged
     assert "sunny 72F" in merged
     assert "tc_2" in merged
@@ -2638,7 +2662,7 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         )
 
 
-_TOOL_CHOICE_DOWNGRADE_TOOLS = [
+_TOOL_CHOICE_DOWNGRADE_TOOLS: list[dict[str, JsonValue]] = [
     {
         "type": "function",
         "function": {
@@ -2891,10 +2915,9 @@ def test_prompt_in_tool_loop_false_user_only() -> None:
     assert _prompt_in_tool_loop(messages) is False
 
 
-def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
-    """When thinking is enabled but assistant messages with tool_calls lack
-    thinking_blocks, the thinking param must be dropped to avoid the Bedrock
-    BadRequestError about missing thinking blocks."""
+def test_bedrock_claude_keeps_thinking_when_thinking_blocks_missing() -> None:
+    """Bedrock accepts a tool-call message without thinking blocks, so the
+    requested thinking stays on through the tool loop."""
     llm = LitellmLLM(
         api_key=None,
         model_provider=LlmProviderNames.BEDROCK,
@@ -2922,7 +2945,7 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
         ),
     ]
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -2947,8 +2970,8 @@ def test_bedrock_claude_drops_thinking_when_thinking_blocks_missing() -> None:
         )
 
         kwargs = mock_completion.call_args.kwargs
-        assert "thinking" not in kwargs, (
-            "thinking param should be dropped when thinking_blocks are missing "
+        assert kwargs["thinking"]["type"] == "enabled", (
+            "thinking stays on when thinking_blocks are missing "
             "from assistant messages with tool_calls"
         )
 
@@ -2967,7 +2990,7 @@ def test_bedrock_claude_keeps_thinking_when_no_tool_history() -> None:
         UserMessage(content="What's the weather?"),
     ]
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -3011,7 +3034,7 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
     messages: list[ChatCompletionMessage] = [
         UserMessage(content="Use a tool if needed")
     ]
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -3408,7 +3431,6 @@ def _tool_cycle_prompt() -> list[ChatCompletionMessage]:
     return [
         UserMessage(content="What's the weather in Paris?"),
         AssistantMessage(
-            role="assistant",
             content=None,
             tool_calls=[
                 ToolCall(
@@ -3651,6 +3673,7 @@ def test_policy_extra_body_keeps_deployment_siblings_under_the_same_key() -> Non
         extra_body={"provider": {"order": ["Azure"], "allow_fallbacks": False}},
     )
 
+    assert isinstance(llm._model_kwargs["extra_body"], dict)
     assert llm._model_kwargs["extra_body"]["provider"] == {
         "order": ["Azure"],
         "allow_fallbacks": False,
@@ -3929,3 +3952,72 @@ def test_invoke_timeout_accounts_for_lock_wait(default_multi_llm: LitellmLLM) ->
     ):
         default_multi_llm.invoke_raw([UserMessage(content="Hi")], total_timeout_s=10)
     assert completion.call_args.kwargs["timeout"] == 6.0
+
+
+def test_cancellable_provider_setup_restores_environment_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_ENV_LOCK_TEST_KEY, "deployment-value")
+    transport = LitellmLLM(
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-5-mini",
+        max_input_tokens=10000,
+        api_key="test-key",
+        custom_config={_ENV_LOCK_TEST_KEY: "request-value"},
+    )
+
+    def fail_provider_setup(**_kwargs: JsonValue) -> None:
+        assert os.environ[_ENV_LOCK_TEST_KEY] == "request-value"
+        raise ValueError("Provider setup failed")
+
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=True),
+        patch("litellm.completion", side_effect=fail_provider_setup) as completion,
+        cancellation_scope(CancellationSignal()),
+        pytest.raises(ValueError, match="Provider setup failed"),
+    ):
+        transport.invoke_raw([UserMessage(content="Hi")])
+
+    completion.assert_called_once()
+    assert os.environ[_ENV_LOCK_TEST_KEY] == "deployment-value"
+
+
+@pytest.mark.parametrize(
+    ("provider", "model", "strict"),
+    [
+        (LlmProviderNames.OPENAI, "gpt-5", True),
+        (LlmProviderNames.AZURE, "gpt-5", False),
+        (LlmProviderNames.LITELLM_PROXY, "gpt-5", False),
+        (LlmProviderNames.OPENAI, "ft:gpt-4o:example:test", False),
+        (LlmProviderNames.OPENAI, "unknown-model", False),
+        (LlmProviderNames.ANTHROPIC, "claude-sonnet-4-5", False),
+        # An OpenAI-compatible server, such as vLLM, serving a non-OpenAI model.
+        (LlmProviderNames.OPENAI, "meta-llama/Llama-3.1-8B-Instruct", False),
+    ],
+)
+def test_invoke_sends_strict_tool_schemas_to_openai(
+    provider: str, model: str, strict: bool
+) -> None:
+    search_tool = SearchTool.__new__(SearchTool)
+    llm = get_llm(
+        provider=provider,
+        model=model,
+        deployment_name=None,
+        max_input_tokens=4096,
+        api_key="test_key",
+    )
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = litellm.ModelResponse(
+            choices=[litellm.Choices(message=litellm.Message(content="ok"))]
+        )
+        llm.invoke(
+            GenerationRequest(
+                messages=[AppUserMessage(content="Find the roadmap")],
+                tools=[search_tool.tool_definition()],
+            )
+        )
+
+    function = mock_completion.call_args.kwargs["tools"][0]["function"]
+    assert function["name"] == search_tool.name
+    assert function.get("strict", False) is strict
+    assert function["parameters"] == search_tool.tool_definition().parameters

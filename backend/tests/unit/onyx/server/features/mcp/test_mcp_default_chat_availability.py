@@ -225,7 +225,6 @@ def test_default_chat_checks_access_before_resolving_credentials(
     accessible: bool,
     expected_resolution: bool,
 ) -> None:
-    from onyx.chat.emitter import Emitter
     from onyx.db.models import User
     from onyx.llm.interfaces import LLM
     from onyx.server.features.mcp.credentials import MCPCredentialsError
@@ -272,7 +271,6 @@ def test_default_chat_checks_access_before_resolving_credentials(
     result = tool_constructor._construct_tools_impl(
         configuration=configuration,
         db_session=MagicMock(spec=Session),
-        emitter=MagicMock(spec=Emitter),
         user=User(enable_memory_tool=False),
         llm=MagicMock(spec=LLM),
     )

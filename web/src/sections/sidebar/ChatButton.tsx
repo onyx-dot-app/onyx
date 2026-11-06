@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useDraggable } from "@dnd-kit/core";
 import useChatSessions from "@/hooks/useChatSessions";
 import { deleteChatSession, renameChatSession } from "@/app/app/services/lib";
-import { ChatSession } from "@/app/app/interfaces";
+import { ChatSession } from "@/app/app/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
 import {
@@ -31,7 +31,7 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import {
   SvgChevronLeft,
   SvgEdit,
@@ -55,11 +55,9 @@ const ChatButton = memo(
   ({ chatSession, project, draggable = false }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
     const appPosition = useAppPosition();
-    const activeSidebarTab = useAppPosition();
     const active = useMemo(
-      () =>
-        activeSidebarTab.isChat() && activeSidebarTab.chat() === chatSession.id,
-      [activeSidebarTab, chatSession.id]
+      () => appPosition.isChat() && appPosition.chat() === chatSession.id,
+      [appPosition, chatSession.id]
     );
     const mounted = useOnMount();
     const [displayName, setDisplayName] = useState(
@@ -241,7 +239,10 @@ const ChatButton = memo(
     ];
 
     // Pin the chat's agent when clicking on the conversation
-    async function handleClick() {
+    const chatLink = appPosition.linkToChat(chatSession.id);
+
+    async function handleClick(event: React.MouseEvent<HTMLElement>) {
+      chatLink.onClick(event);
       await pinChatAgent(chatSession);
     }
 
@@ -261,7 +262,7 @@ const ChatButton = memo(
           await refreshCurrentProjectDetails();
 
           // Only route if the deleted chat is the currently opened chat session
-          if (active) {
+          if (appPosition.chat() === chatSession.id) {
             appPosition.openProject(project.id);
           }
         }
@@ -384,11 +385,7 @@ const ChatButton = memo(
         >
           <SidebarTab
             /* While renaming, drop the click target so the input stays usable. */
-            href={
-              isDragging || renaming
-                ? undefined
-                : `/app?chatId=${chatSession.id}`
-            }
+            href={isDragging || renaming ? undefined : chatLink.href}
             onClick={renaming ? undefined : handleClick}
             selected={active}
             rightChildren={rightMenu}

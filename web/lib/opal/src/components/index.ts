@@ -127,31 +127,40 @@ export {
   type CompactMarkdownProps,
 } from "@opal/components/text/CompactMarkdown";
 
+/* Badge */
+export {
+  Badge,
+  BADGE_COLORS,
+  badgeTextClass,
+  type BadgeProps,
+  type BadgeSize,
+} from "@opal/components/badge/components";
+
+/* BadgeButton */
+export {
+  BadgeButton,
+  type BadgeButtonProps,
+} from "@opal/components/badge-button/components";
+
 /* Tag */
 export {
   Tag,
-  TAG_COLORS,
+  TAG_REMOVE_ATTR,
   type TagProps,
-  type TagVariant,
-  type TagColor,
 } from "@opal/components/tag/components";
-
-/* Chip */
-export {
-  Chip,
-  CHIP_REMOVE_ATTR,
-  type ChipProps,
-} from "@opal/components/chip/components";
 
 /* Fold */
 export { Fold, type FoldProps } from "@opal/components/fold/components";
 
-/* Enter */
+/* Presence */
 export {
-  Enter,
-  type EnterProps,
-  type EnterVariant,
-} from "@opal/components/enter/components";
+  Presence,
+  type PresenceProps,
+  type PresenceSide,
+  type PresenceSwapProps,
+  type PresenceSwapDirection,
+  type PresenceSwapAxis,
+} from "@opal/components/presence/components";
 
 /* IconTooltip */
 export {
@@ -159,12 +168,6 @@ export {
   type IconTooltipProps,
   type IconTooltipStatus,
 } from "@opal/components/icon-tooltip/components";
-
-/* OverflowText */
-export {
-  OverflowText,
-  type OverflowTextProps,
-} from "@opal/components/overflow-text/components";
 
 /* Log */
 export {
@@ -195,6 +198,14 @@ export {
   type ProgressBarProps,
   type ProgressBarColor,
 } from "@opal/components/progress-bar/components";
+
+/* ProgressRing */
+export {
+  ProgressRing,
+  type ProgressRingProps,
+  type ProgressRingColor,
+  type ProgressRingTrack,
+} from "@opal/components/progress-ring/components";
 
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";

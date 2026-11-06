@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "Commit"
+      },
+      "commitDate": {
+        "label": "Commit Date"
+      },
+      "instanceUrl": {
+        "label": "Instance URL"
+      },
+      "label": "About",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "Not available",
+      "version": {
+        "label": "Version"
+      }
+    },
     "accountFallback": {
       "label": "Account"
     },
@@ -154,7 +173,7 @@
         "title": "Access control",
         "description": "Choose who can use this MCP.",
         "public": {
-          "label": "Public",
+          "label": "Organization",
           "description": "Anyone in your organization can use this MCP"
         },
         "groups": {
@@ -167,7 +186,6 @@
           "description": "Choose at least one group you manage."
         },
         "retainedUsers": "{count, plural, one {Also shared directly with # user.} other {Also shared directly with # users.}}",
-        "planTag": "Business",
         "planNote": "Group access requires a Business plan."
       },
       "defaultChat": {
@@ -412,8 +430,7 @@
       },
       "cimd": {
         "label": "Use client metadata document",
-        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead.",
-        "turnOff": "Turn off client metadata document"
+        "description": "When on, the provider fetches {appName}'s client metadata document over the public internet. Turn this off if this {appName} instance is private. {appName} then uses automatic client registration instead."
       },
       "discovery": {
         "checking": "Checking automatic setup…",
@@ -1115,18 +1132,6 @@
         "openapi": "Add OpenAPI plugin"
       },
       "catalog": {
-        "slack": {
-          "summary": "Search conversations and send messages",
-          "description": "Search conversations and send messages. Requires a registered Slack app."
-        },
-        "hubspot": {
-          "summary": "Work with contacts and deals",
-          "description": "Work with contacts and deals. Requires a HubSpot MCP connector."
-        },
-        "asana": {
-          "summary": "Manage tasks and projects",
-          "description": "Manage tasks and projects. Requires a registered OAuth client."
-        },
         "linear": {
           "summary": "Manage issues, projects, and teams",
           "description": "Manage issues, projects, and teams."
@@ -1218,6 +1223,10 @@
       "blocked": "This URL is blocked by your outbound security settings.",
       "publicDetected": "No authentication required",
       "oauthDetected": "OAuth detected",
+      "clientMetadata": "Client metadata document",
+      "clientMetadataSupported": "Supported",
+      "clientMetadataUnsupported": "Not supported",
+      "clientMetadataUnknown": "Not checked",
       "manualRequired": "Choose authentication manually",
       "chooseAuthentication": "We could not determine how this server authenticates. Choose a method below.",
       "connect": "Connect",
@@ -1254,7 +1263,7 @@
       "decisionModel": {
         "title": "Decision Model",
         "openAiDecisionsModelName": "OpenAI Decisions (GPT-6 Luna)",
-        "description": "Select a model for future classification and review features. Onyx does not use this model yet.",
+        "description": "Internal search uses this model to rank results and choose how much context to add. You can also set it in Chat Preferences.",
         "clear": "Clear",
         "notConfigured": "Not configured",
         "saveFailed": "Failed to update decision model"
@@ -1444,6 +1453,9 @@
         },
         "s3": {
           "description": "AWS storage buckets"
+        },
+        "azureDatalake": {
+          "description": "Files in Azure Data Lake Storage containers"
         },
         "r2": {
           "description": "Cloud storage buckets"
@@ -1646,7 +1658,7 @@
             "label": "Private"
           },
           "public": {
-            "label": "Public"
+            "label": "Organization"
           },
           "shared": {
             "label": "Shared"
@@ -1920,7 +1932,7 @@
             "text": "Access controls are removed from this deployment. **This starts a re-index** so search results reflect the change, which can take a while on a large index."
           },
           "madePublic": {
-            "text": "**Made public:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
+            "text": "**Opened to your organization:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
           },
           "reset": {
             "text": "**Reset to defaults:** Custom branding and chat retention policy."
@@ -2222,9 +2234,10 @@
         "description": "Generates session titles. A fast, low-cost model works well.",
         "title": "Chat Naming Model"
       },
-      "searchSelectionModel": {
-        "description": "Selects and checks retrieved documents. A fast, low-cost model can reduce search costs, but may affect answer quality.",
-        "title": "Search Selection Model"
+      "searchDecisionModel": {
+        "description": "Selects retrieved documents and decides how much context to add. A decision model ranks them in one call. A language model selects them as before.",
+        "title": "Search Decision Model",
+        "decisionSection": "Decision Models"
       },
       "taskModels": {
         "loadFailed": "Could not load task models",
@@ -2405,7 +2418,7 @@
       "toasts": {
         "chatNamingUpdateFailed": "Failed to update chat naming model",
         "providerResolveFailed": "Could not resolve provider",
-        "searchSelectionUpdateFailed": "Failed to update search selection model",
+        "searchDecisionUpdateFailed": "Failed to update search decision model",
         "settingsUpdateFailed": "Failed to update settings",
         "systemPromptUpdateFailed": "Failed to update system prompt",
         "toolsUpdateFailed": "Failed to update tools",
@@ -2635,7 +2648,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Delete"
+          "label": "Delete Connector",
+          "description": "Permanently remove all indexed docs."
         },
         "reIndex": {
           "tooltip": {
@@ -2674,7 +2688,7 @@
         },
         "syncPermissions": {
           "label": "Sync Permissions",
-          "description": "Pull who can read each doc from the source now.",
+          "description": "Pull doc permissions from the source.",
           "tooltip": {
             "syncing": "A permission sync is already queued or running"
           }
@@ -2801,20 +2815,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} docs/min",
-        "indexingSpeedTooltip": "Documents indexed per minute since the connector was created",
         "lastIndexed": {
           "value": "Last indexed {when}"
         },
+        "deletionStarted": {
+          "value": "Started {when}"
+        },
         "documents": {
           "totalLabel": "Total documents indexed",
-          "recentLabel": "Recently processed documents",
-          "syncedPermissionsLabel": "Synced permissions",
-          "syncedMembershipsLabel": "Synced group memberships"
+          "recentLabel": "Docs processed recently",
+          "indexedLabel": "Documents indexed"
         },
         "throughput": {
           "ariaLabel": "Documents indexed over time",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "lineTooltip": "{failures, plural, one {# failure} other {# failures}}, {errors, plural, one {# error} other {# errors}}",
+          "barLabel": "{count, plural, one {# document} other {# documents}}, {range}",
           "loadError": "The chart could not load.",
           "rangeFilter": "Runs created in this slice of the chart"
         },
@@ -2830,13 +2846,33 @@
         "title": "Indexing Status",
         "sync": {
           "permissionsTitle": "Permissions Sync Status",
-          "groupsTitle": "Group Membership Sync Status",
           "last": "Last synced {when}",
           "never": "Not synced yet",
-          "neverTooltip": "Indexed docs may not be searchable until their permissions are synced.",
-          "waitingForFirstIndex": "Waiting for first index"
+          "neverTooltip": "Indexed docs won't be searchable until their permissions are synced.",
+          "waitingForFirstIndex": "Waiting for first index",
+          "docsLabel": "Docs permission-synced",
+          "groupsLabel": "Group memberships"
         },
-        "accessTitle": "Connector Documents Access"
+        "actions": {
+          "showActivities": "Show Activities",
+          "hideActivities": "Hide Activities",
+          "viewDetails": "View Details",
+          "hideDetails": "Hide Details",
+          "viewIndexingRun": "View Indexing Run",
+          "viewPruningRun": "View Pruning Run",
+          "viewChecksRun": "View Checks Run"
+        },
+        "types": {
+          "count": "{count, plural, one {Document type} other {Document types}}",
+          "header": "Document Type",
+          "indexed": "Indexed",
+          "size": "Size",
+          "other": "Other",
+          "countWithSize": "{count} ({size})",
+          "bytes": "Bytes",
+          "loadError": "Couldn't load the document types.",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",
@@ -2966,6 +3002,7 @@
           "all": "All Types",
           "indexing": "Document Index",
           "backfill": "Document Backfill",
+          "retry": "Document Index - Retry",
           "doc_permission_sync": "Permissions Sync",
           "group_sync": "Group Membership Sync",
           "pruning": "Document Pruning",
@@ -2973,9 +3010,10 @@
         },
         "detail": {
           "queued": "Queued",
+          "starting": "Starting sync",
           "running": "Running",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({duration})",
+          "runtime": "Runtime {duration}",
           "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} memberships/min",
           "membershipRateFinished": "{rate} memberships/min ({duration})"
@@ -2984,6 +3022,7 @@
           "stages": "View Stage Metrics",
           "cancel": "Cancel",
           "logs": "View Logs",
+          "noLogs": "No logs recorded",
           "checks": "View Check Results"
         },
         "warnings": {
@@ -3018,16 +3057,12 @@
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}",
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
-        "search": {
-          "placeholder": "Search run errors…"
-        },
         "window": {
           "label": "Time range",
           "all": "All time",
           "h1": "Last hour",
           "h24": "Last 24 hours",
-          "d7": "Last 7 days",
-          "d30": "Last 30 days"
+          "d7": "Last 7 days"
         },
         "statusGroups": {
           "label": "Status",
@@ -3038,14 +3073,13 @@
           "canceled": "Canceled"
         },
         "loadError": {
-          "title": "Couldn't load the runs."
+          "title": "Couldn't load the runs.",
+          "retry": "Retry"
         },
         "empty": {
           "title": "No recent indexing runs",
           "filteredTitle": "No runs match these filters.",
           "pastRuns": "{count, plural, one {# Past Run} other {# Past Runs}}",
-          "view": "View",
-          "viewAria": "{count, plural, one {View # past run} other {View # past runs}}",
           "description": "Runs are scheduled in the background and may take a moment to appear."
         },
         "units": "{count, plural, one {run} other {runs}}",
@@ -3080,15 +3114,24 @@
           "all": "All Levels",
           "failures": "Failures",
           "errors": "Errors",
-          "other": "Other",
+          "running": "Running",
+          "success": "Success",
+          "canceled": "Canceled",
           "resolved": "Resolved",
-          "toggle": "Filters"
+          "connectors": "Connectors",
+          "connectorsLoading": "Loading connectors…",
+          "connectorsLoadError": "Couldn't load connectors.",
+          "connectorsRetry": "Retry",
+          "toggleShow": "Show Filters",
+          "toggleHide": "Hide Filters"
         },
         "groups": {
           "failures": "{count, plural, =0 {Failures} one {# Failure} other {# Failures}}",
           "errors": "{count, plural, =0 {Errors} one {# Error} other {# Errors}}",
-          "other": "Other",
-          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}"
+          "running": "{count, number} Running",
+          "resolved": "Resolved",
+          "success": "Success",
+          "canceled": "Canceled"
         },
         "title": {
           "indexing": {
@@ -3099,9 +3142,8 @@
             "errors": "Indexing completed with errors.",
             "resolved": "Indexing errors resolved.",
             "succeeded": "Indexing completed successfully.",
-            "queued": "Indexing queued.",
             "inProgress": "Indexing in progress.",
-            "canceled": "Indexing stopped."
+            "canceled": "Indexing canceled."
           },
           "doc_permission_sync": {
             "failed": "Permissions sync failed.",
@@ -3111,9 +3153,8 @@
             "errors": "Permissions synced with errors.",
             "resolved": "Permissions sync errors resolved.",
             "succeeded": "Permissions synced successfully.",
-            "queued": "Permissions sync queued.",
             "inProgress": "Permissions syncing.",
-            "canceled": "Permissions sync stopped."
+            "canceled": "Permissions sync canceled."
           },
           "group_sync": {
             "failed": "Group membership sync failed.",
@@ -3123,9 +3164,8 @@
             "errors": "Group membership synced with errors.",
             "resolved": "Group membership sync errors resolved.",
             "succeeded": "Group membership synced successfully.",
-            "queued": "Group membership sync queued.",
             "inProgress": "Group membership syncing.",
-            "canceled": "Group membership sync stopped."
+            "canceled": "Group membership sync canceled."
           },
           "pruning": {
             "failed": "Pruning failed.",
@@ -3135,9 +3175,8 @@
             "errors": "Pruning completed with errors.",
             "resolved": "Pruning errors resolved.",
             "succeeded": "Pruning completed successfully.",
-            "queued": "Pruning queued.",
             "inProgress": "Pruning in progress.",
-            "canceled": "Pruning stopped."
+            "canceled": "Pruning canceled."
           },
           "checks": {
             "failed": "Connector checks failed.",
@@ -3147,9 +3186,8 @@
             "errors": "Connector checks completed with errors.",
             "resolved": "Connector check errors resolved.",
             "succeeded": "Connector checks passed.",
-            "queued": "Connector checks queued.",
             "inProgress": "Connector checks running.",
-            "canceled": "Connector checks stopped."
+            "canceled": "Connector checks canceled."
           }
         },
         "description": {
@@ -3164,22 +3202,18 @@
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
           "indexingItems": "{count, plural, one {# item failed} other {# items failed}}",
-          "doc_permission_sync": "{count, plural, one {# doc failed to sync permissions} other {# docs failed to sync permissions}}",
-          "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "users": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
+          "groups": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "resolved": "Resolved",
-          "resolvedDocs": "{count, plural, one {# item resolved} other {# items resolved}}",
           "superseded": "Superseded"
         },
         "more": "Show more",
         "empty": {
           "title": "No recent activity",
-          "resolved": "No resolved runs",
-          "filtered": "Nothing matches this search.",
-          "failures": "No failures",
-          "errors": "No errors",
-          "other": "No other runs"
+          "past": "Past Activities",
+          "filtered": "Nothing matches this search."
         },
         "loadError": {
           "title": "Couldn't load the activity."
@@ -3187,19 +3221,32 @@
         "docs": {
           "title": "Failed items",
           "search": {
-            "placeholder": "Search items…"
+            "placeholder": "Search documents…"
           },
-          "resolveAll": "Retry all",
-          "resolveAllTooltip": "Re-index every failed document of this run",
-          "resolveAllUnsupported": "This connector can't re-index single documents. Re-index the connector to retry them.",
-          "resolveOne": "Retry this document",
-          "retry": "{count, plural, one {Retry # doc} other {Retry # docs}}",
+          "resolveAll": "Retry All Docs",
+          "resolveOne": "Retry Doc",
+          "resolveWithoutRetry": "Resolve without Retry",
           "more": "More",
           "less": "Less",
           "unknownDocument": "Unknown document",
-          "empty": "No open errors",
+          "empty": "No failed documents",
           "loadError": "Couldn't load the failed items.",
-          "open": "Open the document"
+          "open": "Open the document",
+          "resolvedGroup": "Resolved Errors",
+          "resolvedWithoutRetry": "Resolved without Retry",
+          "resolvedByLaterRun": "Resolved by Later Run"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Failed users",
+            "search": "Search users…",
+            "empty": "No failed users"
+          },
+          "groups": {
+            "title": "Failed groups",
+            "search": "Search groups…",
+            "empty": "No failed groups"
+          }
         },
         "trace": {
           "header": "Stack Trace • Run ID: {id}",
@@ -3207,17 +3254,18 @@
           "runId": "Run ID: {id}"
         },
         "actions": {
-          "resolve": "Resolve"
+          "resolve": "Resolve",
+          "resolveWithoutRetry": "Resolve without Retry",
+          "retryDocs": "Retry Docs"
         },
         "resolveAll": {
-          "button": "Resolve all shown",
-          "title": "Resolve all shown runs?",
-          "description": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved. They keep their status and move under resolved.",
-          "fleetDescription": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved, on the connectors you operate. They keep their status and move under resolved.",
-          "confirm": "Resolve all"
-        },
-        "resolved": {
-          "label": "Resolved"
+          "button": "Resolve All",
+          "title": "Resolve all shown activities",
+          "body": "{count, plural, one {This resolves the # activity that matches the current filter: {failures} and {errors}. Onyx does not retry its failed items. The activity keeps its status and moves to Resolved.} other {This resolves the # activities that match the current filter: {failures} and {errors}. Onyx does not retry their failed items. The activities keep their status and move to Resolved.}}",
+          "body2": "A run that is still running can report new errors. They show as open again. You can retry a resolved document later from its failed documents list.",
+          "failures": "{count, plural, =0 {no failures} one {# failure} other {# failures}}",
+          "errors": "{count, plural, =0 {no runs with errors} one {# run with errors} other {# runs with errors}}",
+          "confirm": "Resolve All"
         }
       },
       "stageDetails": {
@@ -3229,10 +3277,22 @@
         "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
+        "noDocs": "No docs completed indexing",
+        "laterCanceled": "Later stages canceled",
+        "retry": "Retry",
         "uneven": {
           "tooltip": "Batch times vary widely for this stage"
         },
         "close": "Close stage details"
+      },
+      "tabs": {
+        "configurations": "Connector Configurations",
+        "indexing": "Indexing",
+        "indexingDisabled": "Available after the first run starts."
+      },
+      "indexingTab": {
+        "chartHeading": "Document Indexing",
+        "runsHeading": "Indexing Runs"
       }
     },
     "connectorTitle": {
@@ -3685,7 +3745,7 @@
         "documentAccess": {
           "description": "Control who can access documents indexed by this connector.",
           "everyone": {
-            "description": "Documents indexed by this connector will be public to everyone in your organization.",
+            "description": "Documents indexed by this connector are available to everyone in your organization.",
             "title": "Everyone in Your Organization"
           },
           "specificGroups": {
@@ -4593,6 +4653,23 @@
             }
           }
         },
+        "azure_datalake": {
+          "description": "Configure Azure Data Lake Storage connector",
+          "fields": {
+            "account_name": {
+              "label": "Storage Account Name",
+              "description": "The name of the storage account, e.g. contosodata. The account must have a hierarchical namespace."
+            },
+            "container_name": {
+              "label": "Container Name",
+              "description": "The container (file system) to index."
+            },
+            "path_prefix": {
+              "label": "Path Prefix",
+              "description": "A directory in the container, e.g. reports/2026. Leave empty to index the whole container."
+            }
+          }
+        },
         "r2": {
           "description": "Configure R2 connector",
           "fields": {
@@ -5195,6 +5272,8 @@
         "integrationToken": "{source} Integration Token",
         "accessKey": "{source} Access Key",
         "accessKeySecret": "{source} Access Key Secret",
+        "storageAccountName": "Storage Account Name",
+        "accountKey": "{source} Account Key",
         "key": "{source} Key",
         "secret": "{source} Secret",
         "roleArn": "{source} Role ARN",
@@ -5216,6 +5295,7 @@
         "jiraUserEmail": "Required for Jira Cloud.",
         "lumappsServiceUser": "The user to index on behalf of.",
         "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
+        "azureDatalakeAccountKey": "In the Azure portal, open the storage account, then Security + networking, then Access keys.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
         "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
@@ -5228,6 +5308,7 @@
           "certificateAuthentication": "Certificate Authentication",
           "certificate": "Certificate",
           "accessKeyAndSecret": "Access Key and Secret",
+          "accountKey": "Account Key",
           "iamRole": "IAM Role",
           "assumeRole": "Assume Role",
           "serviceAccount": "Service Account",
@@ -5240,6 +5321,9 @@
           "teamsCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Required for Include Attachments, which reads channel files and their readers from SharePoint.",
           "outlookClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret.",
           "outlookCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password.",
+          "azureDatalakeClientSecret": "The connector signs in with a client secret of the app registration. Provide the client ID, directory ID and secret. Give the app the Storage Blob Data Reader role on the container.",
+          "azureDatalakeCertificate": "The connector signs in with a certificate uploaded to the app registration. Provide the client ID, directory ID, the PFX bundle and its password. Give the app the Storage Blob Data Reader role on the container.",
+          "azureDatalakeAccountKey": "The connector signs each request with a key of the storage account. Provide the account name and one of its access keys.",
           "s3AssumeRole": "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required."
         }
       },
@@ -5622,7 +5706,7 @@
             "label": "Private"
           },
           "public": {
-            "label": "Public"
+            "label": "Organization"
           }
         },
         "connector": {
@@ -5743,7 +5827,7 @@
             "header": "Name"
           },
           "public": {
-            "header": "Public"
+            "header": "Access"
           },
           "status": {
             "header": "Status"
@@ -5808,6 +5892,9 @@
         },
         "uploaded": {
           "label": "{count, plural, one {uploaded # file} other {uploaded # files}}"
+        },
+        "uploadedWithWarning": {
+          "label": "{count, plural, one {uploaded # file} other {uploaded # files}}, incomplete: {error}"
         }
       },
       "sensitiveWarning": {
@@ -6217,13 +6304,6 @@
           "title": "Group Permissions"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} now uses group-based permissions. Access is configured per group, so a user's permissions are the combination of every group they belong to.",
-        "learnMore": {
-          "label": "Learn more"
-        },
-        "title": "Permissions have changed."
-      },
       "sharedResources": {
         "agent": {
           "description": "agent"
@@ -6273,28 +6353,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "Add Limit"
-        },
-        "costLimit": {
-          "header": "Cost Limit",
-          "placeholder": "Cost limit",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only.",
-        "section": {
-          "description": "Limit number of tokens this group can use within a given time period.",
-          "title": "Token Rate Limit"
-        },
-        "timeWindow": {
-          "header": "Time Window",
-          "unit": "(UTC days)"
-        },
-        "tokenLimit": {
-          "header": "Token Limit",
-          "placeholder": "Token limit (thousands)",
-          "unit": "(thousands)"
-        }
+        "disabledTooltip": "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
       },
       "builtIn": {
         "admin": {
@@ -6305,9 +6364,6 @@
           "name": "Basic",
           "description": "Default group for all users with basic permissions."
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6587,11 +6643,24 @@
       }
     },
     "imageGeneration": {
+      "availableModels": {
+        "description": "Image models on your connected LLM providers. Connect one to use it in chat.",
+        "title": "Available Models"
+      },
       "configureSuccess": {
         "message": "Provider configured successfully"
       },
+      "connectButton": {
+        "label": "Connect"
+      },
+      "connectedModels": {
+        "title": "Connected Models"
+      },
       "deselectError": {
         "message": "Failed to deselect"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Disconnect {title}"
       },
       "disconnectError": {
         "message": "Failed to disconnect"
@@ -6609,6 +6678,9 @@
         "header": {
           "description": "This will remove the stored credentials for this provider.",
           "title": "Disconnect *{title}*"
+        },
+        "linkedHeader": {
+          "description": "The LLM provider and its credentials stay connected."
         },
         "noDefaultOption": {
           "description": "(Disable Image Generation)",
@@ -6630,6 +6702,9 @@
       },
       "disconnectSuccess": {
         "message": "{title} disconnected"
+      },
+      "editButton": {
+        "ariaLabel": "Edit {title}"
       },
       "emptyState": {
         "title": "Connect an image generation model to use in chat."
@@ -6709,12 +6784,30 @@
         "description": "Settings for in-chat image generation.",
         "title": "Image Generation"
       },
+      "linkError": {
+        "message": "Failed to connect model"
+      },
+      "linkSuccess": {
+        "message": "{title} connected"
+      },
+      "linkedModel": {
+        "description": "From {provider}"
+      },
       "loadError": {
         "message": "Failed to load configuration. Please refresh the page."
       },
       "model": {
         "description": "Select a model to generate images in chat.",
+        "placeholder": "Select a default model",
         "title": "Image Generation Model"
+      },
+      "modelFilter": {
+        "all": "All",
+        "recommended": "Recommended"
+      },
+      "noImageModels": {
+        "description": "Connect an LLM provider that serves image models on the Language Models page. To see every model on your connected providers, open the All tab.",
+        "title": "No image models available"
       },
       "providers": {
         "azureGptImage1": {
@@ -6995,11 +7088,6 @@
           "description": "{appName} will connect to this model on your {provider} proxy."
         }
       },
-      "maxImageSize": {
-        "description": "Images above this size will be skipped to limit resource usage.",
-        "suffix": "(MB)",
-        "title": "Max Image Size for Analysis"
-      },
       "modal": {
         "cancelButton": {
           "label": "Cancel"
@@ -7030,7 +7118,6 @@
           "tag": "GPU recommended"
         },
         "legacy": {
-          "tag": "Legacy",
           "tooltip": "You cannot select this model for a new index. It keeps working until you change the model."
         },
         "selectButton": {
@@ -7045,11 +7132,6 @@
         "addCustomModel": {
           "label": "Add Custom Model"
         },
-        "bringYourOwn": {
-          "cloudDescription": "Connect a LiteLLM proxy, an Azure OpenAI deployment, a Bifrost gateway or an OpenAI-compatible endpoint. You supply the model name. For LiteLLM, Azure and OpenAI-compatible endpoints, you also supply the dimension.",
-          "selfHostedDescription": "Run a Hugging Face embedding model that is not in the list above. You supply the model name, dimension and prefixes.",
-          "title": "Advanced: bring your own model or proxy"
-        },
         "cloudTab": {
           "label": "Cloud-based"
         },
@@ -7057,6 +7139,7 @@
           "title": "Set up a custom embedding model."
         },
         "customModels": {
+          "hint": "Use a [SentenceTransformers](https://www.sbert.net/)-compatible model available on [Hugging Face](https://huggingface.co/models?library=sentence-transformers&sort=trending). {appName} will download the model to set up for self-hosting. Compatibility isn't guaranteed.",
           "title": "Custom Models"
         },
         "foldModels": {
@@ -7087,9 +7170,6 @@
       "multipass": {
         "description": "Index documents as chunks of varying sizes to better identify relevant sources.",
         "disabledTooltip": "Multipass Indexing is disabled temporarily and will be available in the future.",
-        "tag": {
-          "label": "temporarily unavailable"
-        },
         "title": "Multipass Indexing"
       },
       "openaiCompatible": {
@@ -7241,6 +7321,7 @@
       },
       "vectorQuantization": {
         "description": "Store document vectors with fewer bits so vector search uses less memory. Fewer bits can lower search quality. Changing only this setting rebuilds the index from the stored vectors, without re-embedding.",
+        "needsVersion": "Needs OpenSearch {version}+",
         "none": {
           "description": "Full 32-bit precision.",
           "label": "None"
@@ -7253,7 +7334,8 @@
           "description": "About 4x less vector search memory. Almost no loss in search quality.",
           "label": "7-bit"
         },
-        "title": "Vector Quantization"
+        "title": "Vector Quantization",
+        "unsupportedTooltip": "This cluster runs OpenSearch {current}. Upgrade OpenSearch to {version} or later to use this level."
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {This connector will be deleted} other {These # connectors will be deleted}}",
@@ -7297,11 +7379,11 @@
             "off": "Every chunk in the search index has its connector IDs. Search uses the document access lists. Connector-level access is turned off.",
             "shadow": "Every chunk in the search index has its connector IDs. Search uses the document access lists and compares them with connector-level access."
           },
-          "title": "Connector access update complete"
+          "title": "Connector access update complete."
         },
         "notStarted": {
           "description": "A background job will add connector IDs to the existing chunks in the search index. It starts within a few minutes.",
-          "title": "Connector access update has not started"
+          "title": "Connector access update has not started."
         },
         "progress": {
           "ariaLabel": "Connector access update progress"
@@ -7320,7 +7402,7 @@
           "description": "How search decides which documents a user can see.",
           "enforcePending": "Enforce is set and starts when the update completes.",
           "enforceUnavailable": "Available after the search index update completes.",
-          "label": "Search access mode",
+          "label": "Search Access Mode",
           "options": {
             "enforce": {
               "description": "Search uses connector-level access.",
@@ -7342,26 +7424,22 @@
         },
         "loadError": {
           "description": "Reload the page to try again.",
-          "title": "Could not load the connector access update"
+          "title": "Could not load the connector access update."
         }
       },
       "embeddingRateLimit": {
-        "title": "Embedding rate limit",
+        "title": "Embedding Rate Limit",
         "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
         "requests": {
-          "title": "Requests per window",
-          "description": "Leave empty for no limit.",
-          "placeholder": "No limit"
+          "title": "Requests per Window",
+          "description": "The most embedding requests indexing can send in one window. Leave empty for no limit.",
+          "placeholder": "No limit",
+          "suffix": "requests"
         },
         "period": {
-          "title": "Window length",
-          "description": "For example, 60 for a limit per minute.",
-          "suffix": "(seconds)"
-        },
-        "restoreDefault": "Restore default",
-        "validation": {
-          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
-          "period": "Enter a whole number of seconds from 1 to {max, number}."
+          "title": "Window Length",
+          "description": "How long one window lasts. Use 60 for a per-minute limit.",
+          "suffix": "seconds"
         },
         "toasts": {
           "failed": "Could not save the rate limit."
@@ -7372,37 +7450,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Add Connector",
       "connectorCreated": {
         "toast": "Connector created successfully"
       },
       "overview": {
-        "connectors": {
-          "caption": "Indexing / active",
-          "label": "Connectors"
-        },
-        "documents": {
-          "caption": "In the index",
-          "label": "Documents",
-          "tooltip": "Adds up each connector's documents, so a document that two connectors hold counts twice."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "The overview could not load.",
-        "processed": {
-          "caption": "Processed in time range",
-          "label": "Documents",
-          "tooltip": "An estimate, since each run's count is spread evenly over the time it ran. A document counts each time a run processes it, failed ones included, so this can be more than the documents in the index."
-        }
+        "activeConnectors": "Active connectors",
+        "pausedConnectors": "Paused connectors",
+        "indexingConnectors": "Indexing connectors",
+        "loadError": "The overview could not load."
       },
       "activities": {
         "title": "Activities",
-        "history": "Full Activity History",
-        "viewLogs": "View Logs",
         "panel": {
-          "title": "Activity History",
+          "title": "Activities",
           "close": "Close Panel",
           "pairTitle": "{name} Activity History"
+        },
+        "panelButton": {
+          "show": "Show Activities",
+          "hide": "Hide Activities"
         }
       },
       "list": {
@@ -7411,21 +7478,22 @@
         },
         "statusFilter": {
           "label": "Status",
-          "all": "All Status"
+          "all": "All Status",
+          "running": "In Progress"
         },
         "counts": {
           "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
-          "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
+          "running": "{indexing, plural, other {# indexing}}, {syncing, plural, other {# syncing}}",
           "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
           "paused": "{count, plural, one {# connector paused} other {# connectors paused}}",
           "scheduled": "{count, plural, one {# connector scheduled} other {# connectors scheduled}}",
           "deleting": "{count, plural, one {# connector deleting} other {# connectors deleting}}"
         },
         "access": {
-          "public": "Public",
-          "private": "Private",
-          "sync": "Auto-sync",
-          "sync_restricted": "Auto-sync, restricted"
+          "public": "Public to your organization",
+          "private": "{count, plural, =0 {Private} one {Shared with # group} other {Shared with # groups}}",
+          "sync": "Auto-sync permissions",
+          "sync_restricted": "Auto-sync permissions"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} in queue",
@@ -7434,7 +7502,7 @@
         },
         "docs": {
           "label": "docs",
-          "processed": "{count, number} processed",
+          "processed": "{count, number} recently processed",
           "processedTooltip": {
             "running": "Documents the current run has processed so far, failed ones included. A document the run processes twice counts twice, so this can be more than the connector's documents.",
             "finished": "Documents the last run processed, failed ones included. A document the run processed twice counts twice, and documents removed since then no longer count for the connector, so this can be more than the connector's documents."
@@ -7445,6 +7513,8 @@
           "manageFederated": "Manage federated connector",
           "expand": "View Details",
           "collapse": "Hide Details",
+          "viewErrors": "View Errors",
+          "viewAllRuns": "View All Runs",
           "pause": "Pause",
           "resume": "Resume"
         },
@@ -7457,7 +7527,8 @@
           "filteredTitle": "No connectors match these filters."
         },
         "loadError": "Couldn't load the connectors.",
-        "units": "{count, plural, one {connector} other {connectors}}"
+        "units": "{count, plural, one {connector} other {connectors}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "Connector Indexing Status"
     },
@@ -7970,9 +8041,6 @@
         "title": "Set up an LLM provider to start chatting."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Default"
-        },
         "deleteButton": {
           "ariaLabel": "Delete {provider}"
         },
@@ -9050,8 +9118,8 @@
         },
         "knowledgeSource": {
           "allPublic": {
-            "label": "All Public Knowledge",
-            "sublabel": "Let OnyxBot respond based on information from all public connectors"
+            "label": "All Organization-Wide Knowledge",
+            "sublabel": "Let OnyxBot respond based on information from all organization-wide connectors"
           },
           "documentSets": {
             "label": "Specific Document Sets",
@@ -9818,169 +9886,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "Up to {cost} or {tokens} tokens",
-          "cost": "Up to {cost}",
-          "none": "No budget set",
-          "tokens": "Up to {tokens} tokens"
-        },
-        "cadence": {
-          "label": "{days, plural, one {Resets every day at midnight UTC} other {Resets every # days at midnight UTC}}"
-        },
-        "deleteFailed": {
-          "error": "Failed to delete token rate limit"
-        },
-        "empty": {
-          "message": "No limits yet. Create a spending limit to cap usage."
-        },
-        "loadFailed": {
-          "error": "Failed to load token rate limits"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "Delete {label}",
-            "tooltip": "Delete limit"
-          },
-          "disable": {
-            "ariaLabel": "Disable {label}"
-          },
-          "enable": {
-            "ariaLabel": "Enable {label}"
-          },
-          "label": "{budget}, {cadence}"
-        },
-        "updateFailed": {
-          "error": "Failed to update token rate limit"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "Cancel"
-        },
-        "costBudget": {
-          "description": "Maximum spend per reset period. Set a cost budget, a token budget, or both.",
-          "placeholder": "No cost limit",
-          "title": "Cost budget",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "Enter a cost budget, a token budget, or both",
-          "costMax": "The maximum cost budget is ${amount, number}",
-          "costMinCents": "Cost budget must be at least $0.01",
-          "costMoreThanZero": "Cost budget must be greater than 0",
-          "groupRequired": "Select a user group",
-          "periodInteger": "Enter a whole number of days",
-          "periodMin": "Use at least 1 day",
-          "periodRequired": "Enter a reset period",
-          "scopeRequired": "Target Scope is a required field",
-          "tokenIncrement": "Use increments of 1,000 tokens",
-          "tokenInteger": "Enter a whole number of tokens",
-          "tokenMax": "The maximum token budget is 1 trillion",
-          "tokenMin": "Use at least 1,000 tokens"
-        },
-        "groupMenu": {
-          "empty": "No user groups yet. Create one under Users & Groups."
-        },
-        "groupPicker": {
-          "placeholder": "Choose a group"
-        },
-        "header": {
-          "title": "Create spending limit"
-        },
-        "period": {
-          "description": "Budgets reset at midnight UTC",
-          "title": "Reset period",
-          "unit": "days"
-        },
-        "scope": {
-          "caption": {
-            "global": "Everyone in the workspace shares one budget.",
-            "group": "Members of {group} share one budget.",
-            "groupUnchosen": "Members of the chosen group share one budget.",
-            "user": "Each user gets their own budget."
-          },
-          "title": "Applies to"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "Workspace"
-          },
-          "user": {
-            "title": "Per user"
-          },
-          "userGroup": {
-            "title": "User group"
-          }
-        },
-        "submit": {
-          "label": "Create limit"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} or {tokens} tokens",
-            "tokens": "{tokens} tokens"
-          },
-          "global": "{days, plural, one {Everyone in the workspace shares up to {budget} every day. Usage is blocked until the period resets.} other {Everyone in the workspace shares up to {budget} every # days. Usage is blocked until the period resets.}}",
-          "group": "{days, plural, one {Members of {group} share up to {budget} every day. Usage is blocked until the period resets.} other {Members of {group} share up to {budget} every # days. Usage is blocked until the period resets.}}",
-          "groupUnchosen": "{days, plural, one {Members of the chosen group share up to {budget} every day. Usage is blocked until the period resets.} other {Members of the chosen group share up to {budget} every # days. Usage is blocked until the period resets.}}",
-          "user": "{days, plural, one {Each user can spend up to {budget} every day. Usage is blocked until the period resets.} other {Each user can spend up to {budget} every # days. Usage is blocked until the period resets.}}"
-        },
-        "tokenBudget": {
-          "description": "Maximum tokens per reset period",
-          "placeholder": "No token limit",
-          "title": "Token budget",
-          "unit": "tokens"
-        },
-        "userGroup": {
-          "description": "Choose which group shares this budget",
-          "title": "User group"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "Create spending limit"
-        },
-        "createFailed": {
-          "error": "Failed to create spending limit"
-        },
-        "created": {
-          "message": "Spending limit created!"
-        },
-        "embedded": {
-          "description": "Set guardrails for workspace, user, and group usage. Limits can be enabled or disabled without deleting their configuration.",
-          "title": "Manage spending limits"
-        },
-        "global": {
-          "description": "Global limits apply to all users, user groups, and API keys. When the global limit is reached, no more tokens can be spent."
-        },
-        "intro": {
-          "description": "Spending limits help you control how many tokens can be spent in a given time period.",
-          "groupLimit": "Set limits for user groups to control spend for teams.",
-          "toggleLimit": "Enable and disable limits as needed.",
-          "userLimit": "Set limits for users so no single user can spend too much.",
-          "workspaceLimit": "Set a workspace-wide limit for your team's overall spend."
-        },
-        "tabs": {
-          "global": {
-            "name": "Global"
-          },
-          "groups": {
-            "name": "Groups"
-          },
-          "users": {
-            "name": "Users"
-          }
-        },
-        "user": {
-          "description": "User limits apply to each user individually. When a user reaches a limit, they are temporarily blocked from spending tokens."
-        },
-        "userGroup": {
-          "description": "Group limits apply to all users in a group. If a user belongs to multiple groups, the most permissive limit applies."
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM call traces will no longer be sent to **{label}**. Traces already sent are unaffected.",
@@ -10335,13 +10240,6 @@
           "label": "Invite Users"
         },
         "title": "Users & Requests"
-      },
-      "permissionsNotice": {
-        "description": "{appName} now uses group-based permissions. The Curator and Global Curator roles have been replaced by configurable group permissions, with per-group managers for scoped administration.",
-        "learnMoreButton": {
-          "label": "Learn more"
-        },
-        "title": "Permissions have changed"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -11109,6 +11007,200 @@
         "scoped": "Added or changed items only",
         "failures": "{count, plural, one {# failure} other {# failures}}"
       }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "Set spending limits to guardrail LLM spending for your organization.",
+        "loadFailed": "Couldn't load spending limits."
+      },
+      "workspace": {
+        "title": "Workspace Limits",
+        "description": "Apply to all users and accounts in this organization.",
+        "pool": {
+          "title": "Shared Budget",
+          "description": "Shared limit across everyone per reset period. Set a cost or token limit, or both.",
+          "empty": "No global workspace limit",
+          "target": "Global workspace limit",
+          "emptyDescription": "Shared limit across everyone per reset period."
+        },
+        "perUser": {
+          "title": "Per-User Limit",
+          "description": "Individual limit for each user in the organization. Set a cost or token limit, or both.",
+          "empty": "No per-user limit",
+          "target": "Global per-user limit",
+          "emptyDescription": "Individual limit for each user in the organization."
+        }
+      },
+      "groups": {
+        "title": "Group Limits",
+        "description": "Apply to certain groups in this organization.",
+        "add": {
+          "label": "Add Group Limit"
+        },
+        "picker": {
+          "placeholder": "Select a group",
+          "limitSet": "Limit set:"
+        },
+        "members": "{count, plural, one {# member} other {# members}}",
+        "empty": "Set cost/token limit for workspace, user, and group usage.",
+        "pool": {
+          "title": "Shared Group Budget",
+          "description": "Shared limit for everyone in this group. Set a cost or token limit, or both.",
+          "empty": "No shared group budget",
+          "target": "Group limit",
+          "emptyDescription": "Shared limit for everyone in this group.",
+          "members": "{count, plural, one {# member} other {# members}}"
+        },
+        "perMember": {
+          "title": "Per-Member Limit",
+          "description": "Individual limit for each member of this group. Set a cost or token limit, or both.",
+          "adminOnly": "Only an admin can change per-member limits, because they can raise a member above the workspace limit.",
+          "empty": "No per-member limit",
+          "target": "Per-member group limit",
+          "emptyDescription": "Individual limit for each member of this group.",
+          "members": "Per-member limit • {count, plural, one {# member} other {# members}}"
+        },
+        "kind": {
+          "placeholder": "Select a limit type"
+        },
+        "field": {},
+        "new": {
+          "title": "New Group Limit",
+          "pool": {
+            "description": "Shared limit for everyone in a specific group. Set a cost or token limit, or both."
+          },
+          "perMember": {
+            "description": "Individual limit for each member of a specific group. Set a cost or token limit, or both."
+          }
+        }
+      },
+      "groupPage": {
+        "title": "Spending Limits",
+        "description": "Limit what this group can spend on LLM usage."
+      },
+      "card": {
+        "addLimit": "Add Limit",
+        "addModelBudget": "Add Model Budget",
+        "modelBudget": {
+          "title": "Model Budget",
+          "description": "Cap spend on specific models. These also count toward the shared budget."
+        },
+        "cancel": "Cancel",
+        "save": "Save Updates",
+        "saved": "Spending limits saved",
+        "saveFailed": "Couldn't save spending limits: {error}",
+        "create": "Create Limit",
+        "reenable": "Re-enable",
+        "disable": {
+          "tooltip": "Turn off all limits"
+        },
+        "expand": {
+          "tooltip": "Manage"
+        },
+        "collapse": {
+          "tooltip": "Collapse"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> or <b>{tokens}</b> tokens / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> tokens / {period}",
+          "period": {
+            "DAILY": "day",
+            "WEEKLY": "week",
+            "MONTHLY": "month"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, one {# model budget} other {# model budgets}}",
+          "nextReset": "Next reset: {at}",
+          "inactive": "Inactive limit",
+          "used": "<b>{percent}%</b> used",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "Alerts",
+        "description": "Alert-only limits set through the API. They don't block usage, and saving here keeps them unchanged.",
+        "row": "{model}, {period}: {target}",
+        "allModels": "All models",
+        "percent": "{percent}% of the limit",
+        "tokens": "{tokens} tokens"
+      },
+      "row": {
+        "model": {
+          "title": "Model",
+          "placeholder": "Search models…"
+        },
+        "period": {
+          "title": "Reset Period",
+          "options": {
+            "DAILY": {
+              "title": "Daily Limit",
+              "description": "Resets every day",
+              "helper": "Resets every day at 00:00 UTC."
+            },
+            "WEEKLY": {
+              "title": "Weekly Limit",
+              "description": "Resets every Monday",
+              "helper": "Resets every Monday at 00:00 UTC."
+            },
+            "MONTHLY": {
+              "title": "Monthly Limit",
+              "description": "Resets 1st of every month",
+              "helper": "Resets 1st of every month at 00:00 UTC."
+            }
+          }
+        },
+        "nextReset": "Next reset",
+        "resetUsage": {
+          "label": "Reset Limit Usage Now",
+          "done": "Usage reset. This limit counts from now until its next reset.",
+          "failed": "Couldn't reset usage: {error}"
+        },
+        "remove": {
+          "tooltip": "Remove limit"
+        },
+        "cost": {
+          "title": "Cost Limit",
+          "placeholder": "No cost limit",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "Token Limit",
+          "placeholder": "No token limit",
+          "suffix": "K",
+          "unit": "tokens"
+        },
+        "usage": {
+          "spent": "<mono>{amount}</mono> spent",
+          "tokens": "<mono>{tokens}</mono> tokens used",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "Usage will be blocked until next reset.",
+            "model": "Model usage will be blocked until next reset."
+          }
+        },
+        "whenReached": {
+          "title": "When This Limit Is Reached",
+          "blockAll": {
+            "title": "Block All Usage at Limit",
+            "description": "Usage from all models including chat, search, bot, and API calls stops until the next reset."
+          },
+          "blockModel": {
+            "title": "Block Model Usage at Limit",
+            "description": "Usage from this model including chat, bot, and API calls stops until the next reset.",
+            "summary": "Block model usage at limit"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "Set a cost of at least $0.01 and at most 1 trillion tokens.",
+          "budgetRequired": "Set a cost limit, a token limit, or both.",
+          "duplicate": "Another limit already uses this period.",
+          "modelRequired": "Choose a model."
+        },
+        "edit": {
+          "tooltip": "Edit"
+        }
+      }
     }
   },
   "agents": {
@@ -11121,6 +11213,9 @@
       },
       "pin": {
         "tooltip": "Pin to Sidebar"
+      },
+      "pinFailed": {
+        "message": "Couldn't update the pin. Try again."
       },
       "share": {
         "tooltip": "Share Agent"
@@ -11428,7 +11523,7 @@
           }
         },
         "publicPermissionMenu": {
-          "ariaLabel": "Change public permission"
+          "ariaLabel": "Change organization permission"
         },
         "row": {
           "updateAccess": {
@@ -11512,16 +11607,18 @@
           "title": "Prompt Reminders"
         },
         "public": {
-          "label": "Public to your organization"
+          "label": "Available to your organization"
         }
       }
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {Agent} other {Agents}}"
+        "label": "{count, plural, one {# Agent} other {# Agents}}"
       },
       "empty": {
-        "description": "No Agents found"
+        "description": "Agents you create, and agents shared with you, appear here.",
+        "filteredDescription": "No agents match the selected tab and filters.",
+        "item": "agents"
       },
       "header": {
         "description": "Customize AI behavior and knowledge for you and your team's use cases.",
@@ -11535,9 +11632,6 @@
       },
       "page": {
         "ariaLabel": "Agents Page"
-      },
-      "search": {
-        "placeholder": "Search agents..."
       },
       "sections": {
         "all": {
@@ -12027,9 +12121,6 @@
         "builtin": {
           "label": "Built-in"
         },
-        "custom": {
-          "label": "Custom"
-        },
         "invalid": {
           "label": "Invalid"
         },
@@ -12041,6 +12132,12 @@
         },
         "unavailable": {
           "label": "Unavailable - click to learn more"
+        },
+        "shared": {
+          "label": "Shared"
+        },
+        "organization": {
+          "label": "Organization"
         }
       },
       "toggle": {
@@ -12106,6 +12203,12 @@
       },
       "failedFiles": {
         "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
+      },
+      "firstOpenLoader": {
+        "ariaLabel": "Loading chat"
+      },
+      "olderMessagesLoader": {
+        "ariaLabel": "Loading older messages"
       },
       "newChatButton": {
         "label": "Start a new chat"
@@ -12341,7 +12444,9 @@
           "speakingPlaceholder": "{appName} is speaking..."
         },
         "sendButton": {
-          "processingFilesTooltip": "Waiting for attached file(s) to finish processing"
+          "processingFilesTooltip": "Waiting for attached file(s) to finish processing",
+          "stoppingLabel": "Stopping…",
+          "reloadLabel": "Check again"
         },
         "tabReadingButton": {
           "readLabel": "Read this tab",
@@ -12558,6 +12663,9 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "User has stopped generation"
+        },
+        "timedOut": {
+          "text": "The response stopped because it reached its time limit."
         }
       },
       "codeBlock": {
@@ -12693,9 +12801,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "Image generation"
-        },
         "emptyState": {
           "text": "No images generated"
         },
@@ -12705,11 +12810,11 @@
         "generatedStatus": {
           "text": "{count, plural, one {Generated # image} other {Generated # images}}"
         },
-        "generatingImagesStatus": {
-          "text": "Generating images..."
-        },
         "generatingStatus": {
           "text": "Generating image..."
+        },
+        "stoppedStatus": {
+          "text": "Image generation stopped"
         }
       },
       "memoizedLink": {
@@ -12774,6 +12879,9 @@
         },
         "tryAgainNow": {
           "text": "You can try again now."
+        },
+        "otherModels": {
+          "text": "Other models are still available."
         }
       },
       "resubmit": {
@@ -12870,9 +12978,6 @@
           },
           "executingTool": {
             "label": "Executing tool"
-          },
-          "generatingImage": {
-            "label": "Generating image..."
           },
           "generatingImages": {
             "label": "Generating images"
@@ -13224,14 +13329,14 @@
           "title": "Your Organization"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "Edit"
+          "canEdit": {
+            "label": "Can edit"
+          },
+          "canUse": {
+            "label": "Can use"
           },
           "removeAccess": {
             "label": "Remove Access"
-          },
-          "viewAndChat": {
-            "label": "View & Chat"
           }
         },
         "privateOption": {
@@ -13646,6 +13751,10 @@
       "incognito": {
         "title": "You're incognito"
       }
+    },
+    "readiness": {
+      "stopFailed": "Could not stop the response. Try again.",
+      "checkFailed": "Could not confirm that the response finished. Check again before sending another message."
     }
   },
   "common": {
@@ -14083,11 +14192,11 @@
         "text": "Loading..."
       },
       "makePublic": {
-        "label": "Make this {objectName} Public?",
+        "label": "Make this {objectName} available to your organization?",
         "subtext": "If set, then this {objectName} will be usable by <b>All {publicToWhom}</b>. Otherwise, only <b>Admins</b> and <b>{publicToWhom}</b> who have explicitly been given access to this {objectName} (e.g. via a User Group) will have access."
       },
       "publicDisabled": {
-        "message": "This {objectName} is public and available to all users."
+        "message": "This {objectName} is available to everyone in your organization."
       },
       "usersFallback": {
         "text": "Users"
@@ -14179,10 +14288,7 @@
       "upgrade": {
         "label": "Upgrade Plan"
       },
-      "availableFor": "Available for {plan}",
-      "beta": {
-        "title": "beta"
-      }
+      "availableFor": "Available for {plan}"
     },
     "placeholders": {
       "email": "email@yourcompany.com",
@@ -14216,6 +14322,34 @@
     },
     "appFooter": {
       "slogan": "Open Source AI Platform"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "No {item}",
+        "title": "No items"
+      },
+      "noResults": {
+        "description": "No results matching that search term were found.",
+        "itemTitle": "No {item} found",
+        "title": "No results found"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "Search {item} or press \"/\" to focus...",
+      "placeholder": "Search or press \"/\" to focus..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "beta",
+        "comingSoon": "coming soon",
+        "deprecated": "deprecated",
+        "temporarilyUnavailable": "temporarily unavailable",
+        "legacy": "legacy"
+      },
+      "labels": {
+        "default": "Default"
+      }
     }
   },
   "craft": {
@@ -14737,6 +14871,10 @@
       },
       "plusMenu": {
         "tooltip": "Add files or skills"
+      },
+      "contextRing": {
+        "label": "Context window usage",
+        "tooltip": "{percent}% of context used"
       }
     },
     "interruptHint": {
@@ -14748,9 +14886,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "Return Home"
       },
@@ -15251,6 +15386,10 @@
         "trigger": {
           "runNow": "Run once",
           "schedule": "Schedule"
+        },
+        "markAllViewed": {
+          "label": "Mark all viewed",
+          "error": "Could not mark runs as viewed. Try again."
         }
       },
       "scheduleEditor": {
@@ -15282,7 +15421,8 @@
           "tue": "Tue",
           "wed": "Wed"
         }
-      }
+      },
+      "unviewedResults": "New results"
     },
     "todoList": {
       "empty": {
@@ -15824,24 +15964,30 @@
           "label": "Image Generation"
         },
         "description": "Set up models to create images in your chats.",
-        "title": "Enable image generation"
+        "title": "Enable Image Generation"
       },
       "inviteTeam": {
         "button": {
           "label": "Manage Users"
         },
         "description": "Manage users and permissions for your team",
-        "title": "Invite your team"
+        "title": "Invite Your Team"
       },
       "webSearch": {
         "button": {
           "label": "Web Search"
         },
         "description": "Enable {appName} to search the internet for information.",
-        "title": "Select web search provider"
+        "title": "Select Web Search Provider"
       }
     },
     "header": {
+      "finishButton": {
+        "label": "Finish Setup"
+      },
+      "nextButton": {
+        "label": "Next"
+      },
       "progress": {
         "label": "Step {current} of {total}"
       }
@@ -15853,13 +15999,16 @@
       "connectedCount": {
         "label": "{count, plural, one {# model connected} other {# models connected}}"
       },
-      "customProvider": {
-        "subtitle": "LiteLLM Compatible APIs",
-        "title": "Custom LLM Provider"
-      },
       "description": "{appName} supports both self-hosted models and popular providers.",
       "edit": {
         "ariaLabel": "Edit LLM providers"
+      },
+      "moreProviders": {
+        "button": {
+          "label": "View"
+        },
+        "description": "Set up in Admin Panel",
+        "title": "More Providers"
       },
       "providerCard": {
         "connect": {
@@ -15867,7 +16016,8 @@
         },
         "settingsButton": {
           "ariaLabel": "Provider settings"
-        }
+        },
+        "settingsLoadError": "Couldn't load this provider's settings. Try again."
       },
       "title": "Connect your LLM models"
     },
@@ -15894,28 +16044,19 @@
       }
     },
     "steps": {
-      "complete": {
-        "button": {
-          "label": "Finish Setup"
-        },
-        "title": "You're all set, review the optional settings or click Finish Setup"
-      },
       "llmSetup": {
-        "button": {
-          "label": "Next"
-        },
-        "title": "Almost there! Connect your models to start chatting."
+        "title": "Connect a model to start chatting."
       },
       "name": {
-        "button": {
-          "label": "Next"
-        },
-        "title": "Let's take a moment to get you set up."
+        "title": "Tell us what to call you."
       },
-      "welcome": {
-        "button": {
-          "label": "Let's Go"
-        },
+      "optionalSetup": {
+        "title": "Set up a few optional extras."
+      },
+      "postStep": {
+        "title": "You're all set."
+      },
+      "preStep": {
         "title": "Let's take a moment to get you set up."
       }
     }
@@ -15994,14 +16135,16 @@
     "inputMultiUpload": {
       "placeholder": "Add files…",
       "dropToAdd": "Drop files here to add",
-      "dropToAddMore": "Drop here to add more files"
+      "dropToAddMore": "Drop here to add more files",
+      "select": "Select Files"
     },
     "inputUpload": {
       "placeholder": "Add a file…",
       "pasted": "Pasted text",
       "attached": "File attached",
       "dropToAdd": "Drop file here to add",
-      "dropToReplace": "Drop here to replace file"
+      "dropToReplace": "Drop here to replace file",
+      "select": "Select File"
     },
     "inputImage": {
       "alt": "Image",
@@ -16431,7 +16574,7 @@
       "row": {
         "contentPlaceholder": "Provide a concise 1–2 sentence summary of the following:",
         "promptPlaceholder": "Summarize",
-        "publicTooltip": "Cannot delete public prompt-shortcuts.",
+        "publicTooltip": "Cannot delete organization-wide prompt shortcuts.",
         "removeAriaLabel": "Remove shortcut"
       },
       "title": "Prompt Shortcuts",
@@ -16655,6 +16798,12 @@
         },
         "webSearch": {
           "label": "Web Search"
+        },
+        "skills": {
+          "label": "Skills"
+        },
+        "spendingLimits": {
+          "label": "Spending Limits"
         }
       },
       "sections": {
@@ -16968,6 +17117,9 @@
         "inspectFailed": "Failed to inspect skill bundle",
         "saveFailed": "Failed to save skill",
         "saved": "Saved \"{name}\""
+      },
+      "creationAccess": {
+        "title": "Access"
       }
     },
     "modals": {
@@ -17006,6 +17158,13 @@
           "singleSkill": "Upload one skill at a time.",
           "title": "File requirements",
           "zip": "ZIP files must contain a SKILL.md file."
+        },
+        "batch": {
+          "title": "Access for Uploaded Skills",
+          "selected": "{count, plural, one {# skill bundle selected} other {# skill bundles selected}}",
+          "result": "{imported, plural, one {# skill imported} other {# skills imported}}. {failed, plural, one {# failed} other {# failed}}.",
+          "failure": "{name}: {reason}",
+          "requirement": "Select multiple ZIP files to import skills together. Each ZIP must contain one skill."
         }
       },
       "importGithub": {
@@ -17082,6 +17241,11 @@
         "unavailableFallback": "This skill cannot be imported.",
         "unavailableTag": {
           "label": "Can't import"
+        },
+        "sharing": {
+          "title": "Access for Imported Skills",
+          "configureButton": "Configure access",
+          "description": "These access settings apply to all {count, plural, one {# selected skill} other {# selected skills}}."
         }
       },
       "nameConflict": {
@@ -17146,9 +17310,7 @@
         },
         "ownerLabel": "Owner",
         "permissionMenu": {
-          "ariaLabel": "Update access for {name}",
-          "canUse": "Can use",
-          "canEdit": "Can edit"
+          "ariaLabel": "Update access for {name}"
         },
         "saveButton": {
           "label": "Save"
@@ -17190,11 +17352,15 @@
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"
+      },
+      "tabs": {
+        "details": "Details",
+        "sharing": "Sharing"
       }
     },
     "page": {
       "browse": {
-        "title": "Browse skills"
+        "title": "Select skills"
       },
       "countSeparator": {
         "label": "{count, plural, one {Skill} other {Skills}}"
@@ -17222,8 +17388,8 @@
           "title": "No matching skills"
         },
         "noSkills": {
-          "description": "No custom skills have been shared with you yet, and no built-ins are configured.",
-          "title": "No skills available"
+          "title": "No custom skills yet",
+          "description": "Create or import a skill to add it to your library."
         }
       },
       "focusedApp": {
@@ -17260,6 +17426,9 @@
         "disableFailed": "Failed to disable {name}",
         "enableFailed": "Failed to enable {name}",
         "refreshFailed": "{name} was updated, but the skill list could not be refreshed."
+      },
+      "builtins": {
+        "title": "Built-in skills ({count, number})"
       }
     },
     "sections": {
@@ -17315,6 +17484,34 @@
           "readFailed": "Could not read the upload."
         }
       }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {Everyone in the organization can access this skill.} other {Everyone in the organization can access these skills.}}",
+      "selected": "Shared with {users, plural, one {# person} other {# people}} and {groups, plural, one {# group} other {# groups}}.",
+      "private": "{count, plural, one {Only you can access this skill.} other {Only you can access these skills.}}"
+    },
+    "bulk": {
+      "adminDescription": "Manage skills and access across your organization.",
+      "selectAll": "Select all visible custom skills",
+      "selected": "{count, plural, one {# selected} other {# selected}}",
+      "share": "Share",
+      "enable": "Enable for me",
+      "disable": "Disable for me",
+      "delete": "Delete",
+      "selectSkill": "Select {name}",
+      "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
+      "failed": "Could not update skills. Try again.",
+      "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
+      "deleteTitle": "{count, plural, one {Delete # skill?} other {Delete # skills?}}",
+      "deleteDescription": "{count, plural, one {This deletes the selected skill for everyone who has access. This cannot be undone.} other {This deletes all # selected skills for everyone who has access. This cannot be undone.}}",
+      "shareTitle": "{count, plural, one {Update Access for # Skill} other {Update Access for # Skills}}",
+      "shareDescription": "Apply these changes to every selected skill. Settings left unchanged keep their current values.",
+      "unchanged": "Keep unchanged",
+      "everyone": "Everyone in the organization",
+      "invitedOnly": "Invited people and groups",
+      "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
+      "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
+      "moreActions": "More actions"
     }
   },
   "opensearchHealth": {

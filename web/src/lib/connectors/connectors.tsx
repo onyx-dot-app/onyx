@@ -1855,6 +1855,36 @@ export const connectorConfigs: Record<
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  azure_datalake: {
+    description: "connectors.azure_datalake.description",
+    values: [
+      {
+        type: "text",
+        label: "connectors.azure_datalake.fields.account_name.label",
+        name: "account_name",
+        description:
+          "connectors.azure_datalake.fields.account_name.description",
+        optional: false,
+      },
+      {
+        type: "text",
+        label: "connectors.azure_datalake.fields.container_name.label",
+        name: "container_name",
+        description:
+          "connectors.azure_datalake.fields.container_name.description",
+        optional: false,
+      },
+      {
+        type: "text",
+        label: "connectors.azure_datalake.fields.path_prefix.label",
+        name: "path_prefix",
+        description: "connectors.azure_datalake.fields.path_prefix.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24,
+  },
   r2: {
     description: "connectors.r2.description",
     values: [

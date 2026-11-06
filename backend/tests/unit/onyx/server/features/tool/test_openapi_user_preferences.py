@@ -152,7 +152,6 @@ def test_default_chat_optout_before_credentials_and_allowlist(
     enabled: bool | None,
     constructed: bool,
 ) -> None:
-    from onyx.chat.emitter import Emitter
     from onyx.context.search.models import PersonaSearchInfo
     from onyx.llm.interfaces import LLM
     from onyx.tools import tool_constructor
@@ -198,7 +197,6 @@ def test_default_chat_optout_before_credentials_and_allowlist(
     tool_constructor._construct_tools_impl(
         configuration=configuration,
         db_session=MagicMock(spec=Session),
-        emitter=MagicMock(spec=Emitter),
         user=User(id=uuid4(), enable_memory_tool=False),
         llm=MagicMock(spec=LLM),
         allowed_tool_ids=[42],

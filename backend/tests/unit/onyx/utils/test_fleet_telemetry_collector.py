@@ -1,7 +1,7 @@
 """Collector rows become safe events with stable IDs. A failed read never escapes."""
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -32,6 +32,9 @@ def _connector_row(**overrides: Any) -> dict[str, Any]:
         "prune_seconds": None,
         "auto_sync_enabled": False,
         "permission_sync_enabled": True,
+        "last_permission_sync_at": _NOW - timedelta(minutes=3),
+        "last_group_sync_at": _NOW - timedelta(minutes=10),
+        "permission_sync_pending_since": None,
         "config": {
             "include_shared_drives": True,
             "batch_size": 16,
@@ -57,6 +60,7 @@ def _attempt_row(**overrides: Any) -> dict[str, Any]:
         "completed_batches": 2,
         "started_at": _NOW - timedelta(minutes=3),
         "time_updated": _NOW - timedelta(minutes=1),
+        "ended_at": None,
         "last_progress_at": _NOW - timedelta(minutes=1),
         "last_heartbeat_at": _NOW,
         "error_sample": None,
@@ -99,6 +103,7 @@ def _job_row(**overrides: Any) -> dict[str, Any]:
         "groups_processed": 0,
         "memberships_synced": 0,
         "error_count": 0,
+        "error_sample": None,
         "last_progress_at": None,
         "last_heartbeat_at": None,
     }
@@ -117,6 +122,7 @@ class _Source:
             {"domain": "localhost", "first_signup_at": _NOW},
         ]
         self.license: dict[str, Any] = {"license_present": False, "first_set_at": None}
+        self.users: int = 3
         self.attempts: list[dict[str, Any]] = [_attempt_row()]
         self.stages: list[dict[str, Any]] = [_stage_row()]
         self.jobs: list[dict[str, Any]] = [_job_row()]
@@ -146,6 +152,9 @@ class _Source:
             collector, "email_domain_rows", lambda _session: self.domains
         )
         monkeypatch.setattr(collector, "license_row", lambda _session: self.license)
+        monkeypatch.setattr(
+            collector, "standard_user_count", lambda _session: self.users
+        )
         monkeypatch.setattr(collector, "attempt_rows", attempts)
         monkeypatch.setattr(
             collector, "stage_rows", lambda _session, _ids, _since: self.stages
@@ -176,13 +185,17 @@ def _event_ids(sender: fleet.BoundedTelemetry) -> dict[str, str]:
     }
 
 
-def _job_event(sender: fleet.BoundedTelemetry) -> dict[str, Any]:
-    (job,) = [event for event in sender._take_batch() if event["event_type"] == "job"]
-    return job
+def _only_event(sender: fleet.BoundedTelemetry, event_type: str) -> dict[str, Any]:
+    (event,) = [
+        event for event in sender._take_batch() if event["event_type"] == event_type
+    ]
+    return event
 
 
 def test_connector_data_keeps_reviewed_settings_and_counts_only() -> None:
-    data: dict[str, Any] = collector.connector_data(_connector_row())
+    data: dict[str, Any] = collector.connector_data(
+        _connector_row(), cadences=(300, None)
+    )
     assert data["connector_type"] == "google_drive" and data["state"] == "active"
     assert data["metadata"] == {
         "include_shared_drives": True,
@@ -197,9 +210,96 @@ def test_connector_data_keeps_reviewed_settings_and_counts_only() -> None:
     assert fleet.sanitize_data("connector", data) == data
     # The hash follows the reported settings.
     changed: dict[str, Any] = collector.connector_data(
-        _connector_row(refresh_seconds=3600)
+        _connector_row(refresh_seconds=3600), cadences=(300, None)
     )
     assert changed["config_hash"] != data["config_hash"]
+
+
+def test_connector_data_reports_permission_sync_times_for_synced_pairs_only() -> None:
+    synced: dict[str, Any] = collector.connector_data(
+        _connector_row(permission_sync_pending_since=_NOW), cadences=(300, None)
+    )
+    assert (
+        synced["last_permission_sync_at"] == (_NOW - timedelta(minutes=3)).isoformat()
+    )
+    assert synced["last_group_sync_at"] == (_NOW - timedelta(minutes=10)).isoformat()
+    assert synced["permission_sync_pending_since"] == _NOW.isoformat()
+    # A sync the source does not have, or that cannot run here, has no cadence.
+    assert synced["permission_sync_seconds"] == 300
+    assert "group_sync_seconds" not in synced
+    assert fleet.sanitize_data("connector", synced) == synced
+    public: dict[str, Any] = collector.connector_data(
+        _connector_row(permission_sync_enabled=False), cadences=(300, 300)
+    )
+    assert (
+        not {
+            "last_permission_sync_at",
+            "last_group_sync_at",
+            "permission_sync_seconds",
+            "group_sync_seconds",
+        }
+        & public.keys()
+    )
+
+
+def test_permission_sync_cadences_follow_the_schedulers_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    unindexed: dict[str, Any] = _connector_row(last_success_at=None)
+    # Onyx Lite runs no permission syncs, and a build without Enterprise code has none.
+    monkeypatch.setattr(collector, "DISABLE_VECTOR_DB", True)
+    assert collector.permission_sync_cadence_reader()(_connector_row()) == (None, None)
+    monkeypatch.setattr(collector, "DISABLE_VECTOR_DB", False)
+    assert collector.permission_sync_cadence_reader()(_connector_row()) == (None, None)
+    calls: list[tuple[object, ...]] = []
+
+    def doc_seconds(
+        source: DocumentSource, status: ConnectorCredentialPairStatus, indexed: bool
+    ) -> int | None:
+        calls.append((source, status, indexed))
+        return 300 if indexed else None
+
+    def group_seconds(
+        source: DocumentSource, status: ConnectorCredentialPairStatus
+    ) -> int | None:
+        calls.append((source, status))
+        return 600
+
+    helpers: dict[str, Callable[..., int | None]] = {
+        "doc_permission_sync_seconds": doc_seconds,
+        "external_group_sync_seconds": group_seconds,
+    }
+    monkeypatch.setattr(
+        collector,
+        "fetch_ee_implementation_or_noop",
+        lambda _module, attribute: helpers[attribute],
+    )
+    reads: list[float] = []
+
+    def multiplier() -> float:
+        reads.append(2.0)
+        return 2.0
+
+    monkeypatch.setattr(
+        collector.OnyxRuntime,
+        "get_doc_permission_sync_multiplier",
+        staticmethod(multiplier),
+    )
+    read_cadences = collector.permission_sync_cadence_reader()
+    public: dict[str, Any] = _connector_row(permission_sync_enabled=False)
+    assert read_cadences(public) == (None, None)
+    assert calls == [] and reads == []
+    assert read_cadences(unindexed) == (None, 600)
+    assert calls == [
+        (DocumentSource.GOOGLE_DRIVE, ConnectorCredentialPairStatus.ACTIVE, False),
+        (DocumentSource.GOOGLE_DRIVE, ConnectorCredentialPairStatus.ACTIVE),
+    ]
+    # The doc sync scheduler's runtime multiplier applies to doc syncs only. A pass
+    # reads it once, and only once a permission-synced pair's doc sync can run.
+    assert reads == []
+    assert read_cadences(_connector_row()) == (600, 600)
+    assert read_cadences(_connector_row(cc_pair_id=4)) == (600, 600)
+    assert reads == [2.0]
 
 
 def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
@@ -209,6 +309,7 @@ def test_attempt_data_reports_an_error_category_but_no_error_text() -> None:
     failed: dict[str, Any] = collector.attempt_data(
         _attempt_row(
             status=IndexingStatus.FAILED,
+            ended_at=_NOW - timedelta(minutes=1),
             error_sample="Embedding request for PRIVATE-DOC failed",
         )
     )
@@ -248,6 +349,33 @@ def test_job_data_reports_duration_and_failure() -> None:
     )
     assert "cc_pair_id" not in unlinked
     assert "last_progress_at" not in unlinked
+
+
+def test_job_data_reports_an_error_category_for_failed_runs_only() -> None:
+    failed: dict[str, Any] = collector.job_data(
+        _job_row(
+            state="failed",
+            ended_at=_NOW,
+            error_sample="HTTP 401 Unauthorized for PRIVATE-SITE",
+        )
+    )
+    assert failed["error_code"] == "auth"
+    assert "PRIVATE" not in json.dumps(failed) and "error_sample" not in failed
+    assert fleet.sanitize_data("job", failed) == failed
+    # A canceled run's message names an internal cause, not why a sync failed.
+    canceled: dict[str, Any] = collector.job_data(
+        _job_row(
+            state="canceled",
+            ended_at=_NOW,
+            error_sample="Canceled: the connector is being deleted",
+        )
+    )
+    # A partial doc sync counts its documents with errors and has no message.
+    partial: dict[str, Any] = collector.job_data(
+        _job_row(state="completed_with_errors", ended_at=_NOW, error_count=3)
+    )
+    assert "error_code" not in canceled and "error_code" not in partial
+    assert partial["error_count"] == 3
 
 
 def test_job_data_reports_sync_attempt_progress() -> None:
@@ -330,8 +458,10 @@ def test_first_run_sends_work_then_inventory_and_sets_the_cursor(
         "connector",
         "tenant_domain",
         "license",
+        "users",
     ]
     assert events[5]["data"]["domain"] == "example.com"
+    assert events[7]["data"] == {"total": 3}
     stage: dict[str, Any] = events[1]
     # The service requires a stage event at the time of its last update.
     assert stage["occurred_at"] == (_NOW - timedelta(minutes=1)).isoformat()
@@ -360,24 +490,193 @@ def test_repeated_runs_repeat_event_ids_and_skip_unchanged_inventory(
     source.connectors = [_connector_row(doc_count=41)]
     collector.collect_snapshots("public")
     third: dict[str, str] = _event_ids(sender)
-    # A running job's progress and a changed inventory go out again.
+    # A running job's progress and a changed connector go out again, alone.
     assert third["job"] != first["job"] and third["attempt"] == first["attempt"]
-    assert {"connector", "tenant_domain", "license"} <= third.keys()
+    assert (
+        "connector" in third
+        and not {"tenant_domain", "license", "users"} & third.keys()
+    )
 
 
-def test_a_finished_job_replaces_its_running_state(
+_INVENTORY: tuple[str, ...] = ("connector", "tenant_domain", "license", "users")
+
+
+def _inventory_sent(sender: fleet.BoundedTelemetry) -> list[str]:
+    return [
+        event["event_type"]
+        for event in sender._take_batch()
+        if event["event_type"] in _INVENTORY
+    ]
+
+
+def _sent_items(source: _Source) -> dict[str, dict[str, Any]]:
+    stored: bytes | None = source.cache.get(collector._INVENTORY_ITEMS_KEY)
+    return json.loads(stored) if stored is not None else {}
+
+
+def test_inventory_items_go_out_when_they_change_or_their_last_send_is_old(
     source: _Source, sender: fleet.BoundedTelemetry
 ) -> None:
     collector.collect_snapshots("public")
-    running: dict[str, Any] = _job_event(sender)
+    assert _inventory_sent(sender) == ["connector", "tenant_domain", "license", "users"]
+    collector.collect_snapshots("public")
+    assert _inventory_sent(sender) == []
+    # A permission sync moves the connector's sync time, and only it goes out.
+    source.connectors = [_connector_row(last_permission_sync_at=_NOW)]
+    collector.collect_snapshots("public")
+    assert _inventory_sent(sender) == ["connector"]
+    # Six hours after its own last send, an unchanged item goes out again.
+    items: dict[str, dict[str, Any]] = _sent_items(source)
+    items["license"]["sent_at"] -= collector._INVENTORY_SECONDS
+    source.cache.set(collector._INVENTORY_ITEMS_KEY, json.dumps(items))
+    collector.collect_snapshots("public")
+    assert _inventory_sent(sender) == ["license"]
+    # A connector no longer read drops out of the record.
+    source.connectors = []
+    collector.collect_snapshots("public")
+    assert "connector:3" not in _sent_items(source)
+
+
+@pytest.mark.usefixtures("source")
+def test_a_partly_sent_inventory_sends_the_rest_next_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Room for the work, the heartbeat, and the connector only.
+    small: fleet.BoundedTelemetry = make_sender(capacity=5)
+    monkeypatch.setattr(collector, "get_sender", lambda: small)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(small) == ["connector"]
+    roomy: fleet.BoundedTelemetry = make_sender(capacity=256)
+    monkeypatch.setattr(collector, "get_sender", lambda: roomy)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(roomy) == ["tenant_domain", "license", "users"]
+
+
+def test_items_after_a_refusal_keep_their_last_send(
+    source: _Source, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roomy: fleet.BoundedTelemetry = make_sender(capacity=256)
+    monkeypatch.setattr(collector, "get_sender", lambda: roomy)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(roomy) == ["connector", "tenant_domain", "license", "users"]
+    source.connectors = [_connector_row(doc_count=41)]
+    # Room for the work and the heartbeat only, so the changed connector is refused.
+    small: fleet.BoundedTelemetry = make_sender(capacity=4)
+    monkeypatch.setattr(collector, "get_sender", lambda: small)
+    collector.collect_snapshots("public")
+    assert _inventory_sent(small) == []
+    monkeypatch.setattr(collector, "get_sender", lambda: roomy)
+    collector.collect_snapshots("public")
+    # The other items were neither changed nor due.
+    assert _inventory_sent(roomy) == ["connector"]
+
+
+def test_a_finished_attempt_is_sent_at_its_end_and_again_only_for_late_batches(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    now: datetime = datetime.now(timezone.utc)
+    # With no completed batches, only the `1 +` in the revision puts the finished
+    # state above the running one.
+    source.attempts = [
+        _attempt_row(time_updated=now - timedelta(minutes=1), completed_batches=0)
+    ]
+    collector.collect_snapshots("public")
+    running: dict[str, Any] = _only_event(sender, "attempt")
+    # The worker's clock recorded the end before the last running update's time.
+    ended: datetime = now - timedelta(minutes=1, seconds=1)
+
+    def finished(**overrides: Any) -> list[dict[str, Any]]:
+        values: dict[str, Any] = {
+            "status": IndexingStatus.FAILED,
+            "completed_batches": 0,
+            "ended_at": ended,
+            "time_updated": now,
+        }
+        return [_attempt_row(**{**values, **overrides})]
+
+    source.attempts = finished()
+    collector.collect_snapshots("public")
+    failed: dict[str, Any] = _only_event(sender, "attempt")
+    assert failed["occurred_at"] == ended.isoformat()
+    # The service compares revisions before times.
+    assert failed["revision"] > running["revision"]
+    # Checkpoint cleanup updates the finished row days later.
+    source.attempts = finished(time_updated=now + timedelta(days=6))
+    collector.collect_snapshots("public")
+    assert _only_event(sender, "attempt")["event_id"] == failed["event_id"]
+    # A batch that was in flight at the end completes later.
+    source.attempts = finished(completed_batches=1, docs_indexed=20)
+    collector.collect_snapshots("public")
+    late: dict[str, Any] = _only_event(sender, "attempt")
+    assert late["event_id"] != failed["event_id"]
+    assert late["revision"] > failed["revision"]
+    assert late["occurred_at"] == failed["occurred_at"]
+
+
+def test_finished_work_past_the_horizon_is_not_sent(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    # A later update touches finished rows, some of them from long ago.
+    now: datetime = datetime.now(timezone.utc)
+    source.attempts = [
+        _attempt_row(
+            attempt_id=attempt_id,
+            status=IndexingStatus.FAILED,
+            ended_at=now - timedelta(days=days),
+            time_updated=now,
+        )
+        for attempt_id, days in ((1, 200), (2, 170))
+    ]
+    source.jobs = [
+        _job_row(
+            job_id=f"port:{job_id}",
+            job_type="migration",
+            state="failed",
+            ended_at=now - timedelta(days=days),
+            revision_at=now,
+        )
+        for job_id, days in ((1, 200), (2, 170))
+    ]
+    source.stages = []
+    collector.collect_snapshots("public")
+    sent: list[int | str] = [
+        event["data"].get("attempt_id") or event["data"]["job_id"]
+        for event in sender._take_batch()
+        if event["event_type"] in ("attempt", "job")
+    ]
+    assert sent == [2, "port:2"]
+
+
+def test_a_finished_job_is_sent_once_at_its_end(
+    source: _Source, sender: fleet.BoundedTelemetry
+) -> None:
+    collector.collect_snapshots("public")
+    running: dict[str, Any] = _only_event(sender, "job")
     running_at: datetime = datetime.fromisoformat(running["occurred_at"])
     # The job ended before that pass started, but its transaction committed late.
     ended: datetime = running_at - timedelta(seconds=1)
-    source.jobs = [_job_row(state="success", ended_at=ended, revision_at=ended)]
+
+    def finished(end: datetime) -> list[dict[str, Any]]:
+        return [_job_row(state="success", ended_at=end, revision_at=end)]
+
+    source.jobs = finished(ended)
     collector.collect_snapshots("public")
-    finished: dict[str, Any] = _job_event(sender)
-    assert finished["data"]["state"] == "success"
-    assert datetime.fromisoformat(finished["occurred_at"]) > running_at
+    done: dict[str, Any] = _only_event(sender, "job")
+    assert done["data"]["state"] == "success"
+    assert done["occurred_at"] == ended.isoformat()
+    # The service compares revisions before times.
+    assert done["revision"] > running["revision"]
+    # Later passes repeat the finished state's event ID.
+    collector.collect_snapshots("public")
+    assert _only_event(sender, "job")["event_id"] == done["event_id"]
+    # A later write of a final status stamps a new end.
+    later: datetime = ended + timedelta(minutes=1)
+    source.jobs = finished(later)
+    collector.collect_snapshots("public")
+    rewritten: dict[str, Any] = _only_event(sender, "job")
+    assert rewritten["event_id"] != done["event_id"]
+    assert rewritten["occurred_at"] == later.isoformat()
+    assert rewritten["revision"] == done["revision"]
 
 
 def test_a_failed_read_counts_a_source_error_and_keeps_the_cursor(
@@ -435,7 +734,7 @@ def test_a_full_queue_resumes_at_the_first_unsent_row(
     assert [event["data"]["attempt_id"] for event in small._take_batch()] == [0, 1]
     assert _cursor(source) == recent + timedelta(minutes=2)
     # The inventory did not fit either, so the next run sends it again.
-    assert collector._INVENTORY_KEY not in source.cache.store
+    assert _sent_items(source) == {}
 
 
 @pytest.mark.parametrize("refusal", ["closed", "drained"])
@@ -457,7 +756,7 @@ def test_a_refused_row_is_read_again(
     collector.collect_snapshots("public")
     # The refused row is the first row of the window. The next run reads it again.
     assert _cursor(source) == since
-    assert collector._INVENTORY_KEY not in source.cache.store
+    assert _sent_items(source) == {}
 
 
 @pytest.mark.usefixtures("sender")

@@ -24,6 +24,7 @@ roll back atomically.
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -41,6 +42,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     Permission,
@@ -72,6 +74,7 @@ from onyx.db.utils import is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
+from onyx.skills.ingest import IngestedBundle
 
 
 class SkillManagementPolicy(str, Enum):
@@ -795,3 +798,204 @@ def persist_skill_validity(
                 .values(is_valid=validity_update.is_valid)
             )
         db_session.commit()
+
+
+@dataclass(frozen=True)
+class SkillSharingChange:
+    """A partial update to a skill's access. None leaves a setting unchanged;
+    set_public_permission marks public_permission as supplied."""
+
+    public_permission: SkillSharePermission | None = None
+    set_public_permission: bool = False
+    installation_policy: SkillInstallationPolicy | None = None
+    user_shares: Mapping[UUID, SkillSharePermission] | None = None
+    group_shares: Mapping[int, SkillSharePermission] | None = None
+
+
+SkillBulkAction = Literal["share", "enable", "disable", "delete"]
+
+
+def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
+    if skill.author_user_id == user.id:
+        return
+    if has_global_permission(user, Permission.MANAGE_SKILLS):
+        return
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        "You do not have permission to change organization-wide skill access.",
+    )
+
+
+def _assert_group_share_within_scope(
+    skill: Skill,
+    change: SkillSharingChange,
+    user: User,
+    db_session: Session,
+) -> None:
+    """Changing a skill's group shares is a MANAGE_SKILLS action, matching how
+    agents treat group attachment. EDIT on the skill is not enough: an owner
+    could otherwise publish into any group and inject the skill into that group
+    manager's scope. Shares are read from the DB, never the request, so a
+    reassignment cannot escape scope. Re-sending the current set is a no-op."""
+    if change.group_shares is None:
+        return
+    current = {share.user_group_id: share.permission for share in skill.group_shares}
+    if current == dict(change.group_shares):
+        return
+    assert_within_scope(
+        user,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=list(current),
+        requested_group_ids=list(change.group_shares),
+        is_non_public=skill.public_permission is None
+        and change.public_permission is None,
+    )
+
+
+def share_skill__no_commit(
+    skill: Skill,
+    change: SkillSharingChange,
+    user: User,
+    db_session: Session,
+    *,
+    merge_existing: bool = False,
+) -> set[UUID]:
+    """Apply an access change and return every user whose sandbox is affected,
+    before or after the change. With merge_existing, supplied user and group
+    grants are added to the current ones instead of replacing them."""
+    if change.installation_policy is not None and not has_global_permission(
+        user, Permission.FULL_ADMIN_PANEL_ACCESS
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only admins can change skill installation policies.",
+        )
+    if change.set_public_permission:
+        ensure_can_edit_org_visibility(skill, user)
+    # Anchor on the pre-call visibility so a public->private convert plus a
+    # group-share in one request can't slip a published skill into managed scope.
+    _assert_group_share_within_scope(skill, change, user, db_session)
+
+    before = affected_user_ids_for_skill(skill, db_session)
+    if change.set_public_permission:
+        set_skill_public_permission(
+            skill=skill,
+            public_permission=change.public_permission,
+            db_session=db_session,
+        )
+    if change.installation_policy is not None:
+        set_skill_installation_policy(skill, change.installation_policy, db_session)
+
+    user_shares: dict[UUID, SkillSharePermission] | None = None
+    if change.user_shares is not None:
+        user_shares = {
+            user_id: permission
+            for user_id, permission in change.user_shares.items()
+            if user_id != skill.author_user_id
+        }
+        if merge_existing:
+            user_shares = {
+                share.user_id: share.permission for share in skill.user_shares
+            } | user_shares
+    group_shares: dict[int, SkillSharePermission] | None = None
+    if change.group_shares is not None:
+        group_shares = dict(change.group_shares)
+        if merge_existing:
+            group_shares = {
+                share.user_group_id: share.permission for share in skill.group_shares
+            } | group_shares
+    replace_skill_shares(
+        skill=skill,
+        user_shares=user_shares,
+        group_shares=group_shares,
+        db_session=db_session,
+    )
+    return before | affected_user_ids_for_skill(skill, db_session)
+
+
+def delete_skill_for_user__no_commit(
+    skill: Skill, user: User, db_session: Session
+) -> tuple[set[UUID], str | None]:
+    """Delete a skill the user may edit. Returns the affected users and the
+    bundle file id for caller cleanup."""
+    if (
+        skill.installation_policy == SkillInstallationPolicy.REQUIRED
+        and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only admins can delete required skills.",
+        )
+    affected = affected_user_ids_for_skill(skill, db_session)
+    return affected, delete_skill(skill, db_session)
+
+
+def create_skill_from_bundle__no_commit(
+    ingested: IngestedBundle,
+    change: SkillSharingChange | None,
+    auto_enable: bool,
+    user: User,
+    db_session: Session,
+) -> tuple[Skill, bool, set[UUID]]:
+    """Create a skill from a stored bundle inside a savepoint, so a name
+    conflict or a rejected access change rolls back this skill only. Returns
+    the skill, whether it was enabled for the user, and the affected users."""
+    with db_session.begin_nested():
+        skill = add_new_skill__no_commit(
+            Skill(
+                name=ingested.canonical_name,
+                description=ingested.description,
+                bundle_file_id=ingested.bundle_file_id,
+                bundle_sha256=ingested.bundle_sha256,
+                is_valid=True,
+                author_user_id=user.id,
+            ),
+            db_session,
+        )
+        affected: set[UUID] = set()
+        if change is not None:
+            affected = share_skill__no_commit(skill, change, user, db_session)
+        enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
+            skill, user.id, db_session
+        )
+        if enabled:
+            affected.add(user.id)
+    return skill, enabled, affected
+
+
+def bulk_update_skill__no_commit(
+    skill_id: UUID,
+    action: SkillBulkAction,
+    change: SkillSharingChange | None,
+    user: User,
+    db_session: Session,
+) -> tuple[set[UUID], str | None]:
+    """Apply one bulk action to one skill inside a savepoint, so a failure
+    rolls back this skill only. Returns the affected users and, for a delete,
+    the bundle file id for caller cleanup."""
+    with db_session.begin_nested():
+        if action in ("enable", "disable"):
+            set_skill_enabled_for_user(
+                skill_id=skill_id,
+                enabled=action == "enable",
+                user=user,
+                db_session=db_session,
+            )
+            return {user.id}, None
+        skill = fetch_skill(
+            skill_id,
+            policy=SkillManagementPolicy.EDIT,
+            user=user,
+            db_session=db_session,
+            lock_for_update=True,
+        )
+        if skill is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+        if action == "share":
+            if change is None:
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Sharing is required.")
+            return share_skill__no_commit(
+                skill, change, user, db_session, merge_existing=True
+            ), None
+        return delete_skill_for_user__no_commit(skill, user, db_session)

@@ -31,7 +31,7 @@ import {
   EMPTY_QUEUED_MESSAGES,
   MAX_QUEUED_MESSAGES,
   type QueuedMessage,
-} from "@/app/app/interfaces";
+} from "@/app/app/types";
 
 export interface BaseInputBarHandle {
   reset: () => void;

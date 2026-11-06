@@ -1,9 +1,12 @@
 import { SWR_KEYS } from "@/lib/swr-keys";
-const mockPush = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
-  useRouter: () => ({ push: mockPush }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockReplace }),
 }));
 
 import { Form, Formik } from "formik";
@@ -121,7 +124,8 @@ beforeEach(() => {
   workspaceTier = Tier.BUSINESS;
   craftAvailable = false;
   defaultToolIds = [42, 99];
-  mockPush.mockClear();
+  mockReplace.mockClear();
+  window.history.replaceState(null, "", "/");
   serverRecord = configuredServer;
   saveResponse = async () => new Response(JSON.stringify(serverRecord));
   availableGroups = [
@@ -189,7 +193,7 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
-test("Public is the only alternative to groups and clears explicit grants", async () => {
+test("Organization is the only alternative to groups and clears explicit grants", async () => {
   const submit = renderAccess();
   const user = setupUser();
   await user.click(screen.getByRole("combobox", { name: "Access control" }));
@@ -199,7 +203,7 @@ test("Public is the only alternative to groups and clears explicit grants", asyn
   ).not.toBeInTheDocument();
   await user.click(
     screen.getByRole("option", {
-      name: /^Public Anyone in your organization can use this MCP/,
+      name: /^Organization Anyone in your organization can use this MCP/,
     })
   );
   await user.click(screen.getByRole("button", { name: "Save access" }));
@@ -235,7 +239,7 @@ test("scoped managers can select groups only and must choose a group", async () 
   const user = setupUser();
   await user.click(screen.getByRole("combobox", { name: "Access control" }));
   expect(
-    screen.queryByRole("option", { name: /^Public/ })
+    screen.queryByRole("option", { name: /^Organization/ })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("option", { name: /^Private/ })
@@ -417,7 +421,7 @@ describe("inline server configuration", () => {
     await user.click(chat);
     await user.click(craft);
     expect(savedRequests).toEqual([]);
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
     await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(true));
     await user.click(
       screen.getByRole("button", {
@@ -470,7 +474,7 @@ describe("inline server configuration", () => {
     await user.click(
       await screen.findByRole("switch", { name: "Enable in default Chat" })
     );
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
     expect(savedRequests).toEqual([]);
     await user.click(
       screen.getByRole("button", {
@@ -478,7 +482,7 @@ describe("inline server configuration", () => {
       })
     );
     await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.stringContaining("enable_chat_intent=")
       )
     );
@@ -746,7 +750,7 @@ describe("inline server configuration", () => {
       })
     );
     expect(savedRequests).toEqual([]);
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   test.each(["", "not-a-url", "ftp://example.com/mcp"])(
@@ -782,7 +786,7 @@ describe("inline server configuration", () => {
     { adminCapabilities: [] },
     { adminCapabilities: [Permission.MANAGE_ACTIONS] },
   ])(
-    "read-only configuration loads without global edit permission and preserves Public access: %j",
+    "read-only configuration loads without global edit permission and preserves organization-wide access: %j",
     async ({ adminCapabilities }) => {
       renderDetailsPage({ readOnly: true, permissions: [], adminCapabilities });
       expect(
@@ -797,7 +801,7 @@ describe("inline server configuration", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.getByRole("combobox", { name: "Access control" })
-      ).toHaveValue("Public");
+      ).toHaveValue("Organization");
       expect(
         screen.getByRole("combobox", { name: "Access control" })
       ).toBeDisabled();

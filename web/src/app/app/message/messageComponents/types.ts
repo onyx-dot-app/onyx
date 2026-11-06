@@ -5,7 +5,7 @@ import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
 import type { IconFunctionComponent } from "@opal/types";
-import { CitationMap } from "../../interfaces";
+import { CitationMap } from "@/app/app/types";
 import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
 
 export enum RenderType {
@@ -76,6 +76,7 @@ export type MessageRenderer<
   onComplete: () => void;
   renderType: RenderType;
   animate: boolean;
+  restoredTextLength?: number;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
   /** Whether this is the last step in the timeline (for connector line decisions) */

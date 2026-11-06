@@ -1,0 +1,63 @@
+---
+title: "Zulip"
+description: "Access messages from Zulip streams"
+---
+
+## How it works
+
+The Zulip connector indexes messages from every stream the bot user can read.
+Onyx groups the messages of a topic into one document per week and links each document back to the topic in Zulip.
+
+Permission sync is not available. **Document Access** can be **Everyone in Your Organization** or **Specific Groups**.
+**Specific Groups** is a paid feature: the Business and Enterprise tiers on Onyx Cloud,
+and the Enterprise Edition when self-hosted.
+
+The connector is available in all editions.
+
+<Note>
+  Onyx indexes only the streams the bot is subscribed to or can read.
+  Subscribe the bot to each stream you want to index.
+</Note>
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Create a Zulip bot">
+    In Zulip, open **Personal settings** → **Bots** and add a new bot.
+
+    <img className="rounded-image" src="/assets/admins/connectors/zulip/ZulipBot.webp" alt="Creating a bot user in Zulip settings"/>
+  </Step>
+
+  <Step title="Copy zuliprc contents">
+    Download or copy the bot's `zuliprc` file, see the red arrow below:
+
+    <img className="rounded-image" src="/assets/admins/connectors/zulip/ZulipRC.webp" alt="Zulip bot page highlighting the zuliprc configuration download"/>
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Add the credential">
+    In the Admin Panel, go to **Connectors** and select **Zulip**. Under **Authentication Account**,
+    select **New Zulip Account** and paste the `zuliprc` text into **Zuliprc Content**.
+  </Step>
+
+  <Step title="Enter the realm name and URL">
+    Find your Zulip realm name and URL in Zulip:
+
+    <img className="rounded-image" src="/assets/admins/connectors/zulip/ZulipRealmURL.webp" alt="Zulip UI showing Realm and URL details"/>
+
+    Enter the **Realm Name** and the **Realm URL**, for example `https://example.zulipchat.com`.
+
+    <img className="rounded-image" src="/assets/admins/connectors/zulip/OnyxZulipConfig.webp" alt="Onyx Zulip connector configuration with realm name and realm URL"/>
+  </Step>
+
+  <Step title="Set access and create">
+    Under **Connector Settings**, choose **Document Access** and click **Create Connector**.
+  </Step>
+</Steps>
+
+Later runs index new messages only.

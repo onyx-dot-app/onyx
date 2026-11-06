@@ -1,7 +1,14 @@
 # Plans the module against a mocked provider, so these run without a GCP
 # project or credentials. Run with `terraform test` from the module directory.
 
-mock_provider "google" {}
+mock_provider "google" {
+  override_data {
+    target = data.google_storage_project_service_account.this
+    values = {
+      member = "serviceAccount:service-123456789012@gs-project-accounts.iam.gserviceaccount.com"
+    }
+  }
+}
 
 variables {
   name       = "onyx-file-store-prod"
@@ -357,4 +364,104 @@ run "rejects_a_malformed_project_id" {
   }
 
   expect_failures = [var.project_id]
+}
+
+run "defaults_create_no_key_and_no_expiry" {
+  command = plan
+
+  assert {
+    condition = (
+      length(google_kms_key_ring.this) == 0 &&
+      length(google_kms_crypto_key.this) == 0 &&
+      length(google_kms_crypto_key_iam_member.gcs_service_agent) == 0
+    )
+    error_message = "No KMS resources should exist unless create_kms_key is set."
+  }
+
+  assert {
+    condition     = length([for r in google_storage_bucket.this.lifecycle_rule : r if one(r.condition).age != null]) == 0
+    error_message = "No age-based delete rule should exist unless expiration_days is set."
+  }
+}
+
+run "a_dedicated_key_encrypts_and_expires_the_bucket" {
+  command = plan
+
+  variables {
+    name                              = "onyx-sandbox-archive-prod"
+    create_kms_key                    = true
+    expiration_days                   = 30
+    noncurrent_version_retention_days = 7
+  }
+
+  assert {
+    condition     = google_kms_key_ring.this[0].location == "us-east1"
+    error_message = "The key ring must be in the bucket's location, in the lowercase form Cloud KMS uses."
+  }
+
+  assert {
+    condition     = google_kms_crypto_key.this[0].rotation_period == "7776000s"
+    error_message = "The key should rotate every 90 days by default."
+  }
+
+  assert {
+    condition     = google_kms_crypto_key_iam_member.gcs_service_agent[0].role == "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+    error_message = "The GCS service agent needs encrypt and decrypt on the key, and nothing more."
+  }
+
+  assert {
+    condition     = length(google_storage_bucket.this.encryption) == 1
+    error_message = "The bucket should encrypt with the dedicated key."
+  }
+
+  assert {
+    condition     = google_storage_bucket.this.public_access_prevention == "enforced"
+    error_message = "The archive bucket must never be servable publicly."
+  }
+
+  assert {
+    condition     = one(one([for r in google_storage_bucket.this.lifecycle_rule : r if one(r.condition).age != null]).condition).age == 30
+    error_message = "Live objects should be deleted after expiration_days."
+  }
+
+  assert {
+    condition     = one(one([for r in google_storage_bucket.this.lifecycle_rule : r if one(r.condition).days_since_noncurrent_time != null]).condition).days_since_noncurrent_time == 7
+    error_message = "Noncurrent versions should follow noncurrent_version_retention_days."
+  }
+}
+
+run "rejects_a_dedicated_key_with_a_supplied_key" {
+  command = plan
+
+  variables {
+    create_kms_key = true
+    kms_key_name   = "projects/p/locations/us-east1/keyRings/r/cryptoKeys/k"
+  }
+
+  expect_failures = [var.create_kms_key]
+}
+
+run "a_dotted_bucket_name_gives_dot_free_key_names" {
+  command = plan
+
+  variables {
+    name           = "archive.example.com"
+    create_kms_key = true
+  }
+
+  assert {
+    condition     = google_kms_key_ring.this[0].name == "archive-example-com" && google_kms_crypto_key.this[0].name == "archive-example-com"
+    error_message = "Cloud KMS names allow no dots, so dots in the bucket name must become hyphens."
+  }
+}
+
+run "rejects_a_rotation_period_above_the_cloud_kms_limit" {
+  command = plan
+
+  variables {
+    create_kms_key          = true
+    kms_key_rotation_period = "3153600001s"
+  }
+
+  expect_failures = [var.kms_key_rotation_period]
 }

@@ -5,7 +5,7 @@
 # Overlays:
 #   - values-lite.yaml: minimal deployment without vector DB, Redis, or model servers.
 #   - ../../dev/values-localdev.yaml: local Kubernetes development (source repository only).
-#     See /docs/craft/dev/local-kubernetes.md.
+#     See deployment/helm/dev/README.md.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -408,6 +408,23 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+logExport:
+  kubernetes:
+    # Off by default. When on, the api-server runs as its own service account
+    # (<release>-api-server) with get/list on pods, pods/log, and events in the
+    # release namespace. The admin log export then collects stdout from every
+    # Onyx pod, the logs of crashed containers, pod status, and events. The
+    # other Onyx pods keep the service account above and get no such access.
+    # When off, the export collects log files from one replica per worker type.
+    #
+    # The new service account gets serviceAccount.annotations plus the
+    # annotations below. If the api-server uses IRSA or Workload Identity, add
+    # the role annotation here when it is not in serviceAccount.annotations,
+    # and allow the new service account name in the IAM trust policy.
+    enabled: false
+    serviceAccount:
+      annotations: {}
+
 nginx:
   enabled: true
   # Nginx proxy timeout settings (in seconds)
@@ -426,7 +443,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "10"
+      onyx.app/nginx-config-version: "11"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1230,6 +1247,59 @@ mcpServer:
   tolerations: []
   affinity: {}
 
+webhookServer:
+  extraEnv: []
+  # Runs the webhook server. It serves health and metrics only; the route that
+  # receives connector events comes later. Creates the deployment; the service
+  # always exists so nginx can name it. The ingress and servicemonitor also
+  # need `ingress.enabled` and `monitoring.serviceMonitors.enabled`. With
+  # ingress.enabled=false the bundled nginx routes /webhook instead.
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  # Prefix the ingress routes here, stripped before the app sees it.
+  ingressPath: /webhook
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+  deploymentLabels:
+    app: webhook-server
+  service:
+    type: ClusterIP
+    servicePort: 8091
+    targetPort: webhook-port
+    portName: webhook-port
+  # Hardening defaults merge with your overrides; set a key to null to drop it.
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  volumes: []
+  volumeMounts: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 celery_worker_docfetching:
   extraEnv: []
   replicaCount: 1
@@ -1827,6 +1897,9 @@ configMap:
   LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
+  AZURE_DATALAKE_ACL_READ_CONCURRENCY: ""
   HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY: ""
   NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Push every successfully indexed public-connector document to an external
@@ -1852,11 +1925,21 @@ configMap:
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
+  # Slack cloud for all Slack features: the bot, the connector, federated
+  # search, Slack OAuth and the Craft Slack app. Default
+  # https://slack.com/api/. Set to https://slack-gov.com/api/ for GovSlack.
+  SLACK_API_URL: ""
   DISCORD_BOT_TOKEN: ""
   DISCORD_BOT_INVOKE_CHAR: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
+  # Limits for the admin log export through the Kubernetes API
+  # (logExport.kubernetes.enabled). Empty uses the defaults: last 100000 lines
+  # per container log, 25 MiB per container log, 500 MiB per export.
+  LOG_EXPORT_KUBERNETES_TAIL_LINES: ""
+  LOG_EXPORT_KUBERNETES_MAX_BYTES_PER_STREAM: ""
+  LOG_EXPORT_KUBERNETES_MAX_TOTAL_BYTES: ""
   # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
   # api_server, model_server, slack/discord bots, AND all Celery workers. Empty
   # (default) -> Python falls back to "info" for the api/model/etc processes;
@@ -1886,6 +1969,7 @@ configMap:
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  # The chart's service account and the api-server's (see logExport) are always bound.
   extraBoundServiceAccounts: []
   # CIDR(s) of any non-pod cluster DNS listener the sandbox must reach for firewall-init.sh's
   # proxy-FQDN getent lookup. A NodeLocal DNS cache is a hostNetwork endpoint (its listen IP is
@@ -1904,6 +1988,26 @@ craft:
   # Empty (default) = the chart-deployed proxy, covered by the podSelector (incl. the
   # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
   proxyExtraCIDRs: []
+  # Opt-in check that sandbox nodes can run Firecracker. Runs one pod per
+  # sandbox node (sandboxPod.nodeSelector + tolerations) and writes
+  # PASS/FAIL/WARN lines to the pod log. See README "Check your nodes for
+  # Craft Firecracker". Does not need ENABLE_CRAFT.
+  firecrackerPreflight:
+    enabled: false
+    # Image with POSIX sh, awk, grep and GNU coreutils. Empty = the sandbox
+    # image. The prepuller only caches it when Craft and sandboxImagePrepull
+    # are on; otherwise the first preflight pod pulls it.
+    image: ""
+    # Extended resource of a KVM device plugin (for example
+    # "devices.kubevirt.io/kvm"). Set it to run the check unprivileged.
+    # Empty = privileged, because the container device cgroup blocks
+    # /dev/kvm otherwise.
+    kvmDeviceResource: ""
+    # Node directory on the filesystem that will hold sandbox data. The
+    # filesystem type, XFS reflink and free disk checks run here.
+    scratchHostPath: /var/lib/onyx-craft-fc-preflight
+    # Free disk below this is a WARN.
+    minFreeDiskGi: 50
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.

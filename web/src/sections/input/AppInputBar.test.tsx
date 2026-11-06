@@ -4,7 +4,7 @@ import AppInputBar, {
   type AppInputBarHandle,
 } from "@/sections/input/AppInputBar";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { ChatFileType } from "@/app/app/interfaces";
+import { ChatFileType } from "@/app/app/types";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -36,7 +36,13 @@ jest.mock("@/hooks/useVoiceStatus", () => ({
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
 }));
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({}),
+}));
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     isNewSession: () => true,
     chat: () => null,

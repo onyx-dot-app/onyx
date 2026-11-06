@@ -18,11 +18,12 @@ type CardLoaderProps = CardLoaderCardProps & {
 /**
  * A card that has not loaded: a card holding a shimmering icon, title and
  * description, in the shape of a `ContentAction` card. The card takes every
- * `Card` prop; unset, it is a solid-bordered card with `rounding={4}` and
- * `padding={4}`, like the setup and catalog cards.
+ * `Card` prop; unset, it is a transparent, solid-bordered card with
+ * `rounding={4}` and `padding={4}`, like the setup and catalog cards.
  */
 function CardLoader({
   descriptionLines = 1,
+  color = "transparent",
   border = "solid",
   rounding = 4,
   padding = 4,
@@ -33,6 +34,7 @@ function CardLoader({
     <div role="status" aria-label={strings.loading} className="w-full">
       <Card
         {...cardProps}
+        color={color}
         border={border}
         rounding={rounding}
         padding={padding}

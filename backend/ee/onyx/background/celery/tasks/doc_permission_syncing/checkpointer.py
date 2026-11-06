@@ -63,8 +63,8 @@ def _load_saved_checkpoint(cc_pair_id: int) -> SavedDocSyncCheckpoint | None:
 
 class FileStoreDocSyncCheckpointer(DocSyncCheckpointer):
     """One checkpoint file per cc_pair, overwritten on every save and deleted
-    when a crawl finishes. A failed attempt leaves its last save for the next
-    attempt, which is why only a failed attempt's save may be resumed."""
+    when a crawl finishes. A failed or canceled attempt leaves its last save for
+    the next attempt, which is why only such an attempt's save may be resumed."""
 
     def __init__(
         self,

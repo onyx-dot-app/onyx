@@ -1,13 +1,95 @@
-"""OpenAI provider adapter for prompt caching."""
+"""OpenAI provider adapter for prompt caching.
+
+OpenAI caches prompt prefixes implicitly. Requests on OpenAI or Azure APIs to models
+that LiteLLM's `supports_openai_prompt_cache_breakpoint` accepts also carry
+explicit prompt_cache_breakpoints on every tool result
+(`explicit_cache_breakpoints`, applied in `multi_llm.py`).
+"""
+
+from collections.abc import Iterable, Sequence
+from functools import lru_cache
+from urllib.parse import urlparse
+
+from pydantic import JsonValue
 
 from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
 
+# Both the breakpoint on a tool result and the request's prompt_cache_options.
+EXPLICIT_CACHE_MODE: dict[str, JsonValue] = {"mode": "explicit"}
+
+
+def uses_explicit_cache_breakpoints(
+    model_names: Iterable[str], api_base: str | None, *, azure: bool = False
+) -> bool:
+    """Check model and endpoint support while holding the environment lock."""
+    if not _supports_breakpoint(tuple(model_names)):
+        return False
+    import litellm
+    from litellm.integrations.anthropic_cache_control_hook import targets_openai_api
+    from litellm.secret_managers.main import get_secret_str
+
+    if not azure:
+        return targets_openai_api(api_base)
+    # Azure resolves a different environment variable from the OpenAI handler.
+    endpoint = api_base or litellm.api_base or get_secret_str("AZURE_API_BASE")
+    host = urlparse(endpoint).hostname if isinstance(endpoint, str) else None
+    return host is not None and host.endswith(
+        (".openai.azure.com", ".cognitiveservices.azure.com", ".services.ai.azure.com")
+    )
+
+
+@lru_cache(maxsize=256)
+def _supports_breakpoint(model_names: tuple[str, ...]) -> bool:
+    from litellm.integrations.anthropic_cache_control_hook import (
+        supports_openai_prompt_cache_breakpoint,
+    )
+
+    return any(supports_openai_prompt_cache_breakpoint(name) for name in model_names)
+
+
+def explicit_cache_breakpoints(
+    messages: Sequence[dict[str, JsonValue]],
+) -> tuple[list[dict[str, JsonValue]], dict[str, JsonValue] | None]:
+    """The messages with every tool result marked with an explicit breakpoint,
+    and the request's prompt_cache_options; None before the first tool result,
+    so that request keeps implicit caching.
+
+    A breakpoint is part of the cached prefix, so an entry is reused only if
+    the same message still carries the marker. Marking each tool result
+    (not only the last) keeps earlier bytes identical from step to step.
+    Only tool output can carry the marker through LiteLLM: user content must
+    be chat-completions ``text`` (whose extra keys the bridge drops), system
+    messages become ``instructions``, and assistant output does not accept
+    one.
+    """
+    result = list(messages)
+    marked = False
+    for index, message in enumerate(result):
+        content = message.get("content")
+        if message.get("role") != "tool" or not isinstance(content, str):
+            continue
+        result[index] = {
+            **message,
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": content,
+                    "prompt_cache_breakpoint": dict(EXPLICIT_CACHE_MODE),
+                }
+            ],
+        }
+        marked = True
+    return result, dict(EXPLICIT_CACHE_MODE) if marked else None
+
 
 class OpenAIPromptCacheProvider(PromptCacheProvider):
-    """OpenAI adapter for prompt caching (implicit caching)."""
+    """OpenAI adapter for implicit prompt caching.
+
+    Explicit tool-result breakpoints come from `explicit_cache_breakpoints`.
+    """
 
     def supports_caching(self) -> bool:
         """OpenAI supports automatic prompt caching."""

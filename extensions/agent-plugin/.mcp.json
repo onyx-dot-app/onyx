@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "onyx": {
+      "type": "http",
+      "url": "${user_config.onyx_url}/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${user_config.onyx_api_token}"
+      },
+      "alwaysLoad": true
+    }
+  }
+}

@@ -26,7 +26,7 @@ resource "onyx_embedding_provider" "cohere" {
 
 ### Required
 
-- `provider_type` (String) Provider type: `openai`, `cohere`, `voyage`, `google`, `litellm`, or `azure`. Changing it replaces the resource.
+- `provider_type` (String) Provider type: `openai`, `cohere`, `voyage`, `google`, `litellm`, `azure`, `bifrost`, or `openai_compatible`. `bifrost` needs Onyx v5.0 or later, and `openai_compatible` needs v5.1 or later. Changing it replaces the resource.
 
 ### Optional
 

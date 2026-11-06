@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "@opal/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -15,9 +16,8 @@ import { toast } from "@opal/layouts";
 import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
-import type { ChatSession } from "@/app/app/interfaces";
+import type { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
-import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
@@ -34,7 +34,7 @@ import { Permission } from "@/lib/types";
  * redundant round-trips across the app.
  */
 export function useAgents() {
-  const { data, error, mutate } = useSWR<MinimalAgent[]>(
+  const { data, error, isLoading, mutate } = useSWR<MinimalAgent[]>(
     SWR_KEYS.agents,
     errorHandlingFetcher,
     {
@@ -46,7 +46,7 @@ export function useAgents() {
 
   return {
     agents: data ?? [],
-    isLoading: !error && !data,
+    isLoading,
     error,
     refresh: mutate,
   };
@@ -133,7 +133,7 @@ export function useAdminAgents(
  * disagree about what is pinned.
  */
 export function usePinnedAgents() {
-  const { user, refreshUser } = useUser();
+  const { user, userResolution, refreshUser } = useUser();
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
   const [localPinnedAgents, setLocalPinnedAgents] = useState<MinimalAgent[]>(
@@ -148,11 +148,16 @@ export function usePinnedAgents() {
       .filter((agent): agent is MinimalAgent => !!agent);
   }, [agents, user?.preferences.pinned_assistants]);
 
+  // Set once the pins have been copied from a resolved user. Until then the
+  // local list can be empty although the user has pins.
+  const [hasSyncedPins, setHasSyncedPins] = useState(false);
+
   useEffect(() => {
     if (agents.length > 0) {
       setLocalPinnedAgents(serverPinnedAgents);
+      if (userResolution !== "loading") setHasSyncedPins(true);
     }
-  }, [serverPinnedAgents, agents.length]);
+  }, [serverPinnedAgents, agents.length, userResolution]);
 
   const togglePinnedAgent = useCallback(
     async (agent: MinimalAgent, shouldPin: boolean) => {
@@ -196,7 +201,11 @@ export function usePinnedAgents() {
     pinnedAgents: localPinnedAgents,
     togglePinnedAgent,
     updatePinnedAgents,
-    isLoading: isLoadingAgents,
+    // Loading until the agents and the user's pins are both in the list.
+    isLoading:
+      isLoadingAgents ||
+      userResolution === "loading" ||
+      (agents.length > 0 && !hasSyncedPins),
   };
 }
 

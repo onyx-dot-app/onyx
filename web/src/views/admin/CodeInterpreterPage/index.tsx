@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -13,11 +13,10 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Section } from "@/layouts/general-layouts";
-import { Button, Popover, SelectCard } from "@opal/components";
-import { Card, Content, ContentAction } from "@opal/layouts";
+import { Button, Popover, SelectCard, Text } from "@opal/components";
+import { Card, Content, ContentAction, ReverseContent } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
-import Text from "@/refresh-components/texts/Text";
+import { richNodes } from "@opal/utils";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
@@ -37,7 +36,7 @@ const STATUS_CONFIG: Record<
   {
     labelKey: StatusLabelKey;
     icon: typeof SvgCheckCircle;
-    color: "success" | "danger";
+    color: "success" | "error";
   }
 > = {
   healthy: {
@@ -48,12 +47,12 @@ const STATUS_CONFIG: Record<
   unhealthy: {
     labelKey: "status.unhealthy.label",
     icon: SvgXOctagon,
-    color: "danger",
+    color: "error",
   },
   connection_lost: {
     labelKey: "status.connectionLost.label",
     icon: SvgXOctagon,
-    color: "danger",
+    color: "error",
   },
 };
 
@@ -71,14 +70,11 @@ function CheckingStatus() {
       alignItems="center"
       padding={2}
     >
-      <Content
-        sizePreset="main-ui"
-        variant="body"
-        orientation="reverse"
-        width="fit"
+      <ReverseContent
+        font="main-ui-body"
         icon={IconLoader}
         title={t("status.checking.label")}
-        color="muted"
+        titleColor="text-03"
       />
     </Section>
   );
@@ -106,14 +102,12 @@ function ConnectionStatus({
 
   const { labelKey, icon, color } = STATUS_CONFIG[status];
   const statusContent = (
-    <Content
-      sizePreset="main-ui"
-      variant="body"
-      orientation="reverse"
-      width="fit"
+    <ReverseContent
+      font="main-ui-body"
       icon={icon}
       title={t(labelKey)}
       color={color}
+      titleColor="text-03"
     />
   );
 
@@ -289,8 +283,7 @@ export default function CodeInterpreterPage() {
                 >
                   <Card.Header>
                     <ContentAction
-                      sizePreset="main-ui"
-                      variant="section"
+                      font="main-ui-action"
                       icon={SvgTerminal}
                       title={t("card.title")}
                       strikethrough={isConnectionLost}
@@ -328,10 +321,9 @@ export default function CodeInterpreterPage() {
               onMouseLeave={() => handleErrorHover(false)}
             >
               <Content
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={SvgXOctagon}
-                color="danger"
+                color="error"
                 titleColor="text-04"
                 title={
                   status === "connection_lost"
@@ -351,8 +343,7 @@ export default function CodeInterpreterPage() {
               onClick={() => handleToggle(true)}
             >
               <ContentAction
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={SvgTerminal}
                 title={t("card.disconnectedTitle")}
                 description={t("card.description")}
@@ -399,14 +390,16 @@ export default function CodeInterpreterPage() {
             </Button>
           }
         >
-          <Text as="p" text03>
-            {t.rich("disconnectModal.body.description", {
-              emphasis: (chunks) => (
-                <Text as="span" mainContentEmphasis text03>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("disconnectModal.body.description", {
+                emphasis: (chunks) => (
+                  <Text as="span" font="main-content-emphasis" color="text-03">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         </ConfirmationModalLayout>
       )}
