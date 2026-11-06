@@ -33,6 +33,7 @@ class LlmProviderNames(str, Enum):
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
+    ATLASCLOUD = "atlascloud"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -64,6 +65,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.ATLASCLOUD,
 ]
 
 
@@ -88,6 +90,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
     LlmProviderNames.VERCEL_AI_GATEWAY: "Vercel AI Gateway",
+    LlmProviderNames.ATLASCLOUD: "Atlas Cloud",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -182,6 +185,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
     LlmProviderNames.VERCEL_AI_GATEWAY,
+    LlmProviderNames.ATLASCLOUD,
 }
 
 # Providers whose model catalog lists the models they release. Only these
@@ -205,6 +209,9 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
         LlmProviderNames.LM_STUDIO,
         LlmProviderNames.BIFROST,
         LlmProviderNames.OPENAI_COMPATIBLE,
+        # Atlas Cloud's public catalog supplies display names, so keep them
+        # instead of re-deriving names from LiteLLM's static map.
+        LlmProviderNames.ATLASCLOUD,
     }
 )
 
