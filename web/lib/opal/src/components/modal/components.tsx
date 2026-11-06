@@ -39,11 +39,11 @@ function ModalRoot({ open, ...props }: ModalRootProps) {
   );
 }
 
-/** Tells the owner when the card has unmounted, after its exit animation. */
+/** Registers the card with its owner, which unmounts once no card is left. */
 function ModalExitSignal() {
-  // A stable store method, so the cleanup runs only on unmount.
-  const onExitComplete = useModalOwner()?.onExitComplete;
-  React.useEffect(() => () => onExitComplete?.(), [onExitComplete]);
+  // A stable store method, so this runs only on mount and unmount.
+  const registerCard = useModalOwner()?.registerCard;
+  React.useEffect(() => registerCard?.(), [registerCard]);
   return null;
 }
 
