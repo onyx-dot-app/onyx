@@ -96,11 +96,19 @@ compaction candidate. The list on each model call:
 ```
 
 The notices and reminders change between steps, so they stay after the stable
-prefix. The stable part gets cache markers from prompt assembly only when
-`PROMPT_CACHE_CHAT_HISTORY=true` (`chat/prompt_formatting.py:prepare_model_messages`);
-by default provider-side prefix caching uses it. Separately, the LLM adapter marks
+prefix. Prompt assembly marks the stable part as cacheable
+(`chat/prompt_formatting.py:prepare_model_messages`), and provider-side prefix
+caching uses it for supported providers. Unsupported providers use the no-op adapter,
+which adds no cache markers. Anthropic breakpoints mark the head, the context before the newest
+user message, and the tail. This lets different questions reuse shared files while
+tool rounds reuse the growing history. List-valued messages carry their breakpoint
+on the final content block so image prefixes reach the provider cache.
+Caller markers in the prefix and suffix count toward the four-breakpoint limit.
+The adapter preserves them and uses remaining slots for the tail, head, then context.
+User-message continuation keeps message markers on separate content blocks so
+merging preserves the prefix and suffix cache boundaries.
+Separately, the LLM adapter marks
 every tool result with an explicit breakpoint on supported OpenAI and Azure API requests
-when `ENABLE_PROMPT_CACHING=true`, even with chat-history caching off
 (`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`). Requests with no
 tool results keep implicit caching. `prepare_prompt` copies
 the messages it receives and never changes recorded history. Within one step it
@@ -272,6 +280,13 @@ counts what is sent, not the stored token counts.
 ---
 
 ## Decisions
+
+- **Caching targets aggregate cost across repeated calls.** Cache writes can
+  cost more on a single call; later reads of large prefixes can repay many
+  small unused writes. Evaluate token-weighted reads and writes, including
+  misses, rather than request counts. The
+  [cost model and examples](../../../backend/onyx/llm/prompt_cache/README.md#why-caching-is-always-enabled)
+  explain the break-even point and why output length changes the percentage saved.
 
 - **Agent instructions are a moving user message.** In the system prompt they
   were followed poorly, conflicted with the base prompt, and made weaker models

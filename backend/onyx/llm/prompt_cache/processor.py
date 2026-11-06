@@ -2,7 +2,6 @@
 
 from datetime import datetime, timezone
 
-from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.model_request import UserMessage as ProviderUserMessage
@@ -47,21 +46,6 @@ def process_with_prompt_cache(
             (currently None for implicit caching, will be populated in future PR
             for explicit caching); always None when ``with_metadata`` is False
     """
-    # Check if prompt caching is enabled
-    if not ENABLE_PROMPT_CACHING:
-        logger.debug("Prompt caching is disabled via configuration")
-        # Fall back to no-op behavior
-        from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
-
-        noop_adapter = NoOpPromptCacheProvider()
-        combined = noop_adapter.prepare_messages_for_caching(
-            cacheable_prefix=cacheable_prefix,
-            suffix=suffix,
-            continuation=continuation,
-            cache_metadata=None,
-        )
-        return combined, None
-
     # If no cacheable prefix, return suffix unchanged
     if cacheable_prefix is None:
         logger.debug("No cacheable prefix provided, skipping caching")

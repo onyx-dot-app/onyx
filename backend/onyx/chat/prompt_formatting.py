@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 
 from onyx.agents.compaction import IMAGE_TOKEN_ESTIMATE
 from onyx.chat.models import PromptMetadata
-from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP, PROMPT_CACHE_CHAT_HISTORY
+from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import (
@@ -269,11 +269,7 @@ def prepare_model_messages(  # noqa: C901
                 if token_counter is not None
                 else prompt_metadata(msg).token_count
             )
-        messages[-1].cacheable = (
-            msg.cacheable
-            or PROMPT_CACHE_CHAT_HISTORY
-            and prompt_metadata(msg).should_cache
-        )
+        messages[-1].cacheable = msg.cacheable or prompt_metadata(msg).should_cache
 
     # Tell the model when image limits removed content from the request.
     if image_drop_notice is not None:

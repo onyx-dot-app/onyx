@@ -12,7 +12,6 @@ from urllib.parse import urlparse
 
 from pydantic import JsonValue
 
-from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
 from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
@@ -26,7 +25,7 @@ def uses_explicit_cache_breakpoints(
     model_names: Iterable[str], api_base: str | None, *, azure: bool = False
 ) -> bool:
     """Check model and endpoint support while holding the environment lock."""
-    if not ENABLE_PROMPT_CACHING or not _supports_breakpoint(tuple(model_names)):
+    if not _supports_breakpoint(tuple(model_names)):
         return False
     import litellm
     from litellm.integrations.anthropic_cache_control_hook import targets_openai_api

@@ -141,6 +141,7 @@ class ImageUrlDetail(BaseModel):
 class ImageContentPart(BaseModel):
     type: Literal["image_url"] = "image_url"
     image_url: ImageUrlDetail
+    cache_control: dict[str, JsonValue] | None = None
 
 
 ContentPart = TextContentPart | ImageContentPart

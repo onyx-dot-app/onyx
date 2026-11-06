@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, JsonValue
 
-from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import model_needs_formatting_reenabled
@@ -181,7 +180,6 @@ def cache_split_stats(
 ) -> dict[str, str]:
     """Describe the serialized prefix using already resolved image/token estimates."""
     stats = {
-        "prompt_cache_chat_history": "on" if PROMPT_CACHE_CHAT_HISTORY else "off",
         "cacheable_prefix_msgs": str(prefix_length),
         # Counts prepared messages, including notices added during image selection.
         "history_msgs": str(len(request.messages) + bool(request.system_prompt)),
