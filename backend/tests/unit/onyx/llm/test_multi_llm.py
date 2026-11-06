@@ -4020,4 +4020,4 @@ def test_invoke_sends_strict_tool_schemas_to_openai(
     function = mock_completion.call_args.kwargs["tools"][0]["function"]
     assert function["name"] == search_tool.name
     assert function.get("strict", False) is strict
-    assert (function["parameters"].get("additionalProperties") is False) is strict
+    assert function["parameters"] == search_tool.tool_definition().parameters

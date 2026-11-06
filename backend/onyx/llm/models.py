@@ -297,6 +297,8 @@ class ToolDefinition(BaseModel):
     name: str
     description: str
     parameters: dict[str, JsonValue]
+    # The author supplies a strict-compatible schema and accepts nullable defaults.
+    strict: bool = False
 
 
 class GenerationOptions(BaseModel):

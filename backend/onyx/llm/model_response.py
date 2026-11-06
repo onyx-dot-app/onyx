@@ -33,7 +33,6 @@ from onyx.llm.models import (
     Usage,
     apply_generation_event,
 )
-from onyx.llm.strict_schema import ToolSchemaState, drop_optional_nulls
 from onyx.llm.tool_parsing import (
     XmlToolCallContentFilter,
     extract_tool_calls_from_response_text,
@@ -344,10 +343,7 @@ def _schema_types(schema: dict[str, JsonValue]) -> set[str]:
 
 
 def _normalize_arguments(
-    arguments: dict[str, JsonValue],
-    definition: ToolDefinition | None,
-    *,
-    strict: bool = False,
+    arguments: dict[str, JsonValue], definition: ToolDefinition | None
 ) -> dict[str, JsonValue]:
     if definition is None:
         return arguments
@@ -374,24 +370,17 @@ def _normalize_arguments(
             "object" in accepted_types and isinstance(decoded, dict)
         ):
             normalized[name] = decoded
-    restored = (
-        drop_optional_nulls(normalized, definition.parameters) if strict else normalized
-    )
-    return restored if isinstance(restored, dict) else normalized
+    return normalized
 
 
 def _finish_tool_call(
-    call: ToolCall,
-    arguments: str,
-    definition: ToolDefinition | None,
-    *,
-    strict: bool = False,
+    call: ToolCall, arguments: str, definition: ToolDefinition | None
 ) -> None:
     try:
         decoded = _ENCODED_ARGUMENTS.validate_json(sanitize_string(arguments or "{}"))
         if isinstance(decoded, str):
             decoded = _ARGUMENTS.validate_json(decoded)
-        call.arguments = _normalize_arguments(decoded, definition, strict=strict)
+        call.arguments = _normalize_arguments(decoded, definition)
         call.arguments_complete = True
         call.raw_arguments = None
     except ValidationError:
@@ -401,10 +390,7 @@ def _finish_tool_call(
 
 
 def to_assistant_message(
-    response: ModelResponse,
-    request: GenerationRequest,
-    *,
-    strict_tools: frozenset[str] | set[str] | None = None,
+    response: ModelResponse, request: GenerationRequest
 ) -> AssistantMessage:
     """Convert a complete provider response without creating stream events."""
     source = response.choice.message
@@ -438,15 +424,10 @@ def to_assistant_message(
             raw_arguments=arguments,
             arguments_complete=False,
         )
-        _finish_tool_call(
-            call,
-            arguments,
-            definitions.get(call.name),
-            strict=call.name in (strict_tools or ()),
-        )
+        _finish_tool_call(call, arguments, definitions.get(call.name))
         message.content.append(call)
     if request.tools:
-        message = recover_tool_calls(message, request, strict_tools=strict_tools)
+        message = recover_tool_calls(message, request)
     return message
 
 
@@ -460,15 +441,7 @@ class _PendingToolCall:
 class MessageAccumulator:
     """Maintain ordered assistant content and incremental tool arguments."""
 
-    def __init__(
-        self,
-        tools: Sequence[ToolDefinition] = (),
-        *,
-        tool_schemas: ToolSchemaState | None = None,
-    ) -> None:
-        self.tool_schemas = (
-            tool_schemas if tool_schemas is not None else ToolSchemaState()
-        )
+    def __init__(self, tools: Sequence[ToolDefinition] = ()) -> None:
         self.tools = {tool.name: tool for tool in tools}
         self.message = AssistantMessage()
         self.calls: dict[int, _PendingToolCall] = {}
@@ -646,7 +619,6 @@ class MessageAccumulator:
                         ]
                     ),
                     request,
-                    strict_tools=self.tool_schemas.active.strict_names,
                 )
             tail = content_filter.flush() if content_filter is not None else ""
             if tail:
@@ -677,7 +649,6 @@ class MessageAccumulator:
                     pending.call,
                     pending.call.raw_arguments,
                     self.tools.get(pending.call.name),
-                    strict=pending.call.name in self.tool_schemas.active.strict_names,
                 )
             pending.finalized = True
 
@@ -703,10 +674,7 @@ class MessageAccumulator:
 
 
 def recover_tool_calls(
-    message: AssistantMessage,
-    request: GenerationRequest,
-    *,
-    strict_tools: frozenset[str] | set[str] | None = None,
+    message: AssistantMessage, request: GenerationRequest
 ) -> AssistantMessage:
     """Recover provider text tool payloads when native calls are absent."""
     if message.tool_calls or request.options.tool_choice == ToolChoiceOptions.NONE:
@@ -726,11 +694,7 @@ def recover_tool_calls(
         return message
     tools = {tool.name: tool for tool in request.tools}
     for call in calls:
-        call.arguments = _normalize_arguments(
-            call.arguments,
-            tools.get(call.name),
-            strict=call.name in (strict_tools or ()),
-        )
+        call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
     # Preserve signed thinking for provider replay; hide only XML call payloads.
     content: list[TextContent | ThinkingContent | ToolCall] = []
     for block in message.content:

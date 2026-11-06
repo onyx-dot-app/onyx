@@ -169,6 +169,7 @@ def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonV
                 "name": tool.name,
                 "description": tool.description,
                 "parameters": tool.parameters,
+                "strict": tool.strict,
             },
         }
         for tool in tools

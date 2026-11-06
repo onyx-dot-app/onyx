@@ -109,7 +109,6 @@ from onyx.llm.prompt_cache.providers.openai import (
     explicit_cache_breakpoints,
     uses_explicit_cache_breakpoints,
 )
-from onyx.llm.strict_schema import PreparedTools, ToolSchemaState, prepare_strict_tools
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
@@ -292,6 +291,23 @@ def _retry_attempts(
     return attempts
 
 
+def _tools_with_strictness(
+    tools: list[dict[str, JsonValue]], *, enabled: bool | None
+) -> list[dict[str, JsonValue]]:
+    """Copy tool flags without changing schemas; None omits the provider flag."""
+    result: list[dict[str, JsonValue]] = []
+    for tool in tools:
+        function = tool.get("function")
+        if not isinstance(function, dict):
+            result.append(tool)
+            continue
+        function = {key: value for key, value in function.items() if key != "strict"}
+        if enabled is not None:
+            function["strict"] = enabled
+        result.append({**tool, "function": function})
+    return result
+
+
 def _rejects_strict_tools(error: "BadRequestError") -> bool:
     """Recognize schema failures without treating unrelated 400s as strict failures."""
     body = error.body
@@ -319,10 +335,9 @@ def _rejects_strict_tools(error: "BadRequestError") -> bool:
 
 
 class ProviderOperation(BaseModel):
-    """Request-local dispatch state and diagnostics across provider attempts."""
+    """Diagnostics for one provider call, including its retry attempts."""
 
     request_params: GenerationRequestParams | None = None
-    tool_schemas: ToolSchemaState | None = None
 
 
 def _event_with_request_params(
@@ -978,6 +993,7 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
         operation: ProviderOperation | None = None,
+        manage_tool_strictness: bool = False,
         env_injection_enabled: bool | None = None,
         deadline: float | None = None,
     ) -> "LiteLLMModelResponse | CustomStreamWrapper":
@@ -1480,8 +1496,7 @@ class LitellmLLM(LLM):
             strict_disabled = False
             strict_model = (
                 bool(tools)
-                and operation is not None
-                and operation.tool_schemas is not None
+                and manage_tool_strictness
                 and self._model_provider == LlmProviderNames.OPENAI
                 and not model_bare.startswith("ft:")
                 and is_true_openai_model(LlmProviderNames.OPENAI, model_bare)
@@ -1492,14 +1507,15 @@ class LitellmLLM(LLM):
                 is True
             )
 
-            original_tools = PreparedTools(tools or [])
-            converted_tools = (
-                prepare_strict_tools(tools or []) if strict_model else original_tools
+            unmarked_tools = (
+                _tools_with_strictness(tools, enabled=None)
+                if tools and manage_tool_strictness
+                else tools
             )
-            plain_tools = (
-                prepare_strict_tools(tools or [], enabled=False)
-                if strict_model
-                else original_tools
+            non_strict_tools = (
+                _tools_with_strictness(tools, enabled=False)
+                if tools and strict_model
+                else tools
             )
 
             # Provider 400s degrade to provider defaults with a warning instead
@@ -1516,7 +1532,8 @@ class LitellmLLM(LLM):
                     if env_injection_enabled
                     else nullcontext()
                 )
-                selected_tools = original_tools
+                selected_tools = tools
+                strict_attempt = False
                 try:
                     with env_ctx:
                         from litellm.integrations.anthropic_cache_control_hook import (
@@ -1524,12 +1541,17 @@ class LitellmLLM(LLM):
                         )
 
                         effective_base = passthrough_kwargs.get("api_base") or base_url
-                        if strict_model and targets_openai_api(effective_base):
-                            selected_tools = (
-                                plain_tools if strict_disabled else converted_tools
-                            )
-                        if operation is not None and operation.tool_schemas is not None:
-                            operation.tool_schemas.active = selected_tools
+                        if manage_tool_strictness:
+                            selected_tools = unmarked_tools
+                            if strict_model and targets_openai_api(effective_base):
+                                selected_tools = (
+                                    non_strict_tools if strict_disabled else tools
+                                )
+                                strict_attempt = not strict_disabled and any(
+                                    isinstance(function := tool.get("function"), dict)
+                                    and function.get("strict") is True
+                                    for tool in (tools or [])
+                                )
                         attempt_messages = messages
                         if cache_options is not None and "prompt_cache_options" in opts:
                             effective_base = (
@@ -1584,7 +1606,7 @@ class LitellmLLM(LLM):
                                 messages=attempt_messages,
                                 # None (omitted) rather than [] — some OpenAI-compatible
                                 # servers reject requests with an empty tools array.
-                                tools=selected_tools.tools or None,
+                                tools=selected_tools or None,
                                 stream=stream,
                                 timeout=timeout,
                                 max_tokens=max_tokens,
@@ -1595,11 +1617,11 @@ class LitellmLLM(LLM):
                         )
                 except BadRequestError as e:
                     check_cancelled()
-                    if selected_tools.strict_names and _rejects_strict_tools(e):
+                    if strict_attempt and _rejects_strict_tools(e):
                         strict_disabled = True
                         attempts.insert(i + 1, dict(opts))
                         logger.warning(
-                            "OpenAI rejected strict tools; retrying original schemas"
+                            "OpenAI rejected strict tools; retrying without strict enforcement"
                         )
                         continue
                     if (
@@ -1706,6 +1728,7 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
         total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
         operation: ProviderOperation | None = None,
+        manage_tool_strictness: bool = False,
     ) -> ModelResponse:
         """One complete provider response within ``total_timeout_s``.
 
@@ -1784,6 +1807,7 @@ class LitellmLLM(LLM):
                 user_identity=user_identity,
                 client=client,
                 operation=operation,
+                manage_tool_strictness=manage_tool_strictness,
                 env_injection_enabled=env_injection_enabled,
                 deadline=deadline,
             )
@@ -1844,6 +1868,7 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
         operation: ProviderOperation | None = None,
+        manage_tool_strictness: bool = False,
     ) -> Iterator[ModelResponseStream]:
         """Yield provider chunks as they arrive; the caller owns the generation span.
 
@@ -1925,6 +1950,7 @@ class LitellmLLM(LLM):
                         user_identity=user_identity,
                         client=client,
                         operation=operation,
+                        manage_tool_strictness=manage_tool_strictness,
                     ),
                 )
 
@@ -2026,7 +2052,6 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
         context = context or GenerationContext()
-        operation = ProviderOperation(tool_schemas=ToolSchemaState())
         messages, cache_stats = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
         with (
@@ -2050,7 +2075,7 @@ class LitellmLLM(LLM):
                     tools=tools,
                     tool_choice=request.options.tool_choice,
                     structured_response_format=request.options.structured_response_format,
-                    operation=operation,
+                    manage_tool_strictness=True,
                     total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
                     max_tokens=request.options.max_tokens,
                     reasoning_effort=request.options.reasoning_effort,
@@ -2060,13 +2085,7 @@ class LitellmLLM(LLM):
                 # A completed response survives its deadline, but explicit Stop wins.
                 if signal.cancelled:
                     raise AgentCancelled()
-                return to_assistant_message(
-                    response,
-                    request,
-                    strict_tools=operation.tool_schemas.active.strict_names
-                    if operation.tool_schemas
-                    else frozenset(),
-                )
+                return to_assistant_message(response, request)
             except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
@@ -2083,10 +2102,8 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:
         context = context or GenerationContext()
-        operation = ProviderOperation(tool_schemas=ToolSchemaState())
-        accumulator = MessageAccumulator(
-            request.tools, tool_schemas=operation.tool_schemas
-        )
+        operation = ProviderOperation()
+        accumulator = MessageAccumulator(request.tools)
         messages, cache_stats = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
         with (
@@ -2120,6 +2137,7 @@ class LitellmLLM(LLM):
                             reasoning_effort=request.options.reasoning_effort,
                             user_identity=context.user_identity,
                             operation=operation,
+                            manage_tool_strictness=True,
                             stall_timeout_s=context.stall_timeout_s
                             or LLM_SOCKET_READ_TIMEOUT,
                             structured_response_format=request.options.structured_response_format,

@@ -56,18 +56,32 @@ def test_strict_tools_round_trip(
         "type": "object",
         "properties": {
             "query": {"type": "string"},
-            "limit": {"type": "integer"},
+            "limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
             "rows": {
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {"value": {"type": "integer"}},
+                    "properties": {
+                        "value": {"anyOf": [{"type": "integer"}, {"type": "null"}]}
+                    },
+                    "required": ["value"],
+                    "additionalProperties": False,
                 },
             },
         },
-        "required": ["query", "rows"],
+        "required": ["query", "limit", "rows"],
+        "additionalProperties": False,
+    }
+    external_parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {
+            "values": {"type": "object", "additionalProperties": {"type": "integer"}},
+            "note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        },
+        "required": ["values"],
     }
     original = deepcopy(parameters)
+    original_external = deepcopy(external_parameters)
     arguments = json.dumps(
         {"query": "roadmap", "limit": None, "rows": [{"value": None}]}
     )
@@ -78,6 +92,15 @@ def test_strict_tools_round_trip(
         "name": "search",
         "arguments": arguments,
         "status": "completed",
+    }
+
+    external_arguments = {"values": {"arbitrary_key": 3}, "note": None}
+    external_item = {
+        **item,
+        "id": "fc_external",
+        "call_id": "call_external",
+        "name": "external",
+        "arguments": json.dumps(external_arguments),
     }
 
     def send(
@@ -109,31 +132,44 @@ def test_strict_tools_round_trip(
             "created_at": 1,
             "model": "gpt-6-luna",
             "status": "completed",
-            "output": [item],
+            "output": [item, external_item],
             "usage": {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20},
         }
         if stream:
-            events: list[dict[str, Any]] = [
-                {
-                    "type": "response.output_item.added",
-                    "output_index": 0,
-                    "item": {**item, "arguments": "", "status": "in_progress"},
-                },
-                {
-                    "type": "response.function_call_arguments.delta",
-                    "output_index": 0,
-                    "item_id": "fc_test",
-                    "delta": arguments,
-                },
-                {
-                    "type": "response.function_call_arguments.done",
-                    "output_index": 0,
-                    "item_id": "fc_test",
-                    "arguments": arguments,
-                },
-                {"type": "response.output_item.done", "output_index": 0, "item": item},
-                {"type": "response.completed", "response": response},
-            ]
+            events: list[dict[str, Any]] = []
+            for output_index, output_item in enumerate([item, external_item]):
+                output_arguments = output_item["arguments"]
+                events.extend(
+                    [
+                        {
+                            "type": "response.output_item.added",
+                            "output_index": output_index,
+                            "item": {
+                                **output_item,
+                                "arguments": "",
+                                "status": "in_progress",
+                            },
+                        },
+                        {
+                            "type": "response.function_call_arguments.delta",
+                            "output_index": output_index,
+                            "item_id": output_item["id"],
+                            "delta": output_arguments,
+                        },
+                        {
+                            "type": "response.function_call_arguments.done",
+                            "output_index": output_index,
+                            "item_id": output_item["id"],
+                            "arguments": output_arguments,
+                        },
+                        {
+                            "type": "response.output_item.done",
+                            "output_index": output_index,
+                            "item": output_item,
+                        },
+                    ]
+                )
+            events.append({"type": "response.completed", "response": response})
             for number, event in enumerate(events):
                 event["sequence_number"] = number
             return httpx.Response(
@@ -170,7 +206,14 @@ def test_strict_tools_round_trip(
     request = GenerationRequest(
         messages=[UserMessage(content="Search")],
         tools=[
-            ToolDefinition(name="search", description="Search", parameters=parameters)
+            ToolDefinition(
+                name="search", description="Search", parameters=parameters, strict=True
+            ),
+            ToolDefinition(
+                name="external",
+                description="External tool",
+                parameters=external_parameters,
+            ),
         ],
         options=GenerationOptions(reasoning_effort=ReasoningEffort.HIGH),
     )
@@ -208,7 +251,7 @@ def test_strict_tools_round_trip(
                     prompt, tools=serialize_tools(request.tools), operation=operation
                 )
             assert bodies[0]["tools"][0]["parameters"] == original
-            assert not bodies[0]["tools"][0].get("strict")
+            assert bodies[0]["tools"][0]["strict"] is True
             return
         if stream:
             calls = [
@@ -223,21 +266,77 @@ def test_strict_tools_round_trip(
         return
     strict = route in ("direct", "reject")
     assert bool(bodies[0]["tools"][0]["strict"]) is strict
-    if strict:
-        assert bodies[0]["tools"][0]["parameters"]["required"] == [
-            "query",
-            "limit",
-            "rows",
-        ]
-    assert calls[0].arguments == (
-        {"query": "roadmap", "rows": [{}]}
-        if route == "direct"
-        else json.loads(arguments)
-    )
+    assert bodies[0]["tools"][0]["parameters"] == original
+    assert not bodies[0]["tools"][1].get("strict")
+    assert bodies[0]["tools"][1]["parameters"] == original_external
+    assert calls[0].arguments == json.loads(arguments)
+    assert calls[1].arguments == external_arguments
     assert parameters == original
+    assert external_parameters == original_external
     if route == "reject":
         assert len(bodies) == 2
         assert bodies[1]["tools"][0]["strict"] is False
         assert bodies[1]["tools"][0]["parameters"] == original
         assert bodies[1]["reasoning"] == bodies[0]["reasoning"]
         assert bodies[1]["reasoning"]["effort"] == "high"
+
+
+@pytest.mark.parametrize(
+    ("schema", "expected"),
+    [
+        (
+            {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+            {"anyOf": [{"type": "integer", "nullable": True}]},
+        ),
+        (
+            {
+                "anyOf": [
+                    {"type": "string", "enum": ["square", "portrait", "landscape"]},
+                    {"type": "null"},
+                ]
+            },
+            {
+                "anyOf": [
+                    {
+                        "type": "string",
+                        "enum": ["square", "portrait", "landscape"],
+                        "nullable": True,
+                    }
+                ]
+            },
+        ),
+        (
+            {
+                "anyOf": [
+                    {"type": "array", "items": {"type": "string"}},
+                    {"type": "null"},
+                ]
+            },
+            {
+                "anyOf": [
+                    {"type": "array", "items": {"type": "string"}, "nullable": True}
+                ]
+            },
+        ),
+    ],
+)
+def test_owned_nullable_arguments_survive_gemini_translation(
+    schema: dict[str, Any], expected: dict[str, Any]
+) -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    parameters = {
+        "type": "object",
+        "properties": {"value": schema},
+        "required": ["value"],
+        "additionalProperties": False,
+    }
+    result = VertexGeminiConfig()._map_function(
+        [{"type": "function", "function": {"name": "owned", "parameters": parameters}}],
+        {},
+    )
+    translated = result[0]["function_declarations"][0]["parameters"]
+    assert translated["properties"]["value"] == expected
+    assert translated["required"] == ["value"]

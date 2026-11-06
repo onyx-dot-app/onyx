@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from onyx.image_gen.interfaces import ImageShape
 from onyx.tools.models import GeneratedImage
@@ -19,3 +19,14 @@ class FinalImageGenerationResponse(BaseModel):
 class ImageGenerationArguments(BaseModel):
     prompt: str
     shape: ImageShape = ImageShape.SQUARE
+
+    @model_validator(mode="before")
+    @classmethod
+    def null_uses_default_shape(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        return {
+            key: item
+            for key, item in value.items()
+            if key != "shape" or item is not None
+        }

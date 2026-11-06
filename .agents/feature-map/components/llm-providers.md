@@ -348,21 +348,21 @@ build their own clients.
 
 ### Strict OpenAI tool schemas
 
-`llm/strict_schema.py` converts compatible function schemas for direct OpenAI
-requests to catalogued, non-fine-tuned models with function-calling support.
-The adapter checks the effective endpoint under the per-attempt environment
-lock. Azure, gateways, and custom endpoints keep their existing tool format.
+Tool authors opt into enforcement with `ToolDefinition.strict`. They supply
+closed schemas with all properties required and nullable defaulted arguments.
+File reader and image generation resolve null defaults in their argument models;
+the LLM response parser does not change nulls or remove arguments. MCP and custom
+OpenAPI tools do not opt in, and their schemas remain unchanged.
 
-Optional fields become required and nullable. A request-local tool-schema state selects the wire tools together with their
-restoration metadata; their native and text-recovered calls have these
-null placeholders removed. Optional fields that already accept null, object
-unions, open dictionaries, and unsupported constraints stay non-strict.
-Strict-schema rejection retries the original schemas with explicit strict=false
-and preserves other request options. Streaming and complete responses share
-the same argument restoration, after JSON-string fields are decoded. Raw gateway calls do not opt into conversion;
-the shared invoke/stream paths explicitly opt into argument restoration. Fine-tunes are excluded because parallel calls
-can disable strict enforcement.
+The shared invoke/stream paths enable strict flags only for direct OpenAI requests
+to catalogued, non-fine-tuned models with function-calling support. The adapter
+checks the effective endpoint under the per-attempt environment lock. Other
+destinations omit the flags. Raw gateway calls preserve caller-supplied flags.
+A strict-schema rejection retries with enforcement disabled and the same schemas
+and other request options. Fine-tunes are excluded because parallel calls can
+disable enforcement.
 
 Verification: `backend/tests/unit/onyx/llm/test_strict_tools_http.py` exercises
-the real LiteLLM Responses bridge with mocked HTTP, including endpoint gates,
-streaming, nested optional arguments, and schema-rejection fallback.
+the real LiteLLM Responses bridge with mocked HTTP, including mixed external
+tools, endpoint gates, streaming, and rejection fallback. Tool execution tests
+verify that missing and null defaulted inputs produce the same behavior.
