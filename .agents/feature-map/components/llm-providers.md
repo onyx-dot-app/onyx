@@ -123,8 +123,13 @@ of the chat picker.
 and open a generation span. The agent runtime
 (`agents/runtime.py`) uses `stream`; the gateway uses the raw layer and opens
 its own spans. `_completion` shapes the request
-for each model family and provider. When a provider 400 names a reasoning or
-temperature kwarg, `_completion` retries without it (`_retry_attempts`). It
+for each model family and provider. Supported OpenAI and Azure requests mark tool
+results with explicit cache breakpoints after message normalization. Cache endpoint
+checks run under the same environment lock as each dispatch. The lock releases
+before retry handling; removing cache options prevents later attempts from adding
+markers again. When a provider 400 names a
+reasoning, temperature, or explicit-cache kwarg, `_completion` retries without it
+(`_retry_attempts`). A cache fallback also removes the tool-result markers. It
 never drops tools, tool choice or messages. `_track_llm_cost` counts cost only when
 usage limits are on and the key is Onyx-managed. Per-user usage comes from
 spans, not from this call.
