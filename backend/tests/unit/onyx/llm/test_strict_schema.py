@@ -182,3 +182,34 @@ def test_malformed_format_remains_non_strict(value: JsonValue) -> None:
         )
         is None
     )
+
+
+@pytest.mark.parametrize("value", [[{}], [[]], [1], [None], "value", {}, 0, None])
+def test_malformed_required_remains_non_strict(value: JsonValue) -> None:
+    assert (
+        strict_schema(
+            {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": value,
+            }
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["bogus", "", [], {}, 123, None, ["string", {}], ["bogus"], ["string", "string"]],
+)
+def test_malformed_type_remains_non_strict(value: JsonValue) -> None:
+    assert (
+        strict_schema(
+            {
+                "type": "object",
+                "properties": {"value": {"type": value}},
+                "required": ["value"],
+            }
+        )
+        is None
+    )

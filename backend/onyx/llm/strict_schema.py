@@ -60,6 +60,9 @@ _SUPPORTED_FORMATS = frozenset(
         "uuid",
     }
 )
+_SCHEMA_TYPES = frozenset(
+    {"object", "array", "string", "number", "integer", "boolean", "null"}
+)
 _MAX_DEPTH = 10
 
 
@@ -101,6 +104,16 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
     ):
         raise _NotStrictCompatible()
     declared = schema.get("type")
+    if "type" in schema:
+        types = declared if isinstance(declared, list) else [declared]
+        if (
+            not types
+            or any(
+                not isinstance(name, str) or name not in _SCHEMA_TYPES for name in types
+            )
+            or len(set(types)) != len(types)
+        ):
+            raise _NotStrictCompatible()
     is_object = declared == "object" or (
         isinstance(declared, list) and "object" in declared
     )
@@ -111,9 +124,9 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
             or schema.get("additionalProperties", False) is not False
         ):
             raise _NotStrictCompatible()
-        required = schema.get("required") or []
+        required = schema.get("required", [])
         if not isinstance(required, list) or any(
-            name not in properties for name in required
+            not isinstance(name, str) or name not in properties for name in required
         ):
             raise _NotStrictCompatible()
         for name, prop in properties.items():
