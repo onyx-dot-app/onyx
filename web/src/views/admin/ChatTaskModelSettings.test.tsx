@@ -169,6 +169,7 @@ describe("ChatTaskModelSettings", () => {
                         id: 12,
                         name: "gpt-6-luna",
                         display_name: "GPT-6 Luna",
+                        display_name_code: "openai_decisions",
                         is_visible: true,
                         max_input_tokens: null,
                         supports_image_input: false,
