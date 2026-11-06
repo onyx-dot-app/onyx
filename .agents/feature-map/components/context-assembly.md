@@ -276,6 +276,13 @@ counts what is sent, not the stored token counts.
 
 ## Decisions
 
+- **Caching targets aggregate cost across repeated calls.** Cache writes can
+  cost more on a single call; later reads of large prefixes can repay many
+  small unused writes. Evaluate token-weighted reads and writes, including
+  misses, rather than request counts. The
+  [cost model and examples](../../../backend/onyx/llm/prompt_cache/README.md#why-caching-is-always-enabled)
+  explain the break-even point and why output length changes the percentage saved.
+
 - **Agent instructions are a moving user message.** In the system prompt they
   were followed poorly, conflicted with the base prompt, and made weaker models
   produce broken tool calls. A fixed position fades as the chat grows
