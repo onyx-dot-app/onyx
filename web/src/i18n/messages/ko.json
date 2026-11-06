@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 서비스 프로젝트의 티켓을 색인합니다."
         }
       }
     },

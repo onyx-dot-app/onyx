@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management のサービスプロジェクトのチケットをインデックス化します。"
         }
       }
     },

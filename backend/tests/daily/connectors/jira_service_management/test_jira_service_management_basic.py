@@ -17,6 +17,7 @@ pytestmark = [
         reason="Set JIRA_SERVICE_MANAGEMENT_PROJECT_KEY to run this test",
     ),
     pytest.mark.secrets(
+        TestSecret.JIRA_BASE_URL,
         TestSecret.JIRA_USER_EMAIL,
         TestSecret.JIRA_API_TOKEN,
     ),

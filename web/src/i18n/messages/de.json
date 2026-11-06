@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "jiraServiceManagement": {
+          "description": "Tickets aus Jira Service Management-Serviceprojekten indizieren."
         }
       }
     },

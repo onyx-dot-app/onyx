@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "jiraServiceManagement": {
+          "description": "فهرسة تذاكر مشاريع الخدمة في Jira Service Management."
         }
       }
     },

@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jiraServiceManagement": {
+          "description": "Index Jira Service Management tickets from service projects."
         }
       }
     },

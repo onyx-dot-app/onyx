@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "查询时搜索 Slack"
+        },
+        "jiraServiceManagement": {
+          "description": "为 Jira Service Management 服务项目中的工单编制索引。"
         }
       }
     },

@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "Buscar en Slack al consultar"
+        },
+        "jiraServiceManagement": {
+          "description": "Indexar tickets de proyectos de servicio de Jira Service Management."
         }
       }
     },
