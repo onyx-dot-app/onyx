@@ -61,10 +61,13 @@ def _nullable(schema: JsonSchema) -> JsonSchema:
     ):
         types = [declared] if isinstance(declared, str) else list(declared)
         enum = schema.get("enum")
-        nullable: JsonSchema = {**schema, "type": [*types, "null"]}
+        nullable: JsonSchema = {
+            **schema,
+            "type": types if "null" in types else [*types, "null"],
+        }
         if isinstance(enum, list) and None not in enum:
             nullable["enum"] = [*enum, None]
-        return nullable if "null" not in types else schema
+        return nullable
     return {"anyOf": [schema, {"type": "null"}]}
 
 
@@ -85,8 +88,9 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
     )
     properties = schema.get("properties")
     if is_object or properties is not None:
-        if not isinstance(properties, dict) or schema.get(
-            "additionalProperties", False
+        if (
+            not isinstance(properties, dict)
+            or schema.get("additionalProperties", False) is not False
         ):
             raise _NotStrictCompatible()
         required = schema.get("required") or []

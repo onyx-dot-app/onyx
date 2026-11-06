@@ -446,7 +446,7 @@ def to_assistant_message(
         )
         message.content.append(call)
     if request.tools:
-        message = recover_tool_calls(message, request)
+        message = recover_tool_calls(message, request, strict_tools=strict_tools)
     return message
 
 
@@ -644,6 +644,7 @@ class MessageAccumulator:
                         ]
                     ),
                     request,
+                    strict_tools=self.strict_tools,
                 )
             tail = content_filter.flush() if content_filter is not None else ""
             if tail:
@@ -700,7 +701,10 @@ class MessageAccumulator:
 
 
 def recover_tool_calls(
-    message: AssistantMessage, request: GenerationRequest
+    message: AssistantMessage,
+    request: GenerationRequest,
+    *,
+    strict_tools: set[str] | None = None,
 ) -> AssistantMessage:
     """Recover provider text tool payloads when native calls are absent."""
     if message.tool_calls or request.options.tool_choice == ToolChoiceOptions.NONE:
@@ -720,7 +724,11 @@ def recover_tool_calls(
         return message
     tools = {tool.name: tool for tool in request.tools}
     for call in calls:
-        call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
+        call.arguments = _normalize_arguments(
+            call.arguments,
+            tools.get(call.name),
+            strict=call.name in (strict_tools or ()),
+        )
     # Preserve signed thinking for provider replay; hide only XML call payloads.
     content: list[TextContent | ThinkingContent | ToolCall] = []
     for block in message.content:

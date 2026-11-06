@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from pydantic import JsonValue
 
 from onyx.llm.strict_schema import drop_optional_nulls, strict_schema
@@ -43,7 +45,9 @@ def test_nested_objects_and_arrays_of_objects() -> None:
         "properties": {"items": {"type": "array", "items": item}},
         "required": ["items"],
     }
+    original = deepcopy(schema)
     converted = strict_schema(schema)
+    assert schema == original
     assert converted is not None
     properties = converted["properties"]
     assert isinstance(properties, dict)
@@ -117,7 +121,9 @@ def test_conversion_does_not_share_nested_values() -> None:
         "properties": {"value": {"type": "string", "enum": ["a", "b"]}},
         "required": ["value"],
     }
+    original = deepcopy(schema)
     converted = strict_schema(schema)
+    assert schema == original
     assert converted is not None
     assert converted == schema | {"additionalProperties": False}
     properties = converted["properties"]
@@ -141,3 +147,23 @@ def test_optional_const_can_be_omitted_without_weakening_constant() -> None:
     assert converted["properties"] == {
         "value": {"anyOf": [{"type": "string", "const": "fixed"}, {"type": "null"}]}
     }
+
+
+def test_nullable_type_with_nonnullable_enum_accepts_omission() -> None:
+    schema: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"mode": {"type": ["string", "null"], "enum": ["fast", "slow"]}},
+    }
+    converted = strict_schema(schema)
+    assert converted is not None
+    assert converted["properties"] == {
+        "mode": {"type": ["string", "null"], "enum": ["fast", "slow", None]}
+    }
+    assert drop_optional_nulls({"mode": None}, schema) == {}
+
+
+def test_explicit_empty_additional_properties_remains_open() -> None:
+    assert (
+        strict_schema({"type": "object", "properties": {}, "additionalProperties": {}})
+        is None
+    )

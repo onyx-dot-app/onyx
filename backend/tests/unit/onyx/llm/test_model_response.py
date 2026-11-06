@@ -861,3 +861,65 @@ def test_strict_nulls_for_optional_tool_fields_are_dropped(strict: bool) -> None
         if strict
         else {"file_id": "f", "start_char": None, "tags": ["a"]}
     )
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("strict", [False, True])
+def test_recovered_strict_calls_restore_nested_optional_arguments(
+    stream: bool, strict: bool
+) -> None:
+    payload = '{"name":"search","arguments":{"limit":null,"rows":[{"value":null}]}}'
+    request = GenerationRequest(
+        tools=[
+            ToolDefinition(
+                name="search",
+                description="Search",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer"},
+                        "rows": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {"value": {"type": "integer"}},
+                            },
+                        },
+                    },
+                    "required": ["rows"],
+                },
+            )
+        ],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    strict_tools = {"search"} if strict else set()
+    if stream:
+        accumulator = MessageAccumulator(request.tools, strict_tools=strict_tools)
+        list(
+            accumulator.consume(
+                iter(
+                    [
+                        ModelResponseStream(
+                            id="r",
+                            created="1",
+                            choice=StreamingChoice(delta=Delta(content=payload)),
+                        )
+                    ]
+                ),
+                request,
+            )
+        )
+        message = accumulator.message
+    else:
+        message = to_assistant_message(
+            ModelResponse(
+                id="r",
+                created="1",
+                choice=Choice(message=ResponseMessage(content=payload)),
+            ),
+            request,
+            strict_tools=strict_tools,
+        )
+    assert message.tool_calls[0].arguments == (
+        {"rows": [{}]} if strict else {"limit": None, "rows": [{"value": None}]}
+    )

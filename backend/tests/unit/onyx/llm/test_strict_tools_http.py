@@ -10,6 +10,7 @@ import pytest
 from pydantic import JsonValue
 
 from onyx.llm.factory import get_llm
+from onyx.llm.model_request import format_provider_message, serialize_tools
 from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
@@ -18,11 +19,25 @@ from onyx.llm.models import (
     ToolDefinition,
     UserMessage,
 )
+from onyx.llm.multi_llm import ProviderOperation
 
 
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize(
-    "route", ["direct", "base", "base_url", "custom", "env", "azure", "reject"]
+    "route",
+    [
+        "direct",
+        "base",
+        "base_url",
+        "custom",
+        "env",
+        "azure",
+        "raw",
+        "raw_operation",
+        "fine_tune",
+        "unknown_deployment",
+        "reject",
+    ],
 )
 def test_strict_tools_round_trip(
     monkeypatch: pytest.MonkeyPatch, stream: bool, route: str
@@ -91,7 +106,7 @@ def test_strict_tools_round_trip(
             "usage": {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20},
         }
         if stream:
-            events = [
+            events: list[dict[str, Any]] = [
                 {
                     "type": "response.output_item.added",
                     "output_index": 0,
@@ -112,6 +127,8 @@ def test_strict_tools_round_trip(
                 {"type": "response.output_item.done", "output_index": 0, "item": item},
                 {"type": "response.completed", "response": response},
             ]
+            for number, event in enumerate(events):
+                event["sequence_number"] = number
             return httpx.Response(
                 200,
                 request=request,
@@ -126,7 +143,13 @@ def test_strict_tools_round_trip(
     client = get_llm(
         provider="azure" if route == "azure" else "openai",
         model="gpt-6-luna",
-        deployment_name="deployment" if route == "azure" else None,
+        deployment_name="deployment"
+        if route == "azure"
+        else "ft:gpt-6-luna:org:custom"
+        if route == "fine_tune"
+        else "unknown-deployment"
+        if route == "unknown_deployment"
+        else None,
         api_base=proxy
         if route == "base"
         else "https://test.openai.azure.com"
@@ -145,6 +168,24 @@ def test_strict_tools_round_trip(
         options=GenerationOptions(reasoning_effort=ReasoningEffort.HIGH),
     )
     with patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False):
+        if route in ("raw", "raw_operation"):
+            operation = ProviderOperation() if route == "raw_operation" else None
+            prompt = [format_provider_message(UserMessage(content="Search"))]
+            if stream:
+                list(
+                    client.stream_raw(
+                        prompt,
+                        tools=serialize_tools(request.tools),
+                        operation=operation,
+                    )
+                )
+            else:
+                client.invoke_raw(
+                    prompt, tools=serialize_tools(request.tools), operation=operation
+                )
+            assert bodies[0]["tools"][0]["parameters"] == original
+            assert not bodies[0]["tools"][0]["strict"]
+            return
         if stream:
             calls = [
                 e.tool_call

@@ -295,6 +295,7 @@ class ProviderOperation(BaseModel):
     """Diagnostics for one provider call, including its retry attempts."""
 
     request_params: GenerationRequestParams | None = None
+    restore_strict_arguments: bool = False
     strict_tools: set[str] = Field(default_factory=set)
 
 
@@ -1452,14 +1453,17 @@ class LitellmLLM(LLM):
 
             strict_disabled = False
             strict_names: set[str] = set()
-            strict_model = self._model_provider == LlmProviderNames.OPENAI and any(
-                (
-                    find_model_obj(get_model_map(), LlmProviderNames.OPENAI, name) or {}
+            strict_model = (
+                operation is not None
+                and operation.restore_strict_arguments
+                and self._model_provider == LlmProviderNames.OPENAI
+                and not model_bare.startswith("ft:")
+                and is_true_openai_model(LlmProviderNames.OPENAI, model_bare)
+                and (
+                    find_model_obj(get_model_map(), LlmProviderNames.OPENAI, model_bare)
+                    or {}
                 ).get("supports_function_calling")
                 is True
-                and is_true_openai_model(LlmProviderNames.OPENAI, name)
-                and not name.startswith("ft:")
-                for name in model_identity_names
             )
 
             converted_tools, converted_names = (
@@ -2004,7 +2008,7 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
         context = context or GenerationContext()
-        operation = ProviderOperation()
+        operation = ProviderOperation(restore_strict_arguments=True)
         messages, cache_stats = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
         with (
@@ -2057,7 +2061,7 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> Generator[GenerationEvent, None, None]:
         context = context or GenerationContext()
-        operation = ProviderOperation()
+        operation = ProviderOperation(restore_strict_arguments=True)
         accumulator = MessageAccumulator(
             request.tools, strict_tools=operation.strict_tools
         )
