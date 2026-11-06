@@ -48,7 +48,8 @@ def test_basic_search_returns_results(
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     # The route in the text keeps each run's document unique in the shared index.
     doc_content = f"search api integration test unique document {route}"
-    DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+    doc = DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+    DocumentManager.wait_until_searchable([doc_content], admin_user)
 
     resp = client.post(
         f"{API_SERVER_URL}{route}",
@@ -57,11 +58,10 @@ def test_basic_search_returns_results(
     )
     assert resp.status_code == 200
 
-    # ``reset`` only wipes Postgres; OpenSearch is shared across tests, so docs
-    # seeded by prior tests may still match. Find the seeded doc by content
-    # rather than asserting on result count.
+    # OpenSearch is never reset, so a retried test step finds the docs its
+    # earlier attempts seeded too. The link is the document id.
     data = resp.json()
-    matches = [r for r in data["results"] if doc_content in r["content"]]
+    matches = [r for r in data["results"] if r["link"] == doc.id]
     assert len(matches) == 1
     assert matches[0]["citation_id"] is not None
     assert matches[0]["source_type"]
@@ -83,6 +83,9 @@ def test_document_set_filtering(
     excluded_content = f"{shared_phrase} excluded"
     DocumentManager.seed_doc_with_content(cc_pair_in, included_content, api_key)
     DocumentManager.seed_doc_with_content(cc_pair_out, excluded_content, api_key)
+    DocumentManager.wait_until_searchable(
+        [included_content, excluded_content], admin_user
+    )
 
     doc_set = DocumentSetManager.create(
         cc_pair_ids=[cc_pair_in.id],
@@ -110,8 +113,9 @@ def test_acl_enforcement(
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
 ) -> None:
-    privileged_user = UserManager.create(name="search-acl-allowed")
-    blocked_user = UserManager.create(name="search-acl-blocked")
+    # Random names: a retried test step registers them again on the same database.
+    privileged_user = UserManager.create()
+    blocked_user = UserManager.create()
 
     restricted_cc_pair = CCPairManager.create_from_scratch(
         access_type=AccessType.PRIVATE,
@@ -130,6 +134,7 @@ def test_acl_enforcement(
 
     doc_content = "restricted acl search document"
     DocumentManager.seed_doc_with_content(restricted_cc_pair, doc_content, api_key)
+    DocumentManager.wait_until_searchable([doc_content], privileged_user)
 
     allowed_resp = _search(doc_content, privileged_user)
     assert allowed_resp.status_code == 200
@@ -160,6 +165,9 @@ def test_persona_scoped_search(
     excluded_content = f"{shared_phrase} out of scope"
     DocumentManager.seed_doc_with_content(cc_pair_in, included_content, api_key)
     DocumentManager.seed_doc_with_content(cc_pair_out, excluded_content, api_key)
+    DocumentManager.wait_until_searchable(
+        [included_content, excluded_content], admin_user
+    )
 
     doc_set = DocumentSetManager.create(
         cc_pair_ids=[cc_pair_in.id],
@@ -207,7 +215,8 @@ def test_read_search_scoped_pat_can_search(
 ) -> None:
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
     doc_content = "scoped pat search api unique document"
-    DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+    doc = DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+    DocumentManager.wait_until_searchable([doc_content], admin_user)
 
     raw_token = PATManager.create_scoped(
         name="search-scoped-pat",
@@ -222,5 +231,5 @@ def test_read_search_scoped_pat_can_search(
     )
     assert resp.status_code == 200
 
-    matches = [r for r in resp.json()["results"] if doc_content in r["content"]]
+    matches = [r for r in resp.json()["results"] if r["link"] == doc.id]
     assert len(matches) == 1
