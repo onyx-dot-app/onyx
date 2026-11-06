@@ -11,7 +11,7 @@ enumerate and resolve mailboxes, ``GroupMember.Read.All`` when mailboxes are
 chosen by group.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
@@ -72,6 +72,7 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
+from onyx.utils.datetime import utc_iso_timestamp
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -369,10 +370,6 @@ def _expanded_property(raw: dict[str, Any]) -> str | None:
     Graph writes its id back in its own spelling, so it is not matched."""
     props = raw.get("singleValueExtendedProperties") or []
     return props[0].get("value") if props else None
-
-
-def _graph_timestamp(moment: datetime) -> str:
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class OutlookSourceOperations(SourceOperations):
@@ -724,7 +721,7 @@ class OutlookSourceOperations(SourceOperations):
             params = {"changeType": "created", "$select": CHANGE_SELECT}
             if received_after is not None:
                 params["$filter"] = (
-                    f"receivedDateTime ge {_graph_timestamp(received_after)}"
+                    f"receivedDateTime ge {utc_iso_timestamp(received_after)}"
                 )
         data = self._get(url, params, {"Prefer": f"odata.maxpagesize={page_size}"})
         return OutlookDeltaPage(
@@ -759,8 +756,8 @@ class OutlookSourceOperations(SourceOperations):
         if url is None:
             url = f"{self._user_url(mailbox_id)}/calendarView/delta"
             params = {
-                "startDateTime": _graph_timestamp(window_start),
-                "endDateTime": _graph_timestamp(window_end),
+                "startDateTime": utc_iso_timestamp(window_start),
+                "endDateTime": utc_iso_timestamp(window_end),
             }
         data = self._get(
             url,
@@ -1022,9 +1019,9 @@ class OutlookSourceOperations(SourceOperations):
         url = next_link
         if url is None:
             url = f"{self._user_url(mailbox_id)}/messages"
-            received = f"receivedDateTime ge {_graph_timestamp(received_from)}"
+            received = f"receivedDateTime ge {utc_iso_timestamp(received_from)}"
             if received_to is not None:
-                received += f" and receivedDateTime le {_graph_timestamp(received_to)}"
+                received += f" and receivedDateTime le {utc_iso_timestamp(received_to)}"
             params = {
                 "$filter": received,
                 "$orderby": "receivedDateTime asc",

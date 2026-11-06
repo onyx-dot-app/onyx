@@ -8,6 +8,12 @@ def datetime_to_utc(dt: datetime) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def utc_iso_timestamp(dt: datetime) -> str:
+    """ISO 8601 in UTC to the second (``2025-06-15T12:00:00Z``), as REST APIs
+    such as GitHub and Microsoft Graph take time query parameters."""
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def get_window_start(dt: datetime, period_seconds: int) -> datetime:
     """Fixed UTC window start; weekly → Monday 00:00, else epoch-aligned."""
     dt = datetime_to_utc(dt)
