@@ -203,7 +203,9 @@ the error type on purpose in auth code.
 1. `one-index-per-batch` **A batch writes to one index only:** the index of its
    attempt's own `SearchSettings`. During a REINDEX or ACTIVE_ONLY reindex,
    `background/celery/tasks/docprocessing/tasks.py:check_for_indexing` creates
-   attempts for both generations; an INSTANT reindex creates none for FUTURE.
+   attempts for both generations, except a full run or backfill on PRESENT,
+   which waits until after the swap (`_kickoff_indexing_tasks`,
+   `_try_creating_pending_backfill`); an INSTANT reindex creates none for FUTURE.
    Do not make docprocessing write both: the port fills FUTURE, and a second
    writer would race its create-only copy.
 2. `document-written-whole` **A document's chunks go to `DocumentIndex.index()`
