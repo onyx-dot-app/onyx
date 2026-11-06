@@ -351,6 +351,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
@@ -366,9 +367,12 @@ def process_jira_issue(
 
     description: str = rich_text(get_issue_field(issue, "description"))
 
+    is_jsm = source == DocumentSource.JIRA_SERVICE_MANAGEMENT
     comments: list[str] = get_comment_strs(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
+        skip_restricted=is_jsm,
+        skip_jsm_internal=is_jsm,
     )
     ticket_content = f"{description}\n" + "\n".join(
         [f"Comment: {comment}" for comment in comments if comment]
@@ -441,7 +445,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue_key}: {summary}",
         title=f"{issue_key} {summary}",
         doc_updated_at=time_str_to_utc(get_issue_field(issue, _FIELD_UPDATED)),
@@ -507,6 +511,11 @@ class JiraConnector(
     @property
     def comment_email_blacklist(self) -> tuple:
         return tuple(email.strip() for email in self._comment_email_blacklist)
+
+    @property
+    def document_source(self) -> DocumentSource:
+        """Returns JIRA as the document source. Subclasses may override."""
+        return DocumentSource.JIRA
 
     @property
     def source_operations(self) -> JiraSourceOperations:
@@ -649,7 +658,7 @@ class JiraConnector(
         return None
 
     def _get_jql_query(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch | None
     ) -> str:
         return build_jql_query(
             project_key=self.jira_project,
@@ -661,7 +670,7 @@ class JiraConnector(
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch | None,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         return self._load_with_date_retry(
@@ -671,7 +680,7 @@ class JiraConnector(
     def load_from_checkpoint_with_perm_sync(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch | None,
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         """Load documents from checkpoint with permission information included."""
@@ -682,7 +691,7 @@ class JiraConnector(
     def _load_with_date_retry(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch | None,
         checkpoint: JiraConnectorCheckpoint,
         include_permissions: bool,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
@@ -809,6 +818,7 @@ class JiraConnector(
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            source=self.document_source,
         ):
             # Add permission information to the document if requested
             if include_permissions:

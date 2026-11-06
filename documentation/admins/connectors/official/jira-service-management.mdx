@@ -1,0 +1,213 @@
+---
+title: "Jira Service Management"
+description: "Access tickets and requests from Jira Service Management"
+---
+
+## How it works
+
+The Jira Service Management connector indexes tickets from the JSM projects you select.
+Onyx checks JSM for new and changed tickets on the connector's refresh schedule. The default is every **30** minutes.
+
+For every JSM ticket, this connector pulls:
+
+- Title
+- Description
+- [Common fields](#indexed-metadata)
+- Comments (excluding restricted and internal comments)
+
+The connector skips comments with visibility restrictions and JSM internal comments to ensure
+only publicly accessible content is indexed. The connector can index only the content that its
+JSM account can access. An API token does not give its owner additional JSM permissions.
+
+## Jira Service Management Cloud setup
+
+JSM Cloud is hosted and updated by Atlassian. Its site URL usually ends in `atlassian.net`.
+
+### 1. Choose a connector account
+
+Use a dedicated Jira account for the connector.
+This makes its access easier to review and prevents a personal account change from stopping the connector.
+
+### 2. Grant indexing access
+
+For indexing, the Jira account needs:
+
+- Jira product access.
+- Service desk agent or administrator permissions for JSM projects you want to index.
+- **Browse Projects** for every JSM project that you want to index.
+- Access to each restricted comment that you want to index.
+
+A standard JSM agent can run the connector if the user has all required access.
+
+### 3. Create an API token
+
+Sign in to [Atlassian](https://id.atlassian.com/manage-profile/security/api-tokens) as the connector account:
+
+<Steps>
+  <Step title="Create API token">
+    Click **Create API token**. Name it `Onyx`.
+  </Step>
+
+  <Step title="Copy token">
+    Copy the displayed token. You will not be able to see it again.
+  </Step>
+</Steps>
+
+### 4. Connect to Onyx
+
+In the Onyx admin interface:
+
+<Steps>
+  <Step title="Navigate to connectors">
+    Go to **Admin > Data Sources > Connectors**.
+  </Step>
+
+  <Step title="Add connector">
+    Find **Jira Service Management** in the list and click **Connect**.
+  </Step>
+
+  <Step title="Enter credentials">
+    Provide:
+    - **Site URL**: Your Jira instance URL (e.g., `https://your-company.atlassian.net`)
+    - **Email**: The connector account's email address
+    - **API Token**: The token you created in step 3
+  </Step>
+
+  <Step title="Configure indexing scope">
+    Choose one:
+    - **Everything**: Index all tickets from all JSM projects the account can access. Onyx indexes every visible project.
+    - **Project**: Index tickets from a specific JSM project by its key (e.g., `SUPPORT`)
+    - **JQL Query**: Use a custom JQL query to filter tickets (advanced users)
+
+    <Warning>
+      Do not include time-based filters or ORDER BY clauses in JQL queries. The connector manages these automatically.
+    </Warning>
+  </Step>
+
+  <Step title="Optional settings">
+    Optionally configure:
+    - **Comment Email Blacklist**: Exclude comments from specific email addresses (useful for ignoring bot comments)
+    
+    Note: The connector automatically skips restricted comments and JSM internal comments to ensure
+    only publicly accessible content is indexed.
+  </Step>
+
+  <Step title="Finish">
+    Click **Connect** to complete the setup.
+  </Step>
+</Steps>
+
+## Jira Service Management Data Center setup
+
+JSM Data Center is a self-hosted version managed by your organization.
+
+### 1-2. Choose account and grant access
+
+Follow the same steps as JSM Cloud setup above.
+
+### 3. Create a Personal Access Token (PAT)
+
+In your Jira Data Center instance:
+
+<Steps>
+  <Step title="Navigate to PAT settings">
+    Sign in as the connector account. Go to your **Profile > Personal Access Tokens**.
+  </Step>
+
+  <Step title="Create token">
+    Click **Create token**. Name it `Onyx` and set an expiration date.
+
+    <Warning>
+      You must rotate the token before it expires to keep the connector working.
+    </Warning>
+  </Step>
+
+  <Step title="Copy token">
+    Copy the displayed token. You will not be able to see it again.
+  </Step>
+</Steps>
+
+### 4. Connect to Onyx
+
+Follow the same steps as JSM Cloud setup, but:
+- Use your PAT instead of an API token
+- Leave the **Email** field empty (Data Center uses PATs, not API tokens)
+
+## Indexed metadata
+
+Every indexed JSM ticket includes:
+
+| Field | Description |
+| --- | --- |
+| Issue key | Unique ticket identifier (e.g., SUPPORT-123) |
+| Summary | Ticket title |
+| Description | Ticket description |
+| Status | Current status (Open, In Progress, Resolved, etc.) |
+| Priority | Ticket priority |
+| Issue type | Type of request (Incident, Service Request, Problem, Change, etc.) |
+| Assignee | Person assigned to the ticket |
+| Reporter | Person who created the ticket |
+| Created date | When the ticket was created |
+| Updated date | When the ticket was last modified |
+| Due date | Ticket due date (if set) |
+| Labels | Associated labels |
+| Comments | All comments on the ticket |
+| Project | JSM project the ticket belongs to |
+
+## Troubleshooting
+
+### Missing tickets
+
+If tickets are not appearing in search results:
+
+1. Verify that the connector account has access to the project.
+2. Check that the account has agent or administrator permissions for JSM projects.
+3. Review the connector configuration to ensure the project is included in the indexing scope.
+4. Wait for the next scheduled refresh (default: 30 minutes) or manually trigger a refresh.
+
+### Authentication errors
+
+If you see authentication errors:
+
+1. Verify that the API token or PAT is still valid.
+2. Check that the email address matches the connector account.
+3. Ensure the site URL is correct and includes `https://`.
+4. For Data Center, check that the PAT has not expired.
+
+### JQL query errors
+
+If you receive JQL errors:
+
+1. Remove time-based filters from your JQL query. The connector manages time filters automatically.
+2. Remove ORDER BY clauses. Jira does not allow them inside the connector's queries.
+3. Test your JQL query directly in Jira to verify its syntax.
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="What's the difference between the Jira and JSM connectors?">
+    Jira Service Management is built on top of Jira but is specialized for IT service management and customer support.
+    While both use the same underlying API, the JSM connector is designed specifically for service desk projects
+    and categorizes documents separately from regular Jira issues. Use the JSM connector for service desk projects
+    and the Jira connector for software development projects.
+  </Accordion>
+
+  <Accordion title="Can I index both Jira and JSM projects?">
+    Yes, you can set up both connectors. The Jira connector for software projects and the JSM connector for
+    service desk projects. They operate independently.
+  </Accordion>
+
+  <Accordion title="Does the connector index customer portal data?">
+    The connector indexes tickets that the connector account can access through the Jira API. Customer portal
+    settings determine which tickets are visible, but the connector does not access customer-specific portal features.
+  </Accordion>
+
+  <Accordion title="Can I filter by JSM-specific issue types?">
+    Yes, use a JQL query like `issuetype IN (Incident, "Service Request", Problem, Change)` in the JQL Query tab.
+    Remember not to include time-based filters or ORDER BY clauses.
+  </Accordion>
+
+  <Accordion title="How often does the connector check for changes?">
+    The default is every 30 minutes. You can adjust this in the connector settings under the refresh schedule.
+  </Accordion>
+</AccordionGroup>
