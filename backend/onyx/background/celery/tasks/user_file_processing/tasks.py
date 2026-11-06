@@ -425,6 +425,7 @@ def _process_user_file_with_indexing(
                 document_batch=documents,
                 request_id=None,
                 adapter=adapter,
+                written_search_settings_id=current_search_settings.id,
             )
         except UserFileDeletingSkip:
             # File began deleting mid-pipeline — the delete owns removal; skip cleanly
@@ -507,6 +508,7 @@ def _index_user_file_to_secondary(
                 document_batch=documents,
                 request_id=None,
                 adapter=adapter,
+                written_search_settings_id=bound_secondary.id,
             )
         except UserFileDeletingSkip:
             # File began deleting mid-pipeline — skip cleanly so the caller doesn't flag it

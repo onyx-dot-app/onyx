@@ -106,7 +106,10 @@ hash, reach an existing row only after the index write, so a failed write is
 retried on the next sync. Docprocessing turns gate 1 off, because
 the connector already filtered by time. A FUTURE attempt turns gate 2 off.
 `force_update` turns both off, for the per-document retry and the tabular
-re-chunk migration.
+re-chunk migration. After the write, the hash is stamped only if the settings
+the batch wrote into are still PRESENT at commit, read under a share lock
+(`indexing/indexing_pipeline.py:_written_settings_are_present`), so a batch
+that lands after a swap wrote into a retired index and leaves the row alone.
 
 **The write.** The enricher bakes access, document sets, boost, cc-pair IDs and
 hierarchy ancestors into each chunk. A later permission change reaches the index
@@ -249,9 +252,18 @@ the error type on purpose in auth code.
    ID, and the content hash cannot see that.
    `connectors/models.py:DocumentBase.content_hash` walks text and image
    sections only, so a changed spreadsheet looks unchanged to gate 2.
-9. `future-ignores-content-hash` **A FUTURE write must not read or stamp the
-   content hash.** The hash column is shared and belongs to PRESENT. If FUTURE
-   uses it, the two generations suppress each other's writes during a reindex.
+9. `future-ignores-content-hash` **A FUTURE write must not read the content
+   hash, and a write stamps it only if its settings are PRESENT at commit.**
+   The hash column describes what PRESENT holds. `get_docs_to_update` turns
+   gate 2 off for `index_to_secondary`; `index_doc_batch` stamps under
+   `_written_settings_are_present`, a share lock on the written settings row,
+   so a FUTURE write stamps nothing unless the swap promoted its index
+   meanwhile, and a PRESENT batch that lands after a swap stamps nothing
+   either. `run_indexing_pipeline` takes `written_search_settings_id` from its
+   caller: pass the id resolved when the batch started, never a fresh lookup,
+   because a batch can straddle a swap. Multipass and contextual-RAG settings
+   come from that row too, so a batch chunks for the index it writes. A
+   targeted re-index never stamps (`stamp_content_hash=False`).
 10. `targeted-reindex-outside-fence` **The attempt fence excludes targeted
    reindex on purpose.**
    `db/indexing_coordination.py:IndexingCoordination.try_create_index_attempt`
@@ -329,11 +341,6 @@ the error type on purpose in auth code.
 
 ## Known issues
 
-- **A PRESENT attempt can chunk with FUTURE settings.**
-  `run_indexing_pipeline` takes multipass and contextual-RAG settings from the
-  FUTURE `SearchSettings` whenever one exists, but `docprocessing_task` embeds
-  with the attempt's own. It is unconfirmed as a bug; check before you rely on
-  either behaviour.
 - **Index-time LLM steps skip the provider cost limit.** Contextual RAG
   (`llm/factory.py:get_llm_for_contextual_rag`) and image summarization
   (`llm/factory.py:get_default_llm_with_vision`) do not call
@@ -378,7 +385,9 @@ the error type on purpose in auth code.
   text, change `indexing/port_reembed.py` too ([[#chunk-text-second-copy]]).
 - `pipeline-caller` **A new caller of `run_indexing_pipeline`.** Copy
   `background/indexing/run_targeted_reindex.py`. Pass the right gate flags
-  ([[#dedup-gate-order]], [[#future-ignores-content-hash]]) and an adapter. Pass
+  ([[#dedup-gate-order]], [[#future-ignores-content-hash]]), an adapter, and
+  `written_search_settings_id`: the id of the settings the document index was
+  built from, resolved when the batch started. Pass
   `skip_spreadsheet_content` only for connector content. List the callers with
   `git grep -l 'run_indexing_pipeline(' backend/onyx backend/ee`.
 - `tabular-chunking-change` **A change to tabular chunking.** Change the profile
