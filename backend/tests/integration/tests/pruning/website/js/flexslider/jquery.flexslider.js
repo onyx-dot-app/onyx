@@ -486,7 +486,7 @@
         slider.animatingTo = target;
         slider.vars.before(slider);
 
-        //Optional paramter to pause slider when making an anmiation call
+        //Optional parameter to pause slider when making an anmiation call
         if (pause) {
           slider.pause();
         }
