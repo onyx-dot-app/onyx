@@ -354,7 +354,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   ]);
 
   const handleUpdateName = async (newName: string) => {
-    if (!ccPair) return;
+    if (!ccPair || !newName) return;
     try {
       const response = await updateConnectorCredentialPairName(
         ccPair.id,
