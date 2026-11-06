@@ -6304,13 +6304,6 @@
           "title": "グループの権限"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} はグループ単位の権限を使用するようになりました。アクセス権はグループごとに設定するため、ユーザーの権限は所属するすべてのグループの組み合わせになります。",
-        "learnMore": {
-          "label": "詳細を見る"
-        },
-        "title": "権限の仕組みが変わりました。"
-      },
       "sharedResources": {
         "agent": {
           "description": "エージェント"
@@ -10247,13 +10240,6 @@
           "label": "ユーザーを招待"
         },
         "title": "ユーザーとリクエスト"
-      },
-      "permissionsNotice": {
-        "description": "{appName} はグループベースの権限を使用するようになりました。Curator と Global Curator のロールは、設定可能なグループ権限に置き換えられました。グループごとの管理者が、範囲を限定した管理を行います。",
-        "learnMoreButton": {
-          "label": "詳細を見る"
-        },
-        "title": "権限が変更されました"
       },
       "resetPasswordModal": {
         "copyButton": {

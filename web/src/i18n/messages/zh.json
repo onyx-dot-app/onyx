@@ -6304,13 +6304,6 @@
           "title": "用户组权限"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} 现在使用基于用户组的权限。访问权限按用户组配置，因此用户的权限是其所属全部用户组权限的合集。",
-        "learnMore": {
-          "label": "了解更多"
-        },
-        "title": "权限已变更。"
-      },
       "sharedResources": {
         "agent": {
           "description": "智能体"
@@ -10247,13 +10240,6 @@
           "label": "邀请用户"
         },
         "title": "用户与申请"
-      },
-      "permissionsNotice": {
-        "description": "{appName} 现在使用基于用户组的权限。策展人和全局策展人角色已由可配置的用户组权限取代，并可为每个用户组指定管理者，实现范围化管理。",
-        "learnMoreButton": {
-          "label": "了解更多"
-        },
-        "title": "权限已变更"
       },
       "resetPasswordModal": {
         "copyButton": {
