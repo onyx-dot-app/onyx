@@ -381,7 +381,6 @@
             "group": "Usage & Analytics",
             "pages": [
               "admins/analytics/overview",
-              "admins/analytics/prompt_caching",
               "admins/analytics/query_history",
               "admins/analytics/custom_analytics"
             ]

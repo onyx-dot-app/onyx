@@ -102,6 +102,8 @@ caching uses it. Anthropic breakpoints mark the head, the context before the new
 user message, and the tail. This lets different questions reuse shared files while
 tool rounds reuse the growing history. List-valued messages carry their breakpoint
 on the final content block so image prefixes reach the provider cache.
+Caller markers in the prefix and suffix count toward the four-breakpoint limit.
+The adapter preserves them and uses remaining slots for the tail, head, then context.
 Separately, the LLM adapter marks
 every tool result with an explicit breakpoint on supported OpenAI and Azure API requests
 (`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`). Requests with no

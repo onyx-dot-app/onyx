@@ -20,7 +20,10 @@ _IMAGE = (
 )
 
 
-def _prepare(prefix: list[ChatCompletionMessage]) -> list[ChatCompletionMessage]:
+def _prepare(
+    prefix: list[ChatCompletionMessage],
+    suffix: list[ChatCompletionMessage] | None = None,
+) -> list[ChatCompletionMessage]:
     prepared, _ = process_with_prompt_cache(
         LLMConfig(
             model_provider="anthropic",
@@ -29,7 +32,7 @@ def _prepare(prefix: list[ChatCompletionMessage]) -> list[ChatCompletionMessage]
             max_input_tokens=200_000,
         ),
         prefix,
-        [],
+        suffix or [],
         with_metadata=False,
     )
     return prepared
@@ -91,3 +94,81 @@ def test_tool_round_keeps_context_and_tail_breakpoints() -> None:
         index for index, message in enumerate(prepared) if message.cache_control
     ] == [0, 1, 4]
     assert all(message.cache_control is None for message in prefix)
+
+
+@pytest.mark.parametrize(
+    ("prefix_markers", "suffix_marker"), [(2, True), (3, False), (3, True), (4, False)]
+)
+def test_existing_markers_share_the_request_breakpoint_budget(
+    prefix_markers: int, suffix_marker: bool
+) -> None:
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+
+    content: list[TextContentPart | ImageContentPart] = [
+        TextContentPart(
+            text=f"Shared context {index}",
+            cache_control={"type": "ephemeral", "ttl": "1h"}
+            if index == 0
+            else {"type": "ephemeral"},
+        )
+        for index in range(prefix_markers - 1)
+    ]
+    content.append(
+        ImageContentPart(
+            image_url=ImageUrlDetail(url=_IMAGE),
+            cache_control={"type": "ephemeral"},
+        )
+    )
+    prefix: list[ChatCompletionMessage] = [
+        SystemMessage(content="Instructions"),
+        UserMessage(content=content),
+        UserMessage(content="Question"),
+    ]
+    suffix: list[ChatCompletionMessage] = (
+        [UserMessage(content="Reminder", cache_control={"type": "ephemeral"})]
+        if suffix_marker
+        else []
+    )
+    original = deepcopy([*prefix, *suffix])
+    prepared = _prepare(prefix, suffix)
+    assert prepared[1] == prefix[1]
+    if suffix:
+        assert prepared[-1] == suffix[0]
+    assert [*prefix, *suffix] == original
+
+    body: dict[str, Any] = AnthropicConfig().transform_request(
+        model="claude-haiku-4-5",
+        messages=[message.model_dump(exclude_none=True) for message in prepared],
+        optional_params={"max_tokens": 32},
+        litellm_params={},
+        headers={},
+    )
+    markers = [
+        block["cache_control"]
+        for message in body["messages"]
+        for block in message["content"]
+        if block.get("cache_control") is not None
+    ]
+    markers.extend(
+        block["cache_control"]
+        for block in body.get("system", [])
+        if block.get("cache_control") is not None
+    )
+    assert len(markers) == 4
+    assert markers[0] == {"type": "ephemeral", "ttl": "1h"}
+    assert prepared[0].cache_control is None
+    assert prepared[2].cache_control == (
+        {"type": "ephemeral"} if prefix_markers + int(suffix_marker) < 4 else None
+    )
+
+
+def test_existing_message_marker_keeps_its_lifetime() -> None:
+    prefix: list[ChatCompletionMessage] = [
+        SystemMessage(
+            content="Instructions", cache_control={"type": "ephemeral", "ttl": "1h"}
+        ),
+        UserMessage(content="Question"),
+    ]
+    prepared = _prepare(prefix)
+    assert prepared[0] == prefix[0]
+    assert prepared[-1].cache_control == {"type": "ephemeral"}

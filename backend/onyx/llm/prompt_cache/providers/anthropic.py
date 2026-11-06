@@ -1,6 +1,7 @@
 """Anthropic provider adapter for prompt caching."""
 
 from collections.abc import Sequence
+from functools import partial
 
 from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
@@ -8,17 +9,31 @@ from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
 
 
+def _count_cache_breakpoints(message: ChatCompletionMessage) -> int:
+    """Count caller markers at message and content-block levels."""
+    return int(message.cache_control is not None) + (
+        sum(part.cache_control is not None for part in message.content)
+        if isinstance(message.content, list)
+        else 0
+    )
+
+
 def _add_anthropic_cache_control(
     messages: Sequence[ChatCompletionMessage],
+    *,
+    available_breakpoints: int,
 ) -> Sequence[ChatCompletionMessage]:
     """Mark the head, context before the newest question, and the prefix tail.
 
     The context breakpoint allows different questions to reuse shared files.
     The tail also caches the question and tool rounds as the conversation grows.
-    These boundaries use at most three of Anthropic's four breakpoints.
+    Preserve caller markers and add boundaries only within the remaining budget.
     """
     result = list(messages)
-    if not result:
+    remaining = available_breakpoints - sum(
+        _count_cache_breakpoints(message) for message in result
+    )
+    if not result or remaining <= 0:
         return result
     latest_user = next(
         (
@@ -28,14 +43,19 @@ def _add_anthropic_cache_control(
         ),
         0,
     )
-    boundaries = {0, len(result) - 1}
+    # Prioritize growing history when caller markers leave limited space.
+    boundaries = [len(result) - 1, 0]
     if latest_user > 0:
-        boundaries.add(latest_user - 1)
-    for index in boundaries:
+        boundaries.append(latest_user - 1)
+    for index in dict.fromkeys(boundaries):
+        if remaining <= 0:
+            break
         message = result[index]
+        if message.cache_control is not None:
+            continue
         cache_control = {"type": "ephemeral"}
         if isinstance(message.content, list):
-            if not message.content:
+            if not message.content or message.content[-1].cache_control is not None:
                 continue
             content = [
                 *message.content[:-1],
@@ -46,6 +66,7 @@ def _add_anthropic_cache_control(
             )
         else:
             result[index] = message.model_copy(update={"cache_control": cache_control})
+        remaining -= 1
     return result
 
 
@@ -87,7 +108,11 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
             cacheable_prefix=cacheable_prefix,
             suffix=suffix,
             continuation=continuation,
-            transform_cacheable=_add_anthropic_cache_control,
+            transform_cacheable=partial(
+                _add_anthropic_cache_control,
+                available_breakpoints=4
+                - sum(_count_cache_breakpoints(message) for message in suffix),
+            ),
         )
 
     def extract_cache_metadata(

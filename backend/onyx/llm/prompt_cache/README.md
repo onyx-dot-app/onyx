@@ -52,7 +52,7 @@ For Claude Haiku 4.5 five-minute caching, `w = 1.25` and `r = 0.1`.
 Thus, reads must exceed about 27.8% of writes: `R > 0.25W / 0.9`.
 This is a token-weighted ratio, not a request hit rate.
 For a fixed prefix used `n` times with one write and all later calls hitting, the input cost ratio is `(1.25 + 0.1(n - 1)) / n`.
-Two uses save 32.5%; five save 67%. See the [customer examples](../../../../documentation/admins/analytics/prompt_caching.mdx#why-caching-stays-enabled).
+Two uses save 32.5%; five save 67%. See the [customer examples](../../../../documentation/overview/getting_started/faq.mdx).
 
 These rates come from [Anthropic's pricing](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#pricing), checked November 6, 2026.
 Other models and providers differ. [OpenAI's cache modes](https://developers.openai.com/api/docs/guides/prompt-caching) include both write-premium and no-write-premium pricing.
@@ -160,8 +160,8 @@ processed_prompt, _ = process_with_prompt_cache(
 - **Limitations**: Supports up to 4 cache breakpoints
 
 ### Vertex AI
-- **Caching Type**: Implicit for Gemini; Claude uses the Anthropic adapter.
-- **Behavior**: The Gemini adapter leaves messages unchanged and relies on provider caching.
+- **Caching Type**: The factory routes all Vertex AI models through the Vertex adapter.
+- **Behavior**: The adapter leaves messages unchanged, including for Vertex AI Claude. It does not add explicit cache breakpoints.
 - **Limitations**: Explicit Gemini context-cache creation is not implemented.
 
 ## Architecture
