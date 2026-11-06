@@ -74,6 +74,7 @@ def _build_augmentation_ctx(
     tokenizer = get_tokenizer(
         model_name=llm.config.model_name,
         provider_type=llm.config.model_provider,
+        deployment_name=llm.config.deployment_name,
     )
     return AugmentationReembedContext(
         future_enable_contextual_rag=True,

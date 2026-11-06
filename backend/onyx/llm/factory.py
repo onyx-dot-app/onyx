@@ -583,6 +583,7 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
     llm_tokenizer = get_tokenizer(
         model_name=llm_model_name,
         provider_type=llm_provider,
+        deployment_name=llm.config.deployment_name,
     )
     return llm_tokenizer.encode
 

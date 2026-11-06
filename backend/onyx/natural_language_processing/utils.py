@@ -106,6 +106,8 @@ class HuggingFaceTokenizer(BaseTokenizer):
 
 _TOKENIZER_CACHE: dict[tuple[EmbeddingProvider | None, str | None], BaseTokenizer] = {}
 
+_MODEL_TOKENIZER_CACHE: dict[str, BaseTokenizer | None] = {}
+
 
 def _check_tokenizer_cache(
     model_provider: EmbeddingProvider | None, model_name: str | None
@@ -182,21 +184,23 @@ def _get_default_tokenizer() -> BaseTokenizer:
 
 
 def get_tokenizer(
-    model_name: str | None, provider_type: EmbeddingProvider | str | None
+    model_name: str | None,
+    provider_type: EmbeddingProvider | str | None,
+    deployment_name: str | None = None,
 ) -> BaseTokenizer:
     if isinstance(provider_type, str):
         try:
             provider_type = EmbeddingProvider(provider_type)
         except ValueError:
             # Generation providers such as litellm_proxy are not embedding
-            # providers. Resolve the tokenizer from the generation model itself
-            # instead of silently counting with the default embedding tokenizer.
-            tokenizer = _resolve_tokenizer_for_model(model_name)
+            # providers. Resolve the tokenizer from the model that is sent on
+            # the wire instead of silently counting with the default tokenizer.
+            tokenizer = _resolve_tokenizer_for_model(deployment_name or model_name)
             if tokenizer is not None:
                 return tokenizer
-            logger.debug(
-                "Invalid provider_type '%s'. Falling back to default tokenizer.",
-                provider_type,
+            logger.warning(
+                "Could not resolve a tokenizer for generation model %s; falling back to the default tokenizer.",
+                deployment_name or model_name,
             )
             return _get_default_tokenizer()
     return _check_tokenizer_cache(provider_type, model_name)
@@ -207,25 +211,29 @@ def _resolve_tokenizer_for_model(model_name: str | None) -> BaseTokenizer | None
     if not model_name:
         return None
 
+    if model_name in _MODEL_TOKENIZER_CACHE:
+        return _MODEL_TOKENIZER_CACHE[model_name]
+
     try:
-        return TiktokenTokenizer(model_name)
+        tokenizer: BaseTokenizer | None = TiktokenTokenizer(model_name)
     except Exception as tiktoken_error:
         logger.debug(
             "TiktokenTokenizer not available for model %s: %s",
             model_name,
             tiktoken_error,
         )
+        try:
+            tokenizer = HuggingFaceTokenizer(model_name)
+        except Exception as hf_error:
+            logger.debug(
+                "HuggingFaceTokenizer not available for model %s: %s",
+                model_name,
+                hf_error,
+            )
+            tokenizer = None
 
-    try:
-        return HuggingFaceTokenizer(model_name)
-    except Exception as hf_error:
-        logger.debug(
-            "HuggingFaceTokenizer not available for model %s: %s",
-            model_name,
-            hf_error,
-        )
-
-    return None
+    _MODEL_TOKENIZER_CACHE[model_name] = tokenizer
+    return tokenizer
 
 
 # Max characters per encode() call.
