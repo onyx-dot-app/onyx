@@ -538,7 +538,7 @@ function Card({
           <InputTypeIn
             {...fieldProps}
             ref={searchRef}
-            searchIcon
+            icon="search"
             variant="internal"
             placeholder={placeholder}
             aria-label={placeholder}
@@ -658,9 +658,8 @@ function Rows({
           interaction={highlightedIndex === 0 ? "hover" : "rest"}
           rounding={2}
           title={create.text}
-          sizePreset={sizePreset}
+          font={sizePreset === "secondary" ? "secondary-body" : "main-ui-body"}
           padding={sizePreset === "secondary" ? 0 : 0.5}
-          variant="body"
           rightChildren={<SvgPlus className="opal-dropdown-create-icon" />}
           id={createElementId(listId)}
           data-index={0}

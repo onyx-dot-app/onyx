@@ -103,7 +103,7 @@ export default function LivingMapModal({
                   transition={{ duration: 0.3 }}
                   className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-center"
                 >
-                  <Text font="heading-h3" color="text-05">
+                  <Text font="heading-section" color="text-05">
                     {t(`stages.${stage.id}.title`)}
                   </Text>
                   <Text font="secondary-body" color="text-03">

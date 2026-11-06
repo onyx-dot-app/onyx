@@ -41,6 +41,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
     get_documents_by_ids,
     update_docs_content_hash__no_commit,
+    update_docs_source_info__no_commit,
     upsert_document_by_connector_credential_pair,
     upsert_documents,
 )
@@ -245,6 +246,8 @@ def _upsert_documents_in_db(
             # parent_hierarchy_node_id is resolved in docfetching using Redis cache
             parent_hierarchy_node_id=doc.parent_hierarchy_node_id,
             file_id=doc.file_id,
+            source_mime_type=doc.source_mime_type,
+            source_size_bytes=doc.source_size_bytes,
         )
         document_metadata_list.append(db_doc_metadata)
 
@@ -418,7 +421,8 @@ def get_docs_to_update(
 
     Two-gate dedup:
 
-    Permission changes bypass both gates so ACL updates persist.
+    Permission changes bypass both gates so ACL updates persist, and so does a
+    source type or size reported that differs from the stored one.
 
     Gate 1 — timestamp skip (fast path):
       If the connector supplies doc_updated_at and it hasn't advanced past what we
@@ -462,6 +466,21 @@ def get_docs_to_update(
                 or doc.external_access.is_public != db_doc.is_public
             )
         )
+        # An unchanged timestamp and hash would otherwise skip a newly reported
+        # type or size forever. A source that stops reporting forces nothing.
+        source_info_changed = bool(
+            db_doc
+            and (
+                (
+                    doc.source_mime_type is not None
+                    and doc.source_mime_type != db_doc.source_mime_type
+                )
+                or (
+                    doc.source_size_bytes is not None
+                    and doc.source_size_bytes != db_doc.source_size_bytes
+                )
+            )
+        )
         timestamp_advanced = (
             doc.doc_updated_at is not None
             and doc.id in id_update_time_map
@@ -475,6 +494,7 @@ def get_docs_to_update(
             and doc.id in id_update_time_map
             and not timestamp_advanced
             and not access_changed
+            and not source_info_changed
         ):
             continue
 
@@ -483,7 +503,12 @@ def get_docs_to_update(
         # check so we never suppress a legitimate re-index (see docstring).
         content_hash = doc.content_hash()
         if not timestamp_advanced and not ignore_content_hash_gate:
-            if db_doc and db_doc.content_hash == content_hash and not access_changed:
+            if (
+                db_doc
+                and db_doc.content_hash == content_hash
+                and not access_changed
+                and not source_info_changed
+            ):
                 logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
@@ -1739,13 +1764,25 @@ def index_doc_batch(
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
             # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
             # the PRESENT poll skip the doc (cross-index suppression).
+            successfully_indexed_ids = {r.document_id for r in insertion_records}
             if not index_to_secondary:
-                successfully_indexed_ids = {r.document_id for r in insertion_records}
                 update_docs_content_hash__no_commit(
                     ids_to_new_hash={
                         doc_id: context.doc_id_to_content_hash[doc_id]
                         for doc_id in successfully_indexed_ids
                         if doc_id in context.doc_id_to_content_hash
+                    },
+                    db_session=db_session,
+                )
+            # Same two reasons as the hash: a FUTURE stamp would hide a failed
+            # PRESENT write from the next poll, and a failed write must differ
+            # from the row. A re-chunk that skips row writes fetched no type or size.
+            if not index_to_secondary and not skip_document_row_writes:
+                update_docs_source_info__no_commit(
+                    ids_to_source_info={
+                        doc.id: (doc.source_mime_type, doc.source_size_bytes)
+                        for doc in context.updatable_docs
+                        if doc.id in successfully_indexed_ids
                     },
                     db_session=db_session,
                 )

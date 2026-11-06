@@ -12,7 +12,7 @@ from ee.onyx.db.community_downgrade import (
     _UNCASCADED_GROUP_LINKS,
     remove_custom_user_groups__no_commit,
 )
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.enums import (
     AccountType,
     GrantSource,
@@ -36,7 +36,6 @@ from onyx.db.models import (
     Skill,
     Skill__UserGroup,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     User,
     User__UserGroup,
     UserFile,
@@ -139,7 +138,10 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         )
         group_id = group.id
         rate_limit = TokenRateLimit(
-            token_budget=1, period_hours=1, scope=TokenRateLimitScope.USER_GROUP
+            token_budget=1,
+            period=TokenRateLimitPeriod.DAILY,
+            scope=TokenRateLimitScope.USER_GROUP,
+            user_group_id=group_id,
         )
         db_session.add(rate_limit)
         db_session.flush()
@@ -149,12 +151,6 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         )
         db_session.refresh(basic_member)
         assert basic_member.is_group_manager
-        db_session.add(
-            TokenRateLimit__UserGroup(
-                rate_limit_id=rate_limit_id, user_group_id=group_id
-            )
-        )
-        db_session.flush()
 
         removed = remove_custom_user_groups__no_commit(db_session)
 

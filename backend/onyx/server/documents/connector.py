@@ -53,6 +53,12 @@ from onyx.connectors.credential_families import (
     is_credential_usable_for_source,
     to_source_credential_json,
 )
+from onyx.connectors.event_inbox.models import WebhookSourceSpec
+from onyx.connectors.event_inbox.source_registry import (
+    registered_webhook_sources,
+    webhook_callback_url,
+)
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.factory import (
     validate_ccpair_for_user,
@@ -99,6 +105,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_edit_connector,
     verify_user_can_manage_all_cc_pairs,
 )
+from onyx.db.connector_event_inbox import get_active_event_cc_pairs
 from onyx.db.credentials import (
     create_credential,
     discard_credential_if_unpaired,
@@ -183,6 +190,7 @@ from onyx.server.documents.models import (
     CredentialSharing,
     CredentialSnapshot,
     DocsCountOperator,
+    EventSourceSnapshot,
     FailedConnectorIndexingStatus,
     FileUploadResponse,
     GDriveCallback,
@@ -2512,3 +2520,32 @@ def trigger_indexing_for_cc_pair(
     )
 
     return num_triggers
+
+
+@router.get("/admin/connector/event-sources")
+def get_event_sources(
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    db_session: Session = Depends(get_session),
+) -> list[EventSourceSnapshot]:
+    """The sources that can receive pushed events, and their endpoints."""
+    load_event_sources()
+    return [
+        EventSourceSnapshot(
+            source=spec.source,
+            callback_urls=[
+                webhook_callback_url(spec.slug, endpoint) for endpoint in spec.endpoints
+            ],
+            receiving=_is_receiving(
+                spec, len(get_active_event_cc_pairs(db_session, spec.source))
+            ),
+        )
+        for spec in registered_webhook_sources()
+    ]
+
+
+def _is_receiving(spec: WebhookSourceSpec, active_pairs: int) -> bool:
+    """An unsigned source refuses deliveries once several pairs are active,
+    since it cannot tell them apart."""
+    if spec.verifier is None:
+        return active_pairs == 1
+    return active_pairs > 0

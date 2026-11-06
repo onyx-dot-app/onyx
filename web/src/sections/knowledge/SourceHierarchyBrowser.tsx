@@ -21,7 +21,6 @@ import {
   InputTypeIn,
   Spacer,
   type DropdownItem,
-  OverflowText,
   SelectButton,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -974,23 +973,27 @@ export default function SourceHierarchyBrowser({
                           height="auto"
                           className="min-w-0 grow"
                         >
-                          <OverflowText
+                          <Text
+                            maxLines={1}
+                            overflowTooltip
                             as="p"
                             textPosition="text-start"
                             font="main-ui-body"
                             color="text-05"
                           >
                             {item.data.title}
-                          </OverflowText>
+                          </Text>
                           {subtitle && (
-                            <OverflowText
+                            <Text
+                              maxLines={1}
+                              overflowTooltip
                               as="p"
                               textPosition="text-start"
                               font="secondary-body"
                               color="text-03"
                             >
                               {subtitle}
-                            </OverflowText>
+                            </Text>
                           )}
                         </Section>
                         {item.data.link && (

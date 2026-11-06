@@ -1965,6 +1965,12 @@ MCP_SERVER_CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# Run every MCP document search in retrieval-only mode (no LLM calls), whatever
+# the client asks for.
+MCP_SERVER_SEARCH_RETRIEVAL_ONLY = (
+    os.environ.get("MCP_SERVER_SEARCH_RETRIEVAL_ONLY", "").lower() == "true"
+)
+
 
 POD_NAME = os.environ.get("POD_NAME")
 POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
@@ -2127,6 +2133,14 @@ if _uses_default_object_storage_credentials(
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
 )
+
+# Presigned file store URLs. Keep them short: an S3 URL also stops working when
+# the session credentials that signed it expire.
+FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS = 5 * 60
+FILE_STORE_PRESIGN_MAX_TTL_SECONDS = 15 * 60
+# The largest single S3 PUT. It also bounds the hash that finalize computes on
+# stores that keep no SHA-256.
+FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
 
 # The bundled MinIO that releases before the object store wrote to. A hand-run
 # upgrade keeps this endpoint in .env, so the files stay in MinIO.

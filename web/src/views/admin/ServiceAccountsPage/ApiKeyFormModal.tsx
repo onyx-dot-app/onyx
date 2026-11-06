@@ -188,7 +188,7 @@ export default function ApiKeyFormModal({
                             placeholder={t(
                               "formModal.groups.search.placeholder"
                             )}
-                            searchIcon
+                            icon="search"
                             aria-label={t(
                               "formModal.groups.search.placeholder"
                             )}

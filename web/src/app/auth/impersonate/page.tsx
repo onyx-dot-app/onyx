@@ -60,7 +60,7 @@ export default function ImpersonatePage() {
         <div className="w-full flex flex-col items-center justify-center mb-6">
           <Text
             as="p"
-            font="heading-h3"
+            font="heading-section"
             color="text-05"
             textPosition="text-center"
           >

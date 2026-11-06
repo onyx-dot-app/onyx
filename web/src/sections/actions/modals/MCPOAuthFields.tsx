@@ -142,20 +142,19 @@ export function MCPOAuthFields({
               }}
             >
               <Content
+                font="main-ui-action"
                 icon={
                   values.oauth_setup_mode === mode ? SvgCheckCircle : SvgCircle
                 }
-                sizePreset="main-ui"
-                variant="section"
                 color="interactive"
                 title={t(`mcpAuthModal.oauthSetup.${copyKey}.label`)}
                 description={t(
                   `mcpAuthModal.oauthSetup.${copyKey}.description`,
                   { appName }
                 )}
-                tag={
+                badge={
                   recommendedMode === mode
-                    ? { title: recommendedCopy("label"), color: "green" }
+                    ? { title: recommendedCopy("label"), color: "success" }
                     : undefined
                 }
               />

@@ -359,7 +359,7 @@ function TabsTrigger({
     activeValue: undefined,
   };
   const isActive = props.value === activeValue;
-  const sizePreset = variant === "contained" ? "main-ui" : "secondary";
+  const contained = variant === "contained";
   // Only contained tabs have room for a description.
   const shownDescription = variant === "contained" ? description : undefined;
 
@@ -386,8 +386,7 @@ function TabsTrigger({
           icon={icon}
           title={children}
           color="interactive"
-          sizePreset={sizePreset}
-          variant="body"
+          font={contained ? "main-ui-body" : "secondary-body"}
           width="fit"
         />
       ) : (
@@ -396,8 +395,7 @@ function TabsTrigger({
           title={children}
           description={shownDescription}
           color="interactive"
-          sizePreset={sizePreset}
-          variant="section"
+          font={contained ? "main-ui-action" : "secondary-action"}
           width="fit"
         />
       )}

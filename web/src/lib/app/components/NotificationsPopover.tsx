@@ -69,12 +69,13 @@ function NotificationItem({
   return (
     <Hoverable.Root group="notifications-popover/NotificationItem">
       <LineItemButton
+        font="main-ui-action"
         icon={getNotificationIcon(notification.notif_type)}
         title={notification.title}
         description={notification.description ?? undefined}
-        sizePreset="main-ui"
         rounding={2}
-        color={state === "new" ? undefined : "muted"}
+        color={state === "new" ? undefined : "default"}
+        titleColor={state === "new" ? undefined : "text-03"}
         onClick={onClick}
         rightChildren={
           <Section justifyContent="start">

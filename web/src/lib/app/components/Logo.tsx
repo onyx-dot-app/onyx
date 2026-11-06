@@ -1,6 +1,6 @@
 "use client";
 
-import { OverflowText, Text } from "@opal/components";
+import { Text } from "@opal/components";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_LOGO_SIZE_PX } from "@/lib/constants";
@@ -93,14 +93,16 @@ export function FoldableLogo({
           /* H3 text is 4px larger (28px) than the Logo icon (24px), so negative margin hack. */
           <div className="flex flex-1 flex-col -mt-0.5">
             {opts.includeName && (
-              <OverflowText
+              <Text
+                maxLines={1}
+                overflowTooltip
                 as="p"
                 textPosition="text-start"
-                font="heading-h3"
+                font="heading-section"
                 color="text-05"
               >
                 {applicationName ?? ""}
-              </OverflowText>
+              </Text>
             )}
             {/* Wait for settings so a hidden tagline never flashes. */}
             {!isLoading && !hide_onyx_branding && (
@@ -186,14 +188,16 @@ export function SidebarWordmark({ size }: { size: number }) {
       className="min-w-0 flex-1"
     >
       {logoDisplayStyle !== "logo_only" && (
-        <OverflowText
+        <Text
+          maxLines={1}
+          overflowTooltip
           as="p"
           textPosition="text-start"
-          font="heading-h3"
+          font="heading-section"
           color="text-05"
         >
           {applicationName}
-        </OverflowText>
+        </Text>
       )}
       {/* Wait for settings so a hidden tagline never flashes. */}
       {!isLoading && !hide_onyx_branding && (

@@ -4,6 +4,7 @@ import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Button, Dropdown, InputTypeIn } from "@opal/components";
 import { scrollWithinList } from "@opal/components/dropdown/list";
+import { markdown } from "@opal/utils";
 import type {
   DropdownItem,
   DropdownMenuItem,
@@ -338,6 +339,28 @@ describe("Dropdown picker", () => {
       "aria-selected",
       "false"
     );
+  });
+
+  test("a linked option's note shows its markdown link as text", async () => {
+    const user = setupUser();
+    render(
+      <Harness
+        items={[
+          {
+            kind: "option",
+            value: "docs",
+            title: "Docs",
+            href: "/docs",
+            info: markdown("See [the guide](/guide)"),
+          },
+        ]}
+      />
+    );
+    await user.click(screen.getByRole("combobox", { name: "Fruit" }));
+    const row = screen.getByRole("option", { name: /Docs/ });
+    expect(row).toHaveTextContent("See the guide");
+    expect(row.querySelector("a a")).toBeNull();
+    expect(row.querySelector('a[href="/guide"]')).toBeNull();
   });
 });
 

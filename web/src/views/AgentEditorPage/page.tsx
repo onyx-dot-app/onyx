@@ -1422,9 +1422,8 @@ export default function AgentEditorPage({
 
                       <Section gap={2} alignItems="stretch" height="auto">
                         <Content
+                          font="main-content-emphasis"
                           title={t("editor.share.title")}
-                          sizePreset="main-content"
-                          variant="section"
                         />
                         <Card border="solid" rounding={4}>
                           <Section>

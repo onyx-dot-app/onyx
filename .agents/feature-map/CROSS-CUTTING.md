@@ -188,7 +188,7 @@ cloud (`USAGE_LIMITS_ENABLED`).
 | Widget, JWT passthrough | The visitor's own user | The visitor's | USER, USER_GROUP, GLOBAL | `WIDGET` |
 | API key | The key's service account, if active | The service account's | GLOBAL and the API-call cap | `API` |
 | PAT | The owner, capped by the token's scopes | The owner's | USER, USER_GROUP, GLOBAL, and the API-call cap | `API` |
-| MCP server | The bearer's user (PAT, API key or OAuth grant) | That user's, applied by `/search` | The `/search` checks | none |
+| MCP server | The bearer's user (PAT, API key or OAuth grant) | That user's, applied by `/search` or `/search/raw` | The checks of the route it calls | none |
 | Craft sandbox | The session owner, through a Craft PAT | The owner's | Gateway budgets. No API-call count. | none |
 
 Notes:

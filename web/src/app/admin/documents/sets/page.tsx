@@ -434,12 +434,12 @@ function Main() {
       {documentSets.length > 0 && (
         <>
           <Divider />
-          <Text as="h1" font="heading-h3-muted" color="text-05">
+          <Text as="h1" font="heading-section-muted" color="text-05">
             {t("sets.table.title")}
           </Text>
           <Spacer rem={0.5} />
           <InputTypeIn
-            searchIcon
+            icon="search"
             placeholder={t("sets.search.placeholder")}
             value={searchQuery}
             onChange={(e) => {

@@ -43,3 +43,10 @@ def load_event_sources() -> None:
             logger.exception("Could not load event source %s", module_path)
 
     _loaded = True
+
+
+def reset_event_sources() -> None:
+    """Make the next `load_event_sources` import again. For tests, which
+    unregister a source and then load it again."""
+    global _loaded
+    _loaded = False

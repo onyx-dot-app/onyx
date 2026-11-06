@@ -144,7 +144,7 @@ export default function ToolsPopover({
                   <InputTypeIn
                     key="search"
                     placeholder={t("toolsPopover.search.placeholder")}
-                    searchIcon
+                    icon="search"
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
                     ref={focusOnMount}

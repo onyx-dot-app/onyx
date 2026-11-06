@@ -29,6 +29,7 @@ def _seed_system_usage() -> LLMUsageRecord:
         model=_SYSTEM_USAGE_MODEL,
         flow=LLMFlow.IMAGE_SUMMARIZATION.value,
         provider=_SYSTEM_USAGE_PROVIDER,
+        model_configuration_id=None,
         input_tokens=120,
         output_tokens=30,
         cache_read_tokens=10,

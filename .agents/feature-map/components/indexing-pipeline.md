@@ -100,7 +100,10 @@ local disk inside one docprocessing task, so a large batch is never in memory.
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
 decides which documents to re-chunk. Gate 1 skips a document whose
 `doc_updated_at` did not advance. Gate 2 skips one whose `content_hash()` is
-unchanged. An ACL change bypasses both. Docprocessing turns gate 1 off, because
+unchanged. An ACL change bypasses both, and so does a reported source type or
+size that differs from the stored one. That type and size, like the content
+hash, reach an existing row only after the index write, so a failed write is
+retried on the next sync. Docprocessing turns gate 1 off, because
 the connector already filtered by time. A FUTURE attempt turns gate 2 off.
 `force_update` turns both off, for the per-document retry and the tabular
 re-chunk migration.
@@ -256,7 +259,10 @@ the error type on purpose in auth code.
    crawl run at the same time. The per-document row lock in
    `backend/onyx/db/document.py:prepare_to_modify_documents` keeps their writes
    apart. The heartbeat check skips these attempts too; the targeted-reindex
-   job owns their lifecycle.
+   job owns their lifecycle. Each pair's attempt ends FAILED when every target
+   of the pair failed again and SUCCESS otherwise. Each document that failed
+   again gets a new error row on the attempt, and its first error stays open.
+   A document that lands closes every open error it has on the pair.
 11. `chunk-text-second-copy` **The chunk text recipe has a second copy.**
     `indexing/port_reembed.py` rebuilds the embedding input from stored chunks
     for the reindex port. A change to title prefix, metadata suffix or
