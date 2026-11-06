@@ -345,3 +345,23 @@ build their own clients.
 - By hand: add a provider and run the test call. Set it as default and send a
   chat message. Restrict it to a group the user is not in and confirm that the
   chat answers with the default model.
+
+### Strict OpenAI tool schemas
+
+`llm/strict_schema.py` converts compatible function schemas for direct OpenAI
+requests to catalogued, non-fine-tuned models with function-calling support.
+The adapter checks the effective endpoint under the per-attempt environment
+lock. Azure, gateways, and custom endpoints keep their existing tool format.
+
+Optional fields become required and nullable. Request-local provider state
+records which tools were converted; only their native tool results have these
+null placeholders removed. Optional fields that already accept null, object
+unions, open dictionaries, and unsupported constraints stay non-strict.
+Strict-schema rejection retries the original schemas with explicit strict=false
+and preserves other request options. Streaming and complete responses share
+the same argument restoration. Fine-tunes are excluded because parallel calls
+can disable strict enforcement.
+
+Verification: `backend/tests/unit/onyx/llm/test_strict_tools_http.py` exercises
+the real LiteLLM Responses bridge with mocked HTTP, including endpoint gates,
+streaming, nested optional arguments, and schema-rejection fallback.

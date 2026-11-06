@@ -344,14 +344,19 @@ def _schema_types(schema: dict[str, JsonValue]) -> set[str]:
 
 
 def _normalize_arguments(
-    arguments: dict[str, JsonValue], definition: ToolDefinition | None
+    arguments: dict[str, JsonValue],
+    definition: ToolDefinition | None,
+    *,
+    strict: bool = False,
 ) -> dict[str, JsonValue]:
     if definition is None:
         return arguments
     properties = definition.parameters.get("properties")
     if not isinstance(properties, dict):
         return arguments
-    pruned = drop_optional_nulls(arguments, definition.parameters)
+    pruned = (
+        drop_optional_nulls(arguments, definition.parameters) if strict else arguments
+    )
     normalized = pruned.copy() if isinstance(pruned, dict) else arguments.copy()
     for name, value in list(normalized.items()):
         schema = properties.get(name)
@@ -376,13 +381,17 @@ def _normalize_arguments(
 
 
 def _finish_tool_call(
-    call: ToolCall, arguments: str, definition: ToolDefinition | None
+    call: ToolCall,
+    arguments: str,
+    definition: ToolDefinition | None,
+    *,
+    strict: bool = False,
 ) -> None:
     try:
         decoded = _ENCODED_ARGUMENTS.validate_json(sanitize_string(arguments or "{}"))
         if isinstance(decoded, str):
             decoded = _ARGUMENTS.validate_json(decoded)
-        call.arguments = _normalize_arguments(decoded, definition)
+        call.arguments = _normalize_arguments(decoded, definition, strict=strict)
         call.arguments_complete = True
         call.raw_arguments = None
     except ValidationError:
@@ -392,7 +401,10 @@ def _finish_tool_call(
 
 
 def to_assistant_message(
-    response: ModelResponse, request: GenerationRequest
+    response: ModelResponse,
+    request: GenerationRequest,
+    *,
+    strict_tools: set[str] | None = None,
 ) -> AssistantMessage:
     """Convert a complete provider response without creating stream events."""
     source = response.choice.message
@@ -426,7 +438,12 @@ def to_assistant_message(
             raw_arguments=arguments,
             arguments_complete=False,
         )
-        _finish_tool_call(call, arguments, definitions.get(call.name))
+        _finish_tool_call(
+            call,
+            arguments,
+            definitions.get(call.name),
+            strict=call.name in (strict_tools or ()),
+        )
         message.content.append(call)
     if request.tools:
         message = recover_tool_calls(message, request)
@@ -443,7 +460,13 @@ class _PendingToolCall:
 class MessageAccumulator:
     """Maintain ordered assistant content and incremental tool arguments."""
 
-    def __init__(self, tools: Sequence[ToolDefinition] = ()) -> None:
+    def __init__(
+        self,
+        tools: Sequence[ToolDefinition] = (),
+        *,
+        strict_tools: set[str] | None = None,
+    ) -> None:
+        self.strict_tools = strict_tools if strict_tools is not None else set()
         self.tools = {tool.name: tool for tool in tools}
         self.message = AssistantMessage()
         self.calls: dict[int, _PendingToolCall] = {}
@@ -651,6 +674,7 @@ class MessageAccumulator:
                     pending.call,
                     pending.call.raw_arguments,
                     self.tools.get(pending.call.name),
+                    strict=pending.call.name in self.strict_tools,
                 )
             pending.finalized = True
 

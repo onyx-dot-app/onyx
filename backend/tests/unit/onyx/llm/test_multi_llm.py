@@ -3986,6 +3986,10 @@ def test_cancellable_provider_setup_restores_environment_on_failure(
     ("provider", "model", "strict"),
     [
         (LlmProviderNames.OPENAI, "gpt-5", True),
+        (LlmProviderNames.AZURE, "gpt-5", False),
+        (LlmProviderNames.LITELLM_PROXY, "gpt-5", False),
+        (LlmProviderNames.OPENAI, "ft:gpt-4o:example:test", False),
+        (LlmProviderNames.OPENAI, "unknown-model", False),
         (LlmProviderNames.ANTHROPIC, "claude-sonnet-4-5", False),
         # An OpenAI-compatible server, such as vLLM, serving a non-OpenAI model.
         (LlmProviderNames.OPENAI, "meta-llama/Llama-3.1-8B-Instruct", False),

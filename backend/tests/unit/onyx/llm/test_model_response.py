@@ -823,7 +823,8 @@ def test_stream_tool_call_type_normalization(call_type: str | None) -> None:
     ]
 
 
-def test_strict_nulls_for_optional_tool_fields_are_dropped() -> None:
+@pytest.mark.parametrize("strict", [False, True])
+def test_strict_nulls_for_optional_tool_fields_are_dropped(strict: bool) -> None:
     parameters: dict[str, JsonValue] = {
         "type": "object",
         "properties": {
@@ -852,5 +853,11 @@ def test_strict_nulls_for_optional_tool_fields_are_dropped() -> None:
             ),
         ),
     )
-    call = to_assistant_message(response, request).tool_calls[0]
-    assert call.arguments == {"file_id": "f", "tags": ["a"]}
+    call = to_assistant_message(
+        response, request, strict_tools={"read"} if strict else set()
+    ).tool_calls[0]
+    assert call.arguments == (
+        {"file_id": "f", "tags": ["a"]}
+        if strict
+        else {"file_id": "f", "start_char": None, "tags": ["a"]}
+    )

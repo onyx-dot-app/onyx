@@ -8,7 +8,7 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast, get_type_hints
 
-from pydantic import BaseModel, JsonValue, TypeAdapter
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 from readerwriterlock import rwlock
 
 from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
@@ -109,6 +109,7 @@ from onyx.llm.prompt_cache.providers.openai import (
     explicit_cache_breakpoints,
     uses_explicit_cache_breakpoints,
 )
+from onyx.llm.strict_schema import prepare_strict_tools
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
@@ -294,6 +295,7 @@ class ProviderOperation(BaseModel):
     """Diagnostics for one provider call, including its retry attempts."""
 
     request_params: GenerationRequestParams | None = None
+    strict_tools: set[str] = Field(default_factory=set)
 
 
 def _event_with_request_params(
@@ -1448,6 +1450,29 @@ class LitellmLLM(LLM):
                 if cache_options is not None:
                     optional_kwargs.setdefault("prompt_cache_options", cache_options)
 
+            strict_disabled = False
+            strict_names: set[str] = set()
+            strict_model = self._model_provider == LlmProviderNames.OPENAI and any(
+                (
+                    find_model_obj(get_model_map(), LlmProviderNames.OPENAI, name) or {}
+                ).get("supports_function_calling")
+                is True
+                and is_true_openai_model(LlmProviderNames.OPENAI, name)
+                and not name.startswith("ft:")
+                for name in model_identity_names
+            )
+
+            converted_tools, converted_names = (
+                prepare_strict_tools(tools or [])
+                if strict_model
+                else (tools or [], set())
+            )
+            plain_tools, _ = (
+                prepare_strict_tools(tools or [], enabled=False)
+                if strict_model
+                else (tools or [], set())
+            )
+
             # Provider 400s degrade to provider defaults with a warning instead
             # of failing the message, or learn the "none" a provider demands.
             attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
@@ -1464,6 +1489,22 @@ class LitellmLLM(LLM):
                 )
                 try:
                     with env_ctx:
+                        from litellm.integrations.anthropic_cache_control_hook import (
+                            targets_openai_api,
+                        )
+
+                        strict_names.clear()
+                        effective_base = passthrough_kwargs.get("api_base") or base_url
+                        attempt_tools = tools
+                        if strict_model and targets_openai_api(effective_base):
+                            attempt_tools = (
+                                plain_tools if strict_disabled else converted_tools
+                            )
+                            if not strict_disabled:
+                                strict_names.update(converted_names)
+                        if operation is not None:
+                            operation.strict_tools.clear()
+                            operation.strict_tools.update(strict_names)
                         attempt_messages = messages
                         if cache_options is not None and "prompt_cache_options" in opts:
                             effective_base = (
@@ -1518,7 +1559,7 @@ class LitellmLLM(LLM):
                                 messages=attempt_messages,
                                 # None (omitted) rather than [] — some OpenAI-compatible
                                 # servers reject requests with an empty tools array.
-                                tools=tools or None,
+                                tools=attempt_tools or None,
                                 stream=stream,
                                 timeout=timeout,
                                 max_tokens=max_tokens,
@@ -1529,6 +1570,16 @@ class LitellmLLM(LLM):
                         )
                 except BadRequestError as e:
                     check_cancelled()
+                    if strict_names and (
+                        "invalid_function_parameters" in str(e)
+                        or "strict" in str(e).lower()
+                    ):
+                        strict_disabled = True
+                        attempts.insert(i + 1, dict(opts))
+                        logger.warning(
+                            "OpenAI rejected strict tools; retrying original schemas"
+                        )
+                        continue
                     if (
                         _rejection_demands_reasoning_none(e)
                         and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
@@ -1608,18 +1659,15 @@ class LitellmLLM(LLM):
             model_configuration_id=self._model_configuration_id,
         )
 
-    def _is_true_openai_model(self) -> bool:
+    def _uses_isolated_client(self) -> bool:
+        """Providers whose sync calls need a fresh per-call HTTPHandler instead of
+        litellm's shared module_level_client (see threading notes in invoke())."""
         return any(
             is_true_openai_model(self.config.model_provider, name)
             for name in resolve_model_identity_names(
                 self.config.model_name, self.config.deployment_name
             )
-        )
-
-    def _uses_isolated_client(self) -> bool:
-        """Providers whose sync calls need a fresh per-call HTTPHandler instead of
-        litellm's shared module_level_client (see threading notes in invoke())."""
-        return self._is_true_openai_model() or self.config.model_provider in (
+        ) or self.config.model_provider in (
             LlmProviderNames.ANTHROPIC,
             LlmProviderNames.BEDROCK,
             LlmProviderNames.BEDROCK_CONVERSE,
@@ -1956,10 +2004,9 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest, context: GenerationContext | None = None
     ) -> AssistantMessage:
         context = context or GenerationContext()
+        operation = ProviderOperation()
         messages, cache_stats = self._prepare_request(request)
-        tools = (
-            serialize_tools(request.tools, strict=self._is_true_openai_model()) or None
-        )
+        tools = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
@@ -1981,6 +2028,7 @@ class LitellmLLM(LLM):
                     tools=tools,
                     tool_choice=request.options.tool_choice,
                     structured_response_format=request.options.structured_response_format,
+                    operation=operation,
                     total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
                     max_tokens=request.options.max_tokens,
                     reasoning_effort=request.options.reasoning_effort,
@@ -1990,7 +2038,9 @@ class LitellmLLM(LLM):
                 # A completed response survives its deadline, but explicit Stop wins.
                 if signal.cancelled:
                     raise AgentCancelled()
-                return to_assistant_message(response, request)
+                return to_assistant_message(
+                    response, request, strict_tools=operation.strict_tools
+                )
             except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
@@ -2008,11 +2058,11 @@ class LitellmLLM(LLM):
     ) -> Generator[GenerationEvent, None, None]:
         context = context or GenerationContext()
         operation = ProviderOperation()
-        accumulator = MessageAccumulator(request.tools)
-        messages, cache_stats = self._prepare_request(request)
-        tools = (
-            serialize_tools(request.tools, strict=self._is_true_openai_model()) or None
+        accumulator = MessageAccumulator(
+            request.tools, strict_tools=operation.strict_tools
         )
+        messages, cache_stats = self._prepare_request(request)
+        tools = serialize_tools(request.tools) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(

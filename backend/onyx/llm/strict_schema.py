@@ -1,5 +1,6 @@
 """Convert tool parameter schemas to OpenAI strict function-calling form."""
 
+from copy import deepcopy
 from typing import cast
 
 from pydantic import JsonValue
@@ -53,7 +54,11 @@ class _NotStrictCompatible(Exception):
 
 def _nullable(schema: JsonSchema) -> JsonSchema:
     declared = schema.get("type")
-    if isinstance(declared, (str, list)) and "anyOf" not in schema:
+    if (
+        isinstance(declared, (str, list))
+        and "anyOf" not in schema
+        and "const" not in schema
+    ):
         types = [declared] if isinstance(declared, str) else list(declared)
         enum = schema.get("enum")
         nullable: JsonSchema = {**schema, "type": [*types, "null"]}
@@ -72,8 +77,8 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
     result: JsonSchema = {
         key: value for key, value in schema.items() if key in _ALLOWED_KEYWORDS
     }
-    if result.get("format") not in _SUPPORTED_FORMATS:
-        result.pop("format", None)
+    if "format" in result and result["format"] not in _SUPPORTED_FORMATS:
+        raise _NotStrictCompatible()
     declared = schema.get("type")
     is_object = declared == "object" or (
         isinstance(declared, list) and "object" in declared
@@ -85,6 +90,14 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
         ):
             raise _NotStrictCompatible()
         required = schema.get("required") or []
+        if not isinstance(required, list) or any(
+            name not in properties for name in required
+        ):
+            raise _NotStrictCompatible()
+        for name, prop in properties.items():
+            if name not in required and _accepts_null(prop):
+                # Null and omission are distinct inputs; do not collapse them.
+                raise _NotStrictCompatible()
         result["properties"] = {
             name: _convert(prop, depth + 1)
             if name in cast(list[JsonValue], required)
@@ -93,7 +106,9 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
         }
         result["required"] = list(properties)
         result["additionalProperties"] = False
-    if declared == "array" and "items" not in schema:
+    if (
+        declared == "array" or isinstance(declared, list) and "array" in declared
+    ) and "items" not in schema:
         raise _NotStrictCompatible()
     if "items" in schema:
         result["items"] = _convert(schema["items"], depth + 1)
@@ -101,8 +116,40 @@ def _convert(schema: JsonValue, depth: int) -> JsonSchema:
     if any_of is not None:
         if not isinstance(any_of, list):
             raise _NotStrictCompatible()
+        # Object alternatives need branch-aware restoration of omitted fields.
+        if any(
+            isinstance(option, dict)
+            and (
+                "properties" in option
+                or option.get("type") in ("object", "array")
+                or isinstance(option.get("type"), list)
+                and any(t in ("object", "array") for t in option["type"])
+            )
+            for option in any_of
+        ):
+            raise _NotStrictCompatible()
         result["anyOf"] = [_convert(option, depth + 1) for option in any_of]
     return result
+
+
+def _accepts_null(schema: JsonValue) -> bool:
+    if not isinstance(schema, dict):
+        return True
+    if "const" in schema:
+        return schema["const"] is None
+    enum = schema.get("enum")
+    if isinstance(enum, list) and None not in enum:
+        return False
+    options = schema.get("anyOf")
+    if isinstance(options, list):
+        return any(_accepts_null(option) for option in options)
+    declared = schema.get("type")
+    return (
+        declared is None
+        or declared == "null"
+        or isinstance(declared, list)
+        and "null" in declared
+    )
 
 
 def strict_schema(schema: JsonSchema) -> JsonSchema | None:
@@ -114,7 +161,7 @@ def strict_schema(schema: JsonSchema) -> JsonSchema | None:
     if schema.get("type") != "object":
         return None
     try:
-        return _convert(schema, 0)
+        return _convert(deepcopy(schema), 0)
     except _NotStrictCompatible:
         return None
 
@@ -136,3 +183,31 @@ def drop_optional_nulls(value: JsonValue, schema: JsonValue) -> JsonValue:
     if isinstance(value, list) and "items" in schema:
         return [drop_optional_nulls(item, schema["items"]) for item in value]
     return value
+
+
+def prepare_strict_tools(
+    tools: list[dict[str, JsonValue]], *, enabled: bool = True
+) -> tuple[list[dict[str, JsonValue]], set[str]]:
+    """Copy compatible function schemas and identify their response normalizers."""
+    result: list[dict[str, JsonValue]] = []
+    names: set[str] = set()
+    for tool in tools:
+        function = tool.get("function")
+        if not isinstance(function, dict) or function.get("strict") is not None:
+            result.append(tool)
+            continue
+        parameters = function.get("parameters")
+        name = function.get("name")
+        converted = (
+            strict_schema(parameters)
+            if enabled and isinstance(parameters, dict)
+            else None
+        )
+        if converted is None or not isinstance(name, str):
+            result.append({**tool, "function": {**function, "strict": False}})
+            continue
+        result.append(
+            {**tool, "function": {**function, "parameters": converted, "strict": True}}
+        )
+        names.add(name)
+    return result, names

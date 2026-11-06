@@ -98,3 +98,46 @@ def test_drop_optional_nulls_keeps_required_and_unknown_nulls() -> None:
         "rows": [{}],
         "extra": None,
     }
+
+
+def test_optional_nullable_and_unsupported_constraints_stay_non_strict() -> None:
+    for prop in (
+        {"type": ["string", "null"]},
+        {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        {"type": "string", "format": "uri"},
+        {"anyOf": [{"type": "object", "properties": {}}]},
+    ):
+        schema: dict[str, JsonValue] = {"type": "object", "properties": {"value": prop}}
+        assert strict_schema(schema) is None
+
+
+def test_conversion_does_not_share_nested_values() -> None:
+    schema: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"value": {"type": "string", "enum": ["a", "b"]}},
+        "required": ["value"],
+    }
+    converted = strict_schema(schema)
+    assert converted is not None
+    assert converted == schema | {"additionalProperties": False}
+    properties = converted["properties"]
+    assert isinstance(properties, dict)
+    value = properties["value"]
+    assert isinstance(value, dict)
+    enum = value["enum"]
+    assert isinstance(enum, list)
+    enum.append("c")
+    assert strict_schema(schema) != converted
+
+
+def test_optional_const_can_be_omitted_without_weakening_constant() -> None:
+    converted = strict_schema(
+        {
+            "type": "object",
+            "properties": {"value": {"type": "string", "const": "fixed"}},
+        }
+    )
+    assert converted is not None
+    assert converted["properties"] == {
+        "value": {"anyOf": [{"type": "string", "const": "fixed"}, {"type": "null"}]}
+    }
