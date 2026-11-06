@@ -42,8 +42,11 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { getProvider } from "@/lib/languageModels/utils";
+import {
+  useAdminLanguageModels,
+  useModelDisplayName,
+} from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
@@ -600,7 +603,7 @@ function ModelRow({
   // Keeps the hover-revealed actions visible while the settings popover,
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const displayName = modelDisplayName(model);
+  const displayName = useModelDisplayName()(model);
   const description = buildModelDescription(model, displayName);
   const decisionBadge = useModelTypeBadge("decision");
   const visionBadge = useModelTypeBadge("vision");
@@ -764,6 +767,7 @@ export function ModelSelectionField({
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
   const { defaultText } = useAdminLanguageModels();
+  const resolveDisplayName = useModelDisplayName();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -842,9 +846,11 @@ export function ModelSelectionField({
   // A cleared name is null, as the API sends it, so clearing a new name is
   // not a change.
   function setCustomDisplayName(modelName: string, value: string | null) {
-    const updated = models.map((m) =>
-      m.name === modelName ? { ...m, custom_display_name: value || null } : m
-    );
+    const updated = models.map((m) => {
+      if (m.name !== modelName) return m;
+      const renamed = { ...m, custom_display_name: value || null };
+      return { ...renamed, effectiveDisplayName: resolveDisplayName(renamed) };
+    });
     formikProps.setFieldValue("model_configurations", updated);
   }
 
