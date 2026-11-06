@@ -32,7 +32,7 @@ Run `/plugin configure onyx@onyx` to change a value later.
 
 To develop the plugin from a checkout, start Claude Code with `--plugin-dir extensions/claude-code` and set `ONYX_URL`, `ONYX_API_TOKEN` and optionally `ONYX_STRICT_RETRIEVAL=true` or `ONYX_PREFETCH=true` in the environment. The hooks read those variables. The configuration dialog does not run for a plugin loaded this way, and the MCP server reads only the configured options, so it does not connect in this mode.
 
-The plugin is also submitted to the [Anthropic plugin directory](https://claude.com/docs/plugins/submit), which lists it in claude.ai, Cowork and Claude Code. Hooks do not run on claude.ai or Cowork, so those surfaces get the MCP server and the skill only.
+The plugin is also submitted to the [Anthropic plugin directory](https://claude.com/docs/plugins/submit), which lists it in claude.ai, Cowork and Claude Code. Chat on claude.ai ignores hooks and an MCP server whose URL comes from plugin options, so it gets the skill only. Cowork loads the hooks but does not prompt for options, so the MCP server does not connect there either.
 
 Organizations can require the plugin on every machine through managed settings. See [Manage plugins for your organization](https://code.claude.com/docs/en/plugins/org).
 
