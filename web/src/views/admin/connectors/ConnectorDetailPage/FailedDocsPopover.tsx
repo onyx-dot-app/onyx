@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import type { Route } from "next";
+import { Fragment, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import useSWRInfinite from "swr/infinite";
 import {
   Button,
+  Divider,
   InputTypeIn,
   LinkButton,
   Popover,
@@ -13,14 +14,21 @@ import {
 } from "@opal/components";
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
+import { useNavigation } from "@opal/navigation";
 import { LineLoader } from "@opal/loaders";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { SvgExternalLink, SvgFile, SvgRefreshCw } from "@opal/icons";
-import type {
-  IndexAttemptError,
-  PaginatedIndexAttemptErrors,
-} from "@/lib/connectors/types";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import {
+  SvgCheckSquare,
+  SvgExternalLink,
+  SvgFile,
+  SvgRefreshCw,
+} from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
+import type { IndexAttemptError } from "@/lib/connectors/types";
+import {
+  useLoadMorePages,
+  useResolveRunErrors,
+} from "@/lib/connectors/ccPair/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   RUNS_POLL_MS,
@@ -31,29 +39,234 @@ import {
   type PopoverPlacement,
 } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
 
-const PAGE_SIZE = 50;
+// The errors route's largest page: `/errors` orders by time only, so the groups sort within what is loaded.
+const PAGE_SIZE = 100;
 // The errors route refuses a longer search.
 const SEARCH_MAX_LENGTH = 200;
 const CLAMPED_LINES = 5;
+// Hidden until the row is hovered or focused. Touch screens always show it.
+const ON_ROW_HOVER =
+  "opacity-0 no-hover:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100";
 
-interface FailedDocRowProps {
-  error: IndexAttemptError;
-  canResolve: boolean;
-  resolving: boolean;
-  onResolve: () => void;
+type ErrorGroup = "open" | "withoutRetry" | "closed";
+
+/** Closed by a run, a retry or a legacy resolve; resolved without retry (Retry Doc still takes it); or open. */
+function errorGroup(error: IndexAttemptError): ErrorGroup {
+  if (error.is_resolved) return "closed";
+  return error.resolved_reason === "without_retry" ? "withoutRetry" : "open";
 }
-/** One failed item, a document or a whole entity: when, which, why, and a resolve action. */
-function FailedDocRow({
+
+const GROUP_ORDER = {
+  open: 0,
+  withoutRetry: 1,
+  closed: 2,
+} satisfies Record<ErrorGroup, number>;
+
+function errorKey(error: IndexAttemptError): number {
+  return error.id;
+}
+
+/** The Indexing tab at one index run. The page reads `run=<id>` with `run_kind=<kind>`, indexing when absent, because attempt ids are unique only per kind. */
+function indexRunHref(ccPairId: number, attemptId: number): Route {
+  // SAFETY: /admin/connector/[id] is a page. Typed routes do not type the query string.
+  return `/admin/connector/${ccPairId}?tab=indexing&run=${attemptId}&run_kind=indexing` as Route;
+}
+
+interface RowIconButtonProps {
+  icon: IconFunctionComponent;
+  /** The tooltip and the accessible name. */
+  label: string;
+  onClick?: React.MouseEventHandler<HTMLElement>;
+  href?: Route;
+  disabled?: boolean;
+}
+
+function RowIconButton({ icon, label, ...rest }: RowIconButtonProps) {
+  return (
+    <Button
+      icon={icon}
+      prominence="internal"
+      size="sm"
+      tooltip={label}
+      aria-label={label}
+      {...rest}
+    />
+  );
+}
+
+interface FailedDocActionsProps {
+  ccPairId: number;
+  error: IndexAttemptError;
+  canRetry: boolean;
+  canResolveErrors: boolean;
+  busy: boolean;
+  onRetry: () => void;
+  onResolveWithoutRetry: () => void;
+}
+
+/** The row's action column: what the viewer can still do with the error, or how it closed. */
+function FailedDocActions({
+  ccPairId,
   error,
-  canResolve,
-  resolving,
-  onResolve,
-}: FailedDocRowProps) {
+  canRetry,
+  canResolveErrors,
+  busy,
+  onRetry,
+  onResolveWithoutRetry,
+}: FailedDocActionsProps) {
+  const t = useTranslations("admin.connector.activity");
+  const navigation = useNavigation();
+  // Only a document can be re-fetched. An entity-level error has nothing to target.
+  const canRetryDoc = canRetry && error.document_id !== null;
+  const retry = canRetryDoc && (
+    <RowIconButton
+      icon={SvgRefreshCw}
+      label={t("docs.resolveOne")}
+      disabled={busy}
+      onClick={onRetry}
+    />
+  );
+
+  switch (errorGroup(error)) {
+    case "open":
+      return (
+        <Section
+          width="fit"
+          height="fit"
+          gap={1}
+          padding={0.5}
+          className={ON_ROW_HOVER}
+        >
+          {canResolveErrors && (
+            <RowIconButton
+              icon={SvgCheckSquare}
+              label={
+                canRetryDoc
+                  ? t("docs.resolveWithoutRetry")
+                  : t("actions.resolve")
+              }
+              disabled={busy}
+              onClick={onResolveWithoutRetry}
+            />
+          )}
+          {retry}
+        </Section>
+      );
+    case "withoutRetry":
+      return (
+        <Section width="fit" height="fit" gap={1} padding={0.5}>
+          {/* A button only for its tooltip and accessible name. The row stays retryable, so Retry Doc is its one action. */}
+          <RowIconButton
+            icon={SvgCheckSquare}
+            label={t("docs.resolvedWithoutRetry")}
+          />
+          {retry && (
+            <Section width="fit" height="fit" className={ON_ROW_HOVER}>
+              {retry}
+            </Section>
+          )}
+        </Section>
+      );
+    case "closed": {
+      // The closing run is gone (deleted attempts null it), never recorded on legacy rows, or not sent by an API without provenance.
+      const closingRun = error.resolved_by_index_attempt_id ?? null;
+      if (closingRun === null) return null;
+      return (
+        <Section width="fit" height="fit" padding={0.5}>
+          <RowIconButton
+            icon={SvgExternalLink}
+            label={t("docs.resolvedByLaterRun")}
+            {...navigation.linkTo(indexRunHref(ccPairId, closingRun))}
+          />
+        </Section>
+      );
+    }
+  }
+}
+
+/** "{title} ({id})" on one line: the title truncates first, the id keeps up to 120 px. Only the id when the title is unknown or hidden. */
+function FailedDocIdentity({ error }: { error: IndexAttemptError }) {
+  const t = useTranslations("admin.connector.activity.docs");
+  const id = error.document_id ?? error.entity_id;
+  if (id === null) {
+    return (
+      <Text font="secondary-body" color="text-02">
+        {t("unknownDocument")}
+      </Text>
+    );
+  }
+  const title = error.document_name;
+  // Each part stretches its text to its own width, so the text clips there with the full part on hover.
+  return (
+    <Section
+      flexDirection="row"
+      justifyContent="start"
+      alignItems="center"
+      gap={0.5}
+      width="fit"
+      height="fit"
+      className="min-w-0 max-w-60"
+    >
+      <Section width="fit" height="fit" padding={0.5}>
+        <SvgFile size={12} className="stroke-text-02" />
+      </Section>
+      {title !== null && (
+        <Section
+          alignItems="stretch"
+          width="auto"
+          height="fit"
+          className="min-w-0 shrink"
+        >
+          <Text
+            maxLines={1}
+            overflowTooltip
+            font="secondary-body"
+            color="text-02"
+          >
+            {title}
+          </Text>
+        </Section>
+      )}
+      <Section
+        alignItems="stretch"
+        width="fit"
+        height="fit"
+        className="max-w-30"
+      >
+        {/* The leading space collapses on screen but keeps the copied text whole. */}
+        <Text
+          maxLines={1}
+          overflowTooltip
+          font="secondary-body"
+          color="text-02"
+        >
+          {title === null ? id : ` (${id})`}
+        </Text>
+      </Section>
+      {error.document_link !== null && (
+        <Button
+          icon={SvgExternalLink}
+          prominence="internal"
+          size="2xs"
+          href={error.document_link}
+          target="_blank"
+          aria-label={t("open")}
+          tooltip={t("open")}
+        />
+      )}
+    </Section>
+  );
+}
+
+/** One failed item, a document or a whole entity: when, which, why, and its actions. */
+function FailedDocRow(props: FailedDocActionsProps) {
+  const { error } = props;
   const t = useTranslations("admin.connector.activity.docs");
   const [expanded, setExpanded] = useState(false);
   const [message, setMessage] = useState<HTMLElement | null>(null);
   const clipped = useOverflow(message);
-  const id = error.document_id ?? error.entity_id;
+  const open = errorGroup(error) === "open";
+  const tone = open ? "text-04" : "text-02";
   return (
     <Section
       flexDirection="row"
@@ -61,69 +274,20 @@ function FailedDocRow({
       gap={1}
       padding={1}
       height="fit"
-      className="group/row rounded-08 hover:bg-background-tint-02"
+      className="group/row min-h-16 rounded-08 hover:bg-background-tint-02"
     >
-      {/* Stretched so the one-line title truncates at the column's edge instead of sizing to its content. */}
       <Section
-        alignItems="stretch"
+        alignItems="start"
         gap={0}
-        width={14.25}
+        padding={0.5}
+        width={15.25}
         height="fit"
         className="shrink-0"
       >
-        <Text font="secondary-mono" color="text-04">
+        <Text font="secondary-mono" color={tone}>
           {formatDateTimeLog(error.time_created)}
         </Text>
-        {error.document_name !== null && (
-          <Text
-            maxLines={1}
-            overflowTooltip
-            font="secondary-body"
-            color="text-03"
-            wordWrap="wrap-anywhere"
-          >
-            {error.document_name}
-          </Text>
-        )}
-        {/* The id stays visible under a title so it can still be copied. */}
-        {id !== null ? (
-          <Section
-            flexDirection="row"
-            justifyContent="start"
-            alignItems="center"
-            gap={0.25}
-            height="fit"
-            className="min-w-0"
-          >
-            <SvgFile size={12} className="shrink-0 stroke-text-02" />
-            <Text
-              maxLines={1}
-              overflowTooltip
-              font="secondary-mono"
-              color="text-02"
-              wordWrap="wrap-anywhere"
-            >
-              {id}
-            </Text>
-            {error.document_link !== null && (
-              <Button
-                icon={SvgExternalLink}
-                prominence="tertiary"
-                size="2xs"
-                href={error.document_link}
-                target="_blank"
-                aria-label={t("open")}
-                tooltip={t("open")}
-              />
-            )}
-          </Section>
-        ) : (
-          error.document_name === null && (
-            <Text font="secondary-body" color="text-03">
-              {t("unknownDocument")}
-            </Text>
-          )
-        )}
+        <FailedDocIdentity error={error} />
       </Section>
       {/* The toggle follows the clamped text, so "More" sits right after the ellipsis. */}
       <Section
@@ -131,20 +295,21 @@ function FailedDocRow({
         justifyContent="start"
         alignItems="end"
         gap={0.5}
+        padding={0.5}
         height="fit"
         className="min-w-0 flex-1"
       >
         <Text
           ref={setMessage}
           font="secondary-body"
-          color="text-04"
+          color={tone}
           wordWrap="wrap-anywhere"
           maxLines={expanded ? undefined : CLAMPED_LINES}
         >
           {error.failure_message}
         </Text>
         {(expanded || clipped) && (
-          <Section width="fit" height="fit" className="shrink-0">
+          <Section width="fit" height="fit">
             <LinkButton
               external={false}
               onClick={() => setExpanded((current) => !current)}
@@ -154,24 +319,7 @@ function FailedDocRow({
           </Section>
         )}
       </Section>
-      {/* Only a document can be re-fetched. An entity-level error has nothing to target. */}
-      {canResolve && error.document_id !== null && (
-        <Section
-          width="fit"
-          height="fit"
-          className="opacity-0 no-hover:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100"
-        >
-          <Button
-            icon={SvgRefreshCw}
-            prominence="tertiary"
-            size="xs"
-            tooltip={t("resolveOne")}
-            aria-label={t("resolveOne")}
-            disabled={resolving}
-            onClick={onResolve}
-          />
-        </Section>
-      )}
+      <FailedDocActions {...props} />
     </Section>
   );
 }
@@ -181,9 +329,15 @@ export interface FailedDocsPopoverContentProps {
   indexAttemptId: number;
   /** Whether the viewer may re-fetch single documents of this pair. */
   canResolve: boolean;
-  /** Resolves these errors, or every open error of the attempt when `null`. */
+  /** Whether Retry All Docs shows: the viewer may retry and the run has open documents, which the loaded rows cannot tell. Default: `canResolve`. */
+  canRetryAll?: boolean;
+  /** Whether the viewer may resolve errors without retry, which takes the run resolve's permission. Default: `canResolve`. */
+  canResolveErrors?: boolean;
+  /** Retries these errors by a targeted reindex, or every open error of the attempt when `null`. */
   onResolve: (errorIds: number[] | null) => void;
-  /** A resolve is in flight, so the resolve actions wait for it. */
+  /** Closes these errors without a reindex and refreshes the feeds. Default: the list's own resolve. */
+  onResolveWithoutRetry?: (errorIds: number[]) => Promise<void>;
+  /** A retry or resolve is in flight, so the actions wait for it. */
   resolving: boolean;
 }
 
@@ -192,48 +346,47 @@ function FailedDocsBody({
   ccPairId,
   indexAttemptId,
   canResolve,
+  canRetryAll = canResolve,
+  canResolveErrors = canResolve,
   onResolve,
+  onResolveWithoutRetry,
   resolving,
 }: FailedDocsPopoverContentProps) {
-  const t = useTranslations("admin.connector.activity.docs");
-  const tActivity = useTranslations("admin.connector.activity");
+  const t = useTranslations("admin.connector.activity");
+  // Serves a panel rendered without a card, which passes no `onResolveWithoutRetry`.
+  const fallback = useResolveRunErrors();
+  const resolveWithoutRetry =
+    onResolveWithoutRetry ??
+    ((errorIds: number[]) => fallback.resolveWithoutRetry(ccPairId, errorIds));
   const [searchInput, setSearchInput] = useState("");
   const q = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
-  const { data, error, size, setSize } =
-    useSWRInfinite<PaginatedIndexAttemptErrors>(
-      (pageIndex, previous: PaginatedIndexAttemptErrors | null) => {
-        if (previous !== null && previous.items.length < PAGE_SIZE) return null;
-        return SWR_KEYS.ccPairAttemptErrors(ccPairId, {
-          indexAttemptId,
-          q,
-          pageNum: pageIndex,
-          pageSize: PAGE_SIZE,
-        });
-      },
-      errorHandlingFetcher,
-      { refreshInterval: RUNS_POLL_MS, keepPreviousData: true }
-    );
-  useEffect(() => {
-    void setSize(1);
-  }, [q, setSize]);
-  // Polling shifts the offsets as errors resolve, so a row can land on two pages.
-  const items = useMemo(() => {
-    const seen = new Set<number>();
-    return (data ?? []).flatMap((page) =>
-      page.items.filter((item) => {
-        if (seen.has(item.id)) return false;
-        seen.add(item.id);
-        return true;
-      })
-    );
-  }, [data]);
-  const first = data?.[0];
-  const last = data?.[data.length - 1];
-  const hasMore =
-    first !== undefined &&
-    last !== undefined &&
-    items.length < first.total_items &&
-    last.items.length === PAGE_SIZE;
+  const pages = useLoadMorePages<IndexAttemptError>(
+    (pageIndex) =>
+      SWR_KEYS.ccPairAttemptErrors(ccPairId, {
+        indexAttemptId,
+        q,
+        pageNum: pageIndex,
+        pageSize: PAGE_SIZE,
+      }),
+    errorKey,
+    PAGE_SIZE,
+    RUNS_POLL_MS
+  );
+  // Stable, so each group keeps the route's newest-first order.
+  const items = useMemo(
+    () =>
+      [...pages.items].sort(
+        (a, b) => GROUP_ORDER[errorGroup(a)] - GROUP_ORDER[errorGroup(b)]
+      ),
+    [pages.items]
+  );
+  const firstResolved = items.findIndex((item) => errorGroup(item) !== "open");
+  const busy = resolving || fallback.resolving;
+
+  async function resolveRow(errorId: number) {
+    await resolveWithoutRetry([errorId]);
+    await pages.mutate();
+  }
 
   return (
     <Section
@@ -247,68 +400,78 @@ function FailedDocsBody({
         flexDirection="row"
         justifyContent="between"
         alignItems="center"
-        gap={2}
+        gap={1}
         height="fit"
         className="shrink-0"
       >
-        <Section height="fit" className="min-w-0 flex-1">
+        <Section height="fit" className="min-w-[10rem] flex-1">
           <InputTypeIn
             icon="search"
             variant="internal"
-            placeholder={t("search.placeholder")}
+            placeholder={t("docs.search.placeholder")}
             maxLength={SEARCH_MAX_LENGTH}
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
           />
         </Section>
-        {/* Retry all takes every open error, so it hides while a search narrows the list. */}
-        {canResolve && q === "" && (
-          <Button
-            rightIcon={SvgRefreshCw}
-            prominence="tertiary"
-            size="xs"
-            disabled={resolving}
-            onClick={() => onResolve(null)}
-          >
-            {t("resolveAll")}
-          </Button>
+        {/* Retry All Docs takes every open document of the run, not the loaded or searched rows, so only the run's count decides it. */}
+        {canRetryAll && (
+          <Section width="fit" height="fit" padding={1}>
+            <Button
+              rightIcon={SvgRefreshCw}
+              prominence="internal"
+              size="sm"
+              disabled={busy}
+              onClick={() => onResolve(null)}
+            >
+              {t("docs.resolveAll")}
+            </Button>
+          </Section>
         )}
       </Section>
-      {error !== undefined ? (
+      {pages.failed ? (
         <Section padding={1} height="fit">
           <Text font="secondary-body" color="text-03">
-            {t("loadError")}
+            {t("docs.loadError")}
           </Text>
         </Section>
-      ) : first === undefined ? (
+      ) : pages.first === undefined ? (
         <Section padding={1} height="fit">
           <LineLoader lines={3} />
         </Section>
       ) : items.length === 0 ? (
         <Section padding={1} height="fit">
           <Text font="secondary-body" color="text-03">
-            {q !== "" ? tActivity("empty.filtered") : t("empty")}
+            {q !== "" ? t("empty.filtered") : t("docs.empty")}
           </Text>
         </Section>
       ) : (
-        <ShadowDiv className="max-h-130">
-          {items.map((item) => (
-            <FailedDocRow
-              key={item.id}
-              error={item}
-              canResolve={canResolve}
-              resolving={resolving}
-              onResolve={() => onResolve([item.id])}
-            />
+        <ShadowDiv
+          variant="mask"
+          shadowDirection="bottom-only"
+          shadowHeight={8}
+          className="max-h-148"
+        >
+          {items.map((item, index) => (
+            <Fragment key={item.id}>
+              {index === firstResolved && (
+                <Divider title={t("docs.resolvedGroup")} />
+              )}
+              <FailedDocRow
+                ccPairId={ccPairId}
+                error={item}
+                canRetry={canResolve}
+                canResolveErrors={canResolveErrors}
+                busy={busy}
+                onRetry={() => onResolve([item.id])}
+                onResolveWithoutRetry={() => void resolveRow(item.id)}
+              />
+            </Fragment>
           ))}
-          {hasMore && (
+          {pages.hasMore && (
             <Section alignItems="center" height="fit">
-              <Button
-                prominence="tertiary"
-                size="xs"
-                onClick={() => void setSize(size + 1)}
-              >
-                {tActivity("more")}
+              <Button prominence="tertiary" size="xs" onClick={pages.more}>
+                {t("more")}
               </Button>
             </Section>
           )}
@@ -318,15 +481,15 @@ function FailedDocsBody({
   );
 }
 
-/** One attempt's open errors, documents and whole entities, beside or below its card. Radix mounts the content only while open, so nothing is fetched until then. */
+/** One attempt's errors, open then resolved, documents and whole entities, under its card. Radix mounts the content only while open, so nothing is fetched until then. */
 export default function FailedDocsPopoverContent({
-  placement = "beside",
+  placement,
   ...props
-}: FailedDocsPopoverContentProps & { placement?: PopoverPlacement }) {
+}: FailedDocsPopoverContentProps & { placement: PopoverPlacement }) {
   const t = useTranslations("admin.connector.activity.docs");
   return (
     <Popover.Content
-      width={120}
+      width={160}
       {...PLACEMENT_PROPS[placement]}
       aria-label={t("title")}
     >
