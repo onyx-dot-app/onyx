@@ -280,7 +280,11 @@ calls `index_doc_batch`, which:
    hasn't advanced past what's stored, with no hashing. Gate 2 (content hash)
    applies only when the timestamp hasn't advanced; it's skipped for a FUTURE/port
    write (`index_to_secondary=True`) so the FUTURE build doesn't cross-suppress
-   against the PRESENT-only hash. Docprocessing always passes
+   against the PRESENT-only hash. A NULL hash never matches: a reindex swap
+   nulls the hash of what FUTURE may lack so the next poll re-indexes it
+   ([[document-index]] §5); a document a FUTURE attempt failed on needs Retry,
+   and a load-only connector a manual run, since no poll fetches those.
+   Docprocessing always passes
    `ignore_time_skip=True` (the connector already filtered by recency at fetch
    time), so only gate 2 applies here in practice. A caller can also bypass both
    gates with `force_update=True`, which `run_indexing_pipeline` exposes: the
