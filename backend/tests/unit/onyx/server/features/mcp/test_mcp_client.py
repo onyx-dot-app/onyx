@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 from collections.abc import Coroutine
 from typing import Any
@@ -6,7 +7,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 from mcp import ClientSession
-from mcp.types import CallToolResult, TextContent
+from mcp.types import (
+    AudioContent,
+    CallToolResult,
+    EmbeddedResource,
+    ImageContent,
+    TextContent,
+    TextResourceContents,
+)
 
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp import client
@@ -172,3 +180,45 @@ def test_cancellation_stops_a_running_call(monkeypatch: pytest.MonkeyPatch) -> N
     assert not stopper.is_alive()
     assert stopped.is_set()
     assert not cancellation._callbacks
+
+
+@pytest.mark.parametrize(
+    "media",
+    [
+        ImageContent(type="image", mimeType="image/png", data="aGVsbG8="),
+        AudioContent(type="audio", mimeType="audio/wav", data="aGVsbG8="),
+    ],
+)
+@pytest.mark.parametrize(
+    "readable", ["none", "empty_text", "text", "resource", "structured"]
+)
+def test_media_notice_is_only_a_fallback(
+    media: ImageContent | AudioContent, readable: str
+) -> None:
+    result = CallToolResult(content=[media])
+    payload = {"answer": 42}
+    expected = json.dumps(payload)
+    if readable == "text":
+        result.content.append(TextContent(type="text", text=expected))
+        result.structuredContent = {"answer": "secondary"}
+    elif readable == "resource":
+        result.content.append(
+            EmbeddedResource(
+                type="resource",
+                resource=TextResourceContents(
+                    uri="https://example.com/result", text=expected
+                ),
+            )
+        )
+    elif readable == "structured":
+        result.structuredContent = payload
+    else:
+        if readable == "empty_text":
+            result.content.append(TextContent(type="text", text=""))
+        expected = f"[{media.type} omitted: {media.mimeType}]"
+
+    actual = client.process_mcp_result(result)
+
+    assert actual == expected
+    if readable not in ("none", "empty_text"):
+        assert json.loads(actual) == payload
