@@ -1,6 +1,7 @@
 import contextvars
 import json
 import threading
+import uuid
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -91,6 +92,11 @@ VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 # Batch size for the orphan sweep's delete-by-query terms filter — well under the
 # OpenSearch terms cap (65536) so a large mid-port purge can't build an oversized query.
 _PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
+
+# Chunk keys per source fetch of a keys-only hybrid search. Each key adds four
+# clauses, so a fetch stays well under indices.query.bool.max_clause_count
+# (1024 on Cloud).
+_MAX_CHUNK_KEYS_PER_FETCH = 100
 
 # Chunk IDs logged per direction when the cc-pair access shadow comparison
 # finds a disagreement.
@@ -1053,7 +1059,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # request would go to every shard. Explain describes the hybrid
         # scoring, so it keeps one request.
         chunk_keys_only = (
-            not OPENSEARCH_EXPLAIN_ENABLED and self._client.get_number_of_shards() == 1
+            not OPENSEARCH_EXPLAIN_ENABLED and self._is_single_shard_index()
         )
         query_body = DocumentQuery.get_hybrid_search_query(
             query_text=final_query,
@@ -1102,6 +1108,22 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return inference_chunks
 
+    def _is_single_shard_index(self) -> bool:
+        """Returns whether the index has one primary shard.
+
+        If the shard count cannot be read, returns False so hybrid search uses
+        the single-request path.
+        """
+        try:
+            return self._client.get_number_of_shards() == 1
+        except Exception:
+            logger.warning(
+                "Could not read the shard count of index %s; using the single-request hybrid search.",
+                self._index_name,
+                exc_info=True,
+            )
+            return False
+
     def _get_hybrid_search_hits_by_chunk_keys(
         self,
         query_body: dict[str, Any],
@@ -1119,29 +1141,35 @@ class OpenSearchDocumentIndex(DocumentIndex):
         search filters again, so a chunk whose access changed between the two
         requests is dropped, and it returns the match highlights.
         """
+        # Both requests read the same shard copies, so a replica that has not
+        # refreshed yet cannot drop a hit the hybrid search returned.
+        preference = uuid.uuid4().hex
         chunk_key_hits = self._client.search_for_chunk_keys(
             body=query_body,
             search_pipeline_id=normalization_pipeline_name,
             search_type=OpenSearchSearchType.HYBRID,
+            preference=preference,
         )
-        if not chunk_key_hits:
-            return []
-
-        fetch_body = DocumentQuery.get_from_chunk_keys_query(
-            chunk_keys=[
-                (hit.document_id, hit.chunk_index, hit.max_chunk_size)
-                for hit in chunk_key_hits
-            ],
-            query_text=query_text,
-            tenant_state=self._tenant_state,
-            index_filters=filters,
-            include_hidden=include_hidden,
-        )
-        fetched_hits = self._client.search(
-            body=fetch_body,
-            search_pipeline_id=None,
-            search_type=OpenSearchSearchType.HYBRID_FETCH,
-        )
+        fetched_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
+        for start in range(0, len(chunk_key_hits), _MAX_CHUNK_KEYS_PER_FETCH):
+            fetch_body = DocumentQuery.get_from_chunk_keys_query(
+                chunk_keys=[
+                    (hit.document_id, hit.chunk_index, hit.max_chunk_size)
+                    for hit in chunk_key_hits[start : start + _MAX_CHUNK_KEYS_PER_FETCH]
+                ],
+                query_text=query_text,
+                tenant_state=self._tenant_state,
+                index_filters=filters,
+                include_hidden=include_hidden,
+            )
+            fetched_hits.extend(
+                self._client.search(
+                    body=fetch_body,
+                    search_pipeline_id=None,
+                    search_type=OpenSearchSearchType.HYBRID_FETCH,
+                    preference=preference,
+                )
+            )
         fetched_hits_by_key: dict[
             tuple[str, int, int], SearchHit[DocumentChunkWithoutVectors]
         ] = {

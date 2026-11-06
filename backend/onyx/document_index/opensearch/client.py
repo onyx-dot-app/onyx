@@ -207,7 +207,10 @@ _PIT_SCAN_PAGE_SIZE_WITH_VECTORS = 200
 # Ids per mget request, so the body stays under the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
 # Primary shard count per index name. The count is fixed when an index is
-# created, so it is read once per process.
+# created, so it is read once per process. Creating or deleting the index in
+# this process clears its entry; another process that recreates the index under
+# the same name leaves a stale entry here until restart, which only chooses the
+# slower hybrid search path, never wrong results.
 _NUMBER_OF_SHARDS_BY_INDEX: dict[str, int] = {}
 
 
@@ -760,6 +763,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "settings": settings,
         }
         logger.debug("Creating index %s.", self._index_name)
+        _NUMBER_OF_SHARDS_BY_INDEX.pop(self._index_name, None)
         response = self._client.indices.create(index=self._index_name, body=body)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create index {self._index_name}.")
@@ -789,6 +793,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             return False
 
         logger.info("Deleting index %s.", self._index_name)
+        _NUMBER_OF_SHARDS_BY_INDEX.pop(self._index_name, None)
         response = self._client.indices.delete(index=self._index_name)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete index {self._index_name}.")
@@ -1785,6 +1790,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         body: dict[str, Any],
         search_pipeline_id: str | None,
         search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
+        preference: str | None = None,
     ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
         """Searches the index.
 
@@ -1804,6 +1810,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 the default search pipeline will be used.
             search_type: Label for Prometheus metrics. Does not affect search
                 behavior.
+            preference: Searches with the same preference string read the
+                same shard copies. If None, OpenSearch chooses the copies.
 
         Raises:
             Exception: There was an error searching the index.
@@ -1817,7 +1825,10 @@ class OpenSearchIndexClient(OpenSearchClient):
             search_pipeline_id,
         )
         hits = self._run_search(
-            body=body, search_pipeline_id=search_pipeline_id, search_type=search_type
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            search_type=search_type,
+            preference=preference,
         )
 
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
@@ -1851,6 +1862,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         body: dict[str, Any],
         search_pipeline_id: str | None,
         search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
+        preference: str | None = None,
     ) -> list[ChunkKeySearchHit]:
         """Searches the index and returns only the key fields of each hit.
 
@@ -1864,6 +1876,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 the default search pipeline will be used.
             search_type: Label for Prometheus metrics. Does not affect search
                 behavior.
+            preference: Searches with the same preference string read the
+                same shard copies. If None, OpenSearch chooses the copies.
 
         Raises:
             Exception: There was an error searching the index, or a hit is
@@ -1878,7 +1892,10 @@ class OpenSearchIndexClient(OpenSearchClient):
                 '"_none_". This query will therefore read the source of every hit.'
             )
         hits = self._run_search(
-            body=body, search_pipeline_id=search_pipeline_id, search_type=search_type
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            search_type=search_type,
+            preference=preference,
         )
         chunk_key_hits: list[ChunkKeySearchHit] = []
         for hit in hits:
@@ -1903,8 +1920,11 @@ class OpenSearchIndexClient(OpenSearchClient):
         body: dict[str, Any],
         search_pipeline_id: str | None,
         search_type: OpenSearchSearchType,
+        preference: str | None = None,
     ) -> list[Any]:
         """Runs a search, records its metrics, and returns the raw hits.
+
+        Searches with the same preference string read the same shard copies.
 
         Raises:
             Exception: There was an error searching the index, or the search
@@ -1912,6 +1932,8 @@ class OpenSearchIndexClient(OpenSearchClient):
         """
         result: dict[str, Any]
         params = {"phase_took": "true"}
+        if preference is not None:
+            params["preference"] = preference
         ctx = self._get_emit_metrics_context_manager(search_type)
         with ctx:
             try:
