@@ -84,7 +84,8 @@ def _perform_index_swap(
 
     `clear_for_cc_pairs` (the non-INSTANT port flow) clears what FUTURE may
     lack inside the flip's transaction and once more right after the commit;
-    see _clear_what_future_missed__no_commit.
+    see _clear_what_future_missed__no_commit. An empty list still clears the
+    documents a FUTURE attempt failed on.
 
     Returns the old search settings if the swap was successful, otherwise None.
     """
@@ -140,7 +141,7 @@ def _perform_index_swap(
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
-    if clear_for_cc_pairs:
+    if clear_for_cc_pairs is not None:
         # After the status updates, in the same transaction: every stamp that
         # was in flight has committed by now, and a row still locked belongs to
         # a batch that will read PAST and stamp nothing, so skip it rather
@@ -149,7 +150,7 @@ def _perform_index_swap(
             db_session, new_search_settings, clear_for_cc_pairs, skip_locked=True
         )
     db_session.commit()
-    if clear_for_cc_pairs:
+    if clear_for_cc_pairs is not None:
         # Once more after the commit, for the rows that were skipped: they are
         # free now, and nothing can stamp into the old index anymore.
         _clear_what_future_missed__no_commit(

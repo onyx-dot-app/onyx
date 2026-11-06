@@ -289,6 +289,22 @@ def _hashes(db_session: Session, doc_ids: list[str]) -> dict[str, str | None]:
     return {row.id: row.content_hash for row in rows}
 
 
+def _restore_present(db_session: Session, future_id: int, old_present_id: int) -> None:
+    """Undo a real swap, so the fixture can delete the test row."""
+    db_session.rollback()
+    restored_future = db_session.get(SearchSettings, future_id)
+    old_present = db_session.get(SearchSettings, old_present_id)
+    assert restored_future is not None and old_present is not None
+    if restored_future.status == IndexModelStatus.PRESENT:
+        update_search_settings_status__no_commit(
+            restored_future, IndexModelStatus.PAST, db_session
+        )
+    update_search_settings_status__no_commit(
+        old_present, IndexModelStatus.PRESENT, db_session
+    )
+    db_session.commit()
+
+
 def test_swap_clears_hashes_future_may_lack(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
@@ -369,6 +385,43 @@ def test_swap_delta_pass_skips_rows_a_batch_still_holds(
         db_session.commit()
         other_session.rollback()
     assert _hashes(db_session, [held, free]) == {held: "h", free: None}
+
+
+def test_swap_with_no_required_pairs_still_clears_failed_documents(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The failed-document clear is keyed by the FUTURE settings, not by a pair,
+    so a swap whose required list is empty still runs it."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    old_present_id = get_current_search_settings(db_session).id
+    poll = _future_poll(
+        db_session, cc_pair.id, future_id, datetime.now(tz=timezone.utc)
+    )
+    (failed,) = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX
+    )
+    _set_doc(db_session, failed, content_hash="h")
+    error = IndexAttemptError(
+        index_attempt_id=poll.id,
+        connector_credential_pair_id=cc_pair.id,
+        document_id=failed,
+        failure_message="embedding failed",
+    )
+    db_session.add(error)
+    db_session.commit()
+    try:
+        with patch.object(swap_index, "get_default_document_index"):
+            _perform_index_swap(
+                db_session, future_ss, all_cc_pairs=[], clear_for_cc_pairs=[]
+            )
+        assert _hashes(db_session, [failed]) == {failed: None}
+    finally:
+        db_session.rollback()
+        db_session.delete(error)
+        db_session.commit()
+        _restore_present(db_session, future_id, old_present_id)
 
 
 def test_port_swap_blocks_on_unfinished_ingestion_port(
@@ -525,19 +578,7 @@ def test_instant_swap_never_commits_a_state_without_present(
         assert result is not None and result.id == old_present_id
     finally:
         event.remove(db_session, "after_commit", _read_committed_state)
-        # Put the original PRESENT back before the fixture deletes the test row.
-        db_session.rollback()
-        restored_future = db_session.get(SearchSettings, future_id)
-        old_present = db_session.get(SearchSettings, old_present_id)
-        assert restored_future is not None and old_present is not None
-        if restored_future.status == IndexModelStatus.PRESENT:
-            update_search_settings_status__no_commit(
-                restored_future, IndexModelStatus.PAST, db_session
-            )
-        update_search_settings_status__no_commit(
-            old_present, IndexModelStatus.PRESENT, db_session
-        )
-        db_session.commit()
+        _restore_present(db_session, future_id, old_present_id)
 
     assert observed, "the swap made no commit"
     assert all(count == 1 for count, _, _ in observed), observed
