@@ -133,10 +133,6 @@ export function AddPeoplePicker({
   const permissionOptions = useSharePermissionOptions();
 
   function handleSelectSuggestion(suggestion: Suggestion) {
-    if (suggestion.shared) {
-      return;
-    }
-
     if (suggestion.type === "user") {
       const user = users.find(
         (shareableUser) => shareableUser.id === suggestion.id
