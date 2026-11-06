@@ -48,7 +48,6 @@ import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
-  SvgChevronDown,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -492,9 +491,6 @@ export function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 // ─── ModelsField ─────────────────────────────────────────────────────
 
-const FOLDED_MIN_MODELS = 3;
-const FOLDED_MAX_MODELS = 10;
-
 // ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
 
 /** Models that ship extra picker metadata (e.g. Nebius TokenFactory). */
@@ -521,20 +517,14 @@ function inherentOrder(models: ModelConfiguration[]): string[] {
 
 interface ModelListLayout {
   order: string[];
-  foldedCount: number;
   sortedByName: boolean;
 }
 
-/** Rows only move on open, fold and unfold, never on a checkbox change. */
-function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
-  const selected = models.filter((m) => m.is_visible).length;
+/** Rows only move on open or refetch, never on a checkbox change. */
+function modelListLayout(models: ModelConfiguration[]): ModelListLayout {
   return {
     order: inherentOrder(models),
     sortedByName: models.some((m) => hasModelMetadata(m)),
-    foldedCount: Math.min(
-      Math.max(selected, FOLDED_MIN_MODELS),
-      FOLDED_MAX_MODELS
-    ),
   };
 }
 
@@ -735,7 +725,6 @@ export function ModelSelectionField({
   const { defaultText } = useAdminLanguageModels();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
-  const [isExpanded, setIsExpanded] = useState(false);
   const models = formikProps.values.model_configurations;
   const [layout, setLayout] = useState<ModelListLayout | null>(null);
   // Models the admin types in stay where they appear; a refetch re-sorts.
@@ -748,7 +737,7 @@ export function ModelSelectionField({
       layout.sortedByName !== models.some((m) => hasModelMetadata(m)) ||
       models.some((m) => !known.has(m.name) && !typedNames.has(m.name))
     ) {
-      setLayout(foldedLayout(models));
+      setLayout(modelListLayout(models));
     }
   }, [models, layout, typedNames]);
 
@@ -758,29 +747,6 @@ export function ModelSelectionField({
       setTypedNames((prev) => new Set(prev).add(name));
       onAddModel(name);
     });
-
-  function toggleExpanded() {
-    if (isExpanded) {
-      setLayout(foldedLayout(models));
-    } else if (layout) {
-      // Rows already on screen keep their place; the rest go below them.
-      const known = new Set(layout.order);
-      const shown = [
-        ...layout.order.slice(0, layout.foldedCount),
-        ...models.map((m) => m.name).filter((name) => !known.has(name)),
-      ];
-      const shownSet = new Set(shown);
-      setLayout({
-        order: [
-          ...shown,
-          ...inherentOrder(models).filter((name) => !shownSet.has(name)),
-        ],
-        foldedCount: layout.foldedCount,
-        sortedByName: layout.sortedByName,
-      });
-    }
-    setIsExpanded(!isExpanded);
-  }
 
   useEffect(() => {
     const testModel = models.find((model) => model.is_visible)?.name;
@@ -859,18 +825,13 @@ export function ModelSelectionField({
         ) : (
           <Section gap={1} alignItems="stretch">
             {(() => {
-              const { order, foldedCount } = layout ?? foldedLayout(models);
+              const { order } = layout ?? modelListLayout(models);
               const byName = new Map(models.map((m) => [m.name, m]));
-              const ordered = order.flatMap((name) => byName.get(name) ?? []);
-              // Models added since the last re-sort, e.g. a custom model.
+              // Models added since the last re-sort, e.g. a custom model, go last.
               const known = new Set(order);
-              const added = models.filter((m) => !known.has(m.name));
-              const isFoldable = ordered.length > foldedCount;
               const shownModels = [
-                ...(isFoldable && !isExpanded
-                  ? ordered.slice(0, foldedCount)
-                  : ordered),
-                ...added,
+                ...order.flatMap((name) => byName.get(name) ?? []),
+                ...models.filter((m) => !known.has(m.name)),
               ];
               const defaultModelName =
                 providerId != null && defaultText?.provider_id === providerId
@@ -878,65 +839,33 @@ export function ModelSelectionField({
                   : undefined;
 
               return (
-                <>
-                  {/* Folded, the list holds at most 10 rows; unfolded, it scrolls. */}
-                  <ShadowDiv
-                    variant="mask"
-                    className={cn(isExpanded && "max-h-[22rem]")}
-                  >
-                    <Section gap={1} alignItems="stretch" height="auto">
-                      {shownModels.map((model) => (
-                        <ModelRow
-                          key={model.name}
-                          model={model}
-                          onToggleVisibility={(visible) =>
-                            setVisibility(model.name, visible)
-                          }
-                          onRename={(value) =>
-                            setCustomDisplayName(model.name, value)
-                          }
-                          onSettingsChange={(patch) =>
-                            setModelSettings(model.name, patch)
-                          }
-                          isDefaultModel={model.name === defaultModelName}
-                          onSetDefaultModel={
-                            providerId != null &&
-                            model.is_visible &&
-                            model.supports_chat !== false
-                              ? () => void setDefaultModel(model.name)
-                              : undefined
-                          }
-                        />
-                      ))}
-                    </Section>
-                  </ShadowDiv>
-                  {isFoldable && (
-                    <Interactive.Stateless
-                      prominence="tertiary"
-                      onClick={toggleExpanded}
-                    >
-                      <Interactive.Container type="button" width="full">
-                        <Content
-                          font="secondary-body"
-                          title={
-                            isExpanded
-                              ? t("models.foldButton.label")
-                              : t("models.moreButton.label")
-                          }
-                          icon={() => (
-                            <SvgChevronDown
-                              className={cn(
-                                "transition-transform",
-                                isExpanded && "-rotate-180"
-                              )}
-                              size={14}
-                            />
-                          )}
-                        />
-                      </Interactive.Container>
-                    </Interactive.Stateless>
-                  )}
-                </>
+                <ShadowDiv variant="mask" className="max-h-[22rem]">
+                  <Section gap={1} alignItems="stretch" height="auto">
+                    {shownModels.map((model) => (
+                      <ModelRow
+                        key={model.name}
+                        model={model}
+                        onToggleVisibility={(visible) =>
+                          setVisibility(model.name, visible)
+                        }
+                        onRename={(value) =>
+                          setCustomDisplayName(model.name, value)
+                        }
+                        onSettingsChange={(patch) =>
+                          setModelSettings(model.name, patch)
+                        }
+                        isDefaultModel={model.name === defaultModelName}
+                        onSetDefaultModel={
+                          providerId != null &&
+                          model.is_visible &&
+                          model.supports_chat !== false
+                            ? () => void setDefaultModel(model.name)
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </Section>
+                </ShadowDiv>
               );
             })()}
           </Section>
