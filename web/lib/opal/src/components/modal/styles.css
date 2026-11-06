@@ -27,24 +27,22 @@
   @apply animate-out fade-out-0;
 }
 
+/* Every modal is top-aligned: its top edge stays put and a height change
+   grows or shrinks it downward, so the card never jumps. */
 .opal-modal-positioner {
   @apply fixed -translate-x-1/2;
   @apply max-w-[calc(100dvw-2rem)];
-  --opal-modal-available-height: calc(100dvh - 2rem);
+  /* The bottom gap is never less than the top one. */
+  --opal-modal-gap: max(2rem, 12dvh);
+  --opal-modal-top: var(--opal-modal-gap);
+  --opal-modal-available-height: calc(
+    100dvh - var(--opal-modal-top) - var(--opal-modal-gap)
+  );
+  top: var(--opal-modal-top);
   max-height: var(--opal-modal-available-height);
   z-index: var(--z-modal);
 }
-.opal-modal-positioner[data-position="center"] {
-  @apply -translate-y-1/2;
-}
-.opal-modal-positioner[data-position="center"][data-viewport-centered] {
-  @apply left-1/2 top-1/2;
-}
-.opal-modal-positioner[data-position="top"] {
-  @apply top-[72px];
-  --opal-modal-available-height: calc(100dvh - 72px - 1rem);
-}
-.opal-modal-positioner[data-position="top"][data-viewport-centered] {
+.opal-modal-positioner[data-viewport-centered] {
   @apply left-1/2;
 }
 
