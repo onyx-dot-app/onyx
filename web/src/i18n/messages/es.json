@@ -7796,12 +7796,6 @@
             "description": "Selecciona los modelos que estarán disponibles para este proveedor.",
             "title": "Modelos"
           },
-          "foldButton": {
-            "label": "Plegar los modelos"
-          },
-          "moreButton": {
-            "label": "Más modelos"
-          },
           "refetch": {
             "label": "Actualizar modelos",
             "errorToast": "No se pudieron obtener los modelos"
@@ -7809,7 +7803,6 @@
           "row": {
             "defaultLabel": "Modelo predeterminado",
             "decisionTag": {
-              "label": "Decisión",
               "decisionOnly": "Modelo de decisiones. No está disponible en el selector de modelos de chat.",
               "chatAndDecision": "Admite tareas de chat y de decisiones."
             },
@@ -7818,9 +7811,6 @@
             },
             "setDefaultButton": {
               "label": "Establecer como predeterminado"
-            },
-            "visionMarker": {
-              "title": "Visión"
             }
           },
           "selectAllButton": {
@@ -14331,6 +14321,10 @@
       },
       "labels": {
         "default": "Predeterminado"
+      },
+      "modelTypes": {
+        "decision": "Decisión",
+        "vision": "Visión"
       }
     }
   },

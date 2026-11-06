@@ -7796,12 +7796,6 @@
             "description": "Sélectionnez les modèles à rendre disponibles pour ce fournisseur.",
             "title": "Modèles"
           },
-          "foldButton": {
-            "label": "Replier les modèles"
-          },
-          "moreButton": {
-            "label": "Plus de modèles"
-          },
           "refetch": {
             "label": "Actualiser les modèles",
             "errorToast": "Échec de la récupération des modèles"
@@ -7809,7 +7803,6 @@
           "row": {
             "defaultLabel": "Modèle par défaut",
             "decisionTag": {
-              "label": "Décision",
               "decisionOnly": "Modèle de décision. Non disponible dans le sélecteur de modèles de chat.",
               "chatAndDecision": "Prend en charge les tâches de chat et de décision."
             },
@@ -7818,9 +7811,6 @@
             },
             "setDefaultButton": {
               "label": "Définir par défaut"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -14331,6 +14321,10 @@
       },
       "labels": {
         "default": "Par défaut"
+      },
+      "modelTypes": {
+        "decision": "Décision",
+        "vision": "Vision"
       }
     }
   },

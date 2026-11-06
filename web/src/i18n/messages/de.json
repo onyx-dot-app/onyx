@@ -7796,12 +7796,6 @@
             "description": "Wählen Sie die Modelle aus, die für diesen Anbieter verfügbar sein sollen.",
             "title": "Modelle"
           },
-          "foldButton": {
-            "label": "Modelle einklappen"
-          },
-          "moreButton": {
-            "label": "Weitere Modelle"
-          },
           "refetch": {
             "label": "Modelle aktualisieren",
             "errorToast": "Die Modelle konnten nicht abgerufen werden"
@@ -7809,7 +7803,6 @@
           "row": {
             "defaultLabel": "Standardmodell",
             "decisionTag": {
-              "label": "Entscheidung",
               "decisionOnly": "Entscheidungsmodell. Nicht in der Chat-Modellauswahl verfügbar.",
               "chatAndDecision": "Unterstützt Chat- und Entscheidungsaufgaben."
             },
@@ -7818,9 +7811,6 @@
             },
             "setDefaultButton": {
               "label": "Als Standard festlegen"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -14331,6 +14321,10 @@
       },
       "labels": {
         "default": "Standard"
+      },
+      "modelTypes": {
+        "decision": "Entscheidung",
+        "vision": "Vision"
       }
     }
   },

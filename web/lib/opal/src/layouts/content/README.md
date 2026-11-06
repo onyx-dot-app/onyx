@@ -49,7 +49,7 @@ root            0.25rem gap inline; no gap stacked or with a secondary-* / figur
 | `strikethrough`       | `boolean`                                  | `false`            | Strike the title through, for an option that is switched off                                        |
 | `suffix`              | `"optional" \| string`                     | —                  | Muted text beside the title, in the title's size and lighter weight; `"optional"` is the translated "(Optional)" |
 | `auxIcon`             | `"info-gray" \| "info-blue" \| "warning" \| "error"` | —        | A status icon beside the title: a 16px box with a 12px glyph at every title size, centred on the title line |
-| `badge`               | `BadgeProps`                               | —                  | A badge beside the title                                                                            |
+| `badge`               | `BadgeProps \| BadgeProps[]`              | —                  | One badge, or a list of badges in order, beside the title                                           |
 | `role`                | `string`                                   | —                  | ARIA role on the title element                                                                      |
 | `moreIcon1`           | `IconFunctionComponent`                    | —                  | Stacked only: a connector icon after the icon, in `text-03`; its box is 12px smaller than the icon box (2px padding) |
 | `moreIcon2`           | `IconFunctionComponent`                    | —                  | Stacked only: a peer of the icon, the same size                                                     |

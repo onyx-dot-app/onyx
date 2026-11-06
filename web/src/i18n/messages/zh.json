@@ -7796,12 +7796,6 @@
             "description": "选择要为此提供商启用的模型。",
             "title": "模型"
           },
-          "foldButton": {
-            "label": "收起模型"
-          },
-          "moreButton": {
-            "label": "更多模型"
-          },
           "refetch": {
             "label": "刷新模型",
             "errorToast": "获取模型失败"
@@ -7809,7 +7803,6 @@
           "row": {
             "defaultLabel": "默认模型",
             "decisionTag": {
-              "label": "决策",
               "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
               "chatAndDecision": "支持聊天和决策任务。"
             },
@@ -7818,9 +7811,6 @@
             },
             "setDefaultButton": {
               "label": "设为默认"
-            },
-            "visionMarker": {
-              "title": "视觉"
             }
           },
           "selectAllButton": {
@@ -14331,6 +14321,10 @@
       },
       "labels": {
         "default": "默认"
+      },
+      "modelTypes": {
+        "decision": "决策",
+        "vision": "视觉"
       }
     }
   },
