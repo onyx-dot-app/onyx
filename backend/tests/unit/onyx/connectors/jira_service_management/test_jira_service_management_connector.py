@@ -235,13 +235,40 @@ def test_jsm_everything_scope_jql_dc_no_projects(mock_is_cloud: MagicMock) -> No
     end = 1640995200
     jql = connector._get_jql_query(start, end)
     
-    # Verify that a no-match query is used when no JSM projects exist
-    assert "project = __NO_JSM_PROJECTS__" in jql, \
-        "Should use no-match query when no JSM projects found"
+    # Verify that a valid no-match query is used when no JSM projects exist
+    # 'id < 0' is syntactically valid JQL that matches nothing
+    assert "id < 0" in jql, \
+        "Should use valid no-match query when no JSM projects found"
     
     # Verify time range is still included
     assert "updated >=" in jql
     assert "updated <=" in jql
+
+
+@patch("onyx.connectors.jira_service_management.connector.is_cloud_gateway")
+def test_jsm_everything_scope_jql_dc_enumeration_failure(mock_is_cloud: MagicMock) -> None:
+    """Test that project enumeration failures propagate as exceptions."""
+    mock_is_cloud.return_value = False
+    
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.example.com",
+    )
+    
+    # Mock source_operations to raise an exception
+    mock_ops = MagicMock()
+    mock_ops.list_projects.side_effect = Exception("API connection failed")
+    connector._source_operations = mock_ops
+    
+    start = 1609459200
+    end = 1640995200
+    
+    # Verify that the exception propagates (not caught and turned into empty list)
+    try:
+        connector._get_jql_query(start, end)
+        assert False, "Expected exception to be raised"
+    except Exception as e:
+        assert "API connection failed" in str(e), \
+            "Exception should propagate with original message"
 
 
 def test_jsm_project_scope_no_projecttype_filter() -> None:

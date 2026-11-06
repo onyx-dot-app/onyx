@@ -71,18 +71,18 @@ class JiraServiceManagementConnector(JiraConnector):
         
         Returns:
             List of project keys that are service desk projects.
+            
+        Raises:
+            Exception: When project enumeration fails. Callers should handle
+                this distinctly from the empty-list case.
         """
-        try:
-            projects = self.source_operations.list_projects()
-            jsm_keys = [
-                project["key"]
-                for project in projects
-                if project.get("projectTypeKey") == "service_desk"
-            ]
-            return jsm_keys
-        except Exception as e:
-            logger.warning(f"Failed to enumerate JSM projects: {e}")
-            return []
+        projects = self.source_operations.list_projects()
+        jsm_keys = [
+            project["key"]
+            for project in projects
+            if project.get("projectTypeKey") == "service_desk"
+        ]
+        return jsm_keys
 
     @override
     def _get_jql_query(
@@ -120,9 +120,10 @@ class JiraServiceManagementConnector(JiraConnector):
                     keys_str = ", ".join(jsm_keys)
                     jql_query = f"project IN ({keys_str})"
                 else:
-                    # No JSM projects found - use a query that matches nothing
+                    # No JSM projects found - use a syntactically valid query that matches nothing
                     # This prevents indexing all projects when none are service desks
-                    jql_query = "project = __NO_JSM_PROJECTS__"
+                    # Using 'id < 0' since Jira issue IDs start from 1
+                    jql_query = "id < 0"
                     logger.warning(
                         "No JSM projects found on Data Center instance. "
                         "JSM connector will not index any issues."
