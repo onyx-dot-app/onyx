@@ -54,7 +54,10 @@ from onyx.db.index_attempt_metrics import (
 )
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
-from onyx.db.search_settings import get_active_search_settings
+from onyx.db.search_settings import (
+    get_search_settings_by_id,
+    lock_search_settings_for_share,
+)
 from onyx.db.tag import upsert_document_tags
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.document_metadata import DocumentMetadata
@@ -512,6 +515,8 @@ def index_doc_batch_with_handler(
     force_update: bool = False,
     skip_document_row_writes: bool = False,
     skip_spreadsheet_content: bool = False,
+    written_search_settings_id: int,
+    stamp_content_hash: bool = True,
 ) -> IndexingPipelineResult:
     # Documents whose prepare() committed before the batch raised. Their change
     # gates would now see nothing to do, so a retry of them forces the update.
@@ -542,6 +547,8 @@ def index_doc_batch_with_handler(
                 skip_document_row_writes=skip_document_row_writes,
                 on_prepared=prepared.update,
                 skip_spreadsheet_content=skip_spreadsheet_content,
+                written_search_settings_id=written_search_settings_id,
+                stamp_content_hash=stamp_content_hash,
             )
         except ConnectorStopSignal as e:
             logger.warning(
@@ -1491,6 +1498,15 @@ def _maybe_push_documents(
                 )
 
 
+def _written_settings_are_present(
+    db_session: Session, written_search_settings_id: int
+) -> bool:
+    """Whether the settings a batch wrote into are PRESENT, read under a share lock
+    held until the batch commits, so a swap cannot flip them in between."""
+    written = lock_search_settings_for_share(db_session, written_search_settings_id)
+    return written is not None and written.status == IndexModelStatus.PRESENT
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -1515,6 +1531,8 @@ def index_doc_batch(
         [list[Document]], tuple[list[Document], list[ConnectorFailure]]
     ] = filter_documents,
     skip_spreadsheet_content: bool = False,
+    written_search_settings_id: int,
+    stamp_content_hash: bool = True,
 ) -> IndexingPipelineResult:
     """End-to-end indexing for a pre-batched set of documents."""
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
@@ -1737,10 +1755,16 @@ def index_doc_batch(
             # vector DB. Doing this here (after the write) prevents a failed
             # index from storing a hash that would permanently skip the document
             # on the next sync. Hashes were pre-computed in get_docs_to_update.
-            # Skipped for FUTURE writes: stamping the PRESENT-only hash would make
-            # the PRESENT poll skip the doc (cross-index suppression).
-            if not index_to_secondary:
-                successfully_indexed_ids = {r.document_id for r in insertion_records}
+            # The hash describes what the PRESENT index holds, so it is stamped
+            # only when the settings this batch wrote into are still PRESENT at
+            # commit. The share lock makes a swap wait for this batch; a batch
+            # that lands after the swap wrote into a retired index and must not
+            # make the next poll skip the document. A FUTURE write therefore
+            # never stamps, unless the swap promoted its index meanwhile.
+            successfully_indexed_ids = {r.document_id for r in insertion_records}
+            if stamp_content_hash and _written_settings_are_present(
+                db_session, written_search_settings_id
+            ):
                 update_docs_content_hash__no_commit(
                     ids_to_new_hash={
                         doc_id: context.doc_id_to_content_hash[doc_id]
@@ -1787,11 +1811,20 @@ def run_indexing_pipeline(
     force_update: bool = False,
     skip_document_row_writes: bool = False,
     skip_spreadsheet_content: bool = False,
+    written_search_settings_id: int,
+    stamp_content_hash: bool = True,
 ) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them.
 
-    index_to_secondary disables the content-hash gate + stamp for FUTURE writes so
-    they don't cross-suppress the PRESENT index's shared hash.
+    index_to_secondary disables the content-hash gate for FUTURE writes so the
+    PRESENT index's hash does not suppress them.
+
+    written_search_settings_id is the id of the search settings whose index
+    `document_index` writes into, as the caller resolved it when the batch
+    started (never a fresh lookup: a batch can straddle a swap). Chunking and
+    enrichment use that row's configuration, and the content hash is stamped
+    only if those settings are still PRESENT when the batch commits; stamp_content_hash=False skips the stamp outright (a targeted
+    re-index whose FUTURE twin may fail must leave the row's hash alone).
 
     force_update bypasses both change gates. Needed when the document is
     unchanged at the source but must be re-chunked anyway (see
@@ -1802,18 +1835,19 @@ def run_indexing_pipeline(
     placeholder (see skip_tabular_content). Only connector indexing sets it:
     user files and the ingestion API need the content they were given.
     """
+    # Chunking and enrichment follow the settings whose index is written, not
+    # whichever row is PRESENT or FUTURE at this moment.
     if db_session is not None:
-        all_search_settings = get_active_search_settings(db_session)
+        search_settings = get_search_settings_by_id(
+            db_session, written_search_settings_id
+        )
     else:
         with get_session_with_current_tenant() as _sess:
-            all_search_settings = get_active_search_settings(_sess)
-    if (
-        all_search_settings.secondary
-        and all_search_settings.secondary.status == IndexModelStatus.FUTURE
-    ):
-        search_settings = all_search_settings.secondary
-    else:
-        search_settings = all_search_settings.primary
+            search_settings = get_search_settings_by_id(
+                _sess, written_search_settings_id
+            )
+    if search_settings is None:
+        raise RuntimeError(f"Search settings {written_search_settings_id} not found")
 
     multipass_config = get_multipass_config(search_settings)
 
@@ -1869,4 +1903,6 @@ def run_indexing_pipeline(
             force_update=force_update,
             skip_document_row_writes=skip_document_row_writes,
             skip_spreadsheet_content=skip_spreadsheet_content,
+            written_search_settings_id=written_search_settings_id,
+            stamp_content_hash=stamp_content_hash,
         )

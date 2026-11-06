@@ -674,10 +674,17 @@ that block, so it calls `stop_telemetry` itself first.
    A timestamp advance is authoritative and skips the content-hash check on purpose
    (some connectors replace image bytes in place under the same ID); breaking this
    makes those updates silently invisible to indexing.
-9. **A FUTURE/secondary write must not touch the shared PRESENT-only content
-   hash.** `index_to_secondary=True` disables both the hash gate and the
-   post-write hash stamp; violating this cross-suppresses writes between the two
-   generations during a swap.
+9. **A FUTURE/secondary write must not read the content hash, and a write
+   stamps it only if its settings are PRESENT at commit.** The hash describes
+   what PRESENT holds. `index_to_secondary=True` disables the hash gate.
+   `index_doc_batch` stamps under `_written_settings_are_present`, a share lock
+   on the written settings row, so a FUTURE write stamps nothing unless the swap
+   promoted its index meanwhile, and a PRESENT batch that lands after a swap
+   stamps nothing either. `run_indexing_pipeline` takes
+   `written_search_settings_id` from its caller: pass the id resolved when the
+   batch started, never a fresh lookup, because a batch can straddle a swap.
+   Multipass and contextual-RAG settings come from that row too. A targeted
+   re-index never stamps (`stamp_content_hash=False`).
 10. **`try_create_index_attempt`'s fence excludes targeted-reindex attempts on
     purpose.** Any change that makes a full-run and a targeted-reindex attempt
     compete for the same fence row removes the concurrency this design relies on.

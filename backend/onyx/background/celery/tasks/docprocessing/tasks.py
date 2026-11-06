@@ -2139,6 +2139,7 @@ def _docprocessing_task(
             adapter=adapter,
             from_beginning=from_beginning,
             skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
+            written_search_settings_id=search_settings_id,
         )
 
         # Track chunk indexing usage for cloud usage limits
