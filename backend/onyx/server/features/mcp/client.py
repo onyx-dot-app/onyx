@@ -272,14 +272,12 @@ def _call_mcp_tool(
         await session.initialize()
         # Seed the output schema cache so ClientSession.call_tool does not
         # trigger an extra tools/list network round-trip on every call.
-        output_schemas = getattr(session, "_tool_output_schemas", None)
-        if isinstance(output_schemas, dict):
-            output_schemas[tool_name] = output_schema
-        elif not hasattr(session, "_tool_output_schemas"):
-            try:
-                session._tool_output_schemas = {tool_name: output_schema}
-            except Exception:
-                pass
+        try:
+            session._tool_output_schemas[tool_name] = output_schema
+        except AttributeError:
+            session._tool_output_schemas = {tool_name: output_schema}
+        except Exception:
+            pass
         return await session.call_tool(tool_name, arguments)
 
     return call_tool
