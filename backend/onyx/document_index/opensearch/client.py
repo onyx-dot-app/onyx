@@ -206,6 +206,9 @@ _PIT_SCAN_PAGE_SIZE = 1000
 _PIT_SCAN_PAGE_SIZE_WITH_VECTORS = 200
 # Ids per mget request, so the body stays under the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
+# Primary shard count per index name. The count is fixed when an index is
+# created, so it is read once per process.
+_NUMBER_OF_SHARDS_BY_INDEX: dict[str, int] = {}
 
 
 def is_cluster_block_error(e: Exception) -> bool:
@@ -1011,6 +1014,21 @@ class OpenSearchIndexClient(OpenSearchClient):
         return response[self._index_name]["settings"], response[self._index_name].get(
             "defaults", None
         )
+
+    def get_number_of_shards(self) -> int:
+        """Returns the number of primary shards of the index.
+
+        Reads the index settings once per process for each index name.
+
+        Raises:
+            Exception: There was an error getting the settings of the index.
+        """
+        number_of_shards = _NUMBER_OF_SHARDS_BY_INDEX.get(self._index_name)
+        if number_of_shards is None:
+            settings, _ = self.get_settings()
+            number_of_shards = int(settings["index"]["number_of_shards"])
+            _NUMBER_OF_SHARDS_BY_INDEX[self._index_name] = number_of_shards
+        return number_of_shards
 
     @log_function_time(debug_only=True)
     def open_index(self, timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S) -> None:
@@ -1854,6 +1872,11 @@ class OpenSearchIndexClient(OpenSearchClient):
         Returns:
             The key fields and score of each hit, in result order.
         """
+        if body.get("stored_fields") != "_none_":
+            logger.warning(
+                'The body of the search request for chunk keys is missing the key, value pair of "stored_fields": '
+                '"_none_". This query will therefore read the source of every hit.'
+            )
         hits = self._run_search(
             body=body, search_pipeline_id=search_pipeline_id, search_type=search_type
         )

@@ -483,27 +483,10 @@ class DocumentQuery:
             vector_quantization,
             vector_candidates=max_results_per_subquery,
         )
-        hybrid_search_filters = DocumentQuery._get_search_filters(
+        hybrid_search_filters = DocumentQuery._get_hybrid_search_filters(
             tenant_state=tenant_state,
+            index_filters=index_filters,
             include_hidden=include_hidden,
-            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
-            # now. This should not cause any issues but it can introduce
-            # redundant filters in queries that may affect performance.
-            access_control_list=index_filters.access_control_list,
-            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
-            restricted_cc_pair_guard=index_filters.cc_pair_access,
-            source_types=index_filters.source_type or [],
-            tags=index_filters.tags or [],
-            document_sets=index_filters.document_set or [],
-            project_id_filter=index_filters.project_id_filter,
-            persona_id_filter=index_filters.persona_id_filter,
-            created_at_range=index_filters.created_at_range,
-            updated_at_range=index_filters.updated_at_range,
-            min_chunk_index=None,
-            max_chunk_index=None,
-            attached_document_ids=index_filters.attached_document_ids,
-            hierarchy_node_ids=index_filters.hierarchy_node_ids,
-            forced_document_sets=index_filters.forced_document_set,
         )
 
         # See https://docs.opensearch.org/latest/query-dsl/compound/hybrid/
@@ -563,19 +546,59 @@ class DocumentQuery:
         return final_hybrid_search_body
 
     @staticmethod
+    def _get_hybrid_search_filters(
+        tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
+    ) -> list[dict[str, Any]]:
+        """Returns the filters of a hybrid search.
+
+        The source fetch for the top hits of a keys-only hybrid search applies
+        the same filters, so a chunk whose access changed between the two
+        requests is not returned.
+        """
+        return DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=include_hidden,
+            # TODO(andrei): We've done no filtering for PUBLIC_DOC_PAT up to
+            # now. This should not cause any issues but it can introduce
+            # redundant filters in queries that may affect performance.
+            access_control_list=index_filters.access_control_list,
+            cc_pair_access=_get_enforced_cc_pair_access(index_filters),
+            restricted_cc_pair_guard=index_filters.cc_pair_access,
+            source_types=index_filters.source_type or [],
+            tags=index_filters.tags or [],
+            document_sets=index_filters.document_set or [],
+            project_id_filter=index_filters.project_id_filter,
+            persona_id_filter=index_filters.persona_id_filter,
+            created_at_range=index_filters.created_at_range,
+            updated_at_range=index_filters.updated_at_range,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            attached_document_ids=index_filters.attached_document_ids,
+            hierarchy_node_ids=index_filters.hierarchy_node_ids,
+            forced_document_sets=index_filters.forced_document_set,
+        )
+
+    @staticmethod
     def get_from_chunk_keys_query(
         chunk_keys: list[tuple[str, int, int]],
         tenant_state: TenantState,
+        index_filters: IndexFilters,
+        include_hidden: bool,
     ) -> dict[str, Any]:
         """Returns a query for the chunks with the given keys.
 
-        The caller already applied the search filters to choose these chunks,
-        so only the tenant filter is repeated here.
+        Applies the hybrid search filters again, so a chunk whose access or
+        hidden state changed after the hybrid search is not returned.
 
         Args:
             chunk_keys: (document_id, chunk_index, max_chunk_size) of each
                 chunk to get.
             tenant_state: Tenant state containing the tenant ID.
+            index_filters: Filters of the hybrid search.
+            include_hidden: Whether the hybrid search included hidden
+                documents.
 
         Returns:
             A dictionary representing the final chunk retrieval query.
@@ -597,12 +620,16 @@ class DocumentQuery:
             for document_id, chunk_index, max_chunk_size in chunk_keys
         ]
         query: dict[str, Any] = {
-            "bool": {"should": chunk_clauses, "minimum_should_match": 1}
+            "bool": {
+                "should": chunk_clauses,
+                "minimum_should_match": 1,
+                "filter": DocumentQuery._get_hybrid_search_filters(
+                    tenant_state=tenant_state,
+                    index_filters=index_filters,
+                    include_hidden=include_hidden,
+                ),
+            }
         }
-        if tenant_state.multitenant:
-            query["bool"]["filter"] = [
-                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
-            ]
         return {
             "query": query,
             "size": len(chunk_keys),

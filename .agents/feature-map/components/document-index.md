@@ -269,9 +269,14 @@ it deletes the old one.
   model is judged, and the PAST row stays forever as a record.
 - **Hybrid search reads chunk keys first, then the top hits.** On a
   single-shard index, OpenSearch fetches every hybrid candidate before
-  normalization keeps the top hits, up to about 1,000 chunks per search.
+  normalization keeps the top hits: up to `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES`
+  per subquery, about 1,000 chunks at the default of 500.
   `OpenSearchDocumentIndex.hybrid_retrieval` asks for doc values only and
-  fetches the source of the top hits in a second request. Highlighting and
+  fetches the source of the top hits in a second request, which applies the
+  search filters again. This path runs only on a single-shard index, with
+  highlighting off (`OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED=true`) and explain
+  off, which are the defaults. A multi-shard search already fetches only the
+  top hits, and a second request would go to every shard. Highlighting and
   explain need the source, so they keep one request.
 
 ## Known issues

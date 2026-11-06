@@ -1049,10 +1049,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # decision when passing in the query param. See the above comment in the
         # function signature.
         final_query = " ".join(final_keywords) if final_keywords else query
-        # Highlighting and explain read the chunk source in the hybrid query
-        # itself, so they keep the single-request path.
+        # Only a single-shard search fetches every hybrid candidate; a
+        # multi-shard search already fetches only the top hits, and a second
+        # request would go to every shard. Highlighting and explain read the
+        # chunk source in the hybrid query itself, so they keep one request.
         chunk_keys_only = (
-            OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED and not OPENSEARCH_EXPLAIN_ENABLED
+            OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
+            and not OPENSEARCH_EXPLAIN_ENABLED
+            and self._client.get_number_of_shards() == 1
         )
         query_body = DocumentQuery.get_hybrid_search_query(
             query_text=final_query,
@@ -1074,7 +1078,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]]
         if chunk_keys_only:
             search_hits = self._get_hybrid_search_hits_by_chunk_keys(
-                query_body, normalization_pipeline_name
+                query_body=query_body,
+                normalization_pipeline_name=normalization_pipeline_name,
+                filters=filters,
+                include_hidden=False,
             )
         else:
             search_hits = self._client.search(
@@ -1098,14 +1105,20 @@ class OpenSearchDocumentIndex(DocumentIndex):
         return inference_chunks
 
     def _get_hybrid_search_hits_by_chunk_keys(
-        self, query_body: dict[str, Any], normalization_pipeline_name: str
+        self,
+        query_body: dict[str, Any],
+        normalization_pipeline_name: str,
+        filters: IndexFilters,
+        include_hidden: bool,
     ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
         """Runs a keys-only hybrid search, then fetches the top hits' source.
 
         A single-shard search fetches every hybrid candidate before
         normalization keeps the top hits, so reading only doc values there and
         the source of the top hits here avoids reading the source of
-        candidates that are discarded.
+        candidates that are discarded. The source fetch applies the hybrid
+        search filters again, so a chunk whose access changed between the two
+        requests is dropped.
         """
         chunk_key_hits = self._client.search_for_chunk_keys(
             body=query_body,
@@ -1121,6 +1134,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 for hit in chunk_key_hits
             ],
             tenant_state=self._tenant_state,
+            index_filters=filters,
+            include_hidden=include_hidden,
         )
         fetched_hits = self._client.search(
             body=fetch_body,
@@ -1136,8 +1151,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             for hit in fetched_hits
         }
 
-        # Keep the hybrid order and scores. A chunk deleted between the two
-        # requests is dropped.
+        # Keep the hybrid order and scores. A chunk deleted, or no longer
+        # matching the filters, between the two requests is dropped.
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
         for hit in chunk_key_hits:
             chunk = chunks_by_key.get(

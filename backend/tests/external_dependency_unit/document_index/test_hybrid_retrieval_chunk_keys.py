@@ -2,22 +2,28 @@
 
 Hybrid retrieval first runs the hybrid query with doc values only, then fetches
 the source of the top hits. These tests check that it returns the same chunks,
-order and scores as one hybrid query that returns the source.
+order and scores as one hybrid query that returns the source, and that the
+source fetch applies the search filters again.
 """
 
 import random
 import uuid
-from unittest.mock import patch
+from collections.abc import Generator
+from contextlib import ExitStack, contextmanager
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.access.models import DocumentAccess
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.enums import VectorQuantization
 from onyx.document_index.interfaces import TenantState
-from onyx.document_index.opensearch import opensearch_document_index
+from onyx.document_index.opensearch import opensearch_document_index, schema, search
 from onyx.document_index.opensearch.client import (
+    ChunkKeySearchHit,
     OpenSearchIndexClient,
     wait_for_opensearch_with_timeout,
 )
@@ -36,11 +42,14 @@ _NUM_DOCS = 12
 _CHUNKS_PER_DOC = 3
 _NUM_HITS = 10
 _WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"]
+# The unpatched method, for a spy that wraps it.
+_SEARCH_FOR_CHUNK_KEYS = OpenSearchIndexClient.search_for_chunk_keys
 
 
 def _make_chunk(
     doc_id: str, chunk_index: int, rng: random.Random
 ) -> DocMetadataAwareIndexChunk:
+    """Returns a public chunk with random words and a random embedding."""
     content = " ".join(rng.choice(_WORDS) for _ in range(8))
     return make_chunk(doc_id, chunk_id=chunk_index, content=content).model_copy(
         update={
@@ -55,6 +64,7 @@ def _make_chunk(
 def _hybrid_retrieval(
     document_index: OpenSearchDocumentIndex, query_embedding: list[float]
 ) -> list[InferenceChunk]:
+    """Runs a public hybrid retrieval that matches part of the chunk words."""
     return document_index.hybrid_retrieval(
         query="alpha bravo",
         query_embedding=query_embedding,
@@ -68,9 +78,41 @@ def _hybrid_retrieval(
     )
 
 
-def test_hybrid_retrieval_by_chunk_keys_matches_single_request(
-    tenant_context: None,  # noqa: ARG001
-) -> None:
+@contextmanager
+def _search_settings(
+    highlights_disabled: bool, explain_enabled: bool
+) -> Generator[None, None, None]:
+    """Sets the settings that select the hybrid path in every module that reads them."""
+    with ExitStack() as stack:
+        for module in (opensearch_document_index, search):
+            stack.enter_context(
+                patch.object(
+                    module, "OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED", highlights_disabled
+                )
+            )
+            stack.enter_context(
+                patch.object(module, "OPENSEARCH_EXPLAIN_ENABLED", explain_enabled)
+            )
+        yield
+
+
+@contextmanager
+def _spy_on_searches() -> Generator[MagicMock, None, None]:
+    """Records the body of every search request; the real requests still run."""
+    with patch.object(
+        OpenSearchIndexClient,
+        "_run_search",
+        autospec=True,
+        side_effect=OpenSearchIndexClient._run_search,
+    ) as search_spy:
+        yield search_spy
+
+
+@contextmanager
+def _index_of_public_chunks(
+    number_of_shards: int,
+) -> Generator[OpenSearchDocumentIndex, None, None]:
+    """Creates an index of public chunks and deletes it afterwards."""
     if not wait_for_opensearch_with_timeout():
         pytest.fail("OpenSearch is not available.")
 
@@ -85,9 +127,10 @@ def test_hybrid_retrieval_by_chunk_keys_matches_single_request(
     )
     with OpenSearchIndexClient(index_name=index_name) as client:
         try:
-            document_index.verify_and_create_index_if_necessary(
-                embedding_dim=EMBEDDING_DIM,
-            )
+            with patch.object(schema, "OPENSEARCH_INDEX_NUM_SHARDS", number_of_shards):
+                document_index.verify_and_create_index_if_necessary(
+                    embedding_dim=EMBEDDING_DIM,
+                )
             rng = random.Random(7)
             doc_ids = [f"chunk_keys_doc_{i}" for i in range(_NUM_DOCS)]
             document_index.index(
@@ -103,40 +146,154 @@ def test_hybrid_retrieval_by_chunk_keys_matches_single_request(
                 ),
             )
             client.refresh_index()
-            query_embedding = [rng.gauss(0.0, 1.0) for _ in range(EMBEDDING_DIM)]
-
-            with patch.object(
-                OpenSearchIndexClient,
-                "_run_search",
-                autospec=True,
-                side_effect=OpenSearchIndexClient._run_search,
-            ) as search_spy:
-                chunk_keys_results = _hybrid_retrieval(document_index, query_embedding)
-            # The hybrid query reads no stored fields; the second request
-            # fetches only the top hits.
-            hybrid_body, fetch_body = (
-                search_call.kwargs["body"] for search_call in search_spy.call_args_list
-            )
-            assert hybrid_body["stored_fields"] == "_none_"
-            assert "_source" not in hybrid_body
-            assert fetch_body["size"] == _NUM_HITS
-
-            # Explain needs the source in the hybrid query, so it keeps the
-            # single-request path.
-            with patch.object(
-                opensearch_document_index, "OPENSEARCH_EXPLAIN_ENABLED", True
-            ):
-                single_request_results = _hybrid_retrieval(
-                    document_index, query_embedding
-                )
-
-            assert len(chunk_keys_results) == _NUM_HITS
-            assert [
-                (chunk.document_id, chunk.chunk_id, chunk.score, chunk.content)
-                for chunk in chunk_keys_results
-            ] == [
-                (chunk.document_id, chunk.chunk_id, chunk.score, chunk.content)
-                for chunk in single_request_results
-            ]
+            yield document_index
         finally:
             client.delete_index()
+
+
+@pytest.fixture
+def document_index(
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[OpenSearchDocumentIndex, None, None]:
+    """A single-shard index of public chunks."""
+    with _index_of_public_chunks(number_of_shards=1) as document_index:
+        yield document_index
+
+
+def test_hybrid_retrieval_by_chunk_keys_matches_single_request(
+    document_index: OpenSearchDocumentIndex,
+) -> None:
+    query_embedding = [random.Random(11).gauss(0.0, 1.0) for _ in range(EMBEDDING_DIM)]
+
+    with (
+        _search_settings(highlights_disabled=True, explain_enabled=False),
+        _spy_on_searches() as search_spy,
+    ):
+        chunk_keys_results = _hybrid_retrieval(document_index, query_embedding)
+    # The hybrid query reads no stored fields; the second request fetches only
+    # the top hits.
+    hybrid_body, fetch_body = (
+        search_call.kwargs["body"] for search_call in search_spy.call_args_list
+    )
+    assert hybrid_body["stored_fields"] == "_none_"
+    assert "_source" not in hybrid_body
+    assert fetch_body["size"] == _NUM_HITS
+
+    # Highlighting and explain need the source in the hybrid query, so they
+    # keep the single-request path. Explain changes the scores slightly, so
+    # the results are compared with the highlighting path.
+    with (
+        _search_settings(highlights_disabled=False, explain_enabled=False),
+        _spy_on_searches() as search_spy,
+    ):
+        single_request_results = _hybrid_retrieval(document_index, query_embedding)
+    assert search_spy.call_count == 1
+    single_request_body: dict[str, Any] = search_spy.call_args.kwargs["body"]
+    assert "highlight" in single_request_body
+    assert "stored_fields" not in single_request_body
+
+    with (
+        _search_settings(highlights_disabled=True, explain_enabled=True),
+        _spy_on_searches() as search_spy,
+    ):
+        _hybrid_retrieval(document_index, query_embedding)
+    assert search_spy.call_count == 1
+    explain_body: dict[str, Any] = search_spy.call_args.kwargs["body"]
+    assert explain_body["explain"] is True
+    assert "stored_fields" not in explain_body
+
+    assert len(chunk_keys_results) == _NUM_HITS
+    assert [
+        (chunk.document_id, chunk.chunk_id, chunk.score, chunk.content)
+        for chunk in chunk_keys_results
+    ] == [
+        (chunk.document_id, chunk.chunk_id, chunk.score, chunk.content)
+        for chunk in single_request_results
+    ]
+
+
+def test_source_fetch_drops_document_made_private_after_hybrid_search(
+    document_index: OpenSearchDocumentIndex,
+) -> None:
+    """A document whose access changes between the two requests is not returned."""
+    query_embedding = [random.Random(11).gauss(0.0, 1.0) for _ in range(EMBEDDING_DIM)]
+    made_private: list[ChunkKeySearchHit] = []
+    all_hits: list[ChunkKeySearchHit] = []
+
+    def search_then_make_top_document_private(
+        client: OpenSearchIndexClient, *args: Any, **kwargs: Any
+    ) -> list[ChunkKeySearchHit]:
+        chunk_key_hits = _SEARCH_FOR_CHUNK_KEYS(client, *args, **kwargs)
+        top_hit = chunk_key_hits[0]
+        private_chunk = make_chunk(
+            top_hit.document_id,
+            chunk_id=top_hit.chunk_index,
+            content="private replacement",
+        ).model_copy(
+            update={
+                "access": DocumentAccess.build(
+                    user_emails=["someone_else@example.com"],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                )
+            }
+        )
+        document_index.index(
+            chunks=[private_chunk],
+            indexing_metadata=make_indexing_metadata(
+                [top_hit.document_id],
+                old_counts=[_CHUNKS_PER_DOC],
+                new_counts=[_CHUNKS_PER_DOC],
+            ),
+        )
+        client.refresh_index()
+        made_private.append(top_hit)
+        all_hits.extend(chunk_key_hits)
+        return chunk_key_hits
+
+    with (
+        _search_settings(highlights_disabled=True, explain_enabled=False),
+        patch.object(
+            OpenSearchIndexClient,
+            "search_for_chunk_keys",
+            autospec=True,
+            side_effect=search_then_make_top_document_private,
+        ),
+    ):
+        results = _hybrid_retrieval(document_index, query_embedding)
+
+    (private_hit,) = made_private
+    # Access is set per document, so every chunk of that document is now
+    # private. The other hits keep their hybrid order.
+    expected_keys = [
+        (hit.document_id, hit.chunk_index)
+        for hit in all_hits
+        if hit.document_id != private_hit.document_id
+    ]
+    assert len(expected_keys) < _NUM_HITS
+    assert [(chunk.document_id, chunk.chunk_id) for chunk in results] == expected_keys
+
+
+def test_multi_shard_index_keeps_single_request(
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A multi-shard search already fetches only the top hits."""
+    query_embedding = [random.Random(11).gauss(0.0, 1.0) for _ in range(EMBEDDING_DIM)]
+    with (
+        _index_of_public_chunks(number_of_shards=2) as document_index,
+        _search_settings(highlights_disabled=True, explain_enabled=False),
+        _spy_on_searches() as search_spy,
+    ):
+        results = _hybrid_retrieval(document_index, query_embedding)
+
+    assert len(results) == _NUM_HITS
+    hybrid_calls = [
+        search_call
+        for search_call in search_spy.call_args_list
+        if "hybrid" in search_call.kwargs["body"]["query"]
+    ]
+    assert len(hybrid_calls) == 1
+    assert search_spy.call_count == 1
+    assert "stored_fields" not in hybrid_calls[0].kwargs["body"]
