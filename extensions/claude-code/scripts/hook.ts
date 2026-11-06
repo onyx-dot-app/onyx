@@ -168,19 +168,34 @@ function writeState(sessionId: string, state: SessionState): void {
   }
 }
 
-// Best effort: another session may prune the same file at the same time.
+// The directive matters more than the gate, so a storage failure is logged
+// and the prompt still gets its context.
+function saveState(sessionId: string, state: SessionState): void {
+  try {
+    writeState(sessionId, state);
+  } catch (err) {
+    console.error(`onyx plugin: could not save state (${errorName(err)})`);
+  }
+}
+
+// Best effort: another session may prune the same file at the same time, and
+// a broken state directory is not a reason to skip the prompt.
 function pruneStaleState(): void {
-  const dir = stateDir();
-  const cutoff = Date.now() - STATE_TTL_MS;
-  for (const name of readdirSync(dir)) {
-    const path = join(dir, name);
-    try {
-      if (statSync(path).mtimeMs < cutoff) {
-        unlinkSync(path);
+  try {
+    const dir = stateDir();
+    const cutoff = Date.now() - STATE_TTL_MS;
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      try {
+        if (statSync(path).mtimeMs < cutoff) {
+          unlinkSync(path);
+        }
+      } catch {
+        continue;
       }
-    } catch {
-      continue;
     }
+  } catch (err) {
+    console.error(`onyx plugin: could not prune state (${errorName(err)})`);
   }
 }
 
@@ -279,23 +294,23 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
   const prompt = (input.prompt ?? "").trim();
   if (!isQuestionPrompt(prompt)) {
     // Nothing to retrieve, so the strict gate has nothing to wait for.
-    writeState(input.session_id, { consulted: true, awaitingFullSearch: false });
+    saveState(input.session_id, { consulted: true, awaitingFullSearch: false });
     return;
   }
   if (!config.prefetch) {
-    writeState(input.session_id, { consulted: false, awaitingFullSearch: false });
     emitContext("UserPromptSubmit", STEER_CONTEXT);
+    saveState(input.session_id, { consulted: false, awaitingFullSearch: false });
     return;
   }
   const { consulted, results } = await search(
     config,
     prompt.slice(0, MAX_QUERY_CHARS),
   );
-  writeState(input.session_id, {
+  emitContext("UserPromptSubmit", prefetchContext(results));
+  saveState(input.session_id, {
     consulted,
     awaitingFullSearch: results !== null,
   });
-  emitContext("UserPromptSubmit", prefetchContext(results));
 }
 
 function isOtherRetrievalTool(tool: string): boolean {
