@@ -17,7 +17,9 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     tabular_file_to_sections,
 )
 from onyx.connectors.models import (
+    ConnectorFailure,
     Document,
+    DocumentFailure,
     DocumentSource,
     ImageSection,
     TabularSection,
@@ -443,6 +445,7 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             return_value=([MagicMock(document_id="doc", already_existed=False)], []),
         ),
         patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(f"{_PATCH_PREFIX}.update_docs_source_info__no_commit"),
         patch(
             f"{_PATCH_PREFIX}._maybe_push_documents",
             side_effect=RuntimeError("sink down"),
@@ -459,6 +462,91 @@ def test_index_batch_wraps_a_failed_document_push() -> None:
             tenant_id="tenant",
             adapter=adapter,
         )
+
+
+@pytest.mark.parametrize(
+    "skip_document_row_writes, index_to_secondary",
+    [(False, False), (True, False), (False, True)],
+)
+def test_index_batch_writes_source_info_only_for_documents_the_index_took(
+    skip_document_row_writes: bool,
+    index_to_secondary: bool,
+) -> None:
+    """A document whose index write failed keeps its stored type and size, so
+    the change gates still see the reported ones as new on the next sync. A
+    re-chunk that skips row writes rebuilt its documents without them and
+    writes none. A FUTURE write stamps none either, as with the content hash:
+    the row is shared, so the PRESENT poll would skip a document whose PRESENT
+    write failed."""
+    written = _make_doc("written")
+    failed = _make_doc("failed")
+    for doc in (written, failed):
+        doc.source_mime_type = "application/pdf"
+        doc.source_size_bytes = 2048
+    adapter = MagicMock()
+    adapter.connector_id = 1
+    adapter.credential_id = 2
+    adapter.index_attempt_metadata = None
+    adapter.prepare.return_value = DocumentBatchPrepareContext(
+        updatable_docs=[written, failed],
+        id_to_boost_map={},
+    )
+    adapter.lock_context.return_value = _make_ctx()
+    adapter.prepare_enrichment.return_value = MagicMock(
+        doc_id_to_previous_chunk_cnt={}, doc_id_to_new_chunk_cnt={}
+    )
+    chunker = MagicMock()
+    chunker.chunk.return_value = []
+    embedding_result = MagicMock(successful_chunk_ids=[], connector_failures=[])
+    chunk_store = MagicMock()
+    chunk_store.stream.return_value = iter([])
+    embed_ctx = _make_ctx()
+    embed_ctx.__enter__ = MagicMock(return_value=(embedding_result, chunk_store))
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}._apply_document_ingestion_hook",
+            side_effect=lambda documents: documents,
+        ),
+        patch(f"{_PATCH_PREFIX}.embed_and_stream", return_value=embed_ctx),
+        patch(
+            f"{_PATCH_PREFIX}.write_chunks_to_vector_db_with_backoff",
+            return_value=(
+                [MagicMock(document_id="written", already_existed=True)],
+                [
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(document_id="failed"),
+                        failure_message="write failed",
+                    )
+                ],
+            ),
+        ),
+        patch(f"{_PATCH_PREFIX}.update_docs_content_hash__no_commit"),
+        patch(
+            f"{_PATCH_PREFIX}.update_docs_source_info__no_commit"
+        ) as update_source_info,
+        patch(f"{_PATCH_PREFIX}._maybe_push_documents"),
+    ):
+        index_doc_batch(
+            written_search_settings_id=1,
+            document_batch=[written, failed],
+            chunker=chunker,
+            embedder=MagicMock(),
+            document_index=MagicMock(),
+            request_id=None,
+            tenant_id="tenant",
+            adapter=adapter,
+            skip_document_row_writes=skip_document_row_writes,
+            index_to_secondary=index_to_secondary,
+        )
+
+    if skip_document_row_writes or index_to_secondary:
+        update_source_info.assert_not_called()
+        return
+    update_source_info.assert_called_once()
+    assert update_source_info.call_args.kwargs["ids_to_source_info"] == {
+        "written": ("application/pdf", 2048)
+    }
 
 
 def test_batch_handler_forces_only_the_documents_the_batch_prepared() -> None:
@@ -1596,11 +1684,15 @@ def _make_db_doc(
     doc_id: str,
     content_hash: str | None = None,
     doc_updated_at: datetime | None = None,
+    source_mime_type: str | None = None,
+    source_size_bytes: int | None = None,
 ) -> MagicMock:
     db_doc = MagicMock()
     db_doc.id = doc_id
     db_doc.content_hash = content_hash
     db_doc.doc_updated_at = doc_updated_at
+    db_doc.source_mime_type = source_mime_type
+    db_doc.source_size_bytes = source_size_bytes
     db_doc.external_user_emails = []
     db_doc.external_user_group_ids = []
     db_doc.is_public = False
@@ -1702,6 +1794,44 @@ def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
 
     assert docs == [doc]
     assert hashes == {"doc1": doc.content_hash()}
+
+
+def test_get_docs_to_update_new_source_info_bypasses_both_gates_once() -> None:
+    """A type or size the source newly reports is otherwise skipped forever by an
+    unchanged timestamp and hash. Matching or no longer reported values skip."""
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = updated_at
+
+    def db_doc(mime_type: str | None, size_bytes: int | None) -> MagicMock:
+        return _make_db_doc(
+            "doc1",
+            content_hash=doc.content_hash(),
+            doc_updated_at=updated_at,
+            source_mime_type=mime_type,
+            source_size_bytes=size_bytes,
+        )
+
+    cases = [
+        # (incoming type, incoming size, stored type, stored size, updates)
+        ("application/pdf", 2048, None, None, True),
+        ("application/pdf", 2048, "application/pdf", None, True),
+        ("application/pdf", 4096, "application/pdf", 2048, True),
+        ("application/pdf", 2048, "application/pdf", 2048, False),
+        (None, None, "application/pdf", 2048, False),
+    ]
+    for ignore_timestamp_gate in (False, True):
+        for mime_type, size_bytes, stored_type, stored_size, updates in cases:
+            doc.source_mime_type = mime_type
+            doc.source_size_bytes = size_bytes
+            docs, hashes = get_docs_to_update(
+                [doc],
+                db_docs=[db_doc(stored_type, stored_size)],
+                ignore_timestamp_gate=ignore_timestamp_gate,
+            )
+            assert docs == ([doc] if updates else [])
+            assert hashes == ({"doc1": doc.content_hash()} if updates else {})
 
 
 def test_get_docs_to_update_mixed_batch() -> None:

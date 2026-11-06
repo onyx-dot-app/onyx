@@ -47,6 +47,14 @@ function hasLoadedMatch(options: SelectOptions, query: string): boolean {
   );
 }
 
+function hasOptionValue(options: SelectOptions, value: string): boolean {
+  return options.some((item) =>
+    "options" in item
+      ? item.options.some((opt) => opt.value === value)
+      : item.value === value
+  );
+}
+
 export interface GlobalDefaultRow {
   /** The row's title, when "Global Default" is not the right name. */
   label?: string;
@@ -116,6 +124,12 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    * own row with its own callback.
    */
   decisionSection?: DecisionSection;
+  /**
+   * The row for `value` while the listing has not loaded that model, e.g. a
+   * saved choice past the first page, so the select shows its name instead
+   * of an invalid value. Ignored once the model loads.
+   */
+  selectedFallback?: SelectOption;
 }
 
 /**
@@ -140,6 +154,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   container,
   id,
   decisionSection,
+  selectedFallback,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
   const providerNames = useProviderNames();
@@ -173,8 +188,15 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       }),
     [providers, grouped, providerNames, includeDecisionOnly, hasDecisionRows]
   );
+  const fallbackRow =
+    selectedFallback?.value === toSelectValue(value) &&
+    !hasOptionValue(models, selectedFallback.value)
+      ? selectedFallback
+      : undefined;
   const options = useMemo((): SelectOptions => {
-    if (!globalDefault && decisionRows.length === 0) return models;
+    if (!globalDefault && decisionRows.length === 0 && !fallbackRow) {
+      return models;
+    }
     // Loose model rows go under an untitled divider, so a line always
     // separates them from the rows above.
     const looseModels = models.filter(
@@ -191,6 +213,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
             },
           ]
         : []),
+      ...(fallbackRow ? [fallbackRow] : []),
       ...(decisionTitle && decisionRows.length > 0
         ? [{ title: decisionTitle, options: decisionRows }]
         : []),
@@ -198,7 +221,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         ? [{ options: looseModels }]
         : models),
     ];
-  }, [models, globalDefault, t, decisionTitle, decisionRows]);
+  }, [models, globalDefault, t, decisionTitle, decisionRows, fallbackRow]);
 
   // Server search only when nothing loaded matches. The query is remembered
   // so a merged page, which changes `modelPaging`, does not re-run it.

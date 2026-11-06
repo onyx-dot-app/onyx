@@ -100,7 +100,7 @@ export default function AccessRestricted() {
   return (
     <ErrorPageLayout>
       <div className="flex items-center gap-2">
-        <Text font="heading-h2" color="text-05">
+        <Text font="heading-headline" color="text-05">
           {t("accessRestricted.heading.title")}
         </Text>
         <SvgLock className="stroke-status-error-05 w-6 h-6" />

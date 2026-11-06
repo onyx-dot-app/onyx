@@ -91,6 +91,7 @@ def test_resolves_only_the_pairs_open_errors_for_the_given_documents(
         db_session=db_session,
         cc_pair_id=pair.id,
         document_ids=["doc-a", "doc-without-errors"],
+        resolved_by_index_attempt_id=repeat.index_attempt_id,
     )
 
     assert _is_resolved(db_session, first)
@@ -140,7 +141,10 @@ def test_update_uses_the_partial_index_on_open_errors(
     event.listen(engine, "before_cursor_execute", _capture)
     try:
         resolve_index_attempt_errors_for_documents(
-            db_session=db_session, cc_pair_id=pair.id, document_ids=["doc-a"]
+            db_session=db_session,
+            cc_pair_id=pair.id,
+            document_ids=["doc-a"],
+            resolved_by_index_attempt_id=attempt_id,
         )
     finally:
         event.remove(engine, "before_cursor_execute", _capture)

@@ -13,7 +13,7 @@ export default function LoginText() {
     t("login.welcomeSubtitle.text");
   return (
     <div className="w-full flex flex-col ">
-      <Text as="p" font="heading-h2" color="text-05">
+      <Text as="p" font="heading-headline" color="text-05">
         {t("login.welcomeHeading.title", { appName })}
       </Text>
       <Text as="p" font="main-ui-muted" color="text-03">

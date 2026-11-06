@@ -352,6 +352,30 @@ def merge_overlapping_sections(
     return result
 
 
+def expand_section_with_neighbors(
+    section: InferenceSection,
+    document_index: DocumentIndex,
+    num_chunks: int,
+) -> InferenceSection:
+    """Add up to `num_chunks` chunks on each side of the section, read from
+    the index. Makes no relevance call."""
+    if num_chunks == 0:
+        return section
+    chunks_above, chunks_below = _retrieve_adjacent_chunks(
+        section=section,
+        document_index=document_index,
+        num_chunks_above=num_chunks,
+        num_chunks_below=num_chunks,
+    )
+    return (
+        inference_section_from_chunks(
+            center_chunk=section.center_chunk,
+            chunks=chunks_above + section.chunks + chunks_below,
+        )
+        or section
+    )
+
+
 def expand_section_with_context(
     section: InferenceSection,
     user_query: str,
@@ -492,30 +516,11 @@ def expand_section_with_context(
                 section.center_chunk.semantic_identifier,
             )
 
-        chunks_above_full, chunks_below_full = _retrieve_adjacent_chunks(
+        return expand_section_with_neighbors(
             section=section,
             document_index=document_index,
-            num_chunks_above=FULL_DOC_NUM_CHUNKS_AROUND,
-            num_chunks_below=FULL_DOC_NUM_CHUNKS_AROUND,
+            num_chunks=FULL_DOC_NUM_CHUNKS_AROUND,
         )
-
-        # Combine all chunks: 5 above + section + 5 below
-        all_chunks = chunks_above_full + section.chunks + chunks_below_full
-
-        if not all_chunks:
-            logger.warning(
-                "No chunks found for full document context expansion: %s",
-                section.center_chunk.semantic_identifier,
-            )
-            return section
-
-        # Create new InferenceSection with full context
-        expanded_section = inference_section_from_chunks(
-            center_chunk=section.center_chunk,
-            chunks=all_chunks,
-        )
-
-        return expanded_section or section
 
     else:
         # Unknown classification - default to returning original section

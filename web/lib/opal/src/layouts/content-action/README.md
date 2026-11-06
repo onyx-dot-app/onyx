@@ -53,13 +53,11 @@ import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import SvgSettings from "@opal/icons/settings";
 
-<ContentAction
+<ContentAction font="main-content-emphasis"
   icon={SvgSettings}
   title="OpenAI"
   description="GPT"
-  sizePreset="main-content"
-  variant="section"
-  tag={{ title: "Default", color: "blue" }}
+  badge={{ title: "Default", color: "info" }}
   padding={2}
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />
@@ -74,12 +72,10 @@ import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgArrowExchange, SvgCloud } from "@opal/icons";
 
-<ContentAction
+<ContentAction font="main-content-emphasis"
   icon={SvgCloud}
   title="Google Cloud Vertex AI"
   description="Gemini"
-  sizePreset="main-content"
-  variant="section"
   padding={1}
   rightChildren={
     <Button rightIcon={SvgArrowExchange} prominence="tertiary">
@@ -95,11 +91,9 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { InputSingleSelect } from "@opal/components";
 
-<ContentAction
+<ContentAction font="main-ui-action"
   title="Query History Visibility"
   description="Control what is shown in query history"
-  sizePreset="main-ui"
-  variant="section"
   fillRight
   rightChildren={<InputSingleSelect ... />}
 />
@@ -111,10 +105,8 @@ controls like `InputSwitch`/`Button` should omit `fillRight` so they keep huggin
 ### No right children (padding-only wrapper)
 
 ```tsx
-<ContentAction
+<ContentAction font="main-content-emphasis"
   title="Section Header"
-  sizePreset="main-content"
-  variant="section"
   padding={2}
 />
 ```

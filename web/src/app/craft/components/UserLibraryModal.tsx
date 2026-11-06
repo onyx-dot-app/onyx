@@ -296,7 +296,7 @@ export default function UserLibraryModal({
                 placeholder={t("search.placeholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                searchIcon
+                icon="search"
                 autoComplete="off"
               />
               <Button

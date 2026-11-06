@@ -39,7 +39,7 @@ it("Escape on a control beside the field returns focus to the field", async () =
 });
 
 it("renders a native search field with the search icon", () => {
-  render(<InputTypeIn searchIcon aria-label="Search" />);
+  render(<InputTypeIn icon="search" aria-label="Search" />);
   expect(screen.getByRole("searchbox", { name: "Search" })).toHaveAttribute(
     "type",
     "search"
@@ -47,7 +47,7 @@ it("renders a native search field with the search icon", () => {
 });
 
 it("keeps the search type when a caller passes type with the search icon", () => {
-  render(<InputTypeIn searchIcon type="text" aria-label="Search" />);
+  render(<InputTypeIn icon="search" type="text" aria-label="Search" />);
   expect(screen.getByRole("searchbox", { name: "Search" })).toHaveAttribute(
     "type",
     "search"

@@ -55,10 +55,9 @@ function PluginListError({
         className="rounded-12 border border-border-01 bg-background-neutral-00 px-4 py-3"
       >
         <ContentAction
+          font="main-ui-action"
           icon={SvgAlertCircle}
           title={title}
-          sizePreset="main-ui"
-          variant="section"
           padding={0}
           rightChildren={
             <Button prominence="secondary" size="sm" onClick={onRetry}>

@@ -19,11 +19,10 @@ export default function CraftLlmLockedState() {
       aria-label="craft-llm-locked"
     >
       <ContentAction
+        font="main-ui-action"
         icon={SvgLock}
         title={t("title")}
         description={t("description")}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button prominence="tertiary" {...navigation.linkTo("/app")}>

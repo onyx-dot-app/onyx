@@ -17,7 +17,7 @@ import { useCreateModal, useModalClose } from "@opal/components";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { escapeMarkdown, markdown } from "@opal/utils";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { Content, ContentIndent, IllustrationContent } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import {
   SvgArrowExchange,
@@ -193,19 +193,18 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
       <div className="w-full flex flex-row">
         <div className="flex-1 p-2">
           <Content
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={Icon}
             title={hookPointName(spec, t)}
             description={hookPointDescription(spec, t)}
           />
 
           {spec.docs_url && (
-            <div className="ms-6">
+            <ContentIndent font="main-ui-action">
               <LinkButton href={spec.docs_url} target="_blank">
                 {t("docsLink.label")}
               </LinkButton>
-            </div>
+            </ContentIndent>
           )}
         </div>
 
@@ -365,8 +364,7 @@ function ConnectedHookCard({
           <div className="w-full flex flex-row">
             <div className="flex-1 p-2">
               <Content
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={HookIcon}
                 title={
                   !hook.is_active || hook.is_reachable === false
@@ -384,11 +382,11 @@ function ConnectedHookCard({
               />
 
               {spec?.docs_url && (
-                <div className="ms-6">
+                <ContentIndent font="main-ui-action">
                   <LinkButton href={spec.docs_url} target="_blank">
                     {t("docsLink.label")}
                   </LinkButton>
-                </div>
+                </ContentIndent>
               )}
             </div>
 
@@ -625,7 +623,7 @@ export default function HooksPage() {
                   placeholder={t("page.search.placeholder")}
                   value={search}
                   variant="internal"
-                  searchIcon
+                  icon="search"
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>

@@ -159,7 +159,7 @@ export default function InputMultiUpload({
           <Button
             onClick={noProp(openFilePicker)}
             type="button"
-            prominence="tertiary"
+            prominence="secondary"
             size="sm"
             disabled={isNonEditable}
           >

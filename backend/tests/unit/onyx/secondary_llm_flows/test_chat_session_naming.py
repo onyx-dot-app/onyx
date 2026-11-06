@@ -218,6 +218,9 @@ def test_unset_utilities_check_session_provider_cost_once(
             "onyx.server.query_and_chat.chat_backend.check_llm_cost_limit_for_provider"
         ) as session_cost,
         patch(
+            "onyx.server.query_and_chat.chat_backend.check_model_spend_limits"
+        ) as session_model_limits,
+        patch(
             "onyx.server.query_and_chat.chat_backend.get_llm_token_counter",
             return_value=len,
         ),
@@ -247,6 +250,9 @@ def test_unset_utilities_check_session_provider_cost_once(
         db_session=session_factory.return_value.__enter__.return_value,
         tenant_id="naming-tenant",
         llm_provider_api_key="session-key",
+    )
+    session_model_limits.assert_called_once_with(
+        user, naming_llm.config.model_configuration_id
     )
     utility_cost.assert_not_called()
 

@@ -83,8 +83,7 @@ function SectionHeader({
       className="mx-2 mb-0.5 mt-2"
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={caption}

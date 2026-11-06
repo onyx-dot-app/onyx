@@ -239,10 +239,9 @@ export default function VoicePage() {
         <Section gap={8}>
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("speechToText.title")}
               description={t("speechToText.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveSTTProvider && (
@@ -286,10 +285,9 @@ export default function VoicePage() {
 
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("textToSpeech.title")}
               description={t("textToSpeech.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveTTSProvider && (

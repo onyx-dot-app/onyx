@@ -89,7 +89,7 @@ export default function SwitchList({
         </div>,
 
         <LineItemButton
-          sizePreset="main-ui"
+          font="main-ui-action"
           rounding={2}
           key="enable-disable-all"
           icon={allDisabled ? SvgPlug : SvgUnplug}

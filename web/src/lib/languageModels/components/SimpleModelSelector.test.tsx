@@ -96,6 +96,18 @@ describe("SimpleModelSelector", () => {
     expect(handleChange).toHaveBeenCalledWith(12);
   });
 
+  test("shows the fallback row for a chosen model the listing has not loaded", () => {
+    render(
+      <SimpleModelSelector
+        providers={providers}
+        value={99}
+        selectedFallback={{ value: "99", title: "Claude Opus" }}
+        onChange={jest.fn()}
+      />
+    );
+    expect(screen.getByRole("combobox")).toHaveValue("Claude Opus");
+  });
+
   test("non-nullable: re-picking the chosen model changes nothing", async () => {
     const handleChange = jest.fn();
     const user = setupUser();

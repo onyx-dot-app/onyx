@@ -422,12 +422,29 @@ import one, add it to `initial-requirements.in`.
   pptxgenjs for skill scripts (about 700 MB). Skills are pushed at session setup,
   but their runtime tools must be in the image. CI builds use `false`. Put a new
   heavy system dependency for a skill inside the `ENABLE_SKILLS` block.
-- `ENABLE_BROWSER` (default `true`) installs Chromium, `certutil`, and
+- `ENABLE_BROWSER` (default `true`) installs Chrome for Testing, `certutil`, and
   `agent-browser` (about 400 MB). The runtime `ENABLE_BROWSER` setting in
   `configs.py` gates the built-in `browser` skill and must match the build
   argument. Otherwise the skill is advertised without its runtime.
 
 ### Browser runtime
+
+`image/install-browser.sh` pins Chrome for Testing and verifies the archive hash
+for amd64 or arm64. Update the version and both hashes together. The browser
+lives at `/opt/chrome/chrome`; Debian supplies its shared libraries and `certutil`.
+The build checks the installed version and writes `/opt/chrome/browser.cdx.json`.
+
+Release gates require current stable Chrome and scan its inventory with Grype
+before ODS scans Debian packages.
+An outdated browser, critical findings, or scan errors fail the gate with status 1.
+Status 2 is reserved for an unknown component. CVE report collection uses
+`--report` to resolve images without enforcing the browser gate, so browser
+failures do not stop unrelated vulnerability alerts.
+The stable-release check covers delays in vulnerability database updates.
+This extra scan is required because ODS cannot identify the ZIP installation.
+Grype findings appear in the audit log; they do not use the ODS ignore list or
+its automatic issue tracking. Do not treat a clean Debian scan as browser coverage.
+
 
 `image/browser-cli.sh` installs as `/usr/local/bin/browser`, a PATH executable,
 because the agent's `bash` tool does not read aliases. It pins the browser

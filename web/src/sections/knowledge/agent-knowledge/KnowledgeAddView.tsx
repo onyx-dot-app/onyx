@@ -50,8 +50,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
       >
         {vectorDbEnabled && (
           <LineItemButton
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={SvgFolder}
             title={t("addView.documentSets.label")}
             onClick={onNavigateToDocumentSets}
@@ -72,8 +71,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
         )}
 
         <LineItemButton
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           icon={SvgFiles}
           title={t("addView.yourFiles.label")}
           description={t("addView.yourFiles.description")}
@@ -104,9 +102,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
               sourceSelectionCounts.get(connectedSource.source) ?? 0;
             return (
               <LineItemButton
+                font="main-ui-action"
                 key={connectedSource.source}
-                sizePreset="main-ui"
-                variant="section"
                 icon={sourceMetadata.icon}
                 title={sourceMetadata.displayName}
                 onClick={() => onNavigateToSource(connectedSource.source)}

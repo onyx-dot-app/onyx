@@ -328,6 +328,8 @@ export interface RateLimitDetails {
   scope?: string;
   reset_at?: string; // ISO timestamp
   retry_after_seconds?: number;
+  // Set when the budget that ran out limits one model; other models still run.
+  model?: string;
 }
 
 export interface InputPrompt {
