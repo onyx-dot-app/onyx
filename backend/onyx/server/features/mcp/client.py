@@ -256,10 +256,22 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
 
 
 def _call_mcp_tool(
-    tool_name: str, arguments: dict[str, Any]
+    tool_name: str,
+    arguments: dict[str, Any],
+    output_schema: dict[str, Any] | None = None,
 ) -> MCPClientFunction[CallToolResult]:
     async def call_tool(session: ClientSession) -> CallToolResult:
         await session.initialize()
+        # Seed the output schema cache so ClientSession.call_tool does not
+        # trigger an extra tools/list network round-trip on every call.
+        output_schemas = getattr(session, "_tool_output_schemas", None)
+        if isinstance(output_schemas, dict):
+            output_schemas[tool_name] = output_schema
+        elif not hasattr(session, "_tool_output_schemas"):
+            try:
+                session._tool_output_schemas = {tool_name: output_schema}
+            except Exception:
+                pass
         return await session.call_tool(tool_name, arguments)
 
     return call_tool
@@ -273,10 +285,11 @@ def call_mcp_tool(
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
     cancellation: CancellationSignal | None = None,
+    output_schema: dict[str, Any] | None = None,
 ) -> CallToolResult:
     """Call a tool until it completes or the caller cancels the request."""
     return _call_mcp_client_function_sync(
-        _call_mcp_tool(tool_name, arguments),
+        _call_mcp_tool(tool_name, arguments, output_schema=output_schema),
         server_url,
         connection_headers,
         transport,
