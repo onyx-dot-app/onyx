@@ -276,7 +276,13 @@ interface CCPairRunClosure {
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
 export type CCPairRun = CCPairRunClosure &
   (
-    | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
+    | {
+        kind: "indexing";
+        time_created: string;
+        attempt: IndexAttemptSnapshot;
+        /** A targeted re-index of chosen documents, not a run over the whole pair. Absent from an API that predates retry runs. */
+        is_retry?: boolean;
+      }
     | {
         kind: "doc_permission_sync";
         time_created: string;

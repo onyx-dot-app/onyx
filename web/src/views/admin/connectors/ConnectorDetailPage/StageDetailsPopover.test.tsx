@@ -1,11 +1,15 @@
 import { createFormatter } from "next-intl";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import type {
   IndexAttemptStage,
   IndexAttemptStageMetric,
+  IndexAttemptStageMetricsResponse,
   StageScope,
 } from "@/lib/types";
 import {
+  NONE,
   STAGE_BUCKETS,
+  StageDetailsCard,
   barScale,
   formatSeconds,
   summarizeBuckets,
@@ -171,8 +175,101 @@ describe("formatSeconds", () => {
     );
   });
 
-  it("prints a dash when there is no figure", () => {
-    expect(formatSeconds(english, null)).toBe("-");
-    expect(formatSeconds(english, undefined)).toBe("-");
+  it("prints the placeholder when there is no figure", () => {
+    expect(formatSeconds(english, null)).toBe(NONE);
+    expect(formatSeconds(english, undefined)).toBe(NONE);
+  });
+});
+
+const TOTAL: IndexAttemptStageMetric = metric("BATCH_TOTAL", {
+  event_count: 125,
+  avg_duration_ms: 9860,
+  std_dev_duration_ms: 2140,
+  min_duration_ms: 200,
+  max_duration_ms: 21400,
+});
+
+function response(ok: boolean, stages: IndexAttemptStageMetric[]): Response {
+  const body: IndexAttemptStageMetricsResponse = {
+    stages,
+  } as IndexAttemptStageMetricsResponse;
+  return {
+    ok,
+    status: ok ? 200 : 500,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as unknown as Response;
+}
+
+describe("StageDetailsCard", () => {
+  const realFetch = global.fetch;
+  const realError = console.error;
+  afterEach(() => {
+    global.fetch = realFetch;
+    console.error = realError;
+  });
+
+  it("shows the load error with Retry, and Retry fetches the metrics again", async () => {
+    // The hook logs the failed payload, which is expected here.
+    console.error = jest.fn();
+    const user = setupUser();
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response(false, []))
+      .mockResolvedValue(response(true, [TOTAL])) as typeof fetch;
+
+    render(
+      <StageDetailsCard indexAttemptId={5} noDocs={false} onClose={jest.fn()} />
+    );
+
+    expect(
+      await screen.findByText("Failed to load stage metrics")
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("9.860s")).toBeInTheDocument();
+    expect(screen.queryByText("Failed to load stage metrics")).toBeNull();
+  });
+
+  it("shows only the no-docs header when a run that indexed nothing recorded no stage", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        response(true, [{ ...TOTAL, event_count: 0 }])
+      ) as typeof fetch;
+
+    const { container } = render(
+      <StageDetailsCard indexAttemptId={6} noDocs onClose={jest.fn()} />
+    );
+
+    expect(
+      await screen.findByText("No docs completed indexing")
+    ).toBeInTheDocument();
+    // Loaded, the card drops its loader and divider and keeps the header alone.
+    await waitFor(() =>
+      expect(container.querySelector(".opal-divider")).toBeNull()
+    );
+    expect(screen.getAllByText(NONE)).toHaveLength(2);
+    expect(screen.queryByText("Fetch Source")).toBeNull();
+    expect(screen.queryByText("Later stages canceled")).toBeNull();
+  });
+
+  it("closes through its own button and on Escape", async () => {
+    const user = setupUser();
+    const onClose = jest.fn();
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(response(true, [TOTAL])) as typeof fetch;
+
+    render(
+      <StageDetailsCard indexAttemptId={7} noDocs={false} onClose={onClose} />
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Close stage details" })
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
