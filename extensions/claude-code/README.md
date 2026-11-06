@@ -34,6 +34,19 @@ To develop the plugin from a checkout, start Claude Code with `--plugin-dir exte
 
 Organizations can require the plugin on every machine through managed settings. See [Manage plugins for your organization](https://code.claude.com/docs/en/plugins/org).
 
+## Codex
+
+The same directory is a Codex plugin: `.codex-plugin/plugin.json` is the manifest Codex reads, `hooks/codex.json` holds the Codex hook definitions, and the repo marketplace at `.agents/plugins/marketplace.json` lists it. The manifest uses Codex's own format rather than the portable Agent Plugins one, because Codex loads bundled hooks only from its own format. Codex cannot take a per-user server URL from a plugin, so the plugin bundles no MCP server there. Add the Onyx server yourself, named `onyx`, then install the plugin:
+
+```
+codex mcp add onyx --url https://onyx.example.com/mcp/
+codex mcp login onyx
+codex plugin marketplace add onyx-dot-app/onyx --sparse extensions/claude-code --sparse .agents/plugins
+codex plugin add onyx@onyx
+```
+
+Codex runs plugin hooks only after you trust them once in `/hooks`. Start a new session afterwards. Codex has no options dialog, so the hook reads `ONYX_STRICT_RETRIEVAL`, `ONYX_PREFETCH`, `ONYX_URL` and `ONYX_API_TOKEN` from the environment. The steering directive needs none of them. Codex's built-in web search is a hosted tool that hooks cannot gate, so strict retrieval covers other MCP servers only. The Stop nudge arrives as a continuation prompt in Codex, which is how its `Stop` hook continues a turn.
+
 ## How the prompt hook works
 
 For each submitted prompt the hook injects one directive as additional context: Onyx holds the organization's knowledge base, so call `search_indexed_documents` before answering anything that may depend on company documents, people, decisions, processes, customers or internal systems, and before any other search tool or web search, and cite the url of each result. It skips slash commands, prompts shorter than 15 characters and prompts with no letters. Claude decides when the question needs Onyx, and the full search pipeline, with LLM selection and context expansion, runs only then.
@@ -61,12 +74,14 @@ With strict retrieval also on, a question turn that ends on the prefetch alone g
 
 | Path | Purpose |
 | --- | --- |
-| `.claude-plugin/plugin.json` | Manifest and the options the user is asked for |
+| `.claude-plugin/plugin.json` | Claude Code manifest and the options the user is asked for |
+| `.codex-plugin/plugin.json` | Codex manifest, which declares no MCP server |
 | `.claude-plugin/marketplace.json` | The hosted marketplace: the plugin version and its release zip URL |
 | `.mcp.json` | The remote Onyx MCP server, loaded upfront |
 | `hooks/hooks.json` | The prompt hook, the strict-retrieval gate and the stop nudge |
+| `hooks/codex.json` | The same hooks for Codex |
 | `scripts/onyx-hook` | Runtime launcher for the hook |
-| `scripts/hook.ts` | Hook implementation |
+| `scripts/hook.ts` | Hook implementation for both hosts |
 | `skills/onyx/SKILL.md` | Tells Claude when and how to use Onyx |
 
 Typecheck with `bunx tsgo --noEmit -p extensions/claude-code/tsconfig.json` and validate with `claude plugin validate extensions/claude-code`.

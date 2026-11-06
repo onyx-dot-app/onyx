@@ -26,9 +26,13 @@
   server's connect-time instructions tell the model to call
   `search_indexed_documents` before any other retrieval tool for questions
   about the user's organization.
-- **A Claude Code user** installs the plugin in `extensions/claude-code/`
-  instead of configuring the server by hand. The plugin connects the MCP
-  server with the user's token and, through a `UserPromptSubmit` hook, tells
+- **A Claude Code or Codex user** installs the plugin in `extensions/claude-code/`
+  (one directory with a Claude Code manifest in `.claude-plugin/` and a
+  Codex manifest in `.codex-plugin/`, listed for Codex by the repo
+  marketplace in `.agents/plugins/`). In
+  Claude Code the plugin connects the MCP server with the user's token; in
+  Codex the user adds the server as `onyx` with `codex mcp add`. Through a
+  `UserPromptSubmit` hook the plugin tells
   the model with every question prompt to call `search_indexed_documents`
   before answering from company knowledge or any other search tool. With
   strict retrieval on it denies other servers' search tools until Onyx has
