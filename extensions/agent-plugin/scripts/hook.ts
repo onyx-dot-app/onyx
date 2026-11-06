@@ -131,7 +131,7 @@ function readConfig(): PluginConfig {
 // another local user plant symlinks under predictable session file names.
 function stateDir(): string {
   const base =
-    process.env.CLAUDE_PLUGIN_DATA ?? join(homedir(), ".cache", "onyx-claude-code");
+    process.env.CLAUDE_PLUGIN_DATA ?? join(homedir(), ".cache", "onyx-agent-plugin");
   const dir = join(base, "sessions");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;

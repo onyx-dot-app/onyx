@@ -8,7 +8,7 @@
       "name": "onyx",
       "source": {
         "source": "local",
-        "path": "./extensions/claude-code"
+        "path": "./extensions/agent-plugin"
       },
       "policy": {
         "installation": "AVAILABLE",

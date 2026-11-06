@@ -1,9 +1,9 @@
-name: Release Claude Code plugin
+name: Release agent plugin
 
 on:
   push:
     tags:
-      - "claude-code-plugin/v*.*.*"
+      - "agent-plugin/v*.*.*"
 
 jobs:
   github-release:
@@ -12,8 +12,8 @@ jobs:
       contents: write # needed to create the GitHub release and upload the zip
     timeout-minutes: 10
     env:
-      PLUGIN_DIR: extensions/claude-code
-      ZIP_NAME: onyx-claude-code-plugin.zip
+      PLUGIN_DIR: extensions/agent-plugin
+      ZIP_NAME: onyx-agent-plugin.zip
       TAG: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -30,7 +30,7 @@ jobs:
           codex_version="$(jq -r '.version' "${PLUGIN_DIR}/.codex-plugin/plugin.json")"
           url="$(jq -r '.source.url' <<<"$entry")"
           expected_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP_NAME}"
-          if [ "$version" != "${TAG#claude-code-plugin/v}" ]; then
+          if [ "$version" != "${TAG#agent-plugin/v}" ]; then
             echo "marketplace.json lists version ${version}, tag is ${TAG}" >&2
             exit 1
           fi
@@ -65,7 +65,7 @@ jobs:
           if [ -z "$release_id" ]; then
             gh release create "$TAG" \
               --verify-tag \
-              --title "Onyx plugin for Claude Code ${TAG#claude-code-plugin/}" \
+              --title "Onyx agent plugin ${TAG#agent-plugin/}" \
               --notes-file "${RUNNER_TEMP}/release-notes.md" \
               --latest=false
           elif [ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq .draft)" = "true" ]; then
