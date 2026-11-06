@@ -143,7 +143,7 @@ processed_prompt, _ = process_with_prompt_cache(
 )
 ```
 
-**Note**: When both messages contain strings, continuation concatenates them. List-valued content retains its content blocks.
+**Note**: Continuation concatenates unmarked strings. Marked user messages use separate content blocks to preserve prefix and suffix cache boundaries and lifetimes. List-valued content retains its content blocks.
 
 ## Provider-Specific Behavior
 

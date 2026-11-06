@@ -80,7 +80,8 @@ def test_canonical_cached_prompt_preserves_continuation_and_cache_boundary() -> 
     assert message.text == "document\nchunk"
     assert isinstance(message.content, list)
     assert message.content == [
-        TextContentPart(text="document\nchunk", cache_control={"type": "ephemeral"})
+        TextContentPart(text="document\n", cache_control={"type": "ephemeral"}),
+        TextContentPart(text="chunk"),
     ]
 
 

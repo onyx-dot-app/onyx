@@ -172,3 +172,55 @@ def test_existing_message_marker_keeps_its_lifetime() -> None:
     prepared = _prepare(prefix)
     assert prepared[0] == prefix[0]
     assert prepared[-1].cache_control == {"type": "ephemeral"}
+
+
+@pytest.mark.parametrize("multimodal", [False, True])
+def test_continuation_preserves_prefix_and_suffix_markers_on_wire(
+    multimodal: bool,
+) -> None:
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+
+    prefix: list[ChatCompletionMessage] = [
+        UserMessage(
+            content="Shared context",
+            cache_control={"type": "ephemeral", "ttl": "1h"},
+        )
+    ]
+    suffix: list[ChatCompletionMessage] = [
+        UserMessage(
+            content=[
+                TextContentPart(text="Question"),
+                ImageContentPart(image_url=ImageUrlDetail(url=_IMAGE)),
+            ]
+            if multimodal
+            else "Question",
+            cache_control={"type": "ephemeral"},
+        )
+    ]
+    original = deepcopy((prefix, suffix))
+    prepared, _ = process_with_prompt_cache(
+        LLMConfig(
+            model_provider="anthropic",
+            model_name="claude-haiku-4-5",
+            temperature=0,
+            max_input_tokens=200_000,
+        ),
+        prefix,
+        suffix,
+        continuation=True,
+        with_metadata=False,
+    )
+    assert len(prepared) == 1
+    body: dict[str, Any] = AnthropicConfig().transform_request(
+        model="claude-haiku-4-5",
+        messages=[message.model_dump(exclude_none=True) for message in prepared],
+        optional_params={"max_tokens": 32},
+        litellm_params={},
+        headers={},
+    )
+    blocks = body["messages"][0]["content"]
+    assert blocks[0]["text"] == "Shared context"
+    assert blocks[0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+    assert sum("cache_control" in block for block in blocks) == 2
+    assert (prefix, suffix) == original
