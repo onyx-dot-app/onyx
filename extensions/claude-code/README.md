@@ -32,6 +32,8 @@ Run `/plugin configure onyx@onyx` to change a value later.
 
 To develop the plugin from a checkout, start Claude Code with `--plugin-dir extensions/claude-code` and set `ONYX_URL`, `ONYX_API_TOKEN` and optionally `ONYX_STRICT_RETRIEVAL=true` or `ONYX_PREFETCH=true` in the environment. The hooks read those variables. The configuration dialog does not run for a plugin loaded this way, and the MCP server reads only the configured options, so it does not connect in this mode.
 
+The plugin is also submitted to the [Anthropic plugin directory](https://claude.com/docs/plugins/submit), which lists it in claude.ai, Cowork and Claude Code. Hooks do not run on claude.ai or Cowork, so those surfaces get the MCP server and the skill only.
+
 Organizations can require the plugin on every machine through managed settings. See [Manage plugins for your organization](https://code.claude.com/docs/en/plugins/org).
 
 ## How the prompt hook works
@@ -61,7 +63,8 @@ With strict retrieval also on, a question turn that ends on the prefetch alone g
 
 | Path | Purpose |
 | --- | --- |
-| `.claude-plugin/plugin.json` | Manifest and the options the user is asked for |
+| `.claude-plugin/plugin.json` | Manifest, the options the user is asked for, and the privacy policy URL |
+| `.claude-plugin/icon.png` | Listing icon for the Anthropic plugin directory |
 | `.claude-plugin/marketplace.json` | The hosted marketplace: the plugin version and its release zip URL |
 | `.mcp.json` | The remote Onyx MCP server, loaded upfront |
 | `hooks/hooks.json` | The prompt hook, the strict-retrieval gate and the stop nudge |
@@ -73,9 +76,9 @@ Typecheck with `bunx tsgo --noEmit -p extensions/claude-code/tsconfig.json` and 
 
 ## Release
 
-The plugin version lives in the marketplace entry, not in `plugin.json`, so Claude Code can see a new version before it downloads the zip. To release:
+The plugin version lives in the marketplace entry, so Claude Code can see a new version before it downloads the zip, and in `plugin.json`, which the Anthropic plugin directory reads. To release:
 
-1. Set `version` and the release URL in `.claude-plugin/marketplace.json` to the new version and merge that change.
+1. Set `version` in `.claude-plugin/plugin.json`, and `version` and the release URL in `.claude-plugin/marketplace.json`, to the new version and merge that change.
 2. Push the tag `claude-code-plugin/v<version>` on the merged commit.
 
-The `release-claude-code-plugin` workflow checks the tag against the marketplace entry, zips this directory, and uploads it to a GitHub release at the listed URL. Users who added the marketplace get the new version on their next `/plugin marketplace update onyx` or through auto-update.
+The `release-claude-code-plugin` workflow checks the tag against both versions and the download URL, zips this directory, and uploads it to a GitHub release at the listed URL. Users who added the marketplace get the new version on their next `/plugin marketplace update onyx` or through auto-update.

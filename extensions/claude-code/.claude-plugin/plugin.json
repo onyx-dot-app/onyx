@@ -1,6 +1,7 @@
 {
   "name": "onyx",
   "displayName": "Onyx",
+  "version": "0.1.0",
   "description": "Puts Onyx first for context retrieval in every Claude Code session",
   "author": {
     "name": "Onyx",
@@ -9,6 +10,7 @@
   "homepage": "https://docs.onyx.app",
   "repository": "https://github.com/onyx-dot-app/onyx",
   "license": "MIT",
+  "privacyPolicyUrl": "https://onyx.app/legal/privacy-policy",
   "keywords": ["onyx", "search", "knowledge", "rag", "mcp"],
   "userConfig": {
     "onyx_url": {

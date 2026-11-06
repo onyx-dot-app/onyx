@@ -21,15 +21,21 @@ jobs:
           persist-credentials: false
 
       # The hosted marketplace.json is what users install from, so the tag must
-      # match the version and download URL it already lists.
-      - name: Check the tag against marketplace.json
+      # match the version and download URL it already lists. plugin.json carries
+      # the same version for the Anthropic plugin directory.
+      - name: Check the tag against marketplace.json and plugin.json
         run: |
           entry="$(jq -c '.plugins[] | select(.name == "onyx")' "${PLUGIN_DIR}/.claude-plugin/marketplace.json")"
           version="$(jq -r '.version' <<<"$entry")"
+          plugin_version="$(jq -r '.version' "${PLUGIN_DIR}/.claude-plugin/plugin.json")"
           url="$(jq -r '.source.url' <<<"$entry")"
           expected_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP_NAME}"
           if [ "$version" != "${TAG#claude-code-plugin/v}" ]; then
             echo "marketplace.json lists version ${version}, tag is ${TAG}" >&2
+            exit 1
+          fi
+          if [ "$plugin_version" != "$version" ]; then
+            echo "plugin.json lists version ${plugin_version}, marketplace.json lists ${version}" >&2
             exit 1
           fi
           if [ "$url" != "$expected_url" ]; then
