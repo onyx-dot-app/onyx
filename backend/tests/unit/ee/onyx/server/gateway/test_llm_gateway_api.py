@@ -485,6 +485,14 @@ def test_drop_empty_text() -> None:
     ]
 
 
+def test_messages_adapter_preserves_reasoning_content() -> None:
+    [message] = _MESSAGES_ADAPTER.validate_python(
+        [{"role": "assistant", "content": "answer", "reasoning_content": "thinking..."}]
+    )
+    assert isinstance(message, AssistantMessage)
+    assert message.reasoning_content == "thinking..."
+
+
 def test_prepare_messages_rejects_all_empty_messages() -> None:
     llm = _ConfigOnlyLLM(
         LLMConfig(
