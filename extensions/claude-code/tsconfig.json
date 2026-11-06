@@ -6,8 +6,12 @@
     "strict": true,
     "noEmit": true,
     "erasableSyntaxOnly": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "skipLibCheck": true
   },
-  "include": ["scripts/*.ts"]
+  "include": [
+    "scripts/hook.ts"
+  ]
 }

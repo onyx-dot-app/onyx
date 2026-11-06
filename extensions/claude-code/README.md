@@ -82,9 +82,10 @@ With strict retrieval also on, a question turn that ends on the prefetch alone g
 | `hooks/codex.json` | The hooks for Codex, with its events and tool names |
 | `scripts/onyx-hook` | Runtime launcher for the hook |
 | `scripts/hook.ts` | Hook implementation for both hosts |
+| `scripts/hook.test.ts` | Hook tests for both hosts |
 | `skills/onyx/SKILL.md` | Tells Claude when and how to use Onyx |
 
-Typecheck with `bunx tsgo --noEmit -p extensions/claude-code/tsconfig.json` and validate with `claude plugin validate extensions/claude-code`.
+Typecheck with `bunx tsgo --noEmit -p extensions/claude-code/tsconfig.json`, run the hook tests with `bun test extensions/claude-code`, and validate with `claude plugin validate extensions/claude-code`.
 
 ## Release
 
