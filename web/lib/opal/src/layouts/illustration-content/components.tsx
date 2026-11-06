@@ -24,6 +24,9 @@ interface IllustrationContentProps {
 // IllustrationContent
 // ---------------------------------------------------------------------------
 
+/** Matches `w-30 h-30` so the illustration draws its 120 px line weight. */
+const ILLUSTRATION_SIZE = 120;
+
 /**
  * A vertically-stacked, center-aligned layout for empty states, error pages,
  * and informational placeholders.
@@ -68,7 +71,11 @@ function IllustrationContent({
   return (
     <div className="flex flex-col items-center gap-3 p-5 text-center">
       {Illustration && (
-        <Illustration aria-hidden="true" className="shrink-0 w-30 h-30" />
+        <Illustration
+          aria-hidden="true"
+          size={ILLUSTRATION_SIZE}
+          className="shrink-0 w-30 h-30"
+        />
       )}
       <div
         className={cn(
