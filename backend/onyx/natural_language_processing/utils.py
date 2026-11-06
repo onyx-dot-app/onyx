@@ -188,12 +188,44 @@ def get_tokenizer(
         try:
             provider_type = EmbeddingProvider(provider_type)
         except ValueError:
+            # Generation providers such as litellm_proxy are not embedding
+            # providers. Resolve the tokenizer from the generation model itself
+            # instead of silently counting with the default embedding tokenizer.
+            tokenizer = _resolve_tokenizer_for_model(model_name)
+            if tokenizer is not None:
+                return tokenizer
             logger.debug(
                 "Invalid provider_type '%s'. Falling back to default tokenizer.",
                 provider_type,
             )
             return _get_default_tokenizer()
     return _check_tokenizer_cache(provider_type, model_name)
+
+
+def _resolve_tokenizer_for_model(model_name: str | None) -> BaseTokenizer | None:
+    """Resolve a tokenizer from a model name alone, without a known provider."""
+    if not model_name:
+        return None
+
+    try:
+        return TiktokenTokenizer(model_name)
+    except Exception as tiktoken_error:
+        logger.debug(
+            "TiktokenTokenizer not available for model %s: %s",
+            model_name,
+            tiktoken_error,
+        )
+
+    try:
+        return HuggingFaceTokenizer(model_name)
+    except Exception as hf_error:
+        logger.debug(
+            "HuggingFaceTokenizer not available for model %s: %s",
+            model_name,
+            hf_error,
+        )
+
+    return None
 
 
 # Max characters per encode() call.
