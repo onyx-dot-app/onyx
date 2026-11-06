@@ -2858,6 +2858,17 @@
           "viewIndexingRun": "عرض تشغيل الفهرسة",
           "viewPruningRun": "عرض تشغيل التقليم",
           "viewChecksRun": "عرض تشغيل الفحوصات"
+        },
+        "types": {
+          "count": "{count, plural, zero {نوع مستند} one {نوع مستند} two {نوعا مستند} few {أنواع مستندات} many {نوع مستند} other {نوع مستند}}",
+          "header": "نوع المستند",
+          "indexed": "المفهرسة",
+          "size": "الحجم",
+          "other": "أخرى",
+          "countWithSize": "{count} ({size})",
+          "bytes": "بايت",
+          "loadError": "تعذر تحميل أنواع المستندات.",
+          "sizeValue": "{value} {unit}"
         }
       },
       "toasts": {

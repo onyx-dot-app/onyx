@@ -2858,6 +2858,17 @@
           "viewIndexingRun": "インデックスの実行を表示",
           "viewPruningRun": "プルーニングの実行を表示",
           "viewChecksRun": "チェックの実行を表示"
+        },
+        "types": {
+          "count": "{count, plural, other {ドキュメントの種類}}",
+          "header": "ドキュメントの種類",
+          "indexed": "インデックス済み",
+          "size": "サイズ",
+          "other": "その他",
+          "countWithSize": "{count}（{size}）",
+          "bytes": "バイト",
+          "loadError": "ドキュメントの種類を読み込めませんでした。",
+          "sizeValue": "{value} {unit}"
         }
       },
       "toasts": {

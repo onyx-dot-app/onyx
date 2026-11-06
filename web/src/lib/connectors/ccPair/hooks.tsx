@@ -18,6 +18,7 @@ import type {
   ThroughputActivityLinks,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import type {
+  CCPairDocumentTypeBreakdown,
   CCPairFullInfo,
   CCPairRun,
   CCPairRunErrors,
@@ -1057,6 +1058,18 @@ export function useLatestIndexAttempt(ccPairId: number) {
     SWR_KEYS.ccPairLatestIndexAttempt(ccPairId),
     errorHandlingFetcher,
     { refreshInterval: CC_PAIR_STATUS_POLL_MS }
+  );
+}
+
+// The breakdown reads every document of the pair, so it refreshes far slower than the status poll.
+const DOCUMENT_TYPES_POLL_MS = 60_000;
+
+/** The pair's indexed documents per source MIME type. */
+export function useCCPairDocumentTypes(ccPairId: number) {
+  return useSWR<CCPairDocumentTypeBreakdown>(
+    SWR_KEYS.ccPairDocumentTypes(ccPairId),
+    errorHandlingFetcher,
+    { refreshInterval: DOCUMENT_TYPES_POLL_MS }
   );
 }
 

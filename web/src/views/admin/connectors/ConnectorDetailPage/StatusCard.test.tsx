@@ -1,5 +1,12 @@
 /** The connector page's Indexing and Permissions Sync status cards on LineLayout, without the estimate bar. */
-import { render, screen, setupUser, within } from "@tests/setup/test-utils";
+import {
+  act,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+  within,
+} from "@tests/setup/test-utils";
 import { SvgListCheck, SvgScissors } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import {
@@ -10,6 +17,8 @@ import {
   type CCPairRun,
   type CCPairRunKind,
   type CCPairRunsResponse,
+  type DocumentTypeCount,
+  type CCPairDocumentTypeBreakdown,
   type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
 import StatusCard from "@/views/admin/connectors/ConnectorDetailPage/StatusCard";
@@ -1121,5 +1130,449 @@ describe("StatusCard without operate", () => {
     expect(panelButton).toBeEnabled();
     await user.click(panelButton);
     expect(onTogglePanel).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── Document types ─────────────────────────────────────────────────────────
+
+describe("Indexing card document types", () => {
+  const MB = 1024 * 1024;
+  const TYPES_URL = `/api/manage/admin/cc-pair/${CC_PAIR_ID}/document-types`;
+  const DOCX =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  // Thirteen types, largest first, so the twelfth and thirteenth fold into Other.
+  const MIMES: [string, string][] = [
+    ["text/plain", "TXT"],
+    ["image/png", "PNG"],
+    ["application/pdf", "PDF"],
+    [DOCX, "DOCX"],
+    ["text/html", "HTML"],
+    ["text/csv", "CSV"],
+    ["text/markdown", "MD"],
+    ["image/jpeg", "JPG"],
+    ["application/json", "JSON"],
+    ["application/zip", "ZIP"],
+    ["image/gif", "GIF"],
+    ["image/webp", "WEBP"],
+    ["image/bmp", "BMP"],
+  ];
+
+  // Most cases leave `timed_out` out, which the route sends as false.
+  let breakdown: Omit<CCPairDocumentTypeBreakdown, "timed_out"> & {
+    timed_out?: boolean;
+  };
+  let typesStatus: number;
+
+  function sized(
+    mime_type: string,
+    count: number,
+    bytes: number
+  ): DocumentTypeCount {
+    return { mime_type, count, sized_count: count, size_bytes: bytes };
+  }
+
+  beforeEach(() => {
+    breakdown = { types: [], untyped_count: 0 };
+    typesStatus = 200;
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      if (String(input) !== TYPES_URL) return new Promise<Response>(() => {});
+      return Promise.resolve({
+        ok: typesStatus === 200,
+        status: typesStatus,
+        json: async () =>
+          typesStatus === 200
+            ? { timed_out: false, ...breakdown }
+            : { detail: "boom" },
+      } as Response);
+    }) as typeof fetch;
+  });
+
+  async function typesFetched() {
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(TYPES_URL));
+  }
+
+  function typesLabel(count: number): string {
+    return count === 1 ? "Document type" : "Document types";
+  }
+
+  function segments(card: HTMLElement): HTMLElement[] {
+    return within(card).getAllByTestId("document-type-segment");
+  }
+
+  function cellsOf(card: HTMLElement, key: string): HTMLElement[] {
+    return Array.from(
+      card.querySelectorAll<HTMLElement>(`[data-document-type="${key}"]`)
+    );
+  }
+
+  async function expand(card: HTMLElement) {
+    const user = setupUser();
+    await user.click(
+      await within(card).findByRole("button", { name: copy(KEYS.viewDetails) })
+    );
+    return user;
+  }
+
+  it("reads the pair's document types from their own route", async () => {
+    breakdown = { types: [sized("text/plain", 5, 75)], untyped_count: 0 };
+    renderCard(seedIndexed());
+
+    expect(
+      await within(indexingCard()).findByText(typesLabel(1))
+    ).toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledWith(TYPES_URL);
+  });
+
+  it("offers no expand button when the source reports no types", async () => {
+    breakdown = { types: [], untyped_count: 5 };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+
+    await within(card).findByText("3,248");
+    await typesFetched();
+    expect(
+      within(card).queryByRole("button", { name: copy(KEYS.viewDetails) })
+    ).toBeNull();
+    expect(within(card).queryByText(/Document types?/)).toBeNull();
+  });
+
+  it("a timed-out breakdown stays folded and shows no type count, as unknown rather than empty", async () => {
+    breakdown = {
+      types: [sized("text/plain", 5, 75)],
+      untyped_count: 0,
+      timed_out: true,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+
+    await within(card).findByText("3,248");
+    await typesFetched();
+    expect(
+      within(card).queryByRole("button", { name: copy(KEYS.viewDetails) })
+    ).toBeNull();
+    expect(within(card).queryByText(/Document types?/)).toBeNull();
+  });
+
+  it("a failed types request shows a dash and says so, rather than reading as no types", async () => {
+    typesStatus = 500;
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    const { third } = lineOf(card);
+
+    const reason = await within(card).findByText(
+      copy("admin.connector.statusCard.types.loadError")
+    );
+    expect(third).toContainElement(reason);
+    expect(third).toContainElement(within(card).getByText("—"));
+    expect(
+      within(card).queryByRole("button", { name: copy(KEYS.viewDetails) })
+    ).toBeNull();
+  });
+
+  it("a refresh that fails after a good read folds the card and shows the dash, rather than the old counts", async () => {
+    jest.useFakeTimers({ advanceTimers: true });
+    try {
+      breakdown = { types: [sized("text/plain", 5, 75)], untyped_count: 0 };
+      renderCard(seedIndexed());
+      const card = indexingCard();
+      await expand(card);
+      expect(segments(card)).toHaveLength(1);
+
+      typesStatus = 500;
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+
+      expect(
+        await within(card).findByText(
+          copy("admin.connector.statusCard.types.loadError")
+        )
+      ).toBeInTheDocument();
+      expect(within(card).getByText("—")).toBeInTheDocument();
+      expect(within(card).queryByText(typesLabel(1))).toBeNull();
+      expect(within(card).queryAllByTestId("document-type-segment")).toEqual(
+        []
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("shows the type count but no expand button while some documents are untyped", async () => {
+    breakdown = { types: [sized(DOCX, 4, 71_821)], untyped_count: 2 };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+
+    expect(await within(card).findByText(typesLabel(1))).toBeInTheDocument();
+    expect(
+      within(card).queryByRole("button", { name: copy(KEYS.viewDetails) })
+    ).toBeNull();
+  });
+
+  it("folded: the type count and total size sit at the right and the expand button in D", async () => {
+    breakdown = {
+      types: [
+        sized("text/plain", 1342, 121.5 * MB),
+        sized("application/pdf", 191, 2.8 * MB),
+      ],
+      untyped_count: 0,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    const { third } = lineOf(card);
+
+    const count = await within(card).findByText("2", { exact: true });
+    expect(count).toHaveClass("font-main-ui-action", "text-text-03");
+    expect(third).toContainElement(count);
+    expect(third).toContainElement(within(card).getByText(typesLabel(2)));
+    expect(within(card).getByText("124.3", { exact: true })).toHaveClass(
+      "font-main-ui-action"
+    );
+    expect(within(card).getByText("MB", { exact: true })).toBeInTheDocument();
+    expect(third).toContainElement(
+      within(card).getByRole("button", { name: copy(KEYS.viewDetails) })
+    );
+    // Folded is never a breakdown.
+    expect(within(card).queryAllByTestId("document-type-segment")).toEqual([]);
+  });
+
+  it("hides the size when any type lacks a size for some of its documents", async () => {
+    breakdown = {
+      types: [
+        sized("text/plain", 1342, 121.5 * MB),
+        { mime_type: "image/png", count: 3, sized_count: 2, size_bytes: 900 },
+      ],
+      untyped_count: 0,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+
+    expect(await within(card).findByText(typesLabel(2))).toBeInTheDocument();
+    expect(
+      within(card).queryByText(/^(Bytes|KB|MB|GB|TB)$/, { exact: true })
+    ).toBeNull();
+
+    await expand(card);
+    // The type without a full size leaves its cell blank.
+    expect(within(card).getAllByText("121.5 MB").length).toBeGreaterThan(0);
+    expect(within(card).queryByText(/900 Bytes/)).toBeNull();
+  });
+
+  it("unfolded: segments sort by count with the twelfth type and beyond folded into Other, always last", async () => {
+    breakdown = {
+      // Other (60 + 50) outnumbers the eleventh type (100), and still comes last.
+      types: MIMES.map(([mime], index) =>
+        sized(
+          mime,
+          index < 11 ? 200 - index * 10 : 60 - (index - 11) * 10,
+          1000
+        )
+      ).reverse(),
+      untyped_count: 0,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+
+    expect(await within(card).findByText("13")).toBeInTheDocument();
+    const user = await expand(card);
+
+    const keys = segments(card).map((s) => s.dataset.documentType);
+    expect(keys).toEqual([...MIMES.slice(0, 11).map(([m]) => m), "other"]);
+    const expectedLabels = [...MIMES.slice(0, 11).map(([, l]) => l), "Other"];
+    const wide = within(card).getByTestId("document-types-table");
+    expect(
+      within(wide)
+        .getAllByTestId("document-type-name")
+        .map((n) => n.textContent)
+    ).toEqual(expectedLabels);
+    // Other sums the folded types.
+    expect(cellsOf(card, "other").map((c) => c.textContent)).toContain("110");
+
+    await user.click(
+      within(card).getByRole("button", { name: copy(KEYS.hideDetails) })
+    );
+    expect(within(card).queryAllByTestId("document-type-segment")).toEqual([]);
+  });
+
+  it("a long unmapped type name clips to its column instead of covering the counts", async () => {
+    breakdown = {
+      types: [sized("application/vnd.ms-excel.sheet.macroenabled.12", 3, MB)],
+      untyped_count: 0,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    await expand(card);
+
+    const wide = within(card).getByTestId("document-types-table");
+    const [name] = within(wide).getAllByTestId("document-type-name");
+    expect(name).toHaveTextContent("MS-EXCEL.SHEET.MACROENABLED.12");
+    expect(name).toHaveClass("truncate");
+    expect(name!.parentElement).toHaveClass("min-w-0", "max-w-full");
+  });
+
+  it("hovering a segment mutes every other segment and row, and hovering a row mutes the other segments", async () => {
+    breakdown = {
+      types: [
+        sized("text/plain", 1342, 121.5 * MB),
+        sized("image/png", 223, 6.3 * 1024 * MB),
+        sized("application/pdf", 191, 125.3 * MB),
+      ],
+      untyped_count: 0,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    const user = await expand(card);
+
+    const png = segments(card)[1]!;
+    await user.hover(png);
+    for (const cell of cellsOf(card, "image/png")) {
+      expect(cell).not.toHaveClass("opacity-50");
+    }
+    for (const key of ["text/plain", "application/pdf"]) {
+      for (const cell of cellsOf(card, key)) {
+        expect(cell).toHaveClass("opacity-50");
+      }
+    }
+
+    await user.unhover(png);
+    for (const cell of cellsOf(card, "text/plain")) {
+      expect(cell).not.toHaveClass("opacity-50");
+    }
+
+    const pdfName = within(
+      within(card).getByTestId("document-types-table")
+    ).getByText("PDF");
+    await user.hover(pdfName);
+    expect(segments(card)[2]).not.toHaveClass("opacity-50");
+    expect(segments(card)[0]).toHaveClass("opacity-50");
+    expect(segments(card)[1]).toHaveClass("opacity-50");
+  });
+
+  it("folding while a type is hovered clears the mute, so the next unfold shows every type", async () => {
+    breakdown = {
+      types: [
+        sized("text/plain", 1342, 121.5 * MB),
+        sized("image/png", 223, 6.3 * 1024 * MB),
+      ],
+      untyped_count: 0,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    const user = await expand(card);
+
+    await user.hover(segments(card)[1]!);
+    expect(segments(card)[0]).toHaveClass("opacity-50");
+    // The keyboard folds and unfolds while the pointer still rests where the segment was, so no leave fires.
+    within(card)
+      .getByRole("button", { name: copy(KEYS.hideDetails) })
+      .focus();
+    await user.keyboard("{Enter}");
+    within(card)
+      .getByRole("button", { name: copy(KEYS.viewDetails) })
+      .focus();
+    await user.keyboard("{Enter}");
+
+    for (const segment of segments(card)) {
+      expect(segment).not.toHaveClass("opacity-50");
+    }
+  });
+
+  it("a refresh that folds the card while a type is hovered clears the mute, so the table comes back with every type", async () => {
+    jest.useFakeTimers({ advanceTimers: true });
+    try {
+      const full = {
+        types: [
+          sized("text/plain", 1342, 121.5 * MB),
+          sized("image/png", 223, 6.3 * 1024 * MB),
+        ],
+        untyped_count: 0,
+      };
+      breakdown = full;
+      renderCard(seedIndexed());
+      const card = indexingCard();
+      const user = await expand(card);
+      await user.hover(segments(card)[1]!);
+      expect(segments(card)[0]).toHaveClass("opacity-50");
+
+      breakdown = { ...full, timed_out: true };
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+      await waitFor(() =>
+        expect(within(card).queryAllByTestId("document-type-segment")).toEqual(
+          []
+        )
+      );
+
+      breakdown = full;
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+      await waitFor(() => expect(segments(card)).toHaveLength(2));
+      for (const segment of segments(card)) {
+        expect(segment).not.toHaveClass("opacity-50");
+      }
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("below 640 px each type takes two lines, name then count and size, with no headers and rows ending 32 px inside the line", async () => {
+    breakdown = {
+      types: [
+        sized("text/plain", 1342, 121.5 * MB),
+        sized("image/png", 223, 6.3 * 1024 * MB),
+      ],
+      untyped_count: 0,
+    };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    await expand(card);
+
+    const wide = within(card).getByTestId("document-types-table");
+    const narrow = within(card).getByTestId("document-types-list");
+    expect(wide).toHaveClass("@max-[38.75rem]:hidden");
+    expect(narrow).toHaveClass("hidden", "@max-[38.75rem]:flex");
+    expect(within(narrow).queryByText("Indexed")).toBeNull();
+    expect(within(narrow).queryByText("Size")).toBeNull();
+
+    const items = within(narrow).getAllByTestId("document-type-item");
+    expect(items).toHaveLength(2);
+    const [name, figures] = [
+      within(items[0]!).getByText("TXT"),
+      within(items[0]!).getByText("1,342 (121.5 MB)"),
+    ];
+    expect(
+      name.compareDocumentPosition(figures) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    for (const item of items) expect(item).toHaveClass("me-6");
+  });
+
+  it("below 640 px a card that can unfold keeps its bar row folded, so unfolding never moves the count", async () => {
+    breakdown = { types: [sized("text/plain", 5, 75)], untyped_count: 0 };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    await within(card).findByRole("button", { name: copy(KEYS.viewDetails) });
+
+    // The open bar is a 20 px line and a 4 px gap above the count, so the folded count and summary hold the same 24 px.
+    const figure = within(card).getByText("3,248", { exact: true });
+    const summary = within(card).getByText(typesLabel(1));
+    for (const part of [figure, summary]) {
+      const held = part.closest(".mt-6");
+      expect(held).not.toBeNull();
+      expect(held).not.toHaveClass("@max-[38.75rem]:mt-0");
+    }
+  });
+
+  it("below 640 px a card that cannot unfold drops the bar row, so the wrapped count sits under column A", async () => {
+    breakdown = { types: [sized(DOCX, 4, 71_821)], untyped_count: 2 };
+    renderCard(seedIndexed());
+    const card = indexingCard();
+    const summary = await within(card).findByText(typesLabel(1));
+
+    const figure = within(card).getByText("3,248", { exact: true });
+    for (const part of [figure, summary]) {
+      expect(part.closest(".mt-6")).toHaveClass("@max-[38.75rem]:mt-0");
+    }
   });
 });

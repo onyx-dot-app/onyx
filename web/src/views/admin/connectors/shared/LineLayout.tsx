@@ -70,20 +70,41 @@ const VARIANT_CLASSES = {
   },
 } satisfies Record<LineVariant, VariantClasses>;
 
-export interface LineLayoutProps {
+interface LineParts {
   a: ReactNode;
   b: ReactNode;
   /** A stat line leaves C out when it is null, so D takes the whole third. */
   c: ReactNode;
   d: ReactNode;
-  variant: LineVariant;
 }
+
+// A stat line sizes its third to C's picker, so only row and run lines can hand C's width to B.
+export type LineLayoutProps = LineParts &
+  (
+    | { variant: "stat"; bSpansC?: never }
+    | {
+        variant: Exclude<LineVariant, "stat">;
+        /** B's content runs on through C's slot, for a bar or table on one ruler across both; C is not drawn and the columns do not move. */
+        bSpansC?: boolean;
+      }
+  );
+
+// The columns stay put and only B's content runs on over C's empty slot: C is the third (a third of the line, at most 208 px) less D's 64 px, and the container is the line.
+const B_SPANS_C_CONTENT =
+  "w-[calc(100%_+_min(33.333cqw,13rem)_-_4rem)] @max-[38.75rem]:w-full";
 
 /**
  * The three-column line shared by connector rows, run lines and stat cards: A and B split the width, C and D share a third capped at 208 px.
  * Below 640 px of card it wraps by variant, keeping the actions top right.
  */
-export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
+export default function LineLayout({
+  a,
+  b,
+  c,
+  d,
+  variant,
+  bSpansC = false,
+}: LineLayoutProps) {
   const variantClasses: VariantClasses = VARIANT_CLASSES[variant];
   const showsC = variant !== "stat" || c !== null;
   // A container query cannot measure its own element, so the parts query this wrapper.
@@ -117,11 +138,23 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
           height="fit"
           className={cn(
             "min-w-0 flex-1",
+            bSpansC && "@max-[38.75rem]:basis-full",
             variantClasses.part,
             variantClasses.b
           )}
         >
-          {b}
+          {bSpansC ? (
+            <Section
+              alignItems="start"
+              gap={1}
+              height="fit"
+              className={B_SPANS_C_CONTENT}
+            >
+              {b}
+            </Section>
+          ) : (
+            b
+          )}
         </Section>
         {/* A fixed third (flex-none would reset the basis) at the design's 208 px; below 640 px it dissolves so C and D wrap as the line's own parts. */}
         <Section
@@ -131,7 +164,7 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
           gap={0}
           height="fit"
           className={cn(
-            "max-w-[13rem] shrink-0 basis-1/3 @max-[38.75rem]:contents",
+            "shrink-0 @max-[38.75rem]:contents max-w-[13rem] basis-1/3",
             variantClasses.third
           )}
         >
@@ -144,10 +177,11 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
               className={cn(
                 "min-w-0 flex-1",
                 variantClasses.part,
-                variantClasses.c
+                variantClasses.c,
+                bSpansC && "@max-[38.75rem]:hidden"
               )}
             >
-              {c}
+              {!bSpansC && c}
             </Section>
           )}
           {/* 64 px holds two 24 px actions with a run line's gap and padding. */}
@@ -168,7 +202,7 @@ export default function LineLayout({ a, b, c, d, variant }: LineLayoutProps) {
 }
 
 // A figure that failed to load, so the line keeps its height and does not read as empty.
-const NO_FIGURE = "—";
+export const NO_FIGURE = "—";
 
 export interface LineFigureProps {
   /** Null shows a dash. */

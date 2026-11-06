@@ -2858,6 +2858,17 @@
           "viewIndexingRun": "인덱싱 실행 보기",
           "viewPruningRun": "정리 실행 보기",
           "viewChecksRun": "검사 실행 보기"
+        },
+        "types": {
+          "count": "{count, plural, other {문서 유형}}",
+          "header": "문서 유형",
+          "indexed": "인덱싱됨",
+          "size": "크기",
+          "other": "기타",
+          "countWithSize": "{count} ({size})",
+          "bytes": "바이트",
+          "loadError": "문서 유형을 불러오지 못했습니다.",
+          "sizeValue": "{value} {unit}"
         }
       },
       "toasts": {

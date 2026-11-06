@@ -111,9 +111,10 @@ function SettingsRoot({
     <SettingsPageContext.Provider
       value={{ animateEnter, loading, error, pageTitle, setPageTitle }}
     >
+      {/* Both gutters stay reserved, so the centered page does not shift when content grows a scrollbar. */}
       <div
         id="page-wrapper-scroll-container"
-        className="w-full h-full flex flex-col items-center overflow-y-auto"
+        className="w-full h-full flex flex-col items-center overflow-y-auto [scrollbar-gutter:stable_both-edges]"
       >
         <div
           className={cn(
