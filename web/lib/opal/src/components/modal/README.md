@@ -45,13 +45,13 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 
 ## Modal.Header
 
-| Prop                             | Type                    | Description                                                                                                                          |
-| -------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `icon`, `moreIcon1`, `moreIcon2` | `IconFunctionComponent` | Heading icons. Omitting `icon` gives the minimal (icon-less) variant                                                                 |
+| Prop                             | Type                           | Description                                                                                                                          |
+| -------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `icon`, `moreIcon1`, `moreIcon2` | `IconFunctionComponent`        | Heading icons. Omitting `icon` gives the minimal (icon-less) variant                                                                 |
 | `color`                          | `StatusColor \| "interactive"` | Colour mode of the icon and title, as on `Content` (a status colours the title and icon)                                             |
-| `title`                          | `string \| RichStr`     | Required                                                                                                                             |
-| `description`                    | `string \| RichStr`     | Optional, also wired to `aria-describedby`                                                                                           |
-| `onClose`                        | `() => void`            | Renders the close button, with a "Close" tooltip on its start side on pointer hover (not on focus, so Escape still closes the modal) |
+| `title`                          | `string \| RichStr`            | Required                                                                                                                             |
+| `description`                    | `string \| RichStr`            | Optional, also wired to `aria-describedby`                                                                                           |
+| `onClose`                        | `() => void`                   | Renders the close button, with a "Close" tooltip on its start side on pointer hover (not on focus, so Escape still closes the modal) |
 
 `children` render below the title stack (e.g. a search input).
 
@@ -59,7 +59,7 @@ Use `maxHeight` to cap a content-sized modal, for example `height="fit" maxHeigh
 
 ## Modal.Body
 
-`twoTone` (default `true`) gives the body the gray `tint-01` background separating it from header and footer. Scrolls when the card height caps. Reserves equal scrollbar space on both sides to keep content centered and prevent shifts when scrolling becomes necessary.
+`twoTone` (default `true`) gives the body the gray `tint-01` background separating it from header and footer. Scrolls when the card height caps, through a [`ShadowDiv`](../shadow-div/README.md): a shadow at the top once scrolled, and a mask fading the content at the bottom while more is below. Reserves equal scrollbar space on both sides to keep content centered and prevent shifts when scrolling becomes necessary.
 
 ## Modal.Footer
 
