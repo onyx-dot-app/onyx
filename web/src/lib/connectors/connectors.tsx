@@ -1107,68 +1107,58 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira_service_management: {
-    description: "Configure Jira Service Management connector",
-    subtext: `Configure which Jira Service Management tickets to index. You can index all accessible service projects, specify a service project, or provide a JSM-scoped JQL query.`,
+    description: "connectors.jiraServiceManagement.description",
+    subtext: "connectors.jiraServiceManagement.subtext",
     values: [
       {
         type: "text",
-        label: "Jira Base URL",
+        label: "connectors.jira.fields.jira_base_url.label",
         name: "jira_base_url",
         optional: false,
-        description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
       },
-      {
-        type: "checkbox",
-        label: "Using scoped token",
-        name: "scoped_token",
-        optional: true,
-        default: false,
-      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Jira Service Management?",
+        label: "connectors.jiraServiceManagement.indexingScopeLabel",
         optional: true,
         tabs: [
           {
             value: "everything",
-            label: "All JSM Projects",
+            label: "connectors.jiraServiceManagement.everythingLabel",
             fields: [
               {
                 type: "string_tab",
-                label: "All JSM Projects",
+                label: "connectors.jiraServiceManagement.everythingLabel",
                 name: "everything",
                 description:
-                  "This connector will index all Jira Service Management issues the provided credentials have access to.",
+                  "connectors.jiraServiceManagement.everythingDescription",
               },
             ],
           },
           {
             value: "project",
-            label: "Project",
+            label: "connectors.jira.fields.indexing_scope.tabs.project.label",
             fields: [
               {
                 type: "text",
-                label: "Project Key",
+                label: "connectors.jira.fields.project_key.label",
                 name: "project_key",
-                description:
-                  "The key of a specific Jira Service Management project to index (e.g., 'HELP').",
+                description: "connectors.jira.fields.project_key.description",
               },
             ],
           },
           {
             value: "jql",
-            label: "JQL Query",
+            label: "connectors.jira.fields.indexing_scope.tabs.jql.label",
             fields: [
               {
                 type: "text",
-                label: "JQL Query",
+                label: "connectors.jira.fields.jql_query.label",
                 name: "jql_query",
-                description:
-                  "A custom JQL query to filter Jira Service Management issues." +
-                  "\n\nThe connector automatically restricts custom JQL to Jira Service Management projects. Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
-                  "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+                description: "connectors.jiraServiceManagement.jqlDescription",
               },
             ],
           },
@@ -1177,10 +1167,10 @@ export const connectorConfigs: Record<
       },
       {
         type: "list",
-        label: "Comment Email Blacklist",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
         name: "comment_email_blacklist",
         description:
-          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+          "connectors.jira.fields.comment_email_blacklist.description",
         optional: true,
       },
     ],

@@ -14,17 +14,21 @@ JSM_SPACE_TYPE_JQL = "spaceType = service_desk"
 
 
 def _project_type_key(project: dict[str, Any]) -> str | None:
+    """Read a Jira project type without accepting malformed API values."""
     project_type = project.get("projectTypeKey")
     return project_type if isinstance(project_type, str) else None
 
 
 class JiraServiceManagementConnector(JiraConnector):
+    """Index Jira service projects while preserving the distinct JSM source."""
+
     source = DocumentSource.JIRA_SERVICE_MANAGEMENT
 
     @override
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
+        """Keep incremental polling limited to the configured service scope."""
         base_jql = super()._get_jql_query(start, end)
 
         if self.jql_query:
@@ -41,10 +45,12 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @override
     def _search_all_issues(self, jql: str) -> Iterator[dict[str, Any]]:
+        """Apply the service-project restriction to resolver and reindex queries."""
         return super()._search_all_issues(f"{JSM_SPACE_TYPE_JQL} AND ({jql})")
 
     @override
     def validate_connector_settings(self) -> None:
+        """Validate credentials and reject non-service project configurations."""
         if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
 
