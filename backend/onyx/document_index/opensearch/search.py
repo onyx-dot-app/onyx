@@ -459,7 +459,8 @@ class DocumentQuery:
                 the rescoring of the vector subqueries.
             chunk_keys_only: Return only the chunk key fields, read from doc
                 values, instead of the stored source. Highlighting and explain
-                need the source, so they are left out of this query.
+                are left out of this query; get_from_chunk_keys_query
+                highlights the top hits.
 
         Returns:
             A dictionary representing the final hybrid search query.
@@ -583,18 +584,22 @@ class DocumentQuery:
     @staticmethod
     def get_from_chunk_keys_query(
         chunk_keys: list[tuple[str, int, int]],
+        query_text: str,
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
     ) -> dict[str, Any]:
-        """Returns a query for the chunks with the given keys.
+        """Returns a query for the top hits of a keys-only hybrid search.
 
         Applies the hybrid search filters again, so a chunk whose access or
-        hidden state changed after the hybrid search is not returned.
+        hidden state changed after the hybrid search is not returned. Match
+        highlights use the keyword subquery of the hybrid search, the only
+        subquery with terms.
 
         Args:
             chunk_keys: (document_id, chunk_index, max_chunk_size) of each
                 chunk to get.
+            query_text: The text of the hybrid search.
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters of the hybrid search.
             include_hidden: Whether the hybrid search included hidden
@@ -630,7 +635,7 @@ class DocumentQuery:
                 ),
             }
         }
-        return {
+        final_chunk_keys_query: dict[str, Any] = {
             "query": query,
             "size": len(chunk_keys),
             "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
@@ -638,6 +643,14 @@ class DocumentQuery:
                 "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
             },
         }
+        if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
+            final_chunk_keys_query["highlight"] = {
+                **DocumentQuery._get_match_highlights_configuration(),
+                "highlight_query": DocumentQuery._get_title_content_combined_keyword_search_query(
+                    query_text
+                ),
+            }
+        return final_chunk_keys_query
 
     @staticmethod
     def get_keyword_search_query(

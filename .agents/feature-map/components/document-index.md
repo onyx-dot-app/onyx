@@ -272,12 +272,12 @@ it deletes the old one.
   normalization keeps the top hits: up to `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES`
   per subquery, about 1,000 chunks at the default of 500.
   `OpenSearchDocumentIndex.hybrid_retrieval` asks for doc values only and
-  fetches the source of the top hits in a second request, which applies the
-  search filters again. This path runs only on a single-shard index, with
-  highlighting off (`OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED=true`) and explain
-  off, which are the defaults. A multi-shard search already fetches only the
-  top hits, and a second request would go to every shard. Highlighting and
-  explain need the source, so they keep one request.
+  fetches the source of the top hits in a second request. That request applies
+  the search filters again and builds the match highlights from the keyword
+  subquery. This path runs only on a single-shard index with explain off (the
+  default). A multi-shard search already fetches only the top hits, and a
+  second request would go to every shard. Explain describes the hybrid
+  scoring, so it keeps one request.
 
 ## Known issues
 

@@ -11,7 +11,6 @@ from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import (
     MAX_CHUNKS_PER_DOC_BATCH,
     OPENSEARCH_EXPLAIN_ENABLED,
-    OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED,
     VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT,
 )
 from onyx.configs.constants import PUBLIC_DOC_PAT, OnyxRedisLocks
@@ -1051,12 +1050,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
         final_query = " ".join(final_keywords) if final_keywords else query
         # Only a single-shard search fetches every hybrid candidate; a
         # multi-shard search already fetches only the top hits, and a second
-        # request would go to every shard. Highlighting and explain read the
-        # chunk source in the hybrid query itself, so they keep one request.
+        # request would go to every shard. Explain describes the hybrid
+        # scoring, so it keeps one request.
         chunk_keys_only = (
-            OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED
-            and not OPENSEARCH_EXPLAIN_ENABLED
-            and self._client.get_number_of_shards() == 1
+            not OPENSEARCH_EXPLAIN_ENABLED and self._client.get_number_of_shards() == 1
         )
         query_body = DocumentQuery.get_hybrid_search_query(
             query_text=final_query,
@@ -1079,6 +1076,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         if chunk_keys_only:
             search_hits = self._get_hybrid_search_hits_by_chunk_keys(
                 query_body=query_body,
+                query_text=final_query,
                 normalization_pipeline_name=normalization_pipeline_name,
                 filters=filters,
                 include_hidden=False,
@@ -1107,6 +1105,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def _get_hybrid_search_hits_by_chunk_keys(
         self,
         query_body: dict[str, Any],
+        query_text: str,
         normalization_pipeline_name: str,
         filters: IndexFilters,
         include_hidden: bool,
@@ -1118,7 +1117,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
         the source of the top hits here avoids reading the source of
         candidates that are discarded. The source fetch applies the hybrid
         search filters again, so a chunk whose access changed between the two
-        requests is dropped.
+        requests is dropped, and it returns the match highlights.
         """
         chunk_key_hits = self._client.search_for_chunk_keys(
             body=query_body,
@@ -1133,6 +1132,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 (hit.document_id, hit.chunk_index, hit.max_chunk_size)
                 for hit in chunk_key_hits
             ],
+            query_text=query_text,
             tenant_state=self._tenant_state,
             index_filters=filters,
             include_hidden=include_hidden,
@@ -1142,12 +1142,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
             search_pipeline_id=None,
             search_type=OpenSearchSearchType.HYBRID_FETCH,
         )
-        chunks_by_key: dict[tuple[str, int, int], DocumentChunkWithoutVectors] = {
+        fetched_hits_by_key: dict[
+            tuple[str, int, int], SearchHit[DocumentChunkWithoutVectors]
+        ] = {
             (
                 hit.document_chunk.document_id,
                 hit.document_chunk.chunk_index,
                 hit.document_chunk.max_chunk_size,
-            ): hit.document_chunk
+            ): hit
             for hit in fetched_hits
         }
 
@@ -1155,13 +1157,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # matching the filters, between the two requests is dropped.
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
         for hit in chunk_key_hits:
-            chunk = chunks_by_key.get(
+            fetched_hit = fetched_hits_by_key.get(
                 (hit.document_id, hit.chunk_index, hit.max_chunk_size)
             )
-            if chunk is not None:
+            if fetched_hit is not None:
                 search_hits.append(
                     SearchHit[DocumentChunkWithoutVectors](
-                        document_chunk=chunk, score=hit.score
+                        document_chunk=fetched_hit.document_chunk,
+                        score=hit.score,
+                        match_highlights=fetched_hit.match_highlights,
                     )
                 )
         return search_hits

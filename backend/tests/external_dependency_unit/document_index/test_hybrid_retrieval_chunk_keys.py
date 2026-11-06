@@ -82,17 +82,24 @@ def _hybrid_retrieval(
 def _search_settings(
     highlights_disabled: bool, explain_enabled: bool
 ) -> Generator[None, None, None]:
-    """Sets the settings that select the hybrid path in every module that reads them."""
+    """Sets the highlight and explain settings in every module that reads them."""
     with ExitStack() as stack:
-        for module in (opensearch_document_index, search):
-            stack.enter_context(
-                patch.object(
-                    module, "OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED", highlights_disabled
-                )
+        stack.enter_context(
+            patch.object(
+                search, "OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED", highlights_disabled
             )
+        )
+        for module in (opensearch_document_index, search):
             stack.enter_context(
                 patch.object(module, "OPENSEARCH_EXPLAIN_ENABLED", explain_enabled)
             )
+        yield
+
+
+@contextmanager
+def _single_request_path() -> Generator[None, None, None]:
+    """Makes hybrid retrieval send one request, as before the keys-only path."""
+    with patch.object(OpenSearchIndexClient, "get_number_of_shards", return_value=2):
         yield
 
 
@@ -160,56 +167,82 @@ def document_index(
         yield document_index
 
 
+@pytest.mark.parametrize("highlights_disabled", [True, False])
 def test_hybrid_retrieval_by_chunk_keys_matches_single_request(
     document_index: OpenSearchDocumentIndex,
+    highlights_disabled: bool,
 ) -> None:
     query_embedding = [random.Random(11).gauss(0.0, 1.0) for _ in range(EMBEDDING_DIM)]
 
     with (
-        _search_settings(highlights_disabled=True, explain_enabled=False),
+        _search_settings(
+            highlights_disabled=highlights_disabled, explain_enabled=False
+        ),
         _spy_on_searches() as search_spy,
     ):
         chunk_keys_results = _hybrid_retrieval(document_index, query_embedding)
-    # The hybrid query reads no stored fields; the second request fetches only
-    # the top hits.
+    # The hybrid query reads no stored fields; the second request fetches and
+    # highlights only the top hits.
     hybrid_body, fetch_body = (
         search_call.kwargs["body"] for search_call in search_spy.call_args_list
     )
     assert hybrid_body["stored_fields"] == "_none_"
     assert "_source" not in hybrid_body
+    assert "highlight" not in hybrid_body
     assert fetch_body["size"] == _NUM_HITS
+    assert ("highlight" in fetch_body) is not highlights_disabled
 
-    # Highlighting and explain need the source in the hybrid query, so they
-    # keep the single-request path. Explain changes the scores slightly, so
-    # the results are compared with the highlighting path.
     with (
-        _search_settings(highlights_disabled=False, explain_enabled=False),
+        _search_settings(
+            highlights_disabled=highlights_disabled, explain_enabled=False
+        ),
+        _single_request_path(),
         _spy_on_searches() as search_spy,
     ):
         single_request_results = _hybrid_retrieval(document_index, query_embedding)
     assert search_spy.call_count == 1
-    single_request_body: dict[str, Any] = search_spy.call_args.kwargs["body"]
-    assert "highlight" in single_request_body
-    assert "stored_fields" not in single_request_body
 
+    assert len(chunk_keys_results) == _NUM_HITS
+    assert [
+        (
+            chunk.document_id,
+            chunk.chunk_id,
+            chunk.score,
+            chunk.content,
+            chunk.match_highlights,
+        )
+        for chunk in chunk_keys_results
+    ] == [
+        (
+            chunk.document_id,
+            chunk.chunk_id,
+            chunk.score,
+            chunk.content,
+            chunk.match_highlights,
+        )
+        for chunk in single_request_results
+    ]
+    # The query words occur in the chunks, so the comparison covers highlights.
+    assert any(chunk.match_highlights for chunk in chunk_keys_results) is not (
+        highlights_disabled
+    )
+
+
+def test_explain_keeps_single_request(
+    document_index: OpenSearchDocumentIndex,
+) -> None:
+    """Explain describes the hybrid scoring, so it needs the one hybrid request."""
+    query_embedding = [random.Random(11).gauss(0.0, 1.0) for _ in range(EMBEDDING_DIM)]
     with (
         _search_settings(highlights_disabled=True, explain_enabled=True),
         _spy_on_searches() as search_spy,
     ):
-        _hybrid_retrieval(document_index, query_embedding)
+        results = _hybrid_retrieval(document_index, query_embedding)
+    assert len(results) == _NUM_HITS
     assert search_spy.call_count == 1
     explain_body: dict[str, Any] = search_spy.call_args.kwargs["body"]
     assert explain_body["explain"] is True
     assert "stored_fields" not in explain_body
-
-    assert len(chunk_keys_results) == _NUM_HITS
-    assert [
-        (chunk.document_id, chunk.chunk_id, chunk.score, chunk.content)
-        for chunk in chunk_keys_results
-    ] == [
-        (chunk.document_id, chunk.chunk_id, chunk.score, chunk.content)
-        for chunk in single_request_results
-    ]
 
 
 def test_source_fetch_drops_document_made_private_after_hybrid_search(
