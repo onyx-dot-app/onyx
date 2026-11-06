@@ -195,9 +195,10 @@ the guards decide.
     "Curator" means `is_group_manager` plus the scoped bundle.
 12. `create-api-keys-gates-consent` **`CREATE_USER_API_KEYS` gates both PAT
     creation and OAuth-provider consent** (`server/pat/api.py:create_token`,
-    `server/oauth_provider/api.py`). It is the only grant an admin can switch
-    on the seeded Basic group (`auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`),
-    so one toggle stops users from minting PATs and from approving third-party
+    `server/oauth_provider/api.py`). It is one of two grants an admin can
+    switch on the seeded Basic group
+    (`auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`). The other is
+    `ADD_AGENTS`, off by default. The `CREATE_USER_API_KEYS` toggle stops users from minting PATs and from approving third-party
     apps. `db/oauth_provider.py:create_oauth_provider_grant__no_commit`
     checks it again when it issues the grant. A new way for a user to mint a
     credential for themselves needs the same permission.
