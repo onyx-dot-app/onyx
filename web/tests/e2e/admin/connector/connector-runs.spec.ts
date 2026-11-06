@@ -1,7 +1,5 @@
-/** The run list and the activity panel: a file connector shows no run-type
- * filter and no activity, a perm-synced pair's failed syncs open their
- * error and the doc sync's shows in the panel, and the status card and the
- * run list share one time window. */
+/** The Indexing tab and the activity panel: a never-run pair's tab stays disabled,
+ * failed syncs open their error, and the chart and run list share one window. */
 
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -74,7 +72,7 @@ function syncCCPairFixture() {
     last_full_permission_sync: null,
     overall_indexing_speed: null,
     latest_checkpoint_description: null,
-    last_permission_sync_attempt_status: null,
+    last_permission_sync_attempt_status: "failed",
     permission_syncing: false,
     supports_doc_permission_sync: false,
     last_permission_sync_attempt_finished: null,
@@ -145,7 +143,7 @@ async function mockSyncConnector(page: Page): Promise<void> {
       jsonResponse({
         window_start: new Date(Date.now() - 3_600_000).toISOString(),
         window_end: new Date().toISOString(),
-        docs_indexed: [0, 0, 0],
+        docs_indexed: [0, 4, 0],
         runs: [],
       })
     );
@@ -168,7 +166,7 @@ async function mockSyncConnector(page: Page): Promise<void> {
 }
 
 test.describe("Connector runs", () => {
-  test("a file connector shows no run-type filter and no activity", async ({
+  test("a file connector that never ran keeps the Indexing tab disabled and shows no activity", async ({
     page,
   }) => {
     const apiClient = new OnyxApiClient(page.request);
@@ -177,10 +175,12 @@ test.describe("Connector runs", () => {
     );
     try {
       const detail = new AdminConnectorDetailPage(page);
-      await detail.goto(ccPairId);
-      await detail.expectNoRuns();
+      // ?tab=indexing lands on Connector Configurations until a run starts.
+      await detail.goto(ccPairId, "indexing");
+      await detail.expectLoaded();
+      await expect(detail.indexingTab).toBeDisabled();
+      await expect(detail.runsSection).toHaveCount(0);
       await detail.expectNoActivity();
-      await expect(detail.runKindFilter).toHaveCount(0);
     } finally {
       await apiClient.deleteCCPair(ccPairId);
     }
@@ -189,7 +189,7 @@ test.describe("Connector runs", () => {
   test("a failed sync run opens its error", async ({ page }) => {
     await mockSyncConnector(page);
     const detail = new AdminConnectorDetailPage(page);
-    await detail.goto(MOCK_SYNC_CC_PAIR_ID);
+    await detail.goto(MOCK_SYNC_CC_PAIR_ID, "indexing");
     await detail.expectRunsVisible();
     await expect(detail.runKindFilter).toBeVisible();
     await detail.expectActivityShows(MOCK_DOC_ERROR_MESSAGE);
@@ -210,7 +210,7 @@ test.describe("Connector runs", () => {
     await expect(groupModal).toContainText(MOCK_GROUP_ERROR_MESSAGE);
   });
 
-  test("the status card and the run list share one time window", async ({
+  test("the chart card and the run list share one time window", async ({
     page,
   }) => {
     await mockSyncConnector(page);
@@ -232,7 +232,7 @@ test.describe("Connector runs", () => {
       }
     });
     const detail = new AdminConnectorDetailPage(page);
-    await detail.goto(MOCK_SYNC_CC_PAIR_ID);
+    await detail.goto(MOCK_SYNC_CC_PAIR_ID, "indexing");
     await detail.expectRunsVisible();
 
     // Both cards open on the last 24 hours.

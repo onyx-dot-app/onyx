@@ -27,12 +27,16 @@ import type {
   CCPairRunLevel,
   CCPairRunsQuery,
   CCPairRunStatusGroup,
+  CCPairThroughputResponse,
+  CCPairThroughputWindow,
   IndexingConnectorRow,
   IndexingConnectorsResponse,
   IndexingRun,
+  PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useThroughputData, type ThroughputData } from "@/lib/connectors/hooks";
 import {
   resolveAllErrorsForCCPair,
   resolveErrors,
@@ -1017,4 +1021,34 @@ export function useActivityChartLinks({
       outlinedAttemptIds,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// useLatestIndexAttempt
+// ---------------------------------------------------------------------------
+
+// The connector page's poll of the pair and its newest attempts.
+export const CC_PAIR_STATUS_POLL_MS = 5000;
+
+/** The pair's newest index attempt. */
+export function useLatestIndexAttempt(ccPairId: number) {
+  return useSWR<PaginatedIndexAttempts>(
+    SWR_KEYS.ccPairLatestIndexAttempt(ccPairId),
+    errorHandlingFetcher,
+    { refreshInterval: CC_PAIR_STATUS_POLL_MS }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// useCCPairThroughput
+// ---------------------------------------------------------------------------
+
+/** One pair's throughput over the window, in as many bars as the measured chart fits. */
+export function useCCPairThroughput(
+  ccPairId: number,
+  range: CCPairThroughputWindow
+): ThroughputData<CCPairThroughputResponse> {
+  return useThroughputData<CCPairThroughputResponse>((bins, tzOffsetMinutes) =>
+    SWR_KEYS.ccPairThroughput(ccPairId, range, bins, tzOffsetMinutes)
+  );
 }

@@ -109,6 +109,23 @@ export interface RunsCardProps {
   onClearRange?: () => void;
   /** Called when a run line's stage details or check results open or close, so the page can step back around it. */
   onFocusChange?: (focused: boolean) => void;
+  /** The index attempt of the activity the page's panel points at: its run line lifts. */
+  liftedAttemptId?: number | null;
+}
+
+/** The empty list at the design's 64 px illustration. */
+function NoRecentRuns() {
+  const t = useTranslations("admin.connector.runs.empty");
+  return (
+    // IllustrationContent pads 20 px, and 20 px of margin makes the design's 40 px above and below.
+    <Section height="fit" className="my-5">
+      <IllustrationContent
+        size="sm"
+        illustration={SvgLongWait}
+        title={t("title")}
+      />
+    </Section>
+  );
 }
 
 /** A run's key in the list. */
@@ -127,6 +144,7 @@ export default function RunsCard({
   onFocusChange,
   range = null,
   onClearRange,
+  liftedAttemptId = null,
 }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
@@ -310,10 +328,7 @@ export default function RunsCard({
       </Section>
     ) : emptyWindow ? (
       <Section alignItems="stretch" gap={0} height="fit">
-        <IllustrationContent
-          illustration={SvgLongWait}
-          title={t("empty.title")}
-        />
+        <NoRecentRuns />
         {pastRuns > 0 && !embedded && (
           <Section flexDirection="row" alignItems="center" gap={0} height="fit">
             <Section height="fit" className="min-w-0 flex-1">
@@ -340,10 +355,7 @@ export default function RunsCard({
           title={t("empty.filteredTitle")}
         />
       ) : (
-        <IllustrationContent
-          illustration={SvgLongWait}
-          title={t("empty.title")}
-        />
+        <NoRecentRuns />
       )
     ) : (
       <Section alignItems="stretch" gap={1} height="fit">
@@ -357,6 +369,9 @@ export default function RunsCard({
             open={focus.isOpen(runKey(run))}
             onOpenChange={(open) => focus.setOpen(runKey(run), open)}
             dimmed={focus.isDimmed(runKey(run))}
+            lifted={
+              run.kind === "indexing" && run.attempt.id === liftedAttemptId
+            }
           />
         ))}
       </Section>
@@ -372,12 +387,13 @@ export default function RunsCard({
   const body = (
     <>
       {logModal}
-      <Section alignItems="stretch" gap={1} height="fit">
+      <Section alignItems="stretch" gap={0} height="fit">
         <Section
           flexDirection="row"
           justifyContent="between"
           alignItems="center"
           gap={2}
+          padding={2}
           height="fit"
         >
           <Section
@@ -538,15 +554,21 @@ export default function RunsCard({
           </Section>
         </Section>
 
-        {runList}
+        <Section alignItems="stretch" padding={1} height="fit">
+          {runList}
+        </Section>
 
+        {/* 12 px in from the card's sides, in line with the run lines. */}
         {totalItems > 0 && (
           <Section
             flexDirection="row"
             justifyContent="between"
             alignItems="center"
             gap={2}
+            padding={2}
+            width="auto"
             height="fit"
+            className="mx-1"
           >
             <Text font="secondary-body" color="text-03">
               {richNodes(
@@ -618,7 +640,7 @@ export default function RunsCard({
       color="background-tint-01"
       border="solid"
       rounding={4}
-      padding={2}
+      padding={0}
       data-testid="connector-runs"
     >
       {body}

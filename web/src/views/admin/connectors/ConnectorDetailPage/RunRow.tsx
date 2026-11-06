@@ -574,6 +574,8 @@ export interface RunRowProps {
   onOpenChange: (open: boolean) => void;
   /** Another line's details are open, so this line steps back. */
   dimmed: boolean;
+  /** An activity elsewhere on the page points at this run, so the line rises as an open one does. */
+  lifted?: boolean;
 }
 
 /** One run in the pair's run list: what ran and when, how it ended, and what it moved, with its stage details or check results inline under it. */
@@ -585,6 +587,7 @@ export default function RunRow({
   open,
   onOpenChange,
   dimmed,
+  lifted = false,
 }: RunRowProps) {
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
@@ -644,7 +647,7 @@ export default function RunRow({
     >
       <Card
         padding={1}
-        shadow={open ? "md" : "none"}
+        shadow={open || lifted ? "md" : "none"}
         className="group/run-line"
         data-testid="run-row"
       >
