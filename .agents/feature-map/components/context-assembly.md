@@ -100,7 +100,6 @@ prefix. Prompt assembly marks the stable part as cacheable
 (`chat/prompt_formatting.py:prepare_model_messages`), and provider-side prefix
 caching uses it. Separately, the LLM adapter marks
 every tool result with an explicit breakpoint on supported OpenAI and Azure API requests
-when `ENABLE_PROMPT_CACHING=true`
 (`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`). Requests with no
 tool results keep implicit caching. `prepare_prompt` copies
 the messages it receives and never changes recorded history. Within one step it

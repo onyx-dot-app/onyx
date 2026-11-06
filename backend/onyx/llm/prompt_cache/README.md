@@ -87,15 +87,6 @@ processed_prompt, _ = process_with_prompt_cache(
 - **Cache Lifetime**: 5 minutes
 - **Future**: Full context caching with block number management (deferred to future PR)
 
-## Configuration
-
-### Environment Variables
-
-- `ENABLE_PROMPT_CACHING`: Enable/disable prompt caching (default: `true`)
-  ```bash
-  export ENABLE_PROMPT_CACHING=false  # Disable caching
-  ```
-
 ## Architecture
 
 ### Core Components

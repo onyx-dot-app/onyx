@@ -112,13 +112,6 @@ def test_other_requests_keep_plain_tool_results(
     assert "prompt_cache_options" not in sent
 
 
-def test_disabled_prompt_caching_keeps_plain_tool_results() -> None:
-    with patch("onyx.llm.prompt_cache.providers.openai.ENABLE_PROMPT_CACHING", False):
-        sent = _sent("openai", "gpt-5.6-luna", _turn())
-    assert all(isinstance(content, str) for content in _tool_contents(sent))
-    assert "prompt_cache_options" not in sent
-
-
 def test_no_tool_result_keeps_implicit_caching() -> None:
     sent = _sent("openai", "gpt-5.6-luna", [UserMessage(content="Hello")])
     assert "prompt_cache_options" not in sent
