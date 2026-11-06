@@ -628,6 +628,7 @@ class TestRetrieveAdjacentChunks:
         _retrieve_adjacent_chunks(
             section=_section(document_id, [3, 4]),
             document_index=document_index,
+            user=MagicMock(),
             num_chunks_above=2,
             num_chunks_below=2,
         )
@@ -645,6 +646,7 @@ class TestRetrieveAdjacentChunks:
         _retrieve_adjacent_chunks(
             section=_section("doc", [3, 4]),
             document_index=document_index,
+            user=MagicMock(),
             num_chunks_above=2,
             num_chunks_below=3,
         )
@@ -669,6 +671,7 @@ class TestRetrieveAdjacentChunks:
         _retrieve_adjacent_chunks(
             section=_section("doc", [0, 1]),
             document_index=document_index,
+            user=MagicMock(),
             num_chunks_above=2,
             num_chunks_below=1,
         )
@@ -689,12 +692,42 @@ class TestRetrieveAdjacentChunks:
         above, below = _retrieve_adjacent_chunks(
             section=_section("doc", [3]),
             document_index=document_index,
+            user=MagicMock(),
             num_chunks_above=2,
             num_chunks_below=2,
         )
 
         assert [chunk.chunk_id for chunk in above] == [1, 2]
         assert below == []
+
+    def test_censors_neighbors_for_the_user(self) -> None:
+        """A source can decide access per record inside one document, so a
+        visible section does not clear its neighbors."""
+        document_index = MagicMock()
+        document_index.id_based_retrieval.side_effect = [
+            [_inference_chunk("doc", 1), _inference_chunk("doc", 2)],
+            [_inference_chunk("doc", 4), _inference_chunk("doc", 5)],
+        ]
+        user = MagicMock()
+
+        with patch.object(
+            search_utils,
+            "censor_chunks_for_user",
+            side_effect=lambda chunks, _user: [c for c in chunks if c.chunk_id != 4],
+        ) as censor:
+            above, below = _retrieve_adjacent_chunks(
+                section=_section("doc", [3]),
+                document_index=document_index,
+                user=user,
+                num_chunks_above=2,
+                num_chunks_below=2,
+            )
+
+        censor.assert_called_once()
+        assert [chunk.chunk_id for chunk in censor.call_args.args[0]] == [1, 2, 4, 5]
+        assert censor.call_args.args[1] is user
+        assert [chunk.chunk_id for chunk in above] == [1, 2]
+        assert [chunk.chunk_id for chunk in below] == [5]
 
 
 def test_expansion_without_llm_fallback_raises_when_the_decision_call_fails() -> None:
@@ -715,6 +748,7 @@ def test_expansion_without_llm_fallback_raises_when_the_decision_call_fails() ->
             user_query="query",
             llm=MagicMock(),
             document_index=MagicMock(),
+            user=MagicMock(),
             decision_client=MagicMock(),
             llm_fallback=False,
         )
