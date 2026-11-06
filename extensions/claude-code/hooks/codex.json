@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/scripts/onyx-hook\" codex",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\" codex",
             "timeout": 5,
             "additionalContextLimit": 4000
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/scripts/onyx-hook\" codex",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\" codex",
             "timeout": 5
           }
         ]
@@ -27,11 +27,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__onyx__search_indexed_documents",
+        "matcher": "mcp__(onyx|plugin_onyx_onyx)__search_indexed_documents",
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/scripts/onyx-hook\" codex",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\" codex",
             "timeout": 5
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${PLUGIN_ROOT}/scripts/onyx-hook\" codex",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/onyx-hook\" codex",
             "timeout": 5
           }
         ]

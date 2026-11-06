@@ -325,12 +325,14 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
 }
 
 function isOtherRetrievalTool(tool: string): boolean {
-  const match = /^mcp__(.+?)__(.+)$/.exec(tool);
-  if (!match) {
+  if (!tool.startsWith("mcp__")) {
     // Only the matcher's built-in search tools arrive without the MCP prefix.
     return true;
   }
-  const [, server, name] = match;
+  // Split at the last separator: Onyx tool names contain none, a server name may.
+  const split = tool.lastIndexOf("__");
+  const server = tool.slice("mcp__".length, split);
+  const name = tool.slice(split + 2);
   return !OWN_SERVER_PATTERN.test(server) && RETRIEVAL_TOOL_PATTERN.test(name);
 }
 
