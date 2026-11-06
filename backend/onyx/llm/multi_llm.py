@@ -168,6 +168,7 @@ _env_rwlock = rwlock.RWLockWrite()
 if TYPE_CHECKING:
     from litellm import CustomStreamWrapper, HTTPHandler
     from litellm import ModelResponse as LiteLLMModelResponse
+    from litellm.exceptions import BadRequestError
 
 
 LEGACY_MAX_TOKENS_KWARG = "max_tokens"
@@ -288,6 +289,49 @@ def _retry_attempts(
         if len(stripped) < len(attempts[-1]):
             attempts.append(stripped)
     return attempts
+
+
+def _tools_with_strictness(
+    tools: list[dict[str, JsonValue]], *, enabled: bool | None
+) -> list[dict[str, JsonValue]]:
+    """Copy tool flags without changing schemas; None omits the provider flag."""
+    result: list[dict[str, JsonValue]] = []
+    for tool in tools:
+        function = tool.get("function")
+        if not isinstance(function, dict):
+            result.append(tool)
+            continue
+        function = {key: value for key, value in function.items() if key != "strict"}
+        if enabled is not None:
+            function["strict"] = enabled
+        result.append({**tool, "function": function})
+    return result
+
+
+def _rejects_strict_tools(error: "BadRequestError") -> bool:
+    """Recognize schema failures without treating unrelated 400s as strict failures."""
+    body = error.body
+    if isinstance(body, dict):
+        details = body.get("error", body)
+        if isinstance(details, dict):
+            if details.get("code") == "invalid_function_parameters":
+                return True
+            param = details.get("param")
+            if (
+                isinstance(param, str)
+                and param.startswith("tools")
+                and param.endswith(".strict")
+            ):
+                return True
+    message = str(error).lower()
+    return "invalid_function_parameters" in message or any(
+        phrase in message
+        for phrase in (
+            "invalid strict tool schema",
+            "unsupported parameter: 'strict'",
+            'unsupported parameter: "strict"',
+        )
+    )
 
 
 class ProviderOperation(BaseModel):
@@ -949,6 +993,7 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
         client: "HTTPHandler | None" = None,
         operation: ProviderOperation | None = None,
+        manage_tool_strictness: bool = False,
         env_injection_enabled: bool | None = None,
         deadline: float | None = None,
     ) -> "LiteLLMModelResponse | CustomStreamWrapper":
@@ -1448,6 +1493,31 @@ class LitellmLLM(LLM):
                 if cache_options is not None:
                     optional_kwargs.setdefault("prompt_cache_options", cache_options)
 
+            strict_disabled = False
+            strict_model = (
+                bool(tools)
+                and manage_tool_strictness
+                and self._model_provider == LlmProviderNames.OPENAI
+                and not model_bare.startswith("ft:")
+                and is_true_openai_model(LlmProviderNames.OPENAI, model_bare)
+                and (
+                    find_model_obj(get_model_map(), LlmProviderNames.OPENAI, model_bare)
+                    or {}
+                ).get("supports_function_calling")
+                is True
+            )
+
+            unmarked_tools = (
+                _tools_with_strictness(tools, enabled=None)
+                if tools and manage_tool_strictness
+                else tools
+            )
+            non_strict_tools = (
+                _tools_with_strictness(tools, enabled=False)
+                if tools and strict_model
+                else tools
+            )
+
             # Provider 400s degrade to provider defaults with a warning instead
             # of failing the message, or learn the "none" a provider demands.
             attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
@@ -1462,8 +1532,26 @@ class LitellmLLM(LLM):
                     if env_injection_enabled
                     else nullcontext()
                 )
+                selected_tools = tools
+                strict_attempt = False
                 try:
                     with env_ctx:
+                        from litellm.integrations.anthropic_cache_control_hook import (
+                            targets_openai_api,
+                        )
+
+                        effective_base = passthrough_kwargs.get("api_base") or base_url
+                        if manage_tool_strictness:
+                            selected_tools = unmarked_tools
+                            if strict_model and targets_openai_api(effective_base):
+                                selected_tools = (
+                                    non_strict_tools if strict_disabled else tools
+                                )
+                                strict_attempt = not strict_disabled and any(
+                                    isinstance(function := tool.get("function"), dict)
+                                    and function.get("strict") is True
+                                    for tool in (tools or [])
+                                )
                         attempt_messages = messages
                         if cache_options is not None and "prompt_cache_options" in opts:
                             effective_base = (
@@ -1518,7 +1606,7 @@ class LitellmLLM(LLM):
                                 messages=attempt_messages,
                                 # None (omitted) rather than [] — some OpenAI-compatible
                                 # servers reject requests with an empty tools array.
-                                tools=tools or None,
+                                tools=selected_tools or None,
                                 stream=stream,
                                 timeout=timeout,
                                 max_tokens=max_tokens,
@@ -1529,6 +1617,13 @@ class LitellmLLM(LLM):
                         )
                 except BadRequestError as e:
                     check_cancelled()
+                    if strict_attempt and _rejects_strict_tools(e):
+                        strict_disabled = True
+                        attempts.insert(i + 1, dict(opts))
+                        logger.warning(
+                            "OpenAI rejected strict tools; retrying without strict enforcement"
+                        )
+                        continue
                     if (
                         _rejection_demands_reasoning_none(e)
                         and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
@@ -1633,6 +1728,7 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
         total_timeout_s: float = LLM_INVOKE_TIMEOUT_S,
         operation: ProviderOperation | None = None,
+        manage_tool_strictness: bool = False,
     ) -> ModelResponse:
         """One complete provider response within ``total_timeout_s``.
 
@@ -1711,6 +1807,7 @@ class LitellmLLM(LLM):
                 user_identity=user_identity,
                 client=client,
                 operation=operation,
+                manage_tool_strictness=manage_tool_strictness,
                 env_injection_enabled=env_injection_enabled,
                 deadline=deadline,
             )
@@ -1771,6 +1868,7 @@ class LitellmLLM(LLM):
         user_identity: LLMUserIdentity | None = None,
         stall_timeout_s: int = LLM_SOCKET_READ_TIMEOUT,
         operation: ProviderOperation | None = None,
+        manage_tool_strictness: bool = False,
     ) -> Iterator[ModelResponseStream]:
         """Yield provider chunks as they arrive; the caller owns the generation span.
 
@@ -1852,6 +1950,7 @@ class LitellmLLM(LLM):
                         user_identity=user_identity,
                         client=client,
                         operation=operation,
+                        manage_tool_strictness=manage_tool_strictness,
                     ),
                 )
 
@@ -1976,6 +2075,7 @@ class LitellmLLM(LLM):
                     tools=tools,
                     tool_choice=request.options.tool_choice,
                     structured_response_format=request.options.structured_response_format,
+                    manage_tool_strictness=True,
                     total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
                     max_tokens=request.options.max_tokens,
                     reasoning_effort=request.options.reasoning_effort,
@@ -2037,6 +2137,7 @@ class LitellmLLM(LLM):
                             reasoning_effort=request.options.reasoning_effort,
                             user_identity=context.user_identity,
                             operation=operation,
+                            manage_tool_strictness=True,
                             stall_timeout_s=context.stall_timeout_s
                             or LLM_SOCKET_READ_TIMEOUT,
                             structured_response_format=request.options.structured_response_format,
