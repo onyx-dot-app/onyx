@@ -11,6 +11,8 @@ from onyx.server.manage.llm.models import ModelConfigurationView, OpenRouterMode
     "provider,model,chat,decisions",
     [
         ("typesafe", "jev-latest", False, True),
+        ("nace", "drex-max", False, True),
+        ("nace", "drex-v2.0", False, True),
         ("zoom_ai", "zoom-decisions", False, True),
         ("zoom_ai", "zoom-decisions-pro", False, True),
         ("openai", "gpt-6-luna", True, True),
@@ -19,6 +21,7 @@ from onyx.server.manage.llm.models import ModelConfigurationView, OpenRouterMode
         ("azure", "gpt-6-luna", True, False),
         ("openrouter", "openai/gpt-6-luna", True, False),
         ("typesafe", "unknown", False, False),
+        ("nace", "drex-latest", False, False),
         ("openai", "unknown", True, False),
         ("ollama", "instructor-chat", True, False),
         ("openai", "my-embedding-team-chat", True, False),
@@ -33,6 +36,7 @@ def test_catalog_capabilities_are_independent_and_provider_scoped(
 
 def test_direct_decision_models_are_discoverable() -> None:
     assert fetch_models_for_provider("typesafe") == ["jev-latest", "jev-preview"]
+    assert fetch_models_for_provider("nace") == ["drex-max", "drex-v2.0"]
     assert fetch_models_for_provider("zoom_ai") == [
         "zoom-decisions",
         "zoom-decisions-pro",

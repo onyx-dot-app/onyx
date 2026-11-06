@@ -3,7 +3,7 @@ import socket
 import unicodedata
 from collections.abc import Iterator
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -693,3 +693,17 @@ def sanitize_next_url(next_url: str | None) -> str:
         return "/"
 
     return next_url
+
+
+def url_origin(url: str) -> tuple[str, str | None, int | None]:
+    """Scheme, host and port of a URL, with the default port for http(s) filled in.
+
+    Raises ValueError for a malformed URL (for example an out-of-range port).
+    """
+    parsed = urlsplit(url)
+    port = parsed.port
+    return (
+        parsed.scheme,
+        parsed.hostname,
+        port if port is not None else {"https": 443, "http": 80}.get(parsed.scheme),
+    )

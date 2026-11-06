@@ -16,6 +16,7 @@ import {
   SvgDeepSeek,
   SvgQwen,
   SvgGoogle,
+  SvgNace,
   SvgNebius,
   SvgPortkey,
   SvgTypeSafe,
@@ -26,6 +27,7 @@ import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderName } from "@/lib/languageModels/types";
 import OpenAIModal from "@/sections/modals/languageModels/OpenAIModal";
 import TypeSafeModal from "@/sections/modals/languageModels/TypeSafeModal";
+import NaceModal from "@/sections/modals/languageModels/NaceModal";
 import ZoomDecisionModal from "@/sections/modals/languageModels/ZoomDecisionModal";
 import AnthropicModal from "@/sections/modals/languageModels/AnthropicModal";
 import OllamaModal from "@/sections/modals/languageModels/OllamaModal";
@@ -52,6 +54,13 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     productName: "System One",
     companyName: "TypeSafe AI",
     Modal: TypeSafeModal,
+  },
+  [LLMProviderName.NACE]: {
+    decisionOnly: true,
+    icon: SvgNace,
+    productName: "Drex",
+    companyName: "Nace",
+    Modal: NaceModal,
   },
   [LLMProviderName.ZOOM_AI]: {
     decisionOnly: true,
@@ -199,6 +208,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
 
 export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.TYPESAFE]: SvgTypeSafe,
+  [LLMProviderName.NACE]: SvgNace,
   [LLMProviderName.ZOOM_AI]: SvgZoom,
   [LLMProviderName.OPENAI]: SvgOpenAI,
   [LLMProviderName.ANTHROPIC]: SvgClaude,

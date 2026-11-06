@@ -65,6 +65,7 @@ def test_catalog_does_not_select_a_model() -> None:
     assert response.providers == []
     assert set(response.supported_providers) == {
         "typesafe",
+        "nace",
         "openai",
         "openrouter",
         "zoom_ai",
