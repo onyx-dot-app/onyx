@@ -3,12 +3,13 @@ import json
 import threading
 from collections.abc import Coroutine
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from mcp import ClientSession
 from mcp.types import (
     AudioContent,
+    CallToolRequest,
     CallToolResult,
     EmbeddedResource,
     ImageContent,
@@ -136,6 +137,7 @@ def test_call_tool_preserves_server_error_flag() -> None:
         content=[TextContent(type="text", text="Tool request failed")], isError=True
     )
     session = AsyncMock(spec=ClientSession)
+    session._tool_output_schemas = {}
     session.call_tool.return_value = result
 
     received = asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
@@ -180,6 +182,19 @@ def test_cancellation_stops_a_running_call(monkeypatch: pytest.MonkeyPatch) -> N
     assert not stopper.is_alive()
     assert stopped.is_set()
     assert not cancellation._callbacks
+
+
+def test_call_tool_does_not_fetch_tools_list() -> None:
+    session = ClientSession(MagicMock(), MagicMock())
+    session.initialize = AsyncMock()
+    session.send_request = AsyncMock(return_value=CallToolResult(content=[]))
+
+    result = asyncio.run(client._call_mcp_tool("lookup", {"id": 1})(session))
+
+    assert result == CallToolResult(content=[])
+    session.send_request.assert_awaited_once()
+    request = session.send_request.await_args_list[0].args[0]
+    assert isinstance(request.root, CallToolRequest)
 
 
 @pytest.mark.parametrize(

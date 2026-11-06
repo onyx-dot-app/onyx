@@ -268,6 +268,9 @@ def _call_mcp_tool(
 ) -> MCPClientFunction[CallToolResult]:
     async def call_tool(session: ClientSession) -> CallToolResult:
         await session.initialize()
+        # python-sdk#3513: an unknown tool makes call_tool fetch tools/list to
+        # validate output. Onyx does not rely on that validation, so skip it.
+        session._tool_output_schemas[tool_name] = None
         return await session.call_tool(tool_name, arguments)
 
     return call_tool
