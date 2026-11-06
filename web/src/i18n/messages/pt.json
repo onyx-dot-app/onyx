@@ -7824,6 +7824,12 @@
             "description": "Selecione os modelos que ficarão disponíveis para este provedor.",
             "title": "Modelos"
           },
+          "foldButton": {
+            "label": "Recolher modelos"
+          },
+          "moreButton": {
+            "label": "Mais modelos"
+          },
           "refetch": {
             "label": "Atualizar modelos",
             "errorToast": "Falha ao buscar os modelos"

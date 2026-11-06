@@ -7824,6 +7824,12 @@
             "description": "Select models to make available for this provider.",
             "title": "Models"
           },
+          "foldButton": {
+            "label": "Fold Models"
+          },
+          "moreButton": {
+            "label": "More Models"
+          },
           "refetch": {
             "label": "Refresh models",
             "errorToast": "Failed to fetch models"

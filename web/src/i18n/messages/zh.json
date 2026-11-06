@@ -7824,6 +7824,12 @@
             "description": "选择要为此提供商启用的模型。",
             "title": "模型"
           },
+          "foldButton": {
+            "label": "收起模型"
+          },
+          "moreButton": {
+            "label": "更多模型"
+          },
           "refetch": {
             "label": "刷新模型",
             "errorToast": "获取模型失败"
