@@ -13,7 +13,19 @@ def mock_nginx_env(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     mock_nginx = bin_dir / "nginx"
-    mock_nginx.write_text("#!/bin/sh\nexit 0\n")
+    mock_nginx.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" != "-g" ] || [ "$2" != "daemon off;" ]; then\n'
+        '    echo "Invalid nginx arguments: $*" >&2\n'
+        "    exit 1\n"
+        "fi\n"
+        'if grep -q "\\${CONF_DIR}" "$CONF_DIR/app.conf"; then\n'
+        '    echo "ERROR: unexpanded \\${CONF_DIR} found in app.conf" >&2\n'
+        "    exit 1\n"
+        "fi\n"
+        'echo "nginx validated configuration and started successfully"\n'
+        "exit 0\n"
+    )
     mock_nginx.chmod(0o755)
 
     conf_dir = tmp_path / "conf.d"
@@ -73,9 +85,14 @@ def test_run_nginx_mcp_enabled_with_templates(
     )
 
     assert "MCP server is enabled, creating MCP configuration..." in result.stdout
+    assert "nginx validated configuration and started successfully" in result.stdout
     assert (conf_dir / "mcp_upstream.conf.inc").is_file()
     assert (conf_dir / "mcp.conf.inc").is_file()
     assert (conf_dir / "webhook.conf.inc").is_file()
+
+    app_content = (conf_dir / "app.conf").read_text()
+    assert f"include {conf_dir}/mcp_upstream.conf.inc;" in app_content
+    assert "${CONF_DIR}" not in app_content
 
     upstream_content = (conf_dir / "mcp_upstream.conf.inc").read_text()
     assert "server custom_mcp_server:8090;" in upstream_content
@@ -101,6 +118,7 @@ def test_run_nginx_mcp_enabled_fallback_when_templates_missing(
     )
 
     assert "MCP configuration templates are missing" in result.stdout
+    assert "nginx validated configuration and started successfully" in result.stdout
     assert (conf_dir / "mcp_upstream.conf.inc").is_file()
     assert (conf_dir / "mcp.conf.inc").is_file()
     assert (conf_dir / "webhook.conf.inc").is_file()
@@ -129,6 +147,7 @@ def test_run_nginx_mcp_disabled(mock_nginx_env: tuple[Path, dict[str, str]]) -> 
     )
 
     assert "MCP server is disabled, removing MCP configuration..." in result.stdout
+    assert "nginx validated configuration and started successfully" in result.stdout
     assert (conf_dir / "mcp_upstream.conf.inc").is_file()
     assert (conf_dir / "mcp.conf.inc").is_file()
 

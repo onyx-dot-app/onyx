@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 # fill in the template
 export ONYX_BACKEND_API_HOST="${ONYX_BACKEND_API_HOST:-api_server}"
 export ONYX_WEB_SERVER_HOST="${ONYX_WEB_SERVER_HOST:-web_server}"
@@ -17,10 +18,10 @@ echo "Using web server host: $ONYX_WEB_SERVER_HOST"
 echo "Using MCP server host: $ONYX_MCP_SERVER_HOST"
 echo "Using nginx proxy timeouts - connect: ${NGINX_PROXY_CONNECT_TIMEOUT}s, send: ${NGINX_PROXY_SEND_TIMEOUT}s, read: ${NGINX_PROXY_READ_TIMEOUT}s"
 
-CONF_DIR="${CONF_DIR:-/etc/nginx/conf.d}"
+export CONF_DIR="${CONF_DIR:-/etc/nginx/conf.d}"
 
 # shellcheck disable=SC2016
-envsubst '$DOMAIN $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME $ONYX_BACKEND_API_HOST $ONYX_WEB_SERVER_HOST $ONYX_MCP_SERVER_HOST $NGINX_PROXY_CONNECT_TIMEOUT $NGINX_PROXY_SEND_TIMEOUT $NGINX_PROXY_READ_TIMEOUT' < "$CONF_DIR/$1" > "$CONF_DIR/app.conf"
+envsubst '$DOMAIN $CONF_DIR $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME $ONYX_BACKEND_API_HOST $ONYX_WEB_SERVER_HOST $ONYX_MCP_SERVER_HOST $NGINX_PROXY_CONNECT_TIMEOUT $NGINX_PROXY_SEND_TIMEOUT $NGINX_PROXY_READ_TIMEOUT' < "$CONF_DIR/$1" > "$CONF_DIR/app.conf"
 
 # Conditionally create MCP server configuration
 if [ "${MCP_SERVER_ENABLED}" = "True" ] || [ "${MCP_SERVER_ENABLED}" = "true" ]; then
@@ -49,7 +50,17 @@ if [ ! -f "$CONF_DIR/webhook.conf.inc" ]; then
   echo "# Empty file - webhook configuration not found" > "$CONF_DIR/webhook.conf.inc"
 fi
 
-# Start nginx and reload every 6 hours
+# Verify required configuration files exist before proceeding
+for f in "$CONF_DIR/app.conf" "$CONF_DIR/mcp_upstream.conf.inc" "$CONF_DIR/mcp.conf.inc" "$CONF_DIR/webhook.conf.inc"; do
+  if [ ! -f "$f" ]; then
+    echo "ERROR: Required configuration file $f is missing" >&2
+    exit 1
+  fi
+done
+
+# Start background reload loop only when daemon reload is requested
 if [ "${RUN_NGINX_DAEMON:-true}" = "true" ]; then
-  while :; do sleep 6h & wait; nginx -s reload; done & nginx -g "daemon off;"
+  while :; do sleep 6h & wait; nginx -s reload; done &
 fi
+
+nginx -g "daemon off;"

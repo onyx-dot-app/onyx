@@ -136,9 +136,10 @@ function Download-OnyxFile {
 }
 
 function Ensure-OnyxFile {
-    param([string]$Path, [string]$Url, [string]$Description)
+    param([string]$Path, [string]$Url, [string]$Description, [switch]$Optional)
     if ($Local) {
         if (Test-Path $Path) { Print-Success "Using existing $Description"; return $true }
+        if ($Optional) { return $true }
         Print-OnyxError "Required file missing: $Description ($Path)"
         return $false
     }
@@ -148,6 +149,10 @@ function Ensure-OnyxFile {
         Print-Success "$Description downloaded"
         return $true
     } catch {
+        if ($Optional) {
+            Print-Warning "Optional $Description could not be downloaded - skipping"
+            return $true
+        }
         Print-OnyxError "Failed to download $Description"
         return $false
     }
@@ -926,9 +931,9 @@ function Main {
     if (-not (Ensure-OnyxFile $envTemplateDest "$($script:GitHubRawUrl)/env.template" "env.template")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\app.conf.template") "$($script:NginxBaseUrl)/app.conf.template" "nginx/app.conf.template")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") "$($script:NginxBaseUrl)/run-nginx.sh" "nginx/run-nginx.sh")) { exit 1 }
-    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\mcp.conf.inc.template") "$($script:NginxBaseUrl)/mcp.conf.inc.template" "nginx/mcp.conf.inc.template")) { exit 1 }
-    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\mcp_upstream.conf.inc.template") "$($script:NginxBaseUrl)/mcp_upstream.conf.inc.template" "nginx/mcp_upstream.conf.inc.template")) { exit 1 }
-    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\webhook.conf.inc") "$($script:NginxBaseUrl)/webhook.conf.inc" "nginx/webhook.conf.inc")) { exit 1 }
+    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\mcp.conf.inc.template") "$($script:NginxBaseUrl)/mcp.conf.inc.template" "nginx/mcp.conf.inc.template" -Optional)) { exit 1 }
+    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\mcp_upstream.conf.inc.template") "$($script:NginxBaseUrl)/mcp_upstream.conf.inc.template" "nginx/mcp_upstream.conf.inc.template" -Optional)) { exit 1 }
+    if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\webhook.conf.inc") "$($script:NginxBaseUrl)/webhook.conf.inc" "nginx/webhook.conf.inc" -Optional)) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "README.md") "$($script:GitHubRawUrl)/README.md" "README.md")) { exit 1 }
 
     $gitkeep = Join-Path $script:InstallRoot "data\nginx\local\.gitkeep"
@@ -1038,6 +1043,9 @@ function Main {
             Download-OnyxFile "$pinnedBase/docker_compose/docker-compose.yml" $composeDest
             try { Download-OnyxFile "$pinnedBase/data/nginx/app.conf.template" (Join-Path $script:InstallRoot "data\nginx\app.conf.template") } catch {}
             try { Download-OnyxFile "$pinnedBase/data/nginx/run-nginx.sh" (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") } catch {}
+            try { Download-OnyxFile "$pinnedBase/data/nginx/mcp.conf.inc.template" (Join-Path $script:InstallRoot "data\nginx\mcp.conf.inc.template") } catch {}
+            try { Download-OnyxFile "$pinnedBase/data/nginx/mcp_upstream.conf.inc.template" (Join-Path $script:InstallRoot "data\nginx\mcp_upstream.conf.inc.template") } catch {}
+            try { Download-OnyxFile "$pinnedBase/data/nginx/webhook.conf.inc" (Join-Path $script:InstallRoot "data\nginx\webhook.conf.inc") } catch {}
             if ($script:LiteMode) {
                 try { Download-OnyxFile "$pinnedBase/docker_compose/$($script:LiteComposeFile)" $liteOverlayPath } catch {}
             }
