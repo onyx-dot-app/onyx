@@ -133,6 +133,84 @@ Its credentials and settings stay the same. To remove the plugin from all agents
 
 Open the agent editor and select the plugin under **Actions**. See [Agents](/admins/agents/overview).
 
+## Import a schema from an MCP bridge
+
+[mcpo](https://github.com/open-webui/mcpo) exposes a local MCP server as an OpenAPI service.
+Use this approach with self-hosted Onyx when your MCP server uses stdio instead of HTTP.
+
+For example, [ctxd's Docker MCP server](https://github.com/ctxddev/ctxd-agent-plugin)
+synchronizes source content and exposes read tools. After a source edit completes synchronization,
+Onyx can call the read operation again to get the changed content.
+
+Start with a working, authenticated mcpo bridge. The import steps use its existing OpenAPI endpoint.
+For the ctxd example, install this dependency set in a separate Python 3.12 virtual environment on the bridge host:
+
+```bash
+uv pip install mcpo==0.0.20 mcp==1.17.0 fastapi==0.116.1 pydantic==2.11.7
+```
+
+Before you export the schema:
+
+- Run the MCP server through mcpo with an API key. Use the server's setup instructions and mcpo's configuration guide.
+- For ctxd 0.1.16, add `"disabledTools": ["grep"]` to its mcpo server configuration. This example uses the read and path tools.
+- Give the bridge a non-loopback address that the Onyx API server can reach.
+  The default **SSRF Protection** level blocks loopback addresses such as `127.0.0.1`,
+  even when both run on the same host. If Onyx runs in Docker, a loopback address refers to its container.
+- Share only source content that every user of the agent may read. The authorization header uses one shared credential.
+
+<Steps>
+  <Step title="Export the bridge schema">
+    Set `MCP_BRIDGE_URL` to the server-specific base URL, such as `https://bridge.example.com/ctxd`.
+    Set `MCP_BRIDGE_KEY` to the bridge API key in your shell environment.
+
+    Run this command from a workstation that can reach the bridge. It writes `onyx-openapi.json` without the API key.
+
+    ```bash
+    uv run --no-project --with jsonref==1.1.0 python - <<'PY' > onyx-openapi.json
+    import json
+    import os
+    import urllib.request
+
+    import jsonref
+
+    base_url = os.environ["MCP_BRIDGE_URL"].rstrip("/")
+    request = urllib.request.Request(
+        base_url + "/openapi.json",
+        headers={"Authorization": "Bearer " + os.environ["MCP_BRIDGE_KEY"]},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        schema = json.load(response)
+
+    # Onyx's model-facing tool schemas need their request properties inline.
+    schema = jsonref.replace_refs(schema, proxies=False)
+    schema["servers"] = [{"url": base_url}]
+    print(json.dumps(schema, indent=2))
+    PY
+    ```
+
+    The absolute `servers` URL preserves the bridge's server prefix.
+    Inline references keep the operation parameters available to the agent.
+    Export only a schema from a bridge you control.
+  </Step>
+
+  <Step title="Add the plugin">
+    Follow [Add an OpenAPI plugin](#add-an-openapi-plugin) and paste the contents of `onyx-openapi.json`.
+    Select **Custom Authorization Header**.
+    Set the header name to `Authorization` and its value to `Bearer <bridge-api-key>`.
+
+    Add the plugin to a custom agent. The generated operation names, such as `tool_read_post`, appear under **Tools**.
+  </Step>
+
+  <Step title="Check a source change">
+    With ctxd, ask the agent to read a known source path, such as `local-files/source/guide.md`. Edit that source,
+    wait for synchronization, and ask the agent to read the same path again.
+
+    Check the tool result for the changed content.
+    A removed source returns a source-not-found error after synchronization.
+    OpenAPI plugins do not make these tools available in Craft.
+  </Step>
+</Steps>
+
 ## Example
 
 Use this schema to add a plugin that creates and gets agents in Onyx. Replace the server URL with your Onyx API URL.
