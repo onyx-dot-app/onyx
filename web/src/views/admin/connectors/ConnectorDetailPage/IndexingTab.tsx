@@ -6,6 +6,7 @@ import { Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import type { RunRef } from "@/views/admin/connectors/ConnectorDetailPage/runLink";
 import { FigureStatBlock } from "@/views/admin/connectors/ConnectorDetailPage/StatusCard";
 import {
   useCCPairThroughput,
@@ -164,6 +165,8 @@ export interface IndexingTabProps {
   activityLinks?: ThroughputActivityLinks;
   /** The index attempt of the activity the panel points at: its run line lifts. */
   liftedAttemptId?: number | null;
+  /** The run the page's address points at, opened once it lists. */
+  openRun: RunRef | null;
 }
 
 /** The connector page's Indexing tab: the chart card over the runs card, which share one time window and chart span. */
@@ -176,6 +179,7 @@ export default function IndexingTab({
   onRangeChange,
   activityLinks,
   liftedAttemptId = null,
+  openRun,
 }: IndexingTabProps) {
   const t = useTranslations("admin.connector.indexingTab");
   const [runFocus, setRunFocus] = useState(false);
@@ -201,6 +205,7 @@ export default function IndexingTab({
           range={range}
           onClearRange={() => onRangeChange(null)}
           liftedAttemptId={liftedAttemptId}
+          openRun={openRun}
         />
       </Section>
     </Section>

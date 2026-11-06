@@ -2,7 +2,14 @@
 
 import { useRef } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Badge, Button, Card, Text, Tooltip } from "@opal/components";
+import {
+  Badge,
+  BadgeButton,
+  Button,
+  Card,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import {
@@ -77,6 +84,12 @@ export function shownCheckResults(
   run: CheckRunSnapshot
 ): CapabilityCheckResult[] {
   return applicableResults(run.check_results);
+}
+
+/** Whether the line opens stage details or check results under it. */
+export function hasInlineDetails(run: CCPairRun): boolean {
+  if (run.kind === "indexing") return true;
+  return run.kind === "checks" && shownCheckResults(run.attempt).length > 0;
 }
 
 /** How many of a check run's shown checks ended in `status`. */
@@ -279,38 +292,60 @@ function useRateLabel(): (
   };
 }
 
-/** Labels a running permission or group sync with its live rate, such as "24.23 memberships/min", or `null` for any other run. */
-export function useSyncRateLabel(): (run: CCPairRun) => string | null {
+/** Labels an active index or sync run with its live rate, such as "24.23 docs/min", else "Starting sync" until it has one, or `null` for any other run. */
+export function useLiveRunDetail(): (run: CCPairRun) => string | null {
+  const t = useTranslations("admin.connector.runs.detail");
   const rateLabel = useRateLabel();
   return (run) => {
-    if (!isActive(run)) return null;
-    const rate = syncRate(run, Date.now());
-    return rate === null ? null : rateLabel(run, rate);
+    const rate = liveRate(run, Date.now());
+    if (rate !== null) return rateLabel(run, rate);
+    return isActive(run) && rateCount(run) !== null ? t("starting") : null;
   };
+}
+
+interface ErrorCountTagProps {
+  count: number;
+  tooltip: string;
+  /** Makes the count a button, named by its tooltip. */
+  onClick?: () => void;
+}
+/** A warning count of errors, or nothing at zero. */
+export function ErrorCountTag({ count, tooltip, onClick }: ErrorCountTagProps) {
+  const format = useFormatter();
+  if (count === 0) return null;
+  const tag = {
+    ...ERROR_COUNT_TAG,
+    title: format.number(count),
+    titleColor: "text-04",
+  } as const;
+  if (onClick !== undefined) {
+    return <BadgeButton {...tag} tooltip={tooltip} onClick={onClick} />;
+  }
+  return <Badge {...tag} tooltip={tooltip} />;
 }
 
 interface RunWarningsTagProps {
   run: CCPairRun;
+  /** Makes the count a View Errors button. */
+  onClick?: () => void;
 }
 /** The orange count of what the run could not handle, or nothing when it handled everything. */
-export function RunWarningsTag({ run }: RunWarningsTagProps) {
+export function RunWarningsTag({ run, onClick }: RunWarningsTagProps) {
   const t = useTranslations("admin.connector.runs.warnings");
-  const format = useFormatter();
+  const tActions = useTranslations("admin.indexing.list.actions");
   const warnings = runWarnings(run);
-  if (warnings === 0) return null;
   return (
-    <Tooltip
-      tooltip={t(run.kind === "checks" ? "checks" : "tooltip", {
-        count: warnings,
-      })}
-      side="top"
-    >
-      <Badge
-        {...ERROR_COUNT_TAG}
-        title={format.number(warnings)}
-        titleColor="text-04"
-      />
-    </Tooltip>
+    <ErrorCountTag
+      count={warnings}
+      tooltip={
+        onClick === undefined
+          ? t(run.kind === "checks" ? "checks" : "tooltip", {
+              count: warnings,
+            })
+          : tActions("viewErrors")
+      }
+      onClick={onClick}
+    />
   );
 }
 
@@ -568,6 +603,7 @@ export default function RunRow({
   const t = useTranslations("admin.connector.runs");
   const format = useFormatter();
   const rateLabel = useRateLabel();
+  const liveDetail = useLiveRunDetail();
   const hintRef = useRef<HTMLElement>(null);
   const tag = runStatusTag(run);
   const active = isActive(run);
@@ -583,13 +619,7 @@ export default function RunRow({
   // Before it ends: the live rate, Starting sync until a run with a rate has one, else Running.
   // Once it ends: the rate and how long it took, or only how long for a run with no rate or one that moved nothing.
   function detail(): string {
-    if (finished === null) {
-      const rate = liveRate(run, Date.now());
-      if (rate !== null) return rateLabel(run, rate);
-      return active && rateCount(run) !== null
-        ? t("detail.starting")
-        : t("detail.running");
-    }
+    if (finished === null) return liveDetail(run) ?? t("detail.running");
     const ms = runDurationMs(run);
     if (ms === null) return formatDateTimeLog(finished);
     const duration = formatRunLength(format, ms);

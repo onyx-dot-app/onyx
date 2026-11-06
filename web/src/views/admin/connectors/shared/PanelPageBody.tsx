@@ -14,6 +14,8 @@ export const BESIDE = {
     "@min-[51rem]:w-100 @min-[51rem]:shrink-0 @min-[51rem]:h-auto @min-[51rem]:self-stretch @min-[51rem]:contain-size",
   // Capped at the panel's height, so the list scrolls inside the card.
   panelBody: "@min-[51rem]:max-h-full",
+  // Stacked, the panel can be a page's only error list, so it hides only beside the column.
+  panelHidden: "@min-[51rem]:hidden",
   // 1.5rem and 6rem match SettingsLayouts.Body's pt-6 and pt-6 + pb-18, so the page's end never pushes the title out of view.
   panelSticky:
     "@min-[51rem]:sticky @min-[51rem]:top-[calc(var(--settings-header-height,0px)_+_1.5rem)] @min-[51rem]:max-h-[min(100%,calc(var(--settings-scroll-height)_-_var(--settings-header-height,0px)_-_6rem))]",

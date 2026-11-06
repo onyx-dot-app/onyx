@@ -180,13 +180,20 @@ export interface ExternalGroupSyncAttemptSnapshot {
   time_finished: string | null;
 }
 
-/** Mirrors `CCPairRunKind` in `backend/onyx/db/enums.py`. */
-export type CCPairRunKind =
-  | "indexing"
-  | "doc_permission_sync"
-  | "group_sync"
-  | "pruning"
-  | "checks";
+/** Mirrors `CCPairRunKind` in `backend/onyx/db/enums.py`. A list, so input such as a query param can be checked against it. */
+export const CC_PAIR_RUN_KINDS = [
+  "indexing",
+  "doc_permission_sync",
+  "group_sync",
+  "pruning",
+  "checks",
+] as const;
+
+export type CCPairRunKind = (typeof CC_PAIR_RUN_KINDS)[number];
+
+export function isCCPairRunKind(value: string): value is CCPairRunKind {
+  return CC_PAIR_RUN_KINDS.some((kind) => kind === value);
+}
 
 /** Mirrors `SyncStatus`: how a prune stands. */
 export type PruneRunStatus = "in_progress" | "success" | "failed" | "canceled";
