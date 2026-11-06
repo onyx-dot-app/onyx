@@ -131,9 +131,16 @@ export {
 export {
   Badge,
   BADGE_COLORS,
+  badgeTextClass,
   type BadgeProps,
   type BadgeSize,
 } from "@opal/components/badge/components";
+
+/* BadgeButton */
+export {
+  BadgeButton,
+  type BadgeButtonProps,
+} from "@opal/components/badge-button/components";
 
 /* Tag */
 export {

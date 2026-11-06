@@ -47,9 +47,9 @@ export class IndexingStatusPage {
   }
 
   /**
-   * The card for an individual connector, located by its exact name. Every
-   * connector is listed flat, so the card is the stable signal that the list
-   * has rendered with data.
+   * The card for an individual connector, located by its exact name. Rows sit
+   * in open source groups, so the card is the stable signal that the list has
+   * rendered with data.
    */
   connectorRow(connectorName: string): Locator {
     return this.page
@@ -58,7 +58,7 @@ export class IndexingStatusPage {
       .first();
   }
 
-  /** The link to the connector's detail page, offered only on rows the viewer can manage. */
+  /** The link to the connector's detail page. On a row the viewer cannot manage, Manage is a disabled button, not a link. */
   manageLink(connectorName: string): Locator {
     // Exact, so a connector whose name contains "manage" does not match through its own name link.
     return this.connectorRow(connectorName).getByRole("link", {

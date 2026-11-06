@@ -3037,16 +3037,12 @@
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
-        "search": {
-          "placeholder": "실행 오류 검색…"
-        },
         "window": {
           "label": "기간",
           "all": "전체 기간",
           "h1": "최근 1시간",
           "h24": "최근 24시간",
-          "d7": "최근 7일",
-          "d30": "최근 30일"
+          "d7": "최근 7일"
         },
         "statusGroups": {
           "label": "상태",
@@ -3057,7 +3053,8 @@
           "canceled": "취소됨"
         },
         "loadError": {
-          "title": "실행 목록을 불러오지 못했습니다."
+          "title": "실행 목록을 불러오지 못했습니다.",
+          "retry": "다시 시도"
         },
         "empty": {
           "title": "최근 인덱싱 실행이 없습니다",
@@ -7461,16 +7458,17 @@
         "counts": {
           "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",
           "indexing": "{count, plural, other {커넥터 #개 인덱싱 중}}",
+          "syncing": "{count, plural, other {커넥터 #개 동기화 중}}",
           "failed": "{count, plural, other {커넥터 #개 실패}}",
           "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}",
           "scheduled": "{count, plural, other {커넥터 #개 예약됨}}",
           "deleting": "{count, plural, other {커넥터 #개 삭제 중}}"
         },
         "access": {
-          "public": "조직",
-          "private": "비공개",
-          "sync": "자동 동기화",
-          "sync_restricted": "자동 동기화(제한됨)"
+          "public": "조직 전체에 공개",
+          "private": "{count, plural, =0 {비공개} other {그룹 #개와 공유됨}}",
+          "sync": "권한 자동 동기화",
+          "sync_restricted": "권한 자동 동기화"
         },
         "detail": {
           "queued": "대기열 {position, selectordinal, other {#}}번째",
@@ -7479,7 +7477,7 @@
         },
         "docs": {
           "label": "문서",
-          "processed": "{count, number}개 처리됨",
+          "processed": "최근 {count, number}개 처리됨",
           "processedTooltip": {
             "running": "현재 실행이 지금까지 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되므로 커넥터의 문서 수보다 많을 수 있습니다.",
             "finished": "마지막 실행이 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되고 그 후 삭제된 문서는 커넥터 수에서 빠지므로 커넥터의 문서 수보다 많을 수 있습니다."
@@ -7490,6 +7488,8 @@
           "manageFederated": "페더레이션 커넥터 관리",
           "expand": "세부 정보 보기",
           "collapse": "세부 정보 숨기기",
+          "viewErrors": "오류 보기",
+          "viewAllRuns": "모든 실행 보기",
           "pause": "일시 중지",
           "resume": "재개"
         },
@@ -7502,7 +7502,8 @@
           "filteredTitle": "이 필터와 일치하는 커넥터가 없습니다."
         },
         "loadError": "커넥터를 불러올 수 없습니다.",
-        "units": "{count, plural, other {개 커넥터}}"
+        "units": "{count, plural, other {개 커넥터}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "커넥터 인덱싱 상태"
     },

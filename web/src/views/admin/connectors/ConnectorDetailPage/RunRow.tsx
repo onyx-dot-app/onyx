@@ -7,7 +7,6 @@ import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import {
   SvgAlertCircle,
-  SvgAlertTriangle,
   SvgCheckCircle,
   SvgDocFile,
   SvgFileMinus,
@@ -40,6 +39,7 @@ import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import {
+  ERROR_COUNT_TAG,
   isRetryRun,
   runKindLabelKey,
   runStatusTag,
@@ -306,9 +306,8 @@ export function RunWarningsTag({ run }: RunWarningsTagProps) {
       side="top"
     >
       <Badge
-        icon={SvgAlertTriangle}
+        {...ERROR_COUNT_TAG}
         title={format.number(warnings)}
-        color="warning"
         titleColor="text-04"
       />
     </Tooltip>
@@ -340,27 +339,16 @@ function Figure({ value, label }: FigureProps) {
   );
 }
 
-/** How a count shows: a gray tag, or a plain number with its icon after it as run rows show it. */
-export type CountLook = "tag" | "plain";
-
 interface CountProps {
   icon: IconFunctionComponent;
   value: number;
   tooltip: string;
-  look: CountLook;
 }
-/** A small count with its icon, such as new or removed documents. */
-function Count({ icon: Icon, value, tooltip, look }: CountProps) {
+/** A small count with its icon after it, such as new or removed documents. */
+function Count({ icon: Icon, value, tooltip }: CountProps) {
   const format = useFormatter();
   // A run line's sub-counts say only what moved.
-  if (look === "plain" && value === 0) return null;
-  if (look === "tag") {
-    return (
-      <Tooltip tooltip={tooltip} side="top">
-        <Badge icon={Icon} title={format.number(value)} color="default" />
-      </Tooltip>
-    );
-  }
+  if (value === 0) return null;
   return (
     <Tooltip tooltip={tooltip} side="top">
       <Section
@@ -396,13 +384,11 @@ function CountsRow({ children }: CountsRowProps) {
   );
 }
 
-export interface DocCountsProps {
+interface DocCountsProps {
   attempt: IndexAttemptSnapshot;
-  /** @default "tag" */
-  look?: CountLook;
 }
 /** An index attempt's new, updated and removed documents. */
-export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
+function DocCounts({ attempt }: DocCountsProps) {
   const t = useTranslations("admin.connector.runs");
   const updated = Math.max(
     0,
@@ -412,7 +398,6 @@ export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
     <CountsRow>
       <Count
         icon={SvgFilePlus}
-        look={look}
         value={attempt.new_docs_indexed}
         tooltip={t("counts.newDocs", {
           count: attempt.new_docs_indexed,
@@ -420,14 +405,12 @@ export function DocCounts({ attempt, look = "tag" }: DocCountsProps) {
       />
       <Count
         icon={SvgFileRefresh}
-        look={look}
         value={updated}
         tooltip={t("counts.updatedDocs", { count: updated })}
       />
       {attempt.docs_removed_from_index > 0 && (
         <Count
           icon={SvgFileMinus}
-          look={look}
           value={attempt.docs_removed_from_index}
           tooltip={t("counts.removedDocs", {
             count: attempt.docs_removed_from_index,
@@ -467,7 +450,6 @@ function RunFigures({ run }: RunFiguresProps) {
             <CountsRow>
               <Count
                 icon={SvgCheckCircle}
-                look="plain"
                 value={checkCount(attempt, "passed")}
                 tooltip={t("counts.passedChecks", {
                   count: checkCount(attempt, "passed"),
@@ -476,7 +458,6 @@ function RunFigures({ run }: RunFiguresProps) {
               {incomplete > 0 && (
                 <Count
                   icon={SvgAlertCircle}
-                  look="plain"
                   value={incomplete}
                   tooltip={t("counts.incompleteChecks", { count: incomplete })}
                 />
@@ -484,7 +465,6 @@ function RunFigures({ run }: RunFiguresProps) {
               {skipped > 0 && (
                 <Count
                   icon={SvgXCircle}
-                  look="plain"
                   value={skipped}
                   tooltip={t("counts.skippedChecks", { count: skipped })}
                 />
@@ -492,7 +472,6 @@ function RunFigures({ run }: RunFiguresProps) {
               {failed > 0 && (
                 <Count
                   icon={SvgXOctagon}
-                  look="plain"
                   value={failed}
                   tooltip={t("counts.failedChecks", { count: failed })}
                 />
@@ -509,7 +488,7 @@ function RunFigures({ run }: RunFiguresProps) {
             value={run.attempt.total_docs_indexed}
             label={t("figures.indexed")}
           />
-          <DocCounts attempt={run.attempt} look="plain" />
+          <DocCounts attempt={run.attempt} />
         </>
       );
     case "doc_permission_sync":
@@ -522,7 +501,6 @@ function RunFigures({ run }: RunFiguresProps) {
           <CountsRow>
             <Count
               icon={SvgFileRefresh}
-              look="plain"
               value={run.attempt.total_docs_synced}
               tooltip={t("counts.syncedDocs", {
                 count: run.attempt.total_docs_synced,
@@ -542,7 +520,6 @@ function RunFigures({ run }: RunFiguresProps) {
           <CountsRow>
             <Count
               icon={SvgUser}
-              look="plain"
               value={attempt.total_users_processed}
               tooltip={t("counts.users", {
                 count: attempt.total_users_processed,
@@ -550,7 +527,6 @@ function RunFigures({ run }: RunFiguresProps) {
             />
             <Count
               icon={SvgUsers}
-              look="plain"
               value={attempt.total_groups_processed}
               tooltip={t("counts.groups", {
                 count: attempt.total_groups_processed,
@@ -678,9 +654,11 @@ export default function RunRow({
             <>
               <LineTags tag={tag}>
                 {run.kind === "indexing" && run.attempt.is_new_model && (
-                  <Tooltip tooltip={t("newModel.tooltip")} side="top">
-                    <Badge title={t("newModel.label")} color="info" />
-                  </Tooltip>
+                  <Badge
+                    title={t("newModel.label")}
+                    color="info"
+                    tooltip={t("newModel.tooltip")}
+                  />
                 )}
                 {run.kind === "indexing" && (
                   <RunDetailsHint

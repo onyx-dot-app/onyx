@@ -7,12 +7,13 @@ import useSWR from "swr";
 import {
   Button,
   Card,
+  Divider,
   Dropdown,
   SelectButton,
   InputTypeIn,
   MessageCard,
   Pagination,
-  Tag,
+  BadgeButton,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import { Content, IllustrationContent, Section } from "@opal/layouts";
@@ -29,21 +30,22 @@ import {
   type IndexingConnectorsResponse,
 } from "@/lib/connectors/types";
 import { getSourceMetadata } from "@/lib/connectors/utils";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type { FederatedConnectorStatus } from "@/lib/types";
 import {
   focusDimClass,
   useFocusedRow,
 } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import { bucketStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import ConnectorRow from "@/views/admin/connectors/IndexingStatusPage/ConnectorRow";
 import {
   SEARCH_DELAY_MS,
   SEARCH_MAX_LENGTH,
-} from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
-import { bucketStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
-import ConnectorRow from "@/views/admin/connectors/IndexingStatusPage/ConnectorRow";
+} from "@/views/admin/connectors/shared/search";
 
 const PAGE_SIZE = 20;
 const POLL_MS = 30_000;
-const LOADER_ROWS = 4;
+const LOADER_ROWS = 5;
 const ALL = "all";
 
 interface FederatedRowProps {
@@ -66,10 +68,10 @@ function FederatedRow({ connector }: FederatedRowProps) {
         {/* The name column shrinks before the button, so the clamp has an edge. */}
         <Section alignItems="start" height="fit" className="min-w-0 flex-1">
           <Content
-            font="main-ui-action"
             icon={getSourceMetadata(connector.source).icon}
             title={connector.name}
             titleMaxLines={1}
+            font="main-ui-action"
             badge={{ title: t("federated.tag"), color: "default" }}
           />
         </Section>
@@ -86,10 +88,25 @@ function FederatedRow({ connector }: FederatedRowProps) {
   );
 }
 
+/** The page's rows by source, sources in the order their first row appears. */
+function groupBySource(
+  rows: IndexingConnectorRow[]
+): [ValidSources, IndexingConnectorRow[]][] {
+  const groups = new Map<ValidSources, IndexingConnectorRow[]>();
+  for (const row of rows) {
+    const group = groups.get(row.source);
+    if (group === undefined) groups.set(row.source, [row]);
+    else group.push(row);
+  }
+  return Array.from(groups);
+}
+
 /** Every readable connector, searched and filtered by status, with its latest run at a glance. */
 export interface ConnectorListProps {
   /** Opens the activity history on one connector's runs. */
   onViewLogs: (row: IndexingConnectorRow) => void;
+  /** Shows one connector's open errors. */
+  onFocusError: (row: IndexingConnectorRow) => void;
   /** Called when a connector's popover opens or closes, so the page can step back around the list. */
   onFocusChange?: (focused: boolean) => void;
   /** The connector whose activity is hovered in the panel, so its row lifts. */
@@ -98,6 +115,7 @@ export interface ConnectorListProps {
 
 export default function ConnectorList({
   onViewLogs,
+  onFocusError,
   onFocusChange,
   liftedCcPairId = null,
 }: ConnectorListProps) {
@@ -110,9 +128,8 @@ export default function ConnectorList({
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   // A connector's open popover steps the other connectors back.
   const focus = useFocusedRow<number>(onFocusChange);
-  const [expandedIds, setExpandedIds] = useState<ReadonlySet<number>>(
-    () => new Set()
-  );
+  // One row opens at a time, so the page polls one pair's runs.
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const { data, error, isLoading } = useSWR<IndexingConnectorsResponse>(
     SWR_KEYS.indexMonitoringConnectors({
@@ -130,14 +147,6 @@ export default function ConnectorList({
     setPage(1);
   }
 
-  function toggleExpanded(ccPairId: number) {
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (!next.delete(ccPairId)) next.add(ccPairId);
-      return next;
-    });
-  }
-
   const totalItems = data?.total_items ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   // Polling can shrink the list under an open page.
@@ -152,14 +161,16 @@ export default function ConnectorList({
 
   return (
     <Section alignItems="stretch" gap={2} height="fit">
+      {/* Inset at the sides only. The pills wrap onto their own line when the search and filter leave them no room. */}
       <Section
+        width="auto"
         flexDirection="row"
-        justifyContent="between"
+        justifyContent="start"
         alignItems="center"
         gap={2}
-        padding={2}
         height="fit"
         wrap
+        className="mx-2"
       >
         <Section height="fit" className="min-w-40 flex-1">
           <InputTypeIn
@@ -174,80 +185,71 @@ export default function ConnectorList({
             }}
           />
         </Section>
+        <Dropdown>
+          <Dropdown.Trigger asChild>
+            <SelectButton
+              variant="select-filter"
+              chevron
+              labelFont="main-ui-action"
+              icon={SvgActivity}
+              state={status !== null ? "selected" : "empty"}
+              onClear={() => pickStatus(null)}
+            >
+              {status === null ? t("statusFilter.all") : tBadges(status)}
+            </SelectButton>
+          </Dropdown.Trigger>
+          <Dropdown.Data
+            label={t("statusFilter.label")}
+            value={status ?? ALL}
+            onSelect={(option) =>
+              pickStatus(
+                INDEXING_CONNECTOR_STATUSES.find(
+                  (candidate) => candidate === option.value
+                ) ?? null
+              )
+            }
+            items={[
+              {
+                kind: "option" as const,
+                value: ALL,
+                title: t("statusFilter.all"),
+              },
+              ...INDEXING_CONNECTOR_STATUSES.map((candidate) => ({
+                kind: "option" as const,
+                value: candidate,
+                title: tBadges(candidate),
+              })),
+            ]}
+          />
+        </Dropdown>
         <Section
           flexDirection="row"
-          justifyContent="end"
-          alignItems="center"
-          gap={1}
+          justifyContent="start"
+          gap={2}
+          padding={1.5}
           width="fit"
           height="fit"
         >
-          <Dropdown>
-            <Dropdown.Trigger asChild>
-              <SelectButton
-                variant="select-filter"
-                chevron
-                labelFont="main-ui-action"
-                icon={SvgActivity}
-                state={status !== null ? "selected" : "empty"}
-                onClear={() => pickStatus(null)}
-              >
-                {status === null ? t("statusFilter.all") : tBadges(status)}
-              </SelectButton>
-            </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("statusFilter.label")}
-              value={status ?? ALL}
-              onSelect={(option) =>
-                pickStatus(
-                  INDEXING_CONNECTOR_STATUSES.find(
-                    (candidate) => candidate === option.value
-                  ) ?? null
-                )
-              }
-              items={[
-                {
-                  kind: "option" as const,
-                  value: ALL,
-                  title: t("statusFilter.all"),
-                },
-                ...INDEXING_CONNECTOR_STATUSES.map((candidate) => ({
-                  kind: "option" as const,
-                  value: candidate,
-                  title: tBadges(candidate),
-                })),
-              ]}
-            />
-          </Dropdown>
-          <Section
-            flexDirection="row"
-            gap={2}
-            padding={1.5}
-            width="fit"
-            height="fit"
-          >
-            {/* A count per bucket that holds a pair under the search, whatever the status filter. A click filters to it, and again clears it. */}
-            {INDEXING_CONNECTOR_STATUSES.map((counted) => ({
-              counted,
-              count: data?.status_counts[counted] ?? 0,
-              tag: bucketStatusTag(counted),
-            }))
-              .filter(({ count }) => count > 0)
-              .map(({ counted, count, tag }) => (
-                <Tag
-                  key={counted}
-                  icon={tag.icon}
-                  title={format.number(count)}
-                  tooltip={t(`counts.${counted}`, { count })}
-                  iconColor={tag.color}
-                  aria-label={t(`counts.${counted}`, { count })}
-                  aria-pressed={status === counted}
-                  onClick={() =>
-                    pickStatus(status === counted ? null : counted)
-                  }
-                />
-              ))}
-          </Section>
+          {/* A pill per bucket that holds a pair under the search, whatever the status filter. A click filters to it, and again clears it. */}
+          {INDEXING_CONNECTOR_STATUSES.map((counted) => ({
+            counted,
+            count: data?.status_counts[counted] ?? 0,
+            tag: bucketStatusTag(counted),
+          }))
+            .filter(({ count }) => count > 0)
+            .map(({ counted, count, tag }) => (
+              <BadgeButton
+                key={counted}
+                icon={tag.icon}
+                title={format.number(count)}
+                color={tag.color}
+                titleColor="text-04"
+                size={6}
+                tooltip={t(`counts.${counted}`, { count })}
+                pressed={status === counted}
+                onClick={() => pickStatus(status === counted ? null : counted)}
+              />
+            ))}
         </Section>
       </Section>
 
@@ -267,17 +269,47 @@ export default function ConnectorList({
         />
       ) : (
         <Section alignItems="stretch" gap={2} height="fit">
-          {data?.items.map((row) => (
-            <ConnectorRow
-              key={row.cc_pair_id}
-              row={row}
-              expanded={expandedIds.has(row.cc_pair_id)}
-              onToggle={() => toggleExpanded(row.cc_pair_id)}
-              onViewLogs={() => onViewLogs(row)}
-              dimmed={focus.isDimmed(row.cc_pair_id)}
-              onFocusChange={focus.setOpen}
-              lifted={row.cc_pair_id === liftedCcPairId}
-            />
+          {groupBySource(data?.items ?? []).map(([source, rows]) => (
+            <Divider
+              key={source}
+              foldable
+              defaultOpen
+              chevronPosition="start"
+              // A folded group keeps its rows mounted, so its expanded row closes to stop polling runs nobody sees.
+              onOpenChange={(open) => {
+                if (open) return;
+                setExpandedId((current) =>
+                  rows.some((row) => row.cc_pair_id === current)
+                    ? null
+                    : current
+                );
+              }}
+              title={t("sourceGroup", {
+                source: getSourceMetadata(source).displayName,
+                // The API counts every source on the page, so the fallback only satisfies the partial type.
+                count: data?.source_counts[source] ?? rows.length,
+              })}
+            >
+              <Section alignItems="stretch" gap={2} height="fit">
+                {rows.map((row) => (
+                  <ConnectorRow
+                    key={row.cc_pair_id}
+                    row={row}
+                    expanded={expandedId === row.cc_pair_id}
+                    onToggle={() =>
+                      setExpandedId((open) =>
+                        open === row.cc_pair_id ? null : row.cc_pair_id
+                      )
+                    }
+                    onViewLogs={() => onViewLogs(row)}
+                    onFocusError={() => onFocusError(row)}
+                    dimmed={focus.isDimmed(row.cc_pair_id)}
+                    onFocusChange={focus.setOpen}
+                    lifted={row.cc_pair_id === liftedCcPairId}
+                  />
+                ))}
+              </Section>
+            </Divider>
           ))}
           {data?.federated_connectors.map((connector) => (
             <Section

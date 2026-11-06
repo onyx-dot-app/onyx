@@ -99,6 +99,27 @@ describe("useActivityChartLinks", () => {
     expect(result.current.chart.hoveredAttemptId).toBeNull();
   });
 
+  it("focuses a run for the page as a failure line click does", () => {
+    const onFocusAttempt = jest.fn();
+    const { result } = renderHook(() =>
+      useActivityChartLinks({ onFocusAttempt })
+    );
+
+    act(() => result.current.focusAttempt(12));
+    expect(onFocusAttempt).toHaveBeenCalledWith(12);
+    expect(result.current.panel.focusAttemptId).toBe(12);
+  });
+
+  it("counts a repeat focus on the same run as a new request", () => {
+    const { result } = renderHook(() => useActivityChartLinks());
+
+    act(() => result.current.focusAttempt(12));
+    const first = result.current.panel.focusRequest;
+    act(() => result.current.focusAttempt(12));
+    expect(result.current.panel.focusAttemptId).toBe(12);
+    expect(result.current.panel.focusRequest).toBeGreaterThan(first);
+  });
+
   it("keeps a focused card's row lifted after the pointer hovers and leaves another card", () => {
     const { result } = renderHook(() => useActivityChartLinks());
 
@@ -297,6 +318,98 @@ describe("Chart focus on a failure outside the chart's span", () => {
     );
     expect(cardFor(old)).toBeNull();
     expect(onClearRange).not.toHaveBeenCalled();
+  });
+});
+
+describe("Focus on a run with open errors", () => {
+  it("brings back a level that lists the Errors section, and pages to the run", async () => {
+    const withErrors = Array.from({ length: 25 }, (_, index) =>
+      indexRun({
+        id: 400 + index,
+        status: "completed_with_errors",
+        minutesAgo: 10 + index,
+        openErrors: 2,
+      })
+    );
+    const target = withErrors[withErrors.length - 1]!;
+    installActivityFeed([FAILED, ...withErrors]);
+    const onFocusPair = jest.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ActivityPanel scope={PAIR} title="Activities" />
+    );
+    await waitFor(() => expect(cardFor(withErrors[0]!)).not.toBeNull());
+    expect(cardFor(target)).toBeNull();
+
+    // Failures alone hides the Errors section.
+    await user.click(screen.getByRole("button", { name: "Show Filters" }));
+    await pickLevel(user, "Failures");
+    await waitFor(() => expect(cardFor(withErrors[0]!)).toBeNull());
+
+    rerender(
+      <ActivityPanel
+        scope={PAIR}
+        title="Activities"
+        focusAttemptId={target.run.attempt.id}
+        onFocusPair={onFocusPair}
+      />
+    );
+
+    await waitFor(() => expect(cardFor(target)).not.toBeNull());
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(onFocusPair).toHaveBeenCalledWith(SALES_DRIVE.id);
+  });
+});
+
+/** A page's View Errors button wired through the hook, as the status page wires it. */
+function FocusedPanel({ attemptId }: { attemptId: number }) {
+  const links = useActivityChartLinks();
+  return (
+    <>
+      <button type="button" onClick={() => links.focusAttempt(attemptId)}>
+        View Errors
+      </button>
+      <ActivityPanel scope={PAIR} title="Activities" {...links.panel} />
+    </>
+  );
+}
+
+describe("Repeated focus on the same run", () => {
+  it("brings the run back after a filter hid it again", async () => {
+    const withErrors = indexRun({
+      id: 450,
+      status: "completed_with_errors",
+      minutesAgo: 10,
+      openErrors: 2,
+    });
+    installActivityFeed([FAILED, withErrors]);
+    const user = userEvent.setup();
+    render(<FocusedPanel attemptId={withErrors.run.attempt.id} />);
+    await waitFor(() => expect(cardFor(withErrors)).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await user.click(screen.getByRole("button", { name: "Show Filters" }));
+    await pickLevel(user, "Failures");
+    await waitFor(() => expect(cardFor(withErrors)).toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await waitFor(() => expect(cardFor(withErrors)).not.toBeNull());
+  });
+
+  it("scrolls the card into view again, after the list was scrolled away", async () => {
+    installActivityFeed([FAILED]);
+    const user = userEvent.setup();
+    render(<FocusedPanel attemptId={FAILED.run.attempt.id} />);
+    await waitFor(() => expect(cardFor(FAILED)).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+    );
+    await user.click(screen.getByRole("button", { name: "View Errors" }));
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
+    );
   });
 });
 

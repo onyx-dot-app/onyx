@@ -3037,16 +3037,12 @@
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}",
           "syncedDocs": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}"
         },
-        "search": {
-          "placeholder": "Fehler der Läufe durchsuchen…"
-        },
         "window": {
           "label": "Zeitraum",
           "all": "Gesamter Zeitraum",
           "h1": "Letzte Stunde",
           "h24": "Letzte 24 Stunden",
-          "d7": "Letzte 7 Tage",
-          "d30": "Letzte 30 Tage"
+          "d7": "Letzte 7 Tage"
         },
         "statusGroups": {
           "label": "Status",
@@ -3057,7 +3053,8 @@
           "canceled": "Abgebrochen"
         },
         "loadError": {
-          "title": "Die Läufe konnten nicht geladen werden."
+          "title": "Die Läufe konnten nicht geladen werden.",
+          "retry": "Erneut versuchen"
         },
         "empty": {
           "title": "Keine aktuellen Indexläufe",
@@ -7461,16 +7458,17 @@
         "counts": {
           "indexed": "{count, plural, one {# Konnektor indexiert} other {# Konnektoren indexiert}}",
           "indexing": "{count, plural, one {# Konnektor indexiert gerade} other {# Konnektoren indexieren gerade}}",
+          "syncing": "{count, plural, one {# Konnektor synchronisiert gerade} other {# Konnektoren synchronisieren gerade}}",
           "failed": "{count, plural, one {# Konnektor fehlgeschlagen} other {# Konnektoren fehlgeschlagen}}",
           "paused": "{count, plural, one {# Konnektor pausiert} other {# Konnektoren pausiert}}",
           "scheduled": "{count, plural, one {# Konnektor geplant} other {# Konnektoren geplant}}",
           "deleting": "{count, plural, one {# Konnektor wird gelöscht} other {# Konnektoren werden gelöscht}}"
         },
         "access": {
-          "public": "Organisation",
-          "private": "Privat",
-          "sync": "Auto-Sync",
-          "sync_restricted": "Auto-Sync, eingeschränkt"
+          "public": "Öffentlich für Ihre Organisation",
+          "private": "{count, plural, =0 {Privat} one {Mit # Gruppe geteilt} other {Mit # Gruppen geteilt}}",
+          "sync": "Automatische Berechtigungssynchronisierung",
+          "sync_restricted": "Automatische Berechtigungssynchronisierung"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.}} in der Warteschlange",
@@ -7479,7 +7477,7 @@
         },
         "docs": {
           "label": "Dokumente",
-          "processed": "{count, number} verarbeitet",
+          "processed": "{count, number} kürzlich verarbeitet",
           "processedTooltip": {
             "running": "Dokumente, die der aktuelle Lauf bisher verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet, zählt doppelt, daher kann die Zahl größer sein als die Dokumente des Konnektors.",
             "finished": "Dokumente, die der letzte Lauf verarbeitet hat, fehlgeschlagene eingeschlossen. Ein Dokument, das der Lauf zweimal verarbeitet hat, zählt doppelt, und seitdem entfernte Dokumente zählen nicht mehr zum Konnektor, daher kann die Zahl größer sein als die Dokumente des Konnektors."
@@ -7490,6 +7488,8 @@
           "manageFederated": "Föderierten Konnektor verwalten",
           "expand": "Details anzeigen",
           "collapse": "Details ausblenden",
+          "viewErrors": "Fehler anzeigen",
+          "viewAllRuns": "Alle Läufe anzeigen",
           "pause": "Pausieren",
           "resume": "Fortsetzen"
         },
@@ -7502,7 +7502,8 @@
           "filteredTitle": "Keine Konnektoren entsprechen diesen Filtern."
         },
         "loadError": "Die Konnektoren konnten nicht geladen werden.",
-        "units": "{count, plural, one {Konnektor} other {Konnektoren}}"
+        "units": "{count, plural, one {Konnektor} other {Konnektoren}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "Indexierungsstatus der Konnektoren"
     },
