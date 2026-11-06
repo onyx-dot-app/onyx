@@ -525,7 +525,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             setSelectedIds(new Set());
             setBulkFailures([]);
           }}
-          searchIcon
+          icon="search"
         />
       </SettingsLayouts.Header>
 
@@ -822,10 +822,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                 alignItems="stretch"
               >
                 <Content
+                  font="main-ui-body"
                   icon={SvgBlocks}
                   title={item.name}
-                  sizePreset="main-ui"
-                  variant="body"
                 />
               </Section>
             ))}

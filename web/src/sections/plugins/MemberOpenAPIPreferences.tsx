@@ -25,14 +25,13 @@ export default function MemberOpenAPIPreferences({
   return (
     <Section padding={0} gap={4} alignItems="stretch" height="auto">
       <ContentAction
+        font="main-ui-action"
         title={t("chat")}
         description={
           available
             ? t("chatDescription")
             : t("chatUnavailable", { surface: availabilityCopy("mainChat") })
         }
-        sizePreset="main-ui"
-        variant="section"
         padding={0}
         rightChildren={
           <Tooltip

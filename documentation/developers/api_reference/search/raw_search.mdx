@@ -1,0 +1,22 @@
+---
+title: "Raw Search"
+openapi: "POST /search/raw"
+---
+
+<Info>
+  **Required permission:** Search &mdash; Read (`read:search`), which `basic` includes, so any signed-in user has it.
+  A limited [Personal Access Token](/developers/overview#personal-access-tokens) needs the Search &mdash; Read scope.
+</Info>
+
+<Note>
+  This endpoint returns Onyx's retrieval results with no LLM calls,
+  for callers that rank or read the results themselves.
+  It runs the query as written and returns up to 10 sections in retrieval order.
+  For query expansion and LLM document selection, use [Search](/developers/api_reference/search/search) instead.
+</Note>
+
+<Warning>
+  Results are always filtered by the calling user's document permissions,
+  so the same query run by two users can return different documents. A search needs a vector database:
+  deployments running with `DISABLE_VECTOR_DB` set (Onyx Lite) answer with `501`.
+</Warning>

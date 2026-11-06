@@ -77,7 +77,7 @@ const Page = async (props: {
           )}
         >
           <div className="w-full">
-            <Text as="p" font="heading-h2" color="text-05">
+            <Text as="p" font="heading-headline" color="text-05">
               {cloud
                 ? t("signup.cloudSignupHeading.title")
                 : t("signup.createAccountHeading.title")}

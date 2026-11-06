@@ -11,6 +11,10 @@ import { useSavedDraftCredential } from "@/lib/credentials/hooks";
 import { bindingCheckCredentialId } from "@/lib/credentials/utils";
 import { formOnlyFieldNames } from "@/lib/connectors/utils";
 import {
+  binsForWidth,
+  browserUtcOffsetMinutes,
+} from "@/lib/connectors/throughput";
+import {
   bindingCheckInput,
   decideBindingGate,
   type BindingCheckState,
@@ -445,4 +449,62 @@ export function useHierarchyBreakdown(ccPairId: number) {
       errorRetryCount: 1,
     }
   );
+}
+
+// A throughput chart polls this often.
+export const THROUGHPUT_POLL_MS = 30_000;
+
+// A window drag resizes every frame, and each new bar count is a fetch.
+const RESIZE_SETTLE_MS = 200;
+
+interface ChartBins {
+  ref: (element: HTMLDivElement | null) => void;
+  bins: number | null;
+}
+
+/** A ref for the chart's container and the bar count its width allows, null until measured or while hidden at width 0. A resize applies once it settles. */
+function useChartBins(): ChartBins {
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  const [bins, setBins] = useState<number | null>(null);
+  useEffect(() => {
+    if (element === null) return;
+    const measure = () => {
+      const width = element.getBoundingClientRect().width;
+      setBins(width === 0 ? null : binsForWidth(width));
+    };
+    measure();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(measure, RESIZE_SETTLE_MS);
+    });
+    observer.observe(element);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [element]);
+  return { ref: setElement, bins };
+}
+
+export interface ThroughputData<T> {
+  /** For the element whose width sets the bar count. */
+  ref: (element: HTMLDivElement | null) => void;
+  data: T | undefined;
+  error: unknown;
+  /** A new bar count or window is loading while the last response still shows. */
+  stale: boolean;
+}
+
+/** Polls a chart's response once its width sets the bar count, and keeps the last response while a new key loads. */
+export function useThroughputData<T>(
+  keyFor: (bins: number, tzOffsetMinutes: number) => string
+): ThroughputData<T> {
+  const { ref, bins } = useChartBins();
+  const { data, error, isLoading } = useSWR<T>(
+    bins === null ? null : keyFor(bins, browserUtcOffsetMinutes()),
+    errorHandlingFetcher,
+    { refreshInterval: THROUGHPUT_POLL_MS, keepPreviousData: true }
+  );
+  return { ref, data, error, stale: isLoading && data !== undefined };
 }

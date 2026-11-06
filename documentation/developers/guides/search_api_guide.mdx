@@ -4,26 +4,28 @@ description: "Query the Onyx index programmatically and get ranked documents bac
 icon: "magnifying-glass"
 ---
 
-Onyx exposes two search endpoints. Which one you want depends on what you are building.
+Onyx exposes three search endpoints. Which one you want depends on what you are building.
 
 | Endpoint | Use it when |
 |----------|-------------|
 | [`POST /search`](/developers/api_reference/search/search) | You want Onyx's search results inside your own application: RAG pipelines, agents, integrations, anything that needs ranked passages rather than an answer. Runs the same retrieval pipeline as the Search action in chat. |
+| [`POST /search/raw`](/developers/api_reference/search/raw_search) | You rank or read the results yourself, for example with an agent that has its own model. Runs retrieval only, with no LLM calls. |
 | [`POST /search/send-search-message`](/developers/api_reference/search/handle_send_search_message) | You are building a search interface. This is the endpoint behind the Onyx Search UI, and it adds keyword expansion, LLM document selection, streaming, and per-user search history. |
 
-Neither endpoint generates an answer. To have a model read the results and write a response,
+None of these endpoints generates an answer. To have a model read the results and write a response,
 use [`POST /chat/send-chat-message`](/developers/api_reference/chat/handle_send_chat_message) instead.
 
 <Note>
-  Both endpoints search only the documents the calling user is allowed to see,
-  so the same query run by two users can return different results. Both also need a vector database:
+  All three endpoints search only the documents the calling user is allowed to see,
+  so the same query run by two users can return different results. All three also need a vector database:
   on deployments running with `DISABLE_VECTOR_DB` set (Onyx Lite), they answer with `501`.
 </Note>
 
 Authenticate with an API key or a Personal Access Token. A limited-access token needs the **Search &mdash; Read** scope.
 See [Authentication](/developers/overview#authentication).
 Query expansion and LLM document selection use the workspace's default LLM,
-so the same token limits that apply to chat apply to them.
+so the same token limits that apply to chat apply to them. `POST /search/raw` makes no LLM calls,
+so no token limit applies to it.
 
 ## POST /search
 
@@ -99,6 +101,29 @@ several results share one `citation_id` when the search returned multiple non-ov
     }' | jq '.results[] | {citation_id, title, link}'
   ```
 </CodeGroup>
+
+## POST /search/raw
+
+This endpoint runs the query as written. It makes no LLM calls: no query expansion, no source or time detection,
+no federated Slack search and no document selection.
+
+| Parameter | Description |
+|-----------|-------------|
+| `query` | The query to search for. Between 1 and 2048 characters. |
+| `sources`, `document_sets`, `tags`, `time_cutoff` | The same filters as `POST /search`. |
+| `persona_id` | Search inside an Agent's knowledge scope: its document sets, attached documents and search start date. No model is called. |
+| `context_chunks` | Chunks of surrounding text to add on each side of every result, from 0 to 5. Defaults to 5. Send 0 to get only the matched passages. |
+
+The response has the same shape as `POST /search`. It holds up to 10 results in retrieval order.
+The deployment still needs a configured LLM, but this endpoint does not call it.
+
+```bash
+curl -s -X POST "${API_BASE_URL}/search/raw" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is our parental leave policy?", "context_chunks": 0}' \
+  | jq '.results[] | {citation_id, title, content}'
+```
 
 ## POST /search/send-search-message
 

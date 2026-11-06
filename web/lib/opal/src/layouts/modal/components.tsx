@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { ContentColor } from "@opal/layouts/content/components";
 import { Button, Modal, Text } from "@opal/components";
 import { useModalClose } from "@opal/components/modal/context";
 
@@ -12,7 +13,7 @@ import { useModalClose } from "@opal/components/modal/context";
 interface ConfirmationModalProps {
   icon: IconFunctionComponent;
   /** Colour mode of the header icon and title, as on `Content`. */
-  color?: ColorTypes;
+  color?: ContentColor;
   title: string | RichStr;
   description?: string | RichStr;
 

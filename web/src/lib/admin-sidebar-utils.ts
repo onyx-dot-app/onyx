@@ -51,6 +51,7 @@ export type AdminNavItemId =
   | "securityAndHardening"
   | "ssoProviders"
   | "usage"
+  | "spendingLimits"
   | "analytics"
   | "queryHistory"
   | "tracing"
@@ -116,6 +117,7 @@ export const NAV_ITEM_IDS: Record<
   SECURITY_HARDENING: "securityAndHardening",
   SSO_PROVIDERS: "ssoProviders",
   USAGE: "usage",
+  SPENDING_LIMITS: "spendingLimits",
   WORKSPACE_ANALYTICS: "analytics",
   QUERY_HISTORY: "queryHistory",
   TRACING: "tracing",

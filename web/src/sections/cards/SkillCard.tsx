@@ -7,7 +7,7 @@ import {
   Card,
   InputSwitch,
   InputCheckbox,
-  Tag,
+  Badge,
   Text,
   Tooltip,
 } from "@opal/components";
@@ -304,11 +304,10 @@ export default function SkillCard({
             className="min-w-0 flex-1"
           >
             <Content
+              font="secondary-body"
               icon={dependency ? SvgPlug : SvgUser}
               title={dependencyStatus ?? authorTitle}
-              sizePreset="secondary"
-              variant="body"
-              color="muted"
+              titleColor="text-03"
             />
           </Section>
           <Section
@@ -320,12 +319,11 @@ export default function SkillCard({
             className="me-1"
           >
             {isRequired && (
-              <Tooltip tooltip={t("skill.tags.required.tooltip")} side="top">
-                <Tag
-                  title={skillCopy("modals.share.installation.required")}
-                  color="blue"
-                />
-              </Tooltip>
+              <Badge
+                title={skillCopy("modals.share.installation.required")}
+                color="info"
+                tooltip={t("skill.tags.required.tooltip")}
+              />
             )}
             {item.can_toggle && (
               <Section
@@ -344,17 +342,20 @@ export default function SkillCard({
             )}
             {item.source === "builtin" ? (
               item.is_available ? (
-                <Tag title={t("skill.tags.builtin.label")} color="blue" />
+                <Badge title={t("skill.tags.builtin.label")} color="info" />
               ) : (
-                <Tag title={t("skill.tags.unavailable.label")} color="amber" />
+                <Badge
+                  title={t("skill.tags.unavailable.label")}
+                  color="pending"
+                />
               )
             ) : isInvalid ? (
-              <Tag title={t("skill.tags.invalid.label")} color="amber" />
+              <Badge title={t("skill.tags.invalid.label")} color="pending" />
             ) : dependency ? (
-              <Tag title={t("skill.tags.appSkill.label")} color="blue" />
+              <Badge title={t("skill.tags.appSkill.label")} color="info" />
             ) : null}
             {item.source === "custom" && (
-              <Tag
+              <Badge
                 title={t(
                   item.skill.public_permission !== null
                     ? "skill.tags.organization.label"
@@ -362,7 +363,7 @@ export default function SkillCard({
                       ? "skill.tags.personal.label"
                       : "skill.tags.shared.label"
                 )}
-                color={item.skill.is_personal ? "purple" : "blue"}
+                color={item.skill.is_personal ? "default" : "info"}
               />
             )}
           </Section>

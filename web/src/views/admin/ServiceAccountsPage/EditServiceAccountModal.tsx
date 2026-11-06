@@ -202,7 +202,7 @@ export default function EditServiceAccountModal({
                       setPopoverOpen(true);
                     }}
                     placeholder={t("editModal.search.placeholder")}
-                    searchIcon
+                    icon="search"
                     aria-label={t("editModal.search.placeholder")}
                   />
                 </Dropdown.Trigger>

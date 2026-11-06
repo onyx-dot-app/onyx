@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "react";
 import { useTranslations } from "next-intl";
-import { Button, OverflowText, Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
@@ -123,9 +123,15 @@ export default function FileTile({
                     state === "processing" && "hover:text-text-03"
                   )}
                 >
-                  <OverflowText as="p" font="secondary-action" color="inherit">
+                  <Text
+                    maxLines={1}
+                    overflowTooltip
+                    as="p"
+                    font="secondary-action"
+                    color="inherit"
+                  >
                     {title}
-                  </OverflowText>
+                  </Text>
                 </div>
               )}
               {description && (
@@ -144,9 +150,15 @@ export default function FileTile({
           ) : (
             <div className="flex flex-col min-w-0">
               {title && (
-                <OverflowText as="p" font="secondary-action" color="text-04">
+                <Text
+                  maxLines={1}
+                  overflowTooltip
+                  as="p"
+                  font="secondary-action"
+                  color="text-04"
+                >
                   {title}
-                </OverflowText>
+                </Text>
               )}
               {description && (
                 <Text font="secondary-body" color="text-03" maxLines={2}>
