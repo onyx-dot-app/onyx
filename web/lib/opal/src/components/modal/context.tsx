@@ -46,9 +46,11 @@ interface ModalOwner extends ModalInterface {
 interface ModalState {
   isOpen: boolean;
   isPresent: boolean;
+  /** Bumped when the modal reopens while animating out, to remount it. */
+  epoch: number;
 }
 
-const CLOSED: ModalState = { isOpen: false, isPresent: false };
+const CLOSED: ModalState = { isOpen: false, isPresent: false, epoch: 0 };
 
 // The state lives outside React so `Provider` keeps one identity. A new
 // identity would remount the children as the modal closes and skip its
@@ -60,7 +62,11 @@ function createModalStore() {
   let cards = 0;
   const listeners = new Set<() => void>();
   const set = (next: ModalState) => {
-    if (next.isOpen === state.isOpen && next.isPresent === state.isPresent) {
+    if (
+      next.isOpen === state.isOpen &&
+      next.isPresent === state.isPresent &&
+      next.epoch === state.epoch
+    ) {
       return;
     }
     state = next;
@@ -72,20 +78,28 @@ function createModalStore() {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    toggle: (open: boolean) =>
-      set(
-        open
-          ? { isOpen: true, isPresent: true }
-          : cards > 0
-            ? { isOpen: false, isPresent: state.isPresent }
-            : CLOSED
-      ),
+    toggle: (open: boolean) => {
+      if (open) {
+        // Reopening mid-exit remounts the children, so state starts fresh.
+        const reopening = !state.isOpen && state.isPresent;
+        set({
+          isOpen: true,
+          isPresent: true,
+          epoch: reopening ? state.epoch + 1 : state.epoch,
+        });
+      } else if (cards > 0) {
+        set({ ...state, isOpen: false });
+      } else {
+        set({ ...CLOSED, epoch: state.epoch });
+      }
+    },
     registerCard: () => {
       cards += 1;
       return () => {
         cards -= 1;
         // Ignored while open: a nested modal closing must not unmount its owner.
-        if (cards === 0 && !state.isOpen) set(CLOSED);
+        if (cards === 0 && !state.isOpen)
+          set({ ...CLOSED, epoch: state.epoch });
       };
     },
   };
@@ -126,7 +140,9 @@ function useCreateModal(): ModalCreationInterface {
       );
       if (!state.isPresent) return null;
       return (
-        <ModalContext.Provider value={value}>{children}</ModalContext.Provider>
+        <ModalContext.Provider value={value}>
+          <React.Fragment key={state.epoch}>{children}</React.Fragment>
+        </ModalContext.Provider>
       );
     }
     return ModalOwnerProvider;
