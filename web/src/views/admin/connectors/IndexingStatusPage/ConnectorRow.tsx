@@ -7,8 +7,8 @@ import { Button, Card, Popover, Badge, Text, Tooltip } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
+  SvgDocFile,
   SvgExpand,
-  SvgFileText,
   SvgFold,
   SvgOrganization,
   SvgPause,
@@ -36,10 +36,14 @@ import { DocCounts } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
 import { connectorRowStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
-import StatusTagPill from "@/views/admin/connectors/ConnectorDetailPage/StatusTagPill";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
+import LineLayout, {
+  LINE_NARROW_HIDDEN,
+  LineIconLabel,
+  LineTags,
+} from "@/views/admin/connectors/shared/LineLayout";
 
 const ACCESS_ICONS = {
   public: SvgOrganization,
@@ -175,7 +179,7 @@ export default function ConnectorRow({
         />
       )}
       <Button
-        icon={SvgFileText}
+        icon={SvgDocFile}
         prominence="tertiary"
         size="sm"
         tooltip={tRuns("actions.logs")}
@@ -203,185 +207,142 @@ export default function ConnectorRow({
             data-testid={`indexing-connector-${row.cc_pair_id}`}
           >
             <Section alignItems="stretch" gap={0} height="fit">
-              <Section alignItems="stretch" height="fit">
-                <Section
-                  flexDirection="row"
-                  alignItems="start"
-                  justifyContent="start"
-                  gap={1}
-                  padding={1}
-                  height="fit"
-                >
-                  <Section
-                    alignItems="start"
-                    gap={1}
-                    padding={1}
-                    height="fit"
-                    className="min-w-0 flex-1"
-                  >
-                    {/* The link spans the column so the clamped title truncates at its edge. */}
-                    {canOperate ? (
-                      <NavLink
-                        href={`/admin/connector/${row.cc_pair_id}`}
-                        className="w-full hover:underline"
-                      >
+              <Section padding={2} height="fit">
+                <LineLayout
+                  variant="row"
+                  a={
+                    <>
+                      {/* The link spans the column so the clamped title truncates at its edge. */}
+                      {canOperate ? (
+                        <NavLink
+                          href={`/admin/connector/${row.cc_pair_id}`}
+                          className="w-full hover:underline"
+                        >
+                          <Content
+                            icon={getSourceMetadata(row.source).icon}
+                            title={row.name}
+                            titleMaxLines={1}
+                            font="main-ui-action"
+                          />
+                        </NavLink>
+                      ) : (
                         <Content
-                          font="main-ui-action"
                           icon={getSourceMetadata(row.source).icon}
                           title={row.name}
                           titleMaxLines={1}
-                        />
-                      </NavLink>
-                    ) : (
-                      <Content
-                        font="main-ui-action"
-                        icon={getSourceMetadata(row.source).icon}
-                        title={row.name}
-                        titleMaxLines={1}
-                      />
-                    )}
-                    <Section
-                      flexDirection="row"
-                      justifyContent="start"
-                      gap={1}
-                      height="fit"
-                      wrap
-                    >
-                      <Content
-                        font="secondary-body"
-                        icon={ACCESS_ICONS[row.access_type]}
-                        title={t(`access.${row.access_type}`)}
-                        titleColor="text-03"
-                        width="fit"
-                      />
-                      {owner !== null && (
-                        <Content
-                          font="secondary-body"
-                          icon={SvgUser}
-                          title={owner}
-                          titleColor="text-03"
-                          width="fit"
+                          font="main-ui-action"
                         />
                       )}
-                    </Section>
-                  </Section>
-
-                  <Section
-                    alignItems="start"
-                    gap={1}
-                    padding={1}
-                    width={13}
-                    height="fit"
-                    className="shrink-0"
-                  >
-                    <Section
-                      flexDirection="row"
-                      justifyContent="start"
-                      gap={1}
-                      width="fit"
-                      height="fit"
-                    >
-                      <StatusTagPill tag={tag} />
-                      {attempt !== null && !idle && (
-                        <StageDetailsTrigger open={stagesOpen} />
-                      )}
-                      {warnings > 0 && (
-                        <Tooltip
-                          tooltip={tRuns("warnings.tooltip", {
-                            count: warnings,
-                          })}
-                          side="top"
-                        >
-                          <Badge
-                            icon={SvgAlertTriangle}
-                            title={format.number(warnings)}
-                            color="warning"
-                            titleColor="text-04"
-                          />
-                        </Tooltip>
-                      )}
-                    </Section>
-                    <Text font="secondary-body" color="text-03">
-                      {detail()}
-                    </Text>
-                  </Section>
-
-                  <Section
-                    alignItems="end"
-                    gap={1}
-                    padding={1}
-                    width={10}
-                    height="fit"
-                    className="shrink-0"
-                  >
-                    <Section
-                      flexDirection="row"
-                      justifyContent="end"
-                      alignItems="end"
-                      gap={1}
-                      width="fit"
-                      height="fit"
-                    >
-                      <Text font="main-ui-action" color="text-04">
-                        {format.number(row.docs_indexed)}
-                      </Text>
-                      <Text font="secondary-body" color="text-03">
-                        {t("docs.label")}
-                      </Text>
-                    </Section>
-                    {attempt !== null && !idle && (
-                      <>
-                        <Tooltip
-                          tooltip={
-                            row.status === "indexing"
-                              ? t("docs.processedTooltip.running")
-                              : t("docs.processedTooltip.finished")
-                          }
-                          side="top"
-                        >
-                          <Text font="secondary-body" color="text-03">
-                            {t("docs.processed", {
-                              count: attempt.total_docs_indexed,
+                      {/* Below 640 px A shares its line with D, so it is the name alone and the wrapped row stays two lines tall. */}
+                      <Section
+                        flexDirection="row"
+                        justifyContent="start"
+                        gap={1}
+                        height="fit"
+                        wrap
+                        className={LINE_NARROW_HIDDEN}
+                      >
+                        <LineIconLabel
+                          icon={ACCESS_ICONS[row.access_type]}
+                          label={t(`access.${row.access_type}`)}
+                        />
+                        {owner !== null && (
+                          <LineIconLabel icon={SvgUser} label={owner} />
+                        )}
+                      </Section>
+                    </>
+                  }
+                  b={
+                    <>
+                      <LineTags tag={tag}>
+                        {attempt !== null && !idle && (
+                          <StageDetailsTrigger open={stagesOpen} />
+                        )}
+                        {warnings > 0 && (
+                          <Tooltip
+                            tooltip={tRuns("warnings.tooltip", {
+                              count: warnings,
                             })}
-                          </Text>
-                        </Tooltip>
-                        <DocCounts attempt={attempt} />
-                      </>
-                    )}
-                  </Section>
-
-                  <Section
-                    flexDirection="row"
-                    justifyContent="end"
-                    alignItems="center"
-                    gap={1}
-                    width="fit"
-                    height="fit"
-                    className="shrink-0"
-                  >
-                    {canOperate && (
+                            side="top"
+                          >
+                            <Badge
+                              icon={SvgAlertTriangle}
+                              title={format.number(warnings)}
+                              color="warning"
+                              titleColor="text-04"
+                            />
+                          </Tooltip>
+                        )}
+                      </LineTags>
+                      <Text font="secondary-body" color="text-03">
+                        {detail()}
+                      </Text>
+                    </>
+                  }
+                  c={
+                    <>
+                      <Section
+                        flexDirection="row"
+                        justifyContent="end"
+                        alignItems="end"
+                        gap={1}
+                        width="fit"
+                        height="fit"
+                      >
+                        <Text font="main-ui-action" color="text-04">
+                          {format.number(row.docs_indexed)}
+                        </Text>
+                        <Text font="secondary-body" color="text-03">
+                          {t("docs.label")}
+                        </Text>
+                      </Section>
+                      {attempt !== null && !idle && (
+                        <>
+                          <Tooltip
+                            tooltip={
+                              row.status === "indexing"
+                                ? t("docs.processedTooltip.running")
+                                : t("docs.processedTooltip.finished")
+                            }
+                            side="top"
+                          >
+                            <Text font="secondary-body" color="text-03">
+                              {t("docs.processed", {
+                                count: attempt.total_docs_indexed,
+                              })}
+                            </Text>
+                          </Tooltip>
+                          <DocCounts attempt={attempt} />
+                        </>
+                      )}
+                    </>
+                  }
+                  d={
+                    <>
+                      {canOperate && (
+                        <Button
+                          icon={SvgSettings}
+                          prominence="tertiary"
+                          size="sm"
+                          {...navigation.linkTo(
+                            `/admin/connector/${row.cc_pair_id}`
+                          )}
+                          tooltip={t("actions.manage")}
+                          aria-label={t("actions.manage")}
+                        />
+                      )}
                       <Button
-                        icon={SvgSettings}
+                        icon={expanded ? SvgFold : SvgExpand}
                         prominence="tertiary"
                         size="sm"
-                        {...navigation.linkTo(
-                          `/admin/connector/${row.cc_pair_id}`
-                        )}
-                        tooltip={t("actions.manage")}
-                        aria-label={t("actions.manage")}
+                        tooltip={toggleLabel}
+                        aria-label={toggleLabel}
+                        aria-expanded={expanded}
+                        onClick={onToggle}
                       />
-                    )}
-                    <Button
-                      icon={expanded ? SvgFold : SvgExpand}
-                      prominence="tertiary"
-                      size="sm"
-                      tooltip={toggleLabel}
-                      aria-label={toggleLabel}
-                      aria-expanded={expanded}
-                      onClick={onToggle}
-                    />
-                  </Section>
-                </Section>
+                    </>
+                  }
+                />
               </Section>
               {expanded && (
                 <RunsCard
