@@ -859,7 +859,7 @@ def get_connector_credential_pairs_for_source(
     return list(db_session.scalars(stmt).unique().all())
 
 
-def _has_unresolved_entity_error() -> ColumnElement[bool]:
+def has_unresolved_entity_error() -> ColumnElement[bool]:
     """Correlates to the enclosing query's IndexAttempt row. Reads
     ``is_resolved`` alone, since an entity an admin resolved without retry
     still needs its time range fetched again."""
@@ -915,7 +915,7 @@ def get_last_successful_attempt_poll_range_end(
                 IndexAttempt.status == IndexingStatus.SUCCESS,
                 and_(
                     IndexAttempt.status == IndexingStatus.COMPLETED_WITH_ERRORS,
-                    ~_has_unresolved_entity_error(),
+                    ~has_unresolved_entity_error(),
                 ),
             ),
             IndexAttempt.is_backfill.is_(False),
