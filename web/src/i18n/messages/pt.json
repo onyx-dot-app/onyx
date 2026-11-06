@@ -6265,13 +6265,6 @@
           "title": "Permissões do grupo"
         }
       },
-      "permissionsChanged": {
-        "description": "O {appName} agora usa permissões baseadas em grupos. O acesso é configurado por grupo, então as permissões de um usuário são a combinação de todos os grupos aos quais ele pertence.",
-        "learnMore": {
-          "label": "Saiba mais"
-        },
-        "title": "As permissões mudaram."
-      },
       "sharedResources": {
         "agent": {
           "description": "agente"
@@ -10215,13 +10208,6 @@
           "label": "Convidar usuários"
         },
         "title": "Usuários e solicitações"
-      },
-      "permissionsNotice": {
-        "description": "O {appName} agora usa permissões baseadas em grupos. As funções Curador e Curador global foram substituídas por permissões de grupo configuráveis, com gerentes por grupo para administração delimitada.",
-        "learnMoreButton": {
-          "label": "Saiba mais"
-        },
-        "title": "As permissões mudaram"
       },
       "resetPasswordModal": {
         "copyButton": {

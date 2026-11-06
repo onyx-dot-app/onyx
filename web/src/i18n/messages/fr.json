@@ -6265,13 +6265,6 @@
           "title": "Autorisations du groupe"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. L'accès se configure par groupe : les autorisations d'un utilisateur sont donc la somme de celles de tous ses groupes.",
-        "learnMore": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé."
-      },
       "sharedResources": {
         "agent": {
           "description": "agent"
@@ -10215,13 +10208,6 @@
           "label": "Inviter des utilisateurs"
         },
         "title": "Utilisateurs et demandes"
-      },
-      "permissionsNotice": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. Les rôles Curator et Global Curator sont remplacés par des autorisations de groupe configurables, avec des gestionnaires par groupe pour une administration limitée à leur périmètre.",
-        "learnMoreButton": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé"
       },
       "resetPasswordModal": {
         "copyButton": {

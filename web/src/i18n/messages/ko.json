@@ -6265,13 +6265,6 @@
           "title": "그룹 권한"
         }
       },
-      "permissionsChanged": {
-        "description": "이제 {appName}는 그룹 기반 권한을 사용합니다. 접근 권한은 그룹별로 설정하므로, 사용자의 권한은 그 사용자가 속한 모든 그룹의 권한을 합친 것입니다.",
-        "learnMore": {
-          "label": "자세히 알아보기"
-        },
-        "title": "권한이 변경되었습니다."
-      },
       "sharedResources": {
         "agent": {
           "description": "에이전트"
@@ -10215,13 +10208,6 @@
           "label": "사용자 초대"
         },
         "title": "사용자 및 요청"
-      },
-      "permissionsNotice": {
-        "description": "{appName}는 이제 그룹 기반 권한을 사용합니다. Curator와 Global Curator 역할은 구성 가능한 그룹 권한으로 대체되었으며, 그룹별 관리자가 제한된 범위에서 관리합니다.",
-        "learnMoreButton": {
-          "label": "자세히 알아보기"
-        },
-        "title": "권한이 변경되었습니다"
       },
       "resetPasswordModal": {
         "copyButton": {
