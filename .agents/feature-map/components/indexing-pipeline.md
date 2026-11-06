@@ -261,10 +261,10 @@ short-lived session to resolve the embedder, the document index for the attempt'
 `SearchSettings` (`document_index.factory:get_default_document_index`), and the `IndexAttemptMetadata`
 for this batch, then closes that session before the slow work begins.
 
-`run_indexing_pipeline` (`indexing_pipeline.py`) resolves which `SearchSettings`
-generation applies (FUTURE if one is `IndexModelStatus.FUTURE`, else PRESENT),
-builds a `Chunker` sized to that generation's multipass/contextual-RAG config, and
-calls `index_doc_batch`, which:
+`run_indexing_pipeline` (`indexing_pipeline.py`) loads the `SearchSettings` row its
+caller names with `written_search_settings_id`: the settings the batch's document
+index was built from, resolved when the batch started. It builds a `Chunker` sized to
+that row's multipass/contextual-RAG config, and calls `index_doc_batch`, which:
 
 1. `filter_documents` drops documents with no title and no content, or over
    `MAX_DOCUMENT_CHARS`. Before it, when `SKIP_SPREADSHEET_CONTENT` is true,
