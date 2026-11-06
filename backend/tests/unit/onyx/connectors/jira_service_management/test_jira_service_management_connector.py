@@ -203,9 +203,9 @@ def test_jsm_everything_scope_jql_dc_with_projects(mock_is_cloud: MagicMock) -> 
     end = 1640995200
     jql = connector._get_jql_query(start, end)
     
-    # Verify that project IN filter is used on DC
-    assert "project IN (SUPPORT, ITHELP)" in jql, \
-        "DC Everything scope should enumerate JSM projects"
+    # Verify that project IN filter is used on DC with quoted keys
+    assert 'project IN ("SUPPORT", "ITHELP")' in jql, \
+        "DC Everything scope should enumerate JSM projects with quoted keys"
     assert "projectType" not in jql, \
         "Should not use projectType on DC (field unavailable)"
     
@@ -431,8 +431,8 @@ def test_jsm_search_by_key_everything_scope_dc(mock_is_cloud: MagicMock) -> None
     
     assert len(captured_jql) == 1
     jql = captured_jql[0]
-    assert "project IN (SUPPORT, ITHELP)" in jql, \
-        "DC Everything scope should enumerate JSM projects in retry/reindex"
+    assert 'project IN ("SUPPORT", "ITHELP")' in jql, \
+        "DC Everything scope should enumerate JSM projects with quoted keys in retry/reindex"
     assert 'key in ("TEST-1", "TEST-2")' in jql
 
 
@@ -489,3 +489,47 @@ def test_jsm_search_by_key_jql_scoped() -> None:
         "Should not add JSM filter when custom JQL is set"
     assert "project = SUPPORT AND status = Open" in jql, \
         "Should use custom JQL when provided"
+
+
+@patch("onyx.connectors.jira_service_management.connector.is_cloud_gateway")
+def test_jsm_project_list_cached_dc(mock_is_cloud: MagicMock) -> None:
+    """Test that Data Center project list is cached and not called repeatedly."""
+    mock_is_cloud.return_value = False
+    
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.example.com",
+    )
+    
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [
+        {"key": "SUPPORT", "projectTypeKey": "service_desk"},
+        {"key": "ITHELP", "projectTypeKey": "service_desk"},
+    ]
+    connector._source_operations = mock_ops
+    
+    captured_jql: list[str] = []
+    def capture_jql(jql: str) -> list[dict[str, Any]]:
+        captured_jql.append(jql)
+        return []
+    
+    connector._search_all_issues = capture_jql  # type: ignore[method-assign]
+    
+    # First call should fetch projects
+    connector._search_issues_by_key(["TEST-1"])
+    assert mock_ops.list_projects.call_count == 1, \
+        "First call should fetch project list"
+    
+    # Second call should reuse cache
+    connector._search_issues_by_key(["TEST-2", "TEST-3"])
+    assert mock_ops.list_projects.call_count == 1, \
+        "Second call should reuse cached project list"
+    
+    # Third call with _get_jql_query should also reuse cache
+    connector._get_jql_query(start=1609459200, end=1640995200)
+    assert mock_ops.list_projects.call_count == 1, \
+        "Subsequent _get_jql_query call should reuse cached project list"
+    
+    # All JQL queries should have the same project filter
+    assert len(captured_jql) == 2
+    for jql in captured_jql:
+        assert 'project IN ("SUPPORT", "ITHELP")' in jql

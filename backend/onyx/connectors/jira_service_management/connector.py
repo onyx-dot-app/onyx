@@ -86,6 +86,20 @@ class JiraServiceManagementConnector(JiraConnector):
         ]
         return jsm_keys
 
+    def _resolve_jsm_scope_once(self) -> None:
+        """Resolve and cache JSM project scope for Data Center Everything scope.
+        
+        For Data Center deployments with Everything scope, this caches the JSM
+        project-key list to avoid repeated list_projects() calls during polling
+        or retry runs. Only called when both project_key and jql_query are empty.
+        """
+        if hasattr(self, "_jsm_scope_cached"):
+            return
+        
+        if not is_cloud_gateway(self.source_operations):
+            self._jsm_project_keys_cache = self._get_service_desk_project_keys()
+        self._jsm_scope_cached = True
+
     @override
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch | None
@@ -106,32 +120,19 @@ class JiraServiceManagementConnector(JiraConnector):
         Returns:
             JQL query string restricted to service desk projects
         """
-        # If a custom JQL query is provided, use it as-is (user controls scope)
-        # If a project key is provided, use it (user specified exact project)
-        # Otherwise, restrict to service desk projects only
+        # Resolve Everything scope JSM filter once for Data Center
         if not self.jql_query and not self.jira_project:
-            # Everything scope: filter to only service desk projects
-            if is_cloud_gateway(self.source_operations):
-                # Cloud: use projectType JQL field
-                jql_query = "projectType = service_desk"
-            else:
-                # Data Center: enumerate JSM project keys and build project IN clause
-                jsm_keys = self._get_service_desk_project_keys()
-                if jsm_keys:
-                    # Build project IN (KEY1, KEY2, ...) clause
-                    keys_str = ", ".join(jsm_keys)
-                    jql_query = f"project IN ({keys_str})"
-                else:
-                    # No JSM projects found - use a syntactically valid query that matches nothing
-                    # This prevents indexing all projects when none are service desks
-                    # Using 'id < 0' since Jira issue IDs start from 1
-                    jql_query = "id < 0"
-                    logger.warning(
-                        "No JSM projects found on Data Center instance. "
-                        "JSM connector will not index any issues."
-                    )
-        else:
-            jql_query = self.jql_query
+            self._resolve_jsm_scope_once()
+
+        # Get JSM scope filter if in Everything scope, else use user config
+        jsm_scope = self._get_jsm_scope_jql()
+        jql_query = jsm_scope if jsm_scope else self.jql_query
+
+        if jsm_scope == "id < 0":
+            logger.warning(
+                "No JSM projects found on Data Center instance. "
+                "JSM connector will not index any issues."
+            )
 
         return build_jql_query(
             project_key=self.jira_project,
@@ -156,9 +157,13 @@ class JiraServiceManagementConnector(JiraConnector):
         if is_cloud_gateway(self.source_operations):
             return "projectType = service_desk"
         else:
-            jsm_keys = self._get_service_desk_project_keys()
+            if hasattr(self, "_jsm_project_keys_cache"):
+                jsm_keys = self._jsm_project_keys_cache
+            else:
+                jsm_keys = self._get_service_desk_project_keys()
+            
             if jsm_keys:
-                keys_str = ", ".join(jsm_keys)
+                keys_str = ", ".join(f'"{key}"' for key in jsm_keys)
                 return f"project IN ({keys_str})"
             else:
                 return "id < 0"
@@ -172,21 +177,17 @@ class JiraServiceManagementConnector(JiraConnector):
         are returned. This prevents a non-JSM issue from being indexed as
         JSM during retry or reindex operations.
         """
-        from onyx.connectors.jira.connector import scope_jql
+        # Resolve Everything scope JSM filter once for Data Center
+        if not self.jql_query and not self.jira_project:
+            self._resolve_jsm_scope_once()
 
-        keys_jql: str = "key in (%s)" % ", ".join(f'"{key}"' for key in issue_keys)
-        
         # Apply JSM scope if Everything scope, otherwise use base scoping
         jsm_scope = self._get_jsm_scope_jql()
         if jsm_scope:
             # Everything scope: add JSM filter to key search
+            keys_jql: str = "key in (%s)" % ", ".join(f'"{key}"' for key in issue_keys)
             scoped_jql = f"({jsm_scope}) AND {keys_jql}"
+            return list(self._search_all_issues(scoped_jql))
         else:
-            # User-scoped: use base scope_jql logic
-            scoped_jql = scope_jql(
-                project_key=self.jira_project,
-                jql_query=self.jql_query,
-                clause=keys_jql,
-            )
-        
-        return list(self._search_all_issues(scoped_jql))
+            # User-scoped: delegate to base implementation
+            return super()._search_issues_by_key(issue_keys)
