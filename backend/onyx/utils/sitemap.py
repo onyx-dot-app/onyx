@@ -81,12 +81,14 @@ def _extract_urls_from_sitemap(
         namespace = re.match(r"\{.*\}", root.tag)
         ns = namespace.group(0) if namespace else ""
 
+        effective_url = resp.url or sitemap_url
         if root.tag == f"{ns}sitemapindex":
             # This is a sitemap index
             for sitemap in root.findall(f".//{ns}loc"):
-                if sitemap.text:
+                loc_text = sitemap.text.strip() if sitemap.text else ""
+                if loc_text:
                     sub_urls = _extract_urls_from_sitemap(
-                        sitemap.text,
+                        urljoin(effective_url, loc_text),
                         crawl,
                         allow_private_network,
                         depth + 1,
@@ -96,8 +98,9 @@ def _extract_urls_from_sitemap(
         else:
             # This is a regular sitemap
             for url in root.findall(f".//{ns}loc"):
-                if url.text:
-                    urls.add(url.text)
+                loc_text = url.text.strip() if url.text else ""
+                if loc_text:
+                    urls.add(urljoin(effective_url, loc_text))
 
     except Exception as e:
         logger.warning("Error processing sitemap %s: %s", sitemap_url, e)
