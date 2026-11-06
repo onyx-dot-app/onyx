@@ -958,6 +958,19 @@ lack of a key, ask instead. The shared helper
 
 ## 9. Footguns
 
+- **During a port-flow reindex, a Full Re-index or a backfill is refused with
+  CONFLICT.** Such a run fetches documents with old source timestamps into
+  PRESENT, and the incremental FUTURE polls never ask for those, so they would
+  be missing from the new index ([[document-index]]). The check is
+  `db/search_settings.py:raise_if_port_reindex_in_progress`, on an edit plan
+  with a full re-index or backfill step (`connectors/edit_plan/apply.py`) and on
+  a run-once from the beginning
+  (`server/documents/connector.py:trigger_indexing_for_cc_pair`). A request that
+  is already queued waits in the beat, untouched, until the swap
+  (`background/celery/tasks/docprocessing/tasks.py:_kickoff_indexing_tasks` and
+  `_try_creating_pending_backfill`), and then runs on the new index. A reindex
+  cannot start while such a run is in progress
+  (`db/search_settings.py:cc_pairs_with_full_run_in_progress`).
 - **`DocumentFailure.document_id` must equal the `Document.id` the connector
   indexes, not a source-native id.** The internal producer
   (`indexing/indexing_pipeline.py`, `DocumentFailure(document_id=document.id)`)

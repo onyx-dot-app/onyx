@@ -136,6 +136,7 @@ from onyx.db.models import (
     IndexingStatus,
     User,
 )
+from onyx.db.search_settings import raise_if_port_reindex_in_progress
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_limits import (
@@ -2459,6 +2460,11 @@ def trigger_indexing_for_cc_pair(
             "Connector has no valid credentials, cannot create index attempts."
         )
 
+    # A crawl from the beginning cannot start while a reindex builds FUTURE; an
+    # incremental run can. Checked once, before any pair is marked.
+    if from_beginning:
+        raise_if_port_reindex_in_progress(db_session)
+
     # Prevents index attempts for cc pairs that already have an index attempt currently running
     skipped_credentials = [
         credential_id
@@ -2490,6 +2496,15 @@ def trigger_indexing_for_cc_pair(
             indexing_mode = IndexingMode.UPDATE
             if from_beginning:
                 indexing_mode = IndexingMode.REINDEX
+
+            # A queued full run covers an update; do not downgrade it. It can
+            # sit for a while when a port-flow reindex holds it until the swap.
+            if (
+                indexing_mode == IndexingMode.UPDATE
+                and cc_pair.indexing_trigger == IndexingMode.REINDEX
+            ):
+                num_triggers += 1
+                continue
 
             mark_ccpair_with_indexing_trigger(cc_pair.id, indexing_mode, db_session)
             num_triggers += 1

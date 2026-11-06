@@ -64,6 +64,7 @@ from onyx.db.port_attempt import (
     port_backfill_has_pending_work,
 )
 from onyx.db.search_settings import (
+    cc_pairs_with_full_run_in_progress,
     clear_reclaim_intent__no_commit,
     create_search_settings,
     delete_search_settings,
@@ -147,6 +148,8 @@ def set_new_search_settings(
     Only one re-index runs at a time. This raises CONFLICT instead of superseding an
     existing one: either a secondary FUTURE is already in flight, or an INSTANT
     switchover is still backfilling the live index. Cancel the running re-index first.
+    It also raises CONFLICT while a connector runs a full re-index or a backfill on
+    PRESENT (see cc_pairs_with_full_run_in_progress).
 
     Embedding models only move forward: legacy models are refused as a new target,
     except for a re-index with the PRESENT model (see _check_embedding_model_target).
@@ -229,6 +232,22 @@ def set_new_search_settings(
             OnyxErrorCode.CONFLICT,
             "A re-index is already in progress. Cancel it before starting a new one.",
         )
+
+    # A connector that crawls from the beginning or backfills during the port adds
+    # documents FUTURE's incremental catch-up never fetches. The connector
+    # endpoints refuse such runs once the reindex exists and the beat holds queued
+    # ones until the swap; refuse the reindex while one is already running.
+    if search_settings_new.switchover_type != SwitchoverType.INSTANT:
+        running_full_runs = cc_pairs_with_full_run_in_progress(
+            db_session, search_settings.id
+        )
+        if running_full_runs:
+            names = ", ".join(f"'{name}'" for _, name in running_full_runs[:5])
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                f"A full re-index or backfill is running or queued for {names}. "
+                "Wait for it to finish before starting a re-index.",
+            )
 
     # Upgrade-only: a new target must be the PRESENT model or a selectable model.
     # Runs before anything below writes or commits.

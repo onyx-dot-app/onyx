@@ -428,7 +428,9 @@ called once per batch). `docprocessing_task` builds the index with
 `get_default_document_index(index_attempt.search_settings, None)`, so a batch
 writes only to the index of the attempt's own `SearchSettings`: PRESENT or FUTURE.
 It does not write to both generations. The port backfill (`port/tasks.py`) fills a
-FUTURE index (see [[document-index]] §4.4). The write tries the whole
+FUTURE index (see [[document-index]] §4.4). During a port-flow reindex a full run
+or backfill on PRESENT gets no attempt: it waits until after the swap
+(`_kickoff_indexing_tasks`, `_try_creating_pending_backfill`). The write tries the whole
 batch in one call to `DocumentIndex.index()`; on any exception it falls back to a
 per-document retry loop so one bad document doesn't fail the batch. Before writing,
 `adapter.lock_context` (`document.py:prepare_to_modify_documents` ->

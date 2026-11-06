@@ -8,14 +8,21 @@ from onyx.configs.model_configs import (
     PREVIOUS_DEFAULT_DOCUMENT_ENCODER_MODEL,
 )
 from onyx.context.search.models import SavedSearchSettings
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+)
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import (
     CloudEmbeddingProvider,
+    ConnectorCredentialPair,
     IndexAttempt,
     IndexModelStatus,
     IndexReclaimStatus,
     SearchSettings,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )
@@ -205,6 +212,60 @@ def lock_search_settings_for_share(
         .scalars()
         .first()
     )
+
+
+REINDEX_BLOCKS_FULL_RUN_MESSAGE = (
+    "A re-index of the search index is in progress. Full re-index and backfill "
+    "requests are blocked until it completes."
+)
+
+
+def port_reindex_in_progress(db_session: Session) -> bool:
+    """A port-flow reindex is building a FUTURE index. A full re-index or a
+    backfill must not run then: it would add documents with old timestamps that
+    FUTURE's incremental polls never fetch. INSTANT and legacy reindexes do not
+    count. A request that slips in anyway waits in the beat, untouched, until
+    the swap (see _kickoff_indexing_tasks)."""
+    return active_secondary_port_target(db_session) is not None
+
+
+def raise_if_port_reindex_in_progress(db_session: Session) -> None:
+    """Refuse a full re-index or backfill during a port-flow reindex."""
+    if port_reindex_in_progress(db_session):
+        raise OnyxError(OnyxErrorCode.CONFLICT, REINDEX_BLOCKS_FULL_RUN_MESSAGE)
+
+
+def cc_pairs_with_full_run_in_progress(
+    db_session: Session, present_search_settings_id: int
+) -> list[tuple[int, str]]:
+    """(id, name) of cc_pairs with a running or queued PRESENT attempt from the
+    beginning, or a backfill attempt. A reindex started now could never catch up
+    with them (their documents carry old source timestamps), so
+    `set_new_search_settings` refuses while any exist. A queued request (REINDEX
+    trigger, full re-index or prune-after-reindex request, pending backfill) does
+    not count: the beat holds it until the swap (see port_reindex_in_progress)."""
+    rows = db_session.execute(
+        select(ConnectorCredentialPair.id, ConnectorCredentialPair.name)
+        .join(
+            IndexAttempt,
+            IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
+        )
+        .where(
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+            IndexAttempt.search_settings_id == present_search_settings_id,
+            IndexAttempt.is_synthetic_seed.is_(False),
+            or_(
+                IndexAttempt.from_beginning.is_(True),
+                IndexAttempt.is_backfill.is_(True),
+            ),
+            IndexAttempt.status.in_(
+                [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+            ),
+        )
+        .distinct()
+        .order_by(ConnectorCredentialPair.id)
+    )
+    return [(cc_pair_id, name or f"CC pair {cc_pair_id}") for cc_pair_id, name in rows]
 
 
 def active_secondary_port_target(db_session: Session) -> SearchSettings | None:
