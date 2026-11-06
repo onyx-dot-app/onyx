@@ -111,7 +111,10 @@ interface ContentBaseProps {
   /** Starts a title edit from an outside control; hides the built-in pencil. */
   editHandle?: React.Ref<ContentEditHandle>;
 
-  /** Called with the new title when an edit is committed. */
+  /**
+   * Called with the new, trimmed title when an edit is committed. An empty
+   * title is passed on: the caller decides whether it resets or is ignored.
+   */
   onTitleChange?: (newTitle: string) => void;
 
   /**
@@ -411,10 +414,9 @@ function Content({
     startEditing();
   }
 
-  // An empty edit keeps the old title.
   function commit() {
     const value = editValue.trim();
-    if (value && value !== toPlainString(title)) onTitleChange?.(value);
+    if (value !== toPlainString(title)) onTitleChange?.(value);
     setEditing(false);
   }
 

@@ -479,7 +479,9 @@ export default function AuthenticationAccountCard({
                 titleMaxLines={1}
                 editable={canEditAccount}
                 editTooltip={t("renameButton.tooltip")}
-                onTitleChange={(name) => void saveAccount({ name })}
+                onTitleChange={(name) => {
+                  if (name) void saveAccount({ name });
+                }}
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}
               />
