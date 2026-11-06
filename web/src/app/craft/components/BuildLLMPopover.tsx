@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
@@ -22,7 +23,6 @@ import {
 import { useUser } from "@/providers/UserProvider";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
-import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,
   AccordionContent,
@@ -264,8 +264,7 @@ export function BuildLLMPopover({
         ref={isSelected ? selectedItemRef : undefined}
       >
         <LineItemButton
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           state={isSelected ? "selected" : "empty"}
           description={description}
           icon={rowIcon !== groupIcon ? rowIcon : undefined}
@@ -284,7 +283,7 @@ export function BuildLLMPopover({
   return (
     <Popover open={isOpen} onOpenChange={handlePopoverOpenChange}>
       <Popover.Trigger asChild>{children}</Popover.Trigger>
-      <Popover.Content side="bottom" align="start" width="lg">
+      <Popover.Content side="bottom" align="start" width={60}>
         <div className="px-3">
           <Section gap={2}>
             <div className="flex items-center justify-between py-3 gap-3 border-b border-border-01 px-1">

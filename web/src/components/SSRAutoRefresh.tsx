@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useNavigation } from "@opal/navigation";
 import { useEffect } from "react";
 
 // NOTE: this is causing crashes due to `ECONNRESET` and `UND_ERR_SOCKET`
@@ -21,11 +21,11 @@ import { useEffect } from "react";
 // }
 
 export function InstantSSRAutoRefresh() {
-  const router = useRouter();
+  const navigation = useNavigation();
 
   useEffect(() => {
-    router.refresh();
-  }, [router]);
+    navigation.refresh();
+  }, [navigation]);
 
   return <></>;
 }

@@ -7,7 +7,10 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import * as api from "@/app/craft/services/apiServices";
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: jest.fn() }),
 }));
 jest.mock("@/app/craft/hooks/usePreProvisionPolling", () => ({
   usePreProvisionPolling: jest.fn(),
@@ -43,28 +46,6 @@ describe("useBuildSessionController", () => {
       skillsStale: false,
     });
     useBuildSessionStore.getState().setCurrentSession(SESSION_ID);
-  });
-
-  it("stops the loading indicator after history fails to load", async () => {
-    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
-      isLoaded: false,
-    });
-    useBuildSessionStore.getState().setControllerLoaded(null);
-    jest.mocked(api.fetchSession).mockResolvedValue({} as never);
-    jest.mocked(api.fetchActiveTurn).mockResolvedValue(null);
-    jest
-      .mocked(api.fetchMessages)
-      .mockRejectedValueOnce(new Error("History unavailable"));
-
-    const { result } = renderHook(() =>
-      useBuildSessionController({ existingSessionId: SESSION_ID })
-    );
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-      expect(
-        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.loadError
-      ).toBe("History unavailable");
-    });
   });
 
   it("retries a failed restore only after leaving and revisiting the session", async () => {
@@ -163,7 +144,7 @@ describe("useBuildSessionController", () => {
           },
         },
         panelTabs: [],
-        outputPanelOpen: false,
+        outputPanelMode: "closed",
         filesNeedsRefresh: 1,
       });
     });

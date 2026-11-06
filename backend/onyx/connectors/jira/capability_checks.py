@@ -3,7 +3,9 @@
 The indexing checks register in ``registry.py``; the permission-sync and
 group-sync checks register in the EE registry
 (``ee/onyx/connectors/capability_checks.py``). Each check makes small probes
-(one issue, one project) with the gateway operations that its sync calls.
+(one issue, one project) with the gateway operations that its sync calls,
+with ``fast=True``: a request that Jira does not answer in time raises
+``JiraTimeoutError``, and the check ends instead of waiting for its hang guard.
 
 The gateway reaches the site through the bound config fields
 (``jira_base_url``, ``scoped_token``), so every check requires
@@ -17,8 +19,8 @@ then everything. A blank mode field means "not this mode", so the mode checks
 use ``applies`` instead of ``requires_fields``.
 """
 
-import re
 import time
+from collections.abc import Callable
 from typing import Any, NoReturn
 from urllib.parse import urlparse
 
@@ -30,21 +32,34 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CheckAdvisory,
     CheckOutput,
+    CheckStep,
     CredentialCapability,
+    sign_in_timeout_text,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
+    InconclusiveValidationError,
     InsufficientPermissionsError,
+    NothingToCheckError,
+    RateLimitedValidationError,
+    TimedOutValidationError,
     UnexpectedValidationError,
+    UnreachableValidationError,
 )
 from onyx.connectors.jira.config import JiraConnectorConfig
 from onyx.connectors.jira.connector import build_jql_query, jira_error_messages
-from onyx.connectors.jira.models import JiraGroupMemberSample, JiraIssueIdPage
+from onyx.connectors.jira.models import (
+    JiraGroupMemberSample,
+    JiraIssueIdPage,
+    JiraProjectSample,
+)
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
+    JiraCloudIdError,
     JiraGroupPage,
     JiraSourceOperations,
+    JiraTimeoutError,
     is_cloud_gateway,
 )
 from onyx.connectors.jira.utils import (
@@ -59,9 +74,20 @@ from onyx.connectors.jira.utils import (
     SUPPORTED_STATIC_HOLDER_TYPES,
     get_issue_field,
 )
+from onyx.connectors.models import CheckRowText, counted
 from onyx.connectors.source_operations import SourceOperations
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/jira"
+_TIMEOUT_TEXT = CheckRowText(
+    summary="Timed out",
+    description=(
+        "The check stopped because Jira did not answer in time.\nRe-run the checks."
+    ),
+)
+_SIGN_IN_TIMEOUT_TEXT = sign_in_timeout_text("Jira")
 _SITE_FIELDS = frozenset({"jira_base_url"})
 _ERROR_DETAIL_CHARS = 300
 _CLOUD_HOST_SUFFIX = ".atlassian.net"
@@ -70,11 +96,11 @@ _SCOPE_MISMATCH_TEXT = "scope does not match"
 _TENANT_INFO_PATH = "/_edge/tenant_info"
 _RATE_LIMITED_STATUS = 429
 
-_ORDER_BY_PATTERN = re.compile(r"\border\s+by\b", re.IGNORECASE)
-# A quoted JQL value; a backslash escapes the next character.
-_QUOTED_PATTERN = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'")
 
 _INDEXING_SCOPE = "read:jira-work"
+_BROWSE_NEED = "Browse Projects on the projects to index"
+# Statuses at which a Cloud site turns away a credential without an email.
+_SIGN_IN_REFUSED_STATUSES = frozenset({401, 403, 404})
 
 
 def _gateway(context: CapabilityCheckContext) -> JiraSourceOperations:
@@ -84,10 +110,6 @@ def _gateway(context: CapabilityCheckContext) -> JiraSourceOperations:
             "Bug: The runner constructs the registered gateway for migrated sources."
         )
     return gateway
-
-
-def _advisory_output(message: str) -> CheckOutput:
-    return CheckOutput(advisories=[CheckAdvisory(message=message)])
 
 
 def _project_key(config: JiraConnectorConfig) -> str:
@@ -121,45 +143,133 @@ def _access_hint(
     return f"The token acts as its Jira account. Give that account {user_permission}."
 
 
+def _need(config: JiraConnectorConfig, *, scope: str, user_permission: str) -> str:
+    """The row description's line of what a denied probe needs, for the token
+    type. ``_access_hint`` is the full text for the message."""
+    if config.scoped_token:
+        return f"Required scope: {scope}"
+    return f"Give the token's account {user_permission}."
+
+
 def _error_detail(error: JiraApiError) -> str:
-    messages: str | None = jira_error_messages(error.text)
-    return (messages or error.text or str(error))[:_ERROR_DETAIL_CHARS]
+    messages: str | None = jira_error_messages(error.body)
+    return (messages or error.body or str(error))[:_ERROR_DETAIL_CHARS]
+
+
+def _raise_for_timeout(error: JiraTimeoutError) -> NoReturn:
+    """INCOMPLETE: a slow Jira says nothing about the credential."""
+    raise TimedOutValidationError(
+        f"{error} Run the checks again, or check the status of Jira.",
+        summary=_TIMEOUT_TEXT.summary,
+        description=_TIMEOUT_TEXT.description,
+    ) from error
 
 
 def _raise_for_api_error(
     error: JiraApiError,
     *,
     denied: str,
+    denied_row: CheckRowText | None = None,
+    scope_row: CheckRowText | None = None,
     not_found: str | None = None,
+    not_found_row: CheckRowText | None = None,
     bad_request: str | None = None,
+    bad_request_row: CheckRowText | None = None,
 ) -> NoReturn:
     """Maps a Jira API error onto the validation-exception family. ``denied``
-    explains a 403 (or a scoped token without the scope) for this probe."""
+    explains a 403 (or a scoped token without the scope) for this probe; each
+    ``*_row`` is the row text of that outcome."""
+    if isinstance(error, JiraTimeoutError):
+        _raise_for_timeout(error)
     status: int | None = error.status_code
     detail: str = _error_detail(error)
-    if status == 401 and _SCOPE_MISMATCH_TEXT in (error.text or ""):
+    # Callers' texts can end in a full stop; the mapper adds its own.
+    denied = denied.rstrip(".")
+    if status == 401 and _SCOPE_MISMATCH_TEXT in (error.body or ""):
+        scope_row = scope_row or CheckRowText(
+            summary="Token lacks a scope for this API",
+            description=(
+                "The token signs in but lacks the scope this call needs. "
+                "(HTTP 401)\nCreate the token with the scopes in the docs."
+            ),
+        )
         raise InsufficientPermissionsError(
             f"{denied}. The scoped API token does not have the scope of this API "
-            "(HTTP 401: scope does not match)."
+            "(HTTP 401: scope does not match).",
+            summary=scope_row.summary,
+            description=scope_row.description,
         ) from error
     if status == 401:
         raise CredentialExpiredError(
             "Jira rejected the credential (HTTP 401). The token is wrong, expired, "
-            "or revoked, or the email does not match the token's account."
+            "or revoked, or the email does not match the token's account.",
+            summary="Jira rejected the token",
+            description=(
+                "Jira did not accept the token. (HTTP 401)\n"
+                "Create a new token. For Jira Cloud, enter it with its owner's "
+                "email."
+            ),
         ) from error
     if status == 403:
-        raise InsufficientPermissionsError(f"{denied} (HTTP 403).") from error
+        raise InsufficientPermissionsError(
+            f"{denied} (HTTP 403).",
+            summary=denied_row.summary if denied_row else None,
+            description=denied_row.description if denied_row else None,
+        ) from error
     if status == 404 and not_found is not None:
-        raise ConnectorValidationError(f"{not_found} (HTTP 404).") from error
+        raise ConnectorValidationError(
+            f"{not_found.rstrip('.')} (HTTP 404).",
+            summary=not_found_row.summary if not_found_row else None,
+            description=not_found_row.description if not_found_row else None,
+        ) from error
     if status == 400 and bad_request is not None:
-        raise ConnectorValidationError(f"{bad_request} (HTTP 400): {detail}") from error
+        raise ConnectorValidationError(
+            f"{bad_request} (HTTP 400): {detail}",
+            summary=bad_request_row.summary if bad_request_row else None,
+            description=bad_request_row.description if bad_request_row else None,
+        ) from error
     if status == _RATE_LIMITED_STATUS:
-        raise UnexpectedValidationError(
-            "Jira rate limited the check. Run the checks again in a minute."
+        raise RateLimitedValidationError(
+            "Jira rate limited the check. Run the checks again in a minute.",
+            summary="Rate limited by Jira",
+            description=(
+                "Jira limited the number of requests. (HTTP 429)\n"
+                "Wait a minute, then re-run."
+            ),
         ) from error
     raise UnexpectedValidationError(
-        f"Unexpected Jira response (HTTP {status}): {detail}"
+        f"Unexpected Jira response (HTTP {status}): {detail}",
+        summary="Unexpected response from Jira",
+        description=(
+            "Jira answered with an error this check does not expect. "
+            f"(HTTP {status})\nRe-run the checks."
+        ),
     ) from error
+
+
+_SIGN_IN_CHECK_IDS = ("jira_auth", "jira_scoped_token_auth")
+_SCOPE_CHECK_IDS = (
+    "jira_projects_visible",
+    "jira_configured_project",
+    "jira_jql_query",
+)
+# check_id to the checks it runs after, in run order. A listed check that does
+# not apply (the other token type, a scope not in use) is left out.
+_DEPENDS_ON: dict[str, tuple[str, ...]] = {
+    "jira_projects_visible": _SIGN_IN_CHECK_IDS,
+    "jira_configured_project": ("jira_projects_visible",),
+    "jira_jql_query": ("jira_projects_visible",),
+    "jira_issue_read": _SCOPE_CHECK_IDS,
+    "jira_permission_scheme_read": _SCOPE_CHECK_IDS,
+    "jira_project_access_mappable": ("jira_permission_scheme_read",),
+    "jira_project_roles_read": ("jira_permission_scheme_read",),
+    # Not the roles check: a project with no role grants can still grant users.
+    "jira_permission_user_emails": ("jira_permission_scheme_read",),
+    "jira_group_listing": _SIGN_IN_CHECK_IDS,
+    "jira_group_listing_complete": ("jira_group_listing",),
+    "jira_group_membership": ("jira_group_listing",),
+    "jira_group_member_emails": ("jira_group_membership",),
+}
 
 
 class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
@@ -174,17 +284,26 @@ class _JiraCheck(CapabilityCheck[JiraConnectorConfig]):
         required: bool = True,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         validates_binding: bool = False,
+        fails_when_unreachable: bool = False,
+        row_id: str | None = None,
+        step: CheckStep | None = None,
+        timeout_text: CheckRowText = _TIMEOUT_TEXT,
     ) -> None:
         super().__init__(
             capability=capability,
             check_id=check_id,
             display_name=display_name,
+            row_id=row_id,
             required=required,
             requires_connector_instance=False,
             requires_fields=_SITE_FIELDS,
             remediation=remediation,
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
+            fails_when_unreachable=fails_when_unreachable,
+            depends_on=_DEPENDS_ON.get(check_id, ()),
+            step=step,
+            timeout_text=timeout_text,
         )
 
 
@@ -207,8 +326,11 @@ class _SiteAuthCheck(_JiraCheck):
         if scoped:
             super().__init__(
                 check_id="jira_scoped_token_auth",
+                row_id="jira_auth",
                 validates_binding=True,
-                display_name="Scoped API token signs in to the site",
+                fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
+                display_name="Sign in to Jira",
                 remediation=(
                     "Scoped API tokens work only with Jira Cloud. Enter the email "
                     "of the token's Atlassian account with the token, check the "
@@ -219,7 +341,9 @@ class _SiteAuthCheck(_JiraCheck):
             super().__init__(
                 check_id="jira_auth",
                 validates_binding=True,
-                display_name="Credential signs in to the site",
+                fails_when_unreachable=True,
+                timeout_text=_SIGN_IN_TIMEOUT_TEXT,
+                display_name="Sign in to Jira",
                 remediation=(
                     "Jira Cloud: enter the email of the token's Atlassian account "
                     "and an API token. Jira Data Center: leave the email empty and "
@@ -231,18 +355,18 @@ class _SiteAuthCheck(_JiraCheck):
     def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
         return form_state.config.scoped_token == self._scoped
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway: JiraSourceOperations = _gateway(context)
         try:
             if self._scoped:
-                gateway.list_projects()
-            else:
-                gateway.get_myself()
-            return
+                gateway.list_projects(fast=True)
+                return CheckOutput(summary="Signed in")
+            name: Any = gateway.get_myself(fast=True).get("displayName")
+            return CheckOutput(summary=f"Signed in as {name}" if name else "Signed in")
         except requests.HTTPError as e:
             # Only the scoped token's tenant_info call raises a raw HTTPError.
             # tenant_info needs no auth: a 4xx means the URL is not a Cloud
-            # site. 429 and 5xx fall through as INDETERMINATE.
+            # site. 429 and 5xx fall through as INCOMPLETE.
             response: requests.Response | None = e.response
             config: JiraConnectorConfig = self.config(context)
             if (
@@ -254,26 +378,58 @@ class _SiteAuthCheck(_JiraCheck):
                 raise ConnectorValidationError(
                     "Onyx cannot get the Atlassian cloud id of "
                     f"{config.jira_base_url} (`{_TENANT_INFO_PATH}`). Scoped API "
-                    "tokens work only with Jira Cloud; check the site URL."
+                    "tokens work only with Jira Cloud; check the site URL.",
+                    summary="Site is not a Jira Cloud site",
+                    description=(
+                        "Scoped tokens work only with Jira Cloud, and this URL "
+                        "returned no Atlassian cloud ID."
+                    ),
                 ) from e
             raise UnexpectedValidationError(
-                f"Unexpected response from {config.jira_base_url}: {e}"
+                f"Unexpected response from {config.jira_base_url}: {e}",
+                summary="Site lookup failed",
+                description=(
+                    "The Atlassian site lookup failed with a server error.\n"
+                    "Re-run the checks."
+                ),
             ) from e
-        except (requests.ConnectionError, requests.Timeout) as e:
-            raise UnexpectedValidationError(
+        except (JiraTimeoutError, requests.Timeout) as e:
+            # A raw Timeout comes from the scoped token's tenant_info call.
+            raise TimedOutValidationError(
+                f"{self.config(context).jira_base_url} did not answer the sign-in "
+                f"in time: {e}",
+                summary=_SIGN_IN_TIMEOUT_TEXT.summary,
+                description=_SIGN_IN_TIMEOUT_TEXT.description,
+            ) from e
+        except requests.ConnectionError as e:
+            raise UnreachableValidationError(
                 f"Onyx cannot connect to {self.config(context).jira_base_url}. "
-                "Check the site URL."
+                "Check the site URL.",
+                summary="Cannot reach Jira",
+                description="The connection to Jira Base URL failed.\nCheck Jira Base URL.",
             ) from e
         except JiraApiError as e:
             self._raise_for_sign_in_error(context, gateway, e)
-        except (ValueError, KeyError) as e:
-            if not self._scoped:
-                raise
-            # tenant_info returned no cloud id (e.g. an SSO login page).
+        except JiraCloudIdError as e:
             raise ConnectorValidationError(
                 "Onyx cannot get the Atlassian cloud id of "
                 f"{self.config(context).jira_base_url} (`{_TENANT_INFO_PATH}`). "
-                "Scoped API tokens work only with Jira Cloud; check the site URL."
+                "Scoped API tokens work only with Jira Cloud; check the site URL.",
+                summary="Site returned no cloud ID",
+                description=(
+                    "The site answered without an Atlassian cloud ID, for example "
+                    "with a login page."
+                ),
+            ) from e
+        except (ValueError, KeyError) as e:
+            # The client read an answer that is not Jira's (e.g. a login page).
+            raise ConnectorValidationError(
+                f"{self.config(context).jira_base_url} did not answer like Jira: {e}",
+                summary="Site did not answer like Jira",
+                description=(
+                    "The site answered with data that is not a Jira API response, "
+                    "for example a login page."
+                ),
             ) from e
 
     def _raise_for_sign_in_error(
@@ -284,18 +440,41 @@ class _SiteAuthCheck(_JiraCheck):
     ) -> NoReturn:
         config: JiraConnectorConfig = self.config(context)
         is_cloud_credential: bool = is_cloud_gateway(gateway)
-        if not is_cloud_credential and (self._scoped or _is_cloud_site(config)):
+        # Only a refusal means the missing email: a rate limit or a server
+        # error says nothing about it.
+        if (
+            not is_cloud_credential
+            and (self._scoped or _is_cloud_site(config))
+            and error.status_code in _SIGN_IN_REFUSED_STATUSES
+        ):
             raise ConnectorValidationError(
                 "Jira Cloud needs the email of the token's Atlassian account with "
                 "the API token, but this credential has no email. Edit the "
-                "credential and add the email."
+                "credential and add the email.",
+                summary=(
+                    "Account has no email for the token"
+                    if self._scoped
+                    else "Account has no email for Jira Cloud"
+                ),
+                description=(
+                    "A scoped token signs in with the email of its Atlassian "
+                    "account, and this account has none."
+                    if self._scoped
+                    else "Jira Cloud signs in with an email and a token, but this "
+                    "account has only a token."
+                ),
             ) from error
         if is_cloud_credential and error.status_code == 404:
             raise ConnectorValidationError(
                 f"{config.jira_base_url} has no Jira Cloud REST API (v3). For Jira "
                 "Data Center, leave the email empty and use a personal access "
                 "token. For Jira Cloud, check the site URL "
-                "(https://your-domain.atlassian.net)."
+                "(https://your-domain.atlassian.net).",
+                summary="No Jira Cloud API at this URL",
+                description=(
+                    "The site at Jira Base URL does not answer the Jira Cloud API. "
+                    "(HTTP 404)"
+                ),
             ) from error
         _raise_for_api_error(
             error,
@@ -303,8 +482,35 @@ class _SiteAuthCheck(_JiraCheck):
                 "The credential signs in, but Jira does not let its account use "
                 "Jira on this site. Give the account Jira product access"
             ),
+            denied_row=CheckRowText(
+                summary="Account has no Jira access on this site",
+                description=(
+                    "The token signs in, but its account cannot use Jira on this "
+                    "site. (HTTP 403)"
+                ),
+            ),
+            scope_row=(
+                CheckRowText(
+                    summary="Token lacks the read:jira-work scope",
+                    description=(
+                        "The token signs in but lacks the scope this call needs. "
+                        "(HTTP 401)\nCreate a token with the read:jira-work scope "
+                        "(see the docs)."
+                    ),
+                )
+                if self._scoped
+                else None
+            ),
             not_found=(
                 f"Jira has no REST API at {config.jira_base_url}. Check the site URL"
+            ),
+            not_found_row=CheckRowText(
+                summary="No Jira API at this URL",
+                description=(
+                    "Jira Base URL does not point to a Jira REST API. (HTTP 404)\n"
+                    "Check Jira Base URL, and include the context path if Jira "
+                    "runs under one (e.g. https://example.com/jira)."
+                ),
             ),
         )
 
@@ -314,18 +520,19 @@ class _ProjectsVisibleCheck(_JiraCheck):
         super().__init__(
             check_id="jira_projects_visible",
             validates_binding=True,
-            display_name="Projects are visible",
+            display_name="List projects",
             remediation=(
                 "Give the token's account the Browse Projects permission on the "
                 "projects to index. Scoped API token: the `read:jira-work` scope."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        config: JiraConnectorConfig = self.config(context)
+        need: str = _need(config, scope=_INDEXING_SCOPE, user_permission=_BROWSE_NEED)
         try:
-            projects: list[dict[str, Any]] = _gateway(context).list_projects()
+            projects: list[dict[str, Any]] = _gateway(context).list_projects(fast=True)
         except JiraApiError as e:
-            config: JiraConnectorConfig = self.config(context)
             _raise_for_api_error(
                 e,
                 denied="The credential cannot list Jira projects. "
@@ -334,17 +541,25 @@ class _ProjectsVisibleCheck(_JiraCheck):
                     scope=_INDEXING_SCOPE,
                     user_permission="Browse Projects",
                 ),
+                denied_row=CheckRowText(
+                    summary="Account cannot list projects",
+                    description=f"Jira refused the project list. (HTTP 403)\n{need}",
+                ),
             )
         if not projects:
-            config: JiraConnectorConfig = self.config(context)
             raise InsufficientPermissionsError(
                 "No Jira project is visible to this credential. "
                 + _access_hint(
                     config,
                     scope=_INDEXING_SCOPE,
-                    user_permission="Browse Projects on the projects to index",
-                )
+                    user_permission=_BROWSE_NEED,
+                ),
+                summary="No projects visible",
+                description=f"The account can see no Jira project.\n{need}",
             )
+        return CheckOutput(
+            summary=f"{counted(len(projects), 'project', 'projects')} visible"
+        )
 
 
 def _matching_project_keys(
@@ -365,7 +580,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="jira_configured_project",
-            display_name="Configured project is readable",
+            display_name="Find selected project",
             remediation=(
                 "Use the project key, not the project name (e.g. `PROJ`), and give "
                 "the token's account Browse Projects on the project."
@@ -376,26 +591,39 @@ class _ConfiguredProjectCheck(_JiraCheck):
         config: JiraConnectorConfig = form_state.config
         return bool(_project_key(config)) and not _jql(config)
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
         project_key: str = _project_key(config)
         gateway: JiraSourceOperations = _gateway(context)
         try:
-            gateway.get_project(project_key=project_key)
+            project: dict[str, Any] = gateway.get_project(
+                project_key=project_key, fast=True
+            )
         except JiraApiError as e:
             if e.status_code != 404:
                 _raise_for_api_error(
                     e,
                     denied=f"The credential cannot read the project `{project_key}`",
+                    denied_row=CheckRowText(
+                        summary=f"Account cannot read {project_key}",
+                        description=(
+                            "Jira refused access to the selected project. "
+                            "(HTTP 403)\nGive the token's account Browse Projects "
+                            "on the project."
+                        ),
+                    ),
                 )
             self._raise_not_found(gateway, project_key, e)
+        return CheckOutput(
+            summary=f"Found project {project.get('name') or project_key}"
+        )
 
     def _raise_not_found(
         self, gateway: JiraSourceOperations, project_key: str, error: JiraApiError
     ) -> NoReturn:
         try:
             matches: list[str] = _matching_project_keys(
-                gateway.list_projects(), project_key
+                gateway.list_projects(fast=True), project_key
             )
         except JiraApiError:
             matches = []
@@ -407,35 +635,35 @@ class _ConfiguredProjectCheck(_JiraCheck):
         raise ConnectorValidationError(
             f"No project with the key `{project_key}` is visible to this "
             "credential. Check the key, or give the token's account Browse "
-            f"Projects on the project.{hint}"
+            f"Projects on the project.{hint}",
+            summary=f"Project {project_key} not found",
+            description=(
+                "No project with this key is visible to the account. (HTTP 404)\n"
+                + (
+                    f"Did you mean the key {matches[0]}?"
+                    if hint
+                    else "Enter the project key, not the project name, in Project "
+                    "Key (e.g. PROJ)."
+                )
+            ),
         ) from error
-
-
-def _validate_jql_shape(jql: str) -> None:
-    """Rejects ORDER BY outside quoted values. The connector wraps the query in
-    parentheses and adds a time filter, so ORDER BY makes it invalid."""
-    unquoted: str = _QUOTED_PATTERN.sub('""', jql)
-    if _ORDER_BY_PATTERN.search(unquoted):
-        raise ConnectorValidationError(
-            "Remove ORDER BY from the JQL query. Onyx wraps the query in "
-            "parentheses and adds its own time filter, and Jira rejects ORDER BY "
-            "inside parentheses."
-        )
 
 
 def _search_one_issue(gateway: JiraSourceOperations, jql: str) -> dict[str, Any] | None:
     """The first issue the query matches, with all fields, read through the
     API family the connector uses. Raises ``JiraApiError``."""
     if is_cloud_gateway(gateway):
-        page: JiraIssueIdPage = gateway.search_issue_ids(jql=jql, max_results=1)
+        page: JiraIssueIdPage = gateway.search_issue_ids(
+            jql=jql, max_results=1, fast=True
+        )
         if not page.issue_ids:
             return None
         issues: list[dict[str, Any]] = gateway.bulk_fetch_issues(
-            issue_ids=page.issue_ids[:1]
+            issue_ids=page.issue_ids[:1], fast=True
         )
         return issues[0] if issues else {}
     issues: list[dict[str, Any]] = gateway.search_issues(
-        jql=jql, start_at=0, max_results=1
+        jql=jql, start_at=0, max_results=1, fast=True
     )
     return issues[0] if issues else None
 
@@ -444,7 +672,7 @@ class _JqlQueryCheck(_JiraCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="jira_jql_query",
-            display_name="JQL query is valid",
+            display_name="Run JQL query",
             remediation=(
                 "Test the query in Jira's issue search. Quote values that are "
                 'reserved JQL words (e.g. project = "AS"). Use no ORDER BY.'
@@ -454,9 +682,8 @@ class _JqlQueryCheck(_JiraCheck):
     def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
         return bool(_jql(form_state.config))
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        _validate_jql_shape(_jql(config))
         try:
             issue: dict[str, Any] | None = _search_one_issue(
                 _gateway(context), _scope_jql(config)
@@ -465,16 +692,35 @@ class _JqlQueryCheck(_JiraCheck):
             _raise_for_api_error(
                 e,
                 denied="The credential cannot search Jira issues",
+                denied_row=CheckRowText(
+                    summary="Account cannot search issues",
+                    description=(
+                        "Jira refused the issue search. (HTTP 403)\n"
+                        f"Give the token's account {_BROWSE_NEED}."
+                    ),
+                ),
                 bad_request="Jira rejected the JQL query",
+                bad_request_row=CheckRowText(
+                    summary="Jira rejected the query",
+                    description=(
+                        f"Jira cannot run the JQL query: {_error_detail(e)} "
+                        "(HTTP 400)\nTest the query in Jira's issue search."
+                    ),
+                ),
             )
-        if issue is None:
-            # The scope can be empty on purpose (issues come later).
-            return _advisory_output(
+        # An empty issue is an id the fetch did not return: the account cannot
+        # read it. An empty scope fails the first check that reads it.
+        if not issue:
+            raise ConnectorValidationError(
                 "The JQL query matched no issue that this credential can read. "
-                "Jira accepted the query, but Onyx did not verify that it finds "
-                "issues. If issues exist, check the query."
+                "Jira accepted the query. If issues exist, check the query.",
+                summary="Query matches no issues",
+                description=(
+                    "Jira accepts the query, but it matches no issue the account "
+                    "can read."
+                ),
             )
-        return None
+        return CheckOutput(summary="Query matches issues")
 
 
 class _IssueReadCheck(_JiraCheck):
@@ -484,7 +730,7 @@ class _IssueReadCheck(_JiraCheck):
     def __init__(self) -> None:
         super().__init__(
             check_id="jira_issue_read",
-            display_name="Issues are readable",
+            display_name="Sample issues",
             remediation=(
                 "Give the token's account Browse Projects on the projects to "
                 "index, and access to their issue security levels. Scoped API "
@@ -492,13 +738,12 @@ class _IssueReadCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
         hint: str = _access_hint(
-            config,
-            scope=_INDEXING_SCOPE,
-            user_permission="Browse Projects on the projects to index",
+            config, scope=_INDEXING_SCOPE, user_permission=_BROWSE_NEED
         )
+        need: str = _need(config, scope=_INDEXING_SCOPE, user_permission=_BROWSE_NEED)
         try:
             issue: dict[str, Any] | None = _search_one_issue(
                 _gateway(context), _scope_jql(config)
@@ -508,32 +753,61 @@ class _IssueReadCheck(_JiraCheck):
                 # jira_jql_query / jira_configured_project report a bad scope.
                 raise UnexpectedValidationError(
                     "Jira rejected the indexing scope query, so this check cannot "
-                    f"run. Fix the scope settings first: {_error_detail(e)}"
+                    f"run. Fix the scope settings first: {_error_detail(e)}",
+                    summary="Jira rejected the issue query",
+                    description=(
+                        "Jira did not accept the indexing scope query. (HTTP 400)\n"
+                        "Check Project Key or JQL Query."
+                    ),
                 ) from e
             _raise_for_api_error(
-                e, denied=f"The credential cannot search Jira issues. {hint}"
+                e,
+                denied=f"The credential cannot search Jira issues. {hint}",
+                denied_row=CheckRowText(
+                    summary="Account cannot search issues",
+                    description=f"Jira refused the issue search. (HTTP 403)\n{need}",
+                ),
             )
         if issue is None:
+            # An empty scope fails the first check that reads it: the
+            # connector would index nothing.
             if not _project_key(config) and not _jql(config):
-                # Every document comes from this search, so the run would
-                # index nothing.
                 raise ConnectorValidationError(
                     "Jira projects are visible, but this credential can read no "
-                    f"issue in them, so indexing would add no documents. {hint}"
+                    f"issue in them, so indexing would add no documents. {hint}",
+                    summary="No readable issues found",
+                    description=(
+                        "The account can read no issue in any project.\n"
+                        f"{need} Give it access to the issue security levels."
+                    ),
                 )
-            # A project or JQL scope can be empty on purpose (issues come later).
-            return _advisory_output(
+            raise ConnectorValidationError(
                 "The indexing scope has no issue that this credential can read, "
-                "so Onyx did not verify that issues are readable. If the scope "
-                f"has issues: {hint}"
+                f"so indexing would add no documents. If the scope has issues: {hint}",
+                summary="No issues in the selected scope",
+                description=(
+                    "The selected scope has no issue the account can read.\n"
+                    f"If the scope should have issues: {need}"
+                ),
             )
         fields: Any = issue.get("fields")
         if not isinstance(fields, dict) or "summary" not in fields:
             raise InsufficientPermissionsError(
                 "Jira found an issue but did not return its fields, so issues "
-                f"would index without content. {hint}"
+                f"would index without content. {hint}",
+                summary="Issue came back without its content",
+                description=(
+                    "Issues would index empty.\n"
+                    "Give the token's account access to the issue security levels."
+                ),
             )
-        return None
+        project: Any = fields.get("project")
+        project_key: Any = project.get("key") if isinstance(project, dict) else None
+        return CheckOutput(
+            summary=f"Read an issue from {project_key}"
+            if project_key
+            else "Read an issue"
+        )
 
 
 def build_jira_indexing_checks() -> list[CapabilityCheck]:
@@ -557,6 +831,8 @@ _PUBLIC_HOLDER_TYPES = frozenset({HOLDER_TYPE_ANYONE, HOLDER_TYPE_APPLICATION_RO
 _SAMPLE_USERS = 5
 _SAMPLE_ROLES = 3
 _SAMPLE_GROUPS = 3
+_SAMPLE_PROJECTS = 5
+_PROBE_ISSUE_PAGE = 50
 _GROUP_MEMBER_PAGE_SIZE = 50
 _ATLASSIAN_ACCOUNT_TYPE = "atlassian"
 
@@ -574,18 +850,25 @@ _DC_EMAIL_HINT = (
     "(General configuration) is 'Public', or 'Only visible to logged-in users' "
     "with a token account that can see them."
 )
-_JQL_NO_PROJECT_ADVISORY = (
-    "The JQL query matched no issue, so permission sync reads no project yet. "
-    "Onyx did not verify this check. Run the checks again when the query "
-    "matches issues."
+_ADMIN_NEED = "Give the token's account Administer Projects on every synced project."
+_GROUP_ACCESS_NEED = (
+    "Give the token's account Administer Jira, or the Browse users and groups "
+    "global permission."
 )
-_NO_GROUP_MEMBERS_ADVISORY = (
-    "The sampled groups have no members, so Onyx did not verify that group "
-    "members are readable."
+_EMAIL_NEED = "Ask users to make their email visible to anyone."
+_PERMISSION_SYNC_SCOPE_ROW = CheckRowText(
+    summary="Token lacks a permission sync scope",
+    description=(
+        "The token signs in but lacks the scope this call needs. (HTTP 401)\n"
+        "Add the read:jira-user and manage:jira-configuration scopes."
+    ),
 )
-_NO_GROUP_USERS_ADVISORY = (
-    "The sampled groups have no user members, so Onyx did not verify that "
-    "group members have emails."
+_USER_SCOPE_ROW = CheckRowText(
+    summary="Token lacks the read:jira-user scope",
+    description=(
+        "The token signs in but lacks the scope this call needs. (HTTP 401)\n"
+        "Add the read:jira-user and manage:jira-configuration scopes."
+    ),
 )
 _GROUP_ACCESS_HINT = (
     "Give the token's account Administer Jira, or the global Browse users and "
@@ -607,43 +890,118 @@ def _email_hint(gateway: JiraSourceOperations) -> str:
     return _CLOUD_EMAIL_HINT if is_cloud_gateway(gateway) else _DC_EMAIL_HINT
 
 
-def _probe_project_key(
+def _jql_issue_projects(
+    gateway: JiraSourceOperations, jql: str
+) -> JiraProjectSample | None:
+    """The distinct projects of the first page of issues the query matches,
+    or None when it matches no issue. Raises ``JiraApiError``."""
+    issues: list[dict[str, Any]]
+    # True when the page holds every matching issue.
+    complete: bool
+    if is_cloud_gateway(gateway):
+        page: JiraIssueIdPage = gateway.search_issue_ids(
+            jql=jql, max_results=_PROBE_ISSUE_PAGE, fast=True
+        )
+        if not page.issue_ids:
+            return None
+        issues = gateway.bulk_fetch_issues(
+            issue_ids=page.issue_ids, fields="project", fast=True
+        )
+        complete = page.next_page_token is None and len(issues) == len(page.issue_ids)
+    else:
+        issues = gateway.search_issues(
+            jql=jql,
+            start_at=0,
+            max_results=_PROBE_ISSUE_PAGE,
+            fields="project",
+            fast=True,
+        )
+        if not issues:
+            return None
+        # Jira can return fewer issues than asked for, so a short page is
+        # complete only when the next offset holds no issue.
+        complete = len(issues) < _PROBE_ISSUE_PAGE and not gateway.search_issues(
+            jql=jql, start_at=len(issues), max_results=1, fields="project", fast=True
+        )
+    project_keys: list[str] = []
+    for issue in issues:
+        project: Any = get_issue_field(issue, "project")
+        if not isinstance(project, dict) or not project.get("key"):
+            complete = False
+            continue
+        project_key: str = str(project["key"])
+        if project_key not in project_keys:
+            project_keys.append(project_key)
+    return JiraProjectSample(
+        project_keys=project_keys[:_SAMPLE_PROJECTS],
+        total=len(project_keys) if complete else None,
+    )
+
+
+def _probe_projects(
     context: CapabilityCheckContext, config: JiraConnectorConfig
-) -> str | None:
-    """The configured project in project mode, the project of the first
-    matching issue in JQL mode, else the first visible project. Permission sync
-    reads the scheme of every project with indexed issues, so None when the JQL
-    query matches nothing: there is no project to probe."""
+) -> JiraProjectSample:
+    """The configured project in project mode, the projects of the first
+    matching issues in JQL mode, else the first visible projects. Permission
+    sync reads the scheme of every project with indexed issues, so a JQL query
+    that matches nothing leaves nothing to check."""
     project_key: str = _project_key(config)
     if project_key and not _jql(config):
-        return project_key
+        return JiraProjectSample(project_keys=[project_key], total=1)
     if _jql(config):
         try:
-            issue = _search_one_issue(_gateway(context), _scope_jql(config))
+            sample: JiraProjectSample | None = _jql_issue_projects(
+                _gateway(context), _scope_jql(config)
+            )
+        except JiraTimeoutError as e:
+            _raise_for_timeout(e)
         except JiraApiError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot run the JQL query, so it cannot pick a project to "
-                "probe. jira_jql_query reports why."
+                "probe. jira_jql_query reports why.",
+                summary="Cannot run the JQL query",
+                description="Run JQL query reports why.",
             ) from e
-        if issue is None:
-            return None
-        project: Any = get_issue_field(issue, "project")
-        if not isinstance(project, dict) or not project.get("key"):
-            raise UnexpectedValidationError(
-                "Jira returned the first issue of the JQL query without its "
-                "project, so Onyx cannot pick a project to probe."
+        if sample is None:
+            raise NothingToCheckError(
+                "The JQL query matched no issue, so permission sync reads no "
+                "project yet.",
+                summary="No project to read",
+                description="The JQL query matches no issue yet.",
             )
-        return str(project["key"])
+        if not sample.project_keys:
+            raise UnexpectedValidationError(
+                "Jira returned the issues of the JQL query without their "
+                "project, so Onyx cannot pick a project to probe.",
+                summary="Sample issue came back without a project",
+                description=(
+                    "Jira returned the query's issues without their project.\n"
+                    "Re-run the checks."
+                ),
+            )
+        return sample
     try:
-        projects: list[dict[str, Any]] = _gateway(context).list_projects()
+        projects: list[dict[str, Any]] = _gateway(context).list_projects(fast=True)
     except JiraApiError as e:
-        _raise_for_api_error(e, denied="The credential cannot list Jira projects")
+        _raise_for_api_error(
+            e,
+            denied="The credential cannot list Jira projects",
+            denied_row=CheckRowText(
+                summary="Account cannot list projects",
+                description="Jira refused the project list. (HTTP 403)",
+            ),
+        )
     if not projects:
         raise UnexpectedValidationError(
             "No Jira project is visible, so Onyx cannot read a permission scheme. "
-            "jira_projects_visible reports why."
+            "jira_projects_visible reports why.",
+            summary="No project to read",
+            description="List projects reports why.",
         )
-    return str(projects[0]["key"])
+    return JiraProjectSample(
+        project_keys=[str(project["key"]) for project in projects[:_SAMPLE_PROJECTS]],
+        total=len(projects),
+    )
 
 
 def _browse_holders(scheme: dict[str, Any]) -> list[dict[str, Any]]:
@@ -666,7 +1024,7 @@ def _read_permission_scheme(
 ) -> dict[str, Any]:
     try:
         scheme: dict[str, Any] = _gateway(context).get_project_permission_scheme(
-            project_key=project_key
+            project_key=project_key, fast=True
         )
     except JiraApiError as e:
         _raise_for_api_error(
@@ -675,36 +1033,115 @@ def _read_permission_scheme(
                 "The credential cannot read the permission scheme of the project "
                 f"`{project_key}`. {_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
+            denied_row=CheckRowText(
+                summary="Account cannot read permission schemes",
+                description=(
+                    f"Synced issues in {project_key} would get no access. "
+                    f"(HTTP 403)\n{_ADMIN_NEED}"
+                ),
+            ),
+            scope_row=_PERMISSION_SYNC_SCOPE_ROW,
             not_found=(
                 f"Jira does not return the permission scheme of the project "
                 f"`{project_key}` to this credential. "
                 f"{_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
+            not_found_row=CheckRowText(
+                summary=f"No permission scheme for {project_key}",
+                description=(
+                    f"Jira did not return the permission scheme of {project_key} "
+                    "to this account. (HTTP 404)"
+                ),
+            ),
         )
     if not isinstance(scheme.get("permissions"), list):
         raise InsufficientPermissionsError(
             f"Jira returned the permission scheme of the project `{project_key}` "
-            f"without its grants. {_perm_sync_hint(config, _ADMIN_HINT)}"
+            f"without its grants. {_perm_sync_hint(config, _ADMIN_HINT)}",
+            summary="Scheme came back without grants",
+            description=(
+                f"Jira returned the permission scheme of {project_key} without its "
+                f"grants.\n{_ADMIN_NEED}"
+            ),
         )
     return scheme
 
 
 def _read_scheme_for_dependent_check(
     context: CapabilityCheckContext, config: JiraConnectorConfig
-) -> tuple[str, dict[str, Any]] | None:
-    """The probe project and its scheme, for a check that needs the scheme
-    first. None when there is no project to probe. A failed read is
-    jira_permission_scheme_read's failure."""
+) -> tuple[JiraProjectSample, dict[str, Any]]:
+    """The probe projects and the scheme of the first, for a check that needs
+    the scheme first. A failed read is jira_permission_scheme_read's failure."""
     try:
-        project_key: str | None = _probe_project_key(context, config)
-        if project_key is None:
-            return None
-        return project_key, _read_permission_scheme(context, config, project_key)
+        sample: JiraProjectSample = _probe_projects(context, config)
+        return sample, _read_permission_scheme(context, config, sample.project_keys[0])
     except ConnectorValidationError as e:
         raise UnexpectedValidationError(
             "Onyx cannot read the permission scheme, so this check cannot run. "
-            "jira_permission_scheme_read reports why."
+            "jira_permission_scheme_read reports why.",
+            summary="Cannot read the permission scheme",
+            description="Read permission schemes reports why.",
         ) from e
+
+
+def _check_sampled_projects(
+    context: CapabilityCheckContext,
+    config: JiraConnectorConfig,
+    check_project: Callable[[str, dict[str, Any]], CheckOutput],
+    *,
+    missing: str,
+    skip_summary: str,
+    incomplete_summary: str,
+) -> CheckOutput:
+    """Runs ``check_project`` on the probe projects in order and returns the
+    result of the first that has something to test. ``check_project`` raises
+    ``NothingToCheckError`` for a project with nothing to test. When no project
+    has anything, the check skips only if it read the full scope. A later
+    project whose scheme Onyx cannot read is left out, not failed."""
+    sample, scheme = _read_scheme_for_dependent_check(context, config)
+    skipped: list[NothingToCheckError] = []
+    unreadable: int = 0
+    for index, project_key in enumerate(sample.project_keys):
+        if index:
+            try:
+                scheme = _read_permission_scheme(context, config, project_key)
+            except RateLimitedValidationError:
+                # More calls to a throttled Jira only add load.
+                raise
+            except (ConnectorValidationError, UnexpectedValidationError) as e:
+                logger.warning(
+                    "Jira check skipped project %s: cannot read its permission "
+                    "scheme: %s",
+                    project_key,
+                    e,
+                )
+                unreadable += 1
+                continue
+        try:
+            return check_project(project_key, scheme)
+        except NothingToCheckError as e:
+            skipped.append(e)
+    read: int = len(sample.project_keys) - unreadable
+    if sample.covers_scope and not unreadable:
+        if read == 1:
+            raise skipped[0]
+        raise NothingToCheckError(
+            f"None of the {read} projects in scope {missing}.",
+            summary=skip_summary,
+            description=f"No project in scope {missing}.",
+        )
+    checked: str = (
+        f"Checked {read} of {sample.total} projects"
+        if sample.total is not None
+        else f"Checked {read} projects, and the JQL query matches more"
+    )
+    if unreadable:
+        checked += f" ({unreadable} more could not be read)"
+    raise InconclusiveValidationError(
+        f"{checked}. None of them {missing}, so Onyx cannot verify the rest.",
+        summary=incomplete_summary,
+        description=f"{checked}; none {missing}.",
+    )
 
 
 class _PermissionSchemeReadCheck(_JiraCheck):
@@ -712,25 +1149,34 @@ class _PermissionSchemeReadCheck(_JiraCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="jira_permission_scheme_read",
-            display_name="Project permission schemes are readable",
+            display_name="Read permission schemes",
             remediation=(
                 f"{_ADMIN_HINT} Scoped API token: the {_PERMISSION_SYNC_SCOPES} scopes."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        project_key: str | None = _probe_project_key(context, config)
-        if project_key is None:
-            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
+        project_key: str = _probe_projects(context, config).project_keys[0]
         scheme: dict[str, Any] = _read_permission_scheme(context, config, project_key)
-        if not _browse_holders(scheme):
+        holders: list[dict[str, Any]] = _browse_holders(scheme)
+        if not holders:
             raise InsufficientPermissionsError(
                 f"The permission scheme of the project `{project_key}` grants "
                 "Browse Projects to nobody that Jira shows to this credential. "
-                f"{_perm_sync_hint(config, _ADMIN_HINT)}"
+                f"{_perm_sync_hint(config, _ADMIN_HINT)}",
+                summary="No visible Browse Projects grants",
+                description=(
+                    f"The scheme of {project_key} shows no Browse Projects grant "
+                    f"to this account.\n{_ADMIN_NEED}"
+                ),
             )
-        return None
+        return CheckOutput(
+            summary=(
+                f"{counted(len(holders), 'Browse grant', 'Browse grants')} in "
+                f"{project_key}"
+            )
+        )
 
 
 class _ProjectAccessMappableCheck(_JiraCheck):
@@ -741,7 +1187,7 @@ class _ProjectAccessMappableCheck(_JiraCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="jira_project_access_mappable",
-            display_name="Project access maps to Onyx",
+            display_name="Map project access",
             required=False,
             remediation=(
                 "Grant Browse Projects to users, groups or project roles. Onyx "
@@ -750,25 +1196,32 @@ class _ProjectAccessMappableCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        project_scheme: tuple[str, dict[str, Any]] | None = (
-            _read_scheme_for_dependent_check(context, config)
-        )
-        if project_scheme is None:
-            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
-        project_key, scheme = project_scheme
-        holder_types: set[str] = {
-            str(holder.get("type")) for holder in _browse_holders(scheme)
-        }
+        sample, scheme = _read_scheme_for_dependent_check(context, config)
+        project_key: str = sample.project_keys[0]
+        holders: list[dict[str, Any]] = _browse_holders(scheme)
+        holder_types: set[str] = {str(holder.get("type")) for holder in holders}
         unsupported: list[str] = sorted(holder_types - SUPPORTED_STATIC_HOLDER_TYPES)
         if unsupported:
             raise ConnectorValidationError(
                 f"The project `{project_key}` grants Browse Projects through "
                 f"{', '.join(unsupported)}. Onyx cannot map these grants, so the "
-                "users they cover get no access to the project's issues in Onyx."
+                "users they cover get no access to the project's issues in Onyx.",
+                summary="Some grants cannot map to users",
+                description=(
+                    f"{project_key} grants Browse Projects through "
+                    f"{', '.join(unsupported)}.\nGrant Browse Projects to users, "
+                    "groups or project roles instead."
+                ),
             )
-        return None
+        return CheckOutput(
+            summary=(
+                "The grant maps to users"
+                if len(holders) == 1
+                else f"All {len(holders)} grants map to users"
+            )
+        )
 
 
 def _role_actor_user(actor: dict[str, Any]) -> dict[str, Any] | None:
@@ -817,7 +1270,7 @@ def _read_role(
     """Reads one project role. Raises the validation family on a failed read."""
     try:
         return _gateway(context).get_project_role(
-            project_key=project_key, role_id=role_id
+            project_key=project_key, role_id=role_id, fast=True
         )
     except JiraApiError as e:
         _raise_for_api_error(
@@ -826,10 +1279,25 @@ def _read_role(
                 f"The credential cannot read the roles of the project "
                 f"`{project_key}`. {_perm_sync_hint(config, _ADMIN_HINT)}"
             ),
+            denied_row=CheckRowText(
+                summary="Account cannot read project roles",
+                description=(
+                    f"Users with access through roles in {project_key} would get "
+                    f"none. (HTTP 403)\n{_ADMIN_NEED}"
+                ),
+            ),
+            scope_row=_PERMISSION_SYNC_SCOPE_ROW,
             not_found=(
                 f"Jira does not return the role {role_id} of the project "
                 f"`{project_key}` to this credential. "
                 f"{_perm_sync_hint(config, _ADMIN_HINT)}"
+            ),
+            not_found_row=CheckRowText(
+                summary="Project role not found",
+                description=(
+                    f"Jira did not return role {role_id} of {project_key} to this "
+                    "account. (HTTP 404)"
+                ),
             ),
         )
 
@@ -848,30 +1316,65 @@ class _ProjectRolesReadCheck(_JiraCheck):
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="jira_project_roles_read",
-            display_name="Project roles are readable",
+            display_name="Read project roles",
             remediation=(
                 f"{_ADMIN_HINT} Scoped API token: the {_PERMISSION_SYNC_SCOPES} scopes."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        project_scheme: tuple[str, dict[str, Any]] | None = (
-            _read_scheme_for_dependent_check(context, config)
+        return _check_sampled_projects(
+            context,
+            config,
+            lambda project_key, scheme: self._check_project(
+                context, config, project_key, scheme
+            ),
+            missing="grants Browse Projects through a project role",
+            skip_summary="No role grants to test",
+            incomplete_summary="No role grants in sampled projects",
         )
-        if project_scheme is None:
-            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
-        project_key, scheme = project_scheme
+
+    def _check_project(
+        self,
+        context: CapabilityCheckContext,
+        config: JiraConnectorConfig,
+        project_key: str,
+        scheme: dict[str, Any],
+    ) -> CheckOutput:
         role_ids: list[str] = _browse_role_ids(scheme)
-        if _is_public(scheme) or not role_ids:
-            return None
+        if _is_public(scheme):
+            raise NothingToCheckError(
+                f"The project `{project_key}` is open to all users, so permission "
+                "sync reads no role.",
+                summary=f"{project_key} is open to all users",
+                description="Permission sync needs no role members.",
+            )
+        if not role_ids:
+            raise NothingToCheckError(
+                f"No project role holds Browse Projects in `{project_key}`.",
+                summary="No role grants to test",
+                description=f"No project role holds Browse Projects in {project_key}.",
+            )
         role: dict[str, Any] = _read_role(context, config, project_key, role_ids[0])
-        if not isinstance(role.get("actors"), list):
+        actors: Any = role.get("actors")
+        if not isinstance(actors, list):
             raise InsufficientPermissionsError(
                 f"Jira returned a role of the project `{project_key}` without its "
-                f"members. {_perm_sync_hint(config, _ADMIN_HINT)}"
+                f"members. {_perm_sync_hint(config, _ADMIN_HINT)}",
+                summary="Role came back without members",
+                description=(
+                    f"Jira returned a role of {project_key} without its members.\n"
+                    "Give the token's account Administer Jira, or Administer "
+                    "Projects on every synced project."
+                ),
             )
-        return None
+        return CheckOutput(
+            summary=(
+                f"Read {role.get('name') or 'a role'}: "
+                f"{counted(len(actors), 'member', 'members')}"
+            )
+        )
 
 
 def _is_group_actor(actor: dict[str, Any]) -> bool:
@@ -885,36 +1388,61 @@ class _PermissionUserEmailsCheck(_JiraCheck):
     """People who hold Browse Projects, directly or through a project role,
     have emails. Permission sync maps them to Onyx users by email.
 
-    Passes for a public project (``anyone`` or ``applicationRole``), which syncs
-    without reading users, and for a project with group grants, which give
-    access through group sync. Fails when the sample covers every user the
-    sync reads and no user maps: no user account holds the grant, or every
-    user hides the email. A partial sample is INDETERMINATE."""
+    Moves to the next sampled project past a public project (``anyone`` or
+    ``applicationRole``), which syncs without reading users, and past a project
+    with group grants, which give access through group sync. Fails when the
+    sample covers every user the sync reads and no user maps: no user account
+    holds the grant, or every user hides the email. A partial sample is
+    INCOMPLETE."""
 
     def __init__(self) -> None:
         super().__init__(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
             check_id="jira_permission_user_emails",
-            display_name="Users in permissions have emails",
+            display_name="Read user emails",
             remediation=(
                 "Make user emails visible to the token's account. "
                 f"Cloud: {_CLOUD_EMAIL_HINT} Data Center: {_DC_EMAIL_HINT}"
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        gateway: JiraSourceOperations = _gateway(context)
-        project_scheme: tuple[str, dict[str, Any]] | None = (
-            _read_scheme_for_dependent_check(context, config)
+        return _check_sampled_projects(
+            context,
+            config,
+            lambda project_key, scheme: self._check_project(
+                context, config, project_key, scheme
+            ),
+            missing="grants access to individual users",
+            skip_summary="No user grants to test",
+            incomplete_summary="No user grants in sampled projects",
         )
-        if project_scheme is None:
-            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
-        project_key, scheme = project_scheme
+
+    def _check_project(
+        self,
+        context: CapabilityCheckContext,
+        config: JiraConnectorConfig,
+        project_key: str,
+        scheme: dict[str, Any],
+    ) -> CheckOutput:
+        gateway: JiraSourceOperations = _gateway(context)
         holders: list[dict[str, Any]] = _browse_holders(scheme)
         holder_types: set[str] = {str(holder.get("type")) for holder in holders}
-        if _is_public(scheme) or HOLDER_TYPE_GROUP in holder_types:
-            return None
+        if _is_public(scheme):
+            raise NothingToCheckError(
+                f"The project `{project_key}` is open to all users, so permission "
+                "sync reads no user.",
+                summary=f"{project_key} is open to all users",
+                description="Permission sync needs no user emails.",
+            )
+        if HOLDER_TYPE_GROUP in holder_types:
+            raise NothingToCheckError(
+                f"The project `{project_key}` grants access through groups, which "
+                "group sync maps.",
+                summary="Access comes through groups",
+                description=f"Group sync gives the access in {project_key}.",
+            )
         # Direct user grants carry the expanded user.
         emails: list[str | None] = [
             holder["user"].get("emailAddress")
@@ -931,7 +1459,9 @@ class _PermissionUserEmailsCheck(_JiraCheck):
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read the project roles, so this check cannot run. "
-                "jira_project_roles_read reports why."
+                "jira_project_roles_read reports why.",
+                summary="Cannot read project roles",
+                description="Read project roles reports why.",
             ) from e
         actors: list[dict[str, Any]] = [
             actor
@@ -940,7 +1470,12 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             if isinstance(actor, dict)
         ]
         if any(_is_group_actor(actor) for actor in actors):
-            return None
+            raise NothingToCheckError(
+                f"The roles of the project `{project_key}` grant access through "
+                "groups, which group sync maps.",
+                summary="Access comes through groups",
+                description=f"Group sync gives the access in {project_key}.",
+            )
         role_users: list[dict[str, Any]] = [
             user for actor in actors if (user := _role_actor_user(actor))
         ]
@@ -952,7 +1487,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             if not lookup_id:
                 continue
             try:
-                details: dict[str, Any] = gateway.get_user(user_id=lookup_id)
+                details: dict[str, Any] = gateway.get_user(user_id=lookup_id, fast=True)
             except JiraApiError as e:
                 _raise_for_api_error(
                     e,
@@ -960,6 +1495,13 @@ class _PermissionUserEmailsCheck(_JiraCheck):
                         "The credential cannot read Jira users. "
                         f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
                     ),
+                    denied_row=CheckRowText(
+                        summary="Account cannot read users",
+                        description=(
+                            f"Jira refused user details. (HTTP 403)\n{_GROUP_ACCESS_NEED}"
+                        ),
+                    ),
+                    scope_row=_USER_SCOPE_ROW,
                 )
             account_type: Any = details.get("accountType")
             if account_type is not None and account_type != _ATLASSIAN_ACCOUNT_TYPE:
@@ -968,43 +1510,88 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             emails.append(details.get("emailAddress"))
         if not emails:
             if not complete_sample:
-                raise UnexpectedValidationError(
+                raise InconclusiveValidationError(
                     f"The sampled grants of the project `{project_key}` hold no "
                     "user account. Permission sync reads more users, so Onyx "
-                    "cannot verify the rest."
+                    "cannot verify the rest.",
+                    summary="No user accounts in the sample",
+                    description=(
+                        f"The sampled grants of {project_key} hold no user "
+                        "account, and sync reads more."
+                    ),
                 )
             raise ConnectorValidationError(
                 f"The Browse Projects grants of the project `{project_key}` hold "
                 "no user, group, or public access that Onyx can map, so no user "
                 "would get access to its issues in Onyx. Grant Browse Projects "
-                "to users, groups or project roles with members."
+                "to users, groups or project roles with members.",
+                summary="Grants hold no users to map",
+                description=(
+                    f"The Browse Projects grants of {project_key} hold no user, "
+                    "group or public access."
+                ),
             )
-        if not any(emails):
+        with_email: int = sum(1 for email in emails if email)
+        if not with_email:
             if not complete_sample:
-                raise UnexpectedValidationError(
+                raise InconclusiveValidationError(
                     f"The sampled users who can browse the project `{project_key}` "
                     "have no visible email. Permission sync reads more users, so "
-                    f"Onyx cannot verify the rest. {_email_hint(gateway)}"
+                    f"Onyx cannot verify the rest. {_email_hint(gateway)}",
+                    summary="Sampled users show no email",
+                    description=(
+                        f"The sampled users of {project_key} show no email, and "
+                        "sync reads more users."
+                    ),
                 )
             raise InsufficientPermissionsError(
                 f"No user who can browse the project `{project_key}` has a visible "
                 "email, so their access cannot map to Onyx users. "
-                f"{_email_hint(gateway)}"
+                f"{_email_hint(gateway)}",
+                summary="No user shows an email",
+                description=(
+                    f"Users with access to {project_key} would get none in Onyx.\n"
+                    f"{_EMAIL_NEED}"
+                ),
             )
-        return None
+        return CheckOutput(
+            summary=f"{with_email} of {len(emails)} users show an email",
+            advisories=_missing_email_caveat(len(emails) - with_email),
+        )
+
+
+def _missing_email_caveat(missing: int) -> list[CheckAdvisory]:
+    if not missing:
+        return []
+    return [
+        CheckAdvisory(
+            message=(
+                f"{missing} users without a visible email get no access to synced "
+                "issues."
+            )
+        )
+    ]
 
 
 def _list_groups(
     context: CapabilityCheckContext, config: JiraConnectorConfig
 ) -> JiraGroupPage:
     try:
-        return _gateway(context).list_groups()
+        return _gateway(context).list_groups(fast=True)
     except JiraApiError as e:
         _raise_for_api_error(
             e,
             denied=(
                 "The credential cannot list Jira groups. "
                 f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
+            ),
+            denied_row=CheckRowText(
+                summary="Account cannot list groups",
+                description=f"Jira refused the group list. (HTTP 403)\n{_GROUP_ACCESS_NEED}",
+            ),
+            scope_row=CheckRowText(
+                summary="Token lacks a group sync scope",
+                description=_PERMISSION_SYNC_SCOPE_ROW.description,
             ),
         )
 
@@ -1017,12 +1604,16 @@ def _list_groups_for_dependent_check(
     except ConnectorValidationError as e:
         raise UnexpectedValidationError(
             "Onyx cannot list Jira groups, so this check cannot run. "
-            "jira_group_listing reports why."
+            "jira_group_listing reports why.",
+            summary="Cannot list groups",
+            description="List groups reports why.",
         ) from e
     if not group_names:
         raise UnexpectedValidationError(
             "Jira listed no groups, so Onyx cannot read group members. "
-            "jira_group_listing reports why."
+            "jira_group_listing reports why.",
+            summary="No groups to read",
+            description="List groups reports why.",
         )
     return group_names
 
@@ -1034,15 +1625,17 @@ def _sample_group_members(
     group_names: list[str] = _list_groups_for_dependent_check(context, config)
     members: list[dict[str, Any]] = []
     complete: bool = len(group_names) <= _SAMPLE_GROUPS
+    groups_read: int = 0
     for group_name in group_names[:_SAMPLE_GROUPS]:
         try:
             page: dict[str, Any] = gateway.get_group_members_page(
                 group_name=group_name,
                 start_at=0,
                 max_results=_GROUP_MEMBER_PAGE_SIZE,
+                fast=True,
             )
         except JiraApiError as e:
-            if e.status_code == 404 and "does not exist" in (e.text or ""):
+            if e.status_code == 404 and "does not exist" in (e.body or ""):
                 # The group was deleted after the listing; group sync skips it.
                 continue
             _raise_for_api_error(
@@ -1051,17 +1644,44 @@ def _sample_group_members(
                     f"The credential cannot read the members of the group "
                     f"`{group_name}`. {_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
                 ),
+                denied_row=CheckRowText(
+                    summary="Account cannot read group members",
+                    description=(
+                        f"Jira refused the members of {group_name}. (HTTP 403)\n"
+                        f"{_GROUP_ACCESS_NEED}"
+                    ),
+                ),
+                scope_row=CheckRowText(
+                    summary="Token lacks the read:jira-user scope",
+                    description=(
+                        "The token signs in but lacks the scope this call needs. "
+                        "(HTTP 401)\nAdd read:jira-user, or the read:group:jira, "
+                        "read:user:jira and read:avatar:jira scopes."
+                    ),
+                ),
                 not_found=(
                     "Jira has no group-member API (GET /group/member, Jira 6.0+). "
                     "Upgrade Jira"
                 ),
+                not_found_row=CheckRowText(
+                    summary="Jira has no group member API",
+                    description=(
+                        "This Jira version has no group-member API (Jira 6.0+). "
+                        "(HTTP 404)\nUpgrade Jira to 6.0 or later."
+                    ),
+                ),
             )
+        groups_read += 1
         page_members: Any = page.get("values")
         if isinstance(page_members, list):
             members.extend(m for m in page_members if isinstance(m, dict))
         if not page.get("isLast", True):
             complete = False
-    return JiraGroupMemberSample(members=members, complete=complete)
+    return JiraGroupMemberSample(
+        members=members,
+        complete=complete,
+        groups_read=groups_read,
+    )
 
 
 class _GroupListingCheck(_JiraCheck):
@@ -1069,21 +1689,30 @@ class _GroupListingCheck(_JiraCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="jira_group_listing",
-            display_name="Groups can be listed",
+            display_name="List groups",
             remediation=(
                 f"{_GROUP_ACCESS_HINT} Scoped API token: the "
                 f"{_PERMISSION_SYNC_SCOPES} scopes."
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        if not _list_groups(context, config).group_names:
+        group_names: list[str] = _list_groups(context, config).group_names
+        if not group_names:
             # Group sync fails when the listing is empty.
             raise InsufficientPermissionsError(
                 "Jira listed no groups, and group sync fails without groups. "
-                f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}"
+                f"{_perm_sync_hint(config, _GROUP_ACCESS_HINT)}",
+                summary="No groups listed",
+                description=(
+                    "Jira returned no groups, and group sync fails without groups.\n"
+                    f"{_GROUP_ACCESS_NEED}"
+                ),
             )
+        return CheckOutput(
+            summary=f"{counted(len(group_names), 'group', 'groups')} listed"
+        )
 
 
 class _GroupListingCompleteCheck(_JiraCheck):
@@ -1094,8 +1723,14 @@ class _GroupListingCompleteCheck(_JiraCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="jira_group_listing_complete",
-            display_name="Group listing is complete",
+            row_id="jira_group_listing",
+            display_name="List groups",
             required=False,
+            step=CheckStep(
+                step_of="jira_group_listing",
+                running_summary="Groups listed, checking total…",
+                unfinished_caveat="Could not count every group.",
+            ),
             remediation=(
                 "Group sync skips the groups after the limit, so their members "
                 "lose access in Onyx. A Jira administrator can raise the "
@@ -1103,21 +1738,40 @@ class _GroupListingCompleteCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
         try:
             page: JiraGroupPage = _list_groups(context, config)
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot list Jira groups, so this check cannot run. "
-                "jira_group_listing reports why."
+                "jira_group_listing reports why.",
+                summary="Cannot list groups",
+                description="List groups reports why.",
             ) from e
-        if page.total is not None and page.total > len(page.group_names):
+        returned: int = len(page.group_names)
+        if page.total is None:
+            raise InconclusiveValidationError(
+                "Jira did not report how many groups match, so Onyx cannot tell "
+                "whether the listing is complete.",
+                summary="Jira did not report a group total",
+                description="A cut-off group list cannot be detected.",
+            )
+        if page.total > returned:
             raise ConnectorValidationError(
                 f"Jira matched {page.total} groups but returned only "
-                f"{len(page.group_names)}, so group sync misses "
-                f"{page.total - len(page.group_names)} groups."
+                f"{returned}, so group sync misses {page.total - returned} groups.",
+                summary=f"Only {returned} of {page.total} groups listed",
+                description=(
+                    f"Members of the {page.total - returned} missing groups would "
+                    "lose access."
+                ),
             )
+        return CheckOutput(
+            summary="1 group listed"
+            if page.total == 1
+            else f"All {page.total} groups listed"
+        )
 
 
 class _GroupMembershipCheck(_JiraCheck):
@@ -1125,7 +1779,7 @@ class _GroupMembershipCheck(_JiraCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="jira_group_membership",
-            display_name="Group members are readable",
+            display_name="Read group members",
             remediation=(
                 f"{_GROUP_ACCESS_HINT} Scoped API token: the `read:jira-user` "
                 "scope, or the granular `read:group:jira`, `read:user:jira` and "
@@ -1133,12 +1787,22 @@ class _GroupMembershipCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
-        if not _sample_group_members(context, config).members:
+        sample: JiraGroupMemberSample = _sample_group_members(context, config)
+        if not sample.members:
             # The reads succeeded: the first groups can be empty.
-            return _advisory_output(_NO_GROUP_MEMBERS_ADVISORY)
-        return None
+            raise InconclusiveValidationError(
+                "The sampled groups have no members, so Onyx did not verify that "
+                "group members are readable.",
+                summary="No members found to test",
+                description="The first groups have no active members.",
+            )
+        return CheckOutput(
+            summary=(
+                f"Read {len(sample.members)} members in {sample.groups_read} groups"
+            )
+        )
 
 
 class _GroupMemberEmailsCheck(_JiraCheck):
@@ -1146,21 +1810,23 @@ class _GroupMemberEmailsCheck(_JiraCheck):
         super().__init__(
             capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
             check_id="jira_group_member_emails",
-            display_name="Group members have emails",
+            display_name="Read member emails",
             remediation=(
                 "Make user emails visible to the token's account. "
                 f"Cloud: {_CLOUD_EMAIL_HINT} Data Center: {_DC_EMAIL_HINT}"
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
         try:
             sample: JiraGroupMemberSample = _sample_group_members(context, config)
         except ConnectorValidationError as e:
             raise UnexpectedValidationError(
                 "Onyx cannot read group members, so this check cannot run. "
-                "jira_group_membership reports why."
+                "jira_group_membership reports why.",
+                summary="Cannot read group members",
+                description="Read group members reports why.",
             ) from e
         # Group sync skips app and customer accounts.
         people: list[dict[str, Any]] = [
@@ -1169,19 +1835,35 @@ class _GroupMemberEmailsCheck(_JiraCheck):
             if member.get("accountType") in (None, _ATLASSIAN_ACCOUNT_TYPE)
         ]
         if not people:
-            return _advisory_output(_NO_GROUP_USERS_ADVISORY)
-        if not any(member.get("emailAddress") for member in people):
+            raise InconclusiveValidationError(
+                "The sampled groups have no user members, so Onyx did not verify "
+                "that group members have emails.",
+                summary="No user members found to test",
+                description="The sampled groups hold no user accounts.",
+            )
+        with_email: int = sum(1 for member in people if member.get("emailAddress"))
+        if not with_email:
             if not sample.complete:
-                raise UnexpectedValidationError(
+                raise InconclusiveValidationError(
                     "The sampled group members have no visible email. Group sync "
                     "reads more groups and members, so Onyx cannot verify the "
-                    f"rest. {_email_hint(_gateway(context))}"
+                    f"rest. {_email_hint(_gateway(context))}",
+                    summary="Sampled members show no email",
+                    description=(
+                        "The sampled members show no email, and group sync reads "
+                        "more members."
+                    ),
                 )
             raise InsufficientPermissionsError(
                 "No member of the sampled group has a visible email, so group "
-                f"members cannot map to Onyx users. {_email_hint(_gateway(context))}"
+                f"members cannot map to Onyx users. {_email_hint(_gateway(context))}",
+                summary="No member shows an email",
+                description=f"Group access would reach no one.\n{_EMAIL_NEED}",
             )
-        return None
+        return CheckOutput(
+            summary=f"{with_email} of {len(people)} members show an email",
+            advisories=_missing_email_caveat(len(people) - with_email),
+        )
 
 
 def build_jira_doc_permission_sync_checks() -> list[CapabilityCheck]:

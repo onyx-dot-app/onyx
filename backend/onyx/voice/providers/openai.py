@@ -343,8 +343,7 @@ OPENAI_VOICES = [
 # OPENAI_REALTIME_STT_MODEL regardless of selection.
 OPENAI_STT_MODELS = [
     {"id": "whisper-1", "name": "Whisper v1"},
-    {"id": "gpt-4o-transcribe", "name": "GPT-4o Transcribe"},
-    {"id": "gpt-4o-mini-transcribe", "name": "GPT-4o Mini Transcribe"},
+    {"id": "gpt-transcribe", "name": "GPT Transcribe"},
 ]
 
 # OpenAI available TTS models

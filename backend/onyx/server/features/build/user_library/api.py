@@ -15,7 +15,9 @@ from onyx.configs.app_configs import (
     MAX_EMBEDDED_IMAGES_PER_FILE,
     MAX_EMBEDDED_IMAGES_PER_UPLOAD,
 )
+from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import update_connector_credential_pair
+from onyx.db.document import get_documents_by_source
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus, Permission
 from onyx.db.models import User
@@ -35,7 +37,6 @@ from onyx.server.features.build.db.user_library import (
     fetch_user_file_for_user,
     get_or_create_craft_connector,
     get_user_storage_bytes,
-    list_user_files,
     store_user_file,
 )
 from onyx.server.features.build.sandbox.user_library import (
@@ -155,7 +156,9 @@ def get_library_tree(
     db_session: Session = Depends(get_session),
 ) -> list[LibraryEntryResponse]:
     """Get user's uploaded files as a tree structure."""
-    user_docs = list_user_files(db_session, user.id)
+    user_docs = get_documents_by_source(
+        db_session=db_session, source=DocumentSource.CRAFT_FILE, creator_id=user.id
+    )
 
     entries: list[LibraryEntryResponse] = []
     now = datetime.now(timezone.utc)

@@ -5,16 +5,21 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
+import json
 from collections.abc import Callable, Coroutine
 from enum import Enum
 from typing import Any, Dict, TypeVar
 
+from httpx import HTTPStatusError
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared._httpx_utils import McpHttpClientFactory
 from mcp.types import (
+    AudioContent,
     CallToolResult,
+    ImageContent,
     InitializeResult,
     ListResourcesResult,
     TextResourceContents,
@@ -24,9 +29,15 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
+from onyx.utils.threadpool_concurrency import (
+    run_async_sync_no_cancel,
+    run_until_cancelled,
+)
 
 logger = setup_logger()
 
@@ -91,6 +102,7 @@ def _create_mcp_client_function_runner(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    httpx_client_factory: McpHttpClientFactory | None = None,
     **kwargs: Any,
 ) -> Callable[[], Coroutine[Any, Any, T]]:
     auth_headers = connection_headers or {}
@@ -111,7 +123,7 @@ def _create_mcp_client_function_runner(
             server_url,
             headers=auth_headers,
             auth=auth_for_request,
-            httpx_client_factory=mcp_ssrf_httpx_client_factory,
+            httpx_client_factory=httpx_client_factory or mcp_ssrf_httpx_client_factory,
         ) as client_tuple:
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple
@@ -134,6 +146,26 @@ def _create_mcp_client_function_runner(
     return run_client_function
 
 
+def has_unauthorized_response(error: BaseException) -> bool:
+    """Inspect transport exceptions without treating error messages as auth evidence."""
+    pending = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, HTTPStatusError) and current.response.status_code == 401:
+            return True
+        if isinstance(current, BaseExceptionGroup):
+            pending.extend(current.exceptions)
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        elif current.__context__ is not None and not current.__suppress_context__:
+            pending.append(current.__context__)
+    return False
+
+
 def log_exception_group(e: ExceptionGroup) -> Exception | None:
     logger.error(e)
     saved_e = None
@@ -153,13 +185,21 @@ def _call_mcp_client_function_sync(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    cancellation: CancellationSignal | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
         function, server_url, connection_headers, transport, auth, **kwargs
     )
     try:
-        return run_async_sync_no_cancel(run_client_function())
+        if cancellation is None:
+            return run_async_sync_no_cancel(run_client_function())
+        return run_until_cancelled(
+            run_client_function(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
     except Exception as e:
         logger.error("Failed to call MCP client function: %s", e)
         if isinstance(e, ExceptionGroup):
@@ -171,24 +211,31 @@ def _call_mcp_client_function_sync(
         raise e
 
 
-async def _call_mcp_client_function_async(
+async def call_mcp_client_function_async(
     function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
+    httpx_client_factory: McpHttpClientFactory | None = None,
     **kwargs: Any,
 ) -> T:
     run_client_function = _create_mcp_client_function_runner(
-        function, server_url, connection_headers, transport, auth, **kwargs
+        function,
+        server_url,
+        connection_headers,
+        transport,
+        auth,
+        httpx_client_factory=httpx_client_factory,
+        **kwargs,
     )
     return await run_client_function()
 
 
 def process_mcp_result(call_tool_result: CallToolResult) -> str:
     """Flatten MCP CallToolResult->text (prefers text content blocks)."""
-    # TODO: use structured_content if available
     parts = []
+    media_notices: list[str] = []
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
             parts.append(content_block.text or "")
@@ -203,16 +250,28 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
             parts.append(
                 f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"
             )
-        # TODO: handle other content block types
+        if isinstance(content_block, ImageContent | AudioContent):
+            media_notices.append(
+                f"[{content_block.type} omitted: {content_block.mimeType}]"
+            )
 
-    return "\n\n".join(p for p in parts if p) or str(call_tool_result.structuredContent)
+    text = "\n\n".join(p for p in parts if p)
+    if text:
+        return text
+    if call_tool_result.structuredContent is not None:
+        return json.dumps(call_tool_result.structuredContent)
+    return "\n\n".join(media_notices)
 
 
-def _call_mcp_tool(tool_name: str, arguments: dict[str, Any]) -> MCPClientFunction[str]:
-    async def call_tool(session: ClientSession) -> str:
+def _call_mcp_tool(
+    tool_name: str, arguments: dict[str, Any]
+) -> MCPClientFunction[CallToolResult]:
+    async def call_tool(session: ClientSession) -> CallToolResult:
         await session.initialize()
-        result = await session.call_tool(tool_name, arguments)
-        return process_mcp_result(result)
+        # python-sdk#3513: an unknown tool makes call_tool fetch tools/list to
+        # validate output. Onyx does not rely on that validation, so skip it.
+        session._tool_output_schemas[tool_name] = None
+        return await session.call_tool(tool_name, arguments)
 
     return call_tool
 
@@ -224,14 +283,16 @@ def call_mcp_tool(
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
-) -> str:
-    """Call a specific tool on the MCP server"""
+    cancellation: CancellationSignal | None = None,
+) -> CallToolResult:
+    """Call a tool until it completes or the caller cancels the request."""
     return _call_mcp_client_function_sync(
         _call_mcp_tool(tool_name, arguments),
         server_url,
         connection_headers,
         transport,
         auth,
+        cancellation=cancellation,
     )
 
 
@@ -241,7 +302,7 @@ async def initialize_mcp_client(
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,
 ) -> InitializeResult:
-    return await _call_mcp_client_function_async(
+    return await call_mcp_client_function_async(
         lambda session: session.initialize(),
         server_url,
         connection_headers,
@@ -274,13 +335,21 @@ def discover_mcp_tools(
     """
     Synchronous wrapper for discovering MCP tools.
     """
-    return _call_mcp_client_function_sync(
-        _discover_mcp_tools,
-        server_url,
-        connection_headers,
-        transport,
-        auth,
-    )
+    try:
+        return _call_mcp_client_function_sync(
+            _discover_mcp_tools,
+            server_url,
+            connection_headers,
+            transport,
+            auth,
+        )
+    except Exception as error:
+        if has_unauthorized_response(error):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED,
+                "MCP authentication failed (401 Unauthorized). Check your authentication settings and try again.",
+            ) from error
+        raise
 
 
 async def _discover_mcp_resources(session: ClientSession) -> ListResourcesResult:

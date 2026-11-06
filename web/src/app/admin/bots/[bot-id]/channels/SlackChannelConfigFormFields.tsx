@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, NavLink } from "@opal/navigation";
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
@@ -22,11 +23,9 @@ import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswer
 import { InputSingleComboBox } from "@opal/components";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
-import { AlertCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { SvgAlertCircle } from "@opal/icons";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
-import Link from "next/link";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -61,7 +60,7 @@ export function SlackChannelConfigFormFields({
 }: SlackChannelConfigFormFieldsProps) {
   const t = useTranslations("admin.slackBots");
   const { appName } = useSettings();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { values, setFieldValue } = useFormikContext<any>();
   const [viewUnselectableSets, setViewUnselectableSets] = useState(false);
   const [viewSyncEnabledAgents, setViewSyncEnabledAgents] = useState(false);
@@ -173,7 +172,6 @@ export function SlackChannelConfigFormFields({
       );
     }
     return false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values.knowledge_source, values.document_sets, values.persona_id]);
 
   return (
@@ -381,7 +379,7 @@ export function SlackChannelConfigFormFields({
                     <button
                       type="button"
                       onClick={() =>
-                        router.push(`/app/agents/edit/${persona.id}`)
+                        navigation.go(`/app/agents/edit/${persona.id}`)
                       }
                       key={persona.id}
                       className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
@@ -573,7 +571,7 @@ export function SlackChannelConfigFormFields({
                   </h4>
                   <div className="max-h-40 overflow-y-auto border-t border-text-subtle flex-col gap-y-2">
                     {memoizedPrivateConnectors.map((ccpairinfo: any) => (
-                      <Link
+                      <NavLink
                         key={ccpairinfo.id}
                         href={`/admin/connector/${ccpairinfo.id}`}
                         className="flex items-center p-2 rounded-md hover:bg-background-100 transition-colors"
@@ -587,7 +585,7 @@ export function SlackChannelConfigFormFields({
                         <span className="text-sm text-text-darker font-medium">
                           {ccpairinfo.name}
                         </span>
-                      </Link>
+                      </NavLink>
                     ))}
                   </div>
                 </div>
@@ -595,7 +593,7 @@ export function SlackChannelConfigFormFields({
             }
           >
             <div className="flex hover:bg-background-150 cursor-pointer p-2 rounded-lg items-center">
-              <AlertCircle className="h-5 w-5 text-alert" />
+              <SvgAlertCircle className="h-5 w-5 text-alert" />
             </div>
           </Tooltip>
         )}
@@ -604,7 +602,10 @@ export function SlackChannelConfigFormFields({
             ? t("form.updateButton.label")
             : t("form.createButton.label")}
         </Button>
-        <Button prominence="secondary" onClick={() => router.back()}>
+        <Button
+          prominence="secondary"
+          onClick={() => navigation.clampedBack(`/admin/bots/${slack_bot_id}`)}
+        >
           {t("form.cancelButton.label")}
         </Button>
       </div>

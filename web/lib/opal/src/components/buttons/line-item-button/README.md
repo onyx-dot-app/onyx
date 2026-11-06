@@ -10,7 +10,7 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
   └─ Interactive.Container   <- width, rounding
        └─ ContentAction      <- padding
-            ├─ Content       <- icon, title, description, sizePreset, variant, ...
+            ├─ Content       <- icon, title, description, font, ...
             └─ rightChildren
 ```
 
@@ -85,43 +85,40 @@ meanings in one prop. Use `tooltip` for hover text.
 | `icon`                | `IconFunctionComponent` | —               | Left icon                                                                                                                                                                                                                    |
 | `description`         | `string`                | —               | Description below the title                                                                                                                                                                                                  |
 | `descriptionMaxLines` | `number`                | —               | Cap the description at N lines and truncate the rest. Unset wraps without a limit — a row showing user-authored text usually wants `1`                                                                                       |
-| `suffix`              | `string`                | —               | Muted text beside the title, like "(Default)". Shown only by the `heading` variant with a `main-*` `sizePreset`; the default `headline` row drops it |
-| `tag`         | `TagProps`           | —        | Tag beside the title, like a plan badge; `heading` variant only           |
-| `sizePreset`          | `SizePreset`            | `"headline"`    | Content size preset                                                                                                                                                                                                          |
-| `variant`             | `ContentVariant`        | `"heading"`     | Content layout variant                                                                                                                                                                                                       |
+| `suffix`              | `string`                | —               | Muted text beside the title, like "(Default)"                                                                                        |
+| `badge`         | `BadgeProps`         | —        | Badge beside the title, like a plan badge                                 |
+| `font`                | `TextFont`              | `"main-ui-action"` | The title's font; sets every size |
 | `rightChildren`       | `ReactNode`             | —               | Content after the label (e.g. action button)                                                                                                                                                                                 |
-| `color`               | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
+| `color`               | `StatusColor \| "interactive"` | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
 | `strikethrough`       | `boolean`               | `false`         | Strike the label through, e.g. a row switched off                                                                                                                                                                            |
 
 That table is the entire content surface. The remaining `ContentAction` /
-`Content` props — `editable`, `onTitleChange`, `auxIcon`, `tag`, and the rest —
+`Content` props — `editable`, `onTitleChange`, `auxIcon`, and the rest —
 are **not** part of `LineItemButton`'s type; no call site passed one. Naming
 only what a row uses is what lets everything else reach the row element.
 
 ## Usage
 
 ```tsx
-import { LineItemButton } from "@opal/components";
+import { Badge, LineItemButton } from "@opal/components";
 
 // Simple selectable row
 <LineItemButton
+  font="main-ui-action"
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
   rounding={2}
   onClick={handleClick}
-  title="gpt-4o"
-  sizePreset="main-ui"
-  variant="section"
+  title="gpt-6-sol"
 />
 
 // With right-side action
 <LineItemButton
+  font="main-ui-action"
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
   onClick={handleClick}
   title="claude-opus-4"
-  sizePreset="main-ui"
-  variant="section"
-  rightChildren={<Tag title="Default" color="blue" />}
+  rightChildren={<Badge title="Default" color="info" />}
 />
 ```

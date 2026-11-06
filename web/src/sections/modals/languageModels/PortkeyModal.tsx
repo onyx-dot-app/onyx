@@ -137,7 +137,6 @@ function PortkeyModalInternals({
         }
       })
       .catch(() => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

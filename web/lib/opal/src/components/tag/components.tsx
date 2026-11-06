@@ -1,167 +1,252 @@
 "use client";
 
 import "@opal/components/tag/styles.css";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text, Tooltip } from "@opal/components";
-import { SvgAlertTriangle, SvgX } from "@opal/icons";
-import { cn } from "@opal/utils";
-import { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";
+import type {
+  IconFunctionComponent,
+  RichStr,
+  StatusColor,
+  WithoutStyles,
+} from "@opal/types";
+import { Button, Tooltip } from "@opal/components";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
+import { CONTENT_STATUS_COLORS } from "@opal/layouts/content/colors";
+import { Disabled, Interactive } from "@opal/core";
+import { SvgX } from "@opal/icons";
+import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type TagSize = "sm" | "md";
-
-interface TagProps {
+type TagBaseProps = Omit<
+  WithoutStyles<React.HTMLAttributes<HTMLElement>>,
+  "title" | "color" | "children" | "onClick"
+> & {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
+
+  /** Icon colour, when it is not the chip's gray (an orange warning icon). */
+  iconColor?: StatusColor;
 
   /** Tag label text. */
   title: string | RichStr;
 
-  /** Color variant. Default: `"gray"`. */
-  color?: TagColor;
+  /** Cap the title at 160px with an ellipsis; a cut title shows on hover. */
+  truncate?: boolean;
 
-  /** Size variant. Default: `"sm"`. */
-  size?: TagSize;
+  /** Hover tooltip; on a disabled chip it explains why. */
+  tooltip?: string;
 
-  /**
-   * Switches to the editable tag (Figma Tag `Type=Editable`): remove button,
-   * gray hover, and the dark focus-within treatment chip fields use as the
-   * keyboard-selection state before deleting a tag.
-   */
+  /** Warning icon after the title, for a value the field rejects. */
+  error?: boolean;
+};
+
+/**
+ * Static chip: no click, no remove. Looks like the others, without the hover;
+ * a chip field's locked chip.
+ */
+type TagStaticProps = TagBaseProps & {
+  ref?: React.Ref<HTMLDivElement>;
+  /** Dims the whole chip. */
+  disabled?: boolean;
+  onClick?: never;
+  onRemove?: never;
+  removeInTabOrder?: never;
+};
+
+/** Removable chip: a remove Button after the title. */
+type TagRemovableProps = TagBaseProps & {
+  ref?: React.Ref<HTMLDivElement>;
+  /** Unset, the chip is a static one. */
   onRemove?: () => void;
-
   /**
-   * Editable only: whether the remove button is a Tab stop. A chip field
-   * walks its chips with the arrows and keeps Tab for leaving the field.
+   * Whether the remove button is a Tab stop. A chip field walks its chips
+   * with the arrows and keeps Tab for leaving the field.
    * @default true
    */
   removeInTabOrder?: boolean;
-
-  /** Editable only: dims the tag and hides the remove button. */
+  /** Dims the whole chip and hides the remove button. */
   disabled?: boolean;
+  onClick?: never;
+};
 
-  /** Secondary text rendered after the title in `text-03`. */
-  value?: string | RichStr;
+/**
+ * Clickable chip: a button. As a popover or dropdown trigger it shows the
+ * hover look while open, as `Button` does; with `aria-pressed` it is a filter
+ * toggle, inverted while pressed.
+ */
+type TagButtonProps = TagBaseProps & {
+  ref?: React.Ref<HTMLButtonElement>;
+  onClick: React.MouseEventHandler<HTMLButtonElement>;
+  /** A trigger stays operable. */
+  disabled?: never;
+  onRemove?: never;
+  removeInTabOrder?: never;
+};
 
-  /**
-   * Cap the title width with an ellipsis (120px `sm`, 160px `md`).
-   * Editable tags are always capped, per the Figma spec.
-   */
-  truncate?: boolean;
+type TagProps = TagStaticProps | TagRemovableProps | TagButtonProps;
 
-  /** Hover tooltip. Defaults to string titles on editable or truncated tags. */
-  tooltip?: string;
-
-  /** Warning indicator after the title. */
-  error?: boolean;
+function isClickableTag(props: TagProps): props is TagButtonProps {
+  return props.onClick !== undefined;
 }
 
 // ---------------------------------------------------------------------------
 // Tag
 // ---------------------------------------------------------------------------
 
-// Class of the editable tag's remove control. Exported so composites (chip
-// fields) can target it for keyboard flows without a fragile string copy.
-const TAG_REMOVE_CLASS = "opal-auxiliary-tag-remove";
+// Attribute on the remove button. Exported so composites (chip fields) can
+// target it for keyboard flows without a fragile string copy.
+const TAG_REMOVE_ATTR = "data-opal-tag-remove";
 
-function Tag({
-  icon: Icon,
-  title,
-  color = "gray",
-  size = "sm",
-  onRemove,
-  removeInTabOrder = true,
-  disabled = false,
-  value,
-  truncate = false,
-  tooltip,
-  error = false,
-}: TagProps) {
+/**
+ * A gray, md, `Interactive` pill: a chip-field value, a filter toggle or a
+ * popover trigger. For a coloured label, use `Badge`.
+ */
+function Tag(props: TagProps) {
+  const {
+    ref: _ref,
+    icon,
+    iconColor,
+    title,
+    truncate = false,
+    tooltip,
+    error = false,
+    disabled = false,
+    onClick: _onClick,
+    onRemove,
+    removeInTabOrder: _removeInTabOrder,
+    ...rest
+  } = props;
   const strings = useOpalStrings();
-  const config = TAG_COLORS[color];
-  const editable = onRemove !== undefined;
-  const capped = editable || truncate;
+  const removable = onRemove !== undefined;
 
-  const font =
-    size === "sm"
-      ? "figure-small-value"
-      : editable
-        ? "main-ui-body"
-        : "secondary-body";
+  const dataAttrs = {
+    "data-removable": removable || undefined,
+    "data-capped": removable || truncate || undefined,
+    "data-fixed-color": iconColor !== undefined || undefined,
+  };
+  // SAFETY: CSSProperties has no index for custom properties; the object
+  // holds only the one custom property the stylesheet reads.
+  const iconColorStyle =
+    iconColor !== undefined
+      ? ({
+          "--opal-tag-icon-color": CONTENT_STATUS_COLORS[iconColor].fg,
+        } as React.CSSProperties)
+      : undefined;
 
-  // Editable gray reads in text-04 per the Figma spec. TAG_COLORS.gray
-  // (text-03) stays for the passive metadata tag.
-  const textClass = editable && color === "gray" ? "text-text-04" : config.text;
-
-  const tag = (
-    <div
-      className={cn("opal-auxiliary-tag", config.bg, textClass)}
-      data-size={size}
-      data-type={editable ? "editable" : undefined}
-      data-color={color}
-      data-disabled={(editable && disabled) || undefined}
-    >
-      {Icon && (
-        <div className="opal-auxiliary-tag-icon-container">
-          <Icon className={cn("opal-auxiliary-tag-icon", textClass)} />
-        </div>
+  const content = (
+    <>
+      <Content
+        font="secondary-action"
+        width="fit"
+        color="interactive"
+        icon={icon}
+        title={title}
+        titleMaxLines={1}
+        auxIcon={error ? "warning" : undefined}
+      />
+      {removable && !disabled && (
+        <Button
+          // The literal of TAG_REMOVE_ATTR: JSX takes no computed names.
+          data-opal-tag-remove=""
+          icon={SvgX}
+          prominence="internal"
+          size="2xs"
+          tabIndex={props.removeInTabOrder === false ? -1 : undefined}
+          aria-label={
+            typeof title === "string"
+              ? strings.removeItem(title)
+              : strings.remove
+          }
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
+        />
       )}
-      <span className="opal-auxiliary-tag-text">
-        <span
-          className={cn(
-            "opal-auxiliary-tag-label",
-            capped && "opal-auxiliary-tag-capped"
-          )}
-        >
-          <Text font={font} color="inherit" wordWrap="whitespace-nowrap">
-            {title}
-          </Text>
-        </span>
-        {value !== undefined && (
-          <span className="opal-auxiliary-tag-value">
-            <Text font={font} color="inherit" wordWrap="whitespace-nowrap">
-              {value}
-            </Text>
-          </span>
-        )}
-      </span>
-      {error && <SvgAlertTriangle className="opal-auxiliary-tag-error-icon" />}
-      {editable &&
-        !disabled && (
-          // raw-ok: the remove control is 16px (md) / 12px (sm), and Button's fixed sizes bottom out at 16px, so the tag owns its remove sizing
-          <button
-            type="button"
-            className={TAG_REMOVE_CLASS}
-            tabIndex={removeInTabOrder ? undefined : -1}
-            aria-label={
-              typeof title === "string"
-                ? strings.removeItem(title)
-                : strings.remove
-            }
-            onClick={(event) => {
-              event.stopPropagation();
-              onRemove();
-            }}
-          >
-            <SvgX />
-          </button>
-        )}
-    </div>
+    </>
   );
 
-  const tooltipText =
-    tooltip ?? (capped && typeof title === "string" ? title : undefined);
+  let chip: React.ReactNode;
+  if (isClickableTag(props)) {
+    // A popup trigger takes the hover look while open, as Button does.
+    const popup = rest["aria-haspopup"];
+    const isPopupTrigger =
+      popup !== undefined && popup !== false && popup !== "false";
+    const interaction = isPopupTrigger
+      ? resolveTriggerInteraction(undefined, rest)
+      : "rest";
+    const pressed = rest["aria-pressed"];
+    const button = (
+      <button
+        ref={props.ref}
+        type="button"
+        {...rest}
+        className="opal-tag"
+        style={iconColorStyle}
+        {...dataAttrs}
+      >
+        {content}
+      </button>
+    );
+    // A toggle (aria-pressed) is a filter chip: it shows its pressed state.
+    chip =
+      pressed !== undefined ? (
+        <Interactive.Stateful
+          variant="select-filter"
+          state={pressed === true || pressed === "true" ? "selected" : "empty"}
+          interaction={interaction}
+          type="button"
+          onClick={props.onClick}
+        >
+          {button}
+        </Interactive.Stateful>
+      ) : (
+        <Interactive.Stateless
+          variant="default"
+          prominence="secondary"
+          interaction={interaction}
+          type="button"
+          onClick={props.onClick}
+        >
+          {button}
+        </Interactive.Stateless>
+      );
+  } else {
+    chip = (
+      <Interactive.Stateless
+        variant="default"
+        prominence="secondary"
+        // A static chip keeps the look without the hover.
+        passive={!removable}
+      >
+        <div
+          ref={props.ref}
+          {...rest}
+          className="opal-tag"
+          style={iconColorStyle}
+          {...dataAttrs}
+        >
+          {content}
+        </div>
+      </Interactive.Stateless>
+    );
+  }
 
+  // A disabled chip dims as a whole; its tooltip says why.
+  if (disabled) {
+    return (
+      <Disabled disabled tooltip={tooltip} tooltipSide="top">
+        {chip}
+      </Disabled>
+    );
+  }
   return (
-    <Tooltip tooltip={tooltipText} side="top">
-      {tag}
+    <Tooltip tooltip={tooltip} side="top">
+      {chip}
     </Tooltip>
   );
 }
 
-export { Tag, TAG_REMOVE_CLASS, type TagProps, type TagSize };
-export { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";
+export { Tag, TAG_REMOVE_ATTR, type TagProps };

@@ -3,16 +3,12 @@
 import SvgInfo from "@opal/icons/info";
 import { Tooltip } from "@opal/components/tooltip/components";
 import { useOpalStrings } from "@opal/strings";
-import type {
-  IconFunctionComponent,
-  RichStr,
-  StatusVariants,
-} from "@opal/types";
+import type { IconFunctionComponent, RichStr, StatusColor } from "@opal/types";
 import { cn } from "@opal/utils";
 
 /** The statuses an icon tooltip can show. */
 type IconTooltipStatus = Extract<
-  StatusVariants,
+  StatusColor,
   "default" | "info" | "success" | "warning" | "error"
 >;
 
@@ -31,7 +27,7 @@ const STROKES: Record<IconTooltipStatus, string> = {
   default: "stroke-text-03",
   info: "stroke-status-info-05",
   success: "stroke-status-success-05",
-  warning: "stroke-theme-amber-05",
+  warning: "stroke-status-warning-05",
   error: "stroke-status-error-05",
 };
 

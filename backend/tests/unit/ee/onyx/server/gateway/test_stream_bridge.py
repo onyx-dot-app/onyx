@@ -68,7 +68,7 @@ def test_disconnect_records_trailing_usage(
     llm.stream_raw.return_value = chunks()
     span = MagicMock()
     with (
-        patch.object(api, "_gateway_trace", return_value=nullcontext()),
+        patch.object(api, "llm_gateway_trace", return_value=nullcontext()),
         patch.object(api, "llm_generation_span", return_value=nullcontext(span)),
         patch.object(stream_bridge, "record_llm_span_output") as record,
     ):

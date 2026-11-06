@@ -1,10 +1,10 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
@@ -17,13 +17,13 @@ import { useCreateModal, useModalClose } from "@opal/components";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { escapeMarkdown, markdown } from "@opal/utils";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { Content, ContentIndent, IllustrationContent } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowRightDot,
   SvgBubbleText,
-  SvgFileBroadcast,
+  SvgFiles,
   SvgShareWebhook,
   SvgPlug,
   SvgRefreshCw,
@@ -56,7 +56,7 @@ import { noProp } from "@/lib/utils";
 const route = ADMIN_ROUTES.HOOKS;
 
 const HOOK_POINT_ICONS: Record<string, IconFunctionComponent> = {
-  document_ingestion: SvgFileBroadcast,
+  document_ingestion: SvgFiles,
   document_push: SvgArrowRightDot,
   query_processing: SvgBubbleText,
 };
@@ -193,19 +193,18 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
       <div className="w-full flex flex-row">
         <div className="flex-1 p-2">
           <Content
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={Icon}
             title={hookPointName(spec, t)}
             description={hookPointDescription(spec, t)}
           />
 
           {spec.docs_url && (
-            <div className="ms-6">
+            <ContentIndent font="main-ui-action">
               <LinkButton href={spec.docs_url} target="_blank">
                 {t("docsLink.label")}
               </LinkButton>
-            </div>
+            </ContentIndent>
           )}
         </div>
 
@@ -365,8 +364,7 @@ function ConnectedHookCard({
           <div className="w-full flex flex-row">
             <div className="flex-1 p-2">
               <Content
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={HookIcon}
                 title={
                   !hook.is_active || hook.is_reachable === false
@@ -384,11 +382,11 @@ function ConnectedHookCard({
               />
 
               {spec?.docs_url && (
-                <div className="ms-6">
+                <ContentIndent font="main-ui-action">
                   <LinkButton href={spec.docs_url} target="_blank">
                     {t("docsLink.label")}
                   </LinkButton>
-                </div>
+                </ContentIndent>
               )}
             </div>
 
@@ -470,7 +468,7 @@ export default function HooksPage() {
   const t = useTranslations("admin.hooks");
   const locale = useLocale();
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
@@ -533,12 +531,18 @@ export default function HooksPage() {
     if (settings.isLoading) return;
     if (!enterpriseTier) {
       toast.info(t("page.enterpriseRequired.message"));
-      router.replace("/");
+      navigation.go("/", { replace: true });
     } else if (!settings.hooks_enabled) {
       toast.info(t("page.notEnabled.message"));
-      router.replace("/");
+      navigation.go("/", { replace: true });
     }
-  }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router, t]);
+  }, [
+    settings.isLoading,
+    enterpriseTier,
+    settings.hooks_enabled,
+    navigation,
+    t,
+  ]);
 
   if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
     return <IconLoader />;
@@ -598,7 +602,7 @@ export default function HooksPage() {
         />
       )}
 
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
@@ -606,9 +610,7 @@ export default function HooksPage() {
           divider
         />
         <SettingsLayouts.Body>
-          {isLoading ? (
-            <IconLoader />
-          ) : specsError || hooksError ? (
+          {specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError
                 ? t("page.loadSpecsFailed.message")
@@ -621,7 +623,7 @@ export default function HooksPage() {
                   placeholder={t("page.search.placeholder")}
                   value={search}
                   variant="internal"
-                  searchIcon
+                  icon="search"
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>

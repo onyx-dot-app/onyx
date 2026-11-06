@@ -1,5 +1,6 @@
 import { Tier } from "@/lib/tiers/types";
 import type { Notification } from "@/lib/notifications/interfaces";
+import type { Locale } from "@/i18n/config";
 
 export enum ApplicationStatus {
   PAYMENT_REMINDER = "payment_reminder",
@@ -47,7 +48,10 @@ export interface Settings {
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;
-  image_analysis_max_size_mb?: number | null;
+
+  // Global limit on indexing embedding requests; null means no limit
+  embedding_rate_limit_requests?: number | null;
+  embedding_rate_limit_period_seconds?: number;
 
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
@@ -67,8 +71,14 @@ export interface Settings {
   // Gates visibility of the admin Craft-access controls.
   onyx_craft_available?: boolean;
 
+  // Craft is switched on but the tier is too low: show the upgrade prompt.
+  onyx_craft_requires_upgrade?: boolean;
+
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
+
+  // Workspace UI language for users without a stored language of their own.
+  default_language: Locale;
 
   // Workspace-wide switch for the LLM gateway (direct model API access via
   // /api/gateway). When false, all gateway routes reject requests.
@@ -108,11 +118,17 @@ export interface Settings {
 
   // Application version from the ONYX_VERSION env var on the server.
   version?: string | null;
+  // Git details of the server's build: commit, ISO 8601 commit date, tag or branch.
+  commit?: string | null;
+  commit_date?: string | null;
+  git_ref?: string | null;
   // Hard ceiling for user_file_max_upload_size_mb, derived from env var.
   max_allowed_upload_size_mb?: number;
 
   // Factory defaults for the restore button.
   default_pruning_freq?: number;
+  // A new connector's schedule as the create form fills it in, in seconds.
+  default_refresh_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
 

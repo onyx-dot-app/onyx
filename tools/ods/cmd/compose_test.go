@@ -219,7 +219,11 @@ func TestRunCompose_errors(t *testing.T) {
 			}
 
 			err := runCompose(tt.profile, &tt.opts)
-			if err == nil || !strings.HasPrefix(err.Error(), tt.wantPrefix) {
+			matches := err != nil && strings.HasPrefix(err.Error(), tt.wantPrefix)
+			if tt.noRepo {
+				matches = err != nil && strings.Contains(err.Error(), "not inside a git worktree")
+			}
+			if !matches {
 				t.Fatalf("expected error starting with %q, got %v", tt.wantPrefix, err)
 			}
 			if calls := composeCalls(t, bin, "docker"); (calls != nil) != tt.wantDocker {

@@ -17,7 +17,7 @@ from tests.integration.common_utils.test_models import DATestAPIKey, DATestUser
 # Representative endpoints that use require_permission(Permission.FULL_ADMIN_PANEL_ACCESS).
 # One per major router file to cover breadth without redundancy.
 ADMIN_ACCESS_ENDPOINTS: list[tuple[str, str]] = [
-    ("GET", "/admin/token-rate-limits/global"),
+    ("GET", "/admin/spending-limits"),
     ("GET", "/manage/users/counts"),
     ("GET", "/manage/users/invited"),
     ("GET", "/manage/admin/valid-domains"),

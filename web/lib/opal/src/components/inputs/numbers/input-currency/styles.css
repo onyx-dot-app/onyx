@@ -1,0 +1,39 @@
+@reference "#reference.css";
+
+/* Amount segments grow with their text, so the caret starts at the front
+   instead of the center of a fixed-width box. */
+.opal-input-currency .opal-input-segment {
+  text-align: start;
+}
+
+/* Whole, separator and fraction: one left-to-right run on every page. */
+.opal-input-currency-amount {
+  @apply flex items-center;
+  direction: ltr;
+}
+
+.opal-input-currency-mark {
+  @apply font-main-ui-mono text-text-02;
+}
+
+.opal-input[data-variant="disabled"] .opal-input-currency-mark {
+  @apply text-text-01;
+}
+
+/* A segment keeps 4px past its digits for DM Mono's wide ink; let the next
+   mark overlap that slack so the amount reads as one run. */
+.opal-input-currency-amount .opal-input-segment:not(:last-child) {
+  margin-inline-end: -4px;
+}
+
+.opal-input-currency-suffix {
+  @apply flex flex-1 justify-end;
+}
+
+/* Clicks on the placeholder reach the chrome, which focuses the whole
+   segment; the hidden fraction segment under it must not take them. */
+.opal-input-currency
+  .opal-input-segmented-content[data-placeholder-shown]
+  .opal-input-segment {
+  pointer-events: none;
+}

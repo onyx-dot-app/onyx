@@ -90,11 +90,11 @@ def test_provider_default_models() -> None:
 def test_provider_custom_models() -> None:
     provider = OpenAIVoiceProvider(
         api_key="test",
-        stt_model="gpt-4o-transcribe",
+        stt_model="gpt-transcribe",
         tts_model="tts-1-hd",
         default_voice="nova",
     )
-    assert provider.stt_model == "gpt-4o-transcribe"
+    assert provider.stt_model == "gpt-transcribe"
     assert provider.tts_model == "tts-1-hd"
     assert provider.default_voice == "nova"
 

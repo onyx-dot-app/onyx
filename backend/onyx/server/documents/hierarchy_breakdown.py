@@ -224,5 +224,11 @@ def build_cc_pair_hierarchy_breakdown(
         if entries:
             nodes_by_type[section.node_type] = sorted(entries, key=_sort_key)
     return CCPairHierarchyBreakdown(
-        nodes_by_type=nodes_by_type, other_doc_count=document_counts.other
+        nodes_by_type=nodes_by_type,
+        other_doc_count=document_counts.other,
+        config_fields=[
+            section.config_field
+            for section in sections
+            if section.config_field is not None
+        ],
     )

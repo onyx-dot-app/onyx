@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// Mid-stream reveal rate, in chars per 60fps frame. 3 ≈ 180 cps.
-const CHARS_PER_FRAME = 3;
-// Once the stream is finished, the rate becomes adaptive so a long
-// backlog drains within ~CATCHUP_FRAMES frames. Bursty rendering after
-// the final packet is fine — the visible chunk size only matters while
-// the user is still reading along.
-const CATCHUP_FRAMES = 30;
+// Keep a short text buffer so packet bursts do not become visible pauses.
+const SMOOTHING_WINDOW_MS = 200;
+const MIN_CHARS_PER_SECOND = 30;
+const FINISH_DRAIN_MS = 500;
+const MAX_FRAME_MS = 50;
 
 export interface UseTypewriterResult {
   displayed: string;
@@ -18,8 +16,9 @@ export interface UseTypewriterResult {
 }
 
 /**
- * Reveals `target` one character at a time on each animation frame.
+ * Reveals `target` at a rate that follows the buffered text.
  * When `enabled` is false (historical messages), snaps to full on mount.
+ * `visiblePrefixLength` skips animation for restored content.
  * The rAF loop pauses once caught up and resumes when `target` grows.
  *
  * `streamFinished` lets the loop drain any remaining backlog faster
@@ -29,7 +28,8 @@ export interface UseTypewriterResult {
 export function useTypewriter(
   target: string,
   enabled: boolean,
-  streamFinished: boolean = false
+  streamFinished: boolean = false,
+  visiblePrefixLength: number = 0
 ): UseTypewriterResult {
   // Ref so the rAF loop reads latest length without restarting.
   const targetRef = useRef(target);
@@ -49,28 +49,31 @@ export function useTypewriter(
     streamFinishedRef.current = streamFinished;
   }, [target, enabled, streamFinished]);
 
-  // Captured once when post-finish drain begins, so the per-frame step
-  // size stays constant instead of decaying with the shrinking backlog.
-  // Dividing the *current* backlog each tick produces geometric decay
-  // and overshoots CATCHUP_FRAMES significantly for long tails.
-  const drainStepRef = useRef<number | null>(null);
+  // Fix the finishing rate once so the remaining tail drains in bounded time.
+  const drainRateRef = useRef<number | null>(null);
 
   // Exposed so callers can suppress auto-scroll while the drain runs.
   const [isDraining, setIsDraining] = useState(false);
   const isDrainingRef = useRef(false);
 
-  // `enabled` controls initial state: animate from 0 vs snap to full for
+  // Start after the restored prefix, or show all content for
   // history/voice. Transitions mid-stream are handled via enabledRef in
   // the restart effect so a flip to false doesn't dump the buffered tail
   // *and* doesn't spin up the rAF loop on later growth.
   const [displayedLength, setDisplayedLength] = useState<number>(
-    enabled ? 0 : target.length
+    enabled ? Math.min(visiblePrefixLength, target.length) : target.length
   );
 
-  // Mirror displayedLength in a ref so the rAF loop can read the latest
-  // value without stale-closure issues AND without needing a functional
-  // state updater (which must be pure — no ref mutations inside).
+  // Retain fractional progress between frames, including high-refresh displays.
   const displayedLengthRef = useRef(displayedLength);
+
+  useEffect(() => {
+    const visible = Math.min(visiblePrefixLength, target.length);
+    if (displayedLengthRef.current < visible) {
+      displayedLengthRef.current = visible;
+      setDisplayedLength(visible);
+    }
+  }, [visiblePrefixLength, target.length]);
 
   // Clamp (not reset) on target shrink — preserves already-revealed chars
   // across user-cancel freeze and regeneration.
@@ -79,7 +82,7 @@ export function useTypewriter(
     if (target.length < prevTargetLengthRef.current) {
       const clamped = Math.min(displayedLengthRef.current, target.length);
       displayedLengthRef.current = clamped;
-      setDisplayedLength(clamped);
+      setDisplayedLength(Math.floor(clamped));
     }
     prevTargetLengthRef.current = target.length;
   }, [target.length]);
@@ -91,7 +94,10 @@ export function useTypewriter(
   const startLoopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    const tick = () => {
+    let lastFrameTime = performance.now();
+    const tick = (now: number) => {
+      const elapsed = Math.max(0, Math.min(now - lastFrameTime, MAX_FRAME_MS));
+      lastFrameTime = now;
       const targetLen = targetRef.current.length;
       const prev = displayedLengthRef.current;
       if (prev >= targetLen) {
@@ -105,26 +111,32 @@ export function useTypewriter(
         }
         return;
       }
-      let charsThisFrame: number;
+      const remaining = targetLen - prev;
+      let charsPerSecond: number;
       if (streamFinishedRef.current) {
-        if (drainStepRef.current === null) {
-          const initialBacklog = targetLen - prev;
-          drainStepRef.current = Math.max(
-            CHARS_PER_FRAME,
-            Math.ceil(initialBacklog / CATCHUP_FRAMES)
+        if (drainRateRef.current === null) {
+          drainRateRef.current = Math.max(
+            MIN_CHARS_PER_SECOND,
+            (remaining * 1000) / FINISH_DRAIN_MS
           );
           if (!isDrainingRef.current) {
             isDrainingRef.current = true;
             setIsDraining(true);
           }
         }
-        charsThisFrame = drainStepRef.current;
+        charsPerSecond = drainRateRef.current;
       } else {
-        charsThisFrame = CHARS_PER_FRAME;
+        charsPerSecond = Math.max(
+          MIN_CHARS_PER_SECOND,
+          (remaining * 1000) / SMOOTHING_WINDOW_MS
+        );
       }
-      const next = Math.min(prev + charsThisFrame, targetLen);
+      const next = Math.min(
+        prev + (charsPerSecond * elapsed) / 1000,
+        targetLen
+      );
       displayedLengthRef.current = next;
-      setDisplayedLength(next);
+      setDisplayedLength(Math.floor(next));
       rafIdRef.current = requestAnimationFrame(tick);
     };
 
@@ -143,6 +155,7 @@ export function useTypewriter(
         return;
       }
       runningRef.current = true;
+      lastFrameTime = performance.now();
       rafIdRef.current = requestAnimationFrame(tick);
     };
 
@@ -187,8 +200,8 @@ export function useTypewriter(
   }, []);
 
   const displayed = useMemo(
-    () => target.slice(0, Math.min(displayedLength, target.length)),
-    [target, displayedLength]
+    () => target.slice(0, Math.max(displayedLength, visiblePrefixLength)),
+    [target, displayedLength, visiblePrefixLength]
   );
 
   return { displayed, isDraining };

@@ -1,75 +1,44 @@
 # Tag
 
-**Import:** `import { Tag, type TagProps } from "@opal/components";`
+**Import:** `import { Tag, TAG_REMOVE_ATTR, type TagProps } from "@opal/components";`
 
-A small colored label used to annotate items with status, category, or metadata. Two types, matching the Figma `Tag` component:
+A gray, 1.5rem-tall `Interactive` pill around a `Content` (`secondary` preset): a tag-field value, a filter toggle or a popover trigger. For a coloured label, use [`Badge`](../badge/README.md).
 
-- **Passive** (default): metadata label. 1rem tall with `font-figure-small-value` at `sm`, 1.375rem with `secondary-body` at `md`.
-- **Editable** (`onRemove` set): remove button, gray hover, and a dark focus-within treatment chip fields use as the keyboard-selection state before deleting a tag.
+- **Static** (no `onClick` or `onRemove`): the tag look without the hover, such as a tag field's locked tag.
+- **Removable** (`onRemove`): a remove `Button` after the title, marked with `TAG_REMOVE_ATTR` for tag-field keyboard flows. Tag fields select a tag by focusing its remove button: the tag turns into a dark pill with an outer ring (Figma State=Focus). Removable titles are always capped.
+- **Clickable** (`onClick`): a button (`Interactive.Stateless`, default + secondary). As a popover or dropdown trigger (`aria-haspopup`) it shows the hover look while open, as `Button` does. With `aria-pressed` it is a filter toggle (`Interactive.Stateful`, `select-filter`), inverted while pressed.
+
+`onClick` and `onRemove` cannot be combined. A disabled tag is wrapped in `Disabled`: it dims as a whole, hides its remove button, and its `tooltip` shows the reason.
 
 ## Props
 
-| Prop       | Type                    | Default        | Description                                                                                    |
-| ---------- | ----------------------- | -------------- | ---------------------------------------------------------------------------------------------- |
-| `title`    | `string \| RichStr`     | **(required)** | Tag label text                                                                                 |
-| `color`    | `TagColor`              | `"gray"`       | Color variant                                                                                  |
-| `icon`     | `IconFunctionComponent` | —              | Optional icon before the title                                                                 |
-| `size`     | `"sm" \| "md"`          | `"sm"`         | Size variant (Figma Small / Regular)                                                           |
-| `removeInTabOrder` | `boolean` | `true` | Editable only: whether the remove button is a Tab stop. Chip fields set it off and walk chips with the arrows |
-| `onRemove` | `() => void`            | —              | Switches to the editable type and renders the remove button                                    |
-| `disabled` | `boolean`               | `false`        | Editable only: dims the tag, hides the remove button                                           |
-| `value`    | `string \| RichStr`     | —              | Secondary text after the title, in `text-03`                                                   |
-| `truncate` | `boolean`               | `false`        | Cap the title at 120px (`sm`) / 160px (`md`) with an ellipsis. Editable tags are always capped |
-| `tooltip`  | `string`                | —              | Hover tooltip. Defaults to string titles on editable or truncated tags                         |
-| `error`    | `boolean`               | `false`        | Warning indicator after the title (no Figma variant, exists for chip-field validation)         |
+| Prop               | Type                                   | Default        | Description                                                                 |
+| ------------------ | -------------------------------------- | -------------- | --------------------------------------------------------------------------- |
+| `title`            | `string \| RichStr`                    | **(required)** | Tag label text                                                             |
+| `icon`             | `IconFunctionComponent`                | —              | Optional icon before the title                                              |
+| `iconColor`        | `StatusColor`                         | —              | Icon colour when it is not the tag's gray, kept in every state             |
+| `onClick`          | `MouseEventHandler<HTMLButtonElement>` | —              | Makes the tag a button. `ref` is then a `Ref<HTMLButtonElement>`           |
+| `onRemove`         | `() => void`                           | —              | Renders the remove button                                                   |
+| `removeInTabOrder` | `boolean`                              | `true`         | Removable only: whether the remove button is a Tab stop                     |
+| `disabled`         | `boolean`                              | `false`        | Static and removable: dims the tag and hides the remove button             |
+| `truncate`         | `boolean`                              | `false`        | Cap the title at 160px with an ellipsis; a cut title shows in full on hover |
+| `tooltip`          | `string`                               | —              | Hover tooltip; on a disabled tag, the reason                               |
+| `error`            | `boolean`                              | `false`        | Warning icon after the title, for a value the field rejects                 |
 
-### `TagColor`
-
-`"green" | "blue" | "purple" | "amber" | "red" | "gray"`
-
-| Color    | Background           | Text                                       |
-| -------- | -------------------- | ------------------------------------------ |
-| `green`  | `theme-green-01`     | `theme-green-05`                           |
-| `blue`   | `theme-blue-01`      | `theme-blue-05`                            |
-| `purple` | `theme-purple-01`    | `theme-purple-05`                          |
-| `amber`  | `theme-amber-01`     | `theme-amber-05`                           |
-| `red`    | `status-error-01`    | `status-error-05`                          |
-| `gray`   | `background-tint-02` | `text-03` (passive) / `text-04` (editable) |
-
-## Usage Examples
+## Usage
 
 ```tsx
 import { Tag } from "@opal/components";
-import SvgStar from "@opal/icons/star";
+import { SvgAlertTriangle, SvgUsers } from "@opal/icons";
 
-// Basic
-<Tag title="New" color="green" />
+<Tag icon={SvgUsers} title="engineering" onRemove={() => removeGroup(id)} />
 
-// With icon
-<Tag icon={SvgStar} title="Featured" color="purple" />
+<Tag
+  icon={SvgAlertTriangle}
+  iconColor="warning"
+  title="3 failed"
+  onClick={openDetails}
+/>
 
-// Editable (chip): remove button, hover, focus states
-<Tag title="filter:owner" onRemove={() => removeFilter(id)} />
-
-// Editable with secondary value
-<Tag title="env" value="production" size="md" onRemove={() => {}} />
-
-// Truncated passive tag with the default title tooltip
-<Tag title="A very long label" truncate />
-```
-
-## Usage inside Content
-
-Tag can be rendered as an accessory inside `Content`'s ContentMd via the `tag` prop:
-
-```tsx
-import { Content } from "@opal/layouts";
-import SvgSearch from "@opal/icons/search";
-
-<Content
-  icon={SvgSearch}
-  sizePreset="main-ui"
-  title="My Item"
-  tag={{ title: "New", color: "green" }}
-/>;
+<Tag title="Failed" aria-pressed={selected} onClick={toggle} />
 ```

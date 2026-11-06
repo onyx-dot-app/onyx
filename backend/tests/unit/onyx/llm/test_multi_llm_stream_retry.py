@@ -90,6 +90,34 @@ def test_stream_does_not_retry_after_first_chunk() -> None:
     mock_logger.warning.assert_not_called()
 
 
+def test_stream_keeps_the_answer_when_the_body_fails_after_finish_reason() -> None:
+    fake_llm = _make_fake_llm()
+    answer = _make_stream_response("answer")
+    finish = ModelResponseStream(
+        id="chunk-2", created="1", choice=StreamingChoice(finish_reason="stop")
+    )
+    translated = iter([answer, finish])
+
+    def finish_then_timeout() -> Iterator[object]:
+        yield object()
+        yield object()
+        raise LiteLLMTimeout("timed out", "gpt-test", "openai")
+
+    fake_llm._completion = MagicMock(return_value=finish_then_timeout())
+
+    with (
+        patch("onyx.llm.multi_llm.is_true_openai_model", return_value=False),
+        patch(
+            "onyx.llm.model_response.from_litellm_model_response_stream",
+            side_effect=lambda _chunk: next(translated),
+        ),
+    ):
+        results = list(LitellmLLM.stream_raw(fake_llm, prompt=_make_prompt()))
+
+    assert results == [answer, finish]
+    assert fake_llm._completion.call_count == 1
+
+
 def test_stream_maps_a_rate_limit_wrapped_mid_stream() -> None:
     """litellm wraps a 429 raised during a stream in MidStreamFallbackError and
     leaves __cause__ empty. The gateway checks for LLMRateLimitError, and chat's

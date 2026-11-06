@@ -1,6 +1,6 @@
 # @opal/layouts
 
-**Import:** `import { Content, ContentAction, IllustrationContent, PageCenter } from "@opal/layouts";`
+**Import:** `import { Content, ContentAction, ErrorState, IllustrationContent, KeyValue, PageCenter, StickyBox } from "@opal/layouts";`
 
 Layout primitives for composing content blocks. These components handle sizing, font selection, icon alignment, and optional inline editing — things that are tedious to get right by hand and easy to get wrong.
 
@@ -8,11 +8,13 @@ Layout primitives for composing content blocks. These components handle sizing, 
 
 | Component                                                 | Description                                                                                                                                               | Docs                                                           |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| [`Content`](./content/README.md)                          | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./content/README.md)                          |
+| [`Content`](./content/README.md)                          | Icon + title + description. The title `font` sets every size; `orientation` places the icon. | [Content README](./content/README.md)                          |
 | [`ContentAction`](./content-action/README.md)             | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment with adjacent interactive elements.        | [ContentAction README](./content-action/README.md)             |
 | [`IllustrationContent`](./illustration-content/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders.                                                  | [IllustrationContent README](./illustration-content/README.md) |
 | [`PageCenter`](./page-center/README.md) | Centres a whole-body state (loading, error, empty) in the page body, both ways. | [PageCenter README](./page-center/README.md) |
 | [`StickyBox`](./sticky-box/README.md) | A block that pins to the top or bottom of its scroll container as the page scrolls past it, with an optional shadow while pinned. | [StickyBox README](./sticky-box/README.md) |
+| [`ErrorState`](./states/README.md) | Content that failed to load, centred in place of a page body or list. | [States README](./states/README.md) |
+| [`KeyValue`](./key-value/README.md) | One read-only "label … value" row, for details of a saved object. | [KeyValue README](./key-value/README.md) |
 
 ## Quick Start
 
@@ -23,31 +25,25 @@ import SvgSettings from "@opal/icons/settings";
 import SvgNoResult from "@opal/illustrations/no-result";
 
 // Simple heading
-<Content
+<Content font="heading-headline" orientation="stacked"
   icon={SvgSettings}
   title="Account Settings"
   description="Manage your preferences"
-  sizePreset="headline"
-  variant="heading"
 />
 
 // Label with tag
-<Content
+<Content font="main-content-emphasis"
   icon={SvgSettings}
   title="OpenAI"
   description="GPT"
-  sizePreset="main-content"
-  variant="section"
-  tag={{ title: "Default", color: "blue" }}
+  badge={{ title: "Default", color: "info" }}
 />
 
 // Row with action button
-<ContentAction
+<ContentAction font="main-content-emphasis"
   icon={SvgSettings}
   title="Provider Name"
   description="Some description"
-  sizePreset="main-content"
-  variant="section"
   padding={2}
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" />
@@ -64,14 +60,15 @@ import SvgNoResult from "@opal/illustrations/no-result";
 
 ## Architecture
 
-### Two-axis design (`Content`)
+### One font-driven component (`Content`)
 
-`Content` uses a two-axis system:
+`Content` is one component with two layout props:
 
-- **`sizePreset`** — controls sizing tokens (icon size, padding, gap, font, line-height).
-- **`variant`** — controls structural layout (icon placement, description rendering).
+- **`font`** — the title's `TextFont`. Every size derives from it: an icon box is one title line tall
+  (`1lh`), with 2px padding.
+- **`orientation`** — `inline`, `reverse` or `stacked` (icon before, after or above the title).
 
-Valid preset/variant combinations are enforced at the type level via a discriminated union. See the [Content README](./content/README.md) for the full matrix.
+See the [Content README](./content/README.md).
 
 ### Padding alignment (`ContentAction`)
 
@@ -88,25 +85,22 @@ From `@opal/layouts`:
 // Components
 Content;
 ContentAction;
+ErrorState;
 IllustrationContent;
+KeyValue;
 PageCenter;
+StickyBox;
 
 // Types
 ContentProps;
 ContentActionProps;
+ErrorStateProps;
 IllustrationContentProps;
+KeyValueProps;
 PageCenterProps;
-SizePreset;
-ContentVariant;
+StickyBoxRootProps;
+ContentOrientation;
+ContentBadge;
+ContentEditHandle;
 ```
 
-## Internal Layout Components
-
-These are not exported — `Content` routes to them automatically:
-
-| Layout      | Used when                                                                          | File                    |
-| ----------- | ---------------------------------------------------------------------------------- | ----------------------- |
-| `ContentXl` | `sizePreset` is `headline` or `section` with `variant="heading"`                   | `content/ContentXl.tsx` |
-| `ContentLg` | `sizePreset` is `headline` or `section` with `variant="section"`                   | `content/ContentLg.tsx` |
-| `ContentMd` | `sizePreset` is `main-content`, `main-ui`, or `secondary` with `variant="section"` | `content/ContentMd.tsx` |
-| `ContentSm` | `variant="body"`                                                                   | `content/ContentSm.tsx` |

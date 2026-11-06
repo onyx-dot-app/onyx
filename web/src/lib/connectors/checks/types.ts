@@ -15,14 +15,77 @@ export type CredentialCapability =
   | "external_group_sync";
 
 /**
- * Outcome of one finished check. `indeterminate` is a transient or unknown
+ * Outcome of one finished check. `incomplete` is a transient or unknown
  * failure and must not be read as proof the credential is broken.
+ * `indeterminate` is its legacy value, still held by older stored results.
  */
 export type CapabilityCheckStatus =
   | "passed"
   | "failed"
+  | "incomplete"
   | "indeterminate"
   | "skipped";
+
+/** Mirrors `CheckErrorKind`: why a check failed or is incomplete. */
+export type CheckErrorKind =
+  | "rejected"
+  | "permission"
+  | "invalid"
+  | "rate_limited"
+  | "timeout"
+  | "unreachable"
+  | "inconclusive"
+  | "unexpected";
+
+/** Mirrors `CheckNotRunReason`: why a skipped check did not run. */
+export type CheckNotRunReason =
+  | "dependency_failed"
+  | "dependency_incomplete"
+  | "dependency_skipped"
+  | "rate_limited"
+  | "nothing_in_scope"
+  | "skipped_by_user"
+  | "stopped_by_user";
+
+/** What a discovery check lists, named by `CheckFindingKey` on the backend. */
+export type CheckFindingKey =
+  | "shared_drives"
+  | "visible_organization_users"
+  | "visible_spaces"
+  | "visible_pages"
+  | "readable_channels"
+  | "readable_mailboxes"
+  | "readable_drives";
+
+/** One choice a listing offers a config field. */
+export interface FindingOption {
+  /** What the config field stores: an id or a URL. */
+  value: string;
+  /** What the admin reads. */
+  label: string;
+  detail: string | null;
+}
+
+export interface OptionsFinding {
+  type: "options";
+  key: CheckFindingKey;
+  /** The config field the options are for. */
+  field_name: string | null;
+  options: FindingOption[];
+  /** The listing stopped at the backend's option cap. */
+  truncated: boolean;
+}
+
+export interface CountFinding {
+  type: "count";
+  key: CheckFindingKey;
+  field_name: string | null;
+  count: number;
+  /** The listing stopped at a cap, so the real count is at least `count`. */
+  at_least: boolean;
+}
+
+export type CheckFinding = OptionsFinding | CountFinding;
 
 /** One finished check, as the checks card shows it. */
 export interface CapabilityCheckResult {
@@ -32,11 +95,21 @@ export interface CapabilityCheckResult {
   /** A required check that fails blocks the capability. */
   required: boolean;
   status: CapabilityCheckStatus;
-  /** Failure text, skip reason, or empty on success. */
+  /** Failure text, skip reason, or empty on success. Kept in full for support. */
   message: string;
+  /** The row's short line: what the check found or what is wrong. */
+  summary: string | null;
+  /** Up to three lines of what happened and what is needed. */
+  description: string | null;
+  error_kind: CheckErrorKind | null;
+  not_run_reason: CheckNotRunReason | null;
+  /** False for a skipped check that does not apply to the access type or config. */
+  applicable: boolean;
   remediation: string | null;
   docs_link: string | null;
   duration_ms: number | null;
+  /** What a passing discovery check listed. Empty for every other check. */
+  findings: CheckFinding[];
 }
 
 /** A check's state in a draft run. */
@@ -46,6 +119,8 @@ export type DraftCheckStateKind =
   | "running"
   /** A required form field is missing or invalid; it runs once it is valid. */
   | "waiting"
+  /** A required check the admin skipped: it holds Create until it runs. */
+  | "stopped"
   /** The access type or the check's own rule excludes it. */
   | "not_applicable";
 
@@ -82,6 +157,10 @@ export interface DraftCheckState {
   required: boolean;
   state: DraftCheckStateKind;
   message: string;
+  summary: string | null;
+  description: string | null;
+  error_kind: CheckErrorKind | null;
+  not_run_reason: CheckNotRunReason | null;
   missing_fields: string[];
   invalid_fields: string[];
   remediation: string | null;
@@ -90,6 +169,11 @@ export interface DraftCheckState {
   from_cache: boolean;
   /** The check proves the credential works with the credential-bound fields. */
   validates_binding: boolean;
+  /** The generic validation of a source without checks of its own. */
+  is_fallback: boolean;
+  findings: CheckFinding[];
+  /** The config field whose error this check's failure is. */
+  reports_field: string | null;
 }
 
 export interface DraftCheckRunSnapshot {
@@ -125,11 +209,21 @@ export interface DraftCheckPlanRequest {
   form_state: Record<string, unknown>;
 }
 
+/** The per-check actions of a draft run or a pair dry run. */
+export interface DraftCheckActions {
+  /** Only these run, ignoring their cached results. Send with `rerun: "none"`. */
+  check_ids?: string[];
+  /** These do not run: an optional check is skipped, a required one stopped. */
+  skip_check_ids?: string[];
+  /** Runs next, with the checks it depends on. */
+  start_check_id?: string;
+}
+
 /**
  * Body of `POST /manage/admin/cc-pair/{id}/edit/checks`: a dry run of the
  * checks on a proposed edit of the pair.
  */
-export interface PairEditCheckRunRequest {
+export interface PairEditCheckRunRequest extends DraftCheckActions {
   connector_specific_config: Record<string, unknown>;
   access_type: AccessType;
   /** `null` keeps the pair's credential. */
@@ -141,11 +235,12 @@ export interface PairEditCheckRunRequest {
  * Body of `POST /manage/admin/connector-checks/runs`: a run on a saved
  * credential, or on a typed account, which the run saves as a draft.
  */
-export type DraftCheckRunRequest = CredentialRequest & {
-  source: ValidSources;
-  access_type: AccessType | null;
-  /** One form session. A new run for the same key supersedes the last. */
-  draft_key: string;
-  form_state: Record<string, unknown>;
-  rerun: DraftRerunMode;
-};
+export type DraftCheckRunRequest = CredentialRequest &
+  DraftCheckActions & {
+    source: ValidSources;
+    access_type: AccessType | null;
+    /** One form session. A new run for the same key supersedes the last. */
+    draft_key: string;
+    form_state: Record<string, unknown>;
+    rerun: DraftRerunMode;
+  };

@@ -91,6 +91,8 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  // The turn reached its execution deadline.
+  TIMED_OUT = "timed_out",
 }
 
 export interface Stop extends BaseObj {
@@ -189,7 +191,7 @@ export interface FetchToolDocuments extends BaseObj {
 
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
-  status_code: number;
+  status_code: number | null;
   message: string;
 }
 

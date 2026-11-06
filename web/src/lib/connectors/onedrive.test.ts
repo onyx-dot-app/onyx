@@ -1,12 +1,14 @@
+import englishMessages from "@/i18n/messages/en.json";
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 import {
+  getSourceDocLink,
+  getSourceMetadata,
   createConnectorInitialValues,
   createConnectorValidationSchema,
 } from "@/lib/connectors/utils";
+import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 import { getCredentialFileType } from "@/lib/credentials/utils";
 import { FileTypeCategory, OneDriveScope } from "@/lib/connectors/types";
-import { getSourceDocLink, getSourceMetadata } from "@/lib/sources";
 import {
   ValidSources,
   validAutoSyncSources,
@@ -99,8 +101,15 @@ describe("OneDrive connector metadata", () => {
       throw new Error("SharePoint sites field is required");
     }
 
-    expect(sitesField.description).toContain(
-      "[OneDrive connector](https://docs.onyx.app/admins/connectors/official/onedrive)"
+    // The config holds the message key; the message links the OneDrive docs.
+    expect(sitesField.description).toBe(
+      "connectors.sharepoint.fields.sites.description"
+    );
+    expect(
+      englishMessages.admin.connectorsList.connectors.sharepoint.fields.sites
+        .description
+    ).toContain(
+      "[OneDrive connector]({docsAdminsPath}/connectors/official/onedrive)"
     );
   });
 });

@@ -5,14 +5,22 @@ import ScheduleTaskForm, {
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
 import type { PickerEntry } from "@/lib/skills/picker";
 
-const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
 const mockCreateScheduledTask = jest.fn();
 const mockUpdateScheduledTask = jest.fn();
 const mockMutate = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockRouterReplace }),
 }));
+
+beforeEach(() => {
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/craft/v1/tasks/new");
+});
 
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
@@ -43,24 +51,30 @@ jest.mock("@/app/craft/v1/tasks/components/ScheduleEditor", () => ({
   default: () => null,
 }));
 
-jest.mock("@/app/craft/v1/tasks/components/PreApprovalPicker", () => ({
+jest.mock("@/app/craft/v1/tasks/components/TaskActionPolicies", () => ({
   __esModule: true,
-  default: ({
-    onAppChange,
-    onMcpServerChange,
+  default: function MockPermissions({
+    onChange,
   }: {
-    onAppChange: (ids: number[]) => void;
-    onMcpServerChange: (ids: number[]) => void;
-  }) => (
-    <div>
-      <button type="button" onClick={() => onAppChange([11])}>
-        Pre-approve app
-      </button>
-      <button type="button" onClick={() => onMcpServerChange([22])}>
-        Pre-approve MCP server
-      </button>
-    </div>
-  ),
+    onChange: (value: unknown) => void;
+  }) {
+    const { useEffect } = jest.requireActual("react");
+    useEffect(() => {
+      onChange([
+        {
+          gated_app_id: 11,
+          enabled: true,
+          action_policies: { send: "ALWAYS" },
+        },
+        {
+          gated_app_id: 22,
+          enabled: false,
+          action_policies: { read: "ASK" },
+        },
+      ]);
+    }, [onChange]);
+    return null;
+  },
 }));
 
 jest.mock("@/sections/input/EntryPickerPopover", () => ({
@@ -125,7 +139,7 @@ function renderForm({
 
 describe("ScheduleTaskForm app picker", () => {
   beforeEach(() => {
-    mockRouterPush.mockReset();
+    mockRouterReplace.mockReset();
     mockCreateScheduledTask.mockReset();
     mockUpdateScheduledTask.mockReset();
     mockMutate.mockReset();
@@ -147,7 +161,7 @@ describe("ScheduleTaskForm app picker", () => {
     await waitFor(() =>
       expect(prompt).toHaveValue('[Use external app "Slack" (ID: 1)] ')
     );
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 
   it("routes an unauthenticated app to connection without inserting it", async () => {
@@ -158,34 +172,40 @@ describe("ScheduleTaskForm app picker", () => {
     await user.type(prompt, "/");
     await user.click(screen.getByRole("button", { name: "Connect Gmail" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/apps?connect=2");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/apps?connect=2");
     expect(prompt).toHaveValue("/");
   });
 
-  it("saves app and MCP server pre-approvals independently", async () => {
+  it("saves independent action choices for apps and MCP servers", async () => {
     const user = setupUser();
     renderForm();
 
     await user.type(screen.getByTestId("task-name-input"), "Daily report");
     await user.type(screen.getByTestId("task-prompt-input"), "Make a report");
-    await user.click(screen.getByRole("button", { name: "Pre-approve app" }));
-    await user.click(
-      screen.getByRole("button", { name: "Pre-approve MCP server" })
-    );
     await user.click(screen.getByRole("button", { name: /^Save$/ }));
 
     await waitFor(() =>
       expect(mockCreateScheduledTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          pre_approved_app_ids: [11],
-          pre_approved_mcp_server_ids: [22],
+          action_policies: [
+            {
+              gated_app_id: 11,
+              enabled: true,
+              action_policies: { send: "ALWAYS" },
+            },
+            {
+              gated_app_id: 22,
+              enabled: false,
+              action_policies: { read: "ASK" },
+            },
+          ],
         })
       )
     );
     expect(mockMutate).toHaveBeenCalledWith("/api/build/scheduled-tasks");
   });
 
-  it("preserves both grant kinds when an existing task is edited", async () => {
+  it("saves the displayed action choices when an existing task is edited", async () => {
     const user = setupUser();
     renderForm({
       isEdit: true,
@@ -194,8 +214,6 @@ describe("ScheduleTaskForm app picker", () => {
         taskId: "task-id",
         name: "Daily report",
         prompt: "Make a report",
-        preApprovedAppIds: [11],
-        preApprovedMcpServerIds: [22],
       },
     });
 
@@ -205,8 +223,18 @@ describe("ScheduleTaskForm app picker", () => {
       expect(mockUpdateScheduledTask).toHaveBeenCalledWith(
         "task-id",
         expect.objectContaining({
-          pre_approved_app_ids: [11],
-          pre_approved_mcp_server_ids: [22],
+          action_policies: [
+            {
+              gated_app_id: 11,
+              enabled: true,
+              action_policies: { send: "ALWAYS" },
+            },
+            {
+              gated_app_id: 22,
+              enabled: false,
+              action_policies: { read: "ASK" },
+            },
+          ],
         })
       )
     );
@@ -215,6 +243,9 @@ describe("ScheduleTaskForm app picker", () => {
       { id: "task-id" },
       { revalidate: false }
     );
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/tasks/task-id");
+    expect(mockMutate).toHaveBeenCalledWith(
+      "/api/build/scheduled-tasks/task-id/action-policies"
+    );
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/tasks/task-id");
   });
 });

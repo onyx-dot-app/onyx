@@ -1,0 +1,148 @@
+---
+title: "Docker Compose"
+description: "Run Agent Wiki on a single host with Docker Compose"
+icon: "docker"
+---
+
+Docker Compose is the fastest way to run Agent Wiki. It brings up the whole stack on one host: Postgres, Redis,
+and OpenSearch for the data plane, then the backend, two worker processes, the frontend, and nginx for the app plane.
+
+Postgres, Redis, OpenSearch, and nginx are stock public images and are pulled. Only the backend, the two workers,
+and the frontend are built from source on first install.
+
+## Requirements
+
+- Docker with Compose v2 (`docker compose version`)
+- `git` and `openssl`
+- **4 GB of RAM** — the running stack uses about 2.5 GB
+
+## Install
+
+The installer clones the repository, generates a `.env`, builds the images, and starts the stack:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/agent-wiki/main/install.sh | bash
+```
+
+The first build takes a few minutes. When it finishes, open `http://localhost:8090`.
+
+<Note>
+  **The first account you create becomes the admin.** Sign up as soon as the stack is running,
+  before anyone else can claim it.
+</Note>
+
+### Install options
+
+The installer reads a few environment variables:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `AGENT_WIKI_PORT` | `8090` | Host port nginx publishes |
+| `AGENT_WIKI_DIR` | `./agent-wiki` | Where the repository is cloned |
+| `AGENT_WIKI_REF` | `main` | Branch or tag to check out |
+
+```bash
+AGENT_WIKI_PORT=9000 bash -c "$(curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/agent-wiki/main/install.sh)"
+```
+
+## Install manually
+
+If you would rather not pipe a script to your shell, do the same steps by hand:
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/onyx-dot-app/agent-wiki.git
+    cd agent-wiki
+    ```
+  </Step>
+
+  <Step title="Create your .env">
+    Copy `.env.example` to `.env`, then set a real secret key and the URL the stack will be reached on:
+
+    ```bash
+    cp .env.example .env
+    echo "SECRET_KEY=$(openssl rand -hex 32)" >> .env
+    echo "PUBLIC_BASE_URL=http://localhost:8090" >> .env
+    echo "AGENT_WIKI_PORT=8090" >> .env
+    ```
+  </Step>
+
+  <Step title="Start the stack">
+    The application containers sit behind the `app` Compose profile. Without it, only the data plane starts:
+
+    ```bash
+    docker compose --profile app up -d --build
+    ```
+  </Step>
+
+  <Step title="Claim the admin account">
+    Open `http://localhost:8090` and sign up. The first account becomes the admin.
+  </Step>
+</Steps>
+
+## Required settings
+
+Two values must be right or the backend refuses to boot:
+
+- **`SECRET_KEY`** — any non-empty, non-default value. The backend and workers refuse to start with the built-in
+  development secret, so production deployments cannot accidentally run with a known key.
+- **`PUBLIC_BASE_URL`** — the browser-facing origin the stack is reached on, with no trailing slash. It is never
+  inferred from request headers, because a spoofed `Host` header would then control the URLs the app hands out.
+  Agent Wiki uses it to build the MCP endpoint, launcher deep links, and links in outbound email.
+
+If you put the stack behind a domain or a reverse proxy,
+set `PUBLIC_BASE_URL` to the external URL — `https://wiki.example.com`, not `http://localhost:8090`.
+
+## After installing
+
+<Steps>
+  <Step title="Configure a language model">
+    Go to **Admin → Language Models** and add a provider. Agents, triggers,
+    and Auto Organize all stay idle until a model is configured.
+  </Step>
+
+  <Step title="Connect an agent">
+    Generate an API key under **Agents & Actions** and point your coding agent at the wiki.
+    See [Connect an Agent (MCP)](/agent-wiki/automate/mcp).
+  </Step>
+</Steps>
+
+## Operating the stack
+
+```bash
+# follow logs
+docker compose --profile app logs -f
+
+# stop
+docker compose --profile app down
+
+# upgrade to the latest code
+git pull && docker compose --profile app up -d --build
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The app never responds on the published port">
+    Check the logs with `docker compose --profile app logs -f`.
+    The most common cause is a missing `PUBLIC_BASE_URL` or a `SECRET_KEY` still set to the default value — the backend
+    exits at boot in both cases.
+  </Accordion>
+
+  <Accordion title="Only Postgres and Redis started">
+    The `--profile app` flag was omitted. Without it Compose starts the data plane only.
+  </Accordion>
+
+  <Accordion title="The first install stops partway with no clear error">
+    Building the images needs more headroom than running them. On Docker Desktop,
+    raise the VM's memory allocation under **Settings → Resources** — the host having enough RAM is not enough on its
+    own.
+  </Accordion>
+
+  <Accordion title="Links point at localhost from another machine">
+    `PUBLIC_BASE_URL` is still set to `http://localhost:<port>`. Set it to the external URL and recreate the containers.
+  </Accordion>
+</AccordionGroup>
+
+For a multi-node deployment, see [Kubernetes](/agent-wiki/deployment/kubernetes).

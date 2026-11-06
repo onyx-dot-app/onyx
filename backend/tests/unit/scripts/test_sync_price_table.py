@@ -51,13 +51,31 @@ def test_merge_litellm_skips_non_gap_fill_chat_models() -> None:
         {
             "bedrock/ai21.j2-mid-v1": _chat_entry("bedrock"),
             "ft:gpt-4.1-2025-04-14": _chat_entry("openai"),
-            "eu/gpt-5": _chat_entry("openai"),
+            "eu/gpt-6-sol": _chat_entry("openai"),
             "gpt-retired": _chat_entry("openai", deprecation_date="2020-01-01"),
             "gpt-unpriced": _chat_entry("openai", output_cost_per_token=None),
         },
     )
 
     assert all(not section["models"] for section in providers.values())
+
+
+def test_merge_litellm_marks_past_deprecation_date_non_chat_models() -> None:
+    providers = _providers()
+    image = {"litellm_provider": "openai", "mode": "image_generation"}
+    merge_litellm(
+        providers,
+        {
+            "img-retired": {**image, "deprecation_date": "2020-01-01"},
+            "img-retiring": {**image, "deprecation_date": "2999-01-01"},
+            "img-live": image,
+        },
+    )
+
+    models = providers["openai"]["models"]
+    assert models["img-retired"]["status"] == "deprecated"
+    assert "status" not in models["img-retiring"]
+    assert "status" not in models["img-live"]
 
 
 def test_merge_litellm_keeps_existing_rates() -> None:

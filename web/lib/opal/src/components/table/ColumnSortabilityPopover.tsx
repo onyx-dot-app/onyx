@@ -49,7 +49,7 @@ function SortingPopover<TData extends RowData>({
         />
       </Popover.Trigger>
 
-      <Popover.Content width="lg" align="end" side="bottom">
+      <Popover.Content width={60} align="end" side="bottom">
         <Popover.Menu
           footer={
             footerText ? (
@@ -64,10 +64,10 @@ function SortingPopover<TData extends RowData>({
           <Divider title={strings.sortBy} />
 
           <LineItemButton
+            font="main-ui-action"
             selectVariant="select-heavy"
             state={currentSort === null ? "selected" : "empty"}
             title={strings.manualOrdering}
-            sizePreset="main-ui"
             rightChildren={
               currentSort === null ? (
                 <SvgCheck size={16} className="text-action-selection-05" />
@@ -87,11 +87,11 @@ function SortingPopover<TData extends RowData>({
 
             return (
               <LineItemButton
+                font="main-ui-action"
                 key={column.id}
                 selectVariant="select-heavy"
                 state={isSorted ? "selected" : "empty"}
                 title={label}
-                sizePreset="main-ui"
                 rightChildren={
                   isSorted ? (
                     <SvgCheck size={16} className="text-action-selection-05" />
@@ -113,10 +113,10 @@ function SortingPopover<TData extends RowData>({
               <Divider title={strings.sortingOrder} />
 
               <LineItemButton
+                font="main-ui-action"
                 selectVariant="select-heavy"
                 state={!currentSort.desc ? "selected" : "empty"}
                 title={strings.ascending}
-                sizePreset="main-ui"
                 rightChildren={
                   !currentSort.desc ? (
                     <SvgCheck size={16} className="text-action-selection-05" />
@@ -128,10 +128,10 @@ function SortingPopover<TData extends RowData>({
               />
 
               <LineItemButton
+                font="main-ui-action"
                 selectVariant="select-heavy"
                 state={currentSort.desc ? "selected" : "empty"}
                 title={strings.descending}
-                sizePreset="main-ui"
                 rightChildren={
                   currentSort.desc ? (
                     <SvgCheck size={16} className="text-action-selection-05" />

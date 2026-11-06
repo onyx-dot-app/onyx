@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
@@ -18,8 +18,15 @@ class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     SINGLE = "single"
     # Given a sitemap.xml URL, parse all the pages in it
     SITEMAP = "sitemap"
-    # Given a file upload where every line is a URL, parse all the URLs provided
+    # Removed: read URLs from a server-side file. Kept so stored configs still
+    # parse; selecting it raises UPLOAD_MODE_REMOVED_MESSAGE.
     UPLOAD = "upload"
+
+
+UPLOAD_MODE_REMOVED_MESSAGE = (
+    "The web connector 'upload' mode is no longer supported. "
+    "Use the File connector or a sitemap URL instead."
+)
 
 
 class UrlRewriteRule(BaseModel):
@@ -48,3 +55,12 @@ class WebConnectorConfig(ConnectorConfig):
     url_rewrites: Annotated[
         list[UrlRewriteRule] | None, FieldPolicy(FieldClass.IDENTITY)
     ] = None
+
+    @field_validator("web_connector_type")
+    @classmethod
+    def _reject_upload(
+        cls, value: WEB_CONNECTOR_VALID_SETTINGS
+    ) -> WEB_CONNECTOR_VALID_SETTINGS:
+        if value == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
+            raise ValueError(UPLOAD_MODE_REMOVED_MESSAGE)
+        return value

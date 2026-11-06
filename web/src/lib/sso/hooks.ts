@@ -1,7 +1,7 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { SSOProviderType } from "@/lib/sso/interfaces";
+import type { SSOProviderType } from "@/lib/sso/types";
 import { CREATABLE_SSO_PROVIDER_TYPES } from "@/lib/sso/utils";
 
 interface SupportedSSOProviderTypes {

@@ -13,15 +13,6 @@ export interface MemberRow extends UserRow {
   api_key_display?: string;
 }
 
-export interface TokenRateLimitDisplay {
-  token_id: number;
-  enabled: boolean;
-  // null for a cost-only limit (matches the backend's nullable column).
-  token_budget: number | null;
-  period_hours: number;
-  cost_budget_cents: number | null;
-}
-
 /** Mirrors backend PermissionRegistryEntry from onyx.auth.permissions. */
 export interface PermissionRegistryEntry {
   id: string;

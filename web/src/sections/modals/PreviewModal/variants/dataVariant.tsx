@@ -1,5 +1,5 @@
+import { Section } from "@opal/layouts";
 import { Text, CopyButton } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import { getDataLanguage, getLanguageByMime } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";

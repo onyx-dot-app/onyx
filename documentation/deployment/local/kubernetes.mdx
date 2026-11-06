@@ -1,0 +1,112 @@
+---
+title: "Kubernetes"
+description: "Deploy Onyx with Helm"
+icon: "code"
+---
+
+import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
+
+<Tip>
+  Read the [Resourcing Guide](/deployment/getting_started/resourcing) before you start.
+</Tip>
+
+## Guide
+
+The Onyx Helm chart packages all required services (API, web, PostgreSQL, Redis, OpenSearch, object store, and workers)
+into one release. By default, the chart creates persistent volumes for the stateful services (PostgreSQL, OpenSearch,
+and the object store).
+
+<Steps>
+  <Step title="Add the Onyx Helm repository">
+    ```bash
+    helm repo add onyx https://onyx-dot-app.github.io/onyx/
+    helm repo update
+    helm search repo onyx
+    ```
+  </Step>
+
+  <Step title="Install Onyx">
+    Install into its own namespace (recommended):
+
+    ```bash
+    kubectl create namespace onyx
+    helm install onyx onyx/onyx -n onyx
+    ```
+  </Step>
+
+  <Step title="Verify the installation">
+    ```bash
+    helm list -n onyx
+    kubectl get pods -n onyx
+    ```
+
+    Wait until all pods are `Running` before you open Onyx.
+  </Step>
+
+  <Step title="Access Onyx">
+    By default, the chart exposes Onyx through a Kubernetes Service. For local testing, port-forward it:
+
+    ```bash
+    kubectl -n onyx port-forward service/onyx-nginx 8080:80
+    ```
+
+    Then open [http://localhost:8080](http://localhost:8080).
+  </Step>
+
+  <Step title="Configure Onyx">
+    Put your overrides in your own values file. Application settings go under `configMap`, secrets under `auth`.
+    The chart's [`values.yaml`](https://github.com/onyx-dot-app/onyx/blob/main/deployment/helm/charts/onyx/values.yaml)
+    documents every key.
+
+    ```yaml onyx-values.yaml
+    configMap:
+      WEB_DOMAIN: "https://onyx.example.com"
+    ```
+
+    Apply the file with each upgrade. Helm restarts the pods whose configuration changed.
+
+    ```bash
+    helm upgrade onyx onyx/onyx -n onyx -f onyx-values.yaml
+    ```
+  </Step>
+</Steps>
+
+See the [Helm chart README](https://github.com/onyx-dot-app/onyx/tree/main/deployment/helm)
+for advanced options such as running as non-root and testing with Kind.
+
+## Onyx Lite
+
+Onyx Lite runs the core chat experience with only PostgreSQL. It disables the vector database, Redis, the model servers,
+and the background workers. Connectors and search over indexed documents are disabled. Chat, user file uploads,
+Projects, and Agent knowledge still work.
+
+Install with the chart's Lite values file, then your own overrides:
+
+```bash
+helm install onyx onyx/onyx -n onyx \
+  -f https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/helm/charts/onyx/values-lite.yaml \
+  -f onyx-values.yaml
+```
+
+## Production
+
+Before you run Onyx in production, read these guides:
+
+- [External Services](/deployment/production/external_services): use managed PostgreSQL, Redis, OpenSearch, and
+  object storage.
+- [High Availability and Scaling](/deployment/production/high_availability): replicas, autoscaling, probes, and
+  long-running requests.
+- [Security Hardening](/deployment/production/security): image pinning, credentials, security contexts, and network
+  policies.
+- [Code Interpreter](/deployment/production/code_interpreter): restricted clusters, OpenShift, and capacity.
+
+## Enabling Onyx Craft
+
+Craft adds per-user sandbox pods, scoped RBAC, NetworkPolicies, an egress proxy,
+and a Scheduled Task worker to the Helm release. Craft requires a Business or Enterprise license.
+
+<Card title="Deploy Craft on Kubernetes" icon="dharmachakra" href="/deployment/local/craft_kubernetes">
+  Prepare sandbox nodes and authentication, configure Helm, plan capacity, and verify the runtime.
+</Card>
+
+<DeploymentNextSteps />

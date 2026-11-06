@@ -1,5 +1,5 @@
-"""Indexing reads associations listed inline with a record and falls back to the
-v4 associations API when they were not fetched or HubSpot paged them. The
+"""Indexing reads associations listed inline with a record and falls back to
+batched v4 association reads when they were not fetched or HubSpot paged them. The
 modified-date search pages through the gateway and continues past HubSpot's
 10,000-result cap."""
 
@@ -23,6 +23,7 @@ from onyx.connectors.hubspot.source_operations import (
     HubSpotApiError,
     HubSpotSourceOperations,
 )
+from onyx.connectors.models import Document
 
 MODIFIED = "hs_lastmodifieddate"
 MOMENT = datetime(2024, 6, 6, tzinfo=timezone.utc)
@@ -96,42 +97,85 @@ class TestExtractInlineAssociationIds:
         assert result is None
 
 
-class TestGetAssociatedObjects:
-    def test_inline_ids_drive_the_read_and_skip_v4(self) -> None:
+class TestLinkedRecords:
+    def test_inline_ids_drive_one_read_for_the_batch_and_skip_v4(self) -> None:
         connector, ops = _connector()
         ops.read_records.return_value = [_record("11"), _record("22")]
-        ticket = _record("ticket1", associations={"contacts": _inline(["11", "22"])})
+        tickets = [
+            _record("t1", associations={"contacts": _inline(["11", "22"])}),
+            _record("t2", associations={"contacts": _inline(["22"])}),
+        ]
 
-        result = connector._get_associated_objects(
-            HubSpotObjectType.TICKETS, ticket, HubSpotObjectType.CONTACTS
+        result = connector._linked_records(
+            HubSpotObjectType.TICKETS, tickets, "contacts", strict=False
         )
 
-        ops.list_associations.assert_not_called()
+        ops.read_associations.assert_not_called()
+        # A contact linked to both tickets is read once.
         ops.read_records.assert_called_once()
         assert ops.read_records.call_args.kwargs["variant"] == "contacts"
         assert ops.read_records.call_args.kwargs["ids"] == ["11", "22"]
-        assert [r.id for r in result] == ["11", "22"]
+        assert {k: [r.id for r in v] for k, v in result.items()} == {
+            "t1": ["11", "22"],
+            "t2": ["22"],
+        }
 
-    def test_v4_is_paged_when_inline_ids_are_incomplete(self) -> None:
+    def test_links_are_read_for_the_whole_batch_and_paged_per_record(self) -> None:
         connector, ops = _connector()
-        ops.list_associations.side_effect = [
-            HubSpotPage(items=["1", "2"], next_after="c1"),
-            HubSpotPage(items=["2", "3"], next_after=None),
+        ops.read_associations.side_effect = [
+            {
+                "t1": HubSpotPage(items=["1", "2"], next_after="c1"),
+                "t2": HubSpotPage(items=["3"]),
+            },
+            {"t1": HubSpotPage(items=["2", "4"])},
         ]
-        ops.read_records.return_value = []
-        ticket = _record("t1", associations={"contacts": _inline(["1"], True)})
+        ops.read_records.return_value = [_record(i) for i in ["1", "2", "3", "4"]]
+        tickets = [
+            _record("t1", associations={"contacts": _inline(["1"], True)}),
+            _record("t2"),
+            _record("t3"),
+        ]
 
-        connector._get_associated_objects(
-            HubSpotObjectType.TICKETS, ticket, HubSpotObjectType.CONTACTS
+        result = connector._linked_records(
+            HubSpotObjectType.TICKETS, tickets, "contacts", strict=False
         )
 
-        assert [c.kwargs["after"] for c in ops.list_associations.call_args_list] == [
-            None,
-            "c1",
-        ]
-        assert ops.list_associations.call_args.kwargs["to_object_type"] == "contacts"
+        cursors = [c.kwargs["cursors"] for c in ops.read_associations.call_args_list]
+        # Only the record with more links is asked for its next page.
+        assert cursors == [{"t1": None, "t2": None, "t3": None}, {"t1": "c1"}]
         # One entry per association label, so the ids collapse in order.
-        assert ops.read_records.call_args.kwargs["ids"] == ["1", "2", "3"]
+        assert {k: [r.id for r in v] for k, v in result.items()} == {
+            "t1": ["1", "2", "4"],
+            "t2": ["3"],
+            "t3": [],
+        }
+
+    def test_notes_are_always_read_through_v4(self) -> None:
+        connector, ops = _connector()
+        ops.read_associations.return_value = {"t1": HubSpotPage(items=["n1"])}
+        ops.read_records.return_value = [_record("n1")]
+        ticket = _record("t1", associations={"contacts": _inline(["11"])})
+
+        result = connector._linked_records(
+            HubSpotObjectType.TICKETS, [ticket], "notes", strict=False
+        )
+
+        assert ops.read_associations.call_args.kwargs["to_object_type"] == "notes"
+        assert [r.id for r in result["t1"]] == ["n1"]
+
+    def test_a_cursor_that_stops_moving_drops_the_links_of_the_batch(self) -> None:
+        connector, ops = _connector()
+        ops.read_associations.side_effect = [
+            {"t1": HubSpotPage(items=["1"], next_after="c1")},
+            {"t1": HubSpotPage(items=["1"], next_after="c1")},
+        ]
+
+        result = connector._linked_records(
+            HubSpotObjectType.TICKETS, [_record("t1")], "contacts", strict=False
+        )
+
+        assert result == {}
+        ops.read_records.assert_not_called()
 
     def test_a_failed_read_is_retried_once_then_dropped(self) -> None:
         connector, ops = _connector()
@@ -139,12 +183,47 @@ class TestGetAssociatedObjects:
         ticket = _record("t1", associations={"contacts": _inline(["1"])})
 
         with patch("onyx.connectors.hubspot.connector.time.sleep"):
-            result = connector._get_associated_objects(
-                HubSpotObjectType.TICKETS, ticket, HubSpotObjectType.CONTACTS
+            result = connector._linked_records(
+                HubSpotObjectType.TICKETS, [ticket], "contacts", strict=False
             )
 
-        assert result == []
+        assert result == {"t1": []}
         assert ops.read_records.call_count == 2
+
+
+def test_a_poll_reads_links_per_batch_not_per_record() -> None:
+    """A search carries no links, so each linked type costs one link read and
+    one record read per batch of a page of records."""
+    connector, ops = _connector()
+    connector.object_types = {"tickets"}
+    tickets = [_record(f"t{i}", modified="2024-01-02T00:00:00Z") for i in range(150)]
+    ops.search_records.side_effect = [
+        HubSpotPage(items=tickets[:100], next_after="p2"),
+        HubSpotPage(items=tickets[100:]),
+    ]
+    ops.read_associations.side_effect = lambda cursors, **_: {
+        record_id: HubSpotPage(items=["9"]) for record_id in cursors
+    }
+    ops.read_records.side_effect = lambda ids, **_: [_record(i) for i in ids]
+
+    documents = [
+        document
+        for batch in connector.poll_source(
+            datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp(),
+            datetime(2024, 2, 1, tzinfo=timezone.utc).timestamp(),
+        )
+        for document in batch
+    ]
+
+    assert len(documents) == 150
+    # Two batches times three linked types plus notes.
+    assert ops.read_associations.call_count == 8
+    assert ops.read_records.call_count == 8
+    first = documents[0]
+    assert isinstance(first, Document)
+    assert first.metadata["associated_contact_ids"] == ["9"]
+    # The record section, three linked records and one note.
+    assert len(first.sections) == 5
 
 
 class TestSearchTimeRange:

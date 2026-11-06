@@ -3,16 +3,14 @@
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import ProviderCard from "@/sections/admin/ProviderCard";
-import { SettingsLayouts } from "@opal/layouts";
+import { SettingsLayouts, Section } from "@opal/layouts";
 import { useVoiceProviders } from "@/lib/voice/hooks";
 import {
   activateVoiceProvider,
   deactivateVoiceProvider,
 } from "@/lib/voice/svc";
-import { PageLoader } from "@opal/loaders";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useCreateModal } from "@opal/components";
 import {
@@ -213,22 +211,6 @@ export default function VoicePage() {
   const hasActiveTTSProvider =
     providers?.some((p) => p.is_default_tts) ?? false;
 
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          icon={route.icon}
-          title={t("header.title")}
-          description={t("header.description")}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <PageLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
   const getModelStatus = (
     model: ModelDetails,
     mode: ProviderMode
@@ -246,7 +228,7 @@ export default function VoicePage() {
   };
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root loading={isLoading}>
       <SettingsLayouts.Header
         icon={route.icon}
         title={t("header.title")}
@@ -257,10 +239,9 @@ export default function VoicePage() {
         <Section gap={8}>
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("speechToText.title")}
               description={t("speechToText.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveSTTProvider && (
@@ -304,10 +285,9 @@ export default function VoicePage() {
 
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("textToSpeech.title")}
               description={t("textToSpeech.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveTTSProvider && (

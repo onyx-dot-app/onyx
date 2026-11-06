@@ -3,6 +3,7 @@ import { Tier } from "@/lib/tiers/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
+  SvgBlocks,
   SvgActivity,
   SvgArrowExchange,
   SvgAudio,
@@ -80,6 +81,7 @@ export interface FeatureFlags {
  *   visible (subject to the permission and tier checks above).** When
  *   provided, the predicate is evaluated against the resolved feature flags;
  *   returning `false` hides the route from the sidebar.
+ * - `beta`: Shows a Beta tag on the sidebar entry.
  */
 export interface AdminRouteEntry {
   path: string;
@@ -90,6 +92,7 @@ export interface AdminRouteEntry {
   section: string;
   requiredTier: Tier | null;
   visibleWhen: ((flags: FeatureFlags) => boolean) | null;
+  beta?: boolean;
 }
 
 export const ADMIN_ROUTES = {
@@ -103,6 +106,17 @@ export const ADMIN_ROUTES = {
     section: "",
     requiredTier: null,
     visibleWhen: null,
+  },
+  DECISION_MODELS: {
+    path: "/admin/decision-models",
+    icon: SvgUserCheck,
+    title: "Decision Models",
+    sidebarLabel: "Decision Models",
+    requiredPermission: Permission.MANAGE_LLMS,
+    section: "",
+    requiredTier: null,
+    visibleWhen: null,
+    beta: true,
   },
   WEB_SEARCH: {
     path: "/admin/web-search",
@@ -179,7 +193,17 @@ export const ADMIN_ROUTES = {
     path: "/admin/craft/apps",
     icon: SvgPlug,
     title: "Apps",
-    sidebarLabel: "Apps",
+    sidebarLabel: "",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Craft",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
+  },
+  SKILLS: {
+    path: "/admin/skills",
+    icon: SvgBlocks,
+    title: "Skills",
+    sidebarLabel: "Skills",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Craft",
     requiredTier: null,
@@ -214,6 +238,26 @@ export const ADMIN_ROUTES = {
     title: "Agents",
     sidebarLabel: "Agents",
     requiredPermission: Permission.MANAGE_AGENTS,
+    section: "Agents & Actions",
+    requiredTier: null,
+    visibleWhen: null,
+  },
+  PLUGINS: {
+    path: "/admin/plugins",
+    icon: SvgPlug,
+    title: "Plugins",
+    sidebarLabel: "Plugins",
+    requiredPermission: Permission.MANAGE_ACTIONS,
+    section: "Agents & Actions",
+    requiredTier: null,
+    visibleWhen: null,
+  },
+  PLUGINS_EXTERNAL_APP: {
+    path: "/admin/plugins/external-app",
+    icon: SvgPlug,
+    title: "Plugins",
+    sidebarLabel: "",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Agents & Actions",
     requiredTier: null,
     visibleWhen: null,
@@ -448,6 +492,16 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Usage",
     requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
+  SPENDING_LIMITS: {
+    path: "/admin/spending-limits",
+    icon: SvgWallet,
+    title: "Spending Limits",
+    sidebarLabel: "Spending Limits",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.ENTERPRISE,
     visibleWhen: null,
   },
   WORKSPACE_ANALYTICS: {

@@ -77,6 +77,32 @@
   --interactive-foreground-icon: var(--text-inverted-05);
 }
 
+/* Keyboard focus paints a tab's hover state and, unlike other Interactive
+   surfaces, a border-04 ring. The list sets `data-focus-ring` while the
+   keyboard moves between tabs (see TabsList), so a click paints neither and
+   Escape clears both; Interactive's own `:focus-visible` paint is undone
+   outside it. */
+.opal-tabs-list:not([data-focus-ring])
+  .opal-tabs-trigger.interactive[data-variant][data-state="inactive"]:focus-visible:not(
+    :hover,
+    [data-disabled]
+  ) {
+  --interactive-foreground: var(--text-03);
+  --interactive-foreground-icon: var(--text-03);
+}
+.opal-tabs-list[data-focus-ring]
+  .opal-tabs-trigger.interactive[data-variant][data-state="inactive"]:focus:not(
+    [data-disabled]
+  ) {
+  --interactive-foreground: var(--text-04);
+  --interactive-foreground-icon: var(--text-04);
+}
+.opal-tabs-list[data-focus-ring]
+  .opal-tabs-trigger.interactive[data-variant]:focus {
+  outline: 2px solid var(--border-04);
+  outline-offset: -2px;
+}
+
 /* ── Pill / underline indicator ─────────────────────────────────────────────── */
 
 .opal-tabs-pill-baseline {

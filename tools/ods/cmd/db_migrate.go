@@ -1,15 +1,131 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/alembic"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/devstack"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 )
 
 // MigrateOptions holds common options for migration commands.
 type MigrateOptions struct {
 	Schema string
+}
+
+func resolveDBMigrationTarget() (devstack.Target, error) {
+	if os.Getenv("POSTGRES_HOST") != "" && flagProjectName() != "" {
+		return devstack.Target{}, fmt.Errorf("--project conflicts with explicit POSTGRES_HOST; select either a stack or a network database")
+	}
+	if host := os.Getenv("POSTGRES_HOST"); host != "" {
+		root, err := paths.GitRoot()
+		if err != nil {
+			return devstack.Target{}, err
+		}
+		if !postgres.IsLoopbackHost(host) {
+			return devstack.Target{Root: root, Mode: runtimeMode()}, nil
+		}
+		port, err := loopbackDBPort(root)
+		if err != nil {
+			return devstack.Target{}, err
+		}
+		if target, found, err := devstack.ResolveManagedDatabaseTarget(root, port, runtimeRegistry()); err != nil || found {
+			return target, err
+		}
+		stack, err := devstack.Open(root, "", runtimeMode())
+		if err != nil {
+			return devstack.Target{}, err
+		}
+		return devstack.Target{Root: stack.Root, Project: stack.Project, StateDir: stack.StateDir, Mode: stack.Mode, Ports: map[string]int{}}, nil
+	}
+	return resolveRuntimeTarget()
+}
+
+func lockDBMigrationTarget(target devstack.Target, mutating bool) (func(), error) {
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		return lockStoppedMigrationTarget(target, mutating)
+	}
+	if !postgres.IsLoopbackHost(host) {
+		return func() {}, nil
+	}
+	port, err := loopbackDBPort(target.Root)
+	if err != nil {
+		return nil, err
+	}
+	current, found, err := devstack.ResolveManagedDatabaseTarget(target.Root, port, runtimeRegistry())
+	if err != nil {
+		return nil, err
+	}
+	if !found && !target.Managed {
+		return func() {}, nil
+	}
+	if found && !target.Managed {
+		return nil, fmt.Errorf("project %s was claimed by %s after target selection; retry the command", current.Project, current.OwnerRoot)
+	}
+	if !found || current.Project != target.Project || current.StateDir != target.StateDir {
+		return nil, fmt.Errorf("database port %d changed ownership after target selection; retry the command", port)
+	}
+	release, err := lockStoppedMigrationTarget(target, mutating)
+	if err != nil {
+		return nil, err
+	}
+	current, found, err = devstack.ResolveManagedDatabaseTarget(target.Root, port, runtimeRegistry())
+	if err != nil || !found || current.Project != target.Project || current.StateDir != target.StateDir {
+		release()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("database port %d changed ownership while acquiring its lock; retry the command", port)
+	}
+	return release, nil
+}
+
+func lockStoppedMigrationTarget(target devstack.Target, mutating bool) (func(), error) {
+	release, err := lockRuntimeTarget(target, mutating)
+	if err != nil {
+		return nil, err
+	}
+	if mutating && target.Managed {
+		st, err := stackForTarget(target).ReadState()
+		if err != nil {
+			release()
+			return nil, err
+		}
+		if st != nil {
+			for _, service := range st.Services {
+				if service.PID > 0 || service.PGID > 0 {
+					release()
+					prefix := "ods"
+					if target.Mode == devstack.Isolated {
+						prefix += " --isolated"
+					}
+					return nil, fmt.Errorf("project %s has managed services; run '%s stack stop' before manual migrations, or use '%s stack up' for a safe upgrade", target.Project, prefix, prefix)
+				}
+			}
+		}
+	}
+	return release, nil
+}
+
+func loopbackDBPort(root string) (int, error) {
+	fileEnv, err := devstack.LoadEnvFile(filepath.Join(root, ".vscode", ".env"))
+	if err != nil {
+		return 0, err
+	}
+	config := postgres.NewConfigFromEnvironment(append(fileEnv, os.Environ()...))
+	port, err := strconv.Atoi(config.Port)
+	if err != nil || port <= 0 || port > 65535 {
+		return 0, fmt.Errorf("invalid POSTGRES_PORT")
+	}
+	return port, nil
 }
 
 // getAlembicSchema converts the schema flag value to alembic.Schema.
@@ -36,12 +152,13 @@ func NewDBUpgradeCommand() *cobra.Command {
 
 If no revision is specified, upgrades to 'head' (latest revision).
 
-The command automatically detects the PostgreSQL container IP if POSTGRES_HOST
-is not set, so it works even when the port isn't exposed to localhost.
+The command uses the selected stack's actual PostgreSQL port. If that port is
+not exposed, it uses only that project's api_server container. Explicit
+POSTGRES_HOST selects a network database and never falls back to Docker.
 
 Environment variables (auto-detected if not set):
-  POSTGRES_HOST      Database host (auto-detects container IP)
-  POSTGRES_PORT      Database port (default: 5432)
+  POSTGRES_HOST      Explicit network database host
+  POSTGRES_PORT      Explicit network database port (default: 5432)
   POSTGRES_USER      Database user (default: postgres)
   POSTGRES_PASSWORD  Database password (default: password)
   POSTGRES_DB        Database name (default: postgres)
@@ -80,7 +197,16 @@ func runDBUpgrade(revision string, opts *MigrateOptions) error {
 		log.Info("Using schema: private (schema_private)")
 	}
 
-	if err := alembic.Upgrade(revision, schema); err != nil {
+	target, err := resolveDBMigrationTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockDBMigrationTarget(target, true)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := alembic.Upgrade(target, revision, schema); err != nil {
 		return fatalErrorf("Failed to upgrade database: %w", err)
 	}
 
@@ -127,7 +253,16 @@ func runDBDowngrade(revision string, opts *MigrateOptions) error {
 		log.Info("Using schema: private (schema_private)")
 	}
 
-	if err := alembic.Downgrade(revision, schema); err != nil {
+	target, err := resolveDBMigrationTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockDBMigrationTarget(target, true)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := alembic.Downgrade(target, revision, schema); err != nil {
 		return fatalErrorf("Failed to downgrade database: %w", err)
 	}
 
@@ -169,7 +304,16 @@ func runDBCurrent(opts *MigrateOptions) error {
 		log.Info("Checking current revision for schema: private (schema_private)")
 	}
 
-	if err := alembic.Current(schema); err != nil {
+	target, err := resolveDBMigrationTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockDBMigrationTarget(target, false)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := alembic.Current(target, schema); err != nil {
 		return fatalErrorf("Failed to get current revision: %w", err)
 	}
 	return nil
@@ -217,7 +361,16 @@ func runDBHistory(opts *HistoryOptions) error {
 		log.Info("Showing history for schema: private (schema_private)")
 	}
 
-	if err := alembic.History(schema, opts.Verbose); err != nil {
+	target, err := resolveDBMigrationTarget()
+	if err != nil {
+		return err
+	}
+	release, err := lockDBMigrationTarget(target, false)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := alembic.History(target, schema, opts.Verbose); err != nil {
 		return fatalErrorf("Failed to get migration history: %w", err)
 	}
 	return nil

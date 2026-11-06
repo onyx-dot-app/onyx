@@ -11,7 +11,12 @@ from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
-from onyx.connectors.models import ConnectorMissingCredentialError, Document
+from onyx.connectors.models import (
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+)
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -214,3 +219,30 @@ def test_documents_are_indexed_with_jsm_source(
     assert document.id == "https://jira.example.com/browse/HELP-1"
     assert document.doc_created_at == datetime(2026, 4, 30, 9, tzinfo=timezone.utc)
     assert outputs[0].next_checkpoint.has_more is False
+
+
+def test_reindex_keeps_jsm_scope_and_document_source(
+    mock_source_operations: MagicMock,
+    make_issue: Callable[..., dict[str, Any]],
+) -> None:
+    mock_source_operations.search_issues.return_value = [make_issue()]
+    connector = _connector(mock_source_operations)
+    outputs = list(
+        connector.reindex(
+            [
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id="https://jira.example.com/browse/HELP-1"
+                    ),
+                    failure_message="Retry this issue",
+                )
+            ]
+        )
+    )
+    documents = [item for item in outputs if isinstance(item, Document)]
+    assert len(documents) == 1
+    assert documents[0].source == DocumentSource.JIRA_SERVICE_MANAGEMENT
+    assert documents[0].id == "https://jira.example.com/browse/HELP-1"
+    assert mock_source_operations.search_issues.call_args.kwargs["jql"] == (
+        'spaceType = service_desk AND (key in ("HELP-1"))'
+    )

@@ -1,0 +1,86 @@
+---
+title: "EC2"
+description: "Deploy Onyx on AWS EC2"
+---
+
+import CustomDomain from "/snippets/custom-domain.mdx"
+import InstallOnyx from "/snippets/install-onyx.mdx"
+import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
+
+A single EC2 instance is the simplest way to self-host Onyx.
+
+<Tip>
+  To run Onyx on EKS with managed RDS, ElastiCache, and S3 instead, see the [EKS guide](/deployment/cloud/aws/eks)
+  or the [Terraform modules](/deployment/local/terraform).
+</Tip>
+
+## Guide
+
+<Steps>
+  <Step title="Create an EC2 instance">
+    Create an EC2 instance with the appropriate resources. This guide uses the recommended `m7g.xlarge` instance.
+
+    - Give your instance a descriptive name like `onyx-prod`
+    - Select the `Amazon Linux 2023` AMI
+    - Select the `64-bit (Arm)` architecture
+    - Select the `m7g.xlarge` instance type
+    - Select `Allow HTTPS traffic from the internet` in the *Network settings* section
+    - Configure storage following the [Resourcing guide](/deployment/getting_started/resourcing)
+
+    <img className="rounded-image" src="/assets/deployment/ec2_create_instance.webp" alt="EC2 Instance Creation"/>
+
+    <img className="rounded-image" src="/assets/deployment/ec2_https.webp" alt="EC2 Security Group Configuration"/>
+  </Step>
+
+  <Step title="Launch the instance">
+    Click **Launch instance** and then view your instance details.
+
+    <Tip>
+      Save the **Public IPv4 address** of the instance.
+    </Tip>
+
+    <img className="rounded-image" src="/assets/deployment/ec2_ipv4.webp" alt="EC2 Public IPv4 Address"/>
+  </Step>
+
+  <CustomDomain />
+
+  <Step title="Install Onyx requirements">
+    Onyx requires `git`, `docker`, and the `docker compose` plugin.
+
+    To install these on Amazon Linux 2023, run the following:
+
+    ```bash
+    sudo yum update -y
+    sudo yum install -y docker git
+    sudo systemctl enable --now docker
+    sudo usermod -aG docker ec2-user
+
+    DOCKER_CONFIG=/usr/local/lib/docker
+    sudo mkdir -p $DOCKER_CONFIG/cli-plugins
+    sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) \
+      -o $DOCKER_CONFIG/cli-plugins/docker-compose
+    sudo chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+    ```
+
+    Log out and back in so your user can run `docker` without `sudo`. Then confirm the install:
+
+    ```bash
+    docker compose version
+    ```
+
+    <Tip>
+      Prefer a guided install? The [Onyx CLI](/deployment/local/onyx_cli) installs Docker Compose,
+      writes the configuration, and manages upgrades for you. Skip the remaining steps if you use it.
+    </Tip>
+  </Step>
+
+  <InstallOnyx />
+</Steps>
+
+## Use managed AWS services
+
+The default install runs PostgreSQL, Redis, OpenSearch, and the object store as containers on the instance.
+For larger deployments, you can move the database to [Amazon RDS](/deployment/cloud/aws/rds)
+and keep the rest on the instance. See [External services](/deployment/production/external_services) for Redis and S3.
+
+<DeploymentNextSteps />

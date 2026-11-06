@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
+from onyx.db.enums import SupportedLanguage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings import api as settings_api
@@ -169,3 +170,19 @@ def test_routing_target_marks_hidden_router_visible(
     assert result.model_routing_model_configuration_id == 3
     assert len(marked) == 1
     assert invalidated == [True]
+
+
+def test_default_language_updates_and_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _patch_settings({"default_language": "fr"}, Settings(), monkeypatch)
+    assert result.default_language == SupportedLanguage.FR
+
+    # A patch to an unrelated field keeps the workspace language.
+    preserved = _patch_settings({"company_name": "x"}, result, monkeypatch)
+    assert preserved.default_language == SupportedLanguage.FR
+
+
+def test_unsupported_default_language_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"default_language": "xx"})

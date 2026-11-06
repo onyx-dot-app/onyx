@@ -18,6 +18,7 @@ from onyx.configs.constants import (
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pair_for_user,
+    lock_connector_credential_pair_row,
     update_connector_credential_pair_from_id,
 )
 from onyx.db.engine.sql_engine import get_session
@@ -42,6 +43,7 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.factory import get_default_llm
 from onyx.llm.utils import test_llm
+from onyx.redis.redis_connector import RedisConnector
 from onyx.server.documents.models import (
     ConnectorCredentialPairIdentifier,
     PaginatedReturn,
@@ -169,6 +171,13 @@ def create_deletion_attempt_for_connector_id(
         error = f"Connector with ID '{connector_id}' and credential ID '{credential_id}' does not exist. Has it already been deleted?"
         logger.error(error)
         raise OnyxError(OnyxErrorCode.CONNECTOR_NOT_FOUND, error)
+
+    # Held through the status commit, so attempt creation (which takes the
+    # same lock) runs before this cancel or sees DELETING.
+    lock_connector_credential_pair_row(db_session, cc_pair.id)
+    # A new deletion starts its own revoke-and-wait; a retry keeps its wait.
+    if cc_pair.status != ConnectorCredentialPairStatus.DELETING:
+        RedisConnector(tenant_id, cc_pair.id).stop.clear_timeout()
 
     # Cancel any scheduled indexing attempts
     cancel_indexing_attempts_for_ccpair(

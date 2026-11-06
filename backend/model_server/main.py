@@ -21,8 +21,8 @@ from model_server.utils import get_cgroup_cpu_limit, get_gpu_type
 from onyx import __version__
 from onyx.utils.logger import setup_logger, setup_uvicorn_logger
 from onyx.utils.middleware import (
-    add_onyx_request_id_middleware,
-    add_onyx_tenant_id_middleware,
+    request_id_middleware,
+    tenant_header_middleware,
 )
 from shared_configs.configs import (
     INDEXING_ONLY,
@@ -145,8 +145,8 @@ def get_model_app() -> FastAPI:
     if INDEXING_ONLY:
         request_id_prefix = "IDX"
 
-    add_onyx_tenant_id_middleware(application, logger)
-    add_onyx_request_id_middleware(application, request_id_prefix, logger)
+    application.add_middleware(tenant_header_middleware)
+    application.add_middleware(request_id_middleware, prefix=request_id_prefix)
 
     # Initialize and instrument the app
     Instrumentator().instrument(application).expose(application)

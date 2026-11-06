@@ -1,7 +1,9 @@
-"""Search API endpoint (POST /api/search).
+"""Search API endpoints (POST /api/search and POST /api/search/raw).
 
-Runs the full SearchTool.run() pipeline — the same multi-stage search that
-powers chat mode. Returns ranked results without generating an LLM answer.
+/search runs SearchTool.search, the same multi-stage search as chat, and
+returns ranked results with no LLM answer.
+/search/raw runs the same retrieval with no LLM step, for callers that rank
+results themselves.
 
 Intended for programmatic consumers (onyx-cli, Craft sandbox, integrations).
 
@@ -11,13 +13,13 @@ directly — a lighter-weight flow with optional query expansion.
 """
 
 import json
+from functools import partial
 from typing import cast
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
 from onyx.db.engine.sql_engine import get_session
@@ -27,30 +29,45 @@ from onyx.db.llm import (
     fetch_existing_llm_provider,
     fetch_user_group_ids,
 )
-from onyx.db.models import User
+from onyx.db.models import Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_tools
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.factory import get_default_llm, get_llm_for_persona, llm_from_provider
+from onyx.llm.factory import (
+    get_default_llm,
+    get_llm_for_persona,
+    get_search_selection_llm,
+    llm_from_provider,
+)
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
+    BaseSearchRequest,
+    RawSearchRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
 )
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
+from onyx.tools.models import ChatMinimalTextMessage, ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.utils.fleet_query_telemetry import telemetry_query
+from onyx.tracing.framework.create import (
+    SearchTraceMetadata,
+    function_span,
+    trace,
+)
+from onyx.tracing.framework.spans import SpanError
+from onyx.utils.fleet_query_telemetry import QueryMode, telemetry_query
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/search")
@@ -66,7 +83,7 @@ router = APIRouter(prefix="/search")
     ],
     tags=PUBLIC_API_TAGS,
 )
-@telemetry_query(mode="search")
+@telemetry_query(mode=QueryMode.SEARCH)
 def search(
     request: SearchRequest,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
@@ -79,36 +96,10 @@ def search(
     expansion, hybrid retrieval, reranking and section merging — and returns the
     ranked sections without generating an answer. Results are ordered most
     relevant first and are always filtered by the calling user's document
-    permissions.
+    permissions. For results with no LLM calls, use `POST /search/raw`.
     """
-    # 1. Load persona
-    persona = None
-    if request.persona_id is not None:
-        try:
-            persona = get_persona_by_id(
-                persona_id=request.persona_id,
-                user=user,
-                db_session=db_session,
-                is_for_edit=False,
-            )
-        except ValueError:
-            raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND)
+    persona, persona_search_info = _load_persona(request.persona_id, user, db_session)
 
-        persona_search_info = PersonaSearchInfo(
-            document_set_names=[ds.name for ds in persona.document_sets],
-            search_start_date=persona.search_start_date,
-            attached_document_ids=[doc.id for doc in persona.attached_documents],
-            hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
-        )
-    else:
-        persona_search_info = PersonaSearchInfo(
-            document_set_names=[],
-            search_start_date=None,
-            attached_document_ids=[],
-            hierarchy_node_ids=[],
-        )
-
-    # 2. Get LLM
     if request.provider:
         provider_model = fetch_existing_llm_provider(request.provider, db_session)
         if not provider_model:
@@ -135,17 +126,135 @@ def search(
     else:
         llm = get_default_llm()
 
-    # Since the agentic search flow requires multiple LLM calls
-    # we should check the tenant usage limits before continuing
-    check_llm_cost_limit_for_provider(
-        db_session=db_session,
-        tenant_id=get_current_tenant_id(),
-        llm_provider_api_key=llm.config.api_key,
+    auto_detect_filters = load_settings().auto_detect_search_filters is not False
+    primary_provider_checked = (
+        bool(request.provider)
+        or not request.skip_query_expansion
+        or auto_detect_filters
+    )
+    if primary_provider_checked:
+        check_llm_cost_limit_for_provider(
+            db_session=db_session,
+            tenant_id=get_current_tenant_id(),
+            llm_provider_api_key=llm.config.api_key,
+        )
+        check_model_spend_limits(user, llm.config.model_configuration_id)
+
+    search_tool = SearchTool(
+        tool_id=_search_tool_id(db_session),
+        user=user,
+        persona_search_info=persona_search_info,
+        llm=llm,
+        selection_llm_factory=(
+            partial(get_search_selection_llm, fallback=llm)
+            if not request.provider
+            else None
+        ),
+        primary_llm_cost_checked=primary_provider_checked,
+        document_index=get_default_document_index(
+            get_current_search_settings(db_session), None
+        ),
+        user_selected_filters=_base_filters(request),
+        project_id_filter=None,
+        persona_id_filter=None,
+        slack_context=None,
+        enable_slack_search=True,
+        include_link=True,
+        auto_detect_filters=auto_detect_filters,
+    )
+    return _run_search(
+        search_tool,
+        request,
+        user,
+        trace_name="search_api",
+        message_history=request.message_history,
+        context=ToolContext(skip_search_query_expansion=request.skip_query_expansion),
     )
 
-    # 3. Build filters. The public time_cutoff maps onto the internal
-    # updated_at_range lower bound; TimeRange coerces naive bounds to UTC.
-    base_filters = BaseFilters(
+
+@router.post(
+    "/raw",
+    # Raw search spends no LLM tokens, so no token budget applies.
+    dependencies=[Depends(require_vector_db), Depends(check_api_key_usage)],
+    tags=PUBLIC_API_TAGS,
+)
+@telemetry_query(mode=QueryMode.SEARCH)
+def raw_search(
+    request: RawSearchRequest,
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
+    db_session: Session = Depends(get_session),
+) -> SearchResponse:
+    """
+    Search the Onyx index with no LLM calls and get back document sections.
+
+    Runs hybrid retrieval on the query as written, with no query expansion,
+    filter detection, federated Slack search or LLM document selection. Returns
+    up to 10 sections in retrieval order, each with up to `context_chunks`
+    neighboring chunks on each side. Results are always filtered by the calling
+    user's document permissions.
+    """
+    _, persona_search_info = _load_persona(request.persona_id, user, db_session)
+    search_tool = SearchTool(
+        tool_id=_search_tool_id(db_session),
+        user=user,
+        persona_search_info=persona_search_info,
+        # SearchTool needs a model object, but retrieval-only never calls it.
+        llm=get_default_llm(),
+        primary_llm_cost_checked=False,
+        document_index=get_default_document_index(
+            get_current_search_settings(db_session), None
+        ),
+        user_selected_filters=_base_filters(request),
+        project_id_filter=None,
+        persona_id_filter=None,
+        slack_context=None,
+        enable_slack_search=False,
+        include_link=True,
+        auto_detect_filters=False,
+        retrieval_only=True,
+        retrieval_context_chunks=request.context_chunks,
+    )
+    return _run_search(
+        search_tool,
+        request,
+        user,
+        trace_name="raw_search_api",
+        message_history=None,
+        context=ToolContext(),
+    )
+
+
+def _load_persona(
+    persona_id: int | None, user: User, db_session: Session
+) -> tuple[Persona | None, PersonaSearchInfo]:
+    if persona_id is None:
+        return None, PersonaSearchInfo(
+            document_set_names=[],
+            search_start_date=None,
+            attached_document_ids=[],
+            hierarchy_node_ids=[],
+        )
+    try:
+        persona = get_persona_by_id(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+        )
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.PERSONA_NOT_FOUND)
+    return persona, PersonaSearchInfo(
+        document_set_names=[ds.name for ds in persona.document_sets],
+        search_start_date=persona.search_start_date,
+        attached_document_ids=[doc.id for doc in persona.attached_documents],
+        hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
+    )
+
+
+def _base_filters(request: BaseSearchRequest) -> BaseFilters:
+    # The public time_cutoff maps onto the internal updated_at_range lower
+    # bound. TimeRange coerces naive bounds to UTC.
+    return BaseFilters(
         source_type=request.sources,
         document_set=request.document_sets,
         updated_at_range=(
@@ -156,59 +265,64 @@ def search(
         tags=request.tags,
     )
 
-    # 4. Get document index
-    search_settings = get_current_search_settings(db_session)
-    document_index = get_default_document_index(search_settings, None)
 
-    # 5. Get tool_id
-    all_tools = get_tools(db_session)
+def _search_tool_id(db_session: Session) -> int:
     tool_id = next(
-        (tool.id for tool in all_tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
+        (
+            tool.id
+            for tool in get_tools(db_session)
+            if tool.in_code_tool_id == SEARCH_TOOL_ID
+        ),
         None,
     )
     if tool_id is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "Search tool not found in database",
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Search tool not found in database")
+    return tool_id
 
-    # 6. Construct SearchTool
-    search_tool = SearchTool(
-        tool_id=tool_id,
-        emitter=NullEmitter(),
-        user=user,
-        persona_search_info=persona_search_info,
-        llm=llm,
-        document_index=document_index,
-        user_selected_filters=base_filters,
-        project_id_filter=None,
-        persona_id_filter=None,
-        slack_context=None,
-        enable_slack_search=True,
-        auto_detect_filters=load_settings().auto_detect_search_filters is not False,
-    )
 
-    # 7. Run search
-    tool_response = search_tool.run(
-        placement=Placement(turn_index=0),
-        override_kwargs=SearchToolOverrideKwargs(
-            starting_citation_num=1,
-            original_query=request.query,
-            skip_query_expansion=request.skip_query_expansion,
-            include_link=True,
-            message_history=request.message_history
-            or [
-                ChatMinimalTextMessage(
-                    message=request.query,
-                    message_type=MessageType.USER,
-                ),
-            ],
+def _run_search(
+    search_tool: SearchTool,
+    request: BaseSearchRequest,
+    user: User,
+    trace_name: str,
+    message_history: list[ChatMinimalTextMessage] | None,
+    context: ToolContext,
+) -> SearchResponse:
+    # These endpoints call search directly, so they open their own trace and tool span.
+    with (
+        trace(
+            trace_name,
+            metadata=SearchTraceMetadata(
+                user_id=str(user.id),
+                persona_id=request.persona_id,
+            ).model_dump(),
         ),
-        queries=[request.query],
-    )
+        function_span(SearchTool.NAME) as tool_span,
+    ):
+        tool_span.span_data.input = request.query
+        try:
+            tool_response = search_tool.search(
+                [request.query],
+                original_query=request.query,
+                message_history=message_history
+                or [
+                    ChatMinimalTextMessage(
+                        message=request.query, message_type=MessageType.USER
+                    )
+                ],
+                context=context,
+            )
+        except Exception as e:
+            # Type only: provider errors can carry credentials, and nothing
+            # redacts them on this path.
+            tool_span.set_error(
+                SpanError(message=f"{type(e).__name__}: search failed", data=None)
+            )
+            raise
+        tool_span.span_data.output = tool_response.text
 
-    # 8. Map LLM-facing JSON entries to SearchResults (one per merged section).
-    llm_facing_text = tool_response.llm_facing_response
+    # Map LLM-facing JSON entries to SearchResults (one per merged section).
+    llm_facing_text = tool_response.text
     entries = json.loads(llm_facing_text)["results"] if llm_facing_text else []
     return SearchResponse(
         results=[

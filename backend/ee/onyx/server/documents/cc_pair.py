@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -20,16 +21,25 @@ from ee.onyx.db.connector_manage_access import (
     fetch_manage_roles_for_cc_pair,
     lock_cc_pairs_for_manage_access__no_commit,
 )
+from ee.onyx.db.sync_attempt_error import (
+    count_sync_attempt_errors_for_cc_pair,
+    get_sync_attempt_errors_for_cc_pair,
+    resolve_sync_attempt_errors_without_retry__no_commit,
+)
 from ee.onyx.db.user_group import fetch_user_groups
 from ee.onyx.server.documents.manage_access import (
     CCPairManageAccessRow,
     CCPairManageAccessUpdateRequest,
     apply_manage_access_change__no_commit,
-    fixed_manage_access_rows,
+    fixed_manage_access_groups,
+    manage_access_rows,
 )
 from ee.onyx.server.documents.models import (
     CCPairDataAccess,
     CCPairDataAccessUpdateRequest,
+    SyncAttemptErrorSnapshot,
+    SyncAttemptErrorsResolveRequest,
+    SyncAttemptErrorsResolveResponse,
 )
 from ee.onyx.server.user_group.models import MinimalUserGroupSnapshot
 from onyx.auth.permissions import require_permission
@@ -38,16 +48,26 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pair_from_id_for_user,
+    get_readable_connector_credential_pair_for_user,
     verify_user_has_access_to_cc_pair,
 )
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccessType, ConnectorManageRole, Permission
-from onyx.db.models import User
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    ConnectorManageRole,
+    IndexAttemptErrorOrder,
+    Permission,
+    SyncEntityKind,
+)
+from onyx.db.models import ConnectorCredentialPair, User
+from onyx.db.permission_sync_attempt import (
+    get_open_doc_permission_sync_attempt,
+    get_open_external_group_sync_attempt,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_pool import get_redis_client
-from onyx.server.documents.models import manage_access_by_group
+from onyx.server.documents.models import PaginatedReturn, manage_access_by_group
 from onyx.server.models import StatusResponse
 from onyx.utils.audit import (
     AuditAction,
@@ -60,6 +80,14 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 router = APIRouter(prefix="/manage")
+
+
+def _assert_perm_synced(cc_pair: ConnectorCredentialPair) -> None:
+    if not cc_pair.access_type.is_perm_synced():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Permission sync is only available for connectors with synced access.",
+        )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/sync-permissions")
@@ -107,11 +135,17 @@ def sync_cc_pair(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
-    r = get_redis_client()
+    # Attempt creation refuses a paused pair. Give the reason here instead of
+    # the generic creation failure below.
+    if cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The connector is paused. Resume it to sync permissions.",
+        )
 
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    if redis_connector.permissions.fenced:
+    if get_open_doc_permission_sync_attempt(cc_pair_id, db_session) is not None:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "Permissions sync task already in progress.",
@@ -124,16 +158,16 @@ def sync_cc_pair(
         cc_pair.credential_id,
         cc_pair.connector.name,
     )
-    payload_id = try_creating_permissions_sync_task(
-        client_app, cc_pair_id, r, tenant_id
-    )
-    if not payload_id:
+    attempt_id = try_creating_permissions_sync_task(client_app, cc_pair_id, tenant_id)
+    if attempt_id is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Permissions sync task creation failed.",
         )
 
-    logger.info("Permissions sync queued: cc_pair=%s id=%s", cc_pair_id, payload_id)
+    logger.info(
+        "Permissions sync queued: cc_pair=%s attempt=%s", cc_pair_id, attempt_id
+    )
 
     return StatusResponse(
         success=True,
@@ -186,11 +220,9 @@ def sync_cc_pair_groups(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Connection not found for current user's permissions",
         )
+    _assert_perm_synced(cc_pair)
 
-    r = get_redis_client()
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    if redis_connector.external_group_sync.fenced:
+    if get_open_external_group_sync_attempt(cc_pair_id, db_session) is not None:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "External group sync task already in progress.",
@@ -203,16 +235,18 @@ def sync_cc_pair_groups(
         cc_pair.credential_id,
         cc_pair.connector.name,
     )
-    payload_id = try_creating_external_group_sync_task(
-        client_app, cc_pair_id, r, tenant_id
+    attempt_id = try_creating_external_group_sync_task(
+        client_app, cc_pair_id, tenant_id
     )
-    if not payload_id:
+    if attempt_id is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "External group sync task creation failed.",
         )
 
-    logger.info("External group sync queued: cc_pair=%s id=%s", cc_pair_id, payload_id)
+    logger.info(
+        "External group sync queued: cc_pair=%s attempt=%s", cc_pair_id, attempt_id
+    )
 
     return StatusResponse(
         success=True,
@@ -305,8 +339,8 @@ def _manage_access_rows(
     """The fixed rows, then the stored rows of groups the caller can see
     (``visible_group_ids``, None: all). A stored row of a group that is also
     fixed is left out: the fixed Editor row already covers it."""
-    fixed_rows = fixed_manage_access_rows(db_session)
-    fixed_group_ids = {row.group_id for row in fixed_rows}
+    fixed_groups = fixed_manage_access_groups(db_session)
+    fixed_group_ids = {group.id for group in fixed_groups}
     roles = fetch_manage_roles_for_cc_pair(db_session, cc_pair_id)
     shown_group_ids = {
         group_id
@@ -316,15 +350,14 @@ def _manage_access_rows(
     groups = fetch_user_groups(
         db_session, only_up_to_date=False, restrict_to_group_ids=shown_group_ids
     )
-    return fixed_rows + [
-        CCPairManageAccessRow(
-            group_id=group.id,
-            group_name=group.name,
-            role=roles[group.id],
-            is_fixed=False,
-        )
-        for group in sorted(groups, key=lambda group: group.id)
-    ]
+    return manage_access_rows(
+        db_session,
+        fixed_groups,
+        [
+            (group, roles[group.id])
+            for group in sorted(groups, key=lambda group: group.id)
+        ],
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/manage-access")
@@ -423,8 +456,8 @@ def get_manage_access_prefill(
 ) -> list[CCPairManageAccessRow]:
     """Starting manage access for the create form: groups with global Manage Connectors
     are fixed Editors, and the chosen data-access groups become Operators."""
-    fixed_rows = fixed_manage_access_rows(db_session)
-    fixed_group_ids = {row.group_id for row in fixed_rows}
+    fixed_groups = fixed_manage_access_groups(db_session)
+    fixed_group_ids = {group.id for group in fixed_groups}
     visible_group_ids = get_visible_user_group_ids(user, db_session)
     operator_group_ids = {
         group_id
@@ -438,12 +471,107 @@ def get_manage_access_prefill(
         include_default=False,
         restrict_to_group_ids=operator_group_ids,
     )
-    return fixed_rows + [
-        CCPairManageAccessRow(
-            group_id=group.id,
-            group_name=group.name,
-            role=ConnectorManageRole.OPERATOR,
-            is_fixed=False,
+    return manage_access_rows(
+        db_session,
+        fixed_groups,
+        [
+            (group, ConnectorManageRole.OPERATOR)
+            for group in sorted(operator_groups, key=lambda group: group.id)
+        ],
+    )
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/sync-errors")
+def get_cc_pair_sync_errors(
+    cc_pair_id: int,
+    include_resolved: bool = Query(False),
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=100),
+    attempt_id: int | None = Query(None),
+    # Annotated, so a direct call that omits them gets the default.
+    entity_kind: Annotated[SyncEntityKind | None, Query()] = None,
+    order: Annotated[IndexAttemptErrorOrder, Query()] = IndexAttemptErrorOrder.TIME,
+    q: str | None = Query(None, max_length=200),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> PaginatedReturn[SyncAttemptErrorSnapshot]:
+    """The users and groups the pair's group syncs could not read, newest
+    first: open ones, or every one with ``include_resolved``. ``attempt_id``
+    keeps one sync's rows, ``entity_kind`` only users or only groups, and
+    ``q`` matches the message, entity id or name. ``order=state`` lists open
+    rows before resolved ones, each newest first."""
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
         )
-        for group in sorted(operator_groups, key=lambda group: group.id)
-    ]
+    source = cc_pair.connector.source
+    query = (q or "").strip() or None
+    total = count_sync_attempt_errors_for_cc_pair(
+        db_session,
+        cc_pair_id=cc_pair_id,
+        source=source,
+        unresolved_only=not include_resolved,
+        attempt_id=attempt_id,
+        entity_kind=entity_kind,
+        query=query,
+    )
+    rows = get_sync_attempt_errors_for_cc_pair(
+        db_session,
+        cc_pair_id=cc_pair_id,
+        source=source,
+        unresolved_only=not include_resolved,
+        attempt_id=attempt_id,
+        entity_kind=entity_kind,
+        query=query,
+        page=page_num,
+        page_size=page_size,
+        order=order,
+    )
+    return PaginatedReturn(
+        items=[SyncAttemptErrorSnapshot.from_model(row) for row in rows],
+        total_items=total,
+    )
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/sync-errors/resolve")
+def resolve_cc_pair_sync_errors(
+    cc_pair_id: int,
+    request: SyncAttemptErrorsResolveRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> SyncAttemptErrorsResolveResponse:
+    """Resolves the pair's chosen open failed users and groups without retry
+    and returns how many it resolved. Takes the run resolve's permissions."""
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        access_level=CCPairAccessLevel.OPERATE,
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this connector",
+        )
+    resolved_ids = resolve_sync_attempt_errors_without_retry__no_commit(
+        db_session, cc_pair_id, cc_pair.connector.source, set(request.error_ids)
+    )
+    db_session.commit()
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"resolved_sync_error_ids": resolved_ids},
+    )
+    return SyncAttemptErrorsResolveResponse(resolved_count=len(resolved_ids))

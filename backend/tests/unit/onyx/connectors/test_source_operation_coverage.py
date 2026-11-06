@@ -7,12 +7,23 @@ a gateway is picked up here automatically; it cannot forget to wire the test.
 """
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.azure_datalake.models import (
+    AzureDataLakePath,
+    AzureDataLakePathPage,
+    AzureRoleAssignment,
+    AzureRoleDefinition,
+    AzureStorageAccountPage,
+    AzureStorageAccountResource,
+    AzureSubscription,
+    AzureSubscriptionPage,
+)
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
@@ -50,14 +61,29 @@ from onyx.connectors.microsoft_utils.models import (
 from onyx.connectors.microsoft_utils.sharepoint_principals import (
     SharepointPrincipalType,
 )
-from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
+from onyx.connectors.sharepoint.models import (
+    SharepointDrive,
+    SitePagesPage,
+    SiteUrlListing,
+)
 from onyx.connectors.slack.source_operations import (
+    SlackAuthTestResponse,
     SlackChannelMembersPage,
     SlackChannelsPage,
+    SlackTeamsPage,
+    SlackUsersPage,
 )
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
+)
+from onyx.connectors.youtrack.models import (
+    YouTrackAssignedRole,
+    YouTrackIssue,
+    YouTrackIssueAccess,
+    YouTrackProject,
+    YouTrackRole,
+    YouTrackUser,
 )
 from tests.unit.onyx.connectors.source_operation_harnesses import (
     compute_uncovered_units,
@@ -82,9 +108,26 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
     spy.get_space_permissions.side_effect = get_space_permissions
 
 
+def _configure_confluence_rest_spy(spy: MagicMock) -> None:
+    """A DC 9.1+ site whose REST space-permissions endpoint answers: the
+    anonymous-access check reads the anonymous endpoint, as permission sync
+    does on such a site."""
+    spy.get_server_version.return_value = (9, 1)
+    spy.get_space_permissions.return_value = []
+    spy.get_anonymous_space_permissions.return_value = []
+
+
 def _configure_slack_spy(spy: MagicMock) -> None:
-    """A workspace where the bot sees one channel with one member, so the
-    checks that read a channel after they find one run."""
+    """A Grid org with one workspace, where the bot sees one channel with one
+    member and one user, so the checks that read an item after they find one
+    run."""
+    spy.check_auth.return_value = SlackAuthTestResponse(ok=True, enterprise_id="E1")
+    spy.list_teams.side_effect = lambda **_kwargs: iter(
+        [SlackTeamsPage(teams=[{"id": "T1", "name": "Acme"}])]
+    )
+    spy.list_users.side_effect = lambda **_kwargs: iter(
+        [SlackUsersPage(members=[{"id": "U1"}])]
+    )
     spy.list_channels.side_effect = lambda **_kwargs: iter(
         [SlackChannelsPage(channels=[{"id": "C1", "name": "general"}])]
     )
@@ -162,7 +205,9 @@ def _configure_sharepoint_spy(spy: MagicMock) -> None:
     the read checks reach the item-level and group-level operations."""
     site_url: str = "https://contoso.sharepoint.com/sites/eng"
     spy.get_auth_method.return_value = MicrosoftAuthMethod.CERTIFICATE
-    spy.list_site_urls.return_value = [site_url]
+    spy.list_site_urls.return_value = SiteUrlListing(
+        site_urls=[site_url], complete=True
+    )
     spy.get_site_id.return_value = "site-id"
     spy.list_drives.return_value = [
         SharepointDrive(
@@ -271,20 +316,121 @@ def _configure_github_user_owner_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_youtrack_spy(spy: MagicMock) -> None:
+    """One project whose readers come through a group, holding one issue, so
+    the checks reach the group listing and the comment read."""
+    project = {"id": "0-1", "shortName": "ABC", "name": "Alpha"}
+    issue = {"id": "2-1", "idReadable": "ABC-1", "created": 1, "updated": 1}
+    spy.get_me.return_value = YouTrackUser(id="1-1")
+    spy.list_projects.return_value = [YouTrackProject.model_validate(project)]
+    spy.list_assigned_roles.return_value = [
+        YouTrackAssignedRole.model_validate(
+            {
+                "role": {"id": "r"},
+                "holder": {"$type": "UserGroup", "id": "g"},
+                "scope": {"$type": "GlobalScope"},
+            }
+        )
+    ]
+    spy.list_roles.return_value = [
+        YouTrackRole.model_validate(
+            {"id": "r", "permissions": [{"id": "JetBrains.YouTrack.READ_ISSUE"}]}
+        )
+    ]
+    spy.list_group_user_ids.return_value = {"1-1"}
+    spy.list_users.return_value = [YouTrackUser(id="1-1", email="a@example.com")]
+    spy.iterate_issues.side_effect = lambda **_kwargs: iter(
+        [[YouTrackIssue.model_validate({**issue, "project": project})]]
+    )
+    spy.iterate_issue_access.side_effect = lambda **_kwargs: iter(
+        [[YouTrackIssueAccess.model_validate({"id": "2-1", "project": project})]]
+    )
+
+
+def _configure_azure_datalake_spy(spy: MagicMock) -> None:
+    """A container holding one file, so the read check reaches the download,
+    in an account that Azure Resource Manager lists with one role assignment,
+    in a tenant with one group."""
+    spy.list_subscriptions.return_value = AzureSubscriptionPage(
+        subscriptions=[AzureSubscription(subscription_id="sub")]
+    )
+    spy.list_storage_accounts.return_value = AzureStorageAccountPage(
+        accounts=[
+            AzureStorageAccountResource(
+                id="/subscriptions/sub/resourceGroups/rg/providers/"
+                "Microsoft.Storage/storageAccounts/onyxtest",
+                name="onyxtest",
+            )
+        ]
+    )
+    spy.list_role_assignments.return_value = [
+        AzureRoleAssignment(
+            id="assignment",
+            principal_id="user",
+            principal_type="User",
+            role_definition_id="/providers/Microsoft.Authorization/roleDefinitions/r",
+        )
+    ]
+    spy.get_role_definition.return_value = AzureRoleDefinition(id="r")
+    spy.list_deny_assignments.return_value = []
+    spy.list_groups.return_value = EntraPage[EntraGroup](items=[EntraGroup(id="group")])
+    spy.list_paths_page.return_value = AzureDataLakePathPage(
+        paths=[
+            AzureDataLakePath(
+                name="docs/readme.txt",
+                is_directory=False,
+                last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                content_length=10,
+            )
+        ],
+        continuation_token=None,
+    )
+
+
+def _configure_asana_spy(spy: MagicMock) -> None:
+    """One project holding one task with a comment and a creator, so the
+    tasks sample reaches the comment and user reads."""
+    workspace = {"gid": "1", "name": "Acme"}
+    project = {"gid": "2", "name": "Roadmap", "archived": False, "workspace": workspace}
+    spy.get_me.return_value = {"gid": "u", "workspaces": [workspace]}
+    spy.get_workspace.return_value = workspace
+    spy.get_team.return_value = {"gid": "3", "name": "Eng", "organization": workspace}
+    spy.get_project.return_value = project
+    spy.iterate_projects.side_effect = lambda **_kwargs: iter([project])
+    spy.iterate_project_tasks.side_effect = lambda **_kwargs: iter(
+        [{"gid": "4", "name": "Task", "created_by": {"gid": "u"}}]
+    )
+    spy.iterate_task_stories.side_effect = lambda **_kwargs: iter(
+        [{"gid": "5", "resource_subtype": "comment_added"}]
+    )
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
-    DocumentSource.CONFLUENCE: [_configure_confluence_spy],
+    DocumentSource.ASANA: [_configure_asana_spy],
+    DocumentSource.CONFLUENCE: [
+        _configure_confluence_spy,
+        _configure_confluence_rest_spy,
+    ],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
+    DocumentSource.YOUTRACK: [_configure_youtrack_spy],
+    DocumentSource.AZURE_DATALAKE: [_configure_azure_datalake_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
 # spy configuration runs with every config listed here.
 _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
+    # The team filter applies only without project IDs, and the workspace
+    # listing only without them too.
+    DocumentSource.ASANA: [
+        {"asana_workspace_id": "1", "asana_project_ids": "2"},
+        {"asana_workspace_id": "1", "asana_team_id": "3"},
+    ],
     DocumentSource.GITHUB: [
         {
             "repo_owner": "acme",
@@ -293,6 +439,16 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
             "branch": "main",
         },
         {"repo_owner": "acme", "repositories": "docs"},
+    ],
+    DocumentSource.YOUTRACK: [
+        {"base_url": "https://example.youtrack.cloud", "projects": ["ABC"]}
+    ],
+    # The root page check reads a page only when a root page is set.
+    DocumentSource.NOTION: [{"root_page_id": "17ab3186873d418fb899c3f6a43f68de"}],
+    # The selected-scope checks read teams and projects only when some are set.
+    DocumentSource.LINEAR: [{"team_keys": ["ENG"], "projects": ["Roadmap"]}],
+    DocumentSource.AZURE_DATALAKE: [
+        {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
     ],
 }
 

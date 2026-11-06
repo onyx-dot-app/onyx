@@ -1,0 +1,82 @@
+---
+title: "FAQ"
+description: "Frequently asked questions about using Onyx"
+icon: "comments-question"
+---
+
+## General Questions
+
+<AccordionGroup>
+  <Accordion title="What kind of questions can I ask Onyx?">
+    You can ask Onyx about knowledge from [connected applications](/overview/core_features/internal_search),
+    general world knowledge known to the LLM,
+    or anything on the web (if your admin has configured [Web Search](/overview/core_features/web_search)).
+    Onyx can also run Python code, generate images, and use [Plugins](/overview/core_features/plugins)
+    to work in your team's applications.
+  </Accordion>
+
+  <Accordion title="What is the difference between Chat and Search?">
+    Use the **Chat / Search** toggle at the top of the page.
+    **Chat** gives you a conversation with an AI Agent that answers with citations.
+    **Search** gives you a ranked list of documents from your connected sources, without an AI answer.
+    Search appears only after your admin has connected at least one source.
+  </Accordion>
+
+  <Accordion title="How is my private data being processed?">
+    See the [Security](/security/architecture/system_description) section to learn more.
+  </Accordion>
+
+  <Accordion title="Can I keep a conversation out of my history?">
+    Yes. Click **Incognito Chat** at the top of a new chat. An incognito chat does not appear in your Recents,
+    and Onyx does not use it to update your memories.
+  </Accordion>
+
+  <Accordion title="Which editions of Onyx exist?">
+    The **Community Edition** is free and open source. **Business** and **Enterprise** add features such as Craft, SSO,
+    permission sync, and usage analytics. **Onyx Cloud** is hosted by Onyx.
+    See the [Enterprise Edition](/admins/getting_started/enterprise_edition) page for details.
+  </Accordion>
+
+  <Accordion title="Can I run Onyx offline?">
+    Yes, but Onyx needs an LLM to function. You can air gap the entire system if you run a local LLM.
+    We strongly recommend a recent, non-quantized LLM for the best experience.
+  </Accordion>
+</AccordionGroup>
+
+## Technical Issues
+
+<AccordionGroup>
+  <Accordion title="Why is my Onyx deployment not coming up?">
+    The most common cause is a deployment with too few resources.
+    See the [Resourcing](/deployment/getting_started/resourcing) page to check.
+  </Accordion>
+
+  <Accordion title="Responses are really slow, is this expected?">
+    No. If responses are slow, check these causes:
+    - The LLM is slow, has low throughput, or does not support streaming.
+    - You configured local models that are not the default, but the system has no GPU.
+    This usually comes from a local reranking or embedding model.
+    - A high **Reasoning Level** or **Deep Research** is on. Both take longer by design.
+  </Accordion>
+</AccordionGroup>
+
+## Knowledge and Search
+
+<AccordionGroup>
+  <Accordion title="Why can't Onyx find information that I know exists?">
+    For an internal document, the connector may not have finished indexing, or the access controls may be wrong.
+    When permissions are unclear, Onyx always defaults to the least permissive option.
+    The most common cause is a [connector](/admins/connectors/overview) that is not configured correctly.
+  </Accordion>
+
+  <Accordion title="Does Onyx keep its knowledge up to date?">
+    Connectors fetch updates on a schedule. The default refresh frequency is 30 minutes.
+    An admin can set the refresh frequency for each connector. Documents, metadata,
+    and access permissions all receive updates.
+  </Accordion>
+
+  <Accordion title="Why is Onyx refusing to search the internet?">
+    An admin must configure Web Search before you can use it. This requires a supported search provider,
+    such as Google or Exa. A content provider for reading pages is optional, because Onyx includes a built-in one.
+  </Accordion>
+</AccordionGroup>

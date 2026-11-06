@@ -21,6 +21,8 @@ class HubSpotObjectSpec(BaseModel):
 class HubSpotPage(BaseModel, Generic[_ItemT]):
     items: list[_ItemT]
     next_after: str | None = None
+    # The match count a search reports. None for other listings.
+    total: int | None = None
 
 
 class HubSpotAssociationIds(BaseModel):
@@ -34,6 +36,7 @@ class HubSpotRecord(BaseModel):
     properties: dict[str, str | None] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+    archived: bool = False
     # Inline association ids by object type. None when none were requested or
     # HubSpot sent none.
     associations: dict[str, HubSpotAssociationIds] | None = None
@@ -78,21 +81,38 @@ class ApiRecord(BaseModel):
     properties: dict[str, str | None] | None = None
     created_at: datetime
     updated_at: datetime
+    archived: bool | None = None
     associations: dict[str, ApiAssociationCollection] | None = None
 
 
 class ApiRecordPage(BaseModel):
     results: list[ApiRecord]
     paging: ApiPaging | None = None
+    # Sent by the Search API only.
+    total: int | None = None
 
 
 class ApiAssociation(BaseModel):
     to_object_id: int
 
 
-class ApiAssociationPage(BaseModel):
-    results: list[ApiAssociation]
+class ApiAssociationBatchResult(BaseModel):
+    from_: ApiAssociatedId = Field(alias="_from")
+    to: list[ApiAssociation]
     paging: ApiPaging | None = None
+
+
+class ApiBatchError(BaseModel):
+    category: str | None = None
+    sub_category: str | None = None
+    message: str | None = None
+
+
+class ApiAssociationBatch(BaseModel):
+    # A record with no links is not in the results.
+    results: list[ApiAssociationBatchResult]
+    # Sent with a 207. A record with no links is reported here too.
+    errors: list[ApiBatchError] = Field(default_factory=list)
 
 
 class ApiPortalInfo(BaseModel):

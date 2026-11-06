@@ -1,0 +1,100 @@
+---
+title: "Troubleshooting"
+description: "Common billing and licensing issues and how to resolve them"
+icon: "wrench"
+---
+
+## "Access Restricted" — Locked Out of the Application
+
+If users see an **Access Restricted** page, the workspace is locked.
+This happens when a subscription expires or when the seat limit is exceeded.
+
+Only **admins** can resolve this.
+
+Even when locked out, admins can still access:
+
+- **Admin Panel > Plans & Billing** — to renew or resubscribe
+- **Admin Panel > Users** — to manage users and free up seats
+- **Downgrade to Community** (self-hosted) — to leave the paid plan and unlock the workspace as Community Edition
+
+### Subscription expired
+
+**Cloud**: Go to **Plans & Billing** and resubscribe through Stripe.
+
+**Self-hosted**:
+Go to **Plans & Billing** and either renew your subscription or [upload an updated license
+file](/admins/billing/manage#air-gapped-license-activation).
+
+Access is restored immediately after renewal. No data is lost.
+
+If you do not plan to renew,
+you can [downgrade to Community Edition](/admins/billing/manage#downgrade-to-community-edition)
+from the lock page or the billing page instead. Everything that paid features kept private becomes visible to all users.
+
+### No license with permission-synced connectors
+
+A self-hosted deployment with no license at all stays locked while it has a connector that inherits permissions from its
+source. Those permissions only apply with a paid plan,
+so the lock keeps the restricted content from opening up by accident.
+Either activate a license or [downgrade to Community Edition](/admins/billing/manage#downgrade-to-community-edition),
+which makes those connectors public on purpose.
+
+### Seat limit exceeded
+
+Your workspace has more active users than your plan allows. **All users** are blocked — not just the most recent ones.
+
+To fix this, either increase your seat count from **Plans & Billing**,
+or remove users from **Admin Panel > Users** until usage is within the limit. Access is restored immediately.
+
+## Paid Features Unavailable
+
+If a page in the Admin Panel shows a lock, or a feature returns an error,
+your workspace does not have the plan that the feature needs.
+
+These features require a **Business** plan or higher:
+
+- User Groups and permission sync
+- Usage and Analytics dashboards, Query History, and usage reports
+- Service accounts, SSO, theming, and the LLM Gateway
+
+These features require an **Enterprise** plan:
+
+- SCIM, custom roles and permissions, and hook extensions
+- Token rate limits per user and per group
+- Custom analytics and full white-labeling
+
+Navigate to **Admin Panel > Plans & Billing** to [subscribe](/admins/billing/subscribing).
+
+## Usage Limit Reached (Cloud Trial)
+
+Cloud trial workspaces have weekly limits on LLM spend, indexed documents, and API calls. When a limit is reached,
+chat shows a message that asks you to upgrade or wait for the next period.
+API access and the chat widget are not available on trial accounts.
+Upgrade from **Admin Panel > Plans & Billing** to remove these limits.
+
+## Cannot Invite or Add Users
+
+If inviting users, new sign-ups, or reactivating users fails, your seat limit has likely been reached.
+
+Either increase your seat count from the [billing page](/admins/billing/manage),
+or remove users from **Admin Panel > Users** to free up seats.
+
+## Unable to Connect to Stripe (Self-Hosted)
+
+If your self-hosted instance cannot reach Stripe, you'll see a banner on the billing page:
+
+> "Unable to connect to Stripe payment portal."
+
+Click **Connect to Stripe** to retry. If your instance is permanently offline or behind a firewall,
+you can [upload a license file manually](/admins/billing/manage#air-gapped-license-activation) instead.
+
+## License File Fails to Validate (Self-Hosted)
+
+If uploading a license file returns an error:
+
+- Make sure you are using the **complete** file contents, including the `-----BEGIN ONYX LICENSE-----`
+  and `-----END ONYX LICENSE-----` delimiters
+- Check for extra whitespace or line breaks that may have been introduced when copying
+- Ensure the file was issued for your specific Onyx instance
+
+Contact **support@onyx.app** if the issue persists.

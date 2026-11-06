@@ -86,36 +86,31 @@ def _get_access_for_documents(
             logger.error("Document %s has no source", document_id)
             continue
 
+        # Source ACL columns only count while a live pair of the document is
+        # perm-synced. Otherwise they are stale or connector-supplied.
+        is_perm_synced = any(
+            access_type.is_perm_synced()
+            for access_type in doc_id_to_access_types.get(document_id, set())
+        )
+
         # A censoring-only source checks access at query time, so its perm-synced
-        # documents are open at retrieval. Documents under only private or public
-        # connectors keep their own ACLs.
+        # documents are open at retrieval.
         perm_sync_config = get_source_perm_sync_config(source)
         is_only_censored = (
-            perm_sync_config is not None
+            is_perm_synced
+            and perm_sync_config is not None
             and perm_sync_config.censoring_config is not None
             and perm_sync_config.doc_sync_config is None
-            and any(
-                access_type.is_perm_synced()
-                for access_type in doc_id_to_access_types.get(document_id, set())
-            )
         )
 
-        ext_u_emails = (
-            set(document.external_user_emails)
-            if document.external_user_emails
-            else set()
-        )
+        ext_u_emails: set[str] = set()
+        ext_u_groups: set[str] = set()
+        if is_perm_synced:
+            ext_u_emails = set(document.external_user_emails or [])
+            ext_u_groups = set(document.external_user_group_ids or [])
 
-        ext_u_groups = (
-            set(document.external_user_group_ids)
-            if document.external_user_group_ids
-            else set()
-        )
-
-        # If the document is determined to be "public" externally (through a SYNC connector)
-        # then it's given the same access level as if it were marked public within Onyx
         is_public_anywhere = (
-            document.is_public
+            (is_perm_synced and document.is_public)
             or non_ee_access.is_public
             or is_only_censored
             or any(u_group in all_public_ext_u_group_ids for u_group in ext_u_groups)

@@ -24,13 +24,14 @@
 
 /* The card: the bordered box with the search field and the rows. */
 .opal-dropdown-card {
-  @apply relative overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
+  @apply relative flex flex-col overflow-hidden border bg-background-neutral-00 rounded-12 shadow-box-01;
+  max-height: var(--opal-dropdown-available-height);
 }
 
 /* The search field pinned above the rows: a borderless input on its own
    row, with a 4px inset on every side. */
 .opal-dropdown-search {
-  @apply p-1;
+  @apply shrink-0 p-1;
 }
 
 /* The inner padding sits inside the ShadowDiv, so its scroll gradients span
@@ -147,6 +148,10 @@
 .opal-dropdown-group {
   @apply flex flex-col;
 }
+/* A titled group's divider gets 4px more room above it than a plain one. */
+.opal-dropdown-titled {
+  @apply pt-1;
+}
 .opal-dropdown-group-rows {
   @apply flex flex-col gap-1 pt-1;
 }
@@ -161,6 +166,16 @@
 /* A toggle row's switch shows the state; the row is the control. */
 .opal-dropdown-toggle {
   @apply ms-2 flex shrink-0 items-center;
+}
+
+/* Capped so a long note wraps instead of squeezing the title. */
+.opal-dropdown-info {
+  @apply ms-2 flex max-w-48 shrink-0 items-center self-center p-0.5 text-text-03;
+}
+
+/* A disabled row mutes its info like its title. */
+.interactive[data-disabled] .opal-dropdown-info {
+  color: var(--interactive-foreground);
 }
 
 .opal-dropdown-create-icon {

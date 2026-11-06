@@ -1,6 +1,5 @@
 "use client";
 
-import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -8,21 +7,21 @@ import { useSettings } from "@/lib/settings/hooks";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   BasicModalFooter,
   Button,
   Code,
+  CopyButton,
   Dropdown,
   MessageCard,
   Modal,
   Table,
-  Tag,
+  Badge,
   Text,
   type TableColumn,
 } from "@opal/components";
-import { Content, IllustrationContent } from "@opal/layouts";
-import SvgNoResult from "@opal/illustrations/no-result";
+import { Content } from "@opal/layouts";
 import {
   SvgDownload,
   SvgKey,
@@ -49,7 +48,6 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
 import EditServiceAccountModal from "@/views/admin/ServiceAccountsPage/EditServiceAccountModal";
-import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
@@ -143,9 +141,8 @@ export default function ServiceAccountsPage() {
         weight: 25,
         cell: (value) => (
           <Content
+            font="main-ui-body"
             title={value || t("table.name.unnamed")}
-            sizePreset="main-ui"
-            variant="body"
           />
         ),
       },
@@ -180,12 +177,12 @@ export default function ServiceAccountsPage() {
           return (
             <div className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0">
               {visible.map((g) => (
-                <Tag key={g.id} title={g.name} size="md" />
+                <Badge key={g.id} title={g.name} size={6} />
               ))}
               {overflow > 0 && (
-                <Tag
+                <Badge
                   title={t("table.groups.overflow.label", { count: overflow })}
-                  size="md"
+                  size={6}
                 />
               )}
             </div>
@@ -246,49 +243,16 @@ export default function ServiceAccountsPage() {
         ),
       },
     ],
-    [t] // eslint-disable-line react-hooks/exhaustive-deps
+    [t]
   );
-
-  if (error) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          title={adminRouteTitle(route)}
-          icon={route.icon}
-          description={t("page.description", { appName })}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <IllustrationContent
-            illustration={SvgNoResult}
-            title={t("page.error.title")}
-            description={t("page.error.description")}
-          />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <SettingsLayouts.Root>
-        <SettingsLayouts.Header
-          title={adminRouteTitle(route)}
-          icon={route.icon}
-          description={t("page.description", { appName })}
-          divider
-        />
-        <SettingsLayouts.Body>
-          <IconLoader />
-        </SettingsLayouts.Body>
-      </SettingsLayouts.Root>
-    );
-  }
 
   const hasKeys = visibleApiKeys.length > 0;
 
   return (
-    <SettingsLayouts.Root>
+    <SettingsLayouts.Root
+      loading={isLoading}
+      error={error ? t("page.error.description") : false}
+    >
       <SettingsLayouts.Header
         title={adminRouteTitle(route)}
         icon={route.icon}
@@ -364,17 +328,12 @@ export default function ServiceAccountsPage() {
                 </Button>
               }
               submit={
-                // TODO(@raunakab): Create an opalified copy-button and replace it here
-                <Button
-                  onClick={() => {
-                    if (fullApiKey) {
-                      navigator.clipboard.writeText(fullApiKey);
-                      toast.success(t("toasts.keyCopied"));
-                    }
-                  }}
+                <CopyButton
+                  prominence="primary"
+                  getCopyText={() => fullApiKey ?? ""}
                 >
                   {t("keyModal.copyButton.label")}
-                </Button>
+                </CopyButton>
               }
             />
           </Modal.Footer>

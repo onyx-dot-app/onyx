@@ -34,7 +34,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -47,10 +47,10 @@
         ]
       },
       "mode": "chat",
-      "name": "DeepSeek V4.1 Flash",
+      "name": "DeepSeek V4.1 Flash 1017",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-09-10",
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -135,7 +135,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -151,7 +151,7 @@
       "name": "DeepSeek V4 Flash",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-09-10",
+      "release_date": "2026-10-17",
       "status": "deprecated",
       "structured_output": true,
       "temperature": true,
@@ -168,7 +168,7 @@
       },
       "family": "deepseek-flash",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -184,7 +184,7 @@
       "name": "DeepSeek V4 Flash Vision Exp",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-09-10",
+      "release_date": "2026-10-17",
       "status": "deprecated",
       "structured_output": true,
       "temperature": true,
@@ -201,7 +201,7 @@
       },
       "family": "deepseek-thinking",
       "limit": {
-        "context": 1000000,
+        "context": 1048576,
         "output": 393216
       },
       "modalities": {
@@ -216,10 +216,14 @@
       "name": "DeepSeek V4 Pro",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-12",
+      "release_date": "2026-08-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
+    },
+    "search": {
+      "mode": "search",
+      "name": "search"
     }
   },
   "models_dev_providers": [

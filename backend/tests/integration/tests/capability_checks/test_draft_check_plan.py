@@ -6,7 +6,7 @@ from typing import Any
 import requests
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.draft_runs import DraftCheckStateKind
+from onyx.connectors.capability_checks.models import DraftCheckStateKind
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client

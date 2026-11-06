@@ -1,5 +1,6 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
 import { IconLoader } from "@opal/loaders";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -7,7 +8,7 @@ import useSWR from "swr";
 import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
 import { SvgBlocks } from "@opal/icons";
 import { Modal } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
+import { CardGrid, Section } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { SkillPreview } from "@/lib/skills/types";
@@ -53,17 +54,26 @@ function metadataRows(preview: SkillPreview): MetadataRow[] {
   return rows;
 }
 
-export default function SkillPreviewModal({
-  open,
+interface SkillPreviewContentProps extends Omit<
+  SkillPreviewModalProps,
+  "open"
+> {
+  closeLabel?: string | RichStr;
+}
+
+type SkillPreviewDetailsProps = Pick<
+  SkillPreviewModalProps,
+  "skillId" | "unavailableReason"
+>;
+
+export function SkillPreviewDetails({
   skillId,
-  fallbackTitle,
   unavailableReason = null,
-  onClose,
-}: SkillPreviewModalProps) {
+}: SkillPreviewDetailsProps) {
   const t = useTranslations("skills.modals");
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("rendered");
-  const swrKey = open && skillId ? SWR_KEYS.userSkillPreview(skillId) : null;
+  const swrKey = skillId ? SWR_KEYS.userSkillPreview(skillId) : null;
   const {
     data: preview,
     error,
@@ -82,88 +92,137 @@ export default function SkillPreviewModal({
     unavailableReason ?? dependencyUnavailableReason;
 
   useEffect(() => {
-    if (open) {
-      setInstructionsDisplayMode("rendered");
-    }
-  }, [open, skillId]);
+    setInstructionsDisplayMode("rendered");
+  }, [skillId]);
 
   return (
-    <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <Modal.Content width="lg" height="lg">
-        <Modal.Header
-          icon={SvgBlocks}
-          title={preview?.name ?? fallbackTitle ?? t("preview.fallbackTitle")}
-          description={preview?.description}
-          onClose={onClose}
-        />
-        <Modal.Body>
-          {isLoading && (
-            <div className="flex items-center justify-center min-h-40">
-              <IconLoader />
-            </div>
-          )}
+    <>
+      {isLoading && (
+        <Section height="auto" className="min-h-40">
+          <IconLoader />
+        </Section>
+      )}
 
-          {error && !isLoading && (
+      {error && !isLoading && (
+        <MessageCard
+          outerPadding={1}
+          innerPadding={1}
+          variant="error"
+          title={t("preview.loadError.title")}
+          description={t("preview.loadError.description")}
+        />
+      )}
+
+      {preview && !isLoading && !error && (
+        <Section gap={4} height="auto" alignItems="stretch">
+          {displayedUnavailableReason && (
             <MessageCard
               outerPadding={1}
               innerPadding={1}
-              variant="error"
-              title={t("preview.loadError.title")}
-              description={t("preview.loadError.description")}
+              variant="warning"
+              title={t("preview.unavailable.title")}
+              description={displayedUnavailableReason}
             />
           )}
 
-          {preview && !isLoading && !error && (
-            <Section gap={4} alignItems="stretch">
-              {displayedUnavailableReason && (
-                <MessageCard
-                  outerPadding={1}
-                  innerPadding={1}
-                  variant="warning"
-                  title={t("preview.unavailable.title")}
-                  description={displayedUnavailableReason}
-                />
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {metadataRows(preview).map((row) => (
-                  <div key={row.labelKey} className="flex flex-col gap-1">
-                    <Text font="main-ui-action" color="text-05">
-                      {t(row.labelKey)}
-                    </Text>
-                    <Text font="main-ui-body" color="text-04">
-                      {row.value}
-                    </Text>
-                  </div>
-                ))}
-              </div>
-
-              <Section gap={1} alignItems="stretch">
-                <div className="flex items-center justify-between gap-2">
-                  <Text font="main-ui-action" color="text-05">
-                    {t("preview.instructions.title")}
-                  </Text>
-                  <InstructionsDisplayModeToggle
-                    value={instructionsDisplayMode}
-                    onChange={setInstructionsDisplayMode}
-                  />
-                </div>
-                <div className="rounded-lg border border-border p-3 overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]">
-                  {instructionsDisplayMode === "rendered" ? (
-                    <CompactMarkdown>{instructionsMarkdown}</CompactMarkdown>
-                  ) : (
-                    <pre className="m-0 whitespace-pre-wrap wrap-break-word font-mono text-xs leading-5 text-text-04">
-                      {instructionsMarkdown}
-                    </pre>
-                  )}
-                </div>
+          <CardGrid>
+            {metadataRows(preview).map((row) => (
+              <Section
+                key={row.labelKey}
+                height="auto"
+                gap={1}
+                alignItems="stretch"
+              >
+                <Text font="main-ui-action" color="text-05">
+                  {t(row.labelKey)}
+                </Text>
+                <Text font="main-ui-body" color="text-04">
+                  {row.value}
+                </Text>
               </Section>
+            ))}
+          </CardGrid>
+
+          <Section gap={1} height="auto" alignItems="stretch">
+            <Section
+              flexDirection="row"
+              justifyContent="between"
+              height="auto"
+              gap={2}
+            >
+              <Text font="main-ui-action" color="text-05">
+                {t("preview.instructions.title")}
+              </Text>
+              <InstructionsDisplayModeToggle
+                value={instructionsDisplayMode}
+                onChange={setInstructionsDisplayMode}
+              />
             </Section>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button onClick={onClose}>{t("preview.closeButton.label")}</Button>
-        </Modal.Footer>
+            <Section
+              height="auto"
+              padding={3}
+              gap={0}
+              alignItems="stretch"
+              className="rounded-lg border border-border overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]"
+            >
+              {instructionsDisplayMode === "rendered" ? (
+                <CompactMarkdown>{instructionsMarkdown}</CompactMarkdown>
+              ) : (
+                <pre className="m-0 whitespace-pre-wrap wrap-break-word font-mono text-xs leading-5 text-text-04">
+                  {instructionsMarkdown}
+                </pre>
+              )}
+            </Section>
+          </Section>
+        </Section>
+      )}
+    </>
+  );
+}
+
+export function SkillPreviewContent({
+  skillId,
+  fallbackTitle,
+  unavailableReason = null,
+  onClose,
+  closeLabel,
+}: SkillPreviewContentProps) {
+  const t = useTranslations("skills.modals");
+  const { data: preview } = useSWR<SkillPreview>(
+    skillId ? SWR_KEYS.userSkillPreview(skillId) : null,
+    errorHandlingFetcher
+  );
+  return (
+    <>
+      <Modal.Header
+        icon={SvgBlocks}
+        title={preview?.name ?? fallbackTitle ?? t("preview.fallbackTitle")}
+        description={preview?.description}
+        onClose={onClose}
+      />
+      <Modal.Body>
+        <SkillPreviewDetails
+          skillId={skillId}
+          unavailableReason={unavailableReason}
+        />
+      </Modal.Body>
+      <Modal.Footer>
+        <Button onClick={onClose}>
+          {closeLabel ?? t("preview.closeButton.label")}
+        </Button>
+      </Modal.Footer>
+    </>
+  );
+}
+
+export default function SkillPreviewModal({
+  open,
+  ...props
+}: SkillPreviewModalProps) {
+  return (
+    <Modal open={open} onOpenChange={(isOpen) => !isOpen && props.onClose()}>
+      <Modal.Content width="lg" height="lg">
+        <SkillPreviewContent {...props} />
       </Modal.Content>
     </Modal>
   );

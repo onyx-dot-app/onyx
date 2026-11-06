@@ -7,8 +7,9 @@ the permission reads from ``sharepoint_rest``. This is the only file under
 ``connectors/sharepoint`` and its EE permission package that imports the SDKs.
 """
 
+import threading
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime
 from typing import Any
 
@@ -63,7 +64,11 @@ from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthMethod,
     acquire_token_for_rest,
 )
-from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
+from onyx.connectors.microsoft_utils.graph_client import (
+    GRAPH_API_MAX_RETRIES,
+    GraphApiClient,
+    sleep_and_retry,
+)
 from onyx.connectors.microsoft_utils.graph_env import (
     MicrosoftGraphEnvironment,
     resolve_microsoft_environment,
@@ -78,6 +83,7 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
 )
 from onyx.connectors.microsoft_utils.models import (
     EntraMember,
+    MicrosoftTokenInfo,
     SharepointPrincipal,
     SharepointRoleAssignment,
     SharepointSecurable,
@@ -90,8 +96,8 @@ from onyx.connectors.sharepoint.connector_utils import (
 from onyx.connectors.sharepoint.models import (
     SharepointCredentials,
     SharepointDrive,
-    SharepointTokenInfo,
     SitePagesPage,
+    SiteUrlListing,
 )
 from onyx.connectors.source_operations import (
     OperationConsumes,
@@ -131,17 +137,30 @@ def _drive(drive: Drive) -> SharepointDrive:
     )
 
 
-def _iter_site_listing(
-    sites: SitesWithRoot, max_pages: int | None
-) -> Generator[Site, None, None]:
+def _execute_with_retry(build: Callable[[], Any], label: str) -> Any:
+    """Runs an office365 SDK read with the shared Graph back-off: 429 and 503
+    wait for Retry-After, or back off with jitter, up to
+    ``GRAPH_API_MAX_RETRIES`` times. ``build`` makes the query again for each
+    retry. A refusal raises ``MicrosoftGraphError``."""
+    with raise_microsoft_errors():
+        return sleep_and_retry(
+            build(), label, max_retries=GRAPH_API_MAX_RETRIES, rebuild=build
+        )
+
+
+def _read_site_listing(sites: SitesWithRoot, max_pages: int | None) -> SiteUrlListing:
+    site_urls: list[str] = []
     pages: int = 0
     while sites:
         if sites.current_page:
-            yield from sites.current_page
+            site_urls.extend(
+                site.web_url for site in sites.current_page if site.web_url
+            )
         pages += 1
         if not sites.has_next or (max_pages is not None and pages >= max_pages):
             break
-        sites = sites._get_next().execute_query()
+        sites = _execute_with_retry(sites._get_next, "list_site_urls")
+    return SiteUrlListing(site_urls=site_urls, complete=not sites or not sites.has_next)
 
 
 class SharepointSourceOperations(SourceOperations):
@@ -157,9 +176,6 @@ class SharepointSourceOperations(SourceOperations):
     _graph_gateway: MicrosoftGraphGateway | None = None
     _sdk_client: GraphClient | None = None
     _tenant_domain_cache: str | None = None
-    _cached_rest_ctx: ClientContext | None = None
-    _cached_rest_ctx_url: str | None = None
-    _cached_rest_ctx_created_at: float = 0.0
 
     def _config(self, key: str, default: str) -> str:
         return str((self.connector_specific_config or {}).get(key) or default).rstrip(
@@ -184,10 +200,12 @@ class SharepointSourceOperations(SourceOperations):
         )
 
     def _gateway(self) -> MicrosoftGraphGateway:
-        if self._graph_gateway is not None:
-            return self._graph_gateway
+        # Read once: another thread's REST rebuild may reset the attribute.
+        gateway: MicrosoftGraphGateway | None = self._graph_gateway
+        if gateway is not None:
+            return gateway
         credential: SharepointCredentials = self._credentials()
-        self._graph_gateway = MicrosoftGraphGateway(
+        gateway = MicrosoftGraphGateway(
             auth_config=MicrosoftGraphAuthConfig(
                 client_id=credential.sp_client_id,
                 directory_id=credential.sp_directory_id,
@@ -200,7 +218,8 @@ class SharepointSourceOperations(SourceOperations):
             graph_api_host=self._env().graph_host,
             graph_api_version=GRAPH_API_VERSION,
         )
-        return self._graph_gateway
+        self._graph_gateway = gateway
+        return gateway
 
     def _auth(self) -> MicrosoftAuthContext:
         return self._gateway().auth_context
@@ -235,8 +254,9 @@ class SharepointSourceOperations(SourceOperations):
             self._tenant_domain_cache = from_sites
             return from_sites
         logger.info("No site URLs available; resolving tenant domain from root site")
-        with raise_microsoft_errors():
-            root_site: Site = self._graph_client().sites.root.get().execute_query()
+        root_site: Site = _execute_with_retry(
+            lambda: self._graph_client().sites.root.get(), "get_root_site"
+        )
         hostname: str | None = root_site.site_collection.hostname
         if not hostname:
             raise ConnectorValidationError(
@@ -251,39 +271,43 @@ class SharepointSourceOperations(SourceOperations):
         self._tenant_domain_cache = tenant_domain
         return tenant_domain
 
+    def _rest_contexts(self) -> threading.local:
+        """This thread's cached REST context. Threads must not share one: an
+        office365 context queues its queries on itself. ``dict.setdefault`` is
+        atomic under the GIL, so no guard lock is needed."""
+        return vars(self).setdefault("_rest_ctx_local", threading.local())
+
     def _rest_context(self, site_url: str) -> ClientContext:
-        """A SharePoint REST context for one site, kept until it changes site
-        or ages out. A rebuild also rebuilds the MSAL app, so its empty token
-        cache guarantees a fresh token from Azure AD."""
+        """A SharePoint REST context for one site, kept per thread until it
+        changes site or ages out. A rebuild also rebuilds the MSAL app, so its
+        empty token cache guarantees a fresh token from Azure AD."""
         suffix: str = self._env().sharepoint_domain_suffix
         # Re-checked here because group sync and discovered sites reach this
         # without validation.
         validate_site_url_host(site_url, suffix, self._tenant_domain())
 
-        elapsed: float = time.monotonic() - self._cached_rest_ctx_created_at
-        if (
-            self._cached_rest_ctx is not None
-            and self._cached_rest_ctx_url == site_url
-            and elapsed <= REST_CTX_MAX_AGE_S
-        ):
-            return self._cached_rest_ctx
-
-        if self._cached_rest_ctx is not None:
+        local: threading.local = self._rest_contexts()
+        # The context, its site URL, and when it was built.
+        cached: tuple[ClientContext, str, float] | None = vars(local).get("entry")
+        if cached is not None:
+            context, cached_url, created_at = cached
+            elapsed: float = time.monotonic() - created_at
+            if cached_url == site_url and elapsed <= REST_CTX_MAX_AGE_S:
+                return context
             logger.info(
                 "Rebuilding SharePoint REST client context (elapsed=%.0fs, site_changed=%s)",
                 elapsed,
-                self._cached_rest_ctx_url != site_url,
+                cached_url != site_url,
             )
             self._graph_gateway = None
 
         msal_app: msal.ConfidentialClientApplication = self._auth().app
         tenant_domain: str = self._tenant_domain()
-        self._cached_rest_ctx = ClientContext(site_url).with_access_token(
+        context = ClientContext(site_url).with_access_token(
             lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
         )
-        self._cached_rest_ctx_url = site_url
-        self._cached_rest_ctx_created_at = time.monotonic()
-        return self._cached_rest_ctx
+        local.entry = (context, site_url, time.monotonic())
+        return context
 
     def _reads(self) -> SharepointRestReads:
         return SharepointRestReads(
@@ -297,12 +321,8 @@ class SharepointSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def check_token(self) -> SharepointTokenInfo:
-        response: dict[str, Any] = self._gateway().token_response()
-        expires: int | str | None = response.get("expires_in")
-        return SharepointTokenInfo(
-            expires_in=int(expires) if expires is not None else None
-        )
+    def check_token(self) -> MicrosoftTokenInfo:
+        return self._gateway().token_info()
 
     @source_operation(
         capabilities={
@@ -315,6 +335,18 @@ class SharepointSourceOperations(SourceOperations):
         """Which credential type signed in. SharePoint REST accepts an app-only
         token only from a certificate."""
         return self._auth().method
+
+    @source_operation(
+        capabilities={
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        },
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def get_certificate_not_after(self) -> datetime | None:
+        """The end date of the account's certificate, read from the .pfx with
+        no call. None for a client secret."""
+        return self._auth().certificate_not_after
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -332,27 +364,22 @@ class SharepointSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
-    def list_site_urls(self, *, max_pages: int | None = None) -> list[str]:
+    def list_site_urls(self, *, max_pages: int | None = None) -> SiteUrlListing:
         """Site collections in the tenant, by web URL: every one, or the first
         ``max_pages`` listing pages for a probe."""
-        with raise_microsoft_errors():
-            sites: SitesWithRoot = (
-                self._graph_client().sites.get_all_sites().execute_query()
-            )
-            return [
-                site.web_url
-                for site in _iter_site_listing(sites, max_pages)
-                if site.web_url
-            ]
+        sites: SitesWithRoot = _execute_with_retry(
+            lambda: self._graph_client().sites.get_all_sites(), "list_site_urls"
+        )
+        return _read_site_listing(sites, max_pages)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_site_id(self, *, site_url: str) -> str:
-        with raise_microsoft_errors():
-            site: Site = self._graph_client().sites.get_by_url(site_url)
-            site.execute_query()
+        site: Site = _execute_with_retry(
+            lambda: self._graph_client().sites.get_by_url(site_url), "get_site_id"
+        )
         if not site.id:
             raise RuntimeError(f"Graph answered site {site_url} without an id")
         return site.id
@@ -362,14 +389,18 @@ class SharepointSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def list_drives(self, *, site_url: str) -> list[SharepointDrive]:
-        with raise_microsoft_errors():
+
+        def build_query() -> Any:
             site: Site = self._graph_client().sites.get_by_url(site_url)
-            drives: EntityCollection[Drive] = (
+            return (
                 site.drives.select(DRIVE_SELECT_FIELDS)
                 .expand(DRIVE_EXPAND_FIELDS)
                 .get_all(page_loaded=lambda _: None)
-                .execute_query()
             )
+
+        drives: EntityCollection[Drive] = _execute_with_retry(
+            build_query, "list_drives"
+        )
         return [_drive(drive) for drive in drives]
 
     @source_operation(

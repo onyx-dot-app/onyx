@@ -5,6 +5,7 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
+    ensure_embedding_url_unchanged,
     fetch_embedding_provider,
     fetch_existing_embedding_providers,
     remove_embedding_provider,
@@ -61,6 +62,7 @@ def test_embedding_configuration(
     if api_key is None and auth.uses_api_key:
         existing = fetch_embedding_provider(db_session, test_llm_request.provider_type)
         if existing is not None and existing.api_key is not None:
+            ensure_embedding_url_unchanged(existing.api_url, test_llm_request.api_url)
             api_key = existing.api_key.get_value(apply_mask=False)
             auth = build_embedding_auth(
                 test_llm_request.provider_type, api_key, test_llm_request.vertex_config

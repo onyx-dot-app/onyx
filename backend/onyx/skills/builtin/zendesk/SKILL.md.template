@@ -1,0 +1,155 @@
+---
+name: zendesk
+description: Read and act on Zendesk Support tickets, users, organizations, views, CSAT ratings, Help Center content, side conversations, and macros on the connected user's behalf via a light REST wrapper.
+---
+
+# Zendesk
+
+Call the Zendesk Support API as the connected user via the bundled helper. **You
+are already authenticated** — the egress proxy injects the user's Zendesk token
+on the wire, so never pass credentials yourself.
+
+This workspace is connected to **{{APP:base_url}}**; the helper already knows
+it, so no command takes an account.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/zendesk/zendesk_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. `python zendesk_api.py
+<command> -h` shows a command's flags.
+
+### Find tickets
+
+`search` takes [Zendesk search syntax](https://support.zendesk.com/hc/en-us/articles/4408886879258)
+and is the way to answer most questions.
+
+```
+python zendesk_api.py search "type:ticket status:open tags:billing" [--limit N]
+python zendesk_api.py search "type:ticket created>2026-10-01" --sort-by created_at --sort-order desc
+```
+
+### Read one ticket
+
+```
+python zendesk_api.py ticket 12345
+python zendesk_api.py comments 12345
+python zendesk_api.py metrics 12345
+```
+
+### What changed since last time
+
+For a scheduled task, poll the incremental export rather than re-searching the
+whole backlog. Start from a time, then resume from the `cursor` the previous
+run returned — that is what makes a repeating task skip nothing and re-read
+nothing.
+
+```
+python zendesk_api.py changed --since 2026-10-01T00:00:00Z [--limit N]
+python zendesk_api.py changed --cursor <cursor from last run>
+```
+
+`--since` takes a unix timestamp or an ISO-8601 instant and must be at least a
+minute in the past. Pass exactly one of `--since` and `--cursor`. The result
+carries `cursor` and `end_of_stream`: keep calling with the new `cursor` until
+`end_of_stream` is true, and store that last `cursor` for the next run. Here
+`--limit` is a floor — the export stops at a page boundary, so the `cursor` is
+always safe to resume from.
+
+### Queues, people, and feedback
+
+```
+python zendesk_api.py views
+python zendesk_api.py view-tickets 360001 [--limit N]
+python zendesk_api.py satisfaction [--score bad] [--limit N]
+python zendesk_api.py user me
+python zendesk_api.py organization 42
+python zendesk_api.py fields
+```
+
+### Write
+
+```
+python zendesk_api.py create --subject "Billing error" --body "..." [--tags billing,urgent]
+python zendesk_api.py update 12345 --set status=solved --set priority=high
+python zendesk_api.py comment 12345 --body "Looked into this." [--public]
+python zendesk_api.py tag 12345 --tags needs-review [--replace]
+```
+
+### Turn a resolved ticket into a Help Center article
+
+Read the ticket and comments. Remove customer details, secrets, and internal notes
+from the proposed article. Choose an existing section and an enabled locale.
+Create a draft unless the user explicitly asks to publish.
+
+```
+python zendesk_api.py call GET /api/v2/help_center/sections.json
+python zendesk_api.py call POST /api/v2/help_center/sections/360001/articles.json '{"article":{"title":"Resolve a billing error","body":"<p>Steps to resolve the issue.</p>","locale":"en-us","draft":true},"notify_subscribers":false}'
+```
+
+Use the section ID returned by Zendesk. Help Center permissions still apply;
+creating or publishing content requires the corresponding Zendesk role.
+See [Articles](https://developer.zendesk.com/api-reference/help_center/help-center-api/articles/).
+
+### Loop in engineering or a vendor
+
+A side conversation keeps a separate exchange inside the ticket. Confirm the
+recipients and message before sending. The account must have side conversations enabled.
+
+```
+python zendesk_api.py call GET /api/v2/tickets/12345/side_conversations.json
+python zendesk_api.py call POST /api/v2/tickets/12345/side_conversations.json '{"message":{"subject":"Investigate billing error","body":"Please review this issue.","to":[{"email":"engineer@example.com"}]}}'
+python zendesk_api.py call POST /api/v2/tickets/12345/side_conversations/CONVERSATION_ID/reply.json '{"message":{"body":"Here is the update.","to":[{"email":"engineer@example.com"}]}}'
+```
+
+Use the returned conversation ID for replies. Zendesk also supports Slack,
+Teams, and child-ticket recipients with the corresponding account integrations.
+See [Side conversations](https://developer.zendesk.com/api-reference/ticketing/side_conversation/side_conversation/).
+
+### Save a reply as a macro
+
+Read existing macros first. Use `user me` to get the connected user's numeric ID.
+Create a personal macro unless the user requests a shared one. Replace `42`
+with that user's ID. Remove ticket-specific details from reusable replies.
+
+```
+python zendesk_api.py call GET /api/v2/macros.json
+python zendesk_api.py call POST /api/v2/macros.json '{"macro":{"title":"Billing follow-up","actions":[{"field":"comment_value","value":"Thanks for contacting support."}],"restriction":{"type":"User","id":42}}}'
+```
+
+Editing a macro's actions replaces its entire action list. Read the current
+macro and preserve actions that the user did not ask to change.
+See [Macros](https://developer.zendesk.com/api-reference/ticketing/business-rules/macros/).
+
+These writes each have a separate Onyx approval policy. A 403 can indicate a
+missing OAuth scope or Zendesk feature permission. Ask the admin to allow
+`hc:write`, `side_conversations:write`, and `macros:write`, then reconnect in
+Onyx. Do not repeatedly reconnect when a feature is absent from the Zendesk plan.
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<collection>": [...],
+"count": N, "truncated": bool}` (`truncated` means more results existed past
+`--limit`). `tag` returns the ticket's resulting tag list, the other writes
+return the ticket. HTTP failures return `{"ok": false, "status": <code>, "error":
+"<message>"}` and exit non-zero — surface the error rather than retrying
+blindly. A `429` also carries `retry_after_seconds`; wait that long before the
+next call.
+
+## Notes
+
+- Tickets come back as a readable subset of their fields. `--full` keeps every
+  field, `--raw` keeps empty ones. A `search` hit that is a user or an
+  organization is never cut down.
+- A comment is a ticket update in Zendesk: `comment` writes an internal note by
+  default, and `--public` makes it a reply the requester sees.
+- `--set key=value` is repeatable and takes Zendesk ticket field names
+  (`status`, `priority`, `assignee_id`, `group_id`). A value that parses as JSON
+  keeps its type, so `--set assignee_id=123` sends a number.
+- `tag` adds tags; `--replace` overwrites the whole tag set. Zendesk treats a
+  tag change as a ticket update, so it follows the "Update a ticket" setting,
+  and it refuses tag changes on a closed ticket.
+- `call` lets you hit any v2 endpoint: `call <METHOD> /api/v2/... [json_body]`.
+  Pass user input as the JSON body, not by string-formatting into the path.

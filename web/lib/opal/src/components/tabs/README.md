@@ -146,9 +146,10 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 | --------------- | -------------------------------------- | ------------- | -------------------------------------- |
 | `variant`       | `"contained" \| "pill" \| "underline"` | `"contained"` | Visual variant for the whole tab group |
 | `gap`           | `Spacing`                              | —             | Space between the tab list and the panel (`N / 4` rem); unset, flush |
-| `defaultValue`  | `string`                               | —             | Initially active tab (uncontrolled)    |
-| `value`         | `string`                               | —             | Controlled active tab                  |
-| `onValueChange` | `(value: string) => void`              | —             | Called when active tab changes         |
+| `defaultValue`  | `string`                               | —             | Initially active tab (uncontrolled)                                  |
+| `value`         | `string`                               | —             | Controlled active tab                                                |
+| `onValueChange` | `(value: string) => void`              | —             | Called when active tab changes                                       |
+| `activationMode` | `"manual" \| "automatic"`             | `"manual"`    | Manual: arrows move focus, Enter or Space selects. Automatic: arrows select |
 
 ### `Tabs.List`
 

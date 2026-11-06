@@ -15,14 +15,14 @@ It takes keyboard focus, so the tooltip opens on focus as well as on hover.
 | `tooltip`    | `string \| RichStr`     | —                    | Opens above the icon, at its start; without it only the icon shows    |
 | `aria-label` | `string`                | `"More information"` | The icon's name for assistive tech (translated through `OpalStrings`) |
 
-`IconTooltipStatus = Extract<StatusVariants, "default" | "info" | "success" | "warning" | "error">`.
+`IconTooltipStatus = Extract<StatusColor, "default" | "info" | "success" | "warning" | "error">`.
 
 | Status    | Stroke              |
 | --------- | ------------------- |
 | `default` | `text-03`           |
 | `info`    | `status-info-05`    |
 | `success` | `status-success-05` |
-| `warning` | `theme-amber-05`    |
+| `warning` | `status-warning-05` |
 | `error`   | `status-error-05`   |
 
 ## Usage

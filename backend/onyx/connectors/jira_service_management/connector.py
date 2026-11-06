@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Any
 
 from typing_extensions import override
@@ -37,6 +38,10 @@ class JiraServiceManagementConnector(JiraConnector):
             return base_jql
 
         return f"{JSM_SPACE_TYPE_JQL} AND {base_jql}"
+
+    @override
+    def _search_all_issues(self, jql: str) -> Iterator[dict[str, Any]]:
+        return super()._search_all_issues(f"{JSM_SPACE_TYPE_JQL} AND ({jql})")
 
     @override
     def validate_connector_settings(self) -> None:

@@ -7,7 +7,10 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
+from onyx.connectors.sharepoint.config import is_site_url_well_formed
 from onyx.db.enums import HierarchyNodeType
+from onyx.server.security.models import connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -128,6 +131,18 @@ def _expected_site_hostnames(
     return {f"{tenant}.{suffix}", f"{tenant}{ONEDRIVE_HOST_SUFFIX}.{suffix}"}
 
 
+class SiteUrlFormatError(ConnectorValidationError):
+    """A site URL that is not https with a site path."""
+
+
+class SiteUrlBlockedError(ConnectorValidationError):
+    """A site URL the outbound URL guard rejects."""
+
+
+class SiteUrlHostError(ConnectorValidationError):
+    """A site URL off the cloud's suffix or the tenant's host."""
+
+
 def validate_content_types(
     include_site_documents: bool, include_site_pages: bool
 ) -> None:
@@ -138,27 +153,29 @@ def validate_content_types(
         )
 
 
-def is_site_url_well_formed(site_url: str) -> bool:
-    """A full SharePoint or OneDrive site URL: https and a site path."""
-    return site_url.startswith("https://") and (
-        "/sites/" in site_url or "/teams/" in site_url or "/personal/" in site_url
-    )
-
-
 def validate_site_url(
     site_url: str, sharepoint_domain_suffix: str, tenant_domain: str | None
 ) -> None:
-    """A full site URL, safe to request, on the tenant's host."""
+    """A full site URL, on the tenant's host, that the shared connector SSRF
+    policy lets the server call."""
     if not is_site_url_well_formed(site_url):
-        raise ConnectorValidationError(
+        raise SiteUrlFormatError(
             f"`{site_url}` is not a full SharePoint or OneDrive site URL "
             "(https://tenant.sharepoint.com/sites/name or /teams/name, "
             "https://tenant-my.sharepoint.com/personal/name)."
         )
+    enforced: bool = connector_ssrf_enforced(
+        get_security_settings().ssrf_protection_level
+    )
     try:
-        validate_outbound_http_url(site_url, https_only=True)
+        validate_outbound_http_url(
+            site_url,
+            https_only=True,
+            allow_private_network=not enforced,
+            block_link_local_only=not enforced,
+        )
     except (SSRFException, ValueError) as e:
-        raise ConnectorValidationError(f"Invalid site URL '{site_url}': {e}") from e
+        raise SiteUrlBlockedError(f"Invalid site URL '{site_url}': {e}") from e
     validate_site_url_host(site_url, sharepoint_domain_suffix, tenant_domain)
 
 
@@ -175,14 +192,14 @@ def validate_site_url_host(
     suffix = sharepoint_domain_suffix.lower()
     hostname = (urlsplit(site_url).hostname or "").lower()
     if hostname != suffix and not hostname.endswith(f".{suffix}"):
-        raise ConnectorValidationError(
+        raise SiteUrlHostError(
             f"Site URL '{site_url}' must be on the '{suffix}' domain."
         )
     if tenant_domain is None:
         return
     expected = _expected_site_hostnames(tenant_domain, sharepoint_domain_suffix)
     if hostname not in expected:
-        raise ConnectorValidationError(
+        raise SiteUrlHostError(
             f"Site URL '{site_url}' is not on this tenant's SharePoint host "
             f"(expected one of: {', '.join(sorted(expected))})."
         )

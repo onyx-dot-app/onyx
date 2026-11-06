@@ -5,10 +5,11 @@ import { useTranslations } from "next-intl";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Button,
-  LineItemButton,
-  Text,
+  Collapsible,
   InputTypeIn,
+  LineItemButton,
   PopoverMenu,
+  Text,
   Tooltip,
 } from "@opal/components";
 import {
@@ -44,13 +45,9 @@ import {
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
 import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import type {
   LLMOption,
   ModelOptionProvider,
@@ -67,6 +64,7 @@ const AUTOFILL_CAP = 3;
 export interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
+  /** Active model's cap: one session temperature, validated against it on save. */
   maxTemperature: number;
   /** True only when an override was set locally or is stored on the session. */
   hasTemperatureOverride: boolean;
@@ -124,17 +122,19 @@ export function useModelDetailManagers(
 }
 
 /** Where the slider parks on open: the session's own choice, else the admin
- *  default, else the user's own default, bounded by the selected model's
- *  slider maximum. */
+ *  default, else the user's own default, bounded by the session's cap. */
 function initialTemperature(
   option: LLMOption,
   manager: TemperatureManager | undefined,
   userTemperatureDefault: number | null
 ): number {
   const sessionTemperature = manager?.temperature ?? 0.5;
-  if (manager?.hasTemperatureOverride) return sessionTemperature;
   return Math.min(
-    option.temperatureDefault ?? userTemperatureDefault ?? sessionTemperature,
+    manager?.hasTemperatureOverride
+      ? sessionTemperature
+      : (option.temperatureDefault ??
+          userTemperatureDefault ??
+          sessionTemperature),
     manager?.maxTemperature ?? 2
   );
 }
@@ -461,9 +461,16 @@ export default function ModelSelectorContent({
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
 
+  const providerNames = useProviderNames();
   const llmOptions = useMemo(
-    () => buildLlmOptions(llmProviders, currentModelName, includeHiddenModels),
-    [llmProviders, currentModelName, includeHiddenModels]
+    () =>
+      buildLlmOptions(
+        llmProviders,
+        currentModelName,
+        includeHiddenModels,
+        providerNames
+      ),
+    [llmProviders, currentModelName, includeHiddenModels, providerNames]
   );
 
   // "Auto" selects the admin-configured router; router rows never list.
@@ -511,9 +518,14 @@ export default function ModelSelectorContent({
     new Set([defaultGroupKey])
   );
 
+  // Applied once the options first resolve, so a pick that moves the first
+  // selected group does not swap the expanded group while the menu fades out.
+  const defaultGroupAppliedRef = useRef(false);
   useEffect(() => {
+    if (defaultGroupAppliedRef.current || groupedOptions.length === 0) return;
+    defaultGroupAppliedRef.current = true;
     setExpandedGroups(new Set([defaultGroupKey]));
-  }, [defaultGroupKey]);
+  }, [defaultGroupKey, groupedOptions.length]);
 
   const isSearching = searchQuery.trim().length > 0;
 
@@ -637,6 +649,7 @@ export default function ModelSelectorContent({
       <Disabled key={llmOptionKey(option)} disabled={disabled}>
         <Hoverable.Root group="model-row">
           <LineItemButton
+            font="main-ui-action"
             selectVariant="select-heavy"
             state={selected ? "selected" : "empty"}
             icon={
@@ -665,7 +678,6 @@ export default function ModelSelectorContent({
                 </Hoverable.Item>
               ) : null
             }
-            sizePreset="main-ui"
             rounding={2}
           />
         </Hoverable.Root>
@@ -686,7 +698,7 @@ export default function ModelSelectorContent({
   return (
     <Section gap={2}>
       <InputTypeIn
-        searchIcon
+        icon="search"
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
@@ -698,6 +710,7 @@ export default function ModelSelectorContent({
           ...(includeGlobalDefault && !isLoading
             ? [
                 <LineItemButton
+                  font="main-ui-action"
                   key="global-default"
                   selectVariant="select-heavy"
                   state={
@@ -707,7 +720,6 @@ export default function ModelSelectorContent({
                   title={GLOBAL_DEFAULT_LLM_OPTION.displayName}
                   description={globalDefaultDisplayNameProp ?? undefined}
                   onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
-                  sizePreset="main-ui"
                   rounding={2}
                 />,
               ]
@@ -739,13 +751,12 @@ export default function ModelSelectorContent({
                 : groupedOptions.flatMap((group, groupIndex) => {
                     const open = isGroupOpen(group.key);
                     const collapsible = (
-                      <Collapsible
+                      <Collapsible.Root
                         key={group.key}
                         open={open}
                         onOpenChange={() => toggleGroup(group.key)}
-                        className="flex flex-col gap-1"
                       >
-                        <CollapsibleTrigger asChild>
+                        <Collapsible.Trigger asChild>
                           <Interactive.Stateless prominence="tertiary">
                             <Interactive.Container
                               size="fit"
@@ -754,9 +765,8 @@ export default function ModelSelectorContent({
                             >
                               <div className="ps-2 pe-1 py-1 w-full rounded-08 bg-background-tint-01">
                                 <ContentAction
-                                  sizePreset="secondary"
-                                  variant="body"
-                                  color="muted"
+                                  font="secondary-body"
+                                  titleColor="text-03"
                                   icon={group.Icon}
                                   title={group.displayName}
                                   padding={0}
@@ -783,14 +793,14 @@ export default function ModelSelectorContent({
                               </div>
                             </Interactive.Container>
                           </Interactive.Stateless>
-                        </CollapsibleTrigger>
+                        </Collapsible.Trigger>
 
-                        <CollapsibleContent>
+                        <Collapsible.Content paddingTop={1}>
                           <Section gap={1} alignItems="stretch">
                             {group.options.map(renderModelItem)}
                           </Section>
-                        </CollapsibleContent>
-                      </Collapsible>
+                        </Collapsible.Content>
+                      </Collapsible.Root>
                     );
                     // null children render as PopoverMenu divider lines.
                     return groupIndex > 0 ? [null, collapsible] : [collapsible];

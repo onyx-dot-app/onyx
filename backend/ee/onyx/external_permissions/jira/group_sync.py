@@ -25,7 +25,7 @@ class _JiraGroupNotFoundError(RuntimeError):
 
 
 def _get_jira_error_text(error: JiraApiError) -> str:
-    raw_text = error.text or ""
+    raw_text = error.body or ""
     try:
         payload = json.loads(raw_text)
     except json.JSONDecodeError:

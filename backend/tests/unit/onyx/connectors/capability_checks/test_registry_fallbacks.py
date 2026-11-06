@@ -40,9 +40,19 @@ def test_unregistered_source_gets_connector_settings_fallback() -> None:
     assert len(indexing_checks) == 1
     fallback = indexing_checks[0]
     assert fallback.check_id == "box_connector_settings"
+    assert fallback.display_name == "Test connection"
     assert fallback.is_fallback is True
+    assert fallback.fails_when_unreachable is True
     assert fallback.required is True
     assert fallback.requires_connector_instance is True
+
+
+def test_source_without_a_settings_probe_gets_no_check() -> None:
+    """Verifies a source whose connector keeps the no-op
+    ``validate_connector_settings`` has no INDEXING check: it would pass
+    without testing anything."""
+    # Under test and postcondition.
+    assert get_capability_checks(DocumentSource.GITLAB) == []
 
 
 def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -91,10 +101,12 @@ def test_fallback_check_calls_validate_connector_settings() -> None:
     check = get_capability_checks(DocumentSource.BOX)[0]
 
     # Under test.
-    check.run(context)
+    output = check.run(context)
 
     # Postcondition.
     connector.validate_connector_settings.assert_called_once_with()
+    assert output is not None
+    assert output.summary == "Connected"
 
 
 def test_oss_build_only_has_indexing_capability() -> None:

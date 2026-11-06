@@ -79,7 +79,7 @@ Configure tool forcing, assertions, and model settings per-test by adding option
 
 #### Model Configuration
 
-- `model`: Model version to use (e.g., "gpt-4o", "claude-3-5-sonnet")
+- `model`: Model version to use (e.g., "gpt-6-sol", "claude-3-5-sonnet")
 - `model_provider`: Model provider (e.g., "openai", "anthropic")
 - `temperature`: Temperature for the model (default: 0.0)
 
@@ -92,7 +92,7 @@ Example with tool and model configuration:
     },
     "expected_tools": ["SearchTool"],
     "force_tools": ["SearchTool"],
-    "model": "gpt-4o"
+    "model": "gpt-6-sol"
   },
   {
     "input": {

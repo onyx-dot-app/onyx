@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 // The field reuses InputTypeIn's .opal-input-field base, color, and placeholder rules.
 import "@opal/components/inputs/texts/input-type-in/styles.css";
 import "@opal/components/inputs/texts/input-text-area/styles.css";
@@ -35,6 +35,9 @@ interface InputTextAreaProps extends WithoutStyles<
   /** Slot pinned to the top-right inside the field. */
   rightSection?: React.ReactNode;
 
+  /** Monospace text, for code or queries. */
+  mono?: boolean;
+
   ref?: React.Ref<HTMLTextAreaElement>;
 }
 
@@ -50,6 +53,7 @@ function InputTextArea({
   maxRows,
   resizable = true,
   rightSection,
+  mono = false,
   ref,
   ...props
 }: InputTextAreaProps) {
@@ -91,7 +95,7 @@ function InputTextArea({
   }, [adjustHeight, props.value]);
 
   return (
-    <div className="opal-input opal-input-textarea" data-variant={variant}>
+    <InputContainer className="opal-input-textarea" variant={variant} grows>
       {/* raw-ok: Opal ships no textarea element, this component IS the library's textarea */}
       <textarea
         ref={mergeRefs(internalRef, ref)}
@@ -100,7 +104,8 @@ function InputTextArea({
         readOnly={isReadOnly}
         className={cn(
           "opal-input-field opal-input-textarea-field",
-          autoResize || !resizable ? "resize-none" : "resize-y"
+          autoResize || !resizable ? "resize-none" : "resize-y",
+          mono && "font-main-ui-mono"
         )}
         rows={rows}
         {...props}
@@ -114,7 +119,7 @@ function InputTextArea({
       {rightSection && (
         <div className="opal-input-textarea-right">{rightSection}</div>
       )}
-    </div>
+    </InputContainer>
   );
 }
 

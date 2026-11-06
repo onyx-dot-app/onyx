@@ -90,13 +90,12 @@ export default function ConnectorGroupRestrictionPicker() {
               {selectedGroups.map((group) => (
                 <Card key={group.id} color="background-tint-01" padding={2}>
                   <ContentAction
+                    font="main-content-emphasis"
                     icon={SvgUsers}
                     title={group.name}
                     description={t("memberCount", {
                       count: group.users.length,
                     })}
-                    sizePreset="main-content"
-                    variant="section"
                     rightChildren={
                       <Button
                         icon={SvgX}

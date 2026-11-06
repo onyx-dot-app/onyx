@@ -1,0 +1,72 @@
+---
+title: "Cloudflare R2"
+description: "Access files from Cloudflare R2 buckets"
+---
+
+## How it works
+
+The **Cloudflare R2** connector indexes the files in one R2 bucket, or in one prefix of that bucket.
+It reads common document formats such as PDF, DOCX, PPTX, XLSX, TXT, Markdown, and HTML.
+Onyx skips files in formats it cannot read and files larger than 20 MB.
+
+Onyx checks the bucket for new and changed files on the connector's **Refresh Every** schedule.
+The default for this connector is **1 day**.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Create an API token">
+    Log into your Cloudflare dashboard. Select **R2** in the sidebar, select **Manage R2 API Tokens**,
+    then **Create API token**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/r2/manageapi.webp" alt="Manage API"/>
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/r2/newtoken.webp" alt="Create API token"/>
+  </Step>
+
+  <Step title="Set permissions">
+    Give the token a name, such as `OnyxR2Connector`, and select the **Object Read only** permission.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/r2/readonly.webp" alt="Read only"/>
+  </Step>
+
+  <Step title="Copy the keys and Account ID">
+    Select **Create API Token**. On the next screen, copy the **Access Key ID** and **Secret Access Key** at once.
+    Then open the R2 **Overview** page. The **Account ID** is the final part of the page URL.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/r2/id.webp" alt="R2 credentials"/>
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create an authentication account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Cloudflare R2**. Under **Authentication Account**,
+    select **Create New**. Enter a **Display Name** and fill in **R2 Account ID**, **R2 Access Key ID**,
+    and **R2 Secret Access Key**. Select **Create**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/r2/Onyx1.webp" alt="R2 credentials input"/>
+  </Step>
+
+  <Step title="Choose the bucket">
+    Under **Connector Settings**, give the connector a **Display Name**. In **Bucket Name**, enter the bucket to index.
+    In **Prefix**, enter a folder path to index only part of the bucket, or leave it empty to index the whole bucket.
+    Turn on **EU Data Residency** if the bucket has EU data residency enabled, so Onyx uses the EU endpoint.
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/r2/Onyx2.webp" alt="R2 bucket selection"/>
+
+    Under **Document Access**, choose who can see the indexed files.
+    **Everyone in Your Organization** shows them to all Onyx users.
+    **Specific Groups** limits them to the Onyx user groups you pick. **Specific Groups** is a paid feature:
+    the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+    The connector does not sync bucket permissions.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector** to save the connector and start indexing.
+    Open **Admin Panel → Indexing Status** and select the connector to follow the first indexing run.
+  </Step>
+</Steps>

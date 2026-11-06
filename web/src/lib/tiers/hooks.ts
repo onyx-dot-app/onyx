@@ -2,11 +2,11 @@
 
 import { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import type { SelectOption, SelectOptions } from "@opal/components";
-import { SvgArrowUpCircle, SvgOrganization, SvgUsers } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import type { SelectOption, SelectOptions, BadgeProps } from "@opal/components";
+import { SvgArrowUpCircle } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import type { PlanColor, PlanMetadata } from "@/lib/tiers/types";
+import { useLifecycleBadge, usePlanBadges } from "@/lib/badges/components";
+import type { PlanMetadata } from "@/lib/tiers/types";
 import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 import { useSettings } from "@/lib/settings/hooks";
@@ -24,40 +24,29 @@ export function useTierAtLeast(required: Tier): boolean {
   return tierAtLeast(settings.tier, required);
 }
 
-const PLAN_STYLES: Record<
-  Tier,
-  {
-    color: PlanColor;
-    icon: IconFunctionComponent | undefined;
-    // The tier's key under `common.plans`; the UI calls COMMUNITY "Free".
-    copyKey: "free" | "business" | "enterprise";
-  }
-> = {
-  [Tier.COMMUNITY]: { color: "gray", icon: undefined, copyKey: "free" },
-  [Tier.BUSINESS]: { color: "green", icon: SvgUsers, copyKey: "business" },
-  [Tier.ENTERPRISE]: {
-    color: "amber",
-    icon: SvgOrganization,
-    copyKey: "enterprise",
-  },
-};
-
 /**
  * The app's plan badges and their copy, by tier. Use these wherever a
- * feature is limited to a tier, so every such feature reads the same.
+ * feature is limited to a tier, so every such feature reads the same. The
+ * badges themselves live in `@/lib/badges/components`.
  */
 export function usePlans(): Record<Tier, PlanMetadata> {
   const t = useTranslations("common.plans");
+  const badges = usePlanBadges();
   return useMemo(() => {
     const metadata = (tier: Tier): PlanMetadata => {
-      const { color, icon, copyKey } = PLAN_STYLES[tier];
-      const title: string = t(`${copyKey}.title`);
+      const tag = badges[tier];
       return {
-        title,
-        icon,
-        color,
-        tag: { title, color, icon },
-        tooltip: markdown(t(`${copyKey}.tooltip`)),
+        title: tag.title,
+        icon: tag.icon,
+        color: tag.color,
+        tag,
+        // The Free plan gates nothing, so it has no tooltip.
+        tooltip:
+          tier === Tier.BUSINESS
+            ? markdown(t("business.tooltip"))
+            : tier === Tier.ENTERPRISE
+              ? markdown(t("enterprise.tooltip"))
+              : undefined,
       };
     };
     return {
@@ -65,7 +54,15 @@ export function usePlans(): Record<Tier, PlanMetadata> {
       [Tier.BUSINESS]: metadata(Tier.BUSINESS),
       [Tier.ENTERPRISE]: metadata(Tier.ENTERPRISE),
     };
-  }, [t]);
+  }, [t, badges]);
+}
+
+/**
+ * The tag every beta feature carries, for a `tag` slot. Use `BetaTag` to
+ * render it on its own.
+ */
+export function useBetaTag(): BadgeProps {
+  return useLifecycleBadge("beta");
 }
 
 // The value of the "Upgrade Plan" row. It is a link, so it is never picked.

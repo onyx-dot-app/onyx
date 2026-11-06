@@ -2,6 +2,7 @@
 hands back plain data, and raises refusals as MicrosoftGraphError."""
 
 import json
+import threading
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -24,7 +25,7 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointSecurableKind,
 )
 from onyx.connectors.sharepoint import source_operations as gateway_module
-from onyx.connectors.sharepoint.models import SharepointDrive
+from onyx.connectors.sharepoint.models import SharepointDrive, SiteUrlListing
 from onyx.connectors.sharepoint.source_operations import (
     DRIVE_EXPAND_FIELDS,
     DRIVE_LIST_PROPERTY,
@@ -162,6 +163,7 @@ class _Sites:
     def get_by_url(self, url: str) -> Any:
         site = MagicMock(id=self._site_id, web_url=url, drives=self.drives)
         site.execute_query.side_effect = self._site_error
+        site.execute_query.return_value = site
         return site
 
     def get_all_sites(self) -> _Query:
@@ -249,14 +251,28 @@ def test_list_site_urls_reads_every_page() -> None:
     pages = _SitePage([SITE_URL], _SitePage([OTHER_SITE_URL, ""], None))
     sdk = _sdk_client(pages=pages)
 
-    assert fake_gateway(sdk_client=sdk).list_site_urls() == [SITE_URL, OTHER_SITE_URL]
+    assert fake_gateway(sdk_client=sdk).list_site_urls().site_urls == [
+        SITE_URL,
+        OTHER_SITE_URL,
+    ]
 
 
 def test_list_site_urls_stops_at_the_page_cap() -> None:
     pages = _SitePage([SITE_URL], _SitePage([OTHER_SITE_URL], None))
     sdk = _sdk_client(pages=pages)
 
-    assert fake_gateway(sdk_client=sdk).list_site_urls(max_pages=1) == [SITE_URL]
+    assert fake_gateway(sdk_client=sdk).list_site_urls(max_pages=1) == (
+        SiteUrlListing(site_urls=[SITE_URL], complete=False)
+    )
+
+
+def test_a_sample_of_the_whole_listing_is_complete() -> None:
+    pages = _SitePage([SITE_URL], _SitePage([OTHER_SITE_URL], None))
+    sdk = _sdk_client(pages=pages)
+
+    assert fake_gateway(sdk_client=sdk).list_site_urls(max_pages=2) == (
+        SiteUrlListing(site_urls=[SITE_URL, OTHER_SITE_URL], complete=True)
+    )
 
 
 def test_check_token_reports_the_lifetime() -> None:
@@ -404,6 +420,27 @@ def test_root_site_without_a_hostname_fails_validation() -> None:
         gateway.resolve_tenant_domain()
 
 
+def _reset_after_read(self: SharepointSourceOperations, name: str) -> Any:
+    """Another thread's REST rebuild resets the Graph gateway right after
+    each read of it."""
+    value = object.__getattribute__(self, name)
+    if name == "_graph_gateway" and value is not None:
+        object.__setattr__(self, name, None)
+    return value
+
+
+def test_a_reset_between_reads_does_not_return_no_gateway() -> None:
+    gateway = fake_gateway(get_json=lambda url, params: {})  # noqa: ARG005
+    graph = gateway._graph_gateway
+
+    with patch.object(
+        SharepointSourceOperations, "__getattribute__", _reset_after_read
+    ):
+        built = gateway._gateway()
+
+    assert built is graph
+
+
 @patch(AUTH_BUILDER, return_value=_auth_context(MicrosoftAuthMethod.CERTIFICATE))
 def test_auth_method_comes_from_the_credential(_build: MagicMock) -> None:
     assert fake_gateway().get_auth_method() is MicrosoftAuthMethod.CERTIFICATE
@@ -496,6 +533,41 @@ class TestRestContext:
         assert self._context_for(gateway, SITE_URL) is not first
         assert context_class.call_count == 2
         assert build.call_count == 2
+
+    @patch.object(gateway_module, "SharepointRestReads", _ContextRecorder)
+    @patch(AUTH_BUILDER, return_value=_auth_context(MicrosoftAuthMethod.CERTIFICATE))
+    @patch.object(gateway_module, "acquire_token_for_rest")
+    @patch.object(gateway_module, "ClientContext")
+    def test_threads_do_not_share_a_context(
+        self, context_class: MagicMock, _acquire: MagicMock, _build: MagicMock
+    ) -> None:
+        """An office365 context queues its queries on itself, so parallel
+        reads of one site on one gateway use one context per thread."""
+        context_class.side_effect = lambda _url: MagicMock()
+        gateway = self._gateway()
+        both_started = threading.Barrier(2, timeout=10)
+        contexts_by_thread: dict[str, list[Any]] = {}
+
+        def read_site(name: str) -> None:
+            both_started.wait()
+            contexts_by_thread[name] = [
+                self._context_for(gateway, SITE_URL),
+                self._context_for(gateway, SITE_URL),
+            ]
+
+        threads = [
+            threading.Thread(target=read_site, args=(name,)) for name in ("a", "b")
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        first_a, second_a = contexts_by_thread["a"]
+        first_b, second_b = contexts_by_thread["b"]
+        assert first_a is second_a
+        assert first_b is second_b
+        assert first_a is not first_b
 
     @patch.object(gateway_module, "SharepointRestReads", _ContextRecorder)
     @patch(AUTH_BUILDER, return_value=_auth_context(MicrosoftAuthMethod.CERTIFICATE))

@@ -1,8 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import { Fragment, useMemo } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Button, LineItemButton } from "@opal/components";
@@ -10,7 +11,6 @@ import { Hoverable } from "@opal/core";
 import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import useCCPairs from "@/hooks/useCCPairs";
-import { Section } from "@/layouts/general-layouts";
 import {
   useToolOAuthStatus,
   type ToolAuthStatus,
@@ -58,7 +58,7 @@ export interface ToolLineItemProps {
  */
 export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const t = useTranslations("actions");
-  const router = useRouter();
+  const navigation = useNavigation();
   const {
     agent,
     toolConfiguration,
@@ -252,7 +252,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             size="sm"
             tooltip={action.tooltip}
             onClick={() => {
-              router.push(action.href as Route);
+              navigation.go(action.href as Route);
               close();
             }}
           />
@@ -266,7 +266,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             aria-label={connectorsLabel}
             tooltip={connectorsLabel}
             onClick={() => {
-              if (needsConnectors) router.push(ADMIN_ROUTES.CONNECTORS.path);
+              if (needsConnectors) navigation.go(ADMIN_ROUTES.CONNECTORS.path);
               else openSources();
             }}
           />
@@ -277,14 +277,18 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   return (
     <Hoverable.Root group={HOVER_GROUP}>
       <LineItemButton
+        font="main-ui-action"
         title={label}
         icon={getIconForAction(tool)}
-        sizePreset="main-ui"
-        variant="section"
         rounding={2}
         state={isForced ? "selected" : "empty"}
         strikethrough={isDisabled}
-        color={(isUnavailable && isForced) || isDisabled ? "muted" : undefined}
+        color={
+          (isUnavailable && isForced) || isDisabled ? "default" : undefined
+        }
+        titleColor={
+          (isUnavailable && isForced) || isDisabled ? "text-03" : undefined
+        }
         disabled={needsConnectors || (isUnavailable && !isForced)}
         tooltip={getToolTooltip(
           tool,

@@ -20,6 +20,10 @@ locals {
   )
   # 15 + len("log") + 6 = 24, so the digest survives in full here too.
   flow_log_storage_account_name = "${substr(local.storage_name_sanitized, 0, 15)}log${local.storage_name_digest}"
+  sandbox_archive_storage_account_name = coalesce(
+    var.sandbox_archive_storage_account_name,
+    "${substr(local.storage_name_sanitized, 0, 15)}arc${local.storage_name_digest}",
+  )
 
   virtual_network_id         = var.create_virtual_network ? module.vnet[0].vnet_id : var.virtual_network_id
   aks_subnet_id              = var.create_virtual_network ? module.vnet[0].aks_subnet_id : var.aks_subnet_id
@@ -185,6 +189,40 @@ module "storage" {
   allowed_subnet_ids       = var.restrict_storage_to_cluster ? [local.aks_subnet_id] : []
 }
 
+# Craft sandbox session archives, in their own account so the expiry policy
+# and the customer-managed key touch nothing else. No identity gets a data
+# role on it: the api_server will hand out SAS URLs.
+# The archive's expiry rules must never land on the file store account.
+resource "terraform_data" "sandbox_archive_storage_account_name_check" {
+  count = var.enable_sandbox_archive_storage ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = !contains([local.storage_account_name, local.flow_log_storage_account_name], local.sandbox_archive_storage_account_name)
+      error_message = "sandbox_archive_storage_account_name must differ from the file store and flow log storage account names. The archive expires blobs after sandbox_archive_expiration_days."
+    }
+  }
+}
+
+module "storage_sandbox_archive" {
+  source = "../storage"
+  count  = var.enable_sandbox_archive_storage ? 1 : 0
+
+  storage_account_name = local.sandbox_archive_storage_account_name
+  container_name       = "sandbox-archives"
+  resource_group_name  = local.resource_group_name
+  location             = var.location
+  tags                 = local.merged_tags
+
+  account_replication_type    = var.storage_account_replication_type
+  allowed_subnet_ids          = var.restrict_storage_to_cluster ? [local.aks_subnet_id] : []
+  create_customer_managed_key = true
+
+  expiration_days            = var.sandbox_archive_expiration_days
+  noncurrent_expiration_days = var.sandbox_archive_noncurrent_expiration_days
+  transition_to_cool         = false
+}
+
 module "postgres" {
   source = "../postgres"
 
@@ -248,8 +286,13 @@ module "aks" {
   node_pools              = local.node_pools
   index_node_pool_enabled = var.index_node_pool_enabled
 
-  enable_gpu_node_pool     = var.enable_gpu_node_pool
-  enable_sandbox_node_pool = var.enable_sandbox_node_pool
+  enable_gpu_node_pool      = var.enable_gpu_node_pool
+  enable_sandbox_node_pool  = var.enable_sandbox_node_pool
+  sandbox_node_vm_size      = var.sandbox_node_vm_size
+  sandbox_node_min_count    = var.sandbox_node_min_count
+  sandbox_node_max_count    = var.sandbox_node_max_count
+  sandbox_node_disk_size_gb = var.sandbox_node_disk_size_gb
+  craft_sandbox_runtime     = var.craft_sandbox_runtime
 
   private_cluster_enabled              = var.private_cluster_enabled
   api_server_authorized_ip_ranges      = local.api_server_authorized_ip_ranges

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
@@ -6,6 +6,8 @@ from onyx.connectors.field_policy import FieldClass, FieldPolicy
 
 
 class CanvasCredentialBinding(CredentialBinding):
+    site_url_fields: ClassVar[frozenset[str]] = frozenset({"canvas_base_url"})
+
     # Document ids hold only course and item ids, so the URL picks the instance.
     canvas_base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
 

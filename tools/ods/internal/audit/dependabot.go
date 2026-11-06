@@ -4,7 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
 // dependabotAlert is the subset of the GitHub Dependabot alerts API response we
@@ -74,7 +79,31 @@ func auditDependabot() ([]Finding, error) {
 		}
 		return nil, fmt.Errorf("gh api dependabot/alerts failed: %w", err)
 	}
-	return parseDependabotAlerts(out)
+	findings, err := parseDependabotAlerts(out)
+	if err != nil {
+		return nil, err
+	}
+	// Without a repo root, keep every alert: err toward blocking.
+	if root, err := paths.GitRoot(); err == nil {
+		findings = dropMissingManifests(findings, root)
+	}
+	return findings, nil
+}
+
+// dropMissingManifests drops alerts whose manifest is not in the checkout.
+// Dependabot can keep an alert open after its manifest is deleted, and the
+// alert then names a file that no longer sets any installed version. An
+// alert with no manifest path stays.
+func dropMissingManifests(findings []Finding, root string) []Finding {
+	var kept []Finding
+	for _, f := range findings {
+		if f.Manifest != "" && !fileExists(filepath.Join(root, filepath.FromSlash(f.Manifest))) {
+			log.Debugf("Skipping Dependabot alert %s for %s: %s is not in this checkout", f.ID, f.Package, f.Manifest)
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept
 }
 
 // parseDependabotAlerts maps the alerts JSON into Findings, keeping only open

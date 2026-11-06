@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 import React, {
   useCallback,
   useEffect,
@@ -8,13 +9,17 @@ import React, {
   useState,
 } from "react";
 import { useAdminNavLabels } from "@/lib/adminNavLabels";
-import { usePathname } from "next/navigation";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
-import { InputTypeIn, SidebarTab } from "@opal/components";
+import {
+  InputTypeIn,
+  SidebarTab,
+  Badge,
+  type BadgeProps,
+} from "@opal/components";
 import { SvgSearch, SvgX } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import {
@@ -22,25 +27,28 @@ import {
   useLicense,
   hasActiveSubscription,
 } from "@/lib/billing";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { Tier } from "@/lib/tiers/types";
-import useFilter from "@/hooks/useFilter";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { markdown } from "@opal/utils";
 import {
+  CUSTOM_ANALYTICS_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "@/lib/constants";
+import { Tier } from "@/lib/tiers/types";
+import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
+import useFilter from "@/hooks/useFilter";
+import { AccountPopover } from "@/lib/app/components";
+import {
+  BETA_SECTION_IDS,
   buildItems,
   groupBySection,
   type AdminNavSectionId,
   type FeatureFlags,
   type SidebarItemEntry,
 } from "@/lib/admin-sidebar-utils";
-import { renderSidebarLogo } from "@/lib/sidebar/utils";
-import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
+import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
 
 export default function AdminSidebar() {
   const t = useTranslations("sidebar");
+  const plans = usePlans();
   const { folded, setFolded } = useSidebarState();
-  const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
 
@@ -50,8 +58,8 @@ export default function AdminSidebar() {
       setFocusSearch(false);
     }
   }, [focusSearch, folded]);
+  const navigation = useNavigation();
   const pathname = usePathname();
-  const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { adminCapabilities } = useUser();
   const settings = useSettings();
   const tier = settings?.tier;
@@ -73,7 +81,7 @@ export default function AdminSidebar() {
     vectorDbEnabled: settings?.vectorDbEnabled !== false,
     enableCloud: NEXT_PUBLIC_CLOUD_ENABLED,
     tier,
-    customAnalyticsEnabled,
+    customAnalyticsEnabled: CUSTOM_ANALYTICS_ENABLED,
     hasSubscription: hasSubscriptionOrLicense,
     hooksEnabled: settings?.hooks_enabled ?? false,
     queryHistoryEnabled:
@@ -100,6 +108,12 @@ export default function AdminSidebar() {
     [t]
   );
 
+  const betaTag: BadgeProps = useBetaTag();
+  const sectionTag = (sectionId: AdminNavSectionId | null) =>
+    sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
+  const itemTag = (beta: boolean | undefined) =>
+    beta ? <Badge {...betaTag} /> : undefined;
+
   // Search the labels the user reads, not the underlying ids.
   const itemExtractor = useCallback(
     (item: SidebarItemEntry) => navLabels[item.nameId],
@@ -115,10 +129,7 @@ export default function AdminSidebar() {
 
   return (
     <SidebarLayouts.Root>
-      <SidebarLayouts.Header
-        renderAppLogo={renderSidebarLogo}
-        showLogoWhenFolded={showLogoWhenFolded}
-      >
+      <BrandedSidebarHeader>
         {folded ? (
           <SidebarTab
             icon={SvgSearch}
@@ -133,14 +144,14 @@ export default function AdminSidebar() {
           <InputTypeIn
             ref={searchRef}
             variant="internal"
-            searchIcon
+            icon="search"
             placeholder={t("adminSidebar.searchInput.placeholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             clearButton
           />
         )}
-      </SidebarLayouts.Header>
+      </BrandedSidebarHeader>
 
       <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => (
@@ -149,13 +160,16 @@ export default function AdminSidebar() {
               title={
                 group.sectionId ? sectionLabels[group.sectionId] : undefined
               }
+              tag={sectionTag(group.sectionId)}
             >
-              {group.items.map(({ link, icon, nameId }) => (
+              {group.items.map(({ link, icon, nameId, beta }) => (
                 <SidebarTab
                   key={link}
                   icon={icon}
-                  href={link}
+                  // SAFETY: sidebar links are the paths in `ADMIN_ROUTES`.
+                  {...navigation.linkTo(link as Route, { scroll: false })}
                   selected={pathname.startsWith(link)}
+                  rightChildren={itemTag(beta)}
                 >
                   {navLabels[nameId]}
                 </SidebarTab>
@@ -170,11 +184,13 @@ export default function AdminSidebar() {
             disabled
             // One tooltip over a tall block: it stays level with the pointer.
             tooltipAlign="follow"
-            tooltip={markdown(
-              disabled.every((item) => item.requiredTier === Tier.ENTERPRISE)
-                ? t("adminSidebar.enterpriseOnly.tooltip")
-                : t("adminSidebar.businessOrEnterpriseOnly.tooltip")
-            )}
+            tooltip={
+              plans[
+                disabled.every((item) => item.requiredTier === Tier.ENTERPRISE)
+                  ? Tier.ENTERPRISE
+                  : Tier.BUSINESS
+              ].tooltip
+            }
           >
             {disabledGroups.map((group, groupIndex) => (
               <SidebarLayouts.Section
@@ -182,9 +198,14 @@ export default function AdminSidebar() {
                 title={
                   group.sectionId ? sectionLabels[group.sectionId] : undefined
                 }
+                tag={sectionTag(group.sectionId)}
               >
-                {group.items.map(({ link, icon, nameId }) => (
-                  <SidebarTab key={link} icon={icon}>
+                {group.items.map(({ link, icon, nameId, beta }) => (
+                  <SidebarTab
+                    key={link}
+                    icon={icon}
+                    rightChildren={itemTag(beta)}
+                  >
                     {navLabels[nameId]}
                   </SidebarTab>
                 ))}
@@ -198,7 +219,10 @@ export default function AdminSidebar() {
         {!folded && <SidebarLayouts.Divider />}
         <SidebarTab
           icon={SvgX}
-          href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
+          {...navigation.linkTo(
+            pathname.startsWith("/admin/craft") ? "/craft/v1" : "/app",
+            { scroll: false }
+          )}
           variant="sidebar-light"
         >
           {t("adminSidebar.exitAdminPanel.label")}

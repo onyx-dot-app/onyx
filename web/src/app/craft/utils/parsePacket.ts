@@ -10,7 +10,10 @@
 // caller can hand these functions an already-parsed type.
 /* oxlint-disable anti-slop/no-unknown-parameters */
 
-import { stripSessionPrefix, sanitizePathsInText } from "./pathSanitizer";
+import {
+  stripSessionPrefix,
+  sanitizePathsInText,
+} from "@/app/craft/utils/pathSanitizer";
 import {
   getRawInput,
   getRawOutput,
@@ -22,10 +25,13 @@ import {
   type ParsedArtifact,
   type ToolName,
   type TextPartUpdate,
-  type ToolKind,
-  type ToolStatus,
 } from "@/app/craft/utils/packetTypes";
-import type { TodoItem, TodoStatus } from "../types/displayTypes";
+import type {
+  TodoItem,
+  TodoStatus,
+  ToolCallKind,
+  ToolCallStatus,
+} from "@/app/craft/types/displayTypes";
 
 export function parsePacket(raw: unknown): ParsedPacket {
   if (!raw || typeof raw !== "object") return { type: "unknown" };
@@ -62,6 +68,30 @@ export function parsePacket(raw: unknown): ParsedPacket {
 
     case "prompt_response":
       return { type: "prompt_response" };
+
+    case "turn_completed": {
+      const { session_id, turn_id, turn_index, status, error_detail } = p;
+      if (
+        typeof session_id !== "string" ||
+        !session_id ||
+        typeof turn_id !== "string" ||
+        !turn_id ||
+        typeof turn_index !== "number" ||
+        !Number.isSafeInteger(turn_index) ||
+        turn_index < 0 ||
+        (status !== "SUCCEEDED" &&
+          status !== "FAILED" &&
+          status !== "CANCELLED") ||
+        (error_detail !== undefined &&
+          error_detail !== null &&
+          typeof error_detail !== "string")
+      )
+        return { type: "unknown" };
+      return {
+        type: "turn_completed",
+        turn: { session_id, turn_id, turn_index, status, error_detail },
+      };
+    }
 
     case "artifact_created":
       return parseArtifact(p);
@@ -164,7 +194,7 @@ function detectSkillScript(command: string): string | null {
 function resolveSkillName(
   p: Record<string, unknown>,
   toolName: ToolName,
-  kind: ToolKind,
+  kind: ToolCallKind,
   ri: Record<string, unknown> | null,
   command: string
 ): string | null {
@@ -229,7 +259,7 @@ function resolveToolName(p: Record<string, unknown>): ToolName {
   return "unknown";
 }
 
-const TOOL_KIND_MAP: Record<ToolName, ToolKind> = {
+const TOOL_KIND_MAP: Record<ToolName, ToolCallKind> = {
   glob: "search",
   grep: "search",
   read: "read",
@@ -250,7 +280,7 @@ const TOOL_KIND_MAP: Record<ToolName, ToolKind> = {
   unknown: "other",
 };
 
-function resolveKind(toolName: ToolName, rawKind: string | null): ToolKind {
+function resolveKind(toolName: ToolName, rawKind: string | null): ToolCallKind {
   const fromName = TOOL_KIND_MAP[toolName];
   if (fromName !== "other") return fromName;
 
@@ -290,7 +320,7 @@ function extractText(content: unknown): string {
   return "";
 }
 
-function normalizeStatus(status: string | null | undefined): ToolStatus {
+function normalizeStatus(status: string | null | undefined): ToolCallStatus {
   if (
     status === "pending" ||
     status === "in_progress" ||
@@ -369,7 +399,7 @@ function extractPatchInfo(
 
 function buildDescription(
   toolName: ToolName,
-  kind: ToolKind,
+  kind: ToolCallKind,
   filePath: string,
   ri: Record<string, unknown> | null,
   rawDescription: string
@@ -420,7 +450,7 @@ function buildDescription(
 
 function buildTitle(
   toolName: ToolName,
-  kind: ToolKind,
+  kind: ToolCallKind,
   isNewFile: boolean
 ): string {
   // Edit/write: distinguish "Writing" (new file) vs "Editing" (existing)
@@ -449,7 +479,7 @@ function buildTitle(
 
   // When toolName is unknown, use kind for a more specific title
   if (toolName === "unknown") {
-    const KIND_TITLES: Partial<Record<ToolKind, string>> = {
+    const KIND_TITLES: Partial<Record<ToolCallKind, string>> = {
       search: "Searching",
       read: "Reading",
       execute: "Running command",
@@ -467,7 +497,7 @@ function buildTitle(
  *  Returns raw unsanitized text — caller applies sanitizePathsInText. */
 function extractRawOutputText(
   toolName: ToolName,
-  kind: ToolKind,
+  kind: ToolCallKind,
   p: Record<string, unknown>,
   ro: Record<string, unknown> | null
 ): string {

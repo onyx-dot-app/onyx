@@ -133,12 +133,6 @@ def onyx_redis(
         redis_delete_if_exists_helper(
             f"{tenant_id}:{redis_connector.prune.fence_key}", dry_run, r
         )
-        redis_delete_if_exists_helper(
-            f"{tenant_id}:{redis_connector.permissions.fence_key}", dry_run, r
-        )
-        redis_delete_if_exists_helper(
-            f"{tenant_id}:{redis_connector.external_group_sync.fence_key}", dry_run, r
-        )
         return 0
     elif command == OnyxRedisCommand.purge_pidbox:
         return purge_by_match_and_type(

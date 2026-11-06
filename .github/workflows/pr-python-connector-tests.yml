@@ -77,6 +77,8 @@ env:
 
 jobs:
   build-backend-image:
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     # See https://runs-on.com/runners/linux/
     runs-on:
       [
@@ -98,6 +100,7 @@ jobs:
           persist-credentials: false
 
       - name: Build backend image
+        id: build
         uses: ./.github/actions/build-backend-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -167,7 +170,7 @@ jobs:
 
       - name: Pull production backend image
         env:
-          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
+          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-backend-image.outputs.digest }}
         run: docker pull "${PROD_IMAGE}"
 
       # Start a long-lived container from the production image and layer in the
@@ -181,7 +184,7 @@ jobs:
       # connector credentials from Secrets Manager.
       - name: Start test container
         env:
-          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
+          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-backend-image.outputs.digest }}
         run: |
           docker run -d --name onyx-connector-tests --user root \
             -v "${{ github.workspace }}:/workspace" \

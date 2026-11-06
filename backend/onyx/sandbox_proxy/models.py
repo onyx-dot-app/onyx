@@ -2,11 +2,12 @@
 
 import ipaddress
 from enum import Enum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
+from onyx.external_apps.matching.engine import AllMatchedActions, GatedTarget
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
@@ -62,3 +63,16 @@ class McpRpcClassification(BaseModel):
     kind: McpRpcKind
     # Tool names of every `tools/call` in the (possibly batched) body, in order.
     tool_names: tuple[str, ...] = ()
+
+
+class McpProtocolRequest(BaseModel):
+    """An attributed MCP protocol request without an action approval requirement."""
+
+    model_config = ConfigDict(frozen=True)
+    target: GatedTarget
+
+
+class RequestContext(SessionContext):
+    """Pin the execution that authorized a request across an approval wait."""
+
+    scheduled_context: tuple[UUID, UUID] | None = None

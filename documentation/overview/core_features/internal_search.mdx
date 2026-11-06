@@ -1,0 +1,52 @@
+---
+title: "RAG and Search"
+description: "Enterprise Search across all your applications"
+icon: "magnifying-glass"
+---
+Onyx enriches the LLM's general knowledge with context that is unique to your team.
+[Connectors](/overview/core_features/connectors) index knowledge from your applications,
+so Onyx understands the documents, people, and concepts in your organization.
+
+Onyx keeps documents, metadata, and access permissions up to date in near real time.
+
+## Search UI
+
+<img className="rounded-image" src="/assets/overview/core_features/search_ui.webp" alt="Onyx Search Interface"/>
+
+<Info>
+  Onyx applies each user's source permissions to search results. Permission sync requires the Enterprise Edition.
+</Info>
+
+You can search your knowledge from both the **Search** and [Chat](/overview/core_features/chat) interfaces.
+Search mode gives a better view of documents. Use it when you want to find a document rather than get an answer.
+
+In Search mode, Onyx expands your query, runs it against the index, and shows the matching documents as source cards.
+
+Open Search mode with the mode button at the top left of the page, next to the sidebar.
+To start every new session in Search, set **Default App Mode** under **Settings → Chats**.
+
+<Note>
+  An admin can turn Search mode off for the workspace. If the mode button offers only **Chat**, ask your admin.
+</Note>
+
+### Filters
+
+Narrow your results in Search mode:
+
+<img className="rounded-image" src="/assets/overview/core_features/search_filters_1.webp" alt="Search filters"/>
+
+Filter by time range to show only recent documents.
+
+<img className="rounded-image" src="/assets/overview/core_features/search_filters_2.webp" alt="Source filters"/>
+
+Filter by source to limit results to specific connectors or document sets.
+
+## Chat UI
+
+The **Internal Search** action gives the Chat UI and your [Agents](/overview/core_features/agents) the same knowledge.
+The LLM decides when to search.
+Open the actions menu in the input bar to force or block **Internal Search** for one chat,
+or to limit the search to selected sources.
+
+Cited documents appear in the sources sidebar on the right. [Deep Research](/overview/core_features/chat#deep-research)
+runs many search and reasoning cycles for hard questions.

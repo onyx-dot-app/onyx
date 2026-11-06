@@ -21,7 +21,7 @@ from tests.integration.mock_services.mock_llm_server.models import (
     ScriptState,
 )
 
-# Onyx special-cases some model names (claude, qwen, gpt-5.x, catalog models).
+# Onyx special-cases some model names (claude, qwen, gpt-6-sol.x, catalog models).
 MOCK_LLM_MODEL_NAME = "mock-model"
 # Deep Research needs at least 50000.
 MOCK_LLM_MAX_INPUT_TOKENS = 200000

@@ -28,6 +28,16 @@
    focused item does not highlight beside the hovered one.
 ============================================================================ */
 
+/* Keyboard focus paints the hover state in place of the browser's ring,
+   as on Interactive.Stateless. */
+.interactive:is(
+  [data-interactive-variant="select-heavy"],
+  [data-interactive-variant="select-light"],
+  [data-interactive-variant="select-filter"]
+):focus-visible {
+  outline: none;
+}
+
 /* ===========================================================================
    Select-Heavy
    =========================================================================== */
@@ -49,6 +59,10 @@
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="empty"][data-interaction="hover"]:not(
   [data-disabled],
@@ -93,6 +107,10 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="filled"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -126,6 +144,10 @@
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"][data-interaction="hover"]:not(
   [data-disabled],
@@ -291,6 +313,10 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="select-light"][data-interactive-state="empty"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="empty"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -328,6 +354,10 @@
   [data-disabled],
   [data-passive]
 ),
+.interactive[data-interactive-variant="select-light"][data-interactive-state="filled"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
+),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="filled"][data-interaction="hover"]:not(
   [data-disabled],
   [data-passive]
@@ -361,6 +391,10 @@
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="select-light"][data-interactive-state="selected"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-light"][data-interactive-state="selected"][data-interaction="hover"]:not(
   [data-disabled],
@@ -446,6 +480,10 @@
 .interactive[data-interactive-variant="select-filter"]:is(
   [data-interactive-state="empty"],
   [data-interactive-state="filled"]
+):focus-visible:not([data-disabled], [data-opal-nav-mode="pointer"] *),
+.interactive[data-interactive-variant="select-filter"]:is(
+  [data-interactive-state="empty"],
+  [data-interactive-state="filled"]
 )[data-interaction="hover"]:not([data-disabled], [data-passive]) {
   @apply bg-background-tint-02;
   --interactive-foreground: var(--text-04);
@@ -483,6 +521,10 @@
 .interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"]:hover:not(
   [data-disabled],
   [data-passive]
+),
+.interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"]:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
 ),
 .interactive[data-interactive-variant="select-filter"][data-interactive-state="selected"][data-interaction="hover"]:not(
   [data-disabled],

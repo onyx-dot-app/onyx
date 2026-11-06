@@ -1,0 +1,229 @@
+---
+title: "OpenAPI"
+description: "Turn a REST API with an OpenAPI schema into tools for Chat and custom agents"
+icon: "code"
+---
+
+<Note>
+  In Onyx 5.0, OpenAPI actions moved from their own admin page to **Admin Panel → Plugins**.
+  See [Where things moved](/admins/plugins/overview#where-things-moved-in-onyx-5).
+</Note>
+
+An OpenAPI plugin connects Onyx to a REST API. You give Onyx an [OpenAPI](https://swagger.io/specification/) schema,
+and Onyx turns each operation in the schema into a tool.
+Agents read the operation descriptions and parameters to decide when and how to call the API.
+
+OpenAPI plugins work in default Chat and in custom agents. They are not available in Craft. For Craft,
+use an [MCP server](/admins/plugins/mcp) or a [custom Craft App](/admins/plugins/craft_apps#custom-apps).
+
+Users with the **Manage Actions** permission can add and edit OpenAPI plugins.
+Only full admins can change **Enable in default Chat**.
+
+Use an OpenAPI plugin for internal services, such as a ticket system or an inventory API, when no MCP server exists.
+
+## Add an OpenAPI plugin
+
+<Steps>
+  <Step title="Paste the schema">
+    Go to **Admin Panel → Plugins**, click **Add**, then select **OpenAPI**.
+    Paste the schema in **OpenAPI Schema Definition**. Onyx reads the schema and lists its operations below the field.
+
+    <img className="rounded-image" src="/assets/admins/plugins/openapi_add_filled.webp" alt="The Add OpenAPI plugin form with a schema and the operations that Onyx found"/>
+
+    The schema must include:
+
+    - A `servers` entry with the base URL of the API.
+    - An `operationId` for each operation. Onyx uses it as the tool name.
+    - A `summary` or `description` for each operation, so the agent knows when to use it.
+
+    The Onyx API server must be able to reach the server URL.
+  </Step>
+
+  <Step title="Add descriptions">
+    | Field | Who reads it |
+    | --- | --- |
+    | **Description for Humans** | Users, on the Plugins page and in the agent editor. |
+    | **Description for Agents** | The agent. Explain when to use the API and how to choose operations. |
+  </Step>
+
+  <Step title="Set default Chat availability">
+    Turn on **Enable in default Chat** to make the plugin available in chats without a custom agent.
+    Turn it off to make the plugin available only in the custom agents that you add it to.
+  </Step>
+
+  <Step title="Configure authentication">
+    Select an authentication method. See [Authentication](#authentication). Click **Add Plugin**.
+  </Step>
+</Steps>
+
+## Authentication
+
+| Method | Effect |
+| --- | --- |
+| **No authentication** | Onyx sends requests without credentials. |
+| **Custom Authorization Header** | Onyx adds one or more headers that you set, such as `Authorization: Bearer <token>`, to every request. All users share these credentials. |
+| **OAuth** | Each user signs in with their own account. Onyx sends the user's access token with each request. |
+| **OAuth Pass-through** | Onyx sends the user's Onyx sign-in token to the API. This method shows only when Onyx sign-in uses OAuth, OIDC, or Google OAuth. |
+
+### Custom authorization header
+
+<img className="rounded-image" src="/assets/admins/plugins/openapi_auth_custom_authorization_header.webp" alt="Custom Authorization Header settings with header name and value fields"/>
+
+Enter a header name and value. You can send more than one header.
+
+### OAuth
+
+<img className="rounded-image" src="/assets/admins/plugins/openapi_auth_oauth.webp" alt="OAuth settings with Authorization URL, Token URL, client ID, client secret, scopes, and PKCE"/>
+
+<Steps>
+  <Step title="Create an OAuth client in the provider">
+    Set the client's redirect URI to the **Redirect URI** that Onyx shows:
+
+    ```text
+    https://<your-onyx-domain>/oauth-config/callback
+    ```
+  </Step>
+
+  <Step title="Enter the client details">
+    Enter the **Authorization URL**, **Token URL**, **OAuth Client ID**, and **OAuth Client Secret**. Optionally,
+    enter **Scopes** as a comma-separated list.
+  </Step>
+
+  <Step title="Set PKCE">
+    Turn on PKCE if the provider requires it. Onyx uses the `S256` method.
+    Click **Test connection** to confirm that Onyx can complete the OAuth flow.
+  </Step>
+</Steps>
+
+Each user connects their own account from the [Plugins page](/overview/core_features/plugins)
+before the agent can call the API for them.
+
+## Request placeholders
+
+Use these placeholders anywhere in the schema, for example in the server URL, a path, or a parameter default.
+Onyx replaces them with the values of the current request at call time.
+
+| Placeholder | Value |
+| --- | --- |
+| `CHAT_SESSION_ID` | The ID of the current chat session |
+| `MESSAGE_ID` | The ID of the current message |
+| `USER_ID` | The ID of the current user |
+| `USER_EMAIL` | The email address of the current user |
+
+## Manage the plugin
+
+| Tab | Contents |
+| --- | --- |
+| **Configuration** | Name, descriptions, schema, and **Enable in default Chat**. |
+| **Authentication** | The authentication method and credentials. |
+| **Tools** | The operations that Onyx found in the schema. |
+
+<img className="rounded-image" src="/assets/admins/plugins/openapi_tab_tools.webp" alt="The Tools tab with the operations from an OpenAPI schema"/>
+
+The **Tools** tab is read only. To add, remove, or change an operation, edit the schema in the **Configuration** tab.
+
+Turning off **Enable in default Chat** does not remove the plugin from custom agents.
+Its credentials and settings stay the same. To remove the plugin from all agents, delete it from the Plugins page.
+
+<Note>
+  In Terraform, `onyx_custom_tool.enabled` sets **Enable in default Chat**. It does not change custom-agent attachments.
+</Note>
+
+## Use the plugin in custom agents
+
+Open the agent editor and select the plugin under **Actions**. See [Agents](/admins/agents/overview).
+
+## Example
+
+Use this schema to add a plugin that creates and gets agents in Onyx. Replace the server URL with your Onyx API URL.
+
+```json OpenAPI expandable
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Agents API",
+    "version": "1.0.0",
+    "description": "Minimal OpenAPI schema for creating and fetching agents in Onyx"
+  },
+  "servers": [
+    {
+      "url": "https://cloud.onyx.app/api"
+    }
+  ],
+  "paths": {
+    "/persona": {
+      "post": {
+        "summary": "Create Agent (Persona)",
+        "operationId": "create_persona",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "document_set_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                  },
+                  "num_chunks": { "type": "number" },
+                  "is_public": { "type": "boolean" },
+                  "recency_bias": {
+                    "type": "string",
+                    "enum": ["favor_recent", "base_decay", "no_decay", "auto"]
+                  },
+                  "llm_filter_extraction": { "type": "boolean" },
+                  "llm_relevance_filter": { "type": "boolean" },
+                  "tool_ids": {
+                    "type": "array",
+                    "items": { "type": "integer" }
+                  },
+                  "system_prompt": { "type": "string" },
+                  "task_prompt": { "type": "string" },
+                  "datetime_aware": { "type": "boolean" }
+                },
+                "required": [
+                  "name",
+                  "description",
+                  "document_set_ids",
+                  "num_chunks",
+                  "is_public",
+                  "recency_bias",
+                  "llm_filter_extraction",
+                  "llm_relevance_filter",
+                  "tool_ids",
+                  "system_prompt",
+                  "task_prompt",
+                  "datetime_aware"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created" }
+        }
+      }
+    },
+    "/persona/{persona_id}": {
+      "get": {
+        "summary": "Get Agent (Persona) By ID",
+        "operationId": "get_persona",
+        "parameters": [
+          {
+            "name": "persona_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}
+```

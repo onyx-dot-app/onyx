@@ -30,7 +30,7 @@ from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.sandbox_proxy import destination_policy
-from onyx.sandbox_proxy.addons.gate import GateAddon, _IdentityResolver
+from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
     UpstreamEventLoop,
@@ -38,6 +38,7 @@ from onyx.sandbox_proxy.destination_policy import (
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
+from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIdentityResolver
 
 # Inter-chunk delay on the upstream. The whole stream takes
 # `(_CHUNK_COUNT - 1) * _CHUNK_DELAY_S`, during which a streamed client must
@@ -93,7 +94,7 @@ class _UpstreamHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
 
-class _StubResolver(_IdentityResolver):
+class _StubResolver(SandboxIdentityResolver):
     """Resolves any source IP to one sandbox so the request is forwarded."""
 
     def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox:  # noqa: ARG002

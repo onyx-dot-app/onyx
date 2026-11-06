@@ -7,9 +7,14 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from onyx.connectors.linear.connector import LinearConnector
-from onyx.connectors.linear.source_operations import refresh_oauth_token
+from onyx.connectors.linear.source_operations import (
+    LinearRateLimitError,
+    LinearTokenRefreshError,
+    refresh_oauth_token,
+)
 from onyx.connectors.models import ConnectorMissingCredentialError
 
 OPS = "onyx.connectors.linear.source_operations"
@@ -90,8 +95,37 @@ def test_refresh_without_a_refresh_token_raises() -> None:
 def test_refresh_non_ok_response_raises(mock_request: MagicMock) -> None:
     mock_request.return_value = _make_mock_response(ok=False, text="invalid_grant")
 
-    with pytest.raises(RuntimeError, match="Failed to refresh token"):
+    with pytest.raises(LinearTokenRefreshError, match="Failed to refresh token"):
         refresh_oauth_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+
+
+@patch(f"{OPS}.request_with_retries")
+def test_a_refused_refresh_carries_the_status(mock_request: MagicMock) -> None:
+    response = _make_mock_response(ok=False, text="invalid_grant")
+    response.status_code = 400
+    mock_request.side_effect = requests.HTTPError(response=response)
+
+    with pytest.raises(LinearTokenRefreshError) as raised:
+        refresh_oauth_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+
+    assert raised.value.status_code == 400
+    assert raised.value.body == "invalid_grant"
+
+
+@patch("onyx.utils.retry_wrapper.requests.request")
+def test_a_rate_limited_refresh_is_a_rate_limit_and_not_retried(
+    mock_request: MagicMock,
+) -> None:
+    response = requests.Response()
+    response.status_code = 429
+    response._content = b"rate limited"
+    mock_request.return_value = response
+
+    with pytest.raises(LinearRateLimitError) as raised:
+        refresh_oauth_token({"refresh_token": _REFRESH_TOKEN_VALUE})
+
+    assert raised.value.status_code == 429
+    mock_request.assert_called_once()
 
 
 def test_an_api_key_is_sent_as_is() -> None:

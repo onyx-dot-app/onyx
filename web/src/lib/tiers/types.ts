@@ -1,4 +1,4 @@
-import type { TagProps } from "@opal/components";
+import type { BadgeProps } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 
 /**
@@ -11,7 +11,7 @@ export enum Tier {
   ENTERPRISE = "enterprise",
 }
 
-export type PlanColor = NonNullable<TagProps["color"]>;
+export type PlanColor = NonNullable<BadgeProps["color"]>;
 
 /** Everything that marks a feature as limited to a plan. */
 export interface PlanMetadata {
@@ -19,7 +19,10 @@ export interface PlanMetadata {
   icon: IconFunctionComponent | undefined;
   color: PlanColor;
   /** For a `tag` slot, such as `Content`'s or an option's. */
-  tag: TagProps;
-  /** Why the feature is off below this plan, linking to billing. */
-  tooltip: RichStr;
+  tag: BadgeProps;
+  /**
+   * Why the feature is off below this plan, linking to billing. The Free plan
+   * gates nothing, so it has none.
+   */
+  tooltip: RichStr | undefined;
 }

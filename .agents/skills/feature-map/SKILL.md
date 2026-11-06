@@ -5,39 +5,38 @@ description: Use the Onyx feature map (.agents/feature-map/) to learn what a pro
 
 # Onyx feature map
 
-`.agents/feature-map/` describes every Onyx product surface as one component
-document: what the user sees, the code paths, the data model, the contracts, what
-else a change touches, how to verify it, and the known traps.
+`.agents/feature-map/` records how Onyx works: where each responsibility lives,
+how the parts connect, the rules a change can break, the design reasons, and known
+issues. It does not restate the code.
 
 ## Find the component
 
+- For new work: start at the Common tasks table in `.agents/feature-map/INDEX.md`
+  and at `.agents/feature-map/CROSS-CUTTING.md`.
 - From a code path: look it up in `.agents/feature-map/PATHS.md`. The longest
-  matching prefix wins. A path with no row is unmapped: say so, and read the
-  nearest code and tests yourself.
-- From a feature name: browse `.agents/feature-map/INDEX.md`.
+  matching prefix wins. A path under `## Not mapped` has no component. A path
+  that no row covers is unmapped: say so, and read the nearest code and tests
+  yourself.
 - Before you trust a name, read `.agents/feature-map/GLOSSARY.md`. Onyx uses words
   such as Persona, Tool, turn and SearchDoc in more than one sense.
 
 ## Before you change code
 
-Read the component document under `.agents/feature-map/components/`:
-
-- §1 and §4: what the code must do.
-- §5 Contracts and invariants: the rules a change can break without any test
-  failing.
-- §7 Blast radius: the other files to check for your kind of change.
-- §9 Footguns: the known traps.
-
-Follow the `[[component]]` links in §6 for any area your change reaches into.
+Read the component document under `.agents/feature-map/components/`.
+**User experience** (or **Callers**, for a component that other code builds on)
+says what the component must do for the people and code that use it. **Contracts and traps**
+come next: these are the rules a change can break without a failing test.
+**Recipes** show how to do common tasks. Follow the `[[component]]` links in
+**Dependencies** for each area your change reaches.
 
 ## When you review a diff or PR
 
-Follow `.agents/feature-map/VERIFYING.md` step by step. Check every invariant in §5
-of each touched component and state a verdict for each one. Report what you could
-not verify.
+Follow `.agents/feature-map/VERIFYING.md` step by step.
 
 ## Keep the map true
 
-If your change alters behaviour that a component document describes, update that
-document in the same PR. If you add a code path, add its row to `PATHS.md`. Cite
-only paths and symbols that exist; a wrong reference is worse than none.
+When you end a turn, the Stop hook may block once with an editing brief. It names
+the sections and keys that cite the code you changed. Read only those and the
+summary, and answer the questions in "Editing judgment" in
+`.agents/feature-map/README.md`. No update is a normal answer. Do not rewrite
+parts the change does not touch. The full rules are in "Keeping the map true".

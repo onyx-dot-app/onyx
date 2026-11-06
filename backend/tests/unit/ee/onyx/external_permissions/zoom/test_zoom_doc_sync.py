@@ -76,8 +76,10 @@ def test_zoom_is_registered_with_its_own_doc_sync() -> None:
     cc_pair, fetch_docs, fetch_ids = MagicMock(), MagicMock(), MagicMock()
 
     # The registry holds a lazy wrapper, so calling it is what shows where it leads.
+    doc_sync_func = config.doc_sync_config.doc_sync_func
+    assert doc_sync_func is not None
     with patch(f"{MODULE}.zoom_doc_sync") as doc_sync:
-        config.doc_sync_config.doc_sync_func(cc_pair, fetch_docs, fetch_ids, None)
+        doc_sync_func(cc_pair, fetch_docs, fetch_ids, None)
 
     doc_sync.assert_called_once_with(cc_pair, fetch_docs, fetch_ids, None)
     assert (

@@ -37,6 +37,7 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
       provider_type: SSOProviderType;
       authorize_url: string;
     }[];
+    default_language?: string | null;
   } = await res.json();
 
   const multiTenant: boolean = NEXT_PUBLIC_CLOUD_ENABLED
@@ -62,6 +63,7 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
       providerType: provider.provider_type,
       authorizeUrl: provider.authorize_url,
     })),
+    defaultLanguage: data.default_language ?? undefined,
   };
 }
 

@@ -57,6 +57,10 @@
       "types": "./dist/logos/index.d.ts",
       "import": "./dist/logos/index.js"
     },
+    "./navigation": {
+      "types": "./dist/navigation/index.d.ts",
+      "import": "./dist/navigation/index.js"
+    },
     "./hooks": {
       "types": "./dist/hooks/index.d.ts",
       "import": "./dist/hooks/index.js"
@@ -113,7 +117,7 @@
     "react": "^19.0.0",
     "react-day-picker": "^9.0.0",
     "react-dom": "^19.0.0",
-    "react-dropzone": "^14.0.0 || ^20.0.0",
+    "react-dropzone": "^20.0.0",
     "react-markdown": "^9.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.0"

@@ -63,7 +63,6 @@ export function InputList({
           {values.map((value, index) => (
             <Tag
               key={index}
-              size="md"
               title={value}
               disabled={disabled}
               onRemove={() => removeValue(index)}

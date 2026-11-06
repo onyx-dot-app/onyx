@@ -8,6 +8,10 @@
   @apply w-full overflow-clip;
 }
 
+.opal-card[data-height="full"] {
+  @apply h-full min-h-0 flex flex-col;
+}
+
 /* Surface colors — one rule per token, names match the palette */
 .opal-card[data-color="transparent"] {
   @apply bg-transparent;
@@ -19,6 +23,10 @@
 
 .opal-card[data-color="background-tint-01"] {
   @apply bg-background-tint-01;
+}
+
+.opal-card[data-color="background-tint-02"] {
+  @apply bg-background-tint-02;
 }
 
 .opal-card[data-color="status-info-00"] {
@@ -39,6 +47,10 @@
 
 .opal-card[data-color="theme-amber-01"] {
   @apply bg-theme-amber-01;
+}
+
+.opal-card[data-color="theme-purple-01"] {
+  @apply bg-theme-purple-01;
 }
 
 /* Disabled — visual only. The card dims and takes a not-allowed cursor, but
@@ -114,6 +126,10 @@
   @apply bg-background-tint-01;
 }
 
+.opal-card-expandable-header[data-color="background-tint-02"] {
+  @apply bg-background-tint-02;
+}
+
 .opal-card-expandable-header[data-color="status-info-00"] {
   @apply bg-status-info-00;
 }
@@ -132,6 +148,10 @@
 
 .opal-card-expandable-header[data-color="theme-amber-01"] {
   @apply bg-theme-amber-01;
+}
+
+.opal-card-expandable-header[data-color="theme-purple-01"] {
+  @apply bg-theme-purple-01;
 }
 
 .opal-card-expandable-header[data-border="none"] {

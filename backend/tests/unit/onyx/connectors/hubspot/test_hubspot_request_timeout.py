@@ -22,7 +22,7 @@ def test_default_timeout_is_passed_to_the_sdk() -> None:
     gateway, _ = _gateway()
     sdk_fn = MagicMock(return_value="ok")
 
-    result = gateway._sdk("op", sdk_fn, key="value")
+    result = gateway._sdk("op", "GET", "/path", sdk_fn, key="value")
 
     assert result == "ok"
     sdk_fn.assert_called_once_with(
@@ -34,7 +34,7 @@ def test_explicit_timeout_is_preserved() -> None:
     gateway, _ = _gateway()
     sdk_fn = MagicMock(return_value="ok")
 
-    gateway._sdk("op", sdk_fn, _request_timeout=5)
+    gateway._sdk("op", "GET", "/path", sdk_fn, _request_timeout=5)
 
     sdk_fn.assert_called_once_with(_request_timeout=5)
 

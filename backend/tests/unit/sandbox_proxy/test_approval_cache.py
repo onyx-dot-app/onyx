@@ -1,3 +1,5 @@
+import builtins
+from collections.abc import Collection
 from uuid import uuid4
 
 import pytest
@@ -15,6 +17,7 @@ from onyx.sandbox_proxy.approval_cache import (
 class _MemoryCache(CacheBackend):
     def __init__(self) -> None:
         self.values: dict[str, bytes] = {}
+        self.sets: dict[str, set[bytes]] = {}
         self.expirations: list[tuple[str, int]] = []
         self.blpop_result: tuple[bytes, bytes] | None = None
         self.blpop_calls: list[tuple[list[str], int]] = []
@@ -51,6 +54,29 @@ class _MemoryCache(CacheBackend):
 
     def delete(self, key: str) -> None:
         self.values.pop(key, None)
+
+    def delete_prefix(self, prefix: str) -> None:
+        if not prefix:
+            raise ValueError("Cache deletion requires a nonempty prefix")
+        for key in list(self.values):
+            if key.startswith(prefix):
+                self.delete(key)
+
+    def exists_many(self, keys: Collection[str]) -> builtins.set[str]:
+        return {key for key in keys if key in self.values}
+
+    def set_add(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.setdefault(key, set()).add(value)
+
+    def set_remove(self, key: str, member: str | bytes) -> None:
+        value = member if isinstance(member, bytes) else member.encode()
+        self.sets.get(key, set()).discard(value)
+
+    def set_members(self, key: str, *, limit: int) -> list[bytes]:
+        if limit < 1:
+            raise ValueError("Cache set member limit must be positive")
+        return list(self.sets.get(key, set()))[:limit]
 
     def exists(self, key: str) -> bool:
         return key in self.values

@@ -47,6 +47,11 @@ def settings_write_lock() -> Iterator[None]:
         yield
 
 
+def resolve_user_language(stored_language: str | None) -> str:
+    """The stored language wins, else the workspace default."""
+    return stored_language or load_settings().default_language.value
+
+
 def load_settings(raise_on_error: bool = False) -> Settings:
     kv_store = get_kv_store()
     try:

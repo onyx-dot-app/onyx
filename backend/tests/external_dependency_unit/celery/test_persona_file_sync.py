@@ -947,6 +947,65 @@ class TestSecondaryPassSkipsTerminalSideEffects:
                 enrichment=enricher,
                 db_session=db_session,
                 index_to_secondary=True,
+                failed_document_ids=set(),
+            )
+            db_session.refresh(uf)
+            assert uf.status == UserFileStatus.INDEXING
+            assert uf.chunk_count == 99
+        finally:
+            _purge_user_files(db_session, user)
+
+    def test_post_index_skips_a_failed_user_file(
+        self,
+        db_session: Session,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """A failed write left the old chunks in place. Marking the file
+        COMPLETED would also notify its owner that it is ready, and the
+        caller's own FAILED flip cannot take a notification back."""
+        user = create_test_user(db_session, "failed_write")
+        uf = UserFile(
+            id=uuid4(),
+            user_id=user.id,
+            file_id=f"fp_{uuid4().hex[:8]}",
+            name=f"{uuid4().hex[:8]}.txt",
+            file_type="text/plain",
+            status=UserFileStatus.INDEXING,
+            chunk_count=99,
+        )
+        db_session.add(uf)
+        db_session.commit()
+        db_session.refresh(uf)
+        try:
+            enricher = UserFileChunkEnricher(
+                user_file_id_to_access={},
+                user_file_id_to_project_ids={},
+                user_file_id_to_persona_ids={},
+                doc_id_to_previous_chunk_cnt={},
+                doc_id_to_new_chunk_cnt={str(uf.id): 0},
+                user_file_id_to_raw_text={str(uf.id): ""},
+                user_file_id_to_token_count={},
+                no_access=DocumentAccess.build(
+                    user_emails=[],
+                    user_groups=[],
+                    external_user_emails=[],
+                    external_user_group_ids=[],
+                    is_public=False,
+                ),
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            )
+            adapter = UserFileIndexingAdapter(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+                db_session=db_session,
+            )
+            adapter.post_index(
+                context=MagicMock(updatable_docs=[MagicMock(id=str(uf.id))]),
+                updatable_chunk_data=[],
+                filtered_documents=[],
+                enrichment=enricher,
+                db_session=db_session,
+                index_to_secondary=False,
+                failed_document_ids={str(uf.id)},
             )
             db_session.refresh(uf)
             assert uf.status == UserFileStatus.INDEXING

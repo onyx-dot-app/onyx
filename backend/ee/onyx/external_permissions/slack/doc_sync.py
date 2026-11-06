@@ -17,10 +17,12 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.slack.connector import (
     SlackConnector,
+    channel_keys,
     filter_channels,
     get_channels,
     get_channels_across_teams,
     list_grid_team_ids,
+    normalize_channel_entries,
 )
 from onyx.connectors.slack.models import ChannelType
 from onyx.connectors.slack.source_operations import SlackSourceOperations
@@ -54,11 +56,10 @@ def _filter_channels_for_permissions(
     exclude_regex_enabled: bool = False,
 ) -> list[ChannelType]:
     if channels_to_include and not include_regex_enabled:
-        available_channel_names = {channel["name"] for channel in all_channels}
+        channels_to_include = normalize_channel_entries(channels_to_include)
+        available_channels = channel_keys(all_channels)
         available_channels_to_include = [
-            channel
-            for channel in channels_to_include
-            if channel in available_channel_names
+            channel for channel in channels_to_include if channel in available_channels
         ]
         missing_channels = sorted(
             set(channels_to_include) - set(available_channels_to_include)

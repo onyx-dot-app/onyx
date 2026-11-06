@@ -6,7 +6,6 @@ import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/compo
 import ManageAccessField from "@/views/admin/connectors/AddConnectorPage/components/ManageAccessField";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
-import { getSourceDisplayName } from "@/lib/sources";
 
 interface ConnectorSettingsSectionProps {
   connector: ConfigurableSources;
@@ -46,7 +45,7 @@ export default function ConnectorSettingsSection({
               <InputTypeInField
                 name="name"
                 data-testid="connector-name"
-                placeholder={getSourceDisplayName(connector) ?? undefined}
+                placeholder={t("displayName.placeholder")}
                 variant={disabled ? "disabled" : "primary"}
               />
             </InputVertical>

@@ -8,7 +8,7 @@ import { SvgMicrophone } from "@opal/icons";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { toast } from "@opal/layouts";
-import { ChatState } from "@/app/app/interfaces";
+import { ChatState } from "@/app/app/types";
 
 interface MicrophoneButtonProps {
   onTranscription: (text: string) => void;

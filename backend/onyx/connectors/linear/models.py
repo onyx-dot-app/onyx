@@ -28,8 +28,9 @@ class LinearUser(BaseModel):
 
 
 class LinearViewer(BaseModel):
-    """The token's own user."""
+    """The token's own user. An app actor's user can have no email."""
 
+    email: str | None = None
     guest: bool
 
 

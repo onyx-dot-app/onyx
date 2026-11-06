@@ -1,22 +1,20 @@
 import type { IconProps } from "@opal/types";
-
 const SvgZoomOut = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 14 14"
+    viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     stroke="currentColor"
     {...props}
   >
     <path
-      d="M12.75 12.75L9.85 9.85M4.08333 6.08333H8.08333M11.4167 6.08333C11.4167 9.02885 9.02885 11.4167 6.08333 11.4167C3.13781 11.4167 0.75 9.02885 0.75 6.08333C0.75 3.13781 3.13781 0.75 6.08333 0.75C9.02885 0.75 11.4167 3.13781 11.4167 6.08333Z"
+      d="M14 14L11.1 11.1M5.33333 7.33333H9.33333M12.6667 7.33333C12.6667 10.2789 10.2789 12.6667 7.33333 12.6667C4.38781 12.6667 2 10.2789 2 7.33333C2 4.38781 4.38781 2 7.33333 2C10.2789 2 12.6667 4.38781 12.6667 7.33333Z"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
-
 export default SvgZoomOut;

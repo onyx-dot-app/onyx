@@ -1,0 +1,243 @@
+---
+title: "Microsoft Teams"
+description: "Index channel conversations, channel files, meeting transcripts and meeting chats from Microsoft Teams"
+---
+
+The Teams connector indexes Microsoft Teams in your Microsoft 365 tenant through Microsoft Graph.
+It reads channel conversations, and it can also read the files in each channel, the images pasted into messages,
+the transcripts of scheduled meetings and the chats of those meetings.
+It can mirror who may read each item with **Auto Sync Permissions**.
+
+The connector signs in as an app registration set up in [Microsoft 365
+Setup](/admins/connectors/official/microsoft-365/setup).
+Each option beyond channel conversations needs its own grants on the Microsoft side,
+and meeting transcripts also need two Teams settings that only a Teams administrator can change.
+
+## How it works
+
+| Content             | Behavior                                                                                                                                                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Channel threads     | Always on. One document per thread: the first message and its replies, oldest first. The team's standard, private and shared channels are read. A thread whose first message was deleted is not indexed, and one deleted after it was indexed keeps only its header until the next prune removes it. The system events Teams lists as messages are skipped.                              |
+| Channel files       | Optional. Each file in a channel's **Files** tab is its own document. Files over 20 MB are skipped, as are BMP, TIFF, GIF, SVG and AVIF images.                                                                                                                                                                           |
+| Inline images | Optional. The images pasted into channel messages and meeting chats are indexed with their thread or chat day, up to 100 for each. Images over 20 MB are skipped. Nothing is downloaded while image extraction and analysis is off in the Onyx search settings. |
+| Meeting transcripts | Optional. One document per transcript of a scheduled meeting, with the speakers when the tenant allows speaker attribution. Transcripts from the last six months are indexed. Channel meetings are not covered.                                                                |
+| Meeting chats | Optional. One document per day (UTC) of the chat of a scheduled meeting. The events Teams lists in a chat (joined, recording started) are left out. Covers meetings organized in your tenant: Microsoft does not serve the chat of a meeting that another organization set up. |
+| Permissions | Optional, on paid plans. Each item is visible to the people who can read it in Teams. See [Auto Sync Permissions](#auto-sync-permissions). |
+
+Each refresh asks every channel for the messages that changed since the last run and rebuilds each thread that changed.
+Every meeting chat with a message in the last six months is asked what changed,
+so an edit or a delete in a chat that has gone quiet is picked up at the next refresh. Pruning removes threads, files,
+transcripts and chat days that no longer exist, and transcripts and chat days older than six months.
+
+## Before you begin
+
+You need a Microsoft 365 tenant with Microsoft Teams,
+the roles listed in [Microsoft 365 Setup](/admins/connectors/official/microsoft-365/setup#before-you-begin),
+and a Teams administrator for **Include Meeting Transcripts** only.
+
+## Configure Microsoft Entra
+
+Follow [Microsoft 365 Setup](/admins/connectors/official/microsoft-365/setup)
+with the Teams rows of its [permission table](/admins/connectors/official/microsoft-365/setup#permissions):
+channel threads always, and one row for each option you turn on.
+Every option works with a client secret except **Include Attachments**, which needs a certificate.
+Keep the **Application (client) ID** at hand:
+the application access policy for **Include Meeting Transcripts** needs it.
+
+## Configure Microsoft Teams
+
+Only **Include Meeting Transcripts** needs this section. The three Graph permissions are not enough:
+with either setting below missing, Microsoft refuses the transcripts even though the permissions are granted.
+
+<Steps>
+  <Step title="Allow Microsoft Graph access to transcripts">
+    Sign in to the [Teams admin center](https://admin.teams.microsoft.com) as a Teams administrator.
+    Go to **Meetings → Meeting settings**. Under **Transcript API access**, turn **Microsoft Graph access** **On**.
+    It is off by default.
+
+    Then select **Configure** and turn **Include speaker attribution** **On**, so that transcripts name who spoke.
+    With it off, Onyx still indexes the transcript, without the speakers.
+
+    The same change in Teams PowerShell, after the `Connect-MicrosoftTeams` shown in the next step:
+
+    ```powershell
+    Set-CsTeamsMeetingConfiguration -EnableGraphTranscriptAccess true -EnableAttributedTranscripts true -Identity Global
+    ```
+
+    See [Manage transcript API access for Teams
+    meetings](https://learn.microsoft.com/en-us/microsoftteams/meeting-transcript-api-access).
+  </Step>
+
+  <Step title="Grant an application access policy">
+    Microsoft lets an app read a meeting only on behalf of an organizer who has an application access policy that names
+    the app. The policy has no page in an admin center. It is set in Teams PowerShell:
+
+    ```powershell
+    Install-Module MicrosoftTeams
+    Connect-MicrosoftTeams
+
+    New-CsApplicationAccessPolicy -Identity Onyx-Transcripts -AppIds "<application (client) id>" -Description "Onyx reads meeting transcripts"
+
+    # Every user who has no policy of their own:
+    Grant-CsApplicationAccessPolicy -PolicyName Onyx-Transcripts -Global
+
+    # Or one organizer at a time, by user object ID:
+    Grant-CsApplicationAccessPolicy -PolicyName Onyx-Transcripts -Identity "<user object id>"
+    ```
+
+    A tenant has one Global application access policy, and it applies to users who have no policy of their own.
+    Run `Get-CsApplicationAccessPolicy` first. If Global already names other apps,
+    make one policy that names them all before you grant it with `-Global`.
+    A user who holds a policy of their own needs the Onyx app named in that policy.
+    A change can take up to 30 minutes to apply.
+    See [Configure an application access
+    policy](https://learn.microsoft.com/en-us/graph/cloud-communication-online-meeting-application-access-policy).
+  </Step>
+
+  <Step title="Check the organizers">
+    A transcript exists only when someone started transcription in the meeting.
+    Teams saves it in the organizer's OneDrive,
+    so an organizer needs a Teams license and a OneDrive that has been set up.
+    An organizer without a OneDrive produces no transcript for Microsoft to serve.
+  </Step>
+</Steps>
+
+## Configure Onyx
+
+<Steps>
+  <Step title="Select or create an authentication account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Teams**. Under **Authentication Account**,
+    select a saved account or create one as described in [Microsoft 365
+    Setup](/admins/connectors/official/microsoft-365/setup#enter-the-credential-in-onyx).
+    **Include Attachments** needs **Certificate Authentication**.
+  </Step>
+
+  <Step title="Choose the teams">
+    Give the connector a **Display Name**. In **Teams**, list the display names of the teams to index,
+    or leave the list empty to index every team in the tenant.
+  </Step>
+
+  <Step title="Choose what to index">
+    Turn on **Include Attachments**, **Include Inline Images**,
+    **Include Meeting Transcripts** and **Include Meeting Chats** as needed. All are off by default.
+
+    In **Meeting Organizers**, list the user principal names of the organizers whose transcripts and chats to index,
+    or leave the list empty to cover every enabled user with a Teams license. With the list empty,
+    the application access policy must cover all of those users.
+  </Step>
+
+  <Step title="Choose the document access">
+    Under **Document Access**, select one option:
+
+    - **Everyone in Your Organization** makes all indexed content visible to every Onyx user.
+    - **Specific Groups** limits the connector to selected Onyx user groups.
+    - **Sync with Teams** mirrors who can read each item in Teams. See [Auto Sync Permissions](#auto-sync-permissions).
+
+    **Specific Groups** and **Sync with Teams** are paid features: the Business and Enterprise tiers on Onyx Cloud,
+    and the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Set an indexing start date">
+    Under **Schedule**, set **Index Documents After** unless you need every thread ever posted. Without one,
+    the first indexing attempt reads every channel from the team's creation,
+    and a tenant with years of channel history takes days to become searchable. With a start date,
+    Onyx indexes the threads last changed after it, so an old thread that gains a reply is indexed whole.
+    Meeting transcripts and chats reach back at most six months, or only to the start date when that is later.
+    See [Advanced Configuration](/admins/connectors/overview#advanced-configuration).
+  </Step>
+
+  <Step title="Connect and verify">
+    Select **Create Connector**. Onyx checks each option you turned on against Microsoft before it starts indexing,
+    and names the missing grant or setting when a check fails.
+    The grants for **Auto Sync Permissions** are not part of this check. Then open **Admin Panel → Indexing Status**,
+    select the connector, and confirm its initial indexing attempt completes.
+  </Step>
+</Steps>
+
+<Note>
+  The check for meeting transcripts reads one organizer.
+  An organizer with no transcript in the last 30 days proves the listing permission only,
+  so a missing application access policy can first show up as an indexing error for that organizer.
+</Note>
+
+### Advanced settings
+
+| Setting        | Default                             | Purpose                                                                                                                         |
+| -------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Authority Host | `https://login.microsoftonline.com` | The Microsoft identity endpoint. See [National clouds](/admins/connectors/official/microsoft-365/setup#national-clouds). |
+| Graph API Host | `https://graph.microsoft.com`       | The Microsoft Graph endpoint. See [National clouds](/admins/connectors/official/microsoft-365/setup#national-clouds).    |
+
+## Attachments
+
+With **Include Attachments** on, each file in a channel's **Files** tab becomes a document of its own,
+with the readers SharePoint grants it. A channel's files live in a SharePoint document library,
+which is why this option needs a certificate and the SharePoint permission. A file is often shared with a group,
+and Onyx lists the group's members, which is what **GroupMember.Read.All** is for.
+Onyx reads each file's readers while it indexes, whatever the access type,
+so the permissions for this option are needed even when **Document Access** is **Everyone in Your Organization**.
+With **Sites.Selected** in place of **Sites.Read.All**, grant the app full control on each channel's site.
+See [Limiting the app to specific
+sites](/admins/connectors/official/microsoft-365/setup#limiting-the-app-to-specific-sites).
+
+Set `TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD` (bytes) to change the 20 MB (20 × 1024 × 1024 bytes) size limit.
+
+## Meeting transcripts and chats
+
+Both options walk meeting organizers, not teams: Microsoft lists transcripts and meeting chats for each user.
+
+- Transcripts and chat days from the last six months are indexed.
+  Onyx reads six months back to keep each organizer's listing short,
+  and an item that passes six months leaves the index at the next prune.
+- Every run asks Microsoft about every organizer. A refresh reads only the time since the last run.
+  A first index, a prune and a permission sync read the full six months,
+  roughly 10 to 15 seconds per organizer even when there is no transcript. Onyx reads eight organizers at a time.
+  To keep a large tenant fast, list the organizers who record meetings.
+- An organizer Microsoft refuses, for example one who lost the application access policy, lists nothing,
+  so their transcripts and chat days leave the index at the next prune. The other organizers are unaffected.
+- A meeting's chat is indexed through the meeting's organizer.
+  The chat of a meeting that another organization set up is not served to apps in your tenant, so it is not indexed.
+
+## Auto Sync Permissions
+
+With **Auto Sync Permissions**, Onyx grants access by email address.
+A person's email or user principal name in Microsoft 365 must match the user's email in Onyx.
+Transcript participants are matched by user principal name.
+
+| Teams item         | Who can see it in Onyx                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Channel threads    | Every member of the team for a standard channel. The channel's own members for a private or shared channel.                          |
+| Channel files | The people and groups SharePoint grants the file to, with the members of each group. A file shared with **Everyone** or **Everyone except external users** is visible to every Onyx user. |
+| Meeting transcript | The organizer and the participants the meeting lists                                                                                 |
+| Meeting chat day   | The chat members who can see the day's first message. Someone added to a chat later sees the days after, as in Teams.                |
+
+A thread names the group of its channel's members, and a group sync lists who is in each group.
+The first group sync starts within a minute of creating the connector,
+and a new connector's threads become visible once it finishes. After that,
+a join or a leave in Teams reaches Onyx at the next sync.
+Both the document sync and the group sync run every 5 minutes by default.
+Set `TEAMS_PERMISSION_DOC_SYNC_FREQUENCY` and `TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds) to change the intervals.
+
+## Troubleshooting
+
+See [Microsoft 365 Setup](/admins/connectors/official/microsoft-365/setup#troubleshooting)
+for the messages every Microsoft 365 connector can show.
+
+| Message or symptom                                                                                                | Cause and fix                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Your app lacks sufficient permissions to read Teams (403 Forbidden)                                               | **Team.ReadBasic.All** is missing or admin consent was not granted. Check that every permission shows **Granted**.                                                                                                                                                  |
+| Include Attachments needs certificate authentication                                                              | The credential uses a client secret. Create a **Certificate Authentication** credential.                                                                                                                                                                            |
+| Include Attachments needs read access to the channel files on Graph                                               | Grant **Files.Read.All** or **Sites.Read.All** on Microsoft Graph and admin-consent it.                                                                                                                                                                             |
+| Include Attachments reads each file's readers from SharePoint, which needs Sites.FullControl.All on the SharePoint API | The permission is missing on the **SharePoint** API. **Sites.Read.All** on SharePoint, or any permission on Microsoft Graph, is not enough.                                          |
+| The files of channel "…" in team … answered 403 | An indexing error for one channel. **GroupMember.Read.All** or **User.Read.All** is missing, or SharePoint refuses the app on that channel's site. Private and shared channels each have a site of their own. |
+| Could not find a channel to check the files grant on | The tenant listed no channel to run the check on. List the teams to index in **Teams**, or retry. |
+| Include Meeting Transcripts needs the tenant setting that allows Graph API access to transcripts                  | **Microsoft Graph access** is off under **Transcript API access** in the Teams admin center. Microsoft reports it as `GraphAccessToTranscriptsDisabled`. No permission overrides it.                                                                               |
+| An application access policy naming this app must be granted to the organizer                                     | The organizer has no application access policy that names the app. Create and grant the policy in Teams PowerShell, then wait up to 30 minutes.                                                                                                                     |
+| Include Meeting Transcripts needs the OnlineMeetingTranscript.Read.All and OnlineMeetings.Read.All application permissions | A permission is missing or not consented. If you granted it minutes ago, wait and retry: it can take about half an hour before every sign-in carries it.                                                                                             |
+| Include Meeting Transcripts (or Include Meeting Chats) needs the User.Read.All application permission to list organizers | Grant **User.Read.All**. Transcripts and chats use it to find the organizers. |
+| No user matches a configured organizer                                                                            | An entry in **Meeting Organizers** matches no user. Use the user principal name.                                                                                                                                                                                    |
+| No enabled user with a Teams license to check Include Meeting Transcripts (or Include Meeting Chats) on | The tenant lists no enabled user with a Teams license. List the organizers in **Meeting Organizers**. |
+| Include Meeting Chats needs the Chat.Read.All application permission                                              | Grant **Chat.Read.All** and admin-consent it.                                                                                                                                                                                                                       |
+| A meeting has no transcript in Onyx | Check these in order. Transcription was started in the meeting. The organizer has a OneDrive. The application access policy and **Meeting Organizers** both cover the organizer. The meeting is not a channel meeting. The transcript is less than six months old. |
+| Operation timed out after 10 seconds, or Timeout while validating Teams access | Microsoft answered more slowly than Onyx waits. Retry. If Onyx then reports that the name exists, use a different name. |
+| Connector by this name already exists                                                                             | An earlier attempt that failed left its connector behind. Use a different name.                                                                                                                                                                                     |
+| Threads are visible to no one under **Auto Sync Permissions** | The first group sync has not finished, or a member's email in Microsoft 365 does not match the user's email in Onyx. Grant **ChannelMember.Read.All** and **User.Read.All**. |

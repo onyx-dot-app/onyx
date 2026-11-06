@@ -1,17 +1,22 @@
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
-import { withoutFormOnlyFields } from "@/lib/connectors/utils";
+import { listConfigValue, withoutFormOnlyFields } from "@/lib/connectors/utils";
 
 type ConfigField = ConnectionConfiguration["values"][number];
+type ConfigValueField = Exclude<ConfigField, { type: "tab" }>;
 
-/** Every config field name, tab contents included; tab selectors are form
+/** Every config field, tab contents included. Tab selectors are form
  * controls, not config. */
-function configFieldNames(fields: ConfigField[]): string[] {
+export function configFields(fields: ConfigField[]): ConfigValueField[] {
   return fields.flatMap((field) =>
     field.type === "tab"
-      ? field.tabs.flatMap((tab) => configFieldNames(tab.fields))
-      : [field.name]
+      ? field.tabs.flatMap((tab) => configFields(tab.fields))
+      : [field]
   );
+}
+
+function configFieldNames(fields: ConfigField[]): string[] {
+  return configFields(fields).map((field) => field.name);
 }
 
 /**
@@ -33,13 +38,15 @@ export function connectorFormState(
       .filter((name) => values[name] !== undefined)
       .map((name) => {
         const value: unknown = values[name];
+        if (!Array.isArray(value)) return [name, value];
+        const entries = value.filter(
+          (item) => typeof item !== "string" || item.trim() !== ""
+        );
         return [
           name,
-          Array.isArray(value)
-            ? value.filter(
-                (item) => typeof item !== "string" || item.trim() !== ""
-              )
-            : value,
+          entries.every((entry): entry is string => typeof entry === "string")
+            ? listConfigValue(configuration, name, entries)
+            : entries,
         ];
       })
   );

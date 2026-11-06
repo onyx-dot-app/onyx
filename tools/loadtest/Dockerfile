@@ -3,7 +3,7 @@
 # Master/worker mode and run flags are supplied by the deployment (see k8s/).
 ARG BASE_IMAGE_REGISTRY=docker.io
 # Keep the tag in sync with the locust pin in uv.lock.
-FROM ${BASE_IMAGE_REGISTRY}/locustio/locust:2.44.1
+FROM ${BASE_IMAGE_REGISTRY}/locustio/locust:2.46.6
 
 # prometheus-client isn't in the base locust image. Pinned to match the
 # version the root lockfile resolves for the `loadtest` group — bump both

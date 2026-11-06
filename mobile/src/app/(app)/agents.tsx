@@ -111,7 +111,7 @@ function AgentSection({
   return (
     <View className="gap-8">
       <View>
-        <Text font="heading-h3" color="text-05">
+        <Text font="heading-section" color="text-05">
           {title}
         </Text>
         {description ? (

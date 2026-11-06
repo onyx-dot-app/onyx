@@ -43,13 +43,13 @@ def test_generate_agent_instructions_populates_real_template_without_skills_sect
         template_path=_template_path(),
         connectable_apps_section="",
         provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         disabled_tools=["web-search", "shell"],
         user_name="TEST_USER",
     )
 
     assert "TEST_USER" in content
-    assert "OpenAI / gpt-5-mini" in content
+    assert "OpenAI / gpt-6-luna" in content
     assert "web-search, shell" in content
     assert "## Skills" not in content
     assert "{{AVAILABLE_SKILLS_SECTION}}" not in content

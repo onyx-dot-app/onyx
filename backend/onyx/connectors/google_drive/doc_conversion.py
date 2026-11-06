@@ -7,7 +7,10 @@ from urllib.parse import urlparse, urlunparse
 from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES
+from onyx.configs.app_configs import (
+    GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
+    SKIP_SPREADSHEET_CONTENT,
+)
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.section_utils import cap_sections_text
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
@@ -299,6 +302,7 @@ def _download_and_extract_sections_basic(
                 content_type=content_type,
                 raw_file_callback=raw_file_callback,
                 link=link,
+                skip_content=SKIP_SPREADSHEET_CONTENT,
             )
             tabular_sections = result.sections
             staged_file_id = result.staged_file_id
@@ -660,6 +664,18 @@ def convert_drive_item_to_document(
     return first_error
 
 
+def _drive_file_size(file: GoogleDriveFileType) -> int | None:
+    """Byte size from the file listing, None when the listing has none."""
+    size_str = file.get("size")
+    if not size_str:
+        return None
+    try:
+        return int(size_str)
+    except ValueError:
+        logger.warning("Parsing string to int failed: size_str=%s", size_str)
+        return None
+
+
 def _convert_drive_item_to_document(
     ops: GoogleDriveSourceOperations,
     allow_images: bool,
@@ -709,20 +725,14 @@ def _convert_drive_item_to_document(
             logger.info("bug: raw shortcut/folder reached document conversion.")
             return None
 
-        size_str = file.get("size")
-        if size_str:
-            try:
-                size_int = int(size_str)
-            except ValueError:
-                logger.warning("Parsing string to int failed: size_str=%s", size_str)
-            else:
-                if size_int > size_threshold:
-                    logger.warning(
-                        "%s exceeds size threshold of %s. Skipping.",
-                        file.get("name"),
-                        size_threshold,
-                    )
-                    return None
+        size_bytes = _drive_file_size(file)
+        if size_bytes is not None and size_bytes > size_threshold:
+            logger.warning(
+                "%s exceeds size threshold of %s. Skipping.",
+                file.get("name"),
+                size_threshold,
+            )
+            return None
 
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
@@ -864,6 +874,8 @@ def _convert_drive_item_to_document(
             external_access=external_access,
             parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
             file_id=staged_file_id,
+            source_mime_type=mime_type or None,
+            source_size_bytes=size_bytes,
         )
     except Exception as e:
         doc_id = "unknown"

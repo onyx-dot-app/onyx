@@ -4,6 +4,8 @@ import json
 import tempfile
 import threading
 import uuid
+from collections.abc import Iterator
+from datetime import timedelta
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, cast
 
@@ -11,7 +13,11 @@ import puremagic
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
+    from google.auth.credentials import Credentials as GoogleCredentials
     from google.cloud.storage import Client as GCSClient
+    from google.oauth2.service_account import (
+        Credentials as ServiceAccountCredentials,
+    )
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import (
@@ -21,12 +27,25 @@ from onyx.db.engine.sql_engine import (
 from onyx.db.file_record import (
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
+    get_filerecord_by_file_id_for_update,
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
+    rename_filerecord,
     upsert_filerecord,
 )
 from onyx.db.models import FileRecord
-from onyx.file_store.file_store import FileStore, content_byte_size
+from onyx.file_store.file_store import (
+    PRESIGN_READ_CHUNK_BYTES,
+    PresignableFileStore,
+    PresignedUrlsNotSupportedError,
+    content_byte_size,
+    presign_expiry,
+)
+from onyx.file_store.models import (
+    PendingPresignedUpload,
+    PresignedRequest,
+    StoredObjectStat,
+)
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
@@ -34,8 +53,23 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
-class GCSBackedFileStore(FileStore):
+
+def _is_permission_denied(error: Exception) -> bool:
+    # google-auth reports a failed signBlob call as TransportError with the
+    # HTTP response in the message.
+    message = str(error)
+    return "403" in message or "PERMISSION_DENIED" in message
+
+
+_SIGN_BLOB_HELP = (
+    "GCS signed URLs without a key file sign through the IAM signBlob API. "
+    "Grant roles/iam.serviceAccountTokenCreator on the service account to itself."
+)
+
+
+class GCSBackedFileStore(PresignableFileStore):
     """Google Cloud Storage backed file store with ADC/Workload Identity support."""
 
     def __init__(
@@ -47,6 +81,9 @@ class GCSBackedFileStore(FileStore):
         service_account_key_json: str | None = None,
     ) -> None:
         self._gcs_client: GCSClient | None = None
+        # The credentials that sign URLs, owned here rather than read from the
+        # client.
+        self._signing_credentials: GoogleCredentials | None = None
         # Shared across threads, so the first operations build one client.
         self._client_lock = threading.Lock()
         self._bucket_name = bucket_name
@@ -309,7 +346,9 @@ class GCSBackedFileStore(FileStore):
     ) -> None:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                file_record = get_filerecord_by_file_id_optional(
+                # The lock makes a concurrent rename either finish first (the
+                # record is then gone here) or wait until this delete commits.
+                file_record = get_filerecord_by_file_id_for_update(
                     file_id=file_id, db_session=db_session
                 )
                 if file_record is None:
@@ -318,6 +357,7 @@ class GCSBackedFileStore(FileStore):
                             f"File by id {file_id} does not exist or was deleted"
                         )
                     return
+                delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                 if not file_record.bucket_name:
                     logger.error(
                         "File record %s with key %s "  # noqa: S608 - log message, not SQL
@@ -325,7 +365,6 @@ class GCSBackedFileStore(FileStore):
                         file_id,
                         file_record.object_key,
                     )
-                    delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                     db_session.commit()
                     return
 
@@ -344,7 +383,6 @@ class GCSBackedFileStore(FileStore):
                         file_record.object_key,
                     )
 
-                delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                 db_session.commit()
 
             except Exception:
@@ -356,7 +394,7 @@ class GCSBackedFileStore(FileStore):
         old_file_id: str,
         new_file_id: str,
         db_session: Session | None = None,
-    ) -> None:
+    ) -> bool:
         """Rename a file by repointing its DB record at the existing blob.
 
         The blob is not moved — only file_id changes — and reads resolve via
@@ -365,32 +403,12 @@ class GCSBackedFileStore(FileStore):
         it has been renamed (the new write would overwrite the renamed blob).
         """
         if old_file_id == new_file_id:
-            return
+            return True
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             try:
-                old_file_record = get_filerecord_by_file_id(
-                    file_id=old_file_id, db_session=db_session
-                )
-                file_metadata = cast(
-                    dict[Any, Any] | None, old_file_record.file_metadata
-                )
-
-                # Reuse the old record's bucket/object_key — the blob stays put.
-                upsert_filerecord(
-                    file_id=new_file_id,
-                    display_name=old_file_record.display_name,
-                    file_origin=old_file_record.file_origin,
-                    file_type=old_file_record.file_type,
-                    bucket_name=old_file_record.bucket_name,
-                    object_key=old_file_record.object_key,
-                    db_session=db_session,
-                    file_metadata=file_metadata,
-                    file_size=old_file_record.file_size,
-                )
-
-                delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
-
+                renamed = rename_filerecord(old_file_id, new_file_id, db_session)
                 db_session.commit()
+                return renamed
 
             except Exception as e:
                 db_session.rollback()
@@ -421,3 +439,152 @@ class GCSBackedFileStore(FileStore):
                 prefix=prefix, db_session=db_session
             )
         return file_records
+
+    def _presign_bucket_name(self) -> str:
+        return self._bucket_name
+
+    def _presign_object_key(self, file_id: str) -> str:
+        return self._get_object_key(file_id)
+
+    def _service_account_key_credentials(
+        self,
+    ) -> ServiceAccountCredentials | None:
+        """Credentials from the configured key file or inline JSON, if any."""
+        from google.oauth2 import service_account
+
+        if self._service_account_key_path:
+            return service_account.Credentials.from_service_account_file(
+                self._service_account_key_path
+            )
+        if self._service_account_key_json:
+            return service_account.Credentials.from_service_account_info(
+                json.loads(self._service_account_key_json)
+            )
+        return None
+
+    def _get_signing_credentials(self) -> GoogleCredentials:
+        """The key credentials when configured, else Application Default
+        Credentials (Workload Identity or the metadata server)."""
+        import google.auth
+
+        with self._client_lock:
+            if self._signing_credentials is None:
+                key_credentials = self._service_account_key_credentials()
+                if key_credentials is not None:
+                    self._signing_credentials = key_credentials
+                else:
+                    self._signing_credentials, _ = google.auth.default(
+                        scopes=[_CLOUD_PLATFORM_SCOPE]
+                    )
+            return self._signing_credentials
+
+    def _iam_signer(self) -> tuple[str, str] | None:
+        """(service account email, access token) for credentials without a
+        key, which sign through IAM signBlob. None when they hold a key."""
+        from google.auth import compute_engine
+        from google.auth.credentials import Signing
+        from google.auth.transport.requests import Request
+
+        credentials = self._get_signing_credentials()
+        if isinstance(credentials, Signing):
+            return None
+        # Workload Identity and the metadata server give these credentials.
+        if not isinstance(credentials, compute_engine.Credentials):
+            raise PresignedUrlsNotSupportedError(
+                "GCS signed URLs need service account credentials, not "
+                f"{type(credentials).__name__}"
+            )
+        # A refresh also replaces the "default" email with the real one. A
+        # failed refresh is a metadata server problem, so it is raised as is.
+        if not credentials.valid:
+            credentials.refresh(Request())
+        if credentials.token is None:
+            raise PresignedUrlsNotSupportedError("GCS credentials have no token")
+        return credentials.service_account_email, credentials.token
+
+    def _signed_url(
+        self,
+        bucket_name: str,
+        object_key: str,
+        method: str,
+        ttl_seconds: int,
+        content_type: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> str:
+        from google.auth.exceptions import GoogleAuthError
+
+        blob = self._get_gcs_client().bucket(bucket_name).blob(object_key)
+        signer = self._iam_signer()
+        try:
+            return blob.generate_signed_url(
+                version="v4",
+                expiration=timedelta(seconds=ttl_seconds),
+                method=method,
+                content_type=content_type,
+                # The library adds headers to the dict it gets.
+                headers=dict(headers) if headers is not None else None,
+                service_account_email=signer[0] if signer else None,
+                access_token=signer[1] if signer else None,
+            )
+        except GoogleAuthError as e:
+            # Only a denied signBlob means the identity cannot sign. Other
+            # errors (network, IAM outage) are raised as they are.
+            if _is_permission_denied(e):
+                raise PresignedUrlsNotSupportedError(f"{_SIGN_BLOB_HELP} ({e})") from e
+            raise
+
+    def _sign_download(
+        self, bucket_name: str, object_key: str, ttl_seconds: int
+    ) -> PresignedRequest:
+        expires_at = presign_expiry(ttl_seconds)
+        url = self._signed_url(bucket_name, object_key, "GET", ttl_seconds)
+        return PresignedRequest(
+            url=url, method="GET", headers={}, expires_at=expires_at
+        )
+
+    def _sign_upload(
+        self, pending: PendingPresignedUpload, ttl_seconds: int
+    ) -> PresignedRequest:
+        # GCS cannot check a SHA-256, so finalize hashes the object. The
+        # generation match lets the URL create the object only once.
+        headers = {
+            "x-goog-if-generation-match": "0",
+            "x-goog-content-length-range": f"{pending.size},{pending.size}",
+        }
+        expires_at = presign_expiry(ttl_seconds)
+        url = self._signed_url(
+            pending.bucket_name,
+            pending.object_key,
+            "PUT",
+            ttl_seconds,
+            content_type=pending.file_type,
+            headers=headers,
+        )
+        return PresignedRequest(
+            url=url,
+            method="PUT",
+            headers={"Content-Type": pending.file_type, **headers},
+            expires_at=expires_at,
+        )
+
+    def _stat_object(
+        self, bucket_name: str, object_key: str
+    ) -> StoredObjectStat | None:
+        blob = self._get_gcs_client().bucket(bucket_name).get_blob(object_key)
+        if blob is None or blob.size is None:
+            return None
+        return StoredObjectStat(size=blob.size, sha256=None)
+
+    def _read_object_chunks(self, bucket_name: str, object_key: str) -> Iterator[bytes]:
+        blob = self._get_gcs_client().bucket(bucket_name).blob(object_key)
+        with blob.open("rb", chunk_size=PRESIGN_READ_CHUNK_BYTES) as reader:
+            while chunk := reader.read(PRESIGN_READ_CHUNK_BYTES):
+                yield chunk
+
+    def _delete_object(self, bucket_name: str, object_key: str) -> None:
+        from google.api_core.exceptions import NotFound
+
+        try:
+            self._get_gcs_client().bucket(bucket_name).blob(object_key).delete()
+        except NotFound:
+            pass

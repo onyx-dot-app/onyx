@@ -1,0 +1,63 @@
+---
+title: "OpenRouter"
+description: "Using OpenRouter with Onyx"
+icon: "robot"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Guide
+
+Configure Onyx to use models served by [OpenRouter](https://openrouter.ai/).
+
+<Steps>
+  <Step title="Create an OpenRouter API Key">
+    Log in to your OpenRouter account and create a new API key.
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect OpenRouter">
+    Under **Gateways & Routers**, click **Connect** on the **OpenRouter** card.
+
+    Paste your OpenRouter **API Key**.
+
+    Keep the default **API Base URL** (`https://openrouter.ai/api/v1`),
+    or enter the URL of an OpenRouter-compatible endpoint.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/openrouter_config.webp" alt="OpenRouter provider setup dialog"/>
+  </Step>
+
+  <Step title="Load Your Models">
+    In the **Models** section, click **Refresh models**. Onyx reads the current OpenRouter catalog,
+    including each model's context size and capabilities (vision, reasoning).
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the API key with one of the selected models before it saves the provider.
+  </Step>
+</Steps>
+
+## Auto Mode with the OpenRouter Router
+
+OpenRouter exposes a router model (`openrouter/auto`) that picks a model for each request.
+Onyx can offer this router to users as an **Auto** option in the chat model picker.
+
+<Steps>
+  <Step title="Enable the Router Model">
+    Select the OpenRouter router model in the provider's **Models** list and save the provider.
+  </Step>
+
+  <Step title="Turn On Auto Mode">
+    On the **Language Models** page, turn on **Auto Mode**.
+  </Step>
+
+  <Step title="Select the Router Model">
+    Under **Router Model**, select the OpenRouter router.
+  </Step>
+</Steps>
+
+Users then see **Auto** in the model picker. Onyx records the cost of the model that OpenRouter served.

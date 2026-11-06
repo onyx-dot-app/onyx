@@ -1,230 +1,249 @@
 "use client";
 
-import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
-import { SearchAndFilterControls } from "./SearchAndFilterControls";
-import { SettingsLayouts, useToastFromQuery } from "@opal/layouts";
+import useSWR from "swr";
+import { Button, SelectButton } from "@opal/components";
+import { Section, SettingsLayouts } from "@opal/layouts";
+import { useNavigation } from "@opal/navigation";
+import { SvgPanelRight, SvgPlus } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Text } from "@opal/components";
-import { markdown } from "@opal/utils";
-import { Spacer } from "@opal/components";
-import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
-import { useSettings } from "@/lib/settings/hooks";
-import { useState, useRef, useMemo, RefObject } from "react";
-import { FilterOptions } from "./FilterComponent";
-import { ValidSources } from "@/lib/connectors/types/source";
-import Cookies from "js-cookie";
-import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
-import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
-import { IndexingStatusRequest } from "@/lib/types";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
+import type {
+  CCPairFullInfo,
+  IndexingConnectorRow,
+} from "@/lib/connectors/types";
+import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { can } from "@/lib/permissions/resource-actions";
+import {
+  useActivityChartLinks,
+  useActivityPanelOpen,
+} from "@/lib/connectors/ccPair/hooks";
+import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
+import ConnectorList from "@/views/admin/connectors/IndexingStatusPage/ConnectorList";
+import OverviewCard from "@/views/admin/connectors/IndexingStatusPage/OverviewCard";
+import { focusDimClass } from "@/views/admin/connectors/ConnectorDetailPage/focusMode";
+import type { SliceRange } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
+import PanelPageBody, {
+  BESIDE,
+  isStacked,
+} from "@/views/admin/connectors/shared/PanelPageBody";
 
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
-function Main() {
-  const t = useTranslations("admin.indexing");
-  const { vectorDbEnabled } = useSettings();
+/** Stacked, the history sits under the list and out of view, so it scrolls there. */
+export function revealHistory(panel: HTMLDivElement | null) {
+  if (panel === null || !isStacked(panel)) return;
+  panel.scrollIntoView({ block: "start", behavior: "smooth" });
+}
 
-  // State for filter management
-  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
-    accessType: null,
-    docsCountFilter: {
-      operator: null,
-      value: null,
-    },
-    lastStatus: null,
-  });
+interface StackedPanelToggleProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
 
-  // State for search
-  const [searchQuery, setSearchQuery] = useState<string>("");
-
-  // State for collapse/expand functionality
-  const [connectorsToggled, setConnectorsToggled] = useState<
-    Record<ValidSources, boolean>
-  >(() => {
-    const savedState = Cookies.get(TOGGLED_CONNECTORS_COOKIE_NAME);
-    return savedState ? JSON.parse(savedState) : {};
-  });
-
-  // Reference to the FilterComponent for resetting its state
-  const filterComponentRef = useRef<{
-    resetFilters: () => void;
-  }>(null);
-
-  // Convert filter options to API request format
-  const request: IndexingStatusRequest = useMemo(() => {
-    return {
-      secondary_index: false,
-      access_type_filters: filterOptions.accessType || [],
-      last_status_filters: filterOptions.lastStatus || [],
-      docs_count_operator: filterOptions.docsCountFilter.operator,
-      docs_count_value: filterOptions.docsCountFilter.value,
-      name_filter: searchQuery,
-    };
-  }, [filterOptions, searchQuery]);
-
-  // Use the paginated hook with filter request and 30-second refresh
-  const {
-    data: ccPairsIndexingStatuses,
-    isLoading: isLoadingCcPairsIndexingStatuses,
-    error: ccPairsIndexingStatusesError,
-    handlePageChange,
-    sourcePages,
-    sourceLoadingStates,
-    resetPagination,
-  } = useConnectorIndexingStatusWithPagination(request, 30000, vectorDbEnabled);
-
-  // Check if filters are active
-  const hasActiveFilters = useMemo(() => {
-    return (
-      (filterOptions.accessType && filterOptions.accessType.length > 0) ||
-      (filterOptions.lastStatus && filterOptions.lastStatus.length > 0) ||
-      filterOptions.docsCountFilter.operator !== null
-    );
-  }, [filterOptions]);
-
-  // Handle filter changes
-  const handleFilterChange = (newFilterOptions: FilterOptions) => {
-    setFilterOptions(newFilterOptions);
-    // Reset pagination when filters change
-    resetPagination();
-  };
-
-  // Toggle source expand/collapse functions
-  const toggleSource = (
-    source: ValidSources,
-    toggled: boolean | null = null
-  ) => {
-    const newConnectorsToggled = {
-      ...connectorsToggled,
-      [source]: toggled == null ? !connectorsToggled[source] : toggled,
-    };
-    setConnectorsToggled(newConnectorsToggled);
-    Cookies.set(
-      TOGGLED_CONNECTORS_COOKIE_NAME,
-      JSON.stringify(newConnectorsToggled)
-    );
-  };
-
-  const expandAll = () => {
-    if (!ccPairsIndexingStatuses) return;
-    const newConnectorsToggled = { ...connectorsToggled };
-    ccPairsIndexingStatuses.forEach((ccPairStatus) => {
-      newConnectorsToggled[ccPairStatus.source] = true;
-    });
-    setConnectorsToggled(newConnectorsToggled);
-    Cookies.set(
-      TOGGLED_CONNECTORS_COOKIE_NAME,
-      JSON.stringify(newConnectorsToggled)
-    );
-  };
-
-  const collapseAll = () => {
-    if (!ccPairsIndexingStatuses) return;
-    const newConnectorsToggled = { ...connectorsToggled };
-    ccPairsIndexingStatuses.forEach((ccPairStatus) => {
-      newConnectorsToggled[ccPairStatus.source] = false;
-    });
-    setConnectorsToggled(newConnectorsToggled);
-    Cookies.set(
-      TOGGLED_CONNECTORS_COOKIE_NAME,
-      JSON.stringify(newConnectorsToggled)
-    );
-  };
-
-  // Check if any sources are expanded
-  const hasExpandedSources =
-    ccPairsIndexingStatuses?.some(
-      (ccPairStatus) => connectorsToggled[ccPairStatus.source]
-    ) || false;
-
-  // Handler functions for the search and filter controls
-  const handleClearFilters = () => {
-    if (filterComponentRef.current) {
-      filterComponentRef.current.resetFilters();
-      setFilterOptions({
-        accessType: null,
-        docsCountFilter: {
-          operator: null,
-          value: null,
-        },
-        lastStatus: null,
-      });
-    }
-  };
-
-  if (ccPairsIndexingStatusesError) {
-    return (
-      <div className="text-error">
-        {ccPairsIndexingStatusesError?.info?.detail ||
-          t("status.loadError.message")}
-      </div>
-    );
-  }
-
+/** Shows or hides the history from the end of the list, where the stacked panel sits, since the counts card's button goes when stacked. */
+function StackedPanelToggle({ open, onOpenChange }: StackedPanelToggleProps) {
+  const t = useTranslations("admin.indexing.activities");
   return (
-    <div>
-      {/* Search bar and controls */}
-      <SearchAndFilterControls
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        hasExpandedSources={hasExpandedSources}
-        onExpandAll={expandAll}
-        onCollapseAll={collapseAll}
-        filterOptions={filterOptions}
-        onFilterChange={handleFilterChange}
-        resetPagination={resetPagination}
-        onClearFilters={handleClearFilters}
-        hasActiveFilters={hasActiveFilters}
-        filterComponentRef={
-          filterComponentRef as RefObject<{ resetFilters: () => void }>
-        }
-      />
-
-      {/* Table component */}
-      {isLoadingCcPairsIndexingStatuses ? (
-        <div className="mt-12">
-          <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
-        </div>
-      ) : !ccPairsIndexingStatuses || ccPairsIndexingStatuses.length === 0 ? (
-        <div>
-          <Spacer rem={3} />
-          <Text as="p">{markdown(t("status.empty.message"))}</Text>
-        </div>
-      ) : (
-        <CCPairIndexingStatusTable
-          ccPairsIndexingStatuses={ccPairsIndexingStatuses}
-          connectorsToggled={connectorsToggled}
-          toggleSource={toggleSource}
-          onPageChange={handlePageChange}
-          sourceLoadingStates={sourceLoadingStates}
-        />
-      )}
-    </div>
+    <Section
+      flexDirection="row"
+      justifyContent="end"
+      height="fit"
+      className={BESIDE.hiddenBeside}
+    >
+      <SelectButton
+        icon={SvgPanelRight}
+        size="md"
+        state={open ? "selected" : "empty"}
+        tooltip={t(open ? "panelButton.hide" : "panelButton.show")}
+        onClick={() => onOpenChange(!open)}
+      >
+        {t("panel.title")}
+      </SelectButton>
+    </Section>
   );
 }
 
+interface PairActivityPanelProps {
+  row: IndexingConnectorRow;
+  onClose: () => void;
+  onHoverPair: (ccPairId: number | null) => void;
+  ref: React.Ref<HTMLDivElement>;
+}
+
+/** The history panel on one connector's runs, opened from its row. */
+function PairActivityPanel({
+  row,
+  onClose,
+  onHoverPair,
+  ref,
+}: PairActivityPanelProps) {
+  const t = useTranslations("admin.indexing");
+  // The row does not say whether its source resolves errors one by one, so the pair's details do.
+  const { data: ccPair } = useSWR<CCPairFullInfo>(
+    buildCCPairInfoUrl(row.cc_pair_id),
+    errorHandlingFetcher
+  );
+  // Both flags come from the details, so a supported connector never reads as unsupported while they load.
+  const operates = ccPair !== undefined && can(ccPair, "operate");
+  return (
+    <ActivityPanel
+      scope={{
+        ccPairId: row.cc_pair_id,
+        canResolve: operates && ccPair.supports_targeted_reindex,
+        canResolveRuns: operates,
+      }}
+      title={t("activities.panel.pairTitle", { name: row.name })}
+      onClose={onClose}
+      onHoverPair={onHoverPair}
+      sticky
+      ref={ref}
+    />
+  );
+}
+
+/** Every connector's indexing at a glance: the fleet's counts and throughput, then each connector with its latest run, beside the fleet's activities. */
 export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
-  const adminRouteTitle = useAdminRouteTitle();
-
-  useToastFromQuery({
-    "connector-created": {
-      message: t("status.connectorCreated.toast"),
-      type: "success",
-    },
+  const navigation = useNavigation();
+  // The catalog's route needs global connector management, which a scoped manager does not hold.
+  const { isGlobalHolder: canAddConnector } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
+  // One connector's history takes the fleet's place while it is open.
+  const [pairHistory, setPairHistory] = useState<IndexingConnectorRow | null>(
+    null
+  );
+  // A picked span of the chart narrows the fleet's history, which opens to show it.
+  const [range, setRange] = useState<SliceRange | null>(null);
+  const fleetPanel = useActivityPanelOpen("fleet");
+  const history: "fleet" | IndexingConnectorRow | null =
+    pairHistory ?? (fleetPanel.open ? "fleet" : null);
+  const historyOpen = history !== null;
+  // The history the page opens with stays where it is. Only one the admin picks scrolls into view.
+  const adminPicked = useRef(false);
+  function showFleetHistory() {
+    adminPicked.current = true;
+    setPairHistory(null);
+    fleetPanel.setOpen(true);
+  }
+  // View Logs on the connector whose history is open closes it.
+  function togglePairHistory(row: IndexingConnectorRow) {
+    adminPicked.current = true;
+    setPairHistory((open) =>
+      open?.cc_pair_id === row.cc_pair_id ? null : row
+    );
+    setRange(null);
+  }
+  // Hiding from the panel button drops a pair's history and the span too, so the button reopens the fleet.
+  function setHistoryOpen(open: boolean) {
+    if (open) {
+      showFleetHistory();
+      return;
+    }
+    setPairHistory(null);
+    fleetPanel.setOpen(false);
+    setRange(null);
+  }
+  // A failure line or View Errors focuses a card in the fleet's history, so the history opens.
+  const activityLinks = useActivityChartLinks({
+    onFocusAttempt: showFleetHistory,
   });
+  // The row's count adds open prune and check runs to its latest run's errors. A latest run with open errors is focused in the fleet's history, and otherwise the pair's history lists the runs that count.
+  function focusErrors(row: IndexingConnectorRow) {
+    setRange(null);
+    const attempt = row.latest_index_attempt;
+    if (attempt !== null && attempt.open_error_count > 0) {
+      activityLinks.focusAttempt(attempt.id);
+      return;
+    }
+    adminPicked.current = true;
+    setPairHistory(row);
+  }
+  // A connector's open popover steps the overview back with the other connectors.
+  const [listFocused, setListFocused] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // What the history shows: the fleet over a span, or one connector. A new subject brings the panel into view.
+  const subject =
+    history === null
+      ? null
+      : history === "fleet"
+        ? `fleet ${range?.since ?? ""} ${range?.until ?? ""}`
+        : `pair ${history.cc_pair_id}`;
+  useEffect(() => {
+    if (subject !== null && adminPicked.current) {
+      revealHistory(panelRef.current);
+    }
+  }, [subject]);
 
   return (
-    <SettingsLayouts.Root width="full">
+    <SettingsLayouts.Root width="xl" narrowGutters>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={adminRouteTitle(route)}
+        title={t("title")}
         divider
+        actions={
+          canAddConnector
+            ? [
+                // The catalog page is where a connector is added.
+                <Button
+                  key="add"
+                  icon={SvgPlus}
+                  {...navigation.linkTo(ADMIN_ROUTES.CONNECTORS.path)}
+                >
+                  {t("addConnector")}
+                </Button>,
+              ]
+            : undefined
+        }
       />
-      <SettingsLayouts.Body>
-        <Main />
-      </SettingsLayouts.Body>
+      <PanelPageBody
+        panel={
+          history === "fleet" ? (
+            <ActivityPanel
+              scope="fleet"
+              title={t("activities.panel.title")}
+              range={range}
+              onClearRange={() => setRange(null)}
+              {...activityLinks.panel}
+              sticky
+              ref={panelRef}
+            />
+          ) : (
+            history !== null && (
+              <PairActivityPanel
+                key={history.cc_pair_id}
+                row={history}
+                onClose={() => setPairHistory(null)}
+                onHoverPair={activityLinks.panel.onHoverPair}
+                ref={panelRef}
+              />
+            )
+          )
+        }
+      >
+        <OverviewCard
+          range={range}
+          onRangeChange={(picked) => {
+            setRange(picked);
+            if (picked !== null) showFleetHistory();
+          }}
+          activityLinks={activityLinks.chart}
+          panelOpen={historyOpen}
+          onPanelOpenChange={setHistoryOpen}
+          className={focusDimClass(listFocused)}
+        />
+        <ConnectorList
+          onViewLogs={togglePairHistory}
+          onFocusError={focusErrors}
+          onFocusChange={setListFocused}
+          liftedCcPairId={historyOpen ? activityLinks.liftedPairId : null}
+        />
+        <StackedPanelToggle open={historyOpen} onOpenChange={setHistoryOpen} />
+      </PanelPageBody>
     </SettingsLayouts.Root>
   );
 }

@@ -1,0 +1,86 @@
+---
+title: "Quickstart"
+description: "Get Agent Wiki running and connect your first agent"
+icon: "rocket"
+---
+
+From nothing to a working wiki your coding agent can read and write. Budget about fifteen minutes,
+most of it waiting on the first build.
+
+<Steps>
+  <Step title="Run the stack">
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/agent-wiki/main/install.sh | bash
+    ```
+
+    When it finishes, open `http://localhost:8090`. See [Docker Compose](/agent-wiki/deployment/docker_compose)
+    for requirements, the manual path, and troubleshooting.
+  </Step>
+
+  <Step title="Claim the admin account">
+    Sign up at that URL. **The first account created becomes the admin**,
+    so do this before anyone else reaches the instance.
+  </Step>
+
+  <Step title="Configure a language model">
+    Go to **Admin → Language Models** and add a provider.
+
+    Nothing intelligent happens until this is set: agents, triggers, and Auto Organize all sit idle without a model.
+  </Step>
+
+  <Step title="Write a page">
+    Open **Wiki** in the sidebar and create one. Pages are markdown in a folder hierarchy,
+    and every save is a git commit — so nothing you do here is unrecoverable.
+
+    Give it real content rather than a placeholder. The next step is more interesting with something to read.
+  </Step>
+
+  <Step title="Connect your agent">
+    Open **Agents & Actions**, generate an API key, and point your coding agent at the wiki:
+
+    ```bash
+    claude mcp add --transport http agent-wiki \
+      http://localhost:8090/api/mcp \
+      --header "Authorization: Bearer mcp_REPLACE_ME"
+    ```
+
+    Full setup for Claude Code, Cursor, Codex,
+    and Onyx Craft — plus the argument-order gotcha that trips up the command above — is in [Connect an
+    Agent](/agent-wiki/automate/mcp).
+  </Step>
+
+  <Step title="Try it from the agent">
+    Ask your agent to search the wiki, read the page you wrote, and add something to it.
+    The edit shows up as a commit attributed to you, visible in the page's history.
+
+    This is the loop the product is built around: agents load context from the wiki before working,
+    and write back what they learn.
+  </Step>
+</Steps>
+
+## Where to go next
+
+<Columns cols={2}>
+  <Card title="Set up a trigger" icon="bolt" href="/agent-wiki/automate/triggers">
+    Get told when something you care about changes, in plain English.
+  </Card>
+
+  <Card title="Control what AI may edit" icon="sliders" href="/agent-wiki/using/update_policies">
+    Decide per page or folder what may be updated or reorganized.
+  </Card>
+
+  <Card title="Keep the wiki tidy" icon="wand-magic-sparkles" href="/agent-wiki/automate/auto_organize">
+    Let the wiki find duplicates and clutter, and approve the fixes.
+  </Card>
+
+  <Card title="Invite your team" icon="users" href="/agent-wiki/admin/users_and_groups">
+    Add accounts and set up permission groups.
+  </Card>
+</Columns>
+
+<Note>
+  Running this for more than a trial?
+  Set `PUBLIC_BASE_URL` to the real external URL before sharing it — links the wiki hands out,
+  including the MCP endpoint, are built from it.
+  See [Docker Compose](/agent-wiki/deployment/docker_compose#required-settings).
+</Note>

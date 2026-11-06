@@ -1,16 +1,19 @@
 "use client";
 
-import { Tag, type TagProps } from "@opal/components";
-import { usePlans } from "@/lib/tiers/hooks";
-import type { Tier } from "@/lib/tiers/types";
+import {
+  LifecycleBadge,
+  PlanBadge,
+  type PlanBadgeProps,
+} from "@/lib/badges/components";
 
-export interface PlanTagProps {
-  plan: Tier;
-  size?: TagProps["size"];
-}
+export type PlanTagProps = PlanBadgeProps;
 
 /** A plan's badge. */
-export function PlanTag({ plan, size }: PlanTagProps) {
-  const { tag } = usePlans()[plan];
-  return <Tag {...tag} size={size} />;
+export function PlanTag(props: PlanTagProps) {
+  return <PlanBadge {...props} />;
+}
+
+/** The badge every beta feature carries. */
+export function BetaTag() {
+  return <LifecycleBadge lifecycle="beta" />;
 }

@@ -13,13 +13,13 @@ from other pairs.
 
 import math
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, computed_field, field_validator
+from pydantic import BaseModel, computed_field
 from pydantic_core import to_jsonable_python
 
 from onyx.cache.factory import get_cache_backend
@@ -33,31 +33,40 @@ from onyx.connectors.capability_checks.findings_setting import (
     hide_findings_if_disabled,
 )
 from onyx.connectors.capability_checks.models import (
+    TRANSIENT_ERROR_KINDS,
+    CachedDraftResult,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CapabilityVerdict,
-    CheckAdvisory,
-    CheckFinding,
     CheckNotApplicableError,
+    CheckNotRunReason,
+    CheckReadinessKind,
     CredentialCapability,
+    DraftCheckState,
+    DraftCheckStateKind,
+    DraftRunPairScope,
+    TwoStepEntry,
+    TwoStepRow,
     compute_capability_verdicts,
-    parse_known_findings,
 )
 from onyx.connectors.capability_checks.runner import (
-    CheckReadinessKind,
     decide_check_readiness,
+    dependency_not_run_result,
+    run_order,
+)
+from onyx.connectors.capability_checks.two_step import (
+    two_step_rows,
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
-from onyx.connectors.models import InputType
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.db.enums import AccessType
 
 DRAFT_RUN_TTL_SECONDS = 30 * 60
-# Caps every hang guard of a draft run. A check that times out is
-# INDETERMINATE, which does not block the form. Stored runs keep their full
-# guards.
+# Caps every hang guard of a draft run. A check that times out is INCOMPLETE,
+# which does not block the form, unless it is a sign-in check
+# (``fails_when_unreachable``). Stored runs keep their full guards.
 DRAFT_CHECK_TIMEOUT_SECONDS = 5 * 60
 # The run outlives its lease by this much, so a reader sees the lease run out
 # before the run expires.
@@ -71,6 +80,7 @@ DRAFT_RESULT_CACHE_TTL_SECONDS = 10 * 60
 _DRAFT_RUN_KEY_PREFIX = "capability_check_draft_run"
 _DRAFT_LATEST_RUN_KEY_PREFIX = "capability_check_draft_latest_run"
 _DRAFT_RESULT_KEY_PREFIX = "capability_check_draft_result"
+_DRAFT_USER_CHOICE_KEY_PREFIX = "capability_check_draft_user_choice"
 # Set on a result key while a draft run is still to write it.
 _IN_FLIGHT_SUFFIX = ":in_flight"
 _DRAFT_RESULT_POLL_SECONDS = 0.2
@@ -82,32 +92,26 @@ _CONFIG_INDEPENDENT_HASH = "config_independent"
 
 _NEEDS_CONFIG_MESSAGE = "Needs connector settings."
 _NEEDS_COMPLETE_CONFIG_MESSAGE = "Needs complete connector settings."
-
-
-class DraftCheckStateKind(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    PASSED = "passed"
-    FAILED = "failed"
-    INDETERMINATE = "indeterminate"
-    SKIPPED = "skipped"
-    # A required field is missing or invalid; the check runs once it is valid.
-    WAITING = "waiting"
-    # The access type or the check's ``applies`` excludes it.
-    NOT_APPLICABLE = "not_applicable"
+_USER_SKIP_REASONS = frozenset(
+    {CheckNotRunReason.SKIPPED_BY_USER, CheckNotRunReason.STOPPED_BY_USER}
+)
+_SKIPPED_BY_USER_LINE = "Skipped by you"
+_STOPPED_BY_USER_LINE = "Not run: stopped by user"
 
 
 _STATE_BY_STATUS: dict[CapabilityCheckStatus, DraftCheckStateKind] = {
     CapabilityCheckStatus.PASSED: DraftCheckStateKind.PASSED,
     CapabilityCheckStatus.FAILED: DraftCheckStateKind.FAILED,
+    CapabilityCheckStatus.INCOMPLETE: DraftCheckStateKind.INCOMPLETE,
     CapabilityCheckStatus.INDETERMINATE: DraftCheckStateKind.INDETERMINATE,
     CapabilityCheckStatus.SKIPPED: DraftCheckStateKind.SKIPPED,
+    CapabilityCheckStatus.STOPPED: DraftCheckStateKind.STOPPED,
 }
 _STATUS_BY_STATE = {state: status for status, state in _STATE_BY_STATUS.items()}
 _UNFINISHED_STATES = frozenset(
     {DraftCheckStateKind.PENDING, DraftCheckStateKind.RUNNING}
 )
-# Indeterminate results are transient, so they are not cached.
+# Incomplete results are transient, so they are not cached.
 _CACHEABLE_STATES = frozenset(
     {
         DraftCheckStateKind.PASSED,
@@ -146,37 +150,6 @@ class DraftRerunMode(str, Enum):
     ALL = "all"
 
 
-class DraftCheckState(BaseModel):
-    check_id: str
-    display_name: str
-    capability: CredentialCapability
-    required: bool
-    state: DraftCheckStateKind
-    message: str = ""
-    # Exception class name of a failure, for support diagnosis.
-    error_type: str | None = None
-    is_fallback: bool = False
-    missing_fields: list[str] = []
-    invalid_fields: list[str] = []
-    remediation: str | None = None
-    docs_link: str | None = None
-    duration_ms: int | None = None
-    from_cache: bool = False
-    # The check proves the credential works with the credential-bound fields.
-    validates_binding: bool = False
-    # A discovery check: it finds what the credential reaches and never
-    # gates the form.
-    discovery: bool = False
-    # What the check found, once it passed.
-    findings: list[CheckFinding] = []
-    advisories: list[CheckAdvisory] = []
-
-    @field_validator("findings", mode="before")
-    @classmethod
-    def _known_findings(cls, findings: Any) -> Any:
-        return parse_known_findings(findings)
-
-
 class DraftCheckRunSnapshot(BaseModel):
     run_id: UUID
     draft_key: str
@@ -194,26 +167,13 @@ class DraftCheckRunSnapshot(BaseModel):
     def verdicts(self) -> dict[CredentialCapability, CapabilityVerdict]:
         """Each capability's verdict, as a stored report computes it. A
         capability with a check that is still pending or running has none."""
-        unfinished: set[CredentialCapability] = set()
-        results: list[CapabilityCheckResult] = []
-        for check in self.checks:
-            if check.state in _UNFINISHED_STATES:
-                unfinished.add(check.capability)
-                continue
-            results.append(
-                CapabilityCheckResult(
-                    capability=check.capability,
-                    check_id=check.check_id,
-                    display_name=check.display_name,
-                    required=check.required,
-                    # A waiting check has not verified anything yet.
-                    status=_result_status(check.state),
-                    applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
-                    discovery=check.discovery,
-                )
-            )
+        unfinished: set[CredentialCapability] = {
+            check.capability
+            for check in self.checks
+            if check.state in _UNFINISHED_STATES
+        }
         verdicts = compute_capability_verdicts(
-            get_applicable_capabilities(self.source), results
+            get_applicable_capabilities(self.source), settled_results(self)
         )
         return {
             capability: verdict
@@ -221,25 +181,92 @@ class DraftCheckRunSnapshot(BaseModel):
             if capability not in unfinished
         }
 
+    @computed_field
+    @property
+    def two_step_rows(self) -> list[TwoStepRow]:
+        """How each two-step row shows, with "counting…" while its step
+        runs."""
+        return two_step_rows(
+            [
+                TwoStepEntry(
+                    check_id=check.check_id,
+                    row_id=check.row_id or check.check_id,
+                    step=check.step,
+                    status=(
+                        None
+                        if check.state in _UNFINISHED_STATES
+                        else _result_status(check.state)
+                    ),
+                    applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
+                    partial=check.partial,
+                    error_kind=check.error_kind,
+                    not_run_reason=check.not_run_reason,
+                    summary=check.summary,
+                )
+                for check in self.checks
+            ]
+        )
 
-class DraftCheckPlan(BaseModel):
-    """The checks a draft run would hold for a form, each in its state before
-    anything runs: pending, waiting or not applicable."""
 
-    source: DocumentSource
-    access_type: AccessType | None
-    # Field name to error message, for the form.
-    form_errors: dict[str, str]
-    unknown_fields: list[str]
-    checks: list[DraftCheckState]
+def _settled_result(check: DraftCheckState) -> CapabilityCheckResult:
+    return CapabilityCheckResult(
+        capability=check.capability,
+        check_id=check.check_id,
+        row_id=check.row_id,
+        display_name=check.display_name,
+        required=check.required,
+        status=_result_status(check.state),
+        message=check.message,
+        summary=check.summary,
+        error_kind=check.error_kind,
+        not_run_reason=check.not_run_reason,
+        blocked_by=check.blocked_by,
+        partial=check.partial,
+        applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
+        discovery=check.discovery,
+    )
 
 
-class DraftRunPairScope(BaseModel):
-    """The existing cc-pair that a dry run proposes a state for."""
+def settled_results(snapshot: DraftCheckRunSnapshot) -> list[CapabilityCheckResult]:
+    """The run's checks that are not PENDING or RUNNING, as result rows. A
+    waiting check has not verified anything, so it is SKIPPED."""
+    return [
+        _settled_result(check)
+        for check in snapshot.checks
+        if check.state not in _UNFINISHED_STATES
+    ]
 
-    cc_pair_id: int
-    connector_id: int
-    input_type: InputType | None
+
+def stop_blocked_draft_checks(
+    snapshot: DraftCheckRunSnapshot, checks: Sequence[CapabilityCheck[Any]]
+) -> None:
+    """Makes a settled check not run when a dependency stops it, as
+    ``stop_blocked_results`` does for a stored run. This reaches the results
+    the run reused from the cache or the latest run, which no runner decided.
+    A check is left until all its dependencies settled, so an any-of group is
+    decided on every member. The admin's own skips and stops stay. ``checks``
+    are the source's registered checks."""
+    state_by_key: dict[tuple[str, CredentialCapability], DraftCheckState] = {
+        (state.check_id, state.capability): state for state in snapshot.checks
+    }
+    unfinished_ids: set[str] = {
+        state.check_id for state in snapshot.checks if state.state in _UNFINISHED_STATES
+    }
+    result_by_check_id: dict[str, CapabilityCheckResult] = {}
+    for check in run_order(checks):
+        state = state_by_key.get((check.check_id, check.capability))
+        if state is None or state.state in _UNFINISHED_STATES:
+            continue
+        if (
+            # A check SKIPPED for its own reason keeps its result.
+            _result_status(state.state) != CapabilityCheckStatus.SKIPPED
+            and state.not_run_reason not in _USER_SKIP_REASONS
+            and unfinished_ids.isdisjoint((*check.depends_on, *check.depends_on_any))
+            and (not_run := dependency_not_run_result(check, result_by_check_id))
+        ):
+            apply_check_result(state, not_run)
+            state.from_cache = False
+        result_by_check_id[check.check_id] = _settled_result(state)
 
 
 class StoredDraftRun(BaseModel):
@@ -248,28 +275,17 @@ class StoredDraftRun(BaseModel):
     # Set for a dry run of an existing pair. Kept out of the snapshot, so the
     # create-form endpoint's response does not change.
     pair_scope: DraftRunPairScope | None = None
-    # check_id to its result cache key, for the checks the run task executes.
+    # check_id to its result cache key, for every check that could run when
+    # the run started, also one filled from the cache or skipped.
     result_cache_keys: dict[str, str]
+    # Start Now: the run task runs this check, and what it needs, first.
+    first_check_id: str | None = None
     # While RUNNING: the time by which the task writes the run again. A RUNNING
     # run read after it has no live task.
     lease_expires_at: datetime | None = None
 
     def renew_lease(self, seconds: float) -> None:
         self.lease_expires_at = datetime.now(timezone.utc) + timedelta(seconds=seconds)
-
-
-class CachedDraftResult(BaseModel):
-    state: DraftCheckStateKind
-    message: str
-    duration_ms: int | None
-    error_type: str | None = None
-    findings: list[CheckFinding] = []
-    advisories: list[CheckAdvisory] = []
-
-    @field_validator("findings", mode="before")
-    @classmethod
-    def _known_findings(cls, findings: Any) -> Any:
-        return parse_known_findings(findings)
 
 
 def decide_draft_check_state(
@@ -282,6 +298,8 @@ def decide_draft_check_state(
     readiness = decide_check_readiness(check, context)
     state = DraftCheckState(
         check_id=check.check_id,
+        row_id=check.row_id,
+        step=check.step,
         display_name=check.display_name,
         capability=check.capability,
         required=check.required,
@@ -291,6 +309,7 @@ def decide_draft_check_state(
         is_fallback=check.is_fallback,
         validates_binding=check.validates_binding,
         discovery=check.discovery,
+        reports_field=check.reports_field,
     )
     match readiness.kind:
         case CheckReadinessKind.RUNNABLE:
@@ -317,6 +336,51 @@ def decide_draft_check_state(
     return state
 
 
+def wait_for_dependencies(
+    planned: Sequence[tuple[CapabilityCheck[Any], DraftCheckState]],
+) -> None:
+    """Makes a PENDING check wait while a check it depends on waits, for the
+    same fields, so a chain of checks waits on the field its first check
+    needs. Its any-of group makes it wait only while no member that applies
+    can run."""
+    state_by_check_id: dict[str, DraftCheckState] = {}
+    for check, state in planned:
+        state_by_check_id.setdefault(check.check_id, state)
+    state_by_check: dict[int, DraftCheckState] = {
+        id(check): state for check, state in planned
+    }
+    for check in run_order([check for check, _ in planned]):
+        state = state_by_check[id(check)]
+        if state.state != DraftCheckStateKind.PENDING:
+            continue
+        waiting: list[DraftCheckState] = [
+            dependency
+            for dependency_id in check.depends_on
+            if (dependency := state_by_check_id.get(dependency_id)) is not None
+            and dependency.state == DraftCheckStateKind.WAITING
+        ]
+        members: list[DraftCheckState] = [
+            member
+            for member_id in check.depends_on_any
+            if (member := state_by_check_id.get(member_id)) is not None
+            and member.state != DraftCheckStateKind.NOT_APPLICABLE
+        ]
+        if members and all(
+            member.state == DraftCheckStateKind.WAITING for member in members
+        ):
+            waiting.extend(members)
+        if not waiting:
+            continue
+        state.state = DraftCheckStateKind.WAITING
+        state.message = waiting[0].message
+        state.missing_fields = sorted(
+            {name for dependency in waiting for name in dependency.missing_fields}
+        )
+        state.invalid_fields = sorted(
+            {name for dependency in waiting for name in dependency.invalid_fields}
+        )
+
+
 def draft_result_cache_key(
     *,
     credential_id: int,
@@ -327,30 +391,35 @@ def draft_result_cache_key(
     form_values: dict[str, Any] | None,
     cc_pair_id: int | None,
 ) -> str:
-    """The result cache key of one check. A check that reads the config,
-    directly or through a connector instance, keys on the validated form
-    values. Any other check keys on the form values that the source's gateway
-    reads, and on the credential. A dry run of a pair also keys on the pair."""
+    """The result cache key of one check. A check that reads the config
+    through a connector instance, or without declaring ``config_fields``, keys
+    on the validated form values. Any other check keys on its
+    ``config_fields`` and the form values that the source's gateway reads, and
+    on the credential. A dry run of a pair also keys on the pair."""
     config_hash = _CONFIG_INDEPENDENT_HASH
     if form_values is not None:
-        if check.reads_connector_config or check.requires_connector_instance:
+        if check.requires_connector_instance or (
+            check.reads_connector_config and check.config_fields is None
+        ):
             config_hash = _config_hash(form_values)
         else:
             gateway_class = get_source_operations_class(source)
             gateway_keys = (
                 gateway_class.config_keys if gateway_class is not None else frozenset()
             )
-            gateway_values = (
+            check_fields = check.config_fields or frozenset()
+            read_values = (
                 form_values
                 if gateway_keys is None
                 else {
                     key: value
                     for key, value in form_values.items()
-                    if key in gateway_keys and value not in (None, "")
+                    if key in check_fields
+                    or (key in gateway_keys and value not in (None, ""))
                 }
             )
-            if gateway_values:
-                config_hash = _config_hash(gateway_values)
+            if read_values:
+                config_hash = _config_hash(read_values)
     access = access_type.value if access_type is not None else "none"
     key = (
         f"{_DRAFT_RESULT_KEY_PREFIX}:{credential_id}:"
@@ -373,19 +442,29 @@ def get_cached_draft_result(key: str) -> CachedDraftResult | None:
 
 
 def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
-    """Caches a terminal result; INDETERMINATE is not cached. Neither is a
-    SKIPPED discovery check: its skip (a failed required check, findings
-    turned off) says nothing about the listing once the cause is gone."""
+    """Caches a terminal result; INCOMPLETE is not cached, nor a sign-in check
+    FAILED by a timeout or an unreachable source. A check that did not run
+    because of a dependency or a rate limit, or a SKIPPED discovery check (a
+    failed required check, findings turned off), drops its cached result: the
+    skip says nothing about the check once the cause is gone, and an older
+    result would return without its cause."""
     state = _draft_state(result)
-    if state not in _CACHEABLE_STATES:
+    if result.not_run_reason is not None or (
+        result.discovery and state == DraftCheckStateKind.SKIPPED
+    ):
+        get_cache_backend().delete(key)
         return
-    if result.discovery and state == DraftCheckStateKind.SKIPPED:
+    if state not in _CACHEABLE_STATES or result.error_kind in TRANSIENT_ERROR_KINDS:
         return
     cached = CachedDraftResult(
         state=state,
         message=result.message,
         duration_ms=result.duration_ms,
         error_type=result.error_type,
+        error_kind=result.error_kind,
+        error_detail=result.error_detail,
+        summary=result.summary,
+        description=result.description,
         findings=result.findings,
         advisories=result.advisories,
     )
@@ -444,7 +523,7 @@ def wait_for_draft_result(
 ) -> CachedDraftResult | None:
     """The result a draft run writes under ``result_key``, once it lands.
     ``None`` when it does not land within ``timeout_seconds``, or the run
-    stops without it (an INDETERMINATE result is not cached)."""
+    stops without it (an INCOMPLETE result is not cached)."""
     deadline = time.monotonic() + timeout_seconds
     while True:
         cached = get_cached_draft_result(result_key)
@@ -466,11 +545,18 @@ def cached_check_result(
     return CapabilityCheckResult(
         capability=check.capability,
         check_id=check.check_id,
+        row_id=check.row_id,
+        step=check.step,
         display_name=check.display_name,
         required=check.required,
         status=_result_status(cached.state),
         message=cached.message,
         error_type=cached.error_type,
+        error_kind=cached.error_kind,
+        error_detail=cached.error_detail,
+        summary=cached.summary,
+        description=cached.description,
+        not_run_reason=cached.not_run_reason,
         is_fallback=check.is_fallback,
         remediation=check.remediation,
         docs_link=check.docs_link,
@@ -490,6 +576,13 @@ def apply_check_result(
     check_state.state = _draft_state(result)
     check_state.message = result.message
     check_state.error_type = result.error_type
+    check_state.error_kind = result.error_kind
+    check_state.error_detail = result.error_detail
+    check_state.not_run_reason = result.not_run_reason
+    check_state.blocked_by = result.blocked_by
+    check_state.partial = result.partial
+    check_state.summary = result.summary
+    check_state.description = result.description
     check_state.duration_ms = result.duration_ms
     check_state.findings = result.findings
     check_state.advisories = result.advisories
@@ -501,32 +594,121 @@ def apply_cached_result(
     check_state.state = cached.state
     check_state.message = cached.message
     check_state.error_type = cached.error_type
+    check_state.error_kind = cached.error_kind
+    check_state.error_detail = cached.error_detail
+    check_state.summary = cached.summary
+    check_state.description = cached.description
+    check_state.not_run_reason = cached.not_run_reason
     check_state.duration_ms = cached.duration_ms
     check_state.findings = cached.findings if check_findings_enabled() else []
     check_state.advisories = cached.advisories
     check_state.from_cache = True
 
 
-def pending_in_run_order(snapshot: DraftCheckRunSnapshot) -> list[DraftCheckState]:
-    """The run's PENDING checks in the order the runner executes them:
-    discovery checks last."""
-    return sorted(
-        (
-            check
-            for check in snapshot.checks
-            if check.state == DraftCheckStateKind.PENDING
-        ),
-        key=lambda check: check.discovery,
+def skip_draft_check(check_state: DraftCheckState) -> None:
+    """Marks a check the admin skipped: an optional check is SKIPPED, a
+    required one STOPPED, so it still holds Create."""
+    if check_state.required:
+        check_state.state = DraftCheckStateKind.STOPPED
+        check_state.not_run_reason = CheckNotRunReason.STOPPED_BY_USER
+        line = _STOPPED_BY_USER_LINE
+    else:
+        check_state.state = DraftCheckStateKind.SKIPPED
+        check_state.not_run_reason = CheckNotRunReason.SKIPPED_BY_USER
+        line = _SKIPPED_BY_USER_LINE
+    check_state.message = line
+    check_state.summary = line
+
+
+def _user_choice_key(user_id: UUID, result_key: str) -> str:
+    return f"{_DRAFT_USER_CHOICE_KEY_PREFIX}:{user_id}:{result_key}"
+
+
+def cache_user_skip(
+    user_id: UUID, result_key: str, check_state: DraftCheckState
+) -> None:
+    """Caches the admin's skip or stop of a check for that admin only, apart
+    from the shared result under ``result_key``: creation by the same admin on
+    the same form reuses a skip, and runs a stopped check."""
+    cached = CachedDraftResult(
+        state=check_state.state,
+        message=check_state.message,
+        duration_ms=None,
+        summary=check_state.summary,
+        not_run_reason=check_state.not_run_reason,
+    )
+    get_cache_backend().set(
+        _user_choice_key(user_id, result_key),
+        cached.model_dump_json(),
+        ex=DRAFT_RESULT_CACHE_TTL_SECONDS,
     )
 
 
-def required_check_failed(snapshot: DraftCheckRunSnapshot) -> bool:
-    """A required check of the run already FAILED, from the cache: its
-    discovery checks then do not run."""
-    return any(
-        check.required and check.state == DraftCheckStateKind.FAILED
+def clear_user_skip(user_id: UUID, result_key: str) -> None:
+    get_cache_backend().delete(_user_choice_key(user_id, result_key))
+
+
+def get_user_skip(user_id: UUID, result_key: str) -> CachedDraftResult | None:
+    """The admin's cached skip or stop of the check under ``result_key``."""
+    raw = get_cache_backend().get(_user_choice_key(user_id, result_key))
+    return CachedDraftResult.model_validate_json(raw) if raw is not None else None
+
+
+# Results a run keeps from the latest run of its draft key. A check that a
+# gate or the admin stopped has no result of its own: it runs again, so it
+# sees the new result of its dependency, or the request's skips decide it.
+_KEPT_STATES = frozenset(
+    {
+        DraftCheckStateKind.PASSED,
+        DraftCheckStateKind.FAILED,
+        DraftCheckStateKind.INCOMPLETE,
+        DraftCheckStateKind.INDETERMINATE,
+        DraftCheckStateKind.SKIPPED,
+    }
+)
+
+
+def kept_draft_state(
+    prior: StoredDraftRun | None, check_state: DraftCheckState, cache_key: str
+) -> DraftCheckState | None:
+    """The check's result in ``prior``, the latest run of the draft key, for a
+    run that does not run the check again. None when ``prior`` ran it on
+    another credential or form, or holds no result of its own for it. A
+    SKIPPED discovery check runs again, as ``cache_draft_result`` drops it."""
+    if prior is None or prior.result_cache_keys.get(check_state.check_id) != cache_key:
+        return None
+    for prior_state in prior.snapshot.checks:
+        if (
+            prior_state.check_id == check_state.check_id
+            and prior_state.capability == check_state.capability
+            and prior_state.state in _KEPT_STATES
+            and prior_state.not_run_reason in (None, CheckNotRunReason.NOTHING_IN_SCOPE)
+            and not (
+                prior_state.discovery
+                and prior_state.state == DraftCheckStateKind.SKIPPED
+            )
+        ):
+            return prior_state.model_copy(update={"from_cache": True})
+    return None
+
+
+def pending_in_run_order(
+    snapshot: DraftCheckRunSnapshot,
+    checks: Sequence[CapabilityCheck[Any]],
+    first_check_id: str | None = None,
+) -> list[DraftCheckState]:
+    """The run's PENDING checks in the order the runner executes them
+    (``run_order``). ``checks`` are the source's registered checks."""
+    pending: dict[tuple[str, CredentialCapability], DraftCheckState] = {
+        (check.check_id, check.capability): check
         for check in snapshot.checks
-    )
+        if check.state == DraftCheckStateKind.PENDING
+    }
+    return [
+        pending[key]
+        for check in run_order(checks, first_check_id)
+        if (key := (check.check_id, check.capability)) in pending
+    ]
 
 
 def cc_pair_draft_key(cc_pair_id: int) -> str:
@@ -574,6 +756,12 @@ def load_draft_run(run_id: UUID) -> StoredDraftRun | None:
     return StoredDraftRun.model_validate_json(raw) if raw is not None else None
 
 
+def load_latest_draft_run(user_id: UUID, draft_key: str) -> StoredDraftRun | None:
+    """The user's latest run of the draft key, while it has not expired."""
+    latest = get_cache_backend().get(_latest_run_key(user_id, draft_key))
+    return load_draft_run(UUID(latest.decode())) if latest is not None else None
+
+
 def draft_run_start_lock(user_id: UUID, draft_key: str) -> CacheLock:
     """Serializes the save and the latest-run update of concurrent starts for
     one draft key, so the run saved last is also the latest."""
@@ -600,6 +788,30 @@ def is_superseded(run: StoredDraftRun) -> bool:
         _latest_run_key(run.user_id, run.snapshot.draft_key)
     )
     return latest is None or latest.decode() != str(run.snapshot.run_id)
+
+
+def _latest_run_skips(run: StoredDraftRun, check_id: str) -> bool:
+    """True when the latest run of ``run``'s draft key skipped or stopped the
+    check on the same result cache key."""
+    latest = load_latest_draft_run(run.user_id, run.snapshot.draft_key)
+    if latest is None or latest.result_cache_keys.get(
+        check_id
+    ) != run.result_cache_keys.get(check_id):
+        return False
+    return any(
+        state.check_id == check_id and state.not_run_reason in _USER_SKIP_REASONS
+        for state in latest.snapshot.checks
+    )
+
+
+def cache_run_result(run: StoredDraftRun, result: CapabilityCheckResult) -> None:
+    """Caches a result of ``run``. A superseded run keeps off the result of a
+    check that the latest run skipped or stopped, so the admin's skip holds.
+    Holds the start lock, under which a new run saves its skips."""
+    with draft_run_start_lock(run.user_id, run.snapshot.draft_key):
+        if is_superseded(run) and _latest_run_skips(run, result.check_id):
+            return
+        cache_draft_result(run.result_cache_keys[result.check_id], result)
 
 
 def clear_latest_draft_run(run: StoredDraftRun) -> None:

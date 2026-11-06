@@ -173,118 +173,6 @@ async function updateDocSetGroupSharing(
 }
 
 // ---------------------------------------------------------------------------
-// Token rate limits — create / update / delete
-// ---------------------------------------------------------------------------
-
-const HOURS_PER_DAY = 24;
-
-interface TokenLimitPayload {
-  tokenId?: number | null;
-  enabled?: boolean;
-  tokenBudget: number | null;
-  periodDays: number | null;
-  costBudgetDollars: number | null;
-}
-
-interface ExistingTokenLimit {
-  token_id: number;
-  enabled: boolean;
-  token_budget: number | null;
-  period_hours: number;
-  cost_budget_cents: number | null;
-}
-
-interface ValidTokenLimit {
-  tokenId: number | null;
-  enabled: boolean;
-  tokenBudget: number | null;
-  periodDays: number;
-  costBudgetCents: number | null;
-}
-
-async function saveTokenLimits(
-  groupId: number,
-  limits: TokenLimitPayload[],
-  existing: ExistingTokenLimit[]
-): Promise<void> {
-  const validLimits: ValidTokenLimit[] = limits
-    .map((l) => {
-      const costBudgetCents =
-        l.costBudgetDollars != null
-          ? Math.round(l.costBudgetDollars * 100)
-          : null;
-      return {
-        tokenId: l.tokenId ?? null,
-        enabled: l.enabled ?? true,
-        tokenBudget: l.tokenBudget,
-        periodDays: l.periodDays,
-        costBudgetCents,
-      };
-    })
-    .filter(
-      (l): l is ValidTokenLimit =>
-        l.periodDays != null &&
-        (l.tokenBudget != null || l.costBudgetCents != null)
-    );
-
-  for (const limit of validLimits.filter((item) => item.tokenId !== null)) {
-    const updateRes = await fetch(
-      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${limit.tokenId}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enabled: limit.enabled,
-          token_budget: limit.tokenBudget,
-          period_hours: limit.periodDays * HOURS_PER_DAY,
-          cost_budget_cents: limit.costBudgetCents,
-        }),
-      }
-    );
-    if (!updateRes.ok) {
-      throw new Error(`Failed to update token rate limit ${limit.tokenId}`);
-    }
-  }
-
-  for (const limit of validLimits.filter((item) => item.tokenId === null)) {
-    const createRes = await fetch(
-      `/api/admin/token-rate-limits/user-group/${groupId}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          enabled: limit.enabled,
-          token_budget: limit.tokenBudget,
-          period_hours: limit.periodDays * HOURS_PER_DAY,
-          cost_budget_cents: limit.costBudgetCents,
-        }),
-      }
-    );
-    if (!createRes.ok) {
-      throw new Error("Failed to create token rate limit");
-    }
-  }
-
-  const retainedIds = new Set(
-    validLimits.flatMap((limit) =>
-      limit.tokenId === null ? [] : [limit.tokenId]
-    )
-  );
-  for (const existingLimit of existing) {
-    if (retainedIds.has(existingLimit.token_id)) continue;
-    const deleteRes = await fetch(
-      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${existingLimit.token_id}`,
-      { method: "DELETE" }
-    );
-    if (!deleteRes.ok) {
-      throw new Error(
-        `Failed to delete token rate limit ${existingLimit.token_id}`
-      );
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Group permissions — bulk set desired permissions in a single request
 // ---------------------------------------------------------------------------
 
@@ -326,7 +214,6 @@ export {
   deleteGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
-  saveTokenLimits,
   saveGroupPermissions,
   setGroupManager,
 };

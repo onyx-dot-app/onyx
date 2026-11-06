@@ -32,7 +32,10 @@ from onyx.background.indexing.job_client import (
     SimpleJobClient,
     SimpleJobException,
 )
-from onyx.background.indexing.run_docfetching import run_docfetching_entrypoint
+from onyx.background.indexing.run_docfetching import (
+    mark_attempt_failed_unless_terminal,
+    run_docfetching_entrypoint,
+)
 from onyx.configs.app_configs import INDEXING_WORKER_MEMORY_LIMIT_MB
 from onyx.configs.constants import (
     CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT,
@@ -42,7 +45,7 @@ from onyx.configs.constants import (
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IndexingStatus
+from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus
 from onyx.db.index_attempt import (
     get_index_attempt,
     mark_attempt_canceled,
@@ -240,14 +243,15 @@ def _docfetching_task(
             callback=callback,
         )
 
-    except ConnectorValidationError:
+    except ConnectorValidationError as e:
+        mark_attempt_failed_unless_terminal(index_attempt_id, e)
         raise SimpleJobException(
             f"Indexing task failed: attempt={index_attempt_id} "
             f"tenant={tenant_id} "
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}",
             code=IndexingWatchdogTerminalStatus.CONNECTOR_VALIDATION_ERROR.code,
-        )
+        ) from e
 
     except Exception as e:
         logger.exception(
@@ -257,16 +261,8 @@ def _docfetching_task(
             cc_pair_id,
             search_settings_id,
         )
-
-        # special bulletproofing ... truncate long exception messages
-        # for exception types that require more args, this will fail
-        # thus the try/except
-        try:
-            sanitized_e = type(e)(str(e)[:1024])
-            sanitized_e.__traceback__ = e.__traceback__
-            raise sanitized_e
-        except Exception:
-            raise e
+        mark_attempt_failed_unless_terminal(index_attempt_id, e)
+        raise
 
     logger.info(
         "Indexing spawned task finished: attempt=%s cc_pair=%s search_settings=%s",
@@ -307,6 +303,15 @@ def process_job_result(
         index_attempt = get_index_attempt(db_session, index_attempt_id)
         if index_attempt and index_attempt.total_batches is not None:
             ignore_exitcode = True
+        # A stop fence left by a pause whose commit failed is not a requested stop.
+        stop_requested = index_attempt is not None and (
+            index_attempt.cancellation_requested
+            or index_attempt.connector_credential_pair.status
+            in (
+                ConnectorCredentialPairStatus.PAUSED,
+                ConnectorCredentialPairStatus.DELETING,
+            )
+        )
 
     if ignore_exitcode:
         result.status = IndexingWatchdogTerminalStatus.SUCCEEDED
@@ -319,6 +324,13 @@ def process_job_result(
     else:
         if result.exit_code is not None:
             result.status = IndexingWatchdogTerminalStatus.from_code(result.exit_code)
+
+        # A requested stop seen before the run started is not a failure.
+        if (
+            result.status == IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL
+            and stop_requested
+        ):
+            return result
 
         job_level_exception = job.exception()
         result.exception_str = f"Docfetching returned exit code {result.exit_code} with exception: {job_level_exception}"
@@ -786,6 +798,22 @@ def docfetching_proxy_task(
             )
 
         job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+    elif result.status == IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL:
+        # The docprocessing monitor may have canceled the attempt already.
+        try:
+            with get_session_with_current_tenant() as db_session:
+                mark_attempt_canceled(
+                    index_attempt_id,
+                    db_session,
+                    "Canceled before the run started: a cancel or stop was requested.",
+                    unless_terminal=True,
+                )
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt as canceled"
+                )
+            )
     elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT:
         try:
             with get_session_with_current_tenant() as db_session:

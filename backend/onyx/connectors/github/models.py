@@ -223,6 +223,9 @@ class GitHubFileContent(BaseModel):
     # 1 MB, or a Git LFS pointer).
     content: bytes | None = None
     encoding: str | None = None
+    # The repository path and web URL GitHub reports for the content.
+    path: str | None = None
+    html_url: str | None = None
 
 
 class GitHubBranch(BaseModel):
@@ -243,3 +246,21 @@ class GitHubTokenInfo(BaseModel):
     # The OAuth scopes of a classic token. None when GitHub sends none (a
     # fine-grained token has permissions, not scopes).
     scopes: list[str] | None = None
+
+
+class GitHubDocKind(str, Enum):
+    """The document types the connector writes, by their URL segment."""
+
+    PULL_REQUEST = "pull"
+    ISSUE = "issues"
+    FILE = "blob"
+
+
+class ParsedGitHubDocId(BaseModel):
+    """The parts of a document id that targeted reindex reads."""
+
+    owner: str
+    repo: str
+    kind: GitHubDocKind
+    # Pull request or issue number. None for a file.
+    number: int | None = None

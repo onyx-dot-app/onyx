@@ -40,11 +40,10 @@ export function AccountSummary({ draft, sourceName }: AccountSummaryProps) {
     >
       <Section alignItems="start" padding={2} width="full">
         <Content
+          font="main-ui-action"
           icon={SvgPlusCircle}
           title={title}
           suffix={t("accountSummary.newAccountSuffix")}
-          sizePreset="main-ui"
-          variant="section"
         />
       </Section>
       {/* Repeats its card's own action, so it leaves the tab order. */}

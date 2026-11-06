@@ -1,6 +1,5 @@
 import { useTranslations } from "next-intl";
-import { IllustrationContent } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { IllustrationContent, Section } from "@opal/layouts";
 import SvgUnPlugged from "@opal/illustrations/un-plugged";
 import { markdown } from "@opal/utils";
 import { DOCS_BASE_URL } from "@/lib/constants";

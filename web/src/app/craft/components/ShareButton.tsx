@@ -7,8 +7,7 @@ import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 
 interface ShareButtonProps {
@@ -107,7 +106,7 @@ export default function ShareButton({
             {isShared ? t("shared.label") : t("share.label")}
           </Button>
         </Popover.Trigger>
-        <Popover.Content side="bottom" align="end" width="lg" sideOffset={4}>
+        <Popover.Content side="bottom" align="end" width={60} sideOffset={4}>
           <Section
             alignItems="stretch"
             gap={1}
@@ -135,10 +134,9 @@ export default function ShareButton({
                   )}
                 >
                   <ContentAction
+                    font="main-ui-action"
                     title={opt.label}
                     description={opt.description}
-                    sizePreset="main-ui"
-                    variant="section"
                     padding={1}
                   />
                 </div>

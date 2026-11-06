@@ -110,10 +110,10 @@ def test_send_message_starts_background_turn(
     start_runner = MagicMock()
     session_manager = MagicMock()
     session_manager.session_llm_config.return_value = SimpleNamespace(
-        model_name="17/gpt-5-mini",
+        model_name="17/gpt-6-luna",
         models=[
             SimpleNamespace(
-                id="17/gpt-5-mini",
+                id="17/gpt-6-luna",
                 capabilities=SimpleNamespace(
                     input_modalities=(
                         ("text", "image") if supports_image_input else ("text",)
@@ -158,7 +158,7 @@ def test_send_message_starts_background_turn(
             content="hello",
             client_request_id="req-1",
             provider_id=17,
-            model="gpt-5-mini",
+            model="gpt-6-luna",
             attachments=[
                 MessageAttachment(
                     name="reference.png",
@@ -198,7 +198,7 @@ def test_send_message_starts_background_turn(
         )
     ]
     assert session.agent_provider == "onyx"
-    assert session.agent_model == "17/gpt-5-mini"
+    assert session.agent_model == "17/gpt-6-luna"
     assert db_session.commits == 1
     turn = get_turn(cache, UUID(response.turn_id))
     assert turn is not None

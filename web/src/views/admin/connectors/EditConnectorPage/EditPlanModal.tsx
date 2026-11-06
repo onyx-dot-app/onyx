@@ -12,7 +12,7 @@ import {
   MessageCard,
   Modal,
   SelectCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
@@ -27,14 +27,21 @@ import {
   type EditPlanChoices,
 } from "@/lib/connectors/edit/choices";
 import type { ApplyEditOutcome } from "@/lib/connectors/edit/svc";
+import { applicableResults } from "@/lib/connectors/checks/results";
 import type {
   ConnectorEditApplyRequest,
   ConnectorEditPlanResponse,
   CredentialPath,
   EditCheckResult,
+  EditNote,
   EditStep,
+  ProposedPairingValidation,
   ReconciliationOption,
 } from "@/lib/connectors/edit/types";
+import {
+  CheckLineGroups,
+  type CheckLine,
+} from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 
 export interface EditPlanModalProps {
   planResponse: ConnectorEditPlanResponse;
@@ -64,14 +71,13 @@ function StepCard({ step, dropped, disabled, onDroppedChange }: StepCardProps) {
     >
       <Section gap={2} alignItems="stretch" height="fit">
         <ContentAction
+          font="main-ui-action"
           title={title}
           description={t(`kind.${step.kind}.description`)}
-          sizePreset="main-ui"
-          variant="section"
-          tag={
+          badge={
             step.required
-              ? { title: t("required.label"), color: "amber" }
-              : { title: t("optional.label"), color: "gray" }
+              ? { title: t("required.label"), color: "pending" }
+              : { title: t("optional.label"), color: "default" }
           }
           rightChildren={
             step.required ? undefined : (
@@ -86,7 +92,7 @@ function StepCard({ step, dropped, disabled, onDroppedChange }: StepCardProps) {
         />
         <Section flexDirection="row" justifyContent="start" gap={1} wrap>
           {step.reasons.map((reason) => (
-            <Tag key={reason} title={t(`reason.${reason}`)} color="blue" />
+            <Badge key={reason} title={t(`reason.${reason}`)} color="info" />
           ))}
         </Section>
         {step.field_names.length > 0 && (
@@ -147,10 +153,9 @@ function ChoiceCard({
       onClick={onSelect}
     >
       <Content
+        font="main-ui-action"
         title={title}
         description={description}
-        sizePreset="main-ui"
-        variant="section"
         color="interactive"
       />
     </SelectCard>
@@ -175,6 +180,83 @@ function CheckFailures({
         />
       ))}
     </>
+  );
+}
+
+// The validation section shows this note under the checks it is about.
+const CHECKS_STILL_RUNNING_NOTE = "checks_still_running";
+
+type ValidationOutcome = "failed" | "warnings" | "incomplete" | "passed";
+
+function validationOutcome(
+  validation: ProposedPairingValidation,
+  blocksApply: boolean
+): ValidationOutcome {
+  if (blocksApply) return "failed";
+  if (
+    validation.check_results.some(
+      (result) =>
+        result.status === "failed" ||
+        result.status === "indeterminate" ||
+        result.status === "incomplete"
+    )
+  )
+    return "warnings";
+  if (validation.unfinished_checks.length > 0) return "incomplete";
+  return "passed";
+}
+
+interface ValidationSectionProps {
+  validation: ProposedPairingValidation;
+  blocksApply: boolean;
+  stillRunningNote: EditNote | undefined;
+}
+
+/** Every check of the blocking validation, as the add-connector page lists them. */
+function ValidationSection({
+  validation,
+  blocksApply,
+  stillRunningNote,
+}: ValidationSectionProps) {
+  const t = useTranslations("admin.connectorEdit.plan.validation");
+  const outcome = validationOutcome(validation, blocksApply);
+  const lines: CheckLine[] = [
+    ...applicableResults(validation.check_results).map((result) => ({
+      ...result,
+      state: result.status,
+    })),
+    ...validation.unfinished_checks.map(
+      (check): CheckLine => ({
+        ...check,
+        message: "",
+        summary: null,
+        description: null,
+        remediation: null,
+        docs_link: null,
+        state: "pending",
+      })
+    ),
+  ];
+
+  return (
+    <Section gap={2} alignItems="stretch" height="fit">
+      <Content
+        font="main-ui-action"
+        title={t(`outcome.${outcome}.title`)}
+        description={t(`outcome.${outcome}.description`)}
+      />
+      {validation.validation_error !== null && (
+        <MessageCard
+          variant="error"
+          title={t("error.title")}
+          description={validation.validation_error}
+        />
+      )}
+      {lines.length > 0 && <CheckLineGroups lines={lines} />}
+      {stillRunningNote !== undefined && (
+        <MessageCard variant="info" title={stillRunningNote.message} />
+      )}
+    </Section>
   );
 }
 
@@ -207,14 +289,16 @@ export default function EditPlanModal({
   const disabled = busy !== null;
 
   const validation = plan.validation;
-  const failedChecks = (validation?.check_results ?? []).filter(
-    (result) => result.status === "failed"
-  );
   const failedDryRuns = plan.dry_run_results.filter(
     (result) => result.status === "failed"
   );
   const warnings = plan.notes.filter((note) => note.severity === "warning");
-  const infos = plan.notes.filter((note) => note.severity === "info");
+  const stillRunningNote = plan.notes.find(
+    (note) => note.kind === CHECKS_STILL_RUNNING_NOTE
+  );
+  const infos = plan.notes.filter(
+    (note) => note.severity === "info" && note !== stillRunningNote
+  );
   const changedFields = [
     ...plan.field_changes.map((change) => change.field_name),
     ...plan.changed_settings,
@@ -298,45 +382,23 @@ export default function EditPlanModal({
               />
             )}
 
-            {validation !== null &&
-              (validation.validation_error !== null ||
-                failedChecks.length > 0) && (
-                <Section gap={2} alignItems="stretch" height="fit">
-                  <Content
-                    title={t("validation.title")}
-                    description={
-                      planResponse.validation_blocks_apply
-                        ? t("validation.blocks")
-                        : t("validation.warns")
-                    }
-                    sizePreset="main-ui"
-                    variant="section"
-                  />
-                  {validation.validation_error !== null && (
-                    <MessageCard
-                      variant="error"
-                      title={t("validation.error.title")}
-                      description={validation.validation_error}
-                    />
-                  )}
-                  <CheckFailures
-                    results={failedChecks.filter((result) => result.required)}
-                    variant="error"
-                  />
-                  <CheckFailures
-                    results={failedChecks.filter((result) => !result.required)}
-                    variant="warning"
-                  />
-                </Section>
-              )}
+            {validation !== null ? (
+              <ValidationSection
+                validation={validation}
+                blocksApply={planResponse.validation_blocks_apply}
+                stillRunningNote={stillRunningNote}
+              />
+            ) : (
+              <Content
+                font="main-ui-action"
+                title={t("validation.title")}
+                description={t("validation.unchanged")}
+              />
+            )}
 
             {(warnings.length > 0 || failedDryRuns.length > 0) && (
               <Section gap={2} alignItems="stretch" height="fit">
-                <Content
-                  title={t("warnings.title")}
-                  sizePreset="main-ui"
-                  variant="section"
-                />
+                <Content font="main-ui-action" title={t("warnings.title")} />
                 {warnings.map((note) => (
                   <MessageCard
                     key={note.kind}
@@ -350,11 +412,7 @@ export default function EditPlanModal({
 
             {infos.length > 0 && (
               <Section gap={2} alignItems="stretch" height="fit">
-                <Content
-                  title={t("notes.title")}
-                  sizePreset="main-ui"
-                  variant="section"
-                />
+                <Content font="main-ui-action" title={t("notes.title")} />
                 {infos.map((note) => (
                   <MessageCard
                     key={note.kind}
@@ -374,12 +432,11 @@ export default function EditPlanModal({
                 aria-label={t("reconciliation.title")}
               >
                 <Content
+                  font="main-ui-action"
                   title={t("reconciliation.title")}
                   description={t("reconciliation.description", {
                     fields: plan.reconciliation_choice.field_names.join(", "),
                   })}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 {plan.reconciliation_choice.options.map((option) => (
                   <ChoiceCard
@@ -402,10 +459,9 @@ export default function EditPlanModal({
                 aria-label={t("credential.title")}
               >
                 <Content
+                  font="main-ui-action"
                   title={t("credential.title")}
                   description={t("credential.description")}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 {plan.credential_choice.options.map((path) => (
                   <ChoiceCard
@@ -424,12 +480,11 @@ export default function EditPlanModal({
 
             <Section gap={2} alignItems="stretch" height="fit">
               <Content
+                font="main-ui-action"
                 title={t("steps.title")}
                 description={
                   steps.length === 0 ? t("steps.none") : t("steps.description")
                 }
-                sizePreset="main-ui"
-                variant="section"
               />
               {steps.map((step) => (
                 <StepCard
@@ -454,17 +509,15 @@ export default function EditPlanModal({
               canAddStep(plan, choices, "prune")) && (
               <Section gap={2} alignItems="stretch" height="fit">
                 <Content
+                  font="main-ui-action"
                   title={t("extra.title")}
                   description={t("extra.description")}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
                 {canAddStep(plan, choices, "full_reindex") && (
                   <ContentAction
+                    font="main-ui-action"
                     title={t("extra.fullReindex.title")}
                     description={t("extra.fullReindex.description")}
-                    sizePreset="main-ui"
-                    variant="section"
                     rightChildren={
                       <InputSwitch
                         checked={choices.addFullReindex}
@@ -479,10 +532,9 @@ export default function EditPlanModal({
                 )}
                 {canAddStep(plan, choices, "prune") && (
                   <ContentAction
+                    font="main-ui-action"
                     title={t("extra.prune.title")}
                     description={t("extra.prune.description")}
-                    sizePreset="main-ui"
-                    variant="section"
                     rightChildren={
                       <InputSwitch
                         checked={choices.addPrune}

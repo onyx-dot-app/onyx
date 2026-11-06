@@ -1,13 +1,18 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { markdown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
-import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
+import { markdown, richNodes } from "@opal/utils";
+import {
+  Content,
+  InputErrorText,
+  InputVertical,
+  toast,
+  Section,
+} from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import { Button, MessageCard } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Presence, MessageCard, Text } from "@opal/components";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { InputNumber } from "@opal/components";
 import {
@@ -174,6 +179,7 @@ function SubscriptionCard({
 }) {
   const t = useTranslations("admin.billing");
   const locale = useLocale();
+  const navigation = useNavigation();
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isEndingTrial, setIsEndingTrial] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -231,7 +237,7 @@ function SubscriptionCard({
         return_url: `${window.location.origin}/admin/billing?portal_return=true`,
       });
       if (response.stripe_customer_portal_url) {
-        window.location.href = response.stripe_customer_portal_url;
+        navigation.load(response.stripe_customer_portal_url);
       }
     } catch (error) {
       console.error("Failed to open customer portal:", error);
@@ -280,7 +286,7 @@ function SubscriptionCard({
             flow_type: StripePortalFlowType.PAYMENT_METHOD_UPDATE,
           });
           if (response.stripe_customer_portal_url) {
-            window.location.href = response.stripe_customer_portal_url;
+            navigation.load(response.stripe_customer_portal_url);
             return;
           }
         } catch (portalError) {
@@ -311,10 +317,10 @@ function SubscriptionCard({
       >
         <Section gap={1} alignItems="start" height="auto" width="auto">
           <PlanIcon className="w-5 h-5" />
-          <Text headingH3Muted text04>
+          <Text font="heading-section-muted" color="text-04">
             {planName}
           </Text>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {subtitle}
           </Text>
         </Section>
@@ -326,18 +332,25 @@ function SubscriptionCard({
           width="fit"
         >
           {isManualLicenseOnly ? (
-            <Text secondaryBody text03 className="text-end">
-              {t.rich("subscription.managedBySales.text", {
-                br: () => <br />,
-                link: (chunks) => (
-                  <a
-                    href="mailto:support@onyx.app?subject=Billing%20change%20request"
-                    className="underline"
-                  >
-                    {chunks}
-                  </a>
-                ),
-              })}
+            <Text
+              as="p"
+              font="secondary-body"
+              color="text-03"
+              textPosition="text-end"
+            >
+              {richNodes(
+                t.rich("subscription.managedBySales.text", {
+                  br: () => <br />,
+                  link: (chunks) => (
+                    <a
+                      href="mailto:support@onyx.app?subject=Billing%20change%20request"
+                      className="underline"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                })
+              )}
             </Text>
           ) : disabled ? (
             <Button
@@ -420,6 +433,7 @@ function SeatsCard({
 }) {
   const t = useTranslations("admin.billing");
   const locale = useLocale();
+  const navigation = useNavigation();
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -492,122 +506,122 @@ function SeatsCard({
 
   if (isEditing) {
     return (
-      <Card
-        padding={0}
-        gap={0}
-        alignItems="stretch"
-        className="billing-card-enter"
-      >
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="start"
-          padding={4}
-          height="auto"
-        >
-          <Content
-            title={t("seats.updateSeats.title")}
-            description={t("seats.updateSeats.description")}
-            sizePreset="main-content"
-            variant="section"
-          />
-          <Button
-            disabled={isSubmitting}
-            prominence="secondary"
-            onClick={handleCancel}
-          >
-            {t("seats.cancel.label")}
-          </Button>
-        </Section>
-
-        <div className="billing-content-area">
+      <Presence>
+        <Card padding={0} gap={0} alignItems="stretch">
           <Section
-            flexDirection="column"
-            alignItems="stretch"
-            gap={1}
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="start"
             padding={4}
             height="auto"
           >
-            <InputVertical title={t("seats.seatsField.title")} withLabel>
-              <InputNumber
-                value={newSeatCount}
-                onChange={(v) => setNewSeatCount(v ?? 1)}
-                min={1}
-                defaultValue={totalSeats}
-                showReset
-                variant={isBelowMinimum ? "error" : "primary"}
-              />
-            </InputVertical>
+            <Content
+              font="main-content-emphasis"
+              title={t("seats.updateSeats.title")}
+              description={t("seats.updateSeats.description")}
+            />
+            <Button
+              disabled={isSubmitting}
+              prominence="secondary"
+              onClick={handleCancel}
+            >
+              {t("seats.cancel.label")}
+            </Button>
+          </Section>
 
-            {isBelowMinimum ? (
-              <InputErrorText type="error">
-                {markdown(
-                  t("seats.belowMinimum.error", { minimum: minRequiredSeats })
+          <div className="billing-content-area">
+            <Section
+              flexDirection="column"
+              alignItems="stretch"
+              gap={1}
+              padding={4}
+              height="auto"
+            >
+              <InputVertical title={t("seats.seatsField.title")} withLabel>
+                <InputNumber
+                  value={newSeatCount}
+                  onChange={(v) => setNewSeatCount(v ?? 1)}
+                  min={1}
+                  defaultValue={totalSeats}
+                  showReset
+                  variant={isBelowMinimum ? "error" : "primary"}
+                />
+              </InputVertical>
+
+              {isBelowMinimum ? (
+                <InputErrorText type="error">
+                  {markdown(
+                    t("seats.belowMinimum.error", { minimum: minRequiredSeats })
+                  )}
+                </InputErrorText>
+              ) : seatDifference !== 0 ? (
+                <Text font="secondary-body" color="text-03">
+                  {isAdding
+                    ? t("seats.delta.added", { count: seatCount })
+                    : t("seats.delta.removed", { count: seatCount })}
+                </Text>
+              ) : null}
+
+              {error && (
+                <Text font="secondary-body" color="status-error-05">
+                  {error}
+                </Text>
+              )}
+            </Section>
+          </div>
+
+          <Section
+            flexDirection="row"
+            alignItems="center"
+            justifyContent="between"
+            padding={4}
+            height="auto"
+          >
+            {isAdding ? (
+              <Text font="secondary-body" color="text-03">
+                {richNodes(
+                  t.rich("seats.billing.added", {
+                    count: seatCount,
+                    value: (chunks) => (
+                      <Text font="secondary-body" color="text-04">
+                        {richNodes(chunks)}
+                      </Text>
+                    ),
+                  })
                 )}
-              </InputErrorText>
-            ) : seatDifference !== 0 ? (
-              <Text secondaryBody text03>
-                {isAdding
-                  ? t("seats.delta.added", { count: seatCount })
-                  : t("seats.delta.removed", { count: seatCount })}
               </Text>
-            ) : null}
-
-            {error && (
-              <Text secondaryBody className="billing-error-text">
-                {error}
+            ) : isRemoving ? (
+              <Text font="secondary-body" color="text-03">
+                {richNodes(
+                  t.rich("seats.billing.removed", {
+                    count: seatCount,
+                    date: nextBillingDate,
+                    value: (chunks) => (
+                      <Text font="secondary-body" color="text-04">
+                        {richNodes(chunks)}
+                      </Text>
+                    ),
+                  })
+                )}
+              </Text>
+            ) : (
+              <Text font="secondary-body" color="text-03">
+                {t("seats.billing.unchanged")}
               </Text>
             )}
+            <Button
+              disabled={
+                isSubmitting || newSeatCount === totalSeats || isBelowMinimum
+              }
+              onClick={handleConfirm}
+            >
+              {isSubmitting
+                ? t("seats.saving.label")
+                : t("seats.confirmChange.label")}
+            </Button>
           </Section>
-        </div>
-
-        <Section
-          flexDirection="row"
-          alignItems="center"
-          justifyContent="between"
-          padding={4}
-          height="auto"
-        >
-          {isAdding ? (
-            <Text secondaryBody text03>
-              {t.rich("seats.billing.added", {
-                count: seatCount,
-                value: (chunks) => (
-                  <Text secondaryBody text04>
-                    {chunks}
-                  </Text>
-                ),
-              })}
-            </Text>
-          ) : isRemoving ? (
-            <Text secondaryBody text03>
-              {t.rich("seats.billing.removed", {
-                count: seatCount,
-                date: nextBillingDate,
-                value: (chunks) => (
-                  <Text secondaryBody text04>
-                    {chunks}
-                  </Text>
-                ),
-              })}
-            </Text>
-          ) : (
-            <Text secondaryBody text03>
-              {t("seats.billing.unchanged")}
-            </Text>
-          )}
-          <Button
-            disabled={
-              isSubmitting || newSeatCount === totalSeats || isBelowMinimum
-            }
-            onClick={handleConfirm}
-          >
-            {isSubmitting
-              ? t("seats.saving.label")
-              : t("seats.confirmChange.label")}
-          </Button>
-        </Section>
-      </Card>
+        </Card>
+      </Presence>
     );
   }
 
@@ -620,10 +634,10 @@ function SeatsCard({
         height="auto"
       >
         <Section gap={1} alignItems="start" height="auto" width="auto">
-          <Text mainContentMuted text04>
+          <Text font="main-content-muted" color="text-04">
             {t("seats.total.label", { count: totalSeats })}
           </Text>
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             {t("seats.breakdown.label", {
               used: usedSeats,
               pending: pendingSeats,
@@ -640,7 +654,7 @@ function SeatsCard({
         >
           <Button
             prominence="tertiary"
-            href="/admin/users"
+            {...navigation.linkTo("/admin/users")}
             icon={SvgExternalLink}
           >
             {t("seats.viewUsers.label")}
@@ -668,13 +682,14 @@ function SeatsCard({
 function PaymentSection({ billing }: { billing: BillingInformation }) {
   const t = useTranslations("admin.billing");
   const locale = useLocale();
+  const navigation = useNavigation();
   const handleOpenPortal = async () => {
     try {
       const response = await createCustomerPortalSession({
         return_url: `${window.location.origin}/admin/billing?portal_return=true`,
       });
       if (response.stripe_customer_portal_url) {
-        window.location.href = response.stripe_customer_portal_url;
+        navigation.load(response.stripe_customer_portal_url);
       }
     } catch (error) {
       console.error("Failed to open customer portal:", error);
@@ -688,7 +703,9 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
   return (
     <div className="billing-payment-section">
       <Section alignItems="start" height="auto" width="full">
-        <Text mainContentEmphasis>{t("payment.section.title")}</Text>
+        <Text font="main-content-emphasis" color="text-05">
+          {t("payment.section.title")}
+        </Text>
         <Section flexDirection="row" gap={2} alignItems="stretch" height="auto">
           <Card className="billing-payment-card">
             <Section

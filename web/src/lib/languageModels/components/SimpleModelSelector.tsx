@@ -1,8 +1,12 @@
 "use client";
 
+import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { InputSingleSelect } from "@opal/components";
+import {
+  InputSingleSelect,
+  type InputSingleSelectProps,
+} from "@opal/components";
 import type {
   SelectOption,
   SelectOptions,
@@ -22,23 +26,50 @@ import type {
 /** The select value of the Global Default row; `fromSelectValue` reads it as null. */
 const GLOBAL_DEFAULT_SELECT_VALUE = "global-default";
 
+/** Prefixes a decision-section row's select value, so a model listed among
+ *  both decision and language models has two distinct rows. */
+const DECISION_SELECT_PREFIX = "decision:";
+
 /** A keystroke storm settles before a search leaves for the server. */
 export const SERVER_SEARCH_DEBOUNCE_MS = 300;
 
-/** True when the list's own filter would show at least one loaded row. */
+/**
+ * True when a loaded row matches the query. A provider title match does not
+ * count: it shows only that provider's loaded rows, so the server is still
+ * asked for the rest.
+ */
 function hasLoadedMatch(options: SelectOptions, query: string): boolean {
   const term = query.toLowerCase();
   return options.some((item) =>
     "options" in item
-      ? (item.title?.toLowerCase().includes(term) ?? false) ||
-        item.options.some((opt) => optionMatchesSearch(opt, term))
+      ? item.options.some((opt) => optionMatchesSearch(opt, term))
       : optionMatchesSearch(item, term)
   );
 }
 
+function hasOptionValue(options: SelectOptions, value: string): boolean {
+  return options.some((item) =>
+    "options" in item
+      ? item.options.some((opt) => opt.value === value)
+      : item.value === value
+  );
+}
+
 export interface GlobalDefaultRow {
+  /** The row's title, when "Global Default" is not the right name. */
+  label?: string;
   /** The model null resolves to, shown under the row's title. */
   description?: string | null;
+}
+
+export interface DecisionSection {
+  /** The section's divider title. */
+  title: string;
+  providers: ModelOptionProvider[];
+  /** True when `value` is one of this section's models. */
+  selected: boolean;
+  /** Called instead of `onChange` when a row of this section is picked. */
+  onChange: (modelConfigurationId: number) => void;
 }
 
 /** What `onChange` emits: only a nullable selector can emit null. */
@@ -46,11 +77,7 @@ type EmittedModelConfigurationId<Nullable extends boolean> =
   Nullable extends true ? number | null : number;
 
 export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
-  /**
-   * The model configurations to offer, grouped by provider. Nothing is
-   * filtered here: pass the list you want shown, trimmed with
-   * `filterModelConfigurations` when needed.
-   */
+  includeDecisionOnly?: boolean;
   providers: ModelOptionProvider[];
   /** The chosen model configuration id; null shows the placeholder. */
   value: number | null;
@@ -78,9 +105,31 @@ export interface SimpleModelSelectorProps<Nullable extends boolean = false> {
    */
   globalDefault?: Nullable extends true ? GlobalDefaultRow : never;
   disabled?: boolean;
+  /**
+   * Error chrome, e.g. while the models failed to load. Left undefined, the
+   * select flags a value outside its options itself; false turns that off.
+   */
+  isError?: boolean;
+  placeholder?: InputSingleSelectProps["placeholder"];
   /** Pages a truncated listing in: the end of the list loads more models,
    *  and a search no loaded model matches asks the server. */
   modelPaging?: ModelPaging;
+  /** Where the list portals to; inside a modal, pass the modal content. */
+  container?: InputSingleSelectProps["container"];
+  /** The select input's id, so a `<label htmlFor>` (`withLabel="<id>"`) opens it. */
+  id?: string;
+  /**
+   * Decision models in their own section above `providers`, for a setting
+   * that takes either kind. A model can be in both lists; each copy is its
+   * own row with its own callback.
+   */
+  decisionSection?: DecisionSection;
+  /**
+   * The row for `value` while the listing has not loaded that model, e.g. a
+   * saved choice past the first page, so the select shows its name instead
+   * of an invalid value. Ignored once the model loads.
+   */
+  selectedFallback?: SelectOption;
 }
 
 /**
@@ -96,24 +145,83 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   onChange,
   nullable,
   grouped = true,
+  includeDecisionOnly = false,
   globalDefault,
   disabled,
+  isError,
+  placeholder,
   modelPaging,
+  container,
+  id,
+  decisionSection,
+  selectedFallback,
 }: SimpleModelSelectorProps<Nullable>) {
   const t = useTranslations("common.modelSelectors");
+  const providerNames = useProviderNames();
+  const decisionTitle = decisionSection?.title;
+  const decisionProviders = decisionSection?.providers;
+  const decisionRows = useMemo(
+    (): SelectOption[] =>
+      decisionProviders
+        ? buildModelSelectOptions(decisionProviders, {
+            grouped: false,
+            providerNames,
+            includeDecisionOnly: true,
+          }).flatMap((option): SelectOption[] =>
+            "options" in option
+              ? []
+              : [{ ...option, value: DECISION_SELECT_PREFIX + option.value }]
+          )
+        : [],
+    [decisionProviders, providerNames]
+  );
+  // Under a decision section, a lone provider keeps its header so its rows
+  // are not read as part of that section.
+  const hasDecisionRows = decisionRows.length > 0;
+  const models = useMemo(
+    () =>
+      buildModelSelectOptions(providers, {
+        grouped,
+        providerNames,
+        includeDecisionOnly,
+        labelSingleGroup: hasDecisionRows,
+      }),
+    [providers, grouped, providerNames, includeDecisionOnly, hasDecisionRows]
+  );
+  const fallbackRow =
+    selectedFallback?.value === toSelectValue(value) &&
+    !hasOptionValue(models, selectedFallback.value)
+      ? selectedFallback
+      : undefined;
   const options = useMemo((): SelectOptions => {
-    const models = buildModelSelectOptions(providers, { grouped });
-    if (!globalDefault) return models;
+    if (!globalDefault && decisionRows.length === 0 && !fallbackRow) {
+      return models;
+    }
+    // Loose model rows go under an untitled divider, so a line always
+    // separates them from the rows above.
+    const looseModels = models.filter(
+      (option): option is SelectOption => !("options" in option)
+    );
     return [
-      {
-        value: GLOBAL_DEFAULT_SELECT_VALUE,
-        title: t("globalDefault.label"),
-        description: globalDefault.description ?? undefined,
-        icon: getModelIcon("", ""),
-      },
-      ...models,
+      ...(globalDefault
+        ? [
+            {
+              value: GLOBAL_DEFAULT_SELECT_VALUE,
+              title: globalDefault.label ?? t("globalDefault.label"),
+              description: globalDefault.description ?? undefined,
+              icon: getModelIcon("", ""),
+            },
+          ]
+        : []),
+      ...(fallbackRow ? [fallbackRow] : []),
+      ...(decisionTitle && decisionRows.length > 0
+        ? [{ title: decisionTitle, options: decisionRows }]
+        : []),
+      ...(looseModels.length === models.length
+        ? [{ options: looseModels }]
+        : models),
     ];
-  }, [providers, grouped, globalDefault, t]);
+  }, [models, globalDefault, t, decisionTitle, decisionRows, fallbackRow]);
 
   // Server search only when nothing loaded matches. The query is remembered
   // so a merged page, which changes `modelPaging`, does not re-run it.
@@ -129,7 +237,9 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
       lastServerSearchRef.current = "";
       return;
     }
-    if (!modelPaging?.hasMore || hasLoadedMatch(options, trimmedQuery)) return;
+    // Only the paged models count: the decision section is fully loaded, so
+    // its match must not hide a language model that is not loaded yet.
+    if (!modelPaging?.hasMore || hasLoadedMatch(models, trimmedQuery)) return;
     if (lastServerSearchRef.current === trimmedQuery) return;
     const handle = setTimeout(() => {
       modelPaging
@@ -143,7 +253,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         .catch(console.error);
     }, SERVER_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [modelPaging, trimmedQuery, options]);
+  }, [modelPaging, trimmedQuery, models]);
 
   // Which provider each row belongs to, so scrolling pages the providers
   // whose rows are on show rather than one hidden behind a folded group.
@@ -177,10 +287,20 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
           shown.flatMap((option) => providerIdByValue.get(option.value) ?? [])
         ),
       ];
-      modelPaging.loadMore(shownProviderIds).catch(console.error);
+      // A caller's filter can hide every loaded model of a provider that has
+      // more pages, so with no shown provider left to page, page any.
+      modelPaging
+        .loadMore(shownProviderIds)
+        .then((loaded) => (loaded ? undefined : modelPaging.loadMore()))
+        .catch(console.error);
     },
     [modelPaging, trimmedQuery, providerIdByValue]
   );
+
+  const selectValue =
+    decisionSection?.selected && value !== null
+      ? DECISION_SELECT_PREFIX + value
+      : toSelectValue(value);
 
   // The Global Default row is what null shows as; otherwise a non-nullable
   // field's own value is its floor. Either way a re-pick is a no-op.
@@ -188,16 +308,24 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
     ? GLOBAL_DEFAULT_SELECT_VALUE
     : nullable || value === null
       ? undefined
-      : String(value);
+      : selectValue;
 
   return (
     <InputSingleSelect
       // Provider lists run long: the list always carries a search field.
       search
-      value={toSelectValue(value)}
+      value={selectValue}
       defaultOption={defaultOption}
       disabled={disabled}
+      isError={isError}
       onValueChange={(next) => {
+        if (decisionSection && next.startsWith(DECISION_SELECT_PREFIX)) {
+          const decisionId = fromSelectValue(
+            next.slice(DECISION_SELECT_PREFIX.length)
+          );
+          if (decisionId !== null) decisionSection.onChange(decisionId);
+          return;
+        }
         const id = fromSelectValue(next);
         // The Global Default row stands for null, so picking it while
         // nothing is chosen changes nothing; the family cannot tell, since
@@ -207,10 +335,12 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
         // its own value is the default option.
         onChange(id as EmittedModelConfigurationId<Nullable>);
       }}
-      placeholder={t("placeholder")}
+      placeholder={placeholder ?? t("placeholder")}
       options={options}
       onSearchChange={modelPaging ? setQuery : undefined}
       onReachEnd={modelPaging ? loadNextWindow : undefined}
+      container={container}
+      id={id}
     />
   );
 }

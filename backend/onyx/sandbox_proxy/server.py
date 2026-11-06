@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from mitmproxy.options import Options
 from mitmproxy.tools.dump import DumpMaster
 
-from onyx.cache.factory import get_cache_backend
+from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.sandbox_proxy.addons.gate import GateAddon
@@ -44,6 +44,12 @@ from onyx.sandbox_proxy.sandbox_identity.resolution import (
     SandboxIPLookup,
     build_ip_lookup,
 )
+from onyx.sandbox_proxy.sandbox_identity.signed import SignedIdentityVerifier
+from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
+    CachedNodeSigningKeyLookup,
+    CacheReplayGuard,
+    CacheSandboxPlacementLookup,
+)
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
     SANDBOX_NAMESPACE,
@@ -53,6 +59,8 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_LISTEN_HOST,
     SANDBOX_PROXY_LISTEN_PORT,
     SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
+    SANDBOX_RUNTIME,
+    SandboxRuntime,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_if_available
@@ -187,6 +195,8 @@ def _build_mitm_master() -> DumpMaster:
             confdir=_MITM_CONFDIR,
             mode=["regular"],
             ssl_insecure=False,
+            # Every forwarded request must pass the HTTP policy and credential hooks.
+            rawtcp=False,
             ssl_verify_upstream_trusted_ca=SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
         ),
         with_termlog=False,
@@ -201,7 +211,9 @@ async def _run_master(master: DumpMaster) -> None:
     await master.run()
 
 
-def build_resolvers() -> list[CredentialResolver]:
+def build_resolvers(
+    mcp_resolver: MCPServerResolver | None = None,
+) -> list[CredentialResolver]:
     """Builds the registered credential resolvers, in first-claim-wins order.
 
     Host-claim sets are designed to be disjoint (external-app requests are
@@ -211,7 +223,7 @@ def build_resolvers() -> list[CredentialResolver]:
     """
     return [
         OnyxPatResolver(),
-        MCPServerResolver(),
+        mcp_resolver if mcp_resolver is not None else MCPServerResolver(),
         ExternalAppResolver(),
     ]
 
@@ -306,18 +318,32 @@ def main() -> int:
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
-        resolvers = build_resolvers()
+        mcp_resolver = MCPServerResolver()
+        resolvers = build_resolvers(mcp_resolver)
         logger.info(
             "Credential resolvers registered: %s",
             [type(r).__name__ for r in resolvers],
         )
+        cache_factory = _build_cache_factory()
+        # Only the Firecracker runtime has a relay that signs VM identity.
+        signed_identity = (
+            SignedIdentityVerifier(
+                signing_keys=CachedNodeSigningKeyLookup(get_shared_cache_backend),
+                placement=CacheSandboxPlacementLookup(cache_factory),
+                replay_guard=CacheReplayGuard(cache_factory),
+            )
+            if SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER
+            else None
+        )
         gate = GateAddon(
+            mcp_resolver=mcp_resolver,
             destination_policy=destination_policy,
             identity=identity,
+            signed_identity=signed_identity,
             request_evaluator=CompositeRequestEvaluator(
                 [ExternalAppRequestEvaluator(), McpRequestEvaluator()]
             ),
-            cache_factory=_build_cache_factory(),
+            cache_factory=cache_factory,
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
         )

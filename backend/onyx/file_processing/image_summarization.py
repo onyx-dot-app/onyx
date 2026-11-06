@@ -1,7 +1,7 @@
 import base64
 from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
@@ -27,14 +27,19 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Base64 grows an image by a third, and Anthropic rejects encoded images over
+# 5 MB, so anything larger than this is shrunk before it is sent.
+_RESIZE_ABOVE_BYTES = 3 * 1024 * 1024
+_RESIZED_MAX_DIMENSION_PX = 1024
+
 
 class UnsupportedImageFormatError(ValueError):
     """Raised when an image uses a MIME type unsupported by the summarization flow."""
 
 
 def prepare_image_bytes(image_data: bytes) -> str:
-    """Prepare image bytes for summarization.
-    Resizes image if it's larger than 20MB. Encodes image as a base64 string."""
+    """Shrink the image if it is too large to send, then encode it as a base64
+    data URL."""
     image_data = _resize_image_if_needed(image_data)
 
     # encode image (base64)
@@ -50,10 +55,8 @@ def summarize_image_pipeline(
     query: str | None = None,
     system_prompt: str | None = None,
 ) -> str:
-    """Pipeline to generate a summary of an image.
-    Resizes images if it is bigger than 20MB. Encodes image as a base64 string.
-    And finally uses the Default LLM to generate a textual summary of the image."""
-    # resize image if it's bigger than 20MB
+    """Summarize an image with the vision LLM, shrinking it first if it is too
+    large to send."""
     encoded_image = prepare_image_bytes(image_data)
 
     summary = _summarize_image(
@@ -175,20 +178,35 @@ def _encode_image_for_llm_prompt(image_data: bytes) -> str:
     return f"data:{mime_type};base64,{base64_encoded_data}"
 
 
-def _resize_image_if_needed(image_data: bytes, max_size_mb: int = 20) -> bytes:
-    """Resize image if it's larger than the specified max size in MB."""
-    max_size_bytes = max_size_mb * 1024 * 1024
+def _resize_image_if_needed(image_data: bytes) -> bytes:
+    """Return the image as a JPEG of at most 1024 px per side when it is over
+    the send limit, otherwise unchanged."""
+    if len(image_data) <= _RESIZE_ABOVE_BYTES:
+        return image_data
 
-    if len(image_data) > max_size_bytes:
-        with Image.open(BytesIO(image_data)) as img:
-            # Reduce dimensions for better size reduction
-            img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
-            output = BytesIO()
+    with Image.open(BytesIO(image_data)) as img:
+        # A JPEG is decoded at a reduced scale, so a large photo never loads at
+        # full size. Other formats ignore this.
+        img.draft(img.mode, (_RESIZED_MAX_DIMENSION_PX, _RESIZED_MAX_DIMENSION_PX))
+        # The saved JPEG drops the EXIF orientation tag, so the rotation is
+        # applied to the pixels first.
+        ImageOps.exif_transpose(img, in_place=True)
+        img.thumbnail(
+            (_RESIZED_MAX_DIMENSION_PX, _RESIZED_MAX_DIMENSION_PX),
+            Image.Resampling.LANCZOS,
+        )
+        output = BytesIO()
+        _to_jpeg_compatible(img).save(output, format="JPEG", quality=85)
+        return output.getvalue()
 
-            # Save with lower quality for compression
-            img.save(output, format="JPEG", quality=85)
-            resized_data = output.getvalue()
 
-            return resized_data
-
-    return image_data
+def _to_jpeg_compatible(img: Image.Image) -> Image.Image:
+    """JPEG stores only RGB or greyscale, so transparent and palette images are
+    flattened onto white. An RGB or greyscale PNG can still mark one colour as
+    transparent, so that is flattened too."""
+    if img.mode in ("RGB", "L") and "transparency" not in img.info:
+        return img
+    rgba = img.convert("RGBA")
+    flattened = Image.new("RGB", rgba.size, (255, 255, 255))
+    flattened.paste(rgba, mask=rgba.getchannel("A"))
+    return flattened

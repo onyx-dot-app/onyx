@@ -33,6 +33,9 @@ class PairState(BaseModel):
     name: str
     refresh_freq: int | None = None
     prune_freq: int | None = None
+    # How often the pair's checks run on a schedule; None runs them only on
+    # request.
+    check_freq: int | None = None
 
     @field_validator("data_access_group_ids")
     @classmethod

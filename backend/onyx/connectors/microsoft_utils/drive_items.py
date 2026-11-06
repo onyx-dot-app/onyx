@@ -23,7 +23,7 @@ from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.paths.resource_path import ResourcePath
 from pydantic import AliasChoices, BaseModel, Field
 
-from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, SKIP_SPREADSHEET_CONTENT
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
@@ -655,6 +655,7 @@ def extract_drive_item_content(
                 content_type=mime_type or "application/octet-stream",
                 raw_file_callback=raw_file_callback,
                 link=driveitem.web_url or "",
+                skip_content=SKIP_SPREADSHEET_CONTENT,
             )
             sections.extend(result.sections)
             staged_file_id = result.staged_file_id

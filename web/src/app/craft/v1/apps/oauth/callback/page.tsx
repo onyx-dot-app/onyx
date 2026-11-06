@@ -1,13 +1,13 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, useSearchParams } from "next/navigation";
 import { mutate as globalMutate } from "swr";
 import { SettingsLayouts } from "@opal/layouts";
 import { Button, Card, Text } from "@opal/components";
 import { SvgPlug } from "@opal/icons";
-import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
+import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { completeExternalAppOAuthCallback } from "@/app/craft/services/externalAppsService";
 import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
@@ -16,11 +16,11 @@ type Status = "exchanging" | "success" | "error";
 
 export default function ExternalAppsOAuthCallbackPage() {
   const t = useTranslations("craft.apps.oauthCallback");
-  const router = useRouter();
+  const navigation = useNavigation();
   const params = useSearchParams();
-  const code = params?.get("code") ?? null;
-  const state = params?.get("state") ?? null;
-  const slackError = params?.get("error") ?? null;
+  const code = params.get("code") ?? null;
+  const state = params.get("state") ?? null;
+  const slackError = params.get("error") ?? null;
 
   const [status, setStatus] = useState<Status>("exchanging");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -30,6 +30,9 @@ export default function ExternalAppsOAuthCallbackPage() {
   const hasExchanged = useRef(false);
 
   useEffect(() => {
+    // Once the exchange starts, the URL is the redirect's, not Slack's: its
+    // missing `code` and `state` are not an error.
+    if (hasExchanged.current) return;
     if (slackError) {
       setStatus("error");
       setErrorMessage(t("errors.cancelled", { reason: slackError }));
@@ -40,16 +43,27 @@ export default function ExternalAppsOAuthCallbackPage() {
       setErrorMessage(t("errors.missingParams"));
       return;
     }
-    if (hasExchanged.current) return;
     hasExchanged.current = true;
 
-    async function exchange() {
+    async function exchange(code: string, state: string) {
       try {
-        const { external_app_id } = await completeExternalAppOAuthCallback(
-          code!,
-          state!
-        );
+        const { external_app_id, return_path } =
+          await completeExternalAppOAuthCallback(code, state);
         setStatus("success");
+        if (return_path) {
+          const target = new URL(return_path, window.location.origin);
+          if (
+            target.origin !== window.location.origin ||
+            target.pathname !== "/app/plugins/oauth/complete"
+          ) {
+            throw new Error(t("errors.missingParams"));
+          }
+          target.searchParams.set("message", "oauth_connected");
+          navigation.go(`${target.pathname}?${target.searchParams}`, {
+            replace: true,
+          });
+          return;
+        }
         // Launched from the in-chat SetupCard popup: signal the opener and close
         // immediately — before any await — so the opener's close-poll can't race
         // ahead of the message and treat the close as a cancellation.
@@ -65,15 +79,21 @@ export default function ExternalAppsOAuthCallbackPage() {
           return;
         }
         await globalMutate(SWR_KEYS.buildExternalApps);
-        setTimeout(() => router.push(CRAFT_APPS_PATH), 800);
+        setTimeout(
+          () =>
+            navigation.go(
+              `${CRAFT_PLUGINS_PATH}?actionPolicies=app-${external_app_id}`
+            ),
+          800
+        );
       } catch (e) {
         setStatus("error");
         setErrorMessage(e instanceof Error ? e.message : String(e));
       }
     }
 
-    exchange();
-  }, [code, state, slackError, router, t]);
+    exchange(code, state);
+  }, [code, state, slackError, navigation, t]);
 
   return (
     <SettingsLayouts.Root width="sm">
@@ -100,7 +120,7 @@ export default function ExternalAppsOAuthCallbackPage() {
                   </Text>
                 )}
                 <div className="pt-2">
-                  <Button onClick={() => router.push(CRAFT_APPS_PATH)}>
+                  <Button onClick={() => navigation.go(CRAFT_PLUGINS_PATH)}>
                     {t("backButton")}
                   </Button>
                 </div>

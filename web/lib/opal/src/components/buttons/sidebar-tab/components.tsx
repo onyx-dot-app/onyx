@@ -5,11 +5,11 @@ import React from "react";
 import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
-import { ContentAction } from "@opal/layouts";
 import { useSidebarFolded } from "@opal/layouts/sidebar/context";
-import { Tooltip } from "@opal/components";
+import { Text, Tooltip } from "@opal/components";
+import useOverflow from "@opal/hooks/useOverflow";
 import { cn } from "@opal/utils";
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,8 +21,7 @@ interface SidebarTabProps {
    *
    * Leave this unset inside a sidebar: the enclosing `SidebarRoot` publishes
    * its fold state as a `data-folded` attribute, and CSS collapses the label.
-   * Set it only to override that — outside a sidebar, in Storybook, or in a
-   * skeleton.
+   * Set it only to override that — outside a sidebar, or in a skeleton.
    */
   folded?: boolean;
 
@@ -58,45 +57,61 @@ interface SidebarTabProps {
   /** Content rendered on the right side (e.g. action buttons). */
   rightChildren?: React.ReactNode;
 
-  /** Tooltip shown on hover. Takes precedence over the folded-name tooltip. */
+  /** Tooltip shown on hover. Takes precedence over the label tooltip. */
   tooltip?: string | RichStr;
 }
 
 // ---------------------------------------------------------------------------
-// FoldedTooltip
+// LabelTooltip
 // ---------------------------------------------------------------------------
 
-interface FoldedTooltipProps {
-  /** Label to show while the tab is folded. */
+interface LabelTooltipProps {
+  /** The tab's label, shown in full. */
   label: string | RichStr;
 
   /** Explicit fold state. Falls back to the enclosing sidebar's. */
   folded?: boolean;
 
+  /** The rendered title, measured to tell whether the tab cuts it off. */
+  titleElement: HTMLElement | null;
+
   children: React.ReactElement;
 }
 
 /**
- * Shows `label` on hover, but only while the tab is folded.
+ * Shows the full `label` on hover while the tab is folded, or while the
+ * unfolded tab cuts the title off with an ellipsis. Its trigger is the
+ * overlay that covers the whole tab, so the tab is the anchor, not the text.
  *
- * This is the one part of the folded look that CSS cannot express, so it is
- * split out: this component subscribes to the fold state, and the tab does
- * not. On a fold toggle React re-renders this wrapper alone — `children` is
- * the same element it received before, so nothing below it re-renders.
+ * The fold state and the title's overflow are the parts CSS cannot express,
+ * so they are split out: this component subscribes to them, and the tab does
+ * not. On a fold, or when the title starts or stops overflowing, React
+ * re-renders this wrapper alone — `children` is the same element it received
+ * before, so nothing below it re-renders.
  *
- * The tooltip stays mounted and is suppressed while unfolded instead of being
- * added and removed. Dropping it would change the tree shape on a fold, which
- * remounts the trigger.
+ * The tooltip stays mounted and is suppressed instead of being added and
+ * removed. Dropping it would change the tree shape, which remounts the
+ * trigger.
  */
-function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
+function LabelTooltip({
+  label,
+  folded,
+  titleElement,
+  children,
+}: LabelTooltipProps) {
   const foldedFromSidebar = useSidebarFolded();
+  const overflowing = useOverflow(titleElement);
 
   const effectiveFolded = folded ?? foldedFromSidebar;
 
-  /* `suppressed`, not a controlled `open`: hover stays Radix's to track, so an
-  unfolded tab keeps no hover state of its own that a later fold could act on. */
+  /* `suppressed`, not a controlled `open`: hover stays Radix's to track, so the
+  tab keeps no hover state of its own that a later fold could act on. */
   return (
-    <Tooltip tooltip={label} side="end" suppressed={!effectiveFolded}>
+    <Tooltip
+      tooltip={label}
+      side="end"
+      suppressed={!effectiveFolded && !overflowing}
+    >
       {children}
     </Tooltip>
   );
@@ -110,10 +125,10 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
  * Sidebar navigation tab built on `Interactive.Stateful` > `Interactive.Container`.
  *
  * Uses `sidebar-heavy` (default) or `sidebar-light` (via `variant`) variants
- * for color styling. The click target is an overlay control — a `Link` when
+ * for color styling. The click target is an overlay control — a `NavLink` when
  * `href` is set, a `button` when only `onClick` is set — so both paths are
  * keyboard focusable. Supports `rightChildren` for inline actions, and folded
- * mode with an auto-tooltip.
+ * mode. A string label shows in a tooltip while folded or cut off.
  *
  * The label and `rightChildren` always render. The folded state hides them in
  * CSS — see `styles.css` — so folding a sidebar re-renders no tabs.
@@ -141,6 +156,12 @@ function SidebarTab({
         )) as IconFunctionComponent)
       : null);
 
+  // The label and `rightChildren` sit in one fold wrapper, so they fade
+  // together. `rightChildren` stays absolutely positioned against the tab.
+  const actions = rightChildren && (
+    <div className="opal-sidebar-tab__actions">{rightChildren}</div>
+  );
+
   // The `rightChildren` node is absolutely positioned to sit on top of the
   // overlay control. A zero-width spacer reserves truncation space for the title.
   const truncationSpacer = rightChildren && (
@@ -153,12 +174,15 @@ function SidebarTab({
   title. */
   const label = typeof children === "string" ? children : undefined;
   const labelId = React.useId();
+  const [titleElement, setTitleElement] = React.useState<HTMLElement | null>(
+    null
+  );
   const labelProps =
     label !== undefined
       ? { "aria-label": label }
       : { "aria-labelledby": labelId };
 
-  /* The click target is an overlay that covers the whole row: a `Link` when
+  /* The click target is an overlay that covers the whole row: a `NavLink` when
   `href` is set, a `button` otherwise. It stays a sibling of the content so that
   `rightChildren` and interactive icons remain valid nested controls. The focus
   outline is inset because the container clips its overflow. `cursor-pointer` is
@@ -176,7 +200,7 @@ function SidebarTab({
   when it has a tooltip to show. */
   const overlay =
     !disabled && href ? (
-      <Link
+      <NavLink
         href={href as Route}
         scroll={false}
         onClick={onClick}
@@ -200,10 +224,10 @@ function SidebarTab({
         {overlay}
       </Tooltip>
     ) : label !== undefined ? (
-      // Only a string label can stand in as its own folded tooltip.
-      <FoldedTooltip label={label} folded={folded}>
+      // Only a string label can stand in as its own tooltip.
+      <LabelTooltip label={label} folded={folded} titleElement={titleElement}>
         {overlay}
-      </FoldedTooltip>
+      </LabelTooltip>
     ) : (
       overlay
     ));
@@ -223,22 +247,32 @@ function SidebarTab({
         <Interactive.Container rounding={2} size="lg" width="full">
           {trigger}
 
-          {rightChildren && (
-            <div className="opal-sidebar-tab__actions">{rightChildren}</div>
-          )}
-
           {label !== undefined ? (
-            <ContentAction
-              icon={Icon ?? undefined}
-              title={label}
-              sizePreset="main-ui"
-              variant="body"
-              color="interactive"
-              width="full"
-              padding={0}
-              rightChildren={truncationSpacer}
-              titleMaxLines={1}
-            />
+            <div className="opal-sidebar-tab__row">
+              <div className="opal-sidebar-tab__content">
+                {Icon && (
+                  <div className="opal-sidebar-tab__icon">
+                    <Icon className="opal-sidebar-tab__icon-svg" />
+                  </div>
+                )}
+                <div className="opal-sidebar-tab__fold">
+                  <Text
+                    font="main-ui-body"
+                    color="inherit"
+                    maxLines={1}
+                    ref={setTitleElement}
+                  >
+                    {label}
+                  </Text>
+                  {actions}
+                </div>
+              </div>
+              {truncationSpacer && (
+                <div className="opal-sidebar-tab__spacer">
+                  {truncationSpacer}
+                </div>
+              )}
+            </div>
           ) : (
             <div
               id={labelId}
@@ -250,7 +284,10 @@ function SidebarTab({
                   <Icon className="h-4 w-4 text-text-03" />
                 </div>
               )}
-              {children}
+              <div className="opal-sidebar-tab__fold" data-label="element">
+                {children}
+                {actions}
+              </div>
               {truncationSpacer}
             </div>
           )}

@@ -29,6 +29,7 @@ export enum PacketType {
 
   // Tool call argument delta (streams tool args before tool executes)
   TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
+  TOOL_CALL_DEBUG = "tool_call_debug",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -105,6 +106,8 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  /** The turn reached its execution deadline. */
+  TIMED_OUT = "timed_out",
 }
 
 export interface Stop extends BaseObj {
@@ -148,7 +151,7 @@ export interface SearchToolDocumentsDelta extends BaseObj {
 
 export type ImageShape = "square" | "landscape" | "portrait";
 
-interface GeneratedImage {
+export interface GeneratedImage {
   file_id: string;
   url: string;
   revised_prompt: string;
@@ -200,7 +203,8 @@ export interface FetchToolDocuments extends BaseObj {
 // Custom Tool Packets
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
-  status_code: number;
+  is_unreachable: boolean;
+  status_code: number | null;
   message: string;
 }
 
@@ -449,8 +453,16 @@ export type CodingAgentObj =
   | SectionEnd
   | PacketError;
 
+export interface ToolCallDebug extends BaseObj {
+  type: "tool_call_debug";
+  tool_call_id: string;
+  tool_name: string;
+  tool_args: Record<string, unknown>;
+}
+
 // Union type for all possible streaming objects
 export type ObjTypes =
+  | ToolCallDebug
   | ChatObj
   | NewToolObj
   | ReasoningObj
@@ -551,4 +563,11 @@ export interface ResearchAgentPacket {
 export interface CodingAgentPacket {
   placement: Placement;
   obj: CodingAgentObj;
+}
+
+/** Transport cursor for the complete packet prefix preceding this record. */
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
 }

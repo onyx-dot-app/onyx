@@ -9,6 +9,7 @@ from onyx.configs.app_configs import (
     CONTINUE_ON_CONNECTOR_FAILURE,
     DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD,
     INDEX_BATCH_SIZE,
+    SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
@@ -307,6 +308,7 @@ class DrupalWikiConnector(
                             file_name=file_name,
                             stage=self.raw_file_callback,
                             link=download_url,
+                            skip_content=SKIP_SPREADSHEET_CONTENT,
                         )
                     )
                 except Exception:

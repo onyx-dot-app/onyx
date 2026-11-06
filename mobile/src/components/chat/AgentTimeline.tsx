@@ -51,7 +51,6 @@ export interface AgentTimelineProps {
   buttonTitle?: string;
   // Backend duration for a hydrated (already finished) turn.
   processingDurationSeconds?: number;
-  isGeneratingImage?: boolean;
   generatedImageCount?: number;
   // Backend `pre_answer_processing_seconds`; freezes the live timer once present.
   toolProcessingDuration?: number;
@@ -95,7 +94,6 @@ function areAgentTimelinePropsEqual(
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.chatState === next.chatState &&
-    prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.streamingStartTime === next.streamingStartTime
@@ -112,7 +110,6 @@ export const AgentTimeline = memo(function AgentTimeline({
   collapsible = true,
   buttonTitle,
   processingDurationSeconds,
-  isGeneratingImage = false,
   generatedImageCount = 0,
   toolProcessingDuration,
   streamingStartTime,
@@ -120,7 +117,6 @@ export const AgentTimeline = memo(function AgentTimeline({
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
-    isGeneratingImage,
   );
 
   const {
@@ -197,7 +193,6 @@ export const AgentTimeline = memo(function AgentTimeline({
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
     }),
     [
@@ -213,7 +208,6 @@ export const AgentTimeline = memo(function AgentTimeline({
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
     ],
   );

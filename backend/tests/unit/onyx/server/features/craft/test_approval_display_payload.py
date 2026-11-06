@@ -4,7 +4,7 @@ from email.message import EmailMessage
 from typing import Any
 from uuid import uuid4
 
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ActionPolicy
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.server.features.build.approvals.api import ApprovalView
@@ -28,7 +28,7 @@ def _view(action_type: str, payload: dict[str, Any]) -> ApprovalView:
                 action_type=action_type,
                 display_name="x",
                 description="x",
-                policy=EndpointPolicy.ASK,
+                policy=ActionPolicy.ASK,
             )
         ],
         app_name="Gmail",

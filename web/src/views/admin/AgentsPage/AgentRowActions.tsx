@@ -1,15 +1,17 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
   Dropdown,
+  Text,
   useCreateModal,
   type DropdownMenuItem,
 } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import { cn, escapeMarkdown, markdown } from "@opal/utils";
+import { cn, escapeMarkdown, markdown, richNodes } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
@@ -22,9 +24,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
-import { useRouter } from "next/navigation";
 import {
   deleteAgent,
   toggleAgentFeatured,
@@ -54,7 +54,7 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const t = useTranslations("admin.agents");
-  const router = useRouter();
+  const navigation = useNavigation();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareModal = useCreateModal();
 
@@ -136,7 +136,7 @@ export default function AgentRowActions({
             id: "stats",
             icon: SvgBarChart,
             title: t("rowActions.statsItem.title"),
-            onSelect: () => router.push(`/ee/agents/stats/${agent.id}`),
+            onSelect: () => navigation.go(`/ee/agents/stats/${agent.id}`),
           },
         ]
       : []),
@@ -178,7 +178,7 @@ export default function AgentRowActions({
               aria-label={t("rowActions.editAgentButton.label")}
               data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
-                router.push(
+                navigation.go(
                   `/app/agents/edit/${agent.id}?u=${Date.now()}&admin=true`
                 )
               }
@@ -274,15 +274,17 @@ export default function AgentRowActions({
             </Button>
           }
         >
-          <Text as="p" text03>
-            {t.rich("deleteModal.confirmation.description", {
-              name: agent.name,
-              emphasis: (chunks) => (
-                <Text as="span" text05>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("deleteModal.confirmation.description", {
+                name: agent.name,
+                emphasis: (chunks) => (
+                  <Text as="span" color="text-05">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         </ConfirmationModalLayout>
       )}
@@ -313,14 +315,14 @@ export default function AgentRowActions({
           }
         >
           <div className="flex flex-col gap-2">
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {agent.is_featured
                 ? t("featuredModal.removeBody.description", {
                     name: agent.name,
                   })
                 : t("featuredModal.addBody.description")}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("modals.accessNote.description")}
             </Text>
           </div>
@@ -349,10 +351,10 @@ export default function AgentRowActions({
           }
         >
           <div className="flex flex-col gap-2">
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("unlistModal.body.description")}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("modals.accessNote.description")}
             </Text>
           </div>

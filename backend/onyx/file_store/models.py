@@ -1,11 +1,14 @@
 import base64
 import threading
+from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, NotRequired, Self
+from typing import Any, Callable, Literal, NotRequired, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypedDict  # noreorder
+
+from onyx.configs.constants import FileOrigin
 
 
 class _LazyContent:
@@ -99,6 +102,12 @@ class UserFileMetadata(BaseModel):
     token_count: int | None
 
 
+class ChatFileInput(BaseModel):
+    descriptor: FileDescriptor
+    token_count: int
+    content_pending: bool
+
+
 class InMemoryChatFile(BaseModel):
     file_id: str
     content: bytes
@@ -163,3 +172,119 @@ class StoredFileFacts(BaseModel):
     file_type: str
     # None for files saved before uploads recorded a hash.
     content_sha256: str | None
+
+
+class ChatLoadedFile(InMemoryChatFile):
+    content_text: str | None
+    token_count: int
+    # True while the user-file worker is still processing the file — its
+    # canonical plaintext (e.g. including image captions) doesn't exist yet.
+    content_pending: bool = False
+
+    @classmethod
+    def lazy_loaded(
+        cls,
+        *,
+        file_id: str,
+        file_type: ChatFileType,
+        filename: str | None,
+        content_text: str | None,
+        token_count: int,
+        loader: Callable[[], bytes],
+        content_pending: bool = False,
+    ) -> "ChatLoadedFile":
+        """Keep supplied text and token counts; load bytes on first content access."""
+        inst = cls(
+            file_id=file_id,
+            content=b"",
+            file_type=file_type,
+            filename=filename,
+            content_text=content_text,
+            token_count=token_count,
+            content_pending=content_pending,
+        )
+        install_lazy_content_loader(inst, loader)
+        return inst
+
+
+class ContextFileMetadata(BaseModel):
+    """Metadata for a context-injected file to enable citation support."""
+
+    file_id: str
+    filename: str
+    file_content: str
+
+
+class FileToolMetadata(BaseModel):
+    """Lightweight metadata for exposing files to the FileReaderTool.
+
+    Used when files cannot be loaded directly into context (project too large
+    or persona-attached user_files without direct-load path). The LLM receives
+    a listing of these so it knows which files it can read via ``read_file``.
+    """
+
+    file_id: str
+    filename: str
+    approx_char_count: int
+
+    # Whether the bytes are available to tools that receive files (PythonTool).
+    # Summary-truncated attachments are listed for the LLM but never staged;
+    # listing them must not promise Python access to bytes it does not have.
+    staged_for_tools: bool = True
+
+
+class ExtractedContextFiles(BaseModel):
+    """Result of attempting to load user files (from a project or persona) into context."""
+
+    file_texts: list[str]
+    image_files: list[ChatLoadedFile]
+    use_as_search_filter: bool
+    total_token_count: int
+    # Full text and titles used to construct citations for injected files.
+    file_metadata: list[ContextFileMetadata]
+    uncapped_token_count: int | None
+    # File listings supplied to the model for retrieval through FileReaderTool.
+    file_metadata_for_tool: list[FileToolMetadata] = []
+
+
+class PresignedRequest(BaseModel):
+    """A short-lived request for one object and one method. The client needs
+    no storage credentials."""
+
+    model_config = ConfigDict(frozen=True)
+
+    url: str
+    method: Literal["GET", "PUT"]
+    # The client must send these headers unchanged. The signature covers most
+    # of them, so a changed or missing header fails the request.
+    headers: dict[str, str]
+    expires_at: datetime
+
+
+class PresignedUpload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    pending_upload_id: str
+    # The file ID that finalize_presigned_upload gives the file.
+    file_id: str
+    request: PresignedRequest
+
+
+class StoredObjectStat(BaseModel):
+    size: int
+    # Hex SHA-256, when the store keeps one for the object.
+    sha256: str | None
+
+
+class PendingPresignedUpload(BaseModel):
+    """What finalize_presigned_upload checks the uploaded object against.
+    Kept in the cache backend, so no file_record row exists before finalize."""
+
+    file_id: str
+    display_name: str | None
+    file_origin: FileOrigin
+    file_type: str
+    bucket_name: str
+    object_key: str
+    size: int
+    sha256: str

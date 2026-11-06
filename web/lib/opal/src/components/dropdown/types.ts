@@ -1,5 +1,10 @@
-import type { IconFunctionComponent, RichStr } from "@opal/types";
-import type { TagProps } from "@opal/components/tag/components";
+import type {
+  ContextualMenuWidth,
+  IconFunctionComponent,
+  RichNodes,
+  RichStr,
+} from "@opal/types";
+import type { BadgeProps } from "@opal/components/badge/components";
 import type { InputTypeInProps } from "@opal/components/inputs/texts/input-type-in/components";
 
 // ---------------------------------------------------------------------------
@@ -23,11 +28,17 @@ export interface DropdownOption extends DropdownRowBase {
   description?: string | RichStr;
   /** Muted text beside the title in the list, like "(Default)". */
   suffix?: string;
+  /**
+   * Muted note at the end of the row, like what is already set for it. On a
+   * linked option (`href`), markdown links show as plain text; `RichNodes`
+   * there must not hold a link.
+   */
+  info?: string | RichStr | RichNodes;
   icon?: IconFunctionComponent;
   /** Lines the description may take before it clamps, for text a user wrote. */
   descriptionMaxLines?: number;
-  /** Tag beside the title, like a plan badge. */
-  tag?: TagProps;
+  /** Badge beside the title, like a plan badge. */
+  tag?: BadgeProps;
   /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
   tooltip?: string | RichStr;
   /** Makes the row a link: activating it follows `href` instead of selecting it. */
@@ -91,7 +102,6 @@ export interface DropdownRowProps {
   "data-index": number;
   tabIndex: -1;
   onClick: (event: React.MouseEvent) => void;
-  onMouseDown: (event: React.MouseEvent) => void;
 }
 
 /**
@@ -143,12 +153,8 @@ export type DropdownMenuItem = DropdownMenuRow | DropdownGroup<DropdownMenuRow>;
 /** Picker (`listbox`, something is selected) or menu (`menu`, commands). */
 export type DropdownMode = "picker" | "menu";
 
-/**
- * A fixed list width on the Tailwind scale (units of 0.25rem), one of the
- * `--block-width-contextual-menu-*` steps in sizes.css: 30 is 7.5rem, 90 is
- * 22.5rem. `DROPDOWN_WIDTH_TOKENS` in model.ts maps each to its token.
- */
-export type DropdownWidth = 30 | 40 | 50 | 60 | 70 | 80 | 90;
+/** A fixed list width: a contextual-menu step, shared with Popover. */
+export type DropdownWidth = ContextualMenuWidth;
 /** Which edge of the anchor the list lines up with. */
 export type DropdownAlign = "start" | "end";
 /** Below the anchor, above it, or a flyout beside it. */
@@ -171,7 +177,7 @@ export type DropdownSearch = Omit<
   | "onKeyDown"
   | "ref"
   | "variant"
-  | "searchIcon"
+  | "icon"
   | "aria-label"
   | "placeholder"
 > &

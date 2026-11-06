@@ -110,7 +110,7 @@ function refExists(ref) {
 }
 if (!refExists(BASELINE_REF)) {
   console.error(
-    `FAIL: baseline ref '${BASELINE_REF}' not found — fetch it (e.g. git fetch origin main) or set PARITY_BASELINE_REF.`
+    `FAIL: baseline ref '${BASELINE_REF}' not found. Fetch it (e.g. git fetch origin main) or set PARITY_BASELINE_REF.`
   );
   process.exit(2);
 }
@@ -126,7 +126,7 @@ try {
   // the base branch. Any other failure is unexpected and must fail loudly.
   if (err.status === 128) {
     console.log(
-      `ℹ️  Opal token baseline not present on ${BASELINE_REF} (post-migration) — parity check skipped.`
+      `ℹ️  Opal token baseline not present on ${BASELINE_REF} (post-migration): parity check skipped.`
     );
     process.exit(0);
   }
@@ -229,9 +229,7 @@ function parseUtilities(css) {
 const baseUtils = parseUtilities(baseCss);
 const genTypoPath = join(sharedRoot, "dist", "typography.css");
 if (!existsSync(genTypoPath)) {
-  errors.push(
-    "MISSING dist/typography.css — run `bun run build:tokens` first."
-  );
+  errors.push("MISSING dist/typography.css. Run `bun run build:tokens` first.");
 } else {
   const genUtils = parseUtilities(readFileSync(genTypoPath, "utf8"));
   const baseNames = new Set(Object.keys(baseUtils));
@@ -258,14 +256,14 @@ if (!existsSync(genTypoPath)) {
 
 // ---- report ----
 if (errors.length) {
-  console.error(`\n❌ Token parity FAILED — ${errors.length} issue(s):\n`);
+  console.error(`\n❌ Token parity FAILED: ${errors.length} issue(s):\n`);
   for (const e of errors.slice(0, 100)) console.error("  - " + e);
   if (errors.length > 100)
     console.error(`  ... and ${errors.length - 100} more`);
   process.exit(1);
 }
 console.log(
-  `✅ Token parity OK — ${baseRootNames.size} :root vars and ${baseDarkNames.size} .dark vars ` +
+  `✅ Token parity OK: ${baseRootNames.size} :root vars and ${baseDarkNames.size} .dark vars ` +
     `resolve identically (light + dark), ${Object.keys(baseUtils).length} typography ` +
     `@utility presets match, no duplicates.`
 );

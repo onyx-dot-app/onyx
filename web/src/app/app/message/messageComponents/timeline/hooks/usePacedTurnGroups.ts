@@ -1,10 +1,15 @@
+import { getToolKey } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { PacketType } from "@/app/app/services/streamingModels";
-import { GroupedPacket } from "./packetProcessor";
-import { TurnGroup, TransformedStep } from "../transformers";
+import { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import {
+  TurnGroup,
+  TransformedStep,
+} from "@/app/app/message/messageComponents/timeline/transformers";
 
 // Delay between steps (ms)
 const PACING_DELAY_MS = 200;
+const NO_RESTORED_GROUPS: ReadonlyMap<string, number> = new Map();
 
 /**
  * Tool START packet types used for categorizing steps
@@ -91,7 +96,8 @@ export function usePacedTurnGroups(
   displayGroups: GroupedPacket[],
   stopPacketSeen: boolean,
   nodeId: number,
-  finalAnswerComing: boolean
+  finalAnswerComing: boolean,
+  restoredGroups: ReadonlyMap<string, number> = NO_RESTORED_GROUPS
 ): {
   pacedTurnGroups: TurnGroup[];
   pacedDisplayGroups: GroupedPacket[];
@@ -201,6 +207,12 @@ export function usePacedTurnGroups(
 
     const state = stateRef.current;
 
+    // Restored steps are already visible; retain their actual completion state.
+    for (const key of restoredGroups.keys()) state.revealedStepKeys.add(key);
+    state.pendingSteps = state.pendingSteps.filter(
+      (step) => !restoredGroups.has(step.key)
+    );
+
     // Detect tool-after-message transition: message was showing, now tools are starting
     // Reset toolPacingComplete to hide display until new tools finish pacing
     if (prevFinalAnswerComingRef.current && !finalAnswerComing) {
@@ -303,6 +315,7 @@ export function usePacedTurnGroups(
     }
   }, [
     toolTurnGroups,
+    restoredGroups,
     stopPacketSeen,
     finalAnswerComing,
     revealNextPendingStep,
@@ -321,8 +334,9 @@ export function usePacedTurnGroups(
 
     const result: TurnGroup[] = [];
     for (const turnGroup of toolTurnGroups) {
-      const revealedSteps = turnGroup.steps.filter((step) =>
-        state.revealedStepKeys.has(step.key)
+      const revealedSteps = turnGroup.steps.filter(
+        (step) =>
+          state.revealedStepKeys.has(step.key) || restoredGroups.has(step.key)
       );
       if (revealedSteps.length > 0) {
         result.push({
@@ -364,8 +378,13 @@ export function usePacedTurnGroups(
     }
 
     return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toolTurnGroups, revealTrigger, shouldBypassPacing, hasNodeChanged]);
+  }, [
+    toolTurnGroups,
+    restoredGroups,
+    revealTrigger,
+    shouldBypassPacing,
+    hasNodeChanged,
+  ]);
 
   useEffect(() => {
     prevPacedRef.current = pacedTurnGroups;
@@ -378,10 +397,12 @@ export function usePacedTurnGroups(
     () =>
       shouldBypassPacing || state.toolPacingComplete || stopPacketSeen
         ? displayGroups
-        : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        : displayGroups.filter((group) =>
+            restoredGroups.has(getToolKey(group.turn_index, group.tab_index))
+          ),
     [
       state.toolPacingComplete,
+      restoredGroups,
       displayGroups,
       revealTrigger,
       shouldBypassPacing,
@@ -392,10 +413,14 @@ export function usePacedTurnGroups(
   // Paced signals for header state consistency
   // Only signal finalAnswerComing when tool pacing is complete (or bypassing)
   const pacedFinalAnswerComing = useMemo(
-    () => (shouldBypassPacing || state.toolPacingComplete) && finalAnswerComing,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () =>
+      (pacedDisplayGroups.length > 0 ||
+        shouldBypassPacing ||
+        state.toolPacingComplete) &&
+      finalAnswerComing,
     [
       state.toolPacingComplete,
+      pacedDisplayGroups,
       finalAnswerComing,
       revealTrigger,
       shouldBypassPacing,

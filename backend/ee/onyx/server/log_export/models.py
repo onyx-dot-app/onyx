@@ -32,7 +32,8 @@ class LogExportReceipt(BaseModel):
     # ``UPLOADED``.
     size_bytes: int
     collected_at: datetime
-    # Why collection failed; only set when ``status`` is ``FAILED``.
+    # Why collection failed (``FAILED``), or what an ``UPLOADED`` piece is
+    # missing because access was denied.
     error: str | None = None
 
 
@@ -84,3 +85,49 @@ class LogExportStatusResponse(BaseModel):
     receipts: list[LogExportReceipt]
     # Manifest workers that have not written a receipt yet.
     pending_worker_names: list[str]
+
+
+class KubernetesLogStream(BaseModel):
+    """One container log the Kubernetes collection reads."""
+
+    pod_name: str
+    container_name: str
+    # Reads the container instance that ran before the last restart.
+    previous: bool
+
+    @property
+    def arcname(self) -> str:
+        suffix = ".previous.log" if self.previous else ".log"
+        return f"logs/{self.pod_name}/{self.container_name}{suffix}"
+
+
+class TerminationSummary(BaseModel):
+    reason: str | None
+    exit_code: int | None
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class ContainerSummary(BaseModel):
+    name: str
+    # Init containers run before the main ones, e.g. the object-store wait.
+    init: bool
+    ready: bool
+    restart_count: int
+    # ``running``, ``waiting: <reason>``, or ``terminated: <reason>``.
+    state: str
+    # How the previous instance ended, e.g. ``OOMKilled`` with exit code 137.
+    last_terminated: TerminationSummary | None
+
+
+class PodSummary(BaseModel):
+    """One entry of ``pods.json`` in the Kubernetes piece."""
+
+    name: str
+    component: str | None
+    node: str | None
+    phase: str | None
+    # Pod-level reason and message, e.g. ``Evicted`` with the resource pressure.
+    reason: str | None
+    message: str | None
+    containers: list[ContainerSummary]

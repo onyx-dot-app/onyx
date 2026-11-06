@@ -23,6 +23,7 @@ export function processRawChatHistory(
       // reuse message_id as nodeId — only uniqueness matters
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
+      responseStatus: messageInfo.response_status,
       // errored turns carry text in `error`; render it as the message (web parity)
       message: messageInfo.error ?? messageInfo.message,
       type: messageInfo.error

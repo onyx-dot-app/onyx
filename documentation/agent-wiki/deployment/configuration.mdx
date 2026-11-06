@@ -1,0 +1,81 @@
+---
+title: "Configuration"
+description: "Environment variables and runtime settings"
+icon: "wrench"
+---
+
+Agent Wiki is configured by environment variables at the deployment level,
+and in the admin console for anything an administrator should be able to change without a redeploy — model providers,
+Slack, email, templates.
+
+This page covers the environment side.
+
+## Required
+
+Both are validated at boot. Get either wrong and the backend refuses to start rather than running in a broken state.
+
+| Variable | Notes |
+| --- | --- |
+| `SECRET_KEY` | Signs sessions. Must be non-empty and not the built-in development value |
+| `PUBLIC_BASE_URL` | The browser-facing origin, no trailing slash |
+
+`PUBLIC_BASE_URL` is deliberately never inferred from request headers — a spoofed `Host` would otherwise control the
+URLs the application hands out. It's used to build the MCP endpoint, launcher deep links, and links in outbound email,
+so if it's wrong those are all wrong in the same way. On Kubernetes the chart derives it from `ingress.host`.
+
+## Data stores
+
+| Variable | Default |
+| --- | --- |
+| `DATABASE_URL` | `postgresql://postgres:postgres@postgres:5432/agent_wiki` |
+| `REDIS_URL` | `redis://redis:6379/0` |
+| `OPENSEARCH_URL` | `http://opensearch:9200` |
+| `OPENSEARCH_INDEX` | `wiki-docs` |
+| `WIKI_DIR` | Where the git working tree lives |
+
+A stock Postgres 17 is fine — no extensions or server-parameter tuning are needed.
+Search is served by OpenSearch and the task queues by Redis,
+so managed database offerings work without special configuration.
+
+## Authentication
+
+| Variable | Notes |
+| --- | --- |
+| `AUTH_MODE` | `basic` (email and password, the default) or `oidc` |
+| `OIDC_ISSUER` | Issuer URL, when `AUTH_MODE=oidc` |
+| `OIDC_CLIENT_ID` | |
+| `OIDC_CLIENT_SECRET` | |
+| `OIDC_REDIRECT_URI` | |
+| `ALLOWED_EMAILS` | Restricts who may sign up |
+
+Under `basic`,
+the first account created is promoted to admin — so claim it immediately after install rather than leaving a fresh
+instance reachable.
+
+## Encryption
+
+`ENCRYPTION_KEY_SECRET` encrypts sensitive columns at rest — Slack webhook URLs, MCP tokens, provider credentials.
+Leave it unset and the application falls back to `SECRET_KEY`,
+which is the historical behavior and keeps existing data decryptable.
+
+Set it when you want to rotate the encryption key independently of the cookie-signing key.
+It must be at least 32 characters, and rotation has a dedicated script — don't just change the value,
+or existing ciphertext becomes unreadable.
+
+## Other
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `AGENT_WIKI_PORT` | `8090` | Host port published by nginx under Compose |
+| `MAX_QUEUE_SIZE` | `1000` | Task queue bound |
+| `MCP_NL_DEBOUNCE_SECONDS` | `30` | Collapses repeated `update_doc_nl` calls on the same page. Raise it for cost control |
+| `DEV_MODE` | `false` | Local development only — it downgrades the secret-key check from fatal to a warning. **Never set in production** |
+
+## Changed in the admin console instead
+
+Don't look for environment variables for these — they're runtime settings, editable by an admin without a redeploy:
+
+- **Model providers and keys** — [Language Models](/agent-wiki/admin/language_models)
+- **Slack app credentials and outbound email** — [Notifications](/agent-wiki/admin/notifications)
+- **Onyx integration endpoint and key** — [Onyx Integration](/agent-wiki/admin/onyx_integration)
+- **Auto Organize behavior** — [Auto Organize](/agent-wiki/automate/auto_organize)

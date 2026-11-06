@@ -30,7 +30,10 @@ def _build_filter_conditions(
     feedback_filter: Feedback type to filter by
     Returns: List of filter conditions
     """
-    conditions = [content_persisting_sessions_filter()]
+    conditions = [
+        content_persisting_sessions_filter(),
+        ChatSession.spawned_by_message_id.is_(None),
+    ]
 
     if start_time is not None:
         conditions.append(ChatSession.time_created >= start_time)
@@ -116,6 +119,7 @@ def get_page_of_chat_sessions(
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(
             desc(ChatSession.time_created),
@@ -140,6 +144,7 @@ def fetch_persisting_chat_session_by_id(
     chat_session = db_session.scalar(
         select(ChatSession).where(
             ChatSession.id == chat_session_id,
+            ChatSession.spawned_by_message_id.is_(None),
             content_persisting_sessions_filter(),
         )
     )
@@ -161,7 +166,7 @@ def fetch_chat_sessions_eagerly_by_time(
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     # Unfiltered on record mode: this backs the usage report, which carries
-    # token counts and no message content, and every mode meters usage.
+    # token counts and no message content. Child runs also meter attributed usage.
     filters: list[ColumnElement | BinaryExpression] = [
         ChatSession.time_created.between(start, end),
     ]
@@ -191,6 +196,7 @@ def fetch_chat_sessions_eagerly_by_time(
             contains_eager(ChatSession.messages).joinedload(
                 ChatMessage.chat_message_feedbacks
             ),
+            contains_eager(ChatSession.messages).selectinload(ChatMessage.search_docs),
         )
         .order_by(asc_time_order, message_order)
     )

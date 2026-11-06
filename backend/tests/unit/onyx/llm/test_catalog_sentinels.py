@@ -131,7 +131,7 @@ def test_embedding_detection_uses_mode() -> None:
     """Embedding detection must use the catalog's mode field, not just the
     name heuristic — a missing mode silently misclassifies."""
     assert model_catalog.resolve_model_mode("text-embedding-3-large") == "embedding"
-    assert model_catalog.resolve_model_mode("gpt-5") == "chat"
+    assert model_catalog.resolve_model_mode("gpt-6-sol") == "chat"
 
 
 def test_uncataloged_name_falls_back_to_chat(
@@ -143,3 +143,64 @@ def test_uncataloged_name_falls_back_to_chat(
     assert (
         model_catalog.resolve_model_mode("my-custom-text-embedding-v1") == "embedding"
     )
+
+
+def test_image_generation_models_skip_pruned_and_dated_snapshots() -> None:
+    models = model_catalog.iter_image_generation_models(LlmProviderNames.OPENAI)
+    assert "gpt-image-2" in models
+    assert "gpt-image-1" not in models
+    assert "dall-e-3" not in models
+    assert "gpt-image-2-2026-04-21" not in models
+    assert "gpt-image-1.5" not in models
+    assert "gpt-image-1.5-2025-12-16" not in models
+    assert all("/" not in model for model in models)
+
+
+def test_is_recommended_image_model_follows_the_listing_provider() -> None:
+    gateway = "custom_image_gateway"
+    assert model_catalog.is_recommended_image_model(gateway, "gpt-image-2")
+    assert not model_catalog.is_recommended_image_model(gateway, "dall-e-3")
+    assert not model_catalog.is_recommended_image_model(
+        gateway, "gpt-image-2-2026-04-21"
+    )
+    assert not model_catalog.is_recommended_image_model(
+        LlmProviderNames.OPENAI, "dall-e-3"
+    )
+    assert model_catalog.is_recommended_image_model(gateway, "openai/gpt-image-2")
+    assert not model_catalog.is_recommended_image_model(
+        gateway, "openai/gpt-image-2-2026-04-21"
+    )
+
+
+def test_supplement_status_retires_listed_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "openai.json").write_text(
+        '{"models": {"img-a": {"mode": "image_generation"}}}'
+    )
+    supplement = tmp_path / "_supplement.json"
+    supplement.write_text('{"openai": {"models": {"img-a": {"status": "deprecated"}}}}')
+    monkeypatch.setattr(model_catalog, "_CATALOG_DIR", tmp_path)
+    monkeypatch.setattr(model_catalog, "_SUPPLEMENT_PATH", supplement)
+    model_catalog._catalog.cache_clear()
+    try:
+        entry = model_catalog._catalog()["openai"]["models"]["img-a"]
+        assert entry["status"] == "deprecated"
+        assert entry["mode"] == "image_generation"
+    finally:
+        model_catalog._catalog.cache_clear()
+
+
+def test_supplement_status_only_entry_is_not_added_as_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "openai.json").write_text('{"models": {}}')
+    supplement = tmp_path / "_supplement.json"
+    supplement.write_text('{"openai": {"models": {"img-a": {"status": "deprecated"}}}}')
+    monkeypatch.setattr(model_catalog, "_CATALOG_DIR", tmp_path)
+    monkeypatch.setattr(model_catalog, "_SUPPLEMENT_PATH", supplement)
+    model_catalog._catalog.cache_clear()
+    try:
+        assert "img-a" not in model_catalog._catalog()["openai"]["models"]
+    finally:
+        model_catalog._catalog.cache_clear()

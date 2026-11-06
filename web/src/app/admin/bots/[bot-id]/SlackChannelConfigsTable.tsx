@@ -1,5 +1,6 @@
 "use client";
 
+import { NavLink, useNavigation } from "@opal/navigation";
 import { PageSelector } from "@/components/PageSelector";
 import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
@@ -13,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Link from "next/link";
 import { useState } from "react";
 import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
@@ -33,6 +33,7 @@ export default function SlackChannelConfigsTable({
   refresh,
 }: SlackChannelConfigsTableProps) {
   const t = useTranslations("admin.slackBots");
+  const navigation = useNavigation();
   const [page, setPage] = useState(1);
 
   const defaultConfig = slackChannelConfigs.find((config) => config.is_default);
@@ -46,7 +47,9 @@ export default function SlackChannelConfigsTable({
         <Button
           prominence="secondary"
           onClick={() => {
-            window.location.href = `/admin/bots/${slackBotId}/channels/${defaultConfig?.id}`;
+            navigation.load(
+              `/admin/bots/${slackBotId}/channels/${defaultConfig?.id}`
+            );
           }}
           icon={SvgSettings}
         >
@@ -55,7 +58,7 @@ export default function SlackChannelConfigsTable({
         <Button
           icon={SvgPlusCircle}
           prominence="secondary"
-          href={`/admin/bots/${slackBotId}/channels/new`}
+          {...navigation.linkTo(`/admin/bots/${slackBotId}/channels/new`)}
         >
           {t("channels.newConfigButton.label")}
         </Button>
@@ -82,7 +85,9 @@ export default function SlackChannelConfigsTable({
                       key={slackChannelConfig.id}
                       className="cursor-pointer transition-colors"
                       onClick={() => {
-                        window.location.href = `/admin/bots/${slackBotId}/channels/${slackChannelConfig.id}`;
+                        navigation.load(
+                          `/admin/bots/${slackBotId}/channels/${slackChannelConfig.id}`
+                        );
                       }}
                     >
                       <TableCell>
@@ -104,12 +109,12 @@ export default function SlackChannelConfigsTable({
                         !isPersonaASlackBotPersona(
                           slackChannelConfig.persona
                         ) ? (
-                          <Link
+                          <NavLink
                             href={`/app/agents/edit/${slackChannelConfig.persona.id}`}
                             className="text-primary hover:underline"
                           >
                             {slackChannelConfig.persona.name}
-                          </Link>
+                          </NavLink>
                         ) : (
                           "-"
                         )}

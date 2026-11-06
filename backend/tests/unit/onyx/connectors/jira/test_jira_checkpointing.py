@@ -353,7 +353,7 @@ def test_validate_connector_settings_errors(
     expected_message: str,
 ) -> None:
     """Test validation with various error scenarios"""
-    error = JiraApiError("error", status_code=status_code, text=None)
+    error = JiraApiError("error", status_code=status_code, body=None)
 
     mock_source_operations.get_project.side_effect = error
 

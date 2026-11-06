@@ -45,6 +45,7 @@ def _provider(
     provider.provider_type = provider_type
     provider.api_url = "https://bifrost.example"
     provider.api_key.get_value.return_value = "sk-bf-stored"
+    provider.vertex_config = None
     return provider
 
 

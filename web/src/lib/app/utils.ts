@@ -23,3 +23,16 @@ export function defaultAgentRedirectTarget(
 
   return query ? `/app?${query}` : "/app";
 }
+
+/** The web server's version, from its ONYX_VERSION env var. Server-side only. */
+export function getWebVersion(): string {
+  return process.env.ONYX_VERSION || "dev";
+}
+
+/** Where the About page's version links. */
+export const CHANGELOG_URL = "https://docs.onyx.app/changelog";
+
+/** The GitHub page of a commit of the Onyx repo. */
+export function commitUrl(commit: string): string {
+  return `https://github.com/onyx-dot-app/onyx/commit/${commit}`;
+}

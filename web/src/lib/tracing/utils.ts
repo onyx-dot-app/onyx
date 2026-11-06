@@ -16,8 +16,6 @@ export interface TracingFieldSpec {
   labelKey: TracingMessageKey;
   descriptionKey?: TracingMessageKey;
   placeholderKey?: TracingMessageKey;
-  // URLs and default values are not translated.
-  placeholder?: string;
   optional?: boolean;
   defaultValue?: string;
 }
@@ -47,7 +45,7 @@ export const TRACING_PROVIDER_DETAILS: Record<
       {
         name: "project",
         labelKey: "providers.braintrust.fields.project.label",
-        placeholder: "Onyx",
+        placeholderKey: "providers.braintrust.fields.project.placeholder",
         optional: true,
         defaultValue: "Onyx",
         descriptionKey: "providers.braintrust.fields.project.description",
@@ -55,7 +53,7 @@ export const TRACING_PROVIDER_DETAILS: Record<
       {
         name: "api_url",
         labelKey: "providers.braintrust.fields.apiUrl.label",
-        placeholder: "https://api.braintrust.dev",
+        placeholderKey: "providers.braintrust.fields.apiUrl.placeholder",
         optional: true,
         descriptionKey: "providers.braintrust.fields.apiUrl.description",
       },
@@ -79,7 +77,7 @@ export const TRACING_PROVIDER_DETAILS: Record<
       {
         name: "host",
         labelKey: "providers.langfuse.fields.host.label",
-        placeholder: "https://cloud.langfuse.com",
+        placeholderKey: "providers.langfuse.fields.host.placeholder",
         optional: true,
         descriptionKey: "providers.langfuse.fields.host.description",
       },

@@ -1,0 +1,14 @@
+---
+title: "Readiness"
+openapi: "GET /health/ready"
+---
+
+<Info>
+  **No authentication required.**
+</Info>
+
+<Note>
+  Readiness probe. It fails when the API server cannot reach its dependencies,
+  so a load balancer can stop routing traffic to this replica.
+  Use [Healthcheck](/developers/api_reference/miscellaneous/healthcheck) for a liveness check.
+</Note>

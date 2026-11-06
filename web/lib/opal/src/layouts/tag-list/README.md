@@ -23,4 +23,4 @@ Wrap-flowing row of `Tag`s outside an input, for any labelled list. Use it inste
 />
 ```
 
-Tags render truncated (`truncate`) so long labels ellipsize with the default title tooltip. There is no Figma component for a standalone tag row. Sizing and spacing follow the `Input/Tags` tag row.
+Tags render truncated (`truncate`), so a long label ends in an ellipsis and shows in full on hover. There is no Figma component for a standalone tag row. Sizing and spacing follow the `Input/Tags` tag row.

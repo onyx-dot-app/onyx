@@ -98,8 +98,8 @@ describe("LLMPopover helpers", () => {
         name: "OpenAI Provider",
         provider: "openai",
         providerDisplayName: "ChatGPT (OpenAI)",
-        modelName: "gpt-4o-mini",
-        displayName: "GPT-4o Mini",
+        modelName: "gpt-6-luna",
+        displayName: "GPT-6 Luna",
         vendor: null,
       },
     ];

@@ -1,0 +1,107 @@
+---
+title: "Braintrust"
+description: "Index prompts, datasets and experiments from Braintrust"
+---
+
+The Braintrust connector indexes the prompts, datasets and experiments of your Braintrust organization.
+
+## How it works
+
+| Content     | Behavior                                                                                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompts     | One document per prompt, named `Prompt: <name>`.                                                                                                |
+| Datasets    | One document per dataset, named `Dataset: <name>`, holding its rows as a table.                                                                  |
+| Experiments | One document per experiment, named `Experiment: <name>`. The summary is always indexed; the per-row results depend on the lookback below.        |
+| Permissions | Not available. **Sync with Braintrust** is not offered, so the access type can only be **Everyone in Your Organization** or **Specific Groups**. |
+
+Onyx indexes prompts first, then datasets, then experiments,
+and keeps its place between runs so a large organization is indexed across several attempts.
+
+## Before you begin
+
+You need:
+
+- A Braintrust account with access to the organization you want to index
+- A Braintrust API key
+- An Onyx administrator account
+
+<Note>
+  The connector reads the Braintrust API at `https://api.braintrust.dev` and indexes only what the API key can read.
+</Note>
+
+## Configure Onyx
+
+<Steps>
+  <Step title="Connect a Braintrust account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Braintrust**. Under **Authentication Account**,
+    select **New Braintrust Account** and paste the key into **API Token**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/braintrust/BraintrustCredential.webp" alt="Create a Braintrust account with a display name and the Braintrust API key"/>
+  </Step>
+
+  <Step title="Choose the scope">
+    In **Project Name**, enter a single Braintrust project to index only its prompts, datasets and experiments.
+    Leave it empty to index the whole organization.
+
+    Onyx checks the name when you create the connector and refuses a project it cannot find.
+  </Step>
+
+  <Step title="Choose who can see the content">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** is available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create and verify">
+    Select **Create Connector**. Then open **Admin Panel → Indexing Status**, select the connector,
+    and confirm its first indexing attempt completes.
+  </Step>
+</Steps>
+
+### Advanced settings
+
+These settings are under **Advanced** in the connector form.
+
+| Setting                        | Default | Purpose                                                                                                                       |
+| ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Experiment Row Lookback (Days) | 30      | Index the per-row results only of experiments created within this many days. Experiment summaries are always indexed. Set it to `0` to index the rows of every experiment. |
+
+A longer lookback makes each indexing run read more from Braintrust.
+
+## Limits
+
+| Limit                   | Value          | Notes                                                                        |
+| ----------------------- | -------------- | ------------------------------------------------------------------------------ |
+| Rows per table          | 10,000         | The most recent rows are kept and the document says it was truncated.        |
+| Braintrust API call     | 60s            |                                                                               |
+| Retries per request     | 5              |                                                                               |
+| Request rate            | 4 per second   | Onyx throttles itself to stay within the Braintrust API's limits.             |
+
+The connector downloads no files, so it has no file-size cap.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The API key is rejected">
+    `Braintrust API rejected the API key` with HTTP 401 or 403 means the key is wrong, revoked,
+    or belongs to an organization you did not intend. Create a new key in Braintrust and update the Onyx credential.
+  </Accordion>
+
+  <Accordion title="The project is not found">
+    `Braintrust project '<name>' was not found` means **Project Name** does not match a project the key can read.
+    The name must match exactly. Leave the field empty to index the whole organization.
+  </Accordion>
+
+  <Accordion title="Braintrust cannot be reached">
+    `Failed to reach the Braintrust API` means the request did not complete.
+    Check that the Onyx server can reach `https://api.braintrust.dev`, then retry.
+  </Accordion>
+
+  <Accordion title="Experiment rows are missing">
+    Only experiments created within **Experiment Row Lookback (days)** have their rows indexed;
+    older experiments keep their summary only. Raise the lookback, or set it to `0`, then re-index.
+  </Accordion>
+
+  <Accordion title="A large table is incomplete">
+    A table stops at its 10,000 most recent rows, and the document says so. This limit is not configurable.
+  </Accordion>
+</AccordionGroup>

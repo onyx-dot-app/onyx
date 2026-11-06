@@ -1,0 +1,72 @@
+---
+title: "Chrome Extension"
+description: "Accessing Onyx via a Chrome Extension"
+icon: "puzzle-piece"
+---
+
+Use the Onyx Chrome extension to ask Onyx from any web page. You can also replace your new-tab page with Onyx.
+
+Features include:
+
+- Onyx on every new tab
+- Onyx as a side panel on any page
+- Search or ask about selected text
+- Ask about the page you are reading
+- Search from the address bar
+
+<img
+
+className="rounded-image" src="/assets/overview/onyx_anywhere/onyx_chrome_extension.webp" alt="Onyx Chrome extension
+new-tab search and side panel" />
+
+<Note>
+  The extension works with Onyx Cloud and with self-hosted Onyx on all editions. It uses your normal Onyx sign-in.
+  It does not store a separate credential.
+</Note>
+
+## Getting Started
+
+**For Onyx Cloud users**: Install the extension from the Chrome Web Store.
+
+**For self-hosted users**: Your administrator provides the extension and the URL of your Onyx server. On first launch,
+the extension opens a welcome page. Enter your Onyx URL if your administrator has not pre-set it.
+
+## Using the Extension
+
+### **Side Panel**
+
+- Select **Read this tab** to let Onyx open the current page and use it as context for your question
+
+### **Selection Search**
+
+- Highlight text on a web page
+- Click the Onyx icon that appears, or right-click and choose the Onyx menu item
+- Onyx opens with the selected text as your prompt
+
+### **Address Bar**
+
+- Type `onyx`, press `Tab`, then type your question
+- Press `Enter` to open the answer in Onyx chat
+
+### **Shortcuts**
+
+- **Mac**: `Cmd+Shift+O` to toggle the new-tab page, `Ctrl+O` to open the side panel
+- **Windows**: `Ctrl+Shift+O` to toggle the new-tab page, `Alt+O` to open the side panel
+- **Linux**: `Ctrl+Shift+O` to toggle the new-tab page, `Ctrl+O` to open the side panel
+
+You can change these shortcuts at `chrome://extensions/shortcuts`.
+
+## Settings and Options
+
+Click the Onyx icon in the Chrome toolbar and select **Extension Settings** (or right-click the icon and select
+**Options**). Set the **Root Domain** of your Onyx server.
+Turn **Use Onyx as new tab page** and **Use Onyx in Address Bar** on or off.
+
+<Info>
+  If your administrator manages the extension with a browser policy, the Onyx URL and the new-tab setting can be locked.
+</Info>
+
+## Deployment
+
+For deployment instructions, including self-hosted installation and managed browser policies,
+see the [Chrome Extension Deployment Guide](/deployment/configuration/chrome_extension).
