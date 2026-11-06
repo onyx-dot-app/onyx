@@ -70,8 +70,13 @@ function session(env: Record<string, string>) {
       stdout: "pipe",
       stderr: "pipe",
     });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    // The hook logs failures and exits 0, so silence is the only proof of success.
+    expect(stderr).toBe("");
+    expect(await proc.exited).toBe(0);
     return stdout ? (JSON.parse(stdout) as Record<string, unknown>) : null;
   };
   const state = () =>
