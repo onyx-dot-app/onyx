@@ -35,7 +35,8 @@ interface ModalCreationInterface extends ModalInterface {
 
 /** What `Modal` reads from its owner to animate out before it unmounts. */
 interface ModalOwner extends ModalInterface {
-  onExitComplete: () => void;
+  /** Registers a mounted card; the returned function unregisters it. */
+  registerCard: () => () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,9 @@ const CLOSED: ModalState = { isOpen: false, isPresent: false };
 // exit animation.
 function createModalStore() {
   let state = CLOSED;
+  // Cards mounted under this owner. With none, nothing animates out, so
+  // closing unmounts at once (e.g. a modal whose data failed to load).
+  let cards = 0;
   const listeners = new Set<() => void>();
   const set = (next: ModalState) => {
     if (next.isOpen === state.isOpen && next.isPresent === state.isPresent) {
@@ -72,11 +76,17 @@ function createModalStore() {
       set(
         open
           ? { isOpen: true, isPresent: true }
-          : { isOpen: false, isPresent: state.isPresent }
+          : cards > 0
+            ? { isOpen: false, isPresent: state.isPresent }
+            : CLOSED
       ),
-    // Ignored while open: a nested modal closing must not unmount its owner.
-    onExitComplete: () => {
-      if (!state.isOpen) set(CLOSED);
+    registerCard: () => {
+      cards += 1;
+      return () => {
+        cards -= 1;
+        // Ignored while open: a nested modal closing must not unmount its owner.
+        if (cards === 0 && !state.isOpen) set(CLOSED);
+      };
     },
   };
 }
@@ -110,7 +120,7 @@ function useCreateModal(): ModalCreationInterface {
         () => ({
           isOpen: state.isOpen,
           toggle: store.toggle,
-          onExitComplete: store.onExitComplete,
+          registerCard: store.registerCard,
         }),
         [state.isOpen]
       );

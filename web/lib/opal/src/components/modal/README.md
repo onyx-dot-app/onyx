@@ -69,7 +69,7 @@ the action buttons on narrow screens. The default layout stays unchanged.
 
 ## Positioning
 
-Every modal is top-aligned, with no prop to change it. The card's top edge sits at `max(2rem, 12dvh)`, so a height change grows or shrinks the card downward instead of moving it. The height limit keeps the same gap at the bottom, so the bottom gap is never less than the top one.
+Every modal is top-aligned, with no prop to change it. The card's top edge sits at `max(2rem, 12dvh)`, so a height change grows or shrinks the card downward instead of moving it. The height limit keeps the same gap at the bottom, so the bottom gap is never less than the top one. In the desktop app the top offset also includes the title bar height (`--onyx-titlebar-height`); the gap below the title bar and the bottom gap stay equal.
 
 When a `[data-main-container]` element is present (the content area beside the sidebar), the modal centers horizontally on it instead of the viewport, and falls back to viewport centering on medium screens or when the container is absent.
 
