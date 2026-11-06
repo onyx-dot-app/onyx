@@ -1,6 +1,6 @@
 // Runs hook.ts as Claude Code and Codex do: one process per event, JSON on stdin.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +15,14 @@ type Host = "claude" | "codex";
 
 let server: ReturnType<typeof Bun.serve>;
 let prefetchEnv: Record<string, string>;
+const dataDirs: string[] = [];
+
+// The developer's own plugin settings must not leak into the hook under test.
+const baseEnv = Object.fromEntries(
+  Object.entries(process.env).filter(
+    ([name]) => !name.startsWith("ONYX_") && !name.startsWith("CLAUDE_PLUGIN_"),
+  ),
+);
 
 beforeAll(() => {
   server = Bun.serve({
@@ -44,17 +52,21 @@ beforeAll(() => {
 
 afterAll(() => {
   server.stop(true);
+  for (const dir of dataDirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 function session(env: Record<string, string>) {
   const dataDir = mkdtempSync(join(tmpdir(), "onyx-hook-test-"));
+  dataDirs.push(dataDir);
   const id = "session-1";
   // Async so the test's own server can answer the hook's prefetch.
   const run = async (host: Host, input: Record<string, unknown>) => {
     const proc = Bun.spawn({
       cmd: ["bun", HOOK, ...(host === "codex" ? ["codex"] : [])],
       stdin: Buffer.from(JSON.stringify({ session_id: id, ...input })),
-      env: { ...process.env, ...env, CLAUDE_PLUGIN_DATA: dataDir },
+      env: { ...baseEnv, ...env, CLAUDE_PLUGIN_DATA: dataDir },
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -122,9 +134,10 @@ describe("steering and the strict gate", () => {
     await s.run("claude", { hook_event_name: "UserPromptSubmit", prompt: PROMPT });
     const pre = (tool: string) =>
       s.run("claude", { hook_event_name: "PreToolUse", tool_name: tool });
-    expect(await pre("mcp__other__search_docs")).not.toBeNull();
-    expect(await pre("WebSearch")).not.toBeNull();
-    expect(await pre("mcp__onyx__external__search")).not.toBeNull();
+    const denied = { hookSpecificOutput: { permissionDecision: "deny" } };
+    expect(await pre("mcp__other__search_docs")).toMatchObject(denied);
+    expect(await pre("WebSearch")).toMatchObject(denied);
+    expect(await pre("mcp__onyx__external__search")).toMatchObject(denied);
     expect(await pre("mcp__other__create_issue")).toBeNull();
     expect(await pre("mcp__onyx__search_indexed_documents")).toBeNull();
     expect(await pre("mcp__plugin_onyx_onyx__search_indexed_documents")).toBeNull();
