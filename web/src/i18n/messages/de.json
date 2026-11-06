@@ -3098,15 +3098,24 @@
           "all": "Alle Ebenen",
           "failures": "Fehlschläge",
           "errors": "Fehler",
-          "other": "Sonstige",
+          "running": "Laufend",
+          "success": "Erfolgreich",
+          "canceled": "Abgebrochen",
           "resolved": "Behoben",
-          "toggle": "Filter"
+          "connectors": "Konnektoren",
+          "connectorsLoading": "Konnektoren werden geladen…",
+          "connectorsLoadError": "Die Konnektoren konnten nicht geladen werden.",
+          "connectorsRetry": "Erneut versuchen",
+          "toggleShow": "Filter anzeigen",
+          "toggleHide": "Filter ausblenden"
         },
         "groups": {
           "failures": "{count, plural, =0 {Fehlschläge} one {# Fehlschlag} other {# Fehlschläge}}",
           "errors": "{count, plural, =0 {Fehler} one {# Fehler} other {# Fehler}}",
-          "other": "Sonstige",
-          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}"
+          "running": "{count, number} Laufend",
+          "resolved": "Behoben",
+          "success": "Erfolgreich",
+          "canceled": "Abgebrochen"
         },
         "title": {
           "indexing": {
@@ -3117,9 +3126,8 @@
             "errors": "Indexierung mit Fehlern abgeschlossen.",
             "resolved": "Indexierungsfehler behoben.",
             "succeeded": "Indexierung erfolgreich abgeschlossen.",
-            "queued": "Indexierung in der Warteschlange.",
             "inProgress": "Indexierung läuft.",
-            "canceled": "Indexierung gestoppt."
+            "canceled": "Indexierung abgebrochen."
           },
           "doc_permission_sync": {
             "failed": "Berechtigungssynchronisierung fehlgeschlagen.",
@@ -3129,9 +3137,8 @@
             "errors": "Berechtigungen mit Fehlern synchronisiert.",
             "resolved": "Fehler der Berechtigungssynchronisierung behoben.",
             "succeeded": "Berechtigungen erfolgreich synchronisiert.",
-            "queued": "Berechtigungssynchronisierung in der Warteschlange.",
             "inProgress": "Berechtigungen werden synchronisiert.",
-            "canceled": "Berechtigungssynchronisierung gestoppt."
+            "canceled": "Berechtigungssynchronisierung abgebrochen."
           },
           "group_sync": {
             "failed": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen.",
@@ -3141,9 +3148,8 @@
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert.",
             "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben.",
             "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert.",
-            "queued": "Gruppensynchronisierung in der Warteschlange.",
             "inProgress": "Gruppenmitgliedschaften werden synchronisiert.",
-            "canceled": "Gruppensynchronisierung gestoppt."
+            "canceled": "Gruppensynchronisierung abgebrochen."
           },
           "pruning": {
             "failed": "Bereinigung fehlgeschlagen.",
@@ -3153,9 +3159,8 @@
             "errors": "Bereinigung mit Fehlern abgeschlossen.",
             "resolved": "Bereinigungsfehler behoben.",
             "succeeded": "Bereinigung erfolgreich abgeschlossen.",
-            "queued": "Bereinigung in der Warteschlange.",
             "inProgress": "Bereinigung läuft.",
-            "canceled": "Bereinigung gestoppt."
+            "canceled": "Bereinigung abgebrochen."
           },
           "checks": {
             "failed": "Konnektor-Prüfungen fehlgeschlagen.",
@@ -3165,9 +3170,8 @@
             "errors": "Konnektor-Prüfungen mit Fehlern abgeschlossen.",
             "resolved": "Fehler der Konnektor-Prüfungen behoben.",
             "succeeded": "Konnektor-Prüfungen bestanden.",
-            "queued": "Konnektor-Prüfungen in der Warteschlange.",
             "inProgress": "Konnektor-Prüfungen laufen.",
-            "canceled": "Konnektor-Prüfungen gestoppt."
+            "canceled": "Konnektor-Prüfungen abgebrochen."
           }
         },
         "description": {
@@ -3182,22 +3186,16 @@
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "indexingItems": "{count, plural, one {# Element fehlgeschlagen} other {# Elemente fehlgeschlagen}}",
-          "doc_permission_sync": "{count, plural, one {Berechtigungen von # Dokument nicht synchronisiert} other {Berechtigungen von # Dokumenten nicht synchronisiert}}",
-          "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
           "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
           "resolved": "Behoben",
-          "resolvedDocs": "{count, plural, one {# Element behoben} other {# Elemente behoben}}",
           "superseded": "Abgelöst"
         },
         "more": "Mehr anzeigen",
         "empty": {
           "title": "Keine aktuellen Aktivitäten",
-          "resolved": "Keine behobenen Läufe",
-          "filtered": "Nichts passt zu dieser Suche.",
-          "failures": "Keine Fehlschläge",
-          "errors": "Keine Fehler",
-          "other": "Keine weiteren Läufe"
+          "past": "Frühere Aktivitäten",
+          "filtered": "Nichts passt zu dieser Suche."
         },
         "loadError": {
           "title": "Die Aktivität konnte nicht geladen werden."
@@ -3208,10 +3206,7 @@
             "placeholder": "Elemente durchsuchen…"
           },
           "resolveAll": "Alle erneut versuchen",
-          "resolveAllTooltip": "Alle fehlgeschlagenen Dokumente dieses Laufs neu indexieren",
-          "resolveAllUnsupported": "Dieser Konnektor kann einzelne Dokumente nicht neu indexieren. Indexieren Sie den Konnektor neu, um sie erneut zu versuchen.",
           "resolveOne": "Dieses Dokument erneut versuchen",
-          "retry": "{count, plural, one {# Dokument erneut versuchen} other {# Dokumente erneut versuchen}}",
           "more": "Mehr",
           "less": "Weniger",
           "unknownDocument": "Unbekanntes Dokument",
@@ -3225,17 +3220,18 @@
           "runId": "Lauf-ID: {id}"
         },
         "actions": {
-          "resolve": "Beheben"
+          "resolve": "Beheben",
+          "resolveWithoutRetry": "Ohne erneuten Versuch beheben",
+          "retryDocs": "Dokumente erneut versuchen"
         },
         "resolveAll": {
-          "button": "Alle angezeigten beheben",
-          "title": "Alle angezeigten Läufe beheben?",
-          "description": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, als behoben markiert. Sie behalten ihren Status und erscheinen unter „Behoben“.",
-          "fleetDescription": "Damit {count, plural, one {wird # Lauf} other {werden # Läufe}}, die dem aktuellen Filter entsprechen, bei den Konnektoren, die Sie verwalten, als behoben markiert. Die Läufe behalten ihren Status und erscheinen unter „Behoben“.",
+          "button": "Alle beheben",
+          "title": "Alle angezeigten Aktivitäten beheben",
+          "body": "{count, plural, one {Damit wird # Aktivität behoben, die dem aktuellen Filter entspricht: {failures} und {errors}. Onyx versucht ihre fehlgeschlagenen Elemente nicht erneut. Die Aktivität behält ihren Status und erscheint unter „Behoben“.} other {Damit werden # Aktivitäten behoben, die dem aktuellen Filter entsprechen: {failures} und {errors}. Onyx versucht ihre fehlgeschlagenen Elemente nicht erneut. Die Aktivitäten behalten ihren Status und erscheinen unter „Behoben“.}}",
+          "body2": "Ein noch laufender Lauf kann neue Fehler melden. Diese erscheinen wieder als offen. Ein behobenes Dokument können Sie später in seiner Liste fehlgeschlagener Dokumente erneut versuchen.",
+          "failures": "{count, plural, =0 {keine Fehlschläge} one {# Fehlschlag} other {# Fehlschläge}}",
+          "errors": "{count, plural, =0 {keine Läufe mit Fehlern} one {# Lauf mit Fehlern} other {# Läufe mit Fehlern}}",
           "confirm": "Alle beheben"
-        },
-        "resolved": {
-          "label": "Behoben"
         }
       },
       "stageDetails": {
@@ -7446,7 +7442,7 @@
         "history": "Vollständiger Aktivitätsverlauf",
         "viewLogs": "Logs anzeigen",
         "panel": {
-          "title": "Aktivitätsverlauf",
+          "title": "Aktivitäten",
           "close": "Bereich schließen",
           "pairTitle": "Aktivitätsverlauf von {name}"
         }

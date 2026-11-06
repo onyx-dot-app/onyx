@@ -16,6 +16,7 @@ import {
   ThroughputBars,
   ThroughputWindowPicker,
   type SliceRange,
+  type ThroughputActivityLinks,
 } from "@/views/admin/connectors/ConnectorDetailPage/ThroughputChart";
 import { useThroughputData } from "@/lib/connectors/hooks";
 
@@ -81,12 +82,15 @@ export interface OverviewCardProps {
   /** The span of the chart the page is narrowed to. A new window clears it. */
   range: SliceRange | null;
   onRangeChange: (range: SliceRange | null) => void;
+  /** Ties the chart to the page's activity panel. */
+  activityLinks?: ThroughputActivityLinks;
 }
 
 /** Every readable connector at a glance: how many index now, the documents they hold, and documents indexed over time. */
 export default function OverviewCard({
   range,
   onRangeChange,
+  activityLinks,
 }: OverviewCardProps) {
   const t = useTranslations("admin.indexing.overview");
   const [timeWindow, setTimeWindow] = useState<CCPairThroughputWindow>("1h");
@@ -179,6 +183,7 @@ export default function OverviewCard({
                 selection={range}
                 // The dimmed bars are the old window's, so they pick nothing until the new one lands.
                 onRangeSelect={stale ? undefined : onRangeChange}
+                {...activityLinks}
               />
             )}
           </Section>

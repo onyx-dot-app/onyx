@@ -125,10 +125,10 @@ export class AdminConnectorDetailPage {
     await expect(this.activityPanel).toContainText(text, { timeout: 30000 });
   }
 
-  /** The activity panel shows exactly these group headings, such as "2 Failures". */
-  async expectActivityGroups(headings: string[]): Promise<void> {
+  /** The activity panel shows exactly these section headings, such as "2 Failures" or "Resolved". */
+  async expectActivitySections(headings: string[]): Promise<void> {
     await expect(
-      this.activityPanel.getByText(/^\d+ (Failures?|Errors?|Resolved)$/)
+      this.activityPanel.getByTestId("activity-section-title")
     ).toHaveText(headings);
   }
 

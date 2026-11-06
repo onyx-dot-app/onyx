@@ -14,6 +14,10 @@ import type {
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { can } from "@/lib/permissions/resource-actions";
+import {
+  useActivityChartLinks,
+  useActivityPanelOpen,
+} from "@/lib/connectors/ccPair/hooks";
 import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
 import ActivitiesCard from "@/views/admin/connectors/IndexingStatusPage/ActivitiesCard";
 import ConnectorList from "@/views/admin/connectors/IndexingStatusPage/ConnectorList";
@@ -67,13 +71,35 @@ function PairActivityPanel({ row, onClose, ref }: PairActivityPanelProps) {
 /** Every connector's indexing at a glance: the fleet's throughput and newest failures, then each connector with its latest run. */
 export default function IndexingStatusPage() {
   const t = useTranslations("admin.indexing");
-  // The fleet's history, or one connector's.
-  const [history, setHistory] = useState<"fleet" | IndexingConnectorRow | null>(
+  // One connector's history takes the fleet's place while it is open.
+  const [pairHistory, setPairHistory] = useState<IndexingConnectorRow | null>(
     null
   );
-  const historyOpen = history !== null;
   // A picked span of the chart narrows the fleet's history, which opens to show it.
   const [range, setRange] = useState<SliceRange | null>(null);
+  const fleetPanel = useActivityPanelOpen("fleet");
+  const history: "fleet" | IndexingConnectorRow | null =
+    pairHistory ?? (fleetPanel.open ? "fleet" : null);
+  const historyOpen = history !== null;
+  // The history the page opens with stays where it is. Only one the admin picks scrolls into view.
+  const adminPicked = useRef(false);
+  function showFleetHistory() {
+    adminPicked.current = true;
+    setPairHistory(null);
+    fleetPanel.setOpen(true);
+  }
+  // View Logs on the connector whose history is open closes it.
+  function togglePairHistory(row: IndexingConnectorRow) {
+    adminPicked.current = true;
+    setPairHistory((open) =>
+      open?.cc_pair_id === row.cc_pair_id ? null : row
+    );
+    setRange(null);
+  }
+  // A failure line focuses its card in the fleet's history, so the history opens.
+  const activityLinks = useActivityChartLinks({
+    onFocusAttempt: showFleetHistory,
+  });
   // A connector's open popover steps the overview and the Activities card back with the other connectors.
   const [listFocused, setListFocused] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -85,7 +111,9 @@ export default function IndexingStatusPage() {
         ? `fleet ${range?.since ?? ""} ${range?.until ?? ""}`
         : `pair ${history.cc_pair_id}`;
   useEffect(() => {
-    if (subject !== null) revealHistory(panelRef.current);
+    if (subject !== null && adminPicked.current) {
+      revealHistory(panelRef.current);
+    }
   }, [subject]);
 
   // The history panel takes the Activities card's place and widens the page to fit beside the column.
@@ -126,8 +154,9 @@ export default function IndexingStatusPage() {
                   range={range}
                   onRangeChange={(picked) => {
                     setRange(picked);
-                    if (picked !== null) setHistory("fleet");
+                    if (picked !== null) showFleetHistory();
                   }}
+                  activityLinks={activityLinks.chart}
                 />
               </Section>
               {/* At 38.5rem (both min widths plus the gap) the cards sit side by side, and size containment lets a long feed scroll inside at the overview's height instead of stretching the row. The minimum keeps the card usable while the overview shows only a loader or an error. */}
@@ -138,20 +167,12 @@ export default function IndexingStatusPage() {
                   height="auto"
                   className="min-w-72 grow-[5] basis-0 @[38.5rem]/overview:contain-size @[38.5rem]/overview:min-h-64"
                 >
-                  <ActivitiesCard onOpenHistory={() => setHistory("fleet")} />
+                  <ActivitiesCard onOpenHistory={showFleetHistory} />
                 </Section>
               )}
             </Section>
             <ConnectorList
-              // View Logs on the connector whose history is open closes it.
-              onViewLogs={(row) => {
-                setHistory((open) =>
-                  open !== "fleet" && open?.cc_pair_id === row.cc_pair_id
-                    ? null
-                    : row
-                );
-                setRange(null);
-              }}
+              onViewLogs={togglePairHistory}
               onFocusChange={setListFocused}
             />
           </Section>
@@ -161,10 +182,12 @@ export default function IndexingStatusPage() {
               scope="fleet"
               title={t("activities.panel.title")}
               onClose={() => {
-                setHistory(null);
+                fleetPanel.setOpen(false);
                 setRange(null);
               }}
               range={range}
+              onClearRange={() => setRange(null)}
+              {...activityLinks.panel}
               sticky
               className="max-lg:order-first"
               ref={panelRef}
@@ -174,7 +197,7 @@ export default function IndexingStatusPage() {
               <PairActivityPanel
                 key={history.cc_pair_id}
                 row={history}
-                onClose={() => setHistory(null)}
+                onClose={() => setPairHistory(null)}
                 ref={panelRef}
               />
             )
