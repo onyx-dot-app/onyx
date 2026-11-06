@@ -7796,12 +7796,6 @@
             "description": "Wählen Sie die Modelle aus, die für diesen Anbieter verfügbar sein sollen.",
             "title": "Modelle"
           },
-          "foldButton": {
-            "label": "Modelle einklappen"
-          },
-          "moreButton": {
-            "label": "Weitere Modelle"
-          },
           "refetch": {
             "label": "Modelle aktualisieren",
             "errorToast": "Die Modelle konnten nicht abgerufen werden"
