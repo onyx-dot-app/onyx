@@ -77,3 +77,5 @@ def jira_planning_rule(
             scope_directions={_PROJECT_KEY: ScopeDirection.NONE}
         )
     return None
+
+
