@@ -310,12 +310,17 @@ azure-core==1.41.0 \
     #   azure-cognitiveservices-speech
     #   azure-identity
     #   azure-storage-blob
+    #   azure-storage-file-datalake
 azure-identity==1.25.2 \
     --hash=sha256:030dbaa720266c796221c6cdbd1999b408c079032c919fef725fcc348a540fe9 \
     --hash=sha256:1b40060553d01a72ba0d708b9a46d0f61f56312e215d8896d836653ffdc6753d
 azure-storage-blob==12.30.1 \
     --hash=sha256:7a24f978c51d56a0375beebffcbe8453e59ae390d2695705848edc75083e4184 \
     --hash=sha256:7dc09c37f4f58508e20532b4b4c178f4763f41b01e0b9063835b994fd9d2a7b3
+    # via azure-storage-file-datalake
+azure-storage-file-datalake==12.25.0 \
+    --hash=sha256:11fbb18250961711afc40c8442207d71bac81961e4b7b80f17fbd550f95e6fc6 \
+    --hash=sha256:34813c6f3e9bf1636898cec62529dd2ced189cd2c677160ec69ef88c3b72da7f
 babel==2.17.0 \
     --hash=sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d \
     --hash=sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2
@@ -1236,6 +1241,7 @@ isodate==0.7.2 \
     --hash=sha256:4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6
     # via
     #   azure-storage-blob
+    #   azure-storage-file-datalake
     #   python3-saml
     #   zeep
 itsdangerous==2.2.0 \
@@ -3172,6 +3178,7 @@ typing-extensions==4.15.0 \
     #   azure-core
     #   azure-identity
     #   azure-storage-blob
+    #   azure-storage-file-datalake
     #   braintrust
     #   cohere
     #   cron-descriptor

@@ -531,6 +531,7 @@ The platform architecture document provides additional context on how these impr
         await expect(aiMessage).toContainText("Platform stability");
         await expect(aiMessage).toContainText("New integrations");
         await expect(aiMessage).toContainText("Performance");
+        await chat.expectInlineCitationsFitLine(2);
 
         await chat.screenshotContainer(
           `chat-internal-search-with-citations-${theme}`

@@ -5,8 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Button, Card, Text } from "@opal/components";
 import { richNodes } from "@opal/utils";
 import { InputSingleUpload } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { InputVertical } from "@opal/layouts";
+import { InputVertical, Section } from "@opal/layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/types";
@@ -160,7 +159,7 @@ export default function LicenseActivationCard({
             justifyContent="between"
             alignItems="center"
           >
-            <Text font="heading-h3" color="text-05">
+            <Text font="heading-section" color="text-05">
               {hasLicense
                 ? t("license.updateTitle.title")
                 : t("license.activateTitle.title")}

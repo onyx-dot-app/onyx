@@ -25,7 +25,7 @@ let mockChatId: string | null = "chat-a";
 let mockAgentId: number | null = null;
 let mockProjectId: number | null = null;
 
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
     agent: () => mockAgentId,

@@ -144,6 +144,8 @@ jobs:
     # prebuilt image instead of cold-building.
     needs: changes
     if: needs.changes.outputs.provider == 'true'
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -171,6 +173,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and push backend image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v6
         with:
           context: ./backend
@@ -256,12 +259,11 @@ jobs:
       # consumes local docker images directly, so pull+tag is enough).
       - name: Pull the backend image and pin the model server to the cache
         env:
-          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          BACKEND_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-backend-image.outputs.digest }}
         run: |
           set -eo pipefail
-          docker pull "${ECR_CACHE}:tf-provider-backend-${RUN_ID}"
-          docker tag "${ECR_CACHE}:tf-provider-backend-${RUN_ID}" \
+          docker pull "${BACKEND_IMAGE}"
+          docker tag "${BACKEND_IMAGE}" \
             "onyxdotapp/onyx-backend:latest"
 
           # Every other image already resolves through the pull-through cache:

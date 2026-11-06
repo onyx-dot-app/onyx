@@ -2497,9 +2497,13 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 name = "onyx"
 version = "0.0.0-dev"
 dependencies = [
+ "block2",
  "clap",
  "directories",
  "gtk",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "reqwest",
  "serde",
  "serde_json",

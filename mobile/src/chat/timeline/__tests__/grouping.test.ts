@@ -172,7 +172,7 @@ describe("grouping engine", () => {
     expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]);
   });
 
-  it("counts generated images and flags image generation", () => {
+  it("collects generated images", () => {
     const state = run([
       makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
       makePlacedPacket(
@@ -186,8 +186,46 @@ describe("grouping engine", () => {
         { turn_index: 0 },
       ),
     ]);
-    expect(state.isGeneratingImage).toBe(true);
-    expect(state.generatedImageCount).toBe(2);
+    expect(state.generatedImages.length).toBe(2);
+  });
+
+  it("keeps earlier images once when another tool precedes the answer", () => {
+    const image = { file_id: "a", url: "u", revised_prompt: "p" };
+    const state = run([
+      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
+      makePlacedPacket(
+        { type: "image_generation_final", images: [image, { ...image }] },
+        { turn_index: 0 },
+      ),
+      sectionEnd(0),
+      searchStart(1),
+      sectionEnd(1),
+      messageStart(2),
+    ]);
+    expect(state.toolGroups.map(keyOf)).toEqual(["0-0", "1-0"]);
+    expect(state.potentialDisplayGroups.map(keyOf)).toEqual(["2-0"]);
+    expect(state.generatedImages).toEqual([image]);
+  });
+
+  it("keeps unique images across separate generation steps", () => {
+    const first = { file_id: "a", url: "a", revised_prompt: "first" };
+    const second = { file_id: "b", url: "b", revised_prompt: "second" };
+    const state = run([
+      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
+      makePlacedPacket(
+        { type: "image_generation_final", images: [first] },
+        { turn_index: 0 },
+      ),
+      sectionEnd(0),
+      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 1 }),
+      makePlacedPacket(
+        { type: "image_generation_final", images: [{ ...first }, second] },
+        { turn_index: 1 },
+      ),
+      sectionEnd(1),
+      messageStart(2),
+    ]);
+    expect(state.generatedImages).toEqual([first, second]);
   });
 
   it("groups incrementally across flushes (cursor advances, prior turns survive)", () => {
@@ -203,3 +241,93 @@ describe("grouping engine", () => {
     expect(state.potentialDisplayGroups.map(keyOf)).toEqual(["1-0"]);
   });
 });
+
+describe("nested research packet ownership", () => {
+  it.each(["section_end", "error"] as const)(
+    "nested %s leaves the parent open until next turn or Stop",
+    (endType) => {
+      for (const closing of [messageStart(1), stopAt(0)]) {
+        const nested = { turn_index: 0, sub_turn_index: 0 };
+        const packets = [
+          makePlacedPacket(
+            { type: "research_agent_start", research_task: "Research" },
+            { turn_index: 0 },
+          ),
+          makePlacedPacket(
+            { type: "search_tool_start", is_internet_search: false },
+            nested,
+          ),
+          makePlacedPacket({ type: endType }, nested),
+          makePlacedPacket(
+            {
+              type: "message_start",
+              id: "nested",
+              content: "",
+              final_documents: null,
+              pre_answer_processing_seconds: 99,
+            },
+            { turn_index: 0, sub_turn_index: 1 },
+          ),
+          makePlacedPacket(
+            { type: "message_delta", content: "Child answer" },
+            { turn_index: 0, sub_turn_index: 1 },
+          ),
+        ];
+        const state = run(packets);
+        expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(false);
+        expect(state.finalAnswerComing).toBe(false);
+        expect(state.toolProcessingDuration).toBeUndefined();
+        const result = processPackets(state, [...packets, closing]);
+        const parentEnds = (result.groupedPacketsMap.get("0-0") ?? []).filter(
+          (packet) =>
+            packet.obj.type === PacketType.SECTION_END &&
+            packet.placement.sub_turn_index == null,
+        );
+        expect(parentEnds).toHaveLength(1);
+        expect(result.groupKeysWithSectionEnd.has("0-0")).toBe(true);
+        expect(result.finalAnswerComing).toBe(
+          closing.obj.type === PacketType.MESSAGE_START,
+        );
+      }
+    },
+  );
+
+  it("nested messages preserve the top-level answer timing", () => {
+    const state = run([
+      messageStart(0, 7),
+      makePlacedPacket(
+        {
+          type: "message_start",
+          id: "nested",
+          content: "",
+          final_documents: null,
+          pre_answer_processing_seconds: 99,
+        },
+        { turn_index: 0, sub_turn_index: 0 },
+      ),
+    ]);
+    expect(state.toolProcessingDuration).toBe(7);
+  });
+});
+
+it.each([undefined, null])(
+  "explicit parent ends prevent duplicate closure (%s)",
+  (subTurnIndex) => {
+    for (const endType of ["section_end", "error"] as const) {
+      const state = run([
+        searchStart(0),
+        makePlacedPacket(
+          { type: endType },
+          { turn_index: 0, sub_turn_index: subTurnIndex },
+        ),
+        stopAt(0),
+      ]);
+      const ends = (state.groupedPacketsMap.get("0-0") ?? []).filter(
+        (packet) =>
+          packet.obj.type === PacketType.SECTION_END ||
+          packet.obj.type === PacketType.ERROR,
+      );
+      expect(ends).toHaveLength(1);
+    }
+  },
+);

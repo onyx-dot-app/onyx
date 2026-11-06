@@ -1,23 +1,8 @@
-import {
-  SvgAsana,
-  SvgHubSpot,
-  SvgJira,
-  SvgLinear,
-  SvgNotion,
-  SvgSentry,
-  SvgSlack,
-} from "@opal/logos";
+import { SvgJira, SvgLinear, SvgNotion, SvgSentry } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 
 export interface SuggestedMCPPlugin {
-  id:
-    | "linear"
-    | "notion"
-    | "sentry"
-    | "atlassian"
-    | "slack"
-    | "hubspot"
-    | "asana";
+  id: "linear" | "notion" | "sentry" | "atlassian";
   name: string;
   serverUrl: string;
   docsUrl: string;
@@ -25,29 +10,6 @@ export interface SuggestedMCPPlugin {
 }
 
 export const SUGGESTED_MCP_PLUGINS: readonly SuggestedMCPPlugin[] = [
-  {
-    id: "slack",
-    name: "Slack",
-    serverUrl: "https://mcp.slack.com/mcp",
-    docsUrl: "https://docs.slack.dev/ai/slack-mcp-server/",
-    icon: SvgSlack,
-  },
-  {
-    id: "hubspot",
-    name: "HubSpot",
-    serverUrl: "https://mcp.hubspot.com",
-    docsUrl:
-      "https://developers.hubspot.com/docs/apps/developer-platform/build-apps/integrate-with-the-remote-hubspot-mcp-server",
-    icon: SvgHubSpot,
-  },
-  {
-    id: "asana",
-    name: "Asana",
-    serverUrl: "https://mcp.asana.com/v2/mcp",
-    docsUrl:
-      "https://developers.asana.com/docs/connecting-mcp-clients-to-asanas-v2-server",
-    icon: SvgAsana,
-  },
   {
     id: "linear",
     name: "Linear",

@@ -40,6 +40,11 @@ class RunStatus(str, Enum):
         return self not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
 
 
+RunOutcome = Literal[
+    RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
+]
+
+
 class ExecutionStatus(str, Enum):
     """State of one generation or tool invocation; running means no terminal outcome yet."""
 
@@ -54,6 +59,7 @@ class RunFailureKind(str, Enum):
     LLM_TIMEOUT = "llm_timeout"
     LLM_RATE_LIMIT = "llm_rate_limit"
     EXECUTION = "execution"
+    DEADLINE = "deadline"
 
 
 class RunFailure(BaseModel):

@@ -44,6 +44,10 @@
   ephemeral replies, an allowlist of users and groups, answer filters,
   follow-up tags, and standard-answer categories. The customer setup guide is
   `documentation/admins/getting_started/slack_bot_setup.mdx`.
+- **An operator on GovSlack** sets `SLACK_API_URL=https://slack-gov.com/api/`
+  (`configs/slack_configs.py`). The bot's Web API calls, the Socket Mode
+  handshake and token validation then go to `slack-gov.com`. Hosts other than
+  `slack.com` and `slack-gov.com` are ignored.
 
 ---
 

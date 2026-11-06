@@ -367,27 +367,6 @@ class ModelConfigurationUpsertRequest(BaseModel):
     def temperature_default_provided(self) -> bool:
         return "temperature_default" in self.model_fields_set
 
-    @classmethod
-    def from_model(
-        cls, model_configuration_model: "ModelConfigurationModel"
-    ) -> "ModelConfigurationUpsertRequest":
-        return cls(
-            name=model_configuration_model.name,
-            is_visible=model_configuration_model.is_visible,
-            max_input_tokens=model_configuration_model.max_input_tokens,
-            supports_image_input=model_configuration_model.supports_image_input,
-            supports_reasoning=(
-                LLMModelFlowType.REASONING
-                in model_configuration_model.llm_model_flow_types
-            ),
-            display_name=model_configuration_model.display_name,
-            custom_display_name=model_configuration_model.custom_display_name,
-            is_router=model_configuration_model.is_router,
-            reasoning_effort_max=model_configuration_model.reasoning_effort_max,
-            reasoning_effort_default=model_configuration_model.reasoning_effort_default,
-            temperature_default=model_configuration_model.temperature_default,
-        )
-
 
 class ModelConfigurationView(BaseModel):
     id: int | None = None

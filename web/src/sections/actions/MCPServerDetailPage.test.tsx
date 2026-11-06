@@ -53,6 +53,9 @@ const mockReplace = jest.fn();
 const mockRouter = { push: mockPush, replace: mockReplace };
 let mockSearchParams = new URLSearchParams();
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   usePathname: () => "/admin/plugins/mcp/7",
   useSearchParams: () => mockSearchParams,
@@ -220,6 +223,7 @@ const discoveredTool: ToolSnapshot = {
 
 beforeEach(() => {
   sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
   mockUserId = "admin-user";
   mockSavedServer = undefined;
   jest.clearAllMocks();

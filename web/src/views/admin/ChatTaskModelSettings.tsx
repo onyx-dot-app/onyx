@@ -166,31 +166,6 @@ export function ChatNamingModelSetting() {
   return <TaskModelSetting task="chatNaming" />;
 }
 
-// One provider list with each provider's chat models and decision models;
-// a model that is both appears once.
-function mergeProviders<T extends ModelOptionProvider>(
-  chatProviders: T[],
-  decisionProviders: T[]
-): T[] {
-  const merged = new Map<number, T>();
-  for (const provider of [...chatProviders, ...decisionProviders]) {
-    const existing = merged.get(provider.id);
-    if (!existing) {
-      merged.set(provider.id, provider);
-      continue;
-    }
-    const known = new Set(existing.model_configurations.map((m) => m.id));
-    merged.set(provider.id, {
-      ...existing,
-      model_configurations: [
-        ...existing.model_configurations,
-        ...provider.model_configurations.filter((m) => !known.has(m.id)),
-      ],
-    });
-  }
-  return [...merged.values()];
-}
-
 function modelConfigurationId(
   providers: ModelOptionProvider[] | undefined,
   model: DefaultModel | null
@@ -206,9 +181,9 @@ function modelConfigurationId(
 
 /**
  * Model for search's evidence decisions: which retrieved sections to keep and
- * how much context to add. A decision model takes the decision-model path;
- * a language model keeps LLM selection. A model that is both counts as a
- * decision model.
+ * how much context to add. Decision models, listed first, take the
+ * decision-model path; language models keep LLM selection. A model that is
+ * both is listed in each section.
  */
 export function SearchDecisionModelSetting() {
   const t = useTranslations("admin.chatPreferences");
@@ -219,35 +194,36 @@ export function SearchDecisionModelSetting() {
   const decision = useDecisionModel();
   const loadError = error ?? decision.error;
 
-  const decisionModelIds = useMemo(
-    () =>
-      new Set(
-        (decision.providers ?? []).flatMap((provider) =>
-          provider.model_configurations.map((config) => config.id)
-        )
-      ),
-    [decision.providers]
+  const decisionValue = modelConfigurationId(
+    decision.providers,
+    decision.model
   );
-  const value =
-    modelConfigurationId(decision.providers, decision.model) ??
-    modelConfigurationId(llmProviders, defaultSearchSelection);
-  const providers = useMemo(
-    () =>
-      mergeProviders(
-        llmProviders
-          ? filterModelConfigurations(llmProviders, { keep: value })
-          : [],
-        decision.providers ?? []
-      ),
-    [llmProviders, decision.providers, value]
+  const selectionValue = modelConfigurationId(
+    llmProviders,
+    defaultSearchSelection
   );
-
-  async function handleChange(modelId: number | null) {
+  const value = decisionValue ?? selectionValue;
+  const languageProviders = useMemo(
+    () =>
+      llmProviders
+        ? filterModelConfigurations(llmProviders, { keep: selectionValue })
+        : [],
+    [llmProviders, selectionValue]
+  );
+  async function handleChange(
+    modelId: number | null,
+    fromDecisionSection: boolean
+  ) {
     if (isPending) return;
     const provider =
       modelId === null
         ? null
-        : findProviderOwningModelConfig(providers, modelId);
+        : findProviderOwningModelConfig(
+            fromDecisionSection
+              ? (decision.providers ?? [])
+              : languageProviders,
+            modelId
+          );
     const model = provider?.model_configurations.find(
       (configuration) => configuration.id === modelId
     );
@@ -262,7 +238,7 @@ export function SearchDecisionModelSetting() {
     setIsPending(true);
     try {
       // Exactly one default stays set: it picks the search path.
-      if (selection && modelId !== null && decisionModelIds.has(modelId)) {
+      if (selection && fromDecisionSection) {
         await saveDecisionModel(selection);
         if (defaultSearchSelection) await deleteDefaultSearchSelectionModel();
       } else {
@@ -312,15 +288,20 @@ export function SearchDecisionModelSetting() {
     control = (
       <SimpleModelSelector
         nullable
-        includeDecisionOnly
         globalDefault={{ label: t("taskModels.chatDefault.label") }}
-        providers={providers}
+        providers={languageProviders}
+        decisionSection={{
+          title: t("searchDecisionModel.decisionSection"),
+          providers: decision.providers ?? [],
+          selected: decisionValue !== null,
+          onChange: (modelId) => void handleChange(modelId, true),
+        }}
         value={value}
         disabled={isPending || !!loadError}
         isError={loadError ? true : undefined}
         grouped={!settings.hide_provider_grouping}
         modelPaging={modelPaging}
-        onChange={(modelId) => void handleChange(modelId)}
+        onChange={(modelId) => void handleChange(modelId, false)}
       />
     );
   }

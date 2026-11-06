@@ -107,7 +107,6 @@ def test_citation_results_do_not_change_prompt_prefix(
             results=results,
             previous_results=results,
             is_last_step=False,
-            ran_image_gen=False,
         )
         for results in ([], [result])
     ]

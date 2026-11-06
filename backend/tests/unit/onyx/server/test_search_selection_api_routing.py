@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +18,7 @@ from ee.onyx.server.query_and_chat.streaming_models import SearchQueriesPacket
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.search import api
-from onyx.server.features.search.models import SearchRequest
+from onyx.server.features.search.models import RawSearchRequest, SearchRequest
 from onyx.tools.constants import SEARCH_TOOL_ID
 
 
@@ -29,6 +30,7 @@ def public_search_dependencies(primary: MagicMock) -> Iterator[MagicMock]:
         patch.multiple(
             api,
             get_default_llm=MagicMock(return_value=primary),
+            check_model_spend_limits=MagicMock(),
             llm_from_provider=MagicMock(return_value=primary),
             get_current_search_settings=MagicMock(),
             get_default_document_index=MagicMock(),
@@ -116,6 +118,24 @@ def test_public_search_defers_unused_primary_provider_check_to_tool() -> None:
         assert constructor.call_args.kwargs["primary_llm_cost_checked"] is False
         assert constructor.call_args.kwargs["selection_llm_factory"]() is selection
         cost.assert_not_called()
+
+
+def test_raw_search_runs_retrieval_only_with_the_callers_window() -> None:
+    with (
+        public_search_dependencies(MagicMock()) as constructor,
+        patch.object(api, "check_llm_cost_limit_for_provider") as cost,
+    ):
+        api.raw_search(
+            RawSearchRequest(query="runbook", context_chunks=2),
+            MagicMock(),
+            MagicMock(),
+        )
+        kwargs = constructor.call_args.kwargs
+        assert kwargs["retrieval_only"] is True
+        assert kwargs["retrieval_context_chunks"] == 2
+        assert kwargs["primary_llm_cost_checked"] is False
+        cost.assert_not_called()
+        cast(MagicMock, api.check_model_spend_limits).assert_not_called()
 
 
 @pytest.mark.parametrize("configured", [False, True])

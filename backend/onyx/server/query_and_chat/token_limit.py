@@ -1,29 +1,47 @@
-from collections.abc import Sequence
+"""Spending limit enforcement. CE enforces the workspace pool; EE adds group
+pools and per-user allowances (`ee.onyx.server.query_and_chat.token_limit`).
+
+Two entry points share one strategy: `check_token_rate_limits` checks the
+all-models limits before a request runs, and `check_model_spend_limits` checks
+the limits on one model once the request has picked it."""
+
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from enum import Enum
 from math import ceil
 from threading import RLock
+from uuid import UUID
 
 from cachetools import TTLCache
 from fastapi import Depends
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import (
+    TokenRateLimitAction,
+    TokenRateLimitPeriod,
+    TokenRateLimitScope,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.models import TokenRateLimit, User
-from onyx.db.token_limit import fetch_all_global_token_rate_limits
+from onyx.db.token_limit import (
+    UsageBaseline,
+    fetch_enforced_token_rate_limits,
+    fetch_pool_usage_baselines,
+    fetch_user_group_enforced_token_rate_limits,
+    fetch_user_usage_baselines,
+    usage_baseline,
+)
 from onyx.db.user_usage import (
     TokenUsageBucket,
-    cost_budget_fetch_cutoff,
-    cost_budget_limits,
-    earliest_window_reset,
-    get_cost_window_reset,
-    get_cost_window_start,
-    get_token_window_start,
+    get_limit_usage_start,
+    get_period_window_reset,
     get_total_cost_cents_buckets_since,
     get_total_token_buckets_since,
-    normalize_token_period_hours,
+    sum_limit_usage,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -41,154 +59,257 @@ TOKEN_BUDGET_UNIT = 1000
 def check_token_rate_limits(
     user: User = Depends(current_chat_accessible_user),
 ) -> None:
-    # short circuit if no rate limits are set up
-    # NOTE: result of `any_rate_limit_exists` is cached, so this call is fast 99% of the time
+    # NOTE: the flag is cached, so the no-limits case skips the DB.
     if not any_rate_limit_exists():
         return
-
-    versioned_rate_limit_strategy = fetch_versioned_implementation(
-        "onyx.server.query_and_chat.token_limit", _check_token_rate_limits.__name__
-    )
-    return versioned_rate_limit_strategy(user)
+    _run_spend_limit_check(user, None)
 
 
-def _check_token_rate_limits(_: User) -> None:
-    _user_is_rate_limited_by_global()
+def check_model_spend_limits(user: User, model_configuration_id: int | None) -> None:
+    """Enforce the limits on one model. A call that ran no saved configuration
+    has nothing a model limit can name."""
+    if model_configuration_id is None or not any_model_spend_limit_exists():
+        return
+    _run_spend_limit_check(user, model_configuration_id)
+
+
+def _run_spend_limit_check(user: User, model_configuration_id: int | None) -> None:
+    fetch_versioned_implementation(
+        "onyx.server.query_and_chat.token_limit", _check_spend_limits.__name__
+    )(user, model_configuration_id)
+
+
+def _check_spend_limits(_: User, model_configuration_id: int | None) -> None:
+    _user_is_rate_limited_by_global(model_configuration_id)
 
 
 def check_global_token_rate_limits() -> None:
     """Enforce tenant-wide budgets without requiring a user principal."""
     if any_rate_limit_exists():
-        _user_is_rate_limited_by_global()
+        _user_is_rate_limited_by_global(None)
 
 
 """
-Global rate limits
+Budget windows
 """
 
 
-def _user_is_rate_limited_by_global() -> None:
-    with get_session_with_current_tenant() as db_session:
-        global_rate_limits = fetch_all_global_token_rate_limits(
-            db_session=db_session, enabled_only=True, ordered=False
+class BudgetUnit(str, Enum):
+    TOKENS = "TOKENS"
+    COST = "COST"
+
+
+class BudgetWindow(BaseModel):
+    """One budget of one limit row: tokens or cents for a calendar period."""
+
+    period: TokenRateLimitPeriod
+    unit: BudgetUnit
+    budget: float
+    # Set when a group allowance, not the workspace default, supplied it.
+    user_group_id: int | None = None
+    # The source row's usage reset; see TokenRateLimit.usage_reset_at.
+    usage_reset_at: datetime | None = None
+    # What the reset day's bucket held at the reset, in this window's unit.
+    usage_baseline: float = 0.0
+
+    def usage_start(self, now: datetime) -> datetime:
+        return get_limit_usage_start(now, self.period, self.usage_reset_at)
+
+    def used(self, buckets: Sequence[tuple[datetime, float]], now: datetime) -> float:
+        return sum_limit_usage(
+            buckets, now, self.period, self.usage_reset_at, self.usage_baseline
         )
 
-        if not global_rate_limits:
-            return
 
-        # Skip the token-usage aggregation when every limit is cost-only.
-        token_reset: datetime | None = None
-        if _has_token_budget(global_rate_limits):
-            # Scan the token table only as far back as the widest *token*
-            # window — a longer cost-only window must not widen the scan.
-            token_limits = [
-                rl
-                for rl in global_rate_limits
-                if rl.token_budget is not None and rl.token_budget > 0
-            ]
-            global_cutoff_time = _get_cutoff_time(token_limits)
-            global_usage = _fetch_global_usage(global_cutoff_time, db_session)
-            token_reset = _token_budget_reset(global_rate_limits, global_usage)
+class WindowUsage(BaseModel):
+    tokens: list[tuple[datetime, float]] = []
+    cost_cents: list[tuple[datetime, float]] = []
 
-        cost_reset: datetime | None = None
-        cost_limits = cost_budget_limits(global_rate_limits)
-        if cost_limits:
-            cost_cutoff = cost_budget_fetch_cutoff(
-                datetime.now(timezone.utc), cost_limits
+
+def budget_windows(
+    rate_limits: Sequence[TokenRateLimit],
+    user_group_id: int | None = None,
+    baselines: Mapping[int, UsageBaseline] | None = None,
+) -> list[BudgetWindow]:
+    """`baselines`: reset baselines by limit id, the user's own for per-user
+    limits or the pool's sum. Without them a reset counts the whole reset day."""
+    windows: list[BudgetWindow] = []
+    for limit in rate_limits:
+        baseline = usage_baseline(limit, baselines or {})
+        # A non-positive token budget only comes from legacy rows; never block on it.
+        if limit.token_budget is not None and limit.token_budget > 0:
+            windows.append(
+                BudgetWindow(
+                    period=limit.period,
+                    unit=BudgetUnit.TOKENS,
+                    budget=limit.token_budget * TOKEN_BUDGET_UNIT,
+                    user_group_id=user_group_id,
+                    usage_reset_at=limit.usage_reset_at,
+                    usage_baseline=baseline.tokens,
+                )
             )
-            cost_buckets = get_total_cost_cents_buckets_since(db_session, cost_cutoff)
-            cost_reset = _cost_budget_reset(global_rate_limits, cost_buckets)
-
-        _raise_for_latest_reset(TokenRateLimitScope.GLOBAL, token_reset, cost_reset)
-
-
-def _fetch_global_usage(
-    cutoff_time: datetime, db_session: Session
-) -> list[TokenUsageBucket]:
-    return get_total_token_buckets_since(db_session, cutoff_time)
-
-
-"""
-Common functions
-"""
+        if limit.cost_budget_cents is not None:
+            windows.append(
+                BudgetWindow(
+                    period=limit.period,
+                    unit=BudgetUnit.COST,
+                    budget=limit.cost_budget_cents,
+                    user_group_id=user_group_id,
+                    usage_reset_at=limit.usage_reset_at,
+                    usage_baseline=baseline.cost_cents,
+                )
+            )
+    return windows
 
 
-def _get_cutoff_time(rate_limits: Sequence[TokenRateLimit]) -> datetime:
-    max_period_hours = max(rate_limit.period_hours for rate_limit in rate_limits)
-    return get_token_window_start(
-        datetime.now(timezone.utc),
-        max_period_hours,
+def resolve_member_allowance(
+    default_limits: list[TokenRateLimit],
+    member_limits_by_group: dict[int, list[TokenRateLimit]],
+    user_baselines: Mapping[int, UsageBaseline] | None = None,
+) -> list[BudgetWindow]:
+    """The user's budget for each (period, unit): the largest among their
+    groups that set it, else the workspace default. A group that doesn't set a
+    bucket has no say in it."""
+    allowance: dict[tuple[TokenRateLimitPeriod, BudgetUnit], BudgetWindow] = {}
+    for group_id, limits in member_limits_by_group.items():
+        for window in budget_windows(limits, group_id, user_baselines):
+            key = (window.period, window.unit)
+            current = allowance.get(key)
+            if current is None or window.budget > current.budget:
+                allowance[key] = window
+    for window in budget_windows(default_limits, None, user_baselines):
+        allowance.setdefault((window.period, window.unit), window)
+    return list(allowance.values())
+
+
+def fetch_member_allowance(
+    db_session: Session, user_id: UUID, model_configuration_id: int | None
+) -> list[BudgetWindow]:
+    """The user's per-user allowance (`resolve_member_allowance`), with the
+    user's reset baselines."""
+    defaults = list(
+        fetch_enforced_token_rate_limits(
+            db_session, TokenRateLimitScope.USER, model_configuration_id
+        )
+    )
+    members = fetch_user_group_enforced_token_rate_limits(
+        db_session,
+        user_id,
+        TokenRateLimitScope.USER_GROUP_MEMBER,
+        model_configuration_id,
+    )
+    # Only a reset row has baselines; most checks skip the query.
+    limit_ids = [
+        limit.id
+        for limit in [*defaults, *(row for rows in members.values() for row in rows)]
+        if limit.usage_reset_at is not None
+    ]
+    return resolve_member_allowance(
+        defaults,
+        members,
+        fetch_user_usage_baselines(db_session, user_id, limit_ids),
     )
 
 
-def _has_token_budget(rate_limits: Sequence[TokenRateLimit]) -> bool:
-    """Whether any limit sets a positive token budget. If not (cost-only limits),
-    the caller skips the token-usage aggregation query entirely."""
-    return any(
-        rl.token_budget is not None and rl.token_budget > 0 for rl in rate_limits
-    )
+def usage_cutoff(
+    now: datetime, windows: Sequence[BudgetWindow], unit: BudgetUnit
+) -> datetime | None:
+    """Earliest usage start among the unit's budgets, so one fetch covers
+    every window; None when no budget uses the unit."""
+    starts = [window.usage_start(now) for window in windows if window.unit == unit]
+    return min(starts) if starts else None
+
+
+def token_buckets(usage: Sequence[TokenUsageBucket]) -> list[tuple[datetime, float]]:
+    return [(bucket.window_start, float(bucket.tokens)) for bucket in usage]
+
+
+def exhausted_windows(
+    windows: Sequence[BudgetWindow], usage: WindowUsage
+) -> list[tuple[BudgetWindow, datetime]]:
+    """Each window whose current calendar period has used up its budget, with
+    the time that period resets."""
+    now = datetime.now(timezone.utc)
+    exhausted: list[tuple[BudgetWindow, datetime]] = []
+    for window in windows:
+        buckets = usage.tokens if window.unit == BudgetUnit.TOKENS else usage.cost_cents
+        if window.used(buckets, now) >= window.budget:
+            exhausted.append((window, get_period_window_reset(now, window.period)))
+    return exhausted
+
+
+def latest_reset(exhausted: Sequence[tuple[BudgetWindow, datetime]]) -> datetime | None:
+    """The latest, so a client that waits it out doesn't re-trip a budget that
+    clears later."""
+    return max((reset for _, reset in exhausted), default=None)
 
 
 def _token_budget_reset(
     rate_limits: Sequence[TokenRateLimit], usage: Sequence[TokenUsageBucket]
 ) -> datetime | None:
-    """The latest exact reset among the exceeded token budgets, or None.
-
-    Each limit's reset is the earliest UTC-day boundary at which its trailing
-    window drops back under budget (see `earliest_window_reset`) — not the full
-    window expiry. Taking the max across all exceeded limits keeps the reported
-    reset safe: a client that waits it out won't immediately re-trip a limit that
-    clears later.
-    """
-    now = datetime.now(timezone.utc)
-    buckets = [(bucket.window_start, float(bucket.tokens)) for bucket in usage]
-    resets: list[datetime] = []
-    for rate_limit in rate_limits:
-        # A null (cost-only) or non-positive token_budget is token-exempt — skip
-        # the token check. Guarding <= 0 means a 0 (new cost-only rows store null,
-        # but legacy/edge rows may hold 0) can never block every request.
-        if rate_limit.token_budget is None or rate_limit.token_budget <= 0:
-            continue
-
-        # The admin enters the budget in THOUSANDS of tokens (Onyx convention),
-        # so the stored value is scaled up to the real token count here.
-        budget = rate_limit.token_budget * TOKEN_BUDGET_UNIT
-        cutoff = get_token_window_start(now, rate_limit.period_hours)
-        used = sum(tokens for window_start, tokens in buckets if window_start >= cutoff)
-        if used >= budget:
-            resets.append(
-                earliest_window_reset(
-                    now,
-                    normalize_token_period_hours(rate_limit.period_hours),
-                    buckets,
-                    budget,
-                )
-            )
-
-    return max(resets) if resets else None
+    windows = [
+        window
+        for window in budget_windows(rate_limits)
+        if window.unit == BudgetUnit.TOKENS
+    ]
+    return latest_reset(
+        exhausted_windows(windows, WindowUsage(tokens=token_buckets(usage)))
+    )
 
 
 def _cost_budget_reset(
     rate_limits: Sequence[TokenRateLimit],
     cost_buckets: Sequence[tuple[datetime, float]],
 ) -> datetime | None:
-    """The latest fixed reset among the exceeded cost budgets, or None."""
-    now = datetime.now(timezone.utc)
-    resets: list[datetime] = []
-    for rate_limit in cost_budget_limits(rate_limits):
-        budget = rate_limit.cost_budget_cents
-        if budget is None:
-            continue
+    windows = [
+        window
+        for window in budget_windows(rate_limits)
+        if window.unit == BudgetUnit.COST
+    ]
+    return latest_reset(
+        exhausted_windows(windows, WindowUsage(cost_cents=list(cost_buckets)))
+    )
 
-        cutoff = get_cost_window_start(now, rate_limit.period_hours)
-        cost = sum(
-            cents for window_start, cents in cost_buckets if window_start >= cutoff
+
+"""
+Workspace pool
+"""
+
+
+def _user_is_rate_limited_by_global(model_configuration_id: int | None) -> None:
+    with get_session_with_current_tenant() as db_session:
+        limits = list(
+            fetch_enforced_token_rate_limits(
+                db_session, TokenRateLimitScope.GLOBAL, model_configuration_id
+            )
         )
-        if cost >= budget:
-            resets.append(get_cost_window_reset(now, rate_limit.period_hours))
+        windows = budget_windows(
+            limits, None, fetch_pool_usage_baselines(db_session, limits)
+        )
+        if not windows:
+            return
 
-    return max(resets) if resets else None
+        now = datetime.now(timezone.utc)
+        usage = WindowUsage()
+        if token_cutoff := usage_cutoff(now, windows, BudgetUnit.TOKENS):
+            usage.tokens = token_buckets(
+                get_total_token_buckets_since(
+                    db_session, token_cutoff, model_configuration_id
+                )
+            )
+        if cost_cutoff := usage_cutoff(now, windows, BudgetUnit.COST):
+            usage.cost_cents = get_total_cost_cents_buckets_since(
+                db_session, cost_cutoff, model_configuration_id
+            )
 
+    # Outside the session: the error looks up the model label in its own session.
+    if reset := latest_reset(exhausted_windows(windows, usage)):
+        raise_rate_limited(TokenRateLimitScope.GLOBAL, reset, model_configuration_id)
+
+
+"""
+Errors
+"""
 
 # Human-readable subject for each scope, used only in the fallback message text.
 # The machine-readable scope value goes in the structured `extra` payload.
@@ -196,76 +317,107 @@ _SCOPE_LABELS: dict[TokenRateLimitScope, str] = {
     TokenRateLimitScope.GLOBAL: "your organization",
     TokenRateLimitScope.USER: "your account",
     TokenRateLimitScope.USER_GROUP: "your user group",
+    TokenRateLimitScope.USER_GROUP_MEMBER: "your group allowance",
 }
 
 
-def raise_rate_limited(scope: TokenRateLimitScope, reset_at: datetime) -> None:
-    """Raise a structured 429 with the next relevant budget reset."""
+def _model_label(model_configuration_id: int) -> str:
+    with get_session_with_current_tenant() as db_session:
+        model = fetch_model_configuration_by_id(db_session, model_configuration_id)
+        if model is None:
+            return str(model_configuration_id)
+        return model.custom_display_name or model.display_name or model.name
+
+
+def raise_rate_limited(
+    scope: TokenRateLimitScope,
+    reset_at: datetime,
+    model_configuration_id: int | None = None,
+) -> None:
+    """Raise a structured 429 with the next relevant budget reset. A limit on
+    one model names it in `extra.model`."""
     retry_after_seconds = max(
         1, ceil((reset_at - datetime.now(timezone.utc)).total_seconds())
     )
-    reset_at_iso = reset_at.isoformat()
+    extra: dict[str, object] = {
+        "scope": scope.value,
+        "reset_at": reset_at.isoformat(),
+        "retry_after_seconds": retry_after_seconds,
+    }
+    subject = _SCOPE_LABELS[scope]
+    message = f"You've reached the usage budget for {subject}."
+    if model_configuration_id is not None:
+        model = _model_label(model_configuration_id)
+        extra["model"] = model
+        message = f"You've reached the {model} budget for {subject}."
     raise OnyxError(
         OnyxErrorCode.RATE_LIMITED,
         # Neutral wording, no raw timestamp — the FE renders a friendly reset
         # time from reset_at / retry_after_seconds below.
-        f"You've reached the usage budget for {_SCOPE_LABELS[scope]}.",
-        extra={
-            "scope": scope.value,
-            "reset_at": reset_at_iso,
-            "retry_after_seconds": retry_after_seconds,
-        },
+        message,
+        extra=extra,
         headers={"Retry-After": str(retry_after_seconds)},
     )
 
 
-def _raise_for_latest_reset(
-    scope: TokenRateLimitScope, *reset_times: datetime | None
-) -> None:
-    """Raise after evaluating independent limits that must all recover."""
-    resets = [reset for reset in reset_times if reset is not None]
-    if resets:
-        raise_rate_limited(scope, max(resets))
-
+"""
+Fast path
+"""
 
 _ANY_RATE_LIMIT_EXISTS_CACHE_TTL_SECONDS = 60
 _any_rate_limit_exists_lock = RLock()
-# tenant_id -> whether that tenant has any enabled token rate limit. Keyed by tenant so
-# one tenant's answer never suppresses another's enforcement in a shared worker. The
-# short TTL bounds staleness across processes without an explicit cross-process bust.
-_any_rate_limit_exists_cache: TTLCache[str, bool] = TTLCache(
+# (tenant_id, is_model_limit) -> whether that tenant has such an enforced limit.
+# Keyed by tenant so one tenant's answer never suppresses another's enforcement
+# in a shared worker. The short TTL bounds staleness across processes.
+_any_rate_limit_exists_cache: TTLCache[tuple[str, bool], bool] = TTLCache(
     maxsize=10_000, ttl=_ANY_RATE_LIMIT_EXISTS_CACHE_TTL_SECONDS
 )
 
 
-def any_rate_limit_exists() -> bool:
-    """Whether the current tenant has any enabled token rate limit. Cached per tenant so
-    the common no-limits case stays a cheap fast-path on the chat dependency without a DB
-    query per message."""
+def _enforced_limit_exists(is_model_limit: bool) -> bool:
     tenant_id = get_current_tenant_id()
+    key = (tenant_id, is_model_limit)
     with _any_rate_limit_exists_lock:
-        cached = _any_rate_limit_exists_cache.get(tenant_id)
+        cached = _any_rate_limit_exists_cache.get(key)
     if cached is not None:
         return cached
 
-    logger.debug("Checking for any rate limits...")
+    model_filter = (
+        TokenRateLimit.model_configuration_id.is_not(None)
+        if is_model_limit
+        else TokenRateLimit.model_configuration_id.is_(None)
+    )
     with get_session_with_current_tenant() as db_session:
         exists = (
             db_session.scalar(
                 select(TokenRateLimit.id).where(
-                    TokenRateLimit.enabled == True  # noqa: E712
+                    TokenRateLimit.enabled.is_(True),
+                    TokenRateLimit.action == TokenRateLimitAction.BLOCK,
+                    model_filter,
                 )
             )
             is not None
         )
 
     with _any_rate_limit_exists_lock:
-        _any_rate_limit_exists_cache[tenant_id] = exists
+        _any_rate_limit_exists_cache[key] = exists
     return exists
 
 
+def any_rate_limit_exists() -> bool:
+    """Whether the current tenant enforces any all-models limit. Cached per
+    tenant so the common no-limits case stays cheap on every chat request."""
+    return _enforced_limit_exists(is_model_limit=False)
+
+
+def any_model_spend_limit_exists() -> bool:
+    return _enforced_limit_exists(is_model_limit=True)
+
+
 def invalidate_any_rate_limit_exists_cache() -> None:
-    """Drop the current tenant's cached flag after a rate-limit write so the change is
-    picked up on this process without waiting for the TTL."""
+    """Drop the current tenant's cached flags after a limit write so the change
+    is picked up on this process without waiting for the TTL."""
+    tenant_id = get_current_tenant_id()
     with _any_rate_limit_exists_lock:
-        _any_rate_limit_exists_cache.pop(get_current_tenant_id(), None)
+        for is_model_limit in (False, True):
+            _any_rate_limit_exists_cache.pop((tenant_id, is_model_limit), None)

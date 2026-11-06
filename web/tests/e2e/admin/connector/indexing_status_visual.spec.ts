@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
@@ -17,7 +17,9 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
  * (`workers: 1`, run as its own CI matrix job), so no other spec can add or
  * remove connectors while we snapshot. We seed exactly one paused file connector
  * via the API, screenshot the page in each theme, and tear the connector down
- * afterwards — keeping the rendered state deterministic.
+ * afterwards — keeping the rendered state deterministic. Earlier specs can leave
+ * failed runs, which open the Activities panel by default, so the panel is pinned
+ * hidden before navigation.
  *
  * Auth comes from the `exclusive` project's `storageState`; each test gets a
  * fresh context, so no explicit login is needed.
@@ -50,8 +52,11 @@ test.describe("Connector status page: visual @exclusive", () => {
       await setThemeBeforeNavigation(page, theme);
 
       const statusPage = new IndexingStatusPage(page);
+      await statusPage.hidePanelBeforeNavigation();
       await statusPage.goto();
       await statusPage.waitForConnector(CONNECTOR_NAME);
+      // An admin manages connectors, so the header carries Add Connector.
+      await expect(statusPage.addConnectorLink).toBeVisible();
       await statusPage.expectScreenshot(`admin-${theme}-indexing--status`);
     });
   }

@@ -51,6 +51,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.api_surfaces import SURFACE_SELECTION_CONFIG_KEYS
 from onyx.llm.constants import (
+    AUTO_UPDATE_PROVIDERS,
     HOSTED_DECISION_PROVIDER_NAMES,
     PROVIDER_DISPLAY_NAMES,
     WELL_KNOWN_PROVIDER_NAMES,
@@ -83,6 +84,7 @@ from onyx.llm.utils import (
 )
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
+    reset_seen_catalog,
 )
 from onyx.llm.well_known_providers.constants import (
     AWS_EXTERNAL_ID_KWARG,
@@ -1050,6 +1052,28 @@ def test_decision_provider(
         ) from error
 
 
+def _initial_auto_update_models(
+    provider_name: str,
+) -> list[ModelConfigurationUpsertRequest]:
+    from onyx.llm.well_known_providers.llm_provider_options import (
+        fetch_latest_models_for_provider,
+        fetch_models_for_provider,
+        get_recommendations,
+    )
+
+    recommended = [
+        model.name for model in get_recommendations().get_visible_models(provider_name)
+    ]
+    # The first sync baselines the latest catalog, so start from it too.
+    catalog = fetch_latest_models_for_provider(provider_name)
+    if catalog is None:
+        catalog = fetch_models_for_provider(provider_name)
+    return [
+        ModelConfigurationUpsertRequest(name=name, is_visible=name in recommended)
+        for name in catalog + [name for name in recommended if name not in catalog]
+    ]
+
+
 @admin_router.put("/provider")
 def put_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
@@ -1164,46 +1188,38 @@ def put_llm_provider(
             f"{PROVIDER_DISPLAY_NAMES[llm_provider_upsert_request.provider]} requires an API key",
         )
 
-    # Check if we're transitioning to Auto mode
-    transitioning_to_auto_mode = llm_provider_upsert_request.is_auto_mode and (
-        not existing_provider or not existing_provider.is_auto_mode
+    if llm_provider_upsert_request.provider not in AUTO_UPDATE_PROVIDERS:
+        llm_provider_upsert_request.is_auto_mode = False
+    provider_type_changed = bool(
+        existing_provider
+        and existing_provider.provider != llm_provider_upsert_request.provider
     )
+    enabling_auto_update = llm_provider_upsert_request.is_auto_mode and (
+        not (existing_provider and existing_provider.is_auto_mode)
+        or provider_type_changed
+    )
+    # API clients may leave the model list to auto-update.
+    if (
+        llm_provider_upsert_request.is_auto_mode
+        and not llm_provider_upsert_request.model_configurations
+    ):
+        if existing_provider and not provider_type_changed:
+            llm_provider_upsert_request.keep_existing_models = True
+        else:
+            llm_provider_upsert_request.model_configurations = (
+                _initial_auto_update_models(llm_provider_upsert_request.provider)
+            )
 
-    # When transitioning to auto mode, preserve existing model configurations
-    # so the upsert doesn't try to delete them (which would trip the default
-    # model protection guard). sync_auto_mode_models will handle the model
-    # lifecycle afterward — adding new models, hiding removed ones, and
-    # updating the default. This is safe even if sync fails: the provider
-    # keeps its old models and default rather than losing them.
-    if transitioning_to_auto_mode and existing_provider:
-        llm_provider_upsert_request.model_configurations = [
-            ModelConfigurationUpsertRequest.from_model(mc)
-            for mc in existing_provider.model_configurations
-        ]
+    # Reset before the upsert, so no sync can use the old baseline once the
+    # flag is on.
+    if enabling_auto_update and existing_provider:
+        reset_seen_catalog(existing_provider.id)
 
     try:
         result = upsert_llm_provider(
             llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
         )
-
-        # If newly enabling Auto mode, sync models immediately from GitHub config
-        if transitioning_to_auto_mode:
-            from onyx.db.llm import sync_auto_mode_models
-
-            config = fetch_llm_recommendations_from_github()
-            if config and llm_provider_upsert_request.provider in config.providers:
-                updated_provider = fetch_existing_llm_provider_by_id(
-                    id=result.id, db_session=db_session
-                )
-                if updated_provider:
-                    sync_auto_mode_models(
-                        db_session,
-                        updated_provider,
-                        config,
-                    )
-                    # Refresh result with synced models
-                    result = LLMProviderView.from_model(updated_provider)
 
         _mask_provider_credentials(result)
         emit_audit_event(
@@ -1221,8 +1237,8 @@ def put_llm_provider(
         logger.exception("Failed to upsert LLM Provider")
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
     finally:
-        # upsert_llm_provider and sync_auto_mode_models commit internally, so a
-        # post-commit failure must still drop cached listings
+        # upsert_llm_provider commits internally, so a post-commit failure
+        # must still drop cached listings
         invalidate_provider_listing_cache()
 
 

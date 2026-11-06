@@ -20,7 +20,7 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
 - Buttons: `Button` from `@opal/components`. No raw `<button>`.
 - Inputs: Opal or refresh-components. No raw `<input>`, `<textarea>`, or `<select>`.
 - Text: `Text` from `@opal/components` with `font` and `color` props. No naked text nodes. For
-  one-line text that shows a tooltip when cut, use `OverflowText`.
+  text that shows a tooltip when cut, set `maxLines` and `overflowTooltip`.
 - Icons: only `@opal/icons`. Never `lucide-react` or `react-icons`. If an icon is missing, import
   it from Figma with the Figma MCP tool and add it to `lib/opal/src/icons/`.
 - Hover-reveal: `Hoverable` from `@opal/core`. If you must hand-write it, add `no-hover:opacity-100`
@@ -63,6 +63,19 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
   - A covered input: to group inputs visually, put them in a white, borderless `<Card padding={2}>`.
     The card adds 0.5rem, and the input's own 0.5rem internal padding adds the rest. Do not wrap
     inputs inside the card in `InputPadder`.
+- **Open popups inside the click.** Call `window.open("about:blank")` in the event handler, then
+  set its `location` after the `await`. Popup blockers and the desktop app block a `window.open`
+  that runs after an `await`.
+- **All navigation goes through `@opal/navigation`.** Never import `next/navigation` or `next/link`
+  outside it, and never write `window.location` or call the router's or `history`'s
+  `push`/`replace`/`back`. `useNavigation()` gives `go`, `linkTo`, `clampedBack`, `refresh`,
+  `prefetch`, `load` and `reload`; `NavLink` replaces `next/link`; `usePathname`, `useSearchParams`,
+  `useParams`, `redirect` and `notFound` are re-exported from it; `loadPage` is for code outside a
+  component; `useAppPosition()` from `@/lib/navigation/hooks` covers `/app` positions. `go` writes
+  the URL at once and then asks Next for the page, so the tabs and the page's loader
+  (`PendingRoute`) follow the click; `clampedBack(fallback)` never leaves the app. A static internal
+  `href` is banned too: spread `useNavigation().linkTo(…)` or use `NavLink`. oxlint
+  `navigation/no-naked-navigation` enforces this.
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 

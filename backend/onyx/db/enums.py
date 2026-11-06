@@ -132,6 +132,8 @@ class CCPairRunStatusGroup(str, PyEnum):
     """How the run history buckets the attempt statuses of every kind."""
 
     RUNNING = "running"
+    # Queued, not started yet.
+    SCHEDULED = "scheduled"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELED = "canceled"
@@ -144,6 +146,42 @@ class CCPairRunErrors(str, PyEnum):
     UNRESOLVED = "unresolved"
     RESOLVED = "resolved"
     NONE = "none"
+
+
+class IndexAttemptErrorResolvedReason(str, PyEnum):
+    """How an index attempt error closed."""
+
+    # A targeted re-index indexed the document.
+    RETRY = "retry"
+    # A later run indexed the document or closed the pair's entity errors
+    # clean, or a later run other than a Retry failed the document again.
+    LATER_RUN = "later_run"
+    # An admin resolved it. ``is_resolved`` stays false, since the poll cursor
+    # and Retry read it and still treat the error as open.
+    WITHOUT_RETRY = "without_retry"
+
+
+class IndexAttemptErrorOrder(str, PyEnum):
+    """How a pair's errors list orders its rows."""
+
+    # Newest first.
+    TIME = "time"
+    # Open, then resolved without retry, then closed by a run, a Retry or a
+    # legacy resolve, each newest first.
+    STATE = "state"
+
+
+class SyncEntityKind(str, PyEnum):
+    """What a permission sync failed to read: a user or a group."""
+
+    USER = "user"
+    GROUP = "group"
+
+
+class SyncAttemptErrorResolvedReason(str, PyEnum):
+    """How a sync attempt error closed."""
+
+    WITHOUT_RETRY = "without_retry"
 
 
 class PortAttemptStatus(str, PyEnum):
@@ -688,6 +726,7 @@ class LLMModelFlowType(str, PyEnum):
     SEARCH_SELECTION = "search_selection"
     DECISION = "decision"
     CRAFT = "craft"
+    IMAGE_GENERATION = "image_generation"
 
 
 class HookPoint(str, PyEnum):
@@ -964,3 +1003,23 @@ class SkillInstallationPolicy(str, PyEnum):
     AVAILABLE = "AVAILABLE"
     DEFAULT = "DEFAULT"
     REQUIRED = "REQUIRED"
+
+
+class ConnectorEventType(str, PyEnum):
+    """What an inbound connector event says happened to one document."""
+
+    UPSERT = "upsert"
+    DELETE = "delete"
+
+
+class ConnectorEventStatus(str, PyEnum):
+    """Lifecycle of one row in `connector_event_inbox`.
+
+    IN_PROGRESS means an index attempt has claimed the row. The next run of the
+    same pair settles it against that attempt's outcome.
+    """
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"

@@ -67,6 +67,8 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     NotificationType,
     SearchFeedbackType,
+    TokenRateLimitAction,
+    TokenRateLimitPeriod,
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
@@ -85,6 +87,8 @@ from onyx.db.enums import (
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
+    ConnectorEventStatus,
+    ConnectorEventType,
     ConnectorManageRole,
     DefaultAppMode,
     ExternalAppType,
@@ -94,6 +98,7 @@ from onyx.db.enums import (
     HookFailStrategy,
     HookPoint,
     IncognitoRecordMode,
+    IndexAttemptErrorResolvedReason,
     IndexingMode,
     IndexingStatus,
     IndexModelStatus,
@@ -122,6 +127,8 @@ from onyx.db.enums import (
     SkillSharePermission,
     SSOProviderType,
     SwitchoverType,
+    SyncAttemptErrorResolvedReason,
+    SyncEntityKind,
     SyncStatus,
     SyncType,
     SystemUsageAttribution,
@@ -1298,6 +1305,10 @@ class Document(Base):
     # First Section's link
     link: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
     file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # As the source reports them. Null for sources that report neither and for
+    # documents not re-indexed since the source started reporting them.
+    source_mime_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # The updated time is also used as a measure of the last successful state of the doc
     # pulled from the source (to help skip reindexing already updated docs in case of
@@ -2829,6 +2840,7 @@ class IndexAttempt(Base):
         "IndexAttemptError",
         back_populates="index_attempt",
         cascade="all, delete-orphan",
+        foreign_keys="IndexAttemptError.index_attempt_id",
     )
 
     stage_metrics: Mapped[list["IndexAttemptStageMetric"]] = relationship(
@@ -3170,6 +3182,24 @@ class IndexAttemptError(Base):
 
     failure_message: Mapped[str] = mapped_column(Text)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Null while open and on rows older than the column.
+    resolved_reason: Mapped[IndexAttemptErrorResolvedReason | None] = mapped_column(
+        Enum(
+            IndexAttemptErrorResolvedReason,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    # The run that closed the error, null when an admin resolved it. SET NULL,
+    # since the error belongs to its own attempt and outlives the closing one.
+    resolved_by_index_attempt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     error_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -3179,15 +3209,26 @@ class IndexAttemptError(Base):
     )
 
     # This is the reverse side of the relationship
-    index_attempt = relationship("IndexAttempt", back_populates="error_rows")
+    index_attempt = relationship(
+        "IndexAttempt",
+        back_populates="error_rows",
+        foreign_keys=[index_attempt_id],
+    )
 
-    # Each docprocessing batch resolves its documents' open errors.
     __table_args__ = (
+        # Each docprocessing batch resolves its documents' open errors.
         Index(
             "ix_index_attempt_errors_unresolved_cc_pair_document",
             "connector_credential_pair_id",
             "document_id",
             postgresql_where=text("NOT is_resolved"),
+        ),
+        # Backs the SET NULL when an attempt is deleted. Partial, since open and
+        # admin-resolved rows hold null.
+        Index(
+            "ix_index_attempt_errors_resolved_by_index_attempt_id",
+            "resolved_by_index_attempt_id",
+            postgresql_where=text("resolved_by_index_attempt_id IS NOT NULL"),
         ),
     )
 
@@ -4165,6 +4206,11 @@ class ImageGenerationConfig(Base):
         nullable=False,
     )
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # False when the config links a model on an admin-managed LLM provider; the
+    # provider then outlives the config.
+    llm_provider_owned: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
 
     model_configuration: Mapped["ModelConfiguration"] = relationship(
         "ModelConfiguration"
@@ -5732,6 +5778,9 @@ NOTE: `TokenRateLimit` is partially an MIT feature (global rate limit)
 
 
 class TokenRateLimit(Base):
+    """One spending limit: a budget for one period, for all models or one model.
+    At most one enabled row per (scope, group, model, period, action, threshold)."""
+
     __tablename__ = "token_rate_limit"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -5742,9 +5791,32 @@ class TokenRateLimit(Base):
     cost_budget_cents: Mapped[float | None] = mapped_column(
         Numeric(18, 6, asdecimal=False), nullable=True
     )
-    period_hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    period: Mapped[TokenRateLimitPeriod] = mapped_column(
+        Enum(TokenRateLimitPeriod, native_enum=False), nullable=False
+    )
     scope: Mapped[TokenRateLimitScope] = mapped_column(
         Enum(TokenRateLimitScope, native_enum=False)
+    )
+    # Set exactly for the group scopes.
+    user_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_group.id", ondelete="CASCADE"), nullable=True
+    )
+    # None: the limit counts usage of every model.
+    model_configuration_id: Mapped[int | None] = mapped_column(
+        ForeignKey("model_configuration.id", ondelete="CASCADE"), nullable=True
+    )
+    action: Mapped[TokenRateLimitAction] = mapped_column(
+        Enum(TokenRateLimitAction, native_enum=False),
+        nullable=False,
+        default=TokenRateLimitAction.BLOCK,
+        server_default=TokenRateLimitAction.BLOCK.value,
+    )
+    # An ALERT_ONLY row's percentage of the BLOCK value for the same bucket, in
+    # place of absolute budgets.
+    threshold_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Usage before this time does not count toward the limit's current period.
+    usage_reset_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -5752,20 +5824,52 @@ class TokenRateLimit(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL",
+            "token_budget IS NOT NULL OR cost_budget_cents IS NOT NULL "
+            "OR threshold_percent IS NOT NULL",
             name="ck_token_rate_limit_budget_set",
+        ),
+        CheckConstraint(
+            "threshold_percent IS NULL OR (action = 'ALERT_ONLY' "
+            "AND token_budget IS NULL AND cost_budget_cents IS NULL "
+            "AND threshold_percent BETWEEN 1 AND 100)",
+            name="ck_token_rate_limit_threshold",
+        ),
+        CheckConstraint(
+            "(scope IN ('USER_GROUP', 'USER_GROUP_MEMBER')) = (user_group_id IS NOT NULL)",
+            name="ck_token_rate_limit_group",
+        ),
+        # Nullable key columns are coalesced: Postgres before 15 has no NULLS NOT DISTINCT.
+        Index(
+            "uq_token_rate_limit_bucket",
+            "scope",
+            text("COALESCE(user_group_id, 0)"),
+            text("COALESCE(model_configuration_id, 0)"),
+            "period",
+            "action",
+            text("COALESCE(threshold_percent, 0)"),
+            unique=True,
+            postgresql_where=text("enabled"),
         ),
     )
 
 
-class TokenRateLimit__UserGroup(Base):
-    __tablename__ = "token_rate_limit__user_group"
+class TokenRateLimitUsageBaseline(Base):
+    """A user's usage in the reset day's bucket when a limit was reset. A
+    per-user limit subtracts the user's own; a pool subtracts the sum over the
+    users it covers now, so a member who leaves takes their share along."""
 
-    rate_limit_id: Mapped[int] = mapped_column(
-        ForeignKey("token_rate_limit.id"), primary_key=True
+    __tablename__ = "token_rate_limit_usage_baseline"
+
+    token_rate_limit_id: Mapped[int] = mapped_column(
+        ForeignKey("token_rate_limit.id", ondelete="CASCADE"), primary_key=True
     )
-    user_group_id: Mapped[int] = mapped_column(
-        ForeignKey("user_group.id"), primary_key=True
+    token_rate_limit: Mapped[TokenRateLimit] = relationship()
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    cost_cents: Mapped[float] = mapped_column(
+        Numeric(18, 6, asdecimal=False), nullable=False
     )
 
 
@@ -6047,6 +6151,11 @@ class UserFile(Base):
         Enum(UserFileStatus, native_enum=False, name="userfilestatus"),
         nullable=False,
         default=UserFileStatus.PROCESSING,
+    )
+    # Pickups by the processing task. Counted before the slow work, so a
+    # worker the kernel kills mid-file still spent one.
+    processing_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
     )
     # Privacy is decided when the file is uploaded, from the toggle state, so
     # an attachment made before the session exists is already private.
@@ -6692,6 +6801,62 @@ class ExternalGroupPermissionSyncAttempt(Base):
         return self.status.is_terminal()
 
 
+class SyncAttemptError(Base):
+    """A user or group that a group sync skipped whole because the source
+    could not read it."""
+
+    __tablename__ = "sync_attempt_error"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_group_sync_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("external_group_permission_sync_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Copied from the attempt so a pair's errors read from one index.
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    entity_kind: Mapped[SyncEntityKind] = mapped_column(
+        Enum(
+            SyncEntityKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    entity_id: Mapped[str] = mapped_column(String, nullable=False)
+    entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_message: Mapped[str] = mapped_column(Text, nullable=False)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    is_resolved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    resolved_reason: Mapped[SyncAttemptErrorResolvedReason | None] = mapped_column(
+        Enum(
+            SyncAttemptErrorResolvedReason,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_sync_attempt_error_cc_pair_attempt",
+            "connector_credential_pair_id",
+            "external_group_sync_attempt_id",
+        ),
+        # The feed, its counts and run resolve read by attempt alone.
+        Index("ix_sync_attempt_error_attempt", "external_group_sync_attempt_id"),
+    )
+
+
 class License(Base):
     """Stores the signed license blob (singleton pattern - only one row)."""
 
@@ -6753,6 +6918,11 @@ class TenantUsage(Base):
     )
 
 
+# Coalesced so the dedup indexes collapse NULLs on Postgres before 15 (no
+# NULLS NOT DISTINCT). Upserts must name this exact expression as the conflict target.
+USAGE_MODEL_CONFIGURATION_KEY = text("COALESCE(model_configuration_id, 0)")
+
+
 class UserUsage(Base):
     """Daily user and system LLM usage rollup. ``user_usage`` is a legacy
     physical name retained for deployment compatibility; partial indexes
@@ -6792,6 +6962,9 @@ class UserUsage(Base):
     incognito: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # The saved model the call ran; None when unknown. Not a FK: a deleted
+    # configuration keeps its id here, which is harmless since ids are never reused.
+    model_configuration_id: Mapped[int | None] = mapped_column(Integer(), nullable=True)
 
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -6832,6 +7005,7 @@ class UserUsage(Base):
             "flow",
             "provider",
             "incognito",
+            USAGE_MODEL_CONFIGURATION_KEY,
             unique=True,
             postgresql_where=text("actor_kind = 'USER'"),
         ),
@@ -6842,6 +7016,7 @@ class UserUsage(Base):
             "model",
             "flow",
             "provider",
+            USAGE_MODEL_CONFIGURATION_KEY,
             unique=True,
             postgresql_where=text("actor_kind = 'SYSTEM'"),
         ),
@@ -7440,6 +7615,10 @@ class ScheduledTaskRun(Base):
     # ~120-char snippet of the final agent message, surfaced in the run
     # history table.
     summary: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Advances each time the run reaches a status with results to review.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Highest version opened by the task owner.
+    viewed_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
     task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
@@ -8048,4 +8227,105 @@ class SSOProvider(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class ConnectorEventInbox(Base):
+    """One document change pushed by an event source.
+
+    The webhook server writes it; a docfetching run claims it. It completes
+    only once the claiming index attempt succeeds.
+    """
+
+    __tablename__ = "connector_event_inbox"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Denormalised from the pair's connector to route a row without a join.
+    source: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False), nullable=False
+    )
+
+    document_id: Mapped[str] = mapped_column(String, nullable=False)
+    event_type: Mapped[ConnectorEventType] = mapped_column(
+        Enum(ConnectorEventType, native_enum=False, name="connectoreventtype"),
+        nullable=False,
+    )
+    # Unique per pair, so a redelivered webhook writes nothing.
+    event_key: Mapped[str] = mapped_column(String, nullable=False)
+
+    # NULL on a delete. RESTRICT so file store cleanup cannot strand a row.
+    file_id: Mapped[str | None] = mapped_column(
+        ForeignKey("file_record.file_id", ondelete="RESTRICT"), nullable=True
+    )
+    # Never the document body; that is in the file store.
+    payload: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+
+    status: Mapped[ConnectorEventStatus] = mapped_column(
+        Enum(ConnectorEventStatus, native_enum=False, name="connectoreventstatus"),
+        nullable=False,
+        default=ConnectorEventStatus.PENDING,
+        # A non-native Enum column stores the member name.
+        server_default=ConnectorEventStatus.PENDING.name,
+    )
+    index_attempt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    # Claim gate and retry backoff.
+    available_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Orders two events on one document. NULL when the provider sends none;
+    # `id` orders them then.
+    occurred_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    processed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair", foreign_keys=[connector_credential_pair_id]
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "connector_credential_pair_id",
+            "event_key",
+            name="uq_connector_event_inbox_pair_event_key",
+        ),
+        Index(
+            "ix_connector_event_inbox_claim",
+            "connector_credential_pair_id",
+            "id",
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+        Index(
+            "ix_connector_event_inbox_pair_document",
+            "connector_credential_pair_id",
+            "document_id",
+        ),
+        Index(
+            "ix_connector_event_inbox_pair_status",
+            "connector_credential_pair_id",
+            "status",
+        ),
     )

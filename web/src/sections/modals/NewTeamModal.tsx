@@ -1,10 +1,10 @@
 "use client";
 
+import type { Route } from "next";
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import { Button, Text } from "@opal/components";
 import { InputErrorText, toast } from "@opal/layouts";
 import { Modal } from "@opal/components";
@@ -36,7 +36,7 @@ export default function NewTeamModal() {
 
   const { user } = useUser();
   const appDomain = user?.email.split("@")[1] ?? "";
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -51,9 +51,11 @@ export default function NewTeamModal() {
       const newUrl =
         window.location.pathname +
         (newParams.toString() ? `?${newParams.toString()}` : "");
-      window.history.replaceState({}, "", newUrl);
+      // SAFETY: the current pathname with its query trimmed is a page of the
+      // app.
+      navigation.go(newUrl as Route, { replace: true, shallow: true });
     }
-  }, [searchParams, setShowNewTeamModal]);
+  }, [searchParams, setShowNewTeamModal, navigation]);
 
   const fetchTenantInfo = async () => {
     setIsLoading(true);
@@ -120,9 +122,8 @@ export default function NewTeamModal() {
   };
 
   const handleContinueToNewOrg = () => {
-    const newUrl = window.location.pathname;
-    // SAFETY: the current pathname is a route of this app.
-    router.replace(newUrl as Route);
+    // The `new_team` query is already gone, so only the page's data is stale.
+    navigation.refresh();
     setShowNewTeamModal(false);
   };
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import type { Route } from "next";
+import { useNavigation } from "@opal/navigation/hooks";
 import { cn } from "@opal/utils";
 import { Divider, Button, Presence, Spacer } from "@opal/components";
-import type { TagProps } from "@opal/components";
+import type { BadgeProps } from "@opal/components";
 import type {
   IconFunctionComponent,
   RichStr,
@@ -25,10 +26,8 @@ import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
 // Imported from their own files: these indexes pull in @opal/layouts.
 import { PageLoader } from "@opal/loaders/page-loader/components";
-import { PageCenter } from "@opal/layouts/page-center/components";
-import { IllustrationContent } from "@opal/layouts/illustration-content/components";
+import { ErrorState } from "@opal/layouts/states/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
-import SvgPlugBroken from "@opal/illustrations/plug-broken";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -88,6 +87,8 @@ interface SettingsRootProps extends WithoutStyles<
    * `loading`. @default false
    */
   error?: SettingsPageError;
+  /** Below 816 px of page width, the header and body keep 8 px side gutters in place of 16. @default false */
+  narrowGutters?: boolean;
 }
 
 /**
@@ -100,6 +101,7 @@ function SettingsRoot({
   animateEnter = true,
   loading = false,
   error = false,
+  narrowGutters = false,
   ...props
 }: SettingsRootProps) {
   // The header reports its title here, so the body's error state can name
@@ -109,11 +111,18 @@ function SettingsRoot({
     <SettingsPageContext.Provider
       value={{ animateEnter, loading, error, pageTitle, setPageTitle }}
     >
+      {/* Both gutters stay reserved, so the centered page does not shift when content grows a scrollbar. */}
       <div
         id="page-wrapper-scroll-container"
-        className="w-full h-full flex flex-col items-center overflow-y-auto"
+        className="w-full h-full flex flex-col items-center overflow-y-auto [scrollbar-gutter:stable_both-edges]"
       >
-        <div className={cn("h-full", widthClasses[width])}>
+        <div
+          className={cn(
+            "h-full",
+            widthClasses[width],
+            narrowGutters && "@container/settings-page"
+          )}
+        >
           <div {...props} />
         </div>
       </div>
@@ -132,8 +141,6 @@ export interface SettingsHeaderProps {
   moreIcon2?: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
-  /** Tag inline after the description, e.g. a status. */
-  descriptionTag?: TagProps;
   /** The title can be edited in place, as `Content` does it. */
   editable?: boolean;
   /** When the editable title shows its pencil: on hover, or at rest too. Default: `"hover"`. */
@@ -149,10 +156,12 @@ export interface SettingsHeaderProps {
   actions?: React.ReactNode[];
   stackActionsOnMobile?: boolean;
   /**
-   * Renders a secondary Cancel as the first action. `true` goes back in
-   * history; a function overrides the destination.
+   * Renders a secondary Cancel as the first action. `true` goes back within
+   * the app (`clampedBack`), or to `/` when the page was not reached within
+   * it; a path does the same with that path as the fallback; a function
+   * replaces the action.
    */
-  cancel?: boolean | (() => void);
+  cancel?: boolean | string | (() => void);
   divider?: boolean;
 }
 
@@ -167,17 +176,16 @@ function SettingsHeader({
   moreIcon2,
   title,
   description,
-  descriptionTag,
   editable,
   editButton,
   onTitleChange,
   children,
   actions,
   stackActionsOnMobile = false,
-  cancel,
+  cancel = false,
   divider,
 }: SettingsHeaderProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
   const strings = useOpalStrings();
   const [showShadow, setShowShadow] = useState(false);
   const { setPageTitle } = useContext(SettingsPageContext);
@@ -191,9 +199,18 @@ function SettingsHeader({
   const onCancel =
     typeof cancel === "function"
       ? cancel
-      : cancel
-        ? () => router.back()
-        : undefined;
+      : cancel === false
+        ? undefined
+        : () =>
+            navigation.clampedBack(
+              // SAFETY: a path on this origin (not `//host`) is a page of the
+              // app; anything else falls back to the app's root.
+              (typeof cancel === "string" &&
+              cancel.startsWith("/") &&
+              !cancel.startsWith("//")
+                ? cancel
+                : "/") as Route
+            );
   const hasActions = !!onCancel || (!!actions && actions.length > 0);
   const isSticky = hasActions;
 
@@ -256,7 +273,7 @@ function SettingsHeader({
     >
       <Spacer rem={3.25} />
 
-      <div className="flex flex-col gap-6 px-4">
+      <div className="flex flex-col gap-6 px-4 @max-[51rem]/settings-page:px-2">
         <div
           className={cn(
             "flex w-full items-start justify-between gap-4",
@@ -265,17 +282,16 @@ function SettingsHeader({
         >
           <div aria-label="admin-page-title">
             <Content
+              font="heading-headline"
+              orientation="stacked"
               icon={Icon}
               moreIcon1={moreIcon1}
               moreIcon2={moreIcon2}
               title={title}
               description={description}
-              descriptionTag={descriptionTag}
               editable={editable}
               editButton={editButton}
               onTitleChange={onTitleChange}
-              sizePreset="headline"
-              variant="heading"
             />
           </div>
           {hasActions && (
@@ -339,15 +355,10 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
     useContext(SettingsPageContext);
   const strings = useOpalStrings();
   const content = error ? (
-    <PageCenter>
-      <IllustrationContent
-        illustration={SvgPlugBroken}
-        title={strings.settingsBodyErrorTitle(pageTitle)}
-        description={
-          error === true ? strings.settingsBodyErrorDescription : error
-        }
-      />
-    </PageCenter>
+    <ErrorState
+      title={strings.settingsBodyErrorTitle(pageTitle)}
+      description={error === true ? undefined : error}
+    />
   ) : loading ? (
     <PageLoader />
   ) : (
@@ -355,7 +366,7 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
   );
   const body = (
     <div
-      className="pt-6 pb-18 px-4 flex flex-col w-full"
+      className="pt-6 pb-18 px-4 @max-[51rem]/settings-page:px-2 flex flex-col w-full"
       style={{ gap: spacingToRem(gap) }}
       {...props}
     >
@@ -371,7 +382,41 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Loading
+// ---------------------------------------------------------------------------
+
+type SettingsLoadingProps = Pick<
+  SettingsHeaderProps,
+  "icon" | "title" | "description"
+> &
+  Pick<SettingsRootProps, "width">;
+
+/**
+ * A whole settings page while it loads: its header over the page loader. For
+ * a route's `loading.tsx`, so it shows the page's title before the page.
+ */
+function SettingsLoading({
+  icon,
+  title,
+  description,
+  width,
+}: SettingsLoadingProps) {
+  return (
+    <SettingsRoot width={width} loading>
+      <SettingsHeader icon={icon} title={title} description={description} />
+      <SettingsBody />
+    </SettingsRoot>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
-export { SettingsRoot as Root, SettingsHeader as Header, SettingsBody as Body };
+export {
+  SettingsRoot as Root,
+  SettingsHeader as Header,
+  SettingsBody as Body,
+  SettingsLoading as Loading,
+};
+export type { SettingsLoadingProps };

@@ -165,6 +165,8 @@ jobs:
 
   build-web-image:
     needs: changes
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     if: needs.changes.outputs.playwright == 'true'
     runs-on:
       [
@@ -217,6 +219,7 @@ jobs:
       # SKIP_TYPE_CHECK cuts the build time of this image. Types are still checked
       # by the `typescript-check` prek hook in the Quality Checks PR workflow.
       - name: Build and push Web Docker image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./web
@@ -234,10 +237,12 @@ jobs:
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
             ${{ env.DHI_NODE_BUILD_ARGS }}
             SKIP_TYPE_CHECK=1
+          # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
+          # which get no secrets, import it. Other runs import only the published image.
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ github.event.pull_request.head.sha || github.sha }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:web-cache-{1}', env.RUNS_ON_ECR_CACHE, github.event.pull_request.head.sha) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:web-cache-{1}', env.RUNS_ON_ECR_CACHE, steps.format-branch.outputs.cache-suffix) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:web-cache', env.RUNS_ON_ECR_CACHE) || '' }}
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-web-server:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
@@ -247,6 +252,8 @@ jobs:
 
   build-backend-image:
     needs: changes
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     if: >-
       needs.changes.outputs.playwright == 'true' ||
       needs.changes.outputs.airgap == 'true'
@@ -289,6 +296,7 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Backend Docker image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: ./backend
@@ -306,10 +314,12 @@ jobs:
           sbom: false
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
+          # which get no secrets, import it. Other runs import only the published image.
           cache-from: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:backend-cache-{1}', env.RUNS_ON_ECR_CACHE, github.event.pull_request.head.sha) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:backend-cache-{1}', env.RUNS_ON_ECR_CACHE, steps.format-branch.outputs.cache-suffix) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:backend-cache', env.RUNS_ON_ECR_CACHE) || '' }}
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-backend:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
@@ -319,6 +329,8 @@ jobs:
 
   build-model-server-image:
     needs: changes
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     if: >-
       needs.changes.outputs.playwright == 'true' ||
       needs.changes.outputs.airgap == 'true'
@@ -339,6 +351,7 @@ jobs:
           persist-credentials: false
 
       - name: Build model server image
+        id: build
         uses: ./.github/actions/build-model-server-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -374,8 +387,8 @@ jobs:
 
       - name: Set deployment images
         env:
-          BACKEND_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
-          MODEL_SERVER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
+          BACKEND_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-backend-image.outputs.digest }}
+          MODEL_SERVER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-model-server-image.outputs.digest }}
         run: |
           echo "ONYX_BACKEND_IMAGE=${BACKEND_IMAGE}" >> "${GITHUB_ENV}"
           echo "ONYX_MODEL_SERVER_IMAGE=${MODEL_SERVER_IMAGE}" >> "${GITHUB_ENV}"
@@ -552,7 +565,9 @@ jobs:
         env:
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          MODEL_SERVER_DIGEST: ${{ needs.build-model-server-image.outputs.digest }}
+          BACKEND_DIGEST: ${{ needs.build-backend-image.outputs.digest }}
+          WEB_DIGEST: ${{ needs.build-web-image.outputs.digest }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
@@ -567,9 +582,9 @@ jobs:
           # host-gateway address); opt in so the SSRF guard allows it. Cloud-
           # metadata/link-local stays blocked regardless.
           MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
-          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}@${BACKEND_DIGEST}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}@${MODEL_SERVER_DIGEST}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}@${WEB_DIGEST}
           EOF
 
       - name: Log in to ECR pull-through cache
@@ -732,7 +747,9 @@ jobs:
         env:
           EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          MODEL_SERVER_DIGEST: ${{ needs.build-model-server-image.outputs.digest }}
+          BACKEND_DIGEST: ${{ needs.build-backend-image.outputs.digest }}
+          WEB_DIGEST: ${{ needs.build-web-image.outputs.digest }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
@@ -747,9 +764,9 @@ jobs:
           # host-gateway address); opt in so the SSRF guard allows it. Cloud-
           # metadata/link-local stays blocked regardless.
           MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
-          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
-          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}@${BACKEND_DIGEST}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}@${MODEL_SERVER_DIGEST}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}@${WEB_DIGEST}
           EOF
 
       - name: Log in to ECR pull-through cache
@@ -888,7 +905,8 @@ jobs:
       - name: Create .env file for Docker Compose
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
+          BACKEND_DIGEST: ${{ needs.build-backend-image.outputs.digest }}
+          WEB_DIGEST: ${{ needs.build-web-image.outputs.digest }}
         run: |
           cat <<EOF > deployment/docker_compose/.env
           AUTH_TYPE=basic
@@ -899,8 +917,8 @@ jobs:
           # host-gateway address); opt in so the SSRF guard allows it. Cloud-
           # metadata/link-local stays blocked regardless.
           MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
-          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}@${BACKEND_DIGEST}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}@${WEB_DIGEST}
           EOF
 
       - name: Log in to ECR pull-through cache

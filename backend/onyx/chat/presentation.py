@@ -14,7 +14,14 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.models import AgentInfo, ExecutionStatus, RunState, RunStatus
+from onyx.agents.models import (
+    AgentInfo,
+    ExecutionStatus,
+    RunFailure,
+    RunFailureKind,
+    RunState,
+    RunStatus,
+)
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
@@ -418,15 +425,20 @@ class ResponsePresenter:
                 output.append(
                     Packet(
                         placement=Placement(turn_index=0),
-                        obj=OverallStop(
-                            stop_reason="user_cancelled"
-                            if event.outcome == RunStatus.CANCELLED
-                            else "finished"
-                        ),
+                        obj=overall_stop(event.outcome, event.failure),
                     )
                 )
         for packet in output:
             self.emitter.emit(packet)
+
+
+def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
+    """How a top-level response ended: the one mapping for live, replay and Stop."""
+    if status != RunStatus.CANCELLED:
+        return OverallStop(stop_reason="finished")
+    if failure is not None and failure.kind == RunFailureKind.DEADLINE:
+        return OverallStop(stop_reason="timed_out")
+    return OverallStop(stop_reason="user_cancelled")
 
 
 def replay_response(
@@ -505,11 +517,7 @@ def replay_response(
         packets.append(
             Packet(
                 placement=Placement(turn_index=0),
-                obj=OverallStop(
-                    stop_reason="user_cancelled"
-                    if response.status == RunStatus.CANCELLED
-                    else "finished"
-                ),
+                obj=overall_stop(response.status, response.failure),
             )
         )
     return packets

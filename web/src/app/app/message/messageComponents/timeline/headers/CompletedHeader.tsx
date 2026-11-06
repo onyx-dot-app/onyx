@@ -6,8 +6,7 @@ import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
 import { clickOnKeyDown } from "@opal/utils";
@@ -72,12 +71,11 @@ function MemoryTagWithTooltip({
                 </Text>
               </div>
               <ContentAction
+                font="secondary-body"
                 icon={SvgAddLines}
                 title={operationLabel}
-                sizePreset="secondary"
                 padding={1}
-                variant="body"
-                color="muted"
+                titleColor="text-03"
                 rightChildren={
                   <Button
                     prominence="tertiary"

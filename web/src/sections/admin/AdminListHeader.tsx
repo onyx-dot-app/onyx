@@ -83,10 +83,9 @@ export default function AdminListHeader({
       <Card rounding={4} border="solid">
         <div className="flex flex-row items-center justify-between gap-3">
           <Content
+            font="main-ui-body"
             title={emptyStateText}
-            sizePreset="main-ui"
-            variant="body"
-            color="muted"
+            titleColor="text-03"
             width="fit"
           />
           {actionButton}
@@ -99,7 +98,7 @@ export default function AdminListHeader({
     <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
-        searchIcon
+        icon="search"
         clearButton
         placeholder={placeholder ?? t("listHeader.search.placeholder")}
         ref={inputRef}

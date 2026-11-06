@@ -1,16 +1,16 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Section } from "@/layouts/general-layouts";
 import {
   Content,
   ContentAction,
   InputHorizontal,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
 import { copyText, markdown } from "@opal/utils";
 import { Formik, Form } from "formik";
@@ -576,8 +576,6 @@ function GeneralSettings() {
     [updateUserChatBackground, setTheme, updateUserThemePreference]
   );
   const { refreshChatSessions } = useChatSessions();
-  const router = useRouter();
-  const pathname = usePathname();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
@@ -614,7 +612,7 @@ function GeneralSettings() {
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, refreshChatSessions, t]);
+  }, [refreshChatSessions, t]);
 
   return (
     <>
@@ -651,9 +649,8 @@ function GeneralSettings() {
       <Section gap={8}>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("profile.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -720,9 +717,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("appearance.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -834,9 +830,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("language.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -866,9 +861,8 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("dangerZone.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -1112,7 +1106,11 @@ function PromptShortcuts() {
                 className="w-full grid grid-cols-[1fr_min-content] gap-x-1 gap-y-1"
               >
                 <InputTypeIn
-                  prefixText="/"
+                  leftChildren={
+                    <Text font="main-ui-body" color="text-02">
+                      /
+                    </Text>
+                  }
                   placeholder={t("promptShortcuts.row.promptPlaceholder")}
                   value={shortcut.prompt}
                   onChange={(e) =>
@@ -1317,9 +1315,8 @@ function ChatPreferencesSettings() {
     <Section gap={8}>
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("chats.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1551,9 +1548,8 @@ function ChatPreferencesSettings() {
           />
         </InputVertical>
         <Content
+          font="main-content-emphasis"
           title={t("memory.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1605,9 +1601,8 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("promptShortcuts.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1632,9 +1627,8 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
+          font="main-content-emphasis"
           title={t("voice.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         <Card border="solid" rounding={4}>
@@ -1796,10 +1790,9 @@ function GatewayAccessSection({
   return (
     <Section gap={3}>
       <ContentAction
+        font="main-content-emphasis"
         title={t("gateway.title")}
         description={t("gateway.description", { appName })}
-        sizePreset="main-content"
-        variant="section"
         width="full"
         center
         rightChildren={
@@ -1827,12 +1820,11 @@ function GatewayAccessSection({
 
           <Section gap={2} alignItems="start">
             <Content
+              font="main-ui-action"
               title={t("gateway.models.title")}
               description={t("gateway.models.description", {
                 count: availableModelCount,
               })}
-              sizePreset="main-ui"
-              variant="section"
             />
 
             <Section gap={2} alignItems="start">
@@ -1953,6 +1945,7 @@ function LLMGatewaySettings() {
 
 function AccountsAccessSettings() {
   const t = useTranslations("settings");
+  const navigation = useNavigation();
   const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -2278,9 +2271,8 @@ function AccountsAccessSettings() {
       <Section gap={8}>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("accounts.title")}
-            sizePreset="main-content"
-            variant="section"
             width="full"
           />
           <Card border="solid" rounding={4}>
@@ -2318,9 +2310,8 @@ function AccountsAccessSettings() {
         {showTokensSection && (
           <Section gap={3}>
             <Content
+              font="main-content-emphasis"
               title={t("apiKeys.section.title")}
-              sizePreset="main-content"
-              variant="section"
               width="full"
             />
             {canCreateTokens ? (
@@ -2345,7 +2336,7 @@ function AccountsAccessSettings() {
                           placeholder={t("apiKeys.list.searchPlaceholder")}
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
-                          searchIcon
+                          icon="search"
                           variant="internal"
                         />
                       )}
@@ -2457,7 +2448,10 @@ function AccountsAccessSettings() {
                     <Text font="secondary-body" color="text-03">
                       {t("apiKeys.upsell.description")}
                     </Text>
-                    <Button prominence="secondary" href="/admin/billing">
+                    <Button
+                      prominence="secondary"
+                      {...navigation.linkTo("/admin/billing")}
+                    >
                       {t("apiKeys.upsell.upgradeButton")}
                     </Button>
                   </Section>
@@ -2485,6 +2479,7 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
     <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit">
         <Content
+          font="main-content-emphasis"
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
           description={
@@ -2492,8 +2487,6 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
               ? t("connectors.status.connected")
               : t("connectors.status.paused")
           }
-          sizePreset="main-content"
-          variant="section"
         />
       </Section>
     </Card>
@@ -2579,6 +2572,7 @@ function FederatedConnectorCard({
       <Card border="solid" padding={2} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
+            font="main-content-emphasis"
             icon={sourceMetadata.icon}
             title={sourceMetadata.displayName}
             description={
@@ -2586,8 +2580,6 @@ function FederatedConnectorCard({
                 ? t("connectors.status.connected")
                 : t("connectors.status.notConnected")
             }
-            sizePreset="main-content"
-            variant="section"
             padding={1}
             rightChildren={
               connector.has_oauth_token ? (
@@ -2653,9 +2645,8 @@ function ConnectorsSettings() {
     <Section gap={8}>
       <Section gap={3} justifyContent="start">
         <Content
+          font="main-content-emphasis"
           title={t("connectors.title")}
-          sizePreset="main-content"
-          variant="section"
           width="full"
         />
         {hasConnectors ? (

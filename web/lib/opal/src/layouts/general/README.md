@@ -21,6 +21,7 @@ Tailwind uses. So `gap={2}` is the same distance as `gap-2`.
 | `gap`            | `Spacing`                                   | `4`        | Gap between children, as a spacing step (`N / 4` rem) |
 | `padding`        | `Spacing`                                   | `0`        | Padding, as a spacing step (`N / 4` rem)              |
 | `wrap`           | `boolean`                                   | `false`    | Enables `flex-wrap`                                   |
+| `wrapGap`        | `Spacing`                                   | `gap`      | Gap between wrapped lines: the row gap in a row Section, the column gap in a column Section |
 | `dbg`            | `boolean`                                   | `false`    | Adds a red debug border                               |
 | `className`      | `string`                                    | —          | Additional classes                                    |
 | `ref`            | `Ref<HTMLDivElement>`                       | —          | Forwarded ref                                         |

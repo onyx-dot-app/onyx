@@ -5,7 +5,7 @@ from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.llm.well_known_providers.auto_update_service import (
-    sync_llm_models_from_github,
+    sync_auto_update_providers,
 )
 
 
@@ -21,12 +21,8 @@ def check_for_auto_llm_updates(
     *,
     tenant_id: str,  # noqa: ARG001
 ) -> bool | None:
-    """Periodic task to fetch LLM model updates from GitHub
-    and sync them to providers in Auto mode.
-
-    This task checks the GitHub-hosted config file and updates all
-    providers that have is_auto_mode=True.
-    """
+    """Periodic task that syncs auto-update providers with their lab's
+    model catalog."""
     if not AUTO_LLM_CONFIG_URL:
         task_logger.debug("AUTO_LLM_CONFIG_URL not configured, skipping")
         return None
@@ -34,7 +30,7 @@ def check_for_auto_llm_updates(
     try:
         # Sync to database
         with get_session_with_current_tenant() as db_session:
-            results = sync_llm_models_from_github(db_session)
+            results = sync_auto_update_providers(db_session)
 
             if results:
                 task_logger.info(f"Auto mode sync results: {results}")

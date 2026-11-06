@@ -1633,8 +1633,9 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
     db_session: Session,
     cc_pair_and_future: tuple[ConnectorCredentialPair, int],
 ) -> None:
-    """Swap gate ignores an INVALID-only deferred doc (no deadlock) but STILL waits
-    on a required cc_pair's deferred doc (regression guard)."""
+    """A deferred doc never holds the swap: not one owned only by an INVALID
+    cc_pair, and not one on a required cc_pair either. The swap turns the flag
+    into a plain needs-sync instead (see swap_index._clear_what_future_missed__no_commit)."""
     required_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
@@ -1656,11 +1657,11 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
         # not blocked by the INVALID-only deferred doc
         assert _port_swap_ready(db_session, future_ss, [required_pair], []) is True
 
-        # a deferred doc on the REQUIRED pair DOES still block the swap
+        # a deferred doc on the REQUIRED pair does not block the swap either
         [req_doc] = _seed_cc_pair_documents(db_session, required_pair, 1, unique=True)
         mark_document_synced_secondary_pending(req_doc, db_session)
         db_session.commit()
-        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is False
+        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is True
     finally:
         _cleanup_pairs(db_session, invalid_pair)
 
@@ -2489,8 +2490,9 @@ def test_reindex_finalizing_needs_every_connector_port_success(
 def test_docfetching_priority_finalizing(
     db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
-    """FUTURE fetch tasks go out HIGH while the reindex finalizes; PRESENT
-    refreshes keep MEDIUM, and first-time indexing stays HIGH."""
+    """While the reindex finalizes, FUTURE fetch tasks go out HIGH when the connector
+    has docs pending for FUTURE, else MEDIUM, and PRESENT refreshes drop to LOW.
+    First-time indexing stays HIGH."""
     cc_pair, future_id = cc_pair_and_port_future
     future = db_session.get(SearchSettings, future_id)
     assert future is not None
@@ -2520,14 +2522,24 @@ def test_docfetching_priority_finalizing(
             == OnyxCeleryPriority.MEDIUM
         )
 
-        # finalizing: FUTURE goes first, PRESENT refreshes keep their place
+        # finalizing with nothing pending for FUTURE: still ahead of PRESENT
         attempt = create_port_attempt(db_session, cc_pair.id, future_id)
         mark_port_in_progress(db_session, attempt.id)
         mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
         assert (
+            docfetching_priority(db_session, cc_pair, future)
+            == OnyxCeleryPriority.MEDIUM
+        )
+
+        # finalizing with a doc pending for FUTURE: FUTURE goes first
+        [doc_id] = _seed_cc_pair_documents(db_session, cc_pair, 1, unique=True)
+        doc = db_session.get(DbDocument, doc_id)
+        assert doc is not None
+        doc.secondary_only_sync_pending = True
+        db_session.commit()
+        assert (
             docfetching_priority(db_session, cc_pair, future) == OnyxCeleryPriority.HIGH
         )
         assert (
-            docfetching_priority(db_session, cc_pair, present)
-            == OnyxCeleryPriority.MEDIUM
+            docfetching_priority(db_session, cc_pair, present) == OnyxCeleryPriority.LOW
         )

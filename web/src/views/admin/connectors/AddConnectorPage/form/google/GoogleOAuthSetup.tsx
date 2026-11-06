@@ -1,9 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import { setupGmailOAuth } from "@/lib/gmail";
 import { setupGoogleDriveOAuth } from "@/lib/googleDrive";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
@@ -27,7 +26,7 @@ interface GoogleOAuthSetupProps {
  */
 export function GoogleOAuthSetup({ source }: GoogleOAuthSetupProps) {
   const t = useTranslations("admin.connectorsList");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { isGlobalHolder } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
@@ -81,7 +80,7 @@ export function GoogleOAuthSetup({ source }: GoogleOAuthSetupProps) {
             appCredential: oauthAppCredential,
           });
       if (authUrl) {
-        router.push(authUrl as Route);
+        navigation.load(authUrl);
       } else {
         toast.error(errorMsg);
         setIsAuthenticating(false);

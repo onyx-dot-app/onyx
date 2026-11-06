@@ -15,6 +15,12 @@ import {
   startMCPUserOAuth,
 } from "@/lib/mcp/svc";
 
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({}),
+}));
 jest.mock("@/lib/fetcher", () => ({ errorHandlingFetcher: jest.fn() }));
 jest.mock("@/lib/mcp/svc", () => ({
   saveMCPUserCredentials: jest.fn(),

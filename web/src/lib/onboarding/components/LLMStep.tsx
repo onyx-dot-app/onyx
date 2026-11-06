@@ -1,10 +1,10 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { memo, useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button, SelectCard } from "@opal/components";
-import { noProp } from "@/lib/utils";
 import LLMProviderCard from "@/lib/onboarding/components/LLMProviderCard";
 import { OnboardingActions, OnboardingState } from "@/lib/onboarding/types";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
@@ -42,6 +42,8 @@ const LLMStep = memo(
     const t = useTranslations("onboarding");
     const providerNames = useProviderNames();
     const { appName } = useSettings();
+    const navigation = useNavigation();
+    const adminPanelLink = navigation.linkTo(ADMIN_ROUTES.LLM_MODELS.path);
     const { llmProviderOptions, isLoading } = useLLMProviderOptions();
     // The onboarding subset, in its order; the rest are in the admin panel.
     const onboardingProviders = ONBOARDING_LLM_PROVIDERS.flatMap((name) => {
@@ -51,7 +53,7 @@ const LLMStep = memo(
       return descriptor ? [descriptor] : [];
     });
     const openAdminPanel = () => {
-      window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
+      navigation.go(ADMIN_ROUTES.LLM_MODELS.path);
     };
 
     // A connected provider's settings open the same modal as Connect, on this
@@ -212,20 +214,22 @@ const LLMStep = memo(
           aria-label="onboarding-llm-step"
         >
           <ContentAction
+            font="main-ui-action"
             icon={SvgCpu}
             title={t("llmStep.title")}
             description={t("llmStep.description", { appName })}
-            sizePreset="main-ui"
-            variant="section"
             padding={2}
             rightChildren={
               <Button
                 disabled={disabled}
                 prominence="internal"
                 rightIcon={SvgExternalLink}
-                href={ADMIN_ROUTES.LLM_MODELS.path}
+                href={adminPanelLink.href}
                 // The link opens the admin page, not the card's provider list.
-                onClick={noProp()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  adminPanelLink.onClick(event);
+                }}
               >
                 {t("llmStep.adminPanel.label")}
               </Button>

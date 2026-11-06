@@ -141,6 +141,7 @@ export { default as SvgOnyxLogo } from "@opal/icons/onyx-logo";
 export { default as SvgOnyxOctagon } from "@opal/icons/onyx-octagon";
 export { default as SvgOrganization } from "@opal/icons/organization";
 export { default as SvgPaintBrush } from "@opal/icons/paint-brush";
+export { default as SvgPanelRight } from "@opal/icons/panel-right";
 export { default as SvgPaperclip } from "@opal/icons/paperclip";
 export { default as SvgPause } from "@opal/icons/pause";
 export { default as SvgPauseCircle } from "@opal/icons/pause-circle";

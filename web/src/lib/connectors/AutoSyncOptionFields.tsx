@@ -33,4 +33,5 @@ export const autoSyncConfigBySource: Record<
   linear: {},
   hubspot: {},
   youtrack: {},
+  azure_datalake: {},
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useNavigation } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
@@ -23,7 +23,7 @@ interface GroupCardProps {
 
 function GroupCard({ group }: GroupCardProps) {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
@@ -46,7 +46,7 @@ function GroupCard({ group }: GroupCardProps) {
   }
 
   function openGroup() {
-    router.push(`/admin/groups/${group.id}`);
+    navigation.go(`/admin/groups/${group.id}`);
   }
 
   return (
@@ -59,11 +59,10 @@ function GroupCard({ group }: GroupCardProps) {
       onClick={canManageMembers ? openGroup : undefined}
     >
       <ContentAction
+        font="main-content-emphasis"
         icon={isAdmin ? SvgUserManage : isBasic ? SvgUser : SvgUsers}
         title={displayGroupName(group, t)}
         description={buildGroupDescription(group, t)}
-        sizePreset="main-content"
-        variant="section"
         padding={1}
         suffix={isBasic ? t("card.defaultSuffix.label") : undefined}
         editable={!isSyncing && canManage}

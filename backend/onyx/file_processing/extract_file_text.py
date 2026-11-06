@@ -5,6 +5,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
@@ -15,6 +16,7 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
+import psutil
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 
 from onyx.configs.app_configs import (
@@ -50,6 +52,17 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 TEXT_SECTION_SEPARATOR = "\n\n"
+
+# PDFium holds every page's fonts until the document closes, so a scan with a
+# distinct non-embedded font per page grows tens of MiB a page. Past this
+# budget the document is reopened before each page.
+PDFIUM_REOPEN_RSS_GROWTH_BYTES = 256 * 1024 * 1024
+
+# A full collection costs about 0.1 s in a loaded worker. One follows every
+# spreadsheet (openpyxl leaves cycles) and otherwise at most one per interval,
+# which bounds the cyclic garbage the other parsers leave in a long-lived worker.
+GC_COLLECT_INTERVAL_SECONDS = 10.0
+_last_gc_collect_at = 0.0
 
 _MARKITDOWN_CONVERTER: Optional["MarkItDown"] = None
 
@@ -240,10 +253,18 @@ def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
     """
     import pypdfium2 as pdfium
 
+    process = psutil.Process()
     pdf = pdfium.PdfDocument(file_bytes, password=password)
+    rss_at_open = process.memory_info().rss
     try:
         page_texts: list[str] = []
-        for page in pdf:
+        for index in range(len(pdf)):
+            # RSS does not drop after a close, so a reset baseline lets the process
+            # keep climbing. Kept fixed, every page past the budget reopens.
+            if process.memory_info().rss - rss_at_open > PDFIUM_REOPEN_RSS_GROWTH_BYTES:
+                pdf.close()
+                pdf = pdfium.PdfDocument(file_bytes, password=password)
+            page = pdf[index]
             # Per-page try/finally so a get_textpage() failure still closes the
             # native page handle instead of leaking it until GC.
             try:
@@ -920,13 +941,22 @@ def extract_text_and_images(
     res = _extract_text_and_images(
         file, file_name, pdf_pass, content_type, image_callback
     )
-    # openpyxl leaves reference cycles behind a workbook, so a collection
-    # follows a spreadsheet. On any other file it only costs time, about a
-    # tenth of a second per file in a loaded process.
-    if _is_spreadsheet(file_name, content_type):
-        logger.info("Unreachable objects: %s", gc.collect())
+    _collect_garbage_if_due(file_name, content_type)
 
     return res
+
+
+def _collect_garbage_if_due(file_name: str, content_type: str | None) -> None:
+    global _last_gc_collect_at
+    now = time.monotonic()
+    if (
+        not _is_spreadsheet(file_name, content_type)
+        and now - _last_gc_collect_at < GC_COLLECT_INTERVAL_SECONDS
+    ):
+        return
+    # Racing threads may both collect. The duplicate is harmless.
+    _last_gc_collect_at = now
+    logger.info("Unreachable objects: %s", gc.collect())
 
 
 def _is_spreadsheet(file_name: str, content_type: str | None) -> bool:

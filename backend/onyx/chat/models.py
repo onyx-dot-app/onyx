@@ -528,7 +528,6 @@ class AvailableFiles(BaseModel):
 
 
 class ChatReminderContext(BaseModel):
-    ran_image_gen: bool
     has_open_url_tool: bool
     out_of_cycles: bool
     persona_task_prompt: str | None
@@ -597,7 +596,6 @@ class ChatFeatureState(BaseModel):
     gathered_documents: list[SearchDoc]
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
-    ran_image_gen: bool
     search_context: SearchContext
 
 

@@ -30,7 +30,9 @@ def _fake_config(model_name: str, provider: str = "openai") -> SimpleNamespace:
         custom_config=None,
     )
     model_configuration = SimpleNamespace(name=model_name, llm_provider=llm_provider)
-    return SimpleNamespace(model_configuration=model_configuration)
+    return SimpleNamespace(
+        model_configuration=model_configuration, llm_provider_owned=True
+    )
 
 
 def _img_item(b64: str, revised: str | None = None) -> MagicMock:

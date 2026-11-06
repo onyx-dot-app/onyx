@@ -23,10 +23,9 @@ export const NonSelectableConnectors = ({
   return (
     <div className="mt-6 mb-4">
       <Content
+        font="main-content-emphasis"
         title={title}
         description={description}
-        sizePreset="main-content"
-        variant="section"
       />
 
       <div className="p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01">

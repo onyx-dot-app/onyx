@@ -244,6 +244,38 @@ A storage account and a private container. Shared access keys are off by
 default: Onyx authenticates with `DefaultAzureCredential`, so no key has to
 exist.
 
+`create_customer_managed_key` (default off) encrypts the account with a key of
+its own. It creates a Key Vault with purge protection, an RSA 3072 key with
+automatic rotation (`key_rotation_period`, default `P90D`), and a user-assigned
+identity that may only wrap and unwrap with the key. The vault uses access
+policies, and the identity running Terraform gets key management rights.
+The derived vault name is `kv-` plus the first 13 characters of the account
+name plus an 8-character digest of it. Purge protection keeps the vault name taken for
+`key_vault_soft_delete_retention_days` (default 90) after a destroy.
+
+#### Sandbox archive storage
+
+`onyx` creates a separate storage account when
+`enable_sandbox_archive_storage` is true. It holds Craft sandbox session
+archives in the `sandbox-archives` container:
+
+- Its own Key Vault key (`create_customer_managed_key = true`)
+- No anonymous access, no shared keys, versioning on
+- Blobs expire after `sandbox_archive_expiration_days` (default 30). Old
+  versions expire after `sandbox_archive_noncurrent_expiration_days` (default 7)
+- Blob soft delete (7 days, the `storage` module default) keeps an expired or
+  deleted blob recoverable for 7 more days. Total retention can be
+  `sandbox_archive_expiration_days` + 7. Set `blob_soft_delete_days = 0` on the
+  archive module to remove the extra days
+- No identity gets a data role. The api_server will hand out SAS URLs
+- Follows `restrict_storage_to_cluster` like the file store account
+- The plan fails if `sandbox_archive_storage_account_name` equals the file
+  store or flow log account name, so the expiry rules cannot reach them
+
+Outputs: `sandbox_archive_storage_account_name`,
+`sandbox_archive_container_name`, `sandbox_archive_key_vault_key_id` (null when
+off).
+
 ### `waf`
 
 A regional WAF policy carrying the OWASP Core Rule Set, the Microsoft bot
@@ -400,6 +432,49 @@ opensearch:
 
 Set `index_node_pool_enabled = false` if you would rather run the index on the
 system pool and skip this.
+
+## Craft sandboxes on Firecracker
+
+`craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
+Firecracker microVMs, which need `/dev/kvm`. It does not change how Craft runs
+sandboxes: Craft still runs pods until its Firecracker backend ships. Set it on
+the composition:
+
+```hcl
+enable_sandbox_node_pool = true
+craft_sandbox_runtime    = "firecracker"
+sandbox_node_vm_size     = "Standard_D8ds_v5"
+```
+
+With `"firecracker"`, the `aks` module:
+
+- sets the sandbox pool OS to `Ubuntu2404`;
+- adds the label `onyx.app/kvm=true`.
+
+The default, `"pod"`, keeps the AKS default `Ubuntu` image. A change to
+`craft_sandbox_runtime` changes the pool OS, so AKS replaces the sandbox nodes
+(through the pool's temporary rotation name).
+
+`Ubuntu2404` needs `azurerm` 4.67 or later. The `aks` and `onyx` modules
+require `>= 4.67, < 5.0`; run `terraform init -upgrade` if your lock file pins
+an older 4.x.
+
+The module sets no `vm.max_map_count`. The Ubuntu 24.04 node image already
+uses `1048576`, and `azurerm` accepts no value above `262144`.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| VM size | Intel D or E, v5 to v7 (for example `Standard_D8ds_v5`, `Standard_D8ds_v7`) | sizes with `a` (AMD) or `p` (Arm) in the name, v4 and older |
+| OS | `Ubuntu2404` (set by the module) | — |
+| Pool | — | Pod Sandboxing (Kata) pools |
+
+The module refuses a blocked VM size. These setups must keep
+`craft_sandbox_runtime = "pod"`:
+
+- AMD or Arm VM sizes.
+- Kata (Pod Sandboxing) pools. Their pods get no `/dev/kvm`.
 
 ## Testing
 

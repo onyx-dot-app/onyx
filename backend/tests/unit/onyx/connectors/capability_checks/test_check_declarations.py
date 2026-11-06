@@ -259,6 +259,7 @@ _SIGN_IN_CHECK_IDS: dict[DocumentSource, frozenset[str]] = {
     DocumentSource.SHAREPOINT: frozenset({"sharepoint_token_auth"}),
     DocumentSource.SLACK: frozenset({"slack_token_auth"}),
     DocumentSource.YOUTRACK: frozenset({"youtrack_token"}),
+    DocumentSource.AZURE_DATALAKE: frozenset({"adls_sign_in"}),
 }
 
 

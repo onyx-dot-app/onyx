@@ -42,11 +42,12 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
-from onyx.db.enums import UserFileStatus
-from onyx.db.models import UserFile
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import (
+    create_processing_user_file,
+    create_test_user,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -55,22 +56,6 @@ from tests.external_dependency_unit.conftest import create_test_user
 _PATCH_QUEUE_LEN = (
     "onyx.background.celery.tasks.user_file_processing.tasks.celery_get_queue_length"
 )
-
-
-def _create_processing_user_file(db_session: Session, user_id: object) -> UserFile:
-    """Insert a UserFile in PROCESSING status and return it."""
-    uf = UserFile(
-        id=uuid4(),
-        user_id=user_id,
-        file_id=f"test_file_{uuid4().hex[:8]}",
-        name=f"test_{uuid4().hex[:8]}.txt",
-        file_type="text/plain",
-        status=UserFileStatus.PROCESSING,
-    )
-    db_session.add(uf)
-    db_session.commit()
-    db_session.refresh(uf)
-    return uf
 
 
 @contextmanager
@@ -114,7 +99,7 @@ class TestQueueDepthBackpressure:
     ) -> None:
         """When the queue depth exceeds the limit the beat cycle is skipped."""
         user = create_test_user(db_session, "bp_user")
-        _create_processing_user_file(db_session, user.id)
+        create_processing_user_file(db_session, user.id)
 
         mock_app = MagicMock()
 
@@ -141,7 +126,7 @@ class TestPerFileGuardKey:
     ) -> None:
         """A file whose guard key is already set in Redis is skipped."""
         user = create_test_user(db_session, "guard_user")
-        uf = _create_processing_user_file(db_session, user.id)
+        uf = create_processing_user_file(db_session, user.id)
 
         redis_client = get_redis_client(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -176,7 +161,7 @@ class TestPerFileGuardKey:
     ) -> None:
         """After a file is enqueued its guard key is present in Redis with a TTL."""
         user = create_test_user(db_session, "guard_set_user")
-        uf = _create_processing_user_file(db_session, user.id)
+        uf = create_processing_user_file(db_session, user.id)
 
         redis_client = get_redis_client(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -216,7 +201,7 @@ class TestTaskExpiry:
     ) -> None:
         """send_task is called with the correct queue, task name, and expires."""
         user = create_test_user(db_session, "expires_user")
-        uf = _create_processing_user_file(db_session, user.id)
+        uf = create_processing_user_file(db_session, user.id)
 
         redis_client = get_redis_client(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE

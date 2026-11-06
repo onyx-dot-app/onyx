@@ -1,7 +1,6 @@
 import { useLocale, useTranslations } from "next-intl";
 import { SvgCheckCircle, SvgClock, SvgKey, SvgRefreshCw } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { Button, Card, Divider, Text } from "@opal/components";
 import { timeAgo } from "@opal/time";
 
@@ -39,10 +38,9 @@ export default function ScimSyncCard({
     <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit" gap={3}>
         <ContentAction
+          font="main-ui-action"
           title={t("card.title")}
           description={t("card.description")}
-          sizePreset="main-ui"
-          variant="section"
           padding={0}
           rightChildren={
             hasToken ? (

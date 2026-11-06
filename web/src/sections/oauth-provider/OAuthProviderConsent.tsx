@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -25,6 +26,7 @@ export default function OAuthProviderConsent({
   userId,
 }: OAuthProviderConsentProps) {
   const t = useTranslations("mcpOAuth");
+  const navigation = useNavigation();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const { data, error, isLoading, mutate } = useSWR<
@@ -50,7 +52,7 @@ export default function OAuthProviderConsent({
         data.csrf_token,
         decision
       );
-      window.location.assign(destination);
+      navigation.load(destination);
     } catch {
       setFailed(true);
       setPending(false);
@@ -83,7 +85,9 @@ export default function OAuthProviderConsent({
               {errorText}
             </Text>
             {error?.status === 401 && (
-              <Button href={signInUrl}>{t("consent.signIn")}</Button>
+              <Button {...navigation.linkTo(signInUrl)}>
+                {t("consent.signIn")}
+              </Button>
             )}
             {canRetry && (
               <Button prominence="secondary" onClick={() => void mutate()}>

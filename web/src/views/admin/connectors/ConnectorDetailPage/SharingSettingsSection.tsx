@@ -218,10 +218,9 @@ export default function SharingSettingsSection({
       hideable: false,
       cell: (name, row) => (
         <Content
+          font="main-ui-action"
           title={name}
           description={row.description}
-          sizePreset="main-ui"
-          variant="section"
         />
       ),
     },
@@ -299,10 +298,9 @@ export default function SharingSettingsSection({
         <Section alignItems="stretch" gap={1} height="fit">
           <SharingPanel>
             <ContentAction
+              font="main-ui-action"
               title={tSettings("documentAccess.title")}
               description={tSettings("documentAccess.description")}
-              sizePreset="main-ui"
-              variant="section"
               padding={0}
               rightChildren={
                 <Section
@@ -348,11 +346,10 @@ export default function SharingSettingsSection({
                   >
                     <Card color="background-tint-01" rounding={2} padding={2}>
                       <Content
+                        font="main-ui-action"
                         icon={SvgUsers}
                         title={group.name}
                         description={memberCountOf(group.id)}
-                        sizePreset="main-ui"
-                        variant="section"
                       />
                     </Card>
                   </div>
@@ -362,10 +359,9 @@ export default function SharingSettingsSection({
           </SharingPanel>
           <SharingPanel>
             <ContentAction
+              font="main-ui-action"
               title={t("manageAccess.title")}
               description={tSettings("manageAccess.description")}
-              sizePreset="main-ui"
-              variant="section"
               padding={0}
             />
             {!manageKnown && manageError !== undefined && (

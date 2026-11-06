@@ -126,10 +126,17 @@ sessions in memory. It drops only idle ones: not current, in `input`, with no
 queued messages, and known not to be incognito (or still empty). An incognito chat cannot be
 rebuilt from the server, so the tab holds its only copy. A dropped chat loads
 from the server again when the user opens it, so state kept only in the store
-does not survive it. Within `/app`,
-`web/src/lib/position/hooks.ts:AppPosition` switches views by writing the URL
-with the history API, not a server navigation; in-app links use its `linkTo*`
-props.
+does not survive it. Navigation goes through
+`web/lib/opal/src/navigation/hooks.ts:Navigation.go`: it writes the URL with the
+history API first, so the tabs follow the click, then asks Next to render a new
+route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
+`web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
+`AppPage` renders itself, so writing the URL is the whole switch; in-app links
+use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+`web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
+URL's page loader (the agents catalog, the agent editor, the page loader, or
+blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
+loader shows while Next commits the route.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.
@@ -142,12 +149,14 @@ failure becomes an `error` node with `errorMessage`, `errorCode` and
 **Packet processing.** `processPackets` is incremental. It processes only
 packets past `nextPacketIndex` and keeps its state in a ref. It decides each
 group's kind from the group's first tool or display packet, and keeps it: a
-tool packet (`isToolPacket`) makes a timeline step, and `MESSAGE_START` or
-`IMAGE_GENERATION_TOOL_START` makes an answer group. Debug and control packets
+tool packet (`isToolPacket`), including image generation, makes a timeline
+step. `MESSAGE_START` makes an answer group. Debug and control packets
 that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group with no packet in
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
-making their own step. A group that mixes answer text and generated images
-renders through `MixedContentHandler`.
+making their own step. Generated images accumulate across tool steps, unique
+by file ID, and render once above the answer as soon as they arrive. Later tool
+calls do not hide them. An image call does not mark the
+answer as final; later search or image calls can continue the timeline.
 
 A group closes on its own `SECTION_END` or `ERROR`; a new `turn_index` or a
 stop packet adds a `SECTION_END` to each open group. Parallel tools share a
@@ -219,6 +228,18 @@ specific routes under `web/src/app/api/` take precedence over this one.
 
 ---
 
+**The sidebar.** `web/src/sections/sidebar/AppSidebar.tsx:AppSidebar` shows
+its header tabs and section titles at once. Each section (agents, projects,
+recents) shows Opal's `SidebarLoader` until its own data loads, so a fast
+section does not wait for a slow one; `usePinnedAgents` stays loading until the
+user's pins are in its list. Folded, the header keeps the unfolded button
+order. The header is
+`web/src/sections/sidebar/BrandedSidebarHeader.tsx:BrandedSidebarHeader`, which
+the admin and Craft sidebars share: the logo mark and the wordmark from
+[[whitelabelling-and-theme]], and the fold button, which moves with the
+column's edge as the sidebar folds. A sidebar renders it rather than setting
+up its own branding.
+
 ## Contracts and traps
 
 1. `packet-list-append-only` **A message's packet list is append-only.**
@@ -274,10 +295,11 @@ specific routes under `web/src/app/api/` take precedence over this one.
    `latestMessageRenderComplete` is true and `queuedMessagesPaused` is false.
    It sends on the change into that state, not while in it, so clearing the
    pause alone sends nothing.
-   `AgentMessage` sets render-complete when its text has drawn;
+   `AgentMessage` sets render-complete when its text has drawn, or when a stop
+   arrives with no answer groups to render;
    `app/app/message/MultiModelResponseView.tsx` sets it when every visible
-   successful panel has drawn. A path that ends a stream without the text
-   renderer finishing must have `settleChatSession` set it
+   successful panel has completed. Other paths that end a stream without
+   completing rendering must have `settleChatSession` set it
    (`completeRendering`). If none does, the queue stalls with no error.
    `onSubmit` clears the pause; errors, failed saves and failed settlement set
    it.
@@ -340,6 +362,14 @@ specific routes under `web/src/app/api/` take precedence over this one.
     `app/app/services/packetUtils.ts:groupPacketsByTurnIndex` has no
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
+
+15. `scroll-follow-intent` **Content growth must not cancel following.**
+    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
+    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
+    catch up if auto-scroll is enabled and the user has not scrolled away.
+    During the opening-follow window, content observers can also catch up with
+    auto-scroll disabled. Scrolling up ends that window. Content observers
+    update visual state without treating layout growth as a user scroll.
 
 ---
 

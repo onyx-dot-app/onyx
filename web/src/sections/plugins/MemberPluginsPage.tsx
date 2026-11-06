@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Modal, SelectCard, Text, Tooltip } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
@@ -254,7 +254,7 @@ export default function MemberPluginsPage({
   surface = "all",
 }: MemberPluginsPageProps) {
   const t = useTranslations("actions.memberPlugins");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
   const { plugins, isLoading, loading, errors, refresh } = useMemberPlugins({
     surface,
@@ -361,7 +361,10 @@ export default function MemberPluginsPage({
     params.delete("actionPolicies");
     const query = params.toString();
     const path = surface === "craft" ? "/craft/v1/plugins" : "/app/plugins";
-    router.replace(query ? `${path}?${query}` : path, { scroll: false });
+    navigation.go(query ? `${path}?${query}` : path, {
+      replace: true,
+      scroll: false,
+    });
   }
 
   useEffect(() => {
@@ -407,7 +410,7 @@ export default function MemberPluginsPage({
               ? [
                   <Button
                     key="manage"
-                    href="/admin/plugins"
+                    {...navigation.linkTo("/admin/plugins")}
                     icon={SvgSettings}
                     prominence="secondary"
                   >

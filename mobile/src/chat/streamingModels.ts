@@ -91,6 +91,8 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  // The turn reached its execution deadline.
+  TIMED_OUT = "timed_out",
 }
 
 export interface Stop extends BaseObj {

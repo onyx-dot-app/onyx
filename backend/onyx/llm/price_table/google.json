@@ -110,7 +110,8 @@
         "output": 32768
       },
       "mode": "image_generation",
-      "name": "gemini-2.0-flash-exp-image-generation"
+      "name": "gemini-2.0-flash-exp-image-generation",
+      "status": "deprecated"
     },
     "gemini-2.5-computer-use-preview-10-2025": {
       "attachment": true,
@@ -216,6 +217,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-08-26",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": false
     },
@@ -459,35 +461,19 @@
       "tool_call": false
     },
     "gemini-3-pro-image-preview": {
-      "attachment": true,
       "cost": {
         "image": 0.134,
         "image_input": 0.0011,
-        "input": 2,
-        "output": 120
+        "input": 2.0,
+        "output": 12.0
       },
-      "family": "gemini-pro",
       "limit": {
         "context": 131072,
         "output": 32768
       },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "text",
-          "image"
-        ]
-      },
       "mode": "image_generation",
-      "name": "Nano Banana Pro",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2025-11-20",
-      "temperature": true,
-      "tool_call": false
+      "name": "gemini-3-pro-image-preview",
+      "status": "deprecated"
     },
     "gemini-3.1-flash-image": {
       "attachment": true,
@@ -522,35 +508,18 @@
       "tool_call": false
     },
     "gemini-3.1-flash-image-preview": {
-      "attachment": true,
       "cost": {
         "image": 0.045,
         "input": 0.5,
-        "output": 60
+        "output": 3.0
       },
-      "family": "gemini-flash",
       "limit": {
         "context": 65536,
         "output": 65536
       },
-      "modalities": {
-        "input": [
-          "text",
-          "image",
-          "pdf"
-        ],
-        "output": [
-          "text",
-          "image"
-        ]
-      },
       "mode": "image_generation",
-      "name": "Nano Banana 2",
-      "open_weights": false,
-      "reasoning": true,
-      "release_date": "2026-02-26",
-      "temperature": true,
-      "tool_call": false
+      "name": "gemini-3.1-flash-image-preview",
+      "status": "deprecated"
     },
     "gemini-3.1-flash-lite": {
       "attachment": true,
@@ -1828,7 +1797,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "veo-3.1-fast-generate-preview"
+      "name": "veo-3.1-fast-generate-preview",
+      "status": "deprecated"
     },
     "veo-3.1-generate-001": {
       "cost": {
@@ -1848,7 +1818,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "veo-3.1-generate-preview"
+      "name": "veo-3.1-generate-preview",
+      "status": "deprecated"
     },
     "veo-3.1-lite-generate-preview": {
       "cost": {
@@ -1858,7 +1829,8 @@
         "context": 1024
       },
       "mode": "video_generation",
-      "name": "veo-3.1-lite-generate-preview"
+      "name": "veo-3.1-lite-generate-preview",
+      "status": "deprecated"
     }
   },
   "models_dev_providers": [

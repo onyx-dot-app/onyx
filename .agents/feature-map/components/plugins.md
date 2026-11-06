@@ -189,7 +189,8 @@ Default Chat when the user's preference turns it off.
 - `suggested-mcp-server` **A suggested MCP server.** Copy the `linear` entry in
   `web/src/lib/plugins/catalog.ts:SUGGESTED_MCP_PLUGINS`; that array is the
   current set. Add the id to the `SuggestedMCPPlugin` id union. Selecting the
-  entry only fills the setup form. It creates no credentials.
+  entry only fills the setup form. It creates no credentials. List only
+  servers that connect in one click, so each must support DCR or CIMD.
 - `plugin-kind` **A plugin kind.** Copy the `openapi` kind; list the kinds in
   `PluginReference` in `web/src/lib/plugins/types.ts`. Extend the `MemberPlugin`
   union and its connection helper in `web/src/lib/plugins/member.ts`, and the

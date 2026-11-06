@@ -56,7 +56,10 @@ def _origin(url: str) -> tuple[str, str | None, int | None] | None:
 def _index_listed_legends(payload: object) -> object:
     """Nace returns a score legend as a list of labels in level order, where
     TypeSafe keys it by level index. Rewrite the list form to the indexed map."""
-    if not isinstance(payload, dict) or not isinstance(payload.get("answers"), dict):
+    if not isinstance(payload, dict):
+        return payload
+    listed_answers = payload.get("answers")
+    if not isinstance(listed_answers, dict):
         return payload
     answers = {
         name: (
@@ -69,7 +72,7 @@ def _index_listed_legends(payload: object) -> object:
             and isinstance((legend := answer.get("legend")), list)
             else answer
         )
-        for name, answer in payload["answers"].items()
+        for name, answer in listed_answers.items()
     }
     return {**payload, "answers": answers}
 

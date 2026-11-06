@@ -2,35 +2,33 @@ import React, { JSX, memo } from "react";
 import {
   ChatPacket,
   isCodeInterpreterToolType,
-  ImageGenerationToolPacket,
   Packet,
   PacketType,
   ReasoningPacket,
   SearchToolStart,
   StopReason,
   ToolCallArgumentDelta,
-} from "../../services/streamingModels";
+} from "@/app/app/services/streamingModels";
 import {
   FullChatState,
   MessageRenderer,
   RenderType,
-  RendererResult,
   RendererOutput,
 } from "@/app/app/message/messageComponents/types";
-import { MessageTextRenderer } from "./renderers/MessageTextRenderer";
-import { ImageToolRenderer } from "./renderers/ImageToolRenderer";
-import { PythonToolRenderer } from "./timeline/renderers/code/PythonToolRenderer";
-import { CodingAgentRenderer } from "./timeline/renderers/code/CodingAgentRenderer";
-import { isCodingAgentPackets } from "./timeline/packetHelpers";
-import { ReasoningRenderer } from "./timeline/renderers/reasoning/ReasoningRenderer";
-import CustomToolRenderer from "./renderers/CustomToolRenderer";
-import { FileReaderToolRenderer } from "./timeline/renderers/filereader/FileReaderToolRenderer";
-import { FetchToolRenderer } from "./timeline/renderers/fetch/FetchToolRenderer";
-import { MemoryToolRenderer } from "./timeline/renderers/memory/MemoryToolRenderer";
-import { DeepResearchPlanRenderer } from "./timeline/renderers/deepresearch/DeepResearchPlanRenderer";
-import { ResearchAgentRenderer } from "./timeline/renderers/deepresearch/ResearchAgentRenderer";
-import { WebSearchToolRenderer } from "./timeline/renderers/search/WebSearchToolRenderer";
-import { InternalSearchToolRenderer } from "./timeline/renderers/search/InternalSearchToolRenderer";
+import { MessageTextRenderer } from "@/app/app/message/messageComponents/renderers/MessageTextRenderer";
+import { ImageToolRenderer } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
+import { PythonToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer";
+import { CodingAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/CodingAgentRenderer";
+import { isCodingAgentPackets } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import { ReasoningRenderer } from "@/app/app/message/messageComponents/timeline/renderers/reasoning/ReasoningRenderer";
+import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/CustomToolRenderer";
+import { FileReaderToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/filereader/FileReaderToolRenderer";
+import { FetchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/fetch/FetchToolRenderer";
+import { MemoryToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/memory/MemoryToolRenderer";
+import { DeepResearchPlanRenderer } from "@/app/app/message/messageComponents/timeline/renderers/deepresearch/DeepResearchPlanRenderer";
+import { ResearchAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/deepresearch/ResearchAgentRenderer";
+import { WebSearchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/search/WebSearchToolRenderer";
+import { InternalSearchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/search/InternalSearchToolRenderer";
 
 // Different types of chat packets using discriminated unions
 interface GroupedPackets {
@@ -167,62 +165,6 @@ export function findRenderer(
   return null;
 }
 
-// Handles display groups containing both chat text and image generation packets
-function MixedContentHandler({
-  chatPackets,
-  imagePackets,
-  chatState,
-  messageNodeId,
-  hasTimelineThinking,
-  onComplete,
-  animate,
-  restoredTextLength,
-  stopPacketSeen,
-  stopReason,
-  children,
-}: {
-  chatPackets: Packet[];
-  imagePackets: Packet[];
-  chatState: FullChatState;
-  messageNodeId?: number;
-  hasTimelineThinking?: boolean;
-  onComplete: () => void;
-  animate: boolean;
-  restoredTextLength?: number;
-  stopPacketSeen: boolean;
-  stopReason?: StopReason;
-  children: (result: RendererOutput) => JSX.Element;
-}) {
-  return (
-    <MessageTextRenderer
-      packets={chatPackets as ChatPacket[]}
-      state={chatState}
-      messageNodeId={messageNodeId}
-      hasTimelineThinking={hasTimelineThinking}
-      onComplete={() => {}}
-      animate={animate}
-      restoredTextLength={restoredTextLength}
-      renderType={RenderType.FULL}
-      stopPacketSeen={stopPacketSeen}
-      stopReason={stopReason}
-    >
-      {(textResults) => (
-        <ImageToolRenderer
-          packets={imagePackets as ImageGenerationToolPacket[]}
-          state={chatState}
-          onComplete={onComplete}
-          animate={animate}
-          renderType={RenderType.FULL}
-          stopPacketSeen={stopPacketSeen}
-          stopReason={stopReason}
-        >
-          {(imageResults) => children([...textResults, ...imageResults])}
-        </ImageToolRenderer>
-      )}
-    </MessageTextRenderer>
-  );
-}
-
 // Props interface for RendererComponent
 interface RendererComponentProps {
   packets: Packet[];
@@ -267,47 +209,6 @@ export const RendererComponent = memo(function RendererComponent({
   stopReason,
   children,
 }: RendererComponentProps) {
-  // Detect mixed display groups (both chat text and image generation)
-  const hasChatPackets = packets.some((p) => isChatPacket(p));
-  const hasImagePackets = packets.some((p) => isImageToolPacket(p));
-
-  if (hasChatPackets && hasImagePackets) {
-    const sharedTypes = new Set<string>([
-      PacketType.SECTION_END,
-      PacketType.ERROR,
-    ]);
-
-    const chatPackets = packets.filter(
-      (p) =>
-        isChatPacket(p) ||
-        p.obj.type === PacketType.CITATION_INFO ||
-        sharedTypes.has(p.obj.type as string)
-    );
-    const imagePackets = packets.filter(
-      (p) =>
-        isImageToolPacket(p) ||
-        p.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA ||
-        sharedTypes.has(p.obj.type as string)
-    );
-
-    return (
-      <MixedContentHandler
-        chatPackets={chatPackets}
-        imagePackets={imagePackets}
-        chatState={chatState}
-        messageNodeId={messageNodeId}
-        hasTimelineThinking={hasTimelineThinking}
-        onComplete={onComplete}
-        animate={animate}
-        restoredTextLength={restoredTextLength}
-        stopPacketSeen={stopPacketSeen}
-        stopReason={stopReason}
-      >
-        {children}
-      </MixedContentHandler>
-    );
-  }
-
   const RendererFn = findRenderer({ packets });
 
   if (!RendererFn) {

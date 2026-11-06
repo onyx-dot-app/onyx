@@ -36,6 +36,7 @@ from urllib.error import URLError
 
 from pydantic import BaseModel
 
+from onyx.configs.slack_configs import SLACK_DOMAIN
 from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
@@ -542,7 +543,7 @@ class _TokenAuthCheck(_SlackCheck):
                 summary="Cannot reach Slack",
                 description=(
                     "The connection to Slack failed.\nCheck that the server can "
-                    "reach slack.com."
+                    f"reach {SLACK_DOMAIN}."
                 ),
             ) from e
         if auth.user and auth.team:

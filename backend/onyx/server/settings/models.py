@@ -42,6 +42,16 @@ class Tier(str, Enum):
     ENTERPRISE = "enterprise"
 
 
+class BuildInfo(BaseModel):
+    """Git details of the running build, shown on the app's About page."""
+
+    commit: str | None = None
+    # ISO 8601 committer date.
+    commit_date: str | None = None
+    # The tag or branch the build came from.
+    ref: str | None = None
+
+
 class Settings(BaseModel):
     """General settings"""
 
@@ -169,6 +179,12 @@ class UserSettings(Settings):
     hooks_enabled: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
+    # Git details of the server's build (server/settings/build_info.py).
+    commit: str | None = None
+    # ISO 8601 committer date.
+    commit_date: str | None = None
+    # The tag or branch the build came from.
+    git_ref: str | None = None
     # Hard ceiling for user_file_max_upload_size_mb, derived from env var.
     max_allowed_upload_size_mb: int = MAX_ALLOWED_UPLOAD_SIZE_MB
     # Factory defaults so the frontend can show a "restore default" button.

@@ -1,4 +1,8 @@
 export {
+  AgentCard,
+  type AgentCardProps,
+} from "@/lib/agents/components/AgentCard";
+export {
   AgentButton,
   type AgentButtonProps,
 } from "@/lib/agents/components/AgentButton";

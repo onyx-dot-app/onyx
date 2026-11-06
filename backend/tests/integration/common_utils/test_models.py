@@ -143,6 +143,7 @@ class DATestImageGenerationConfig(BaseModel):
     llm_provider_id: int
     llm_provider_name: str
     is_default: bool
+    llm_provider_owned: bool = True
 
 
 class DATestDocumentSet(BaseModel):
@@ -219,6 +220,8 @@ class ToolCallDebug(BaseModel):
 class ErrorResponse(BaseModel):
     error: str
     stack_trace: str
+    error_code: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class StreamedResponse(BaseModel):

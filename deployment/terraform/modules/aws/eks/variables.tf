@@ -148,6 +148,68 @@ variable "craft_sandbox_node_disk_size_gb" {
   }
 }
 
+variable "craft_sandbox_node_disk_iops" {
+  type        = number
+  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. Firecracker sandboxes do much more disk I/O than pods; 6000 is the tested value."
+  default     = 3000
+
+  validation {
+    condition     = var.craft_sandbox_node_disk_iops >= 3000 && var.craft_sandbox_node_disk_iops <= 80000
+    error_message = "craft_sandbox_node_disk_iops must be between 3000 and 80000 (the gp3 range)."
+  }
+}
+
+variable "craft_sandbox_node_disk_throughput" {
+  type        = number
+  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. 500 is the tested value for Firecracker sandboxes."
+  default     = 125
+
+  validation {
+    condition     = var.craft_sandbox_node_disk_throughput >= 125 && var.craft_sandbox_node_disk_throughput <= 2000
+    error_message = "craft_sandbox_node_disk_throughput must be between 125 and 2000 MiB/s (the gp3 range)."
+  }
+
+  # gp3 allows at most 0.25 MiB/s of throughput per provisioned IOPS.
+  validation {
+    condition     = var.craft_sandbox_node_disk_throughput <= var.craft_sandbox_node_disk_iops * 0.25
+    error_message = "craft_sandbox_node_disk_throughput can be at most craft_sandbox_node_disk_iops * 0.25 (gp3 limit). Raise craft_sandbox_node_disk_iops."
+  }
+}
+
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "How Craft sandboxes run on the sandbox node group. \"pod\" is one container per sandbox. \"firecracker\" labels the group onyx.app/kvm=true and, on non-metal types, turns on nested virtualization so nodes expose /dev/kvm. It needs Intel c8i, m8i or r8i (or -flex) types, or Intel .metal types."
+  default     = "pod"
+
+  validation {
+    condition     = contains(["pod", "firecracker"], var.craft_sandbox_runtime)
+    error_message = "craft_sandbox_runtime must be \"pod\" or \"firecracker\"."
+  }
+
+  # EC2 nested virtualization exists on Intel 8th-generation types only. m7i
+  # cannot use it, and Graviton (g) and AMD (a) types have no VMX at all.
+  # Intel .metal types expose /dev/kvm without it.
+  validation {
+    condition = var.craft_sandbox_runtime != "firecracker" || alltrue([
+      for t in var.craft_sandbox_node_instance_types :
+      can(regex("^(c8i|m8i|r8i)(-flex)?\\.[0-9]*x?large$", t)) ||
+      # Intel .metal: no "a" (AMD) or "g" (Graviton) in the family suffix.
+      # a1 is Graviton and mac types cannot join EKS.
+      (can(regex("^[a-z]+[0-9]+[b-fh-z]*\\.metal(-[0-9]+xl)?$", t)) && !startswith(t, "a1.") && !startswith(t, "mac"))
+    ])
+    error_message = "craft_sandbox_runtime = \"firecracker\" needs Intel c8i, m8i or r8i (or -flex) types for nested virtualization, or Intel .metal types, such as m8i.2xlarge or m7i.metal-24xl. Graviton (g), AMD (a) and older Intel types have no /dev/kvm; keep craft_sandbox_runtime = \"pod\" on them."
+  }
+
+  # The nested virtualization flag is set on the launch template, so it covers
+  # every type in the group. Do not mix metal and nested types.
+  validation {
+    condition = var.craft_sandbox_runtime != "firecracker" || length(distinct([
+      for t in var.craft_sandbox_node_instance_types : strcontains(t, ".metal")
+    ])) == 1
+    error_message = "craft_sandbox_node_instance_types must be all .metal types or all nested virtualization types when craft_sandbox_runtime = \"firecracker\"."
+  }
+}
+
 variable "eks_managed_node_groups" {
   type        = map(any)
   description = "EKS managed node groups with EBS volume configuration"

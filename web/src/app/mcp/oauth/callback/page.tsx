@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Button, Card, OnyxLoader, Text } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
@@ -116,7 +116,7 @@ function buildRedirectPath(rawPath: string): string {
 
 export default function MCPOAuthCallbackPage() {
   const t = useTranslations("actions");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
 
   const [state, setState] = useState<CallbackState>({ phase: "processing" });
@@ -128,20 +128,20 @@ export default function MCPOAuthCallbackPage() {
   useEffect(() => {
     if (state.phase !== "success") return;
     const timer = setTimeout(
-      () => router.push(state.redirectPath as Route),
+      () => navigation.go(state.redirectPath as Route),
       AUTO_REDIRECT_DELAY_MS
     );
     return () => clearTimeout(timer);
-  }, [state, router]);
+  }, [state, navigation]);
 
   useEffect(() => {
     if (hasProcessedRef.current) return;
     hasProcessedRef.current = true;
 
-    const code = searchParams?.get("code");
-    const stateParam = searchParams?.get("state");
-    const providerError = searchParams?.get("error");
-    const errorDescription = searchParams?.get("error_description");
+    const code = searchParams.get("code");
+    const stateParam = searchParams.get("state");
+    const providerError = searchParams.get("error");
+    const errorDescription = searchParams.get("error_description");
 
     // The provider redirected back with an error (e.g. the user cancelled)
     if (providerError) {
@@ -228,7 +228,7 @@ export default function MCPOAuthCallbackPage() {
                 />
                 <Button
                   width="full"
-                  onClick={() => router.push(state.redirectPath as Route)}
+                  onClick={() => navigation.go(state.redirectPath as Route)}
                 >
                   {t("mcpOauthCallback.continueButton.label")}
                 </Button>
@@ -249,7 +249,7 @@ export default function MCPOAuthCallbackPage() {
                 />
                 <Button
                   width="full"
-                  onClick={() => router.push(DEFAULT_REDIRECT_PATH)}
+                  onClick={() => navigation.go(DEFAULT_REDIRECT_PATH)}
                 >
                   {t("mcpOauthCallback.backToChatButton.label")}
                 </Button>

@@ -639,6 +639,18 @@
       "temperature": true,
       "tool_call": true
     },
+    "accounts/fireworks/models/rune": {
+      "cost": {
+        "cache_read": 0.008400000000000001,
+        "input": 0.041999999999999996,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 262144
+      },
+      "mode": "decisions",
+      "name": "accounts/fireworks/models/rune"
+    },
     "accounts/fireworks/models/stable-diffusion-xl-1024-v1-0": {
       "cost": {
         "input": 0.00013,
@@ -701,6 +713,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4.1 Flash 1017 Spot",
       "open_weights": true,
       "reasoning": true,
@@ -730,6 +743,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4.1 Flash Spot",
       "open_weights": true,
       "reasoning": true,
@@ -787,6 +801,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "GLM 5.3 Spot",
       "open_weights": true,
       "reasoning": true,
@@ -960,6 +975,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Kimi K3 Spot",
       "open_weights": true,
       "reasoning": true,

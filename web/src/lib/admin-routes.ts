@@ -3,6 +3,7 @@ import { Tier } from "@/lib/tiers/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,
+  SvgBlocks,
   SvgActivity,
   SvgArrowExchange,
   SvgAudio,
@@ -193,6 +194,16 @@ export const ADMIN_ROUTES = {
     icon: SvgPlug,
     title: "Apps",
     sidebarLabel: "",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Craft",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
+  },
+  SKILLS: {
+    path: "/admin/skills",
+    icon: SvgBlocks,
+    title: "Skills",
+    sidebarLabel: "Skills",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Craft",
     requiredTier: null,
@@ -481,6 +492,16 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Usage",
     requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
+  SPENDING_LIMITS: {
+    path: "/admin/spending-limits",
+    icon: SvgWallet,
+    title: "Spending Limits",
+    sidebarLabel: "Spending Limits",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.ENTERPRISE,
     visibleWhen: null,
   },
   WORKSPACE_ANALYTICS: {

@@ -2,13 +2,22 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, union, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import PublicExternalUserGroup, User, User__ExternalUserGroupId
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+    HierarchyNode,
+    HierarchyNodeByConnectorCredentialPair,
+    PublicExternalUserGroup,
+    User,
+    User__ExternalUserGroupId,
+)
 from onyx.db.permission_sync_attempt import (
     lock_external_group_sync_attempt_if_owned,
 )
@@ -260,4 +269,45 @@ def fetch_public_external_group_ids(
 ) -> list[str]:
     return list(
         db_session.scalars(select(PublicExternalUserGroup.external_user_group_id)).all()
+    )
+
+
+def fetch_referenced_external_group_ids_for_cc_pair(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    group_id_prefix: str,
+) -> set[str]:
+    """The stored group ids that start with ``group_id_prefix`` and that a
+    document or hierarchy node of the cc-pair grants access to."""
+    document_group_ids = (
+        select(func.unnest(Document.external_user_group_ids).label("group_id"))
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == Document.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == cc_pair.credential_id,
+        )
+    )
+    node_group_ids = (
+        select(func.unnest(HierarchyNode.external_user_group_ids).label("group_id"))
+        .join(
+            HierarchyNodeByConnectorCredentialPair,
+            HierarchyNodeByConnectorCredentialPair.hierarchy_node_id
+            == HierarchyNode.id,
+        )
+        .where(
+            HierarchyNodeByConnectorCredentialPair.connector_id == cc_pair.connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id
+            == cc_pair.credential_id,
+        )
+    )
+    referenced = union(document_group_ids, node_group_ids).subquery()
+    return set(
+        db_session.scalars(
+            select(referenced.c.group_id).where(
+                referenced.c.group_id.startswith(group_id_prefix, autoescape=True)
+            )
+        ).all()
     )

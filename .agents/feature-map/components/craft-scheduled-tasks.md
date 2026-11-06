@@ -27,6 +27,13 @@ session sidebar. After a run ends, the user can send follow-up messages in the
 same session, but app actions from that session are blocked. The user starts a
 normal session to use personal app settings.
 
+A blue dot marks run results the owner has not opened. It shows on each unviewed
+run in run history, on each task row with unviewed runs, on "Scheduled Tasks" in
+the Craft sidebar, and beside the Craft Beta tag in the main app sidebar. The
+sidebars poll `GET /build/scheduled-tasks/unviewed-count` every 30 seconds.
+Opening the run's session marks the run viewed. Opening the task page does not.
+"Mark all viewed" in run history marks every unviewed run of the task.
+
 When a run fails in the executor, the user gets an INFO notification. It
 shows in the notification list, not in the banner queue. A run that the
 stuck-run sweeper fails, or whose task row is gone, fails with no notification
@@ -166,6 +173,13 @@ including requests of a run in progress.
     after sleep), `backend/onyx/server/features/build/session/session_ready.py:ensure_session_ready` reserves a
     port for any session that has none. Do not assume a scheduled session
     never has one.
+11. `run-viewed-revision` **Run read state mirrors Outputs artifacts.**
+    `db/scheduled_task.py:mark_run_status` increments `ScheduledTaskRun.version`
+    when a run moves into a terminal status (`is_terminal()`). `SKIPPED` rows
+    are inserted directly by `insert_run`, so they stay at version 0.
+    `viewed_revision` only moves forward (`mark_runs_viewed` uses `greatest`).
+    A revision newer than `version` returns 409. A run is unviewed while
+    `(viewed_revision ?? 0) < version`.
 
 ---
 

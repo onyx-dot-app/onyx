@@ -1,6 +1,9 @@
 import Page from "@/app/admin/openapi-actions/page";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   redirect: jest.fn((href: string) => {
     throw new Error(href);
   }),
