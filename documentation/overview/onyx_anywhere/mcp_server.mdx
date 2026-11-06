@@ -96,7 +96,7 @@ which you create under **Settings > Accounts & Access > Access Tokens**.
 Add the Onyx marketplace and install the plugin:
 
 ```
-/plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/claude-code/.claude-plugin/marketplace.json
+/plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/agent-plugin/.claude-plugin/marketplace.json
 /plugin install onyx@onyx
 ```
 
@@ -106,7 +106,20 @@ Turn on **Prefetch results** to run a raw Onyx search before each prompt and giv
 at the cost of up to 3 seconds per prompt.
 Administrators can require the plugin on every machine through [managed
 settings](https://code.claude.com/docs/en/plugins/org).
-The [plugin README](https://github.com/onyx-dot-app/onyx/tree/main/extensions/claude-code) describes each option.
+The [plugin README](https://github.com/onyx-dot-app/onyx/tree/main/extensions/agent-plugin) describes each option.
+
+The same plugin installs in Codex CLI. Add the Onyx MCP server as `onyx` as shown above,
+then add the Onyx marketplace and install the plugin:
+
+```
+codex plugin marketplace add onyx-dot-app/onyx --sparse extensions/agent-plugin --sparse .agents/plugins
+codex plugin add onyx@onyx
+```
+
+Open `/hooks` in Codex and trust the plugin's hooks, then start a new session. Codex has no options dialog,
+so strict retrieval and prefetch come from the environment: export `ONYX_STRICT_RETRIEVAL=true`,
+or `ONYX_PREFETCH=true` with `ONYX_URL` and `ONYX_API_TOKEN` set to your Onyx URL and token.
+Codex's built-in web search is not a tool that hooks can gate, so strict retrieval covers other MCP servers only.
 
 #### Share the configuration with a project
 

@@ -1,5 +1,5 @@
 {
-  "name": "onyx-claude-code-plugin",
+  "name": "onyx-agent-plugin",
   "private": true,
   "type": "module"
 }

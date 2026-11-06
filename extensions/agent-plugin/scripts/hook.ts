@@ -1,5 +1,5 @@
-// Claude Code hook entry for the Onyx plugin: UserPromptSubmit steers Claude to
-// Onyx, PreToolUse and PostToolUse run the strict gate, Stop nudges a full search.
+// Hook entry for the Onyx plugin in Claude Code and Codex: UserPromptSubmit steers
+// the model to Onyx, PreToolUse and PostToolUse run the strict gate, Stop nudges a full search.
 import {
   accessSync,
   constants,
@@ -24,9 +24,14 @@ const MIN_PROMPT_CHARS = 15;
 const MAX_RESULTS = 5;
 const MAX_CONTENT_CHARS = 1500;
 // Past 10,000 characters Claude Code swaps additionalContext for a file path.
+// Codex spills past the additionalContextLimit that hooks/codex.json sets.
 const MAX_CONTEXT_CHARS = 9_500;
 const STATE_TTL_MS = 24 * 60 * 60 * 1000;
-const OWN_TOOL_PREFIX = "mcp__plugin_onyx_";
+// Claude Code names the bundled server plugin_onyx_onyx. Codex users add it as onyx.
+const OWN_SERVER_PATTERN = /^(plugin_onyx_onyx|onyx)$/;
+// hooks/codex.json passes "codex". The hosts share the hook input and output
+// shapes except for how a Stop hook continues the turn.
+const IS_CODEX = process.argv[2] === "codex";
 const RETRIEVAL_TOOL_PATTERN = /search|query|retriev|lookup|find|fetch/i;
 const FULL_SEARCH_CALL = "search_indexed_documents on the Onyx MCP server";
 // No network call, so it is the default and the fallback when a prefetch fails.
@@ -71,11 +76,15 @@ type SearchResponse = {
   results: SearchResult[];
 };
 
-type PluginConfig = {
+type SearchTarget = {
   url: string;
   token: string;
+};
+
+// prefetch is null unless it is turned on and has the URL and token it needs.
+type PluginConfig = {
+  prefetch: SearchTarget | null;
   strict: boolean;
-  prefetch: boolean;
 };
 
 // consulted: the strict gate is open for this prompt. Set by a full search,
@@ -94,7 +103,7 @@ type SearchOutcome = {
 };
 
 // CLAUDE_PLUGIN_OPTION_* comes from /plugin configure. The bare name covers
-// --plugin-dir development, where userConfig is never prompted.
+// Codex, which has no options dialog, and --plugin-dir development.
 function option(name: string): string | undefined {
   return process.env[`CLAUDE_PLUGIN_OPTION_${name}`] ?? process.env[name];
 }
@@ -104,20 +113,17 @@ function flag(name: string): boolean {
   return value === "true" || value === "1";
 }
 
-function readConfig(): PluginConfig | null {
+function readConfig(): PluginConfig {
   const url = option("ONYX_URL");
   const token = option("ONYX_API_TOKEN");
-  if (!url || !token) {
-    console.error(
-      "onyx plugin: set the Onyx URL and API token with /plugin configure onyx@onyx",
-    );
-    return null;
+  const target = url && token ? { url: url.replace(/\/+$/, ""), token } : null;
+  const wanted = flag("ONYX_PREFETCH");
+  if (wanted && !target) {
+    console.error("onyx plugin: prefetch needs ONYX_URL and ONYX_API_TOKEN");
   }
   return {
-    url: url.replace(/\/+$/, ""),
-    token,
+    prefetch: wanted ? target : null,
     strict: flag("ONYX_STRICT_RETRIEVAL"),
-    prefetch: flag("ONYX_PREFETCH"),
   };
 }
 
@@ -125,7 +131,7 @@ function readConfig(): PluginConfig | null {
 // another local user plant symlinks under predictable session file names.
 function stateDir(): string {
   const base =
-    process.env.CLAUDE_PLUGIN_DATA ?? join(homedir(), ".cache", "onyx-claude-code");
+    process.env.CLAUDE_PLUGIN_DATA ?? join(homedir(), ".cache", "onyx-agent-plugin");
   const dir = join(base, "sessions");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;
@@ -220,14 +226,14 @@ function isQuestionPrompt(prompt: string): boolean {
 }
 
 async function search(
-  config: PluginConfig,
+  target: SearchTarget,
   query: string,
 ): Promise<SearchOutcome> {
   try {
-    const response = await fetch(`${config.url}${SEARCH_PATH}`, {
+    const response = await fetch(`${target.url}${SEARCH_PATH}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.token}`,
+        Authorization: `Bearer ${target.token}`,
         "Content-Type": "application/json",
       },
       // No neighboring chunks: the excerpt should show the matched section.
@@ -292,6 +298,11 @@ function prefetchContext(results: SearchResult[] | null): string {
 async function userPrompt(input: HookInput, config: PluginConfig): Promise<void> {
   pruneStaleState();
   const prompt = (input.prompt ?? "").trim();
+  // Codex replays the Stop nudge as a user prompt. Treating it as a question
+  // would reset the gate and prefetch the nudge text.
+  if (prompt === STOP_FEEDBACK) {
+    return;
+  }
   if (!isQuestionPrompt(prompt)) {
     // Nothing to retrieve, so the strict gate has nothing to wait for.
     saveState(input.session_id, { consulted: true, awaitingFullSearch: false });
@@ -303,7 +314,7 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
     return;
   }
   const { consulted, results } = await search(
-    config,
+    config.prefetch,
     prompt.slice(0, MAX_QUERY_CHARS),
   );
   emitContext("UserPromptSubmit", prefetchContext(results));
@@ -314,14 +325,15 @@ async function userPrompt(input: HookInput, config: PluginConfig): Promise<void>
 }
 
 function isOtherRetrievalTool(tool: string): boolean {
-  if (tool.startsWith(OWN_TOOL_PREFIX)) {
-    return false;
-  }
   if (!tool.startsWith("mcp__")) {
+    // Only Claude Code's WebSearch arrives without the MCP prefix.
     return true;
   }
-  const toolName = tool.slice(tool.lastIndexOf("__") + 2);
-  return RETRIEVAL_TOOL_PATTERN.test(toolName);
+  // Split at the last separator: Onyx tool names contain none, a server name may.
+  const split = tool.lastIndexOf("__");
+  const server = tool.slice("mcp__".length, split);
+  const name = tool.slice(split + 2);
+  return !OWN_SERVER_PATTERN.test(server) && RETRIEVAL_TOOL_PATTERN.test(name);
 }
 
 function preTool(input: HookInput, config: PluginConfig): void {
@@ -343,12 +355,18 @@ function preTool(input: HookInput, config: PluginConfig): void {
   });
 }
 
-// One nudge per turn: Claude Code sets stop_hook_active on the continuation.
+// One nudge per turn: both hosts set stop_hook_active on the continuation.
+// Claude Code continues the turn from additionalContext. Codex continues only
+// from a block decision, whose reason becomes the next user prompt.
 function stop(input: HookInput, config: PluginConfig): void {
   if (!config.strict || input.stop_hook_active) {
     return;
   }
   if (!readState(input.session_id)?.awaitingFullSearch) {
+    return;
+  }
+  if (IS_CODEX) {
+    emit({ decision: "block", reason: STOP_FEEDBACK });
     return;
   }
   emitContext("Stop", STOP_FEEDBACK);
@@ -357,9 +375,6 @@ function stop(input: HookInput, config: PluginConfig): void {
 async function main(): Promise<void> {
   const input = JSON.parse(readFileSync(0, "utf8")) as HookInput;
   const config = readConfig();
-  if (!config) {
-    return;
-  }
   switch (input.hook_event_name) {
     case "UserPromptSubmit":
       await userPrompt(input, config);
@@ -367,7 +382,8 @@ async function main(): Promise<void> {
     case "PreToolUse":
       preTool(input, config);
       break;
-    // A failed call still counts: Onyx was asked, so the gate opens.
+    // A failed call, which Claude Code reports as PostToolUseFailure, still
+    // counts: Onyx was asked, so the gate opens.
     case "PostToolUse":
     case "PostToolUseFailure":
       writeState(input.session_id, { consulted: true, awaitingFullSearch: false });
