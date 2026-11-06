@@ -346,7 +346,7 @@ function matches(
   return true;
 }
 
-/** `open_level_filters`: what `resolvable-count` counts and the batch resolves mark. */
+/** `open_level_filters`: what `resolvable-count` counts and the batch resolves mark. A `status_groups` narrows each level's own groups. */
 function resolvable(
   feedRun: FeedRun,
   params: URLSearchParams,
@@ -354,20 +354,24 @@ function resolvable(
 ) {
   const level = params.get("level");
   const q = params.get("q")?.trim();
+  const requested = params.getAll("status_groups");
   const levels = level === null ? ["failures", "errors"] : [level];
   return levels.some((candidate) => {
     const levelParams = new URLSearchParams(params);
     levelParams.delete("level");
+    levelParams.delete("status_groups");
     levelParams.set("resolved", "false");
     if (!q) levelParams.set("superseded", "false");
-    if (candidate === "failures") {
-      levelParams.append("status_groups", "failed");
-    } else {
-      for (const group of ["running", "succeeded", "canceled"]) {
-        levelParams.append("status_groups", group);
-      }
-      levelParams.set("errors", "unresolved");
-    }
+    const levelGroups =
+      candidate === "failures"
+        ? ["failed"]
+        : ["running", "succeeded", "canceled"];
+    if (candidate !== "failures") levelParams.set("errors", "unresolved");
+    const groups = levelGroups.filter(
+      (group) => requested.length === 0 || requested.includes(group)
+    );
+    if (groups.length === 0) return false;
+    groups.forEach((group) => levelParams.append("status_groups", group));
     return matches(feedRun, levelParams, { ccPairId });
   });
 }

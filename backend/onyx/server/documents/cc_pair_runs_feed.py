@@ -177,6 +177,8 @@ def _open_level_filter(
             CCPairRunStatusGroup.CANCELED,
         }
         errors = CCPairRunErrors.UNRESOLVED
+    if request.status_groups is not None:
+        status_groups &= set(request.status_groups)
     # A search lists superseded runs too, so they resolve with the rest.
     superseded = None if query else False
     return CCPairRunFilter(

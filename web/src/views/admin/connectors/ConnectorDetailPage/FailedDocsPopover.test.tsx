@@ -111,6 +111,12 @@ const ALL_ROWS = [
 const isOpen = (row: IndexAttemptError) =>
   !row.is_resolved && row.resolved_reason === null;
 
+/** `order=state`: open, then resolved without retry, then closed. */
+function stateRank(row: IndexAttemptError): number {
+  if (isOpen(row)) return 0;
+  return row.resolved_reason === "without_retry" ? 1 : 2;
+}
+
 interface FakeRequest {
   method: string;
   url: URL;
@@ -165,7 +171,12 @@ function installErrorsRoute(seed: IndexAttemptError[]) {
               )
           )
           .sort(
-            (a, b) => Date.parse(b.time_created) - Date.parse(a.time_created)
+            (a, b) =>
+              (params.get("order") === "state"
+                ? stateRank(a) - stateRank(b)
+                : 0) ||
+              Date.parse(b.time_created) - Date.parse(a.time_created) ||
+              b.id - a.id
           );
         return json({
           items: matching.slice(pageNum * pageSize, (pageNum + 1) * pageSize),
@@ -187,12 +198,14 @@ function installErrorsRoute(seed: IndexAttemptError[]) {
     }
   ) as typeof fetch;
 
+  const sent = (method: string, suffix: string) =>
+    requests.filter(
+      (request) =>
+        request.method === method && request.url.pathname.endsWith(suffix)
+    );
   return {
-    posts: (suffix: string) =>
-      requests.filter(
-        (request) =>
-          request.method === "POST" && request.url.pathname.endsWith(suffix)
-      ),
+    posts: (suffix: string) => sent("POST", suffix),
+    gets: (suffix: string) => sent("GET", suffix),
   };
 }
 
@@ -447,6 +460,47 @@ describe("AC-5: resolved groups", () => {
     expect(precedes(divider(), message(WITHOUT_RETRY_NEW))).toBe(true);
     // A legacy row without a reason still reads as resolved.
     expect(precedes(divider(), message(LEGACY))).toBe(true);
+  });
+
+  it("AC-5: pages in the server's state order, so the divider sits once before the first resolved row across pages", async () => {
+    // 101 open rows fill page one and spill onto page two, behind newer resolved rows.
+    const openRows = Array.from({ length: 101 }, (_, index) =>
+      errorRow(1000 + index, 10 + index, {
+        document_id: `doc-open-${index}`,
+        failure_message: `Open failure ${index}.`,
+      })
+    );
+    const lastOpen = openRows[openRows.length - 1]!;
+    const resolvedRows = [WITHOUT_RETRY_NEW, LATER_RUN, LEGACY];
+    const route = installErrorsRoute([...resolvedRows, ...openRows]);
+    renderPanel();
+    await shownMessage(openRows[0]!);
+
+    for (const request of route.gets("/errors")) {
+      expect(request.url.searchParams.get("order")).toBe("state");
+    }
+    // Page one holds open rows only, so nothing resolved and no divider yet.
+    expect(within(panel()).queryByText("Resolved Errors")).toBeNull();
+    for (const row of resolvedRows) {
+      expect(within(panel()).queryByText(row.failure_message)).toBeNull();
+    }
+
+    const user = userEvent.setup();
+    await user.click(
+      within(panel()).getByRole("button", { name: "Show more" })
+    );
+    await shownMessage(LEGACY);
+
+    expect(within(panel()).getAllByText("Resolved Errors")).toHaveLength(1);
+    const message = (row: IndexAttemptError) =>
+      within(panel()).getByText(row.failure_message);
+    // The server's order: open newest first, without retry, then closed newest first.
+    const order = [...openRows, WITHOUT_RETRY_NEW, LEGACY, LATER_RUN];
+    for (let i = 0; i + 1 < order.length; i++) {
+      expect(precedes(message(order[i]!), message(order[i + 1]!))).toBe(true);
+    }
+    expect(precedes(message(lastOpen), divider())).toBe(true);
+    expect(precedes(divider(), message(WITHOUT_RETRY_NEW))).toBe(true);
   });
 
   it("AC-5: a row resolved without retry shows Resolved without Retry and still offers Retry Doc", async () => {
