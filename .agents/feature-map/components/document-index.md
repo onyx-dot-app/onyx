@@ -350,6 +350,9 @@ Once every connector port is SUCCESS the reindex is *finalizing*
 (`reindex_finalizing`, `db/port_attempt.py`): the indexing scheduler queues FUTURE
 index attempts before PRESENT refreshes, those of connectors with docs pending for
 FUTURE first, and processes running FUTURE attempts first, since the swap waits on them.
+The swap does not wait for FUTURE to catch up with what PRESENT wrote during the
+port: it clears the content hash of those documents instead, so the next poll on
+the new PRESENT re-indexes them (§5, contract 10).
 Without `use_port_flow`, INSTANT swaps at once and deletes the cc-pairs' document
 rows, REINDEX waits until every connector has a successful attempt on the new
 settings, and ACTIVE_ONLY waits only on non-paused connectors. `_perform_index_swap` does the actual promotion:
@@ -451,6 +454,29 @@ saving them. See [[llm-providers]] for the independent decision-model selection.
     with no PRESENT row. Keep any new status flip in the same commit. A port task
     that fails setup before it claims its attempt marks it FAILED, so the next
     `check_for_port` tick retries it.
+10. **The swap clears what FUTURE may lack instead of waiting for it.** During a
+    port-flow reindex PRESENT keeps indexing and stamping `content_hash`, so a
+    document edited after its port copy is newer in PRESENT, and the hash gate
+    would make the new PRESENT skip it for good.
+    `db/swap_index.py:_clear_what_future_missed__no_commit` nulls the hash of each
+    required pair's documents modified at or after
+    `db/reindex_clear.py:get_pair_clear_bounds`' `clear_from` (FUTURE's last
+    successful poll end minus the poll overlap; the reindex start when FUTURE
+    never polled; the epoch, so everything, for a pair with neither a seed nor a
+    port attempt), nulls the hash of documents with an `IndexAttemptError` on a
+    FUTURE attempt, and turns `secondary_only_sync_pending` into a plain
+    needs-sync, so the swap does not wait for those documents and the new
+    PRESENT gets their permissions on the next sync. It runs inside the flip's
+    transaction with `FOR UPDATE SKIP LOCKED`, after the two status updates, and
+    once more right after the commit. A batch locks its document rows first and
+    takes the settings share lock only at its stamp, so the flip waits for every
+    stamp in flight and the in-flip pass sees them all; a row a batch still holds
+    is skipped, never waited for (waiting could deadlock with that batch, which
+    reads PAST and stamps nothing), and the pass after the commit clears it.
+    Accepted: about one poll period of lag after the swap; documents a FUTURE
+    attempt failed on need Retry; a load-only connector needs a manual run; a
+    crash between the flip's commit and the pass after it leaves a skipped
+    document's old hash in place (no retry, that would need a persisted marker).
 
 ---
 

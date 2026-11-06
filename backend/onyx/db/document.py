@@ -51,6 +51,8 @@ from onyx.db.models import (
     Credential,
     DocumentByConnectorCredentialPair,
     FileRecord,
+    IndexAttempt,
+    IndexAttemptError,
     User,
 )
 from onyx.db.models import Document as DbDocument
@@ -1528,6 +1530,103 @@ def update_docs_content_hash__no_commit(
     )
     for doc in documents_to_update:
         doc.content_hash = ids_to_new_hash[doc.id]
+
+
+def _update_documents__no_commit(
+    db_session: Session,
+    targets: Select,
+    changes: dict[str, Any],
+    skip_locked: bool,
+) -> int:
+    """Updates the documents `targets` selects (a plain id select, no DISTINCT).
+    With `skip_locked`, rows another transaction holds are left out, not waited
+    for: the swap's second pass runs after the status flip, so a row a batch
+    still holds gets no new stamp from that batch (it reads PAST), and its old
+    stamp was already handled by the first pass. Returns the row count."""
+    if skip_locked:
+        targets = targets.with_for_update(skip_locked=True)
+    result = db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(targets))
+        .values(**changes)
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
+
+
+def clear_content_hash_for_cc_pair_since__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    since: datetime,
+    *,
+    skip_locked: bool = False,
+) -> int:
+    """Forget what the index holds for this cc_pair's documents modified at or
+    after `since`: a NULL hash never matches, so the next poll re-indexes them.
+    Used at a reindex swap. Caller commits. Returns the rows cleared."""
+    targets = select(DbDocument.id).where(
+        DbDocument.id.in_(
+            construct_document_id_select_for_connector_credential_pair(
+                connector_id, credential_id
+            )
+        ),
+        DbDocument.last_modified >= since,
+        DbDocument.content_hash.isnot(None),
+    )
+    return _update_documents__no_commit(
+        db_session, targets, {"content_hash": None}, skip_locked
+    )
+
+
+def clear_content_hash_for_failed_documents__no_commit(
+    db_session: Session, search_settings_id: int, *, skip_locked: bool = False
+) -> int:
+    """Forget what the index holds for every document an attempt on these
+    search settings failed on, resolved or not (UI Resolve does not re-index).
+    The attempt moved the cursor past the document, so only a retry or a source
+    change fetches it again, and a NULL hash makes that fetch index it. Used at
+    a reindex swap for the FUTURE settings. Caller commits."""
+    failed_ids = (
+        select(IndexAttemptError.document_id)
+        .join(IndexAttempt, IndexAttempt.id == IndexAttemptError.index_attempt_id)
+        .where(
+            IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttemptError.document_id.isnot(None),
+        )
+    )
+    targets = select(DbDocument.id).where(
+        DbDocument.id.in_(failed_ids), DbDocument.content_hash.isnot(None)
+    )
+    return _update_documents__no_commit(
+        db_session, targets, {"content_hash": None}, skip_locked
+    )
+
+
+def mark_secondary_pending_documents_needs_sync__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    *,
+    skip_locked: bool = False,
+) -> int:
+    """Turn this cc_pair's deferred-FUTURE-write flags into a plain needs-sync,
+    so the next metadata sync re-applies permissions and document sets on the
+    current index. Used at a reindex swap. Caller commits."""
+    targets = select(DbDocument.id).where(
+        DbDocument.id.in_(
+            construct_document_id_select_for_connector_credential_pair(
+                connector_id, credential_id
+            )
+        ),
+        DbDocument.secondary_only_sync_pending.is_(True),
+    )
+    return _update_documents__no_commit(
+        db_session,
+        targets,
+        {"secondary_only_sync_pending": False, "last_synced": None},
+        skip_locked,
+    )
 
 
 def mark_document_as_modified__no_commit(

@@ -150,6 +150,8 @@ The **Manage Index** menu has these actions:
 
 - **Update Index**: pull updates and index documents since the last successful run.
 - **Full Re-index**: re-index all documents from the source. This can take hours or days on a large source.
+  Not available while a re-index that switches after re-indexing builds the new index (see [Search
+  Configs](/admins/advanced_configs/search_configs)).
 - **Start Indexing**: skip the connector checks and index now.
 - **Sync Permissions**: pull who can read each document from the source now (permission-synced Connectors).
 - **Pause Indexing & Syncs** / **Resume Indexing & Syncs**: stop or restart indexing runs and permission syncs.

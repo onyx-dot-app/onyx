@@ -8,6 +8,7 @@ holds no slow work. The caller authorizes the user and does the work that
 must follow the commit (task revokes, the indexing kick, the audit event).
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -66,6 +67,7 @@ from onyx.db.credentials import swap_cc_pair_credential__no_commit
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import CapabilityCheckTrigger, IndexingMode
 from onyx.db.models import Credential, User
+from onyx.db.search_settings import raise_if_port_reindex_in_progress
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -342,6 +344,27 @@ def apply_connector_edit(
     return applied
 
 
+# Steps that make PRESENT crawl from the beginning or backfill a window.
+_FULL_RUN_STEP_KINDS = frozenset(
+    {
+        EditStepKind.FULL_REINDEX,
+        EditStepKind.FULL_REINDEX_THEN_PRUNE,
+        EditStepKind.SCOPED_BACKFILL,
+        EditStepKind.WINDOW_BACKFILL,
+    }
+)
+
+
+def _ensure_no_full_run_during_reindex(
+    db_session: Session, steps: Sequence[EditStep]
+) -> None:
+    """A full re-index or backfill cannot start while a port-flow reindex builds
+    FUTURE (see raise_if_port_reindex_in_progress). Checked on the resolved
+    steps, so a step the admin added counts too."""
+    if any(step.kind in _FULL_RUN_STEP_KINDS for step in steps):
+        raise_if_port_reindex_in_progress(db_session)
+
+
 def _apply_claimed_plan(
     db_session: Session,
     *,
@@ -356,6 +379,7 @@ def _apply_claimed_plan(
     ensure_edit_is_plannable(current, proposed)
     ensure_base_state_matches(stored, current)
     steps = resolve_edit_steps(stored.plan, choices)
+    _ensure_no_full_run_during_reindex(db_session, steps)
     if _access_changed(current, proposed):
         validate_pairing_access(
             db_session,
@@ -380,7 +404,6 @@ def _apply_claimed_plan(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, _PLAN_NOT_FOUND_MESSAGE)
         current = fetch_current_pair_state(db_session, cc_pair_id)
         ensure_base_state_matches(stored, current)
-
         credential = fetch_proposed_credential(
             db_session, user=user, current=current, proposed=proposed
         )

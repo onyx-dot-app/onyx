@@ -261,10 +261,10 @@ short-lived session to resolve the embedder, the document index for the attempt'
 `SearchSettings` (`document_index.factory:get_default_document_index`), and the `IndexAttemptMetadata`
 for this batch, then closes that session before the slow work begins.
 
-`run_indexing_pipeline` (`indexing_pipeline.py`) resolves which `SearchSettings`
-generation applies (FUTURE if one is `IndexModelStatus.FUTURE`, else PRESENT),
-builds a `Chunker` sized to that generation's multipass/contextual-RAG config, and
-calls `index_doc_batch`, which:
+`run_indexing_pipeline` (`indexing_pipeline.py`) loads the `SearchSettings` row its
+caller names with `written_search_settings_id`: the settings the batch's document
+index was built from, resolved when the batch started. It builds a `Chunker` sized to
+that row's multipass/contextual-RAG config, and calls `index_doc_batch`, which:
 
 1. `filter_documents` drops documents with no title and no content, or over
    `MAX_DOCUMENT_CHARS`. Before it, when `SKIP_SPREADSHEET_CONTENT` is true,
@@ -280,7 +280,11 @@ calls `index_doc_batch`, which:
    hasn't advanced past what's stored, with no hashing. Gate 2 (content hash)
    applies only when the timestamp hasn't advanced; it's skipped for a FUTURE/port
    write (`index_to_secondary=True`) so the FUTURE build doesn't cross-suppress
-   against the PRESENT-only hash. Docprocessing always passes
+   against the PRESENT-only hash. A NULL hash never matches: a reindex swap
+   nulls the hash of what FUTURE may lack so the next poll re-indexes it
+   ([[document-index]] §5); a document a FUTURE attempt failed on needs Retry,
+   and a load-only connector a manual run, since no poll fetches those.
+   Docprocessing always passes
    `ignore_time_skip=True` (the connector already filtered by recency at fetch
    time), so only gate 2 applies here in practice. A caller can also bypass both
    gates with `force_update=True`, which `run_indexing_pipeline` exposes: the
@@ -428,7 +432,9 @@ called once per batch). `docprocessing_task` builds the index with
 `get_default_document_index(index_attempt.search_settings, None)`, so a batch
 writes only to the index of the attempt's own `SearchSettings`: PRESENT or FUTURE.
 It does not write to both generations. The port backfill (`port/tasks.py`) fills a
-FUTURE index (see [[document-index]] §4.4). The write tries the whole
+FUTURE index (see [[document-index]] §4.4). During a port-flow reindex a full run
+or backfill on PRESENT gets no attempt: it waits until after the swap
+(`_kickoff_indexing_tasks`, `_try_creating_pending_backfill`). The write tries the whole
 batch in one call to `DocumentIndex.index()`; on any exception it falls back to a
 per-document retry loop so one bad document doesn't fail the batch. Before writing,
 `adapter.lock_context` (`document.py:prepare_to_modify_documents` ->
@@ -674,10 +680,17 @@ that block, so it calls `stop_telemetry` itself first.
    A timestamp advance is authoritative and skips the content-hash check on purpose
    (some connectors replace image bytes in place under the same ID); breaking this
    makes those updates silently invisible to indexing.
-9. **A FUTURE/secondary write must not touch the shared PRESENT-only content
-   hash.** `index_to_secondary=True` disables both the hash gate and the
-   post-write hash stamp; violating this cross-suppresses writes between the two
-   generations during a swap.
+9. **A FUTURE/secondary write must not read the content hash, and a write
+   stamps it only if its settings are PRESENT at commit.** The hash describes
+   what PRESENT holds. `index_to_secondary=True` disables the hash gate.
+   `index_doc_batch` stamps under `_written_settings_are_present`, a share lock
+   on the written settings row, so a FUTURE write stamps nothing unless the swap
+   promoted its index meanwhile, and a PRESENT batch that lands after a swap
+   stamps nothing either. `run_indexing_pipeline` takes
+   `written_search_settings_id` from its caller: pass the id resolved when the
+   batch started, never a fresh lookup, because a batch can straddle a swap.
+   Multipass and contextual-RAG settings come from that row too. A targeted
+   re-index never stamps (`stamp_content_hash=False`).
 10. **`try_create_index_attempt`'s fence excludes targeted-reindex attempts on
     purpose.** Any change that makes a full-run and a targeted-reindex attempt
     compete for the same fence row removes the concurrency this design relies on.

@@ -1633,8 +1633,9 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
     db_session: Session,
     cc_pair_and_future: tuple[ConnectorCredentialPair, int],
 ) -> None:
-    """Swap gate ignores an INVALID-only deferred doc (no deadlock) but STILL waits
-    on a required cc_pair's deferred doc (regression guard)."""
+    """A deferred doc never holds the swap: not one owned only by an INVALID
+    cc_pair, and not one on a required cc_pair either. The swap turns the flag
+    into a plain needs-sync instead (see swap_index._clear_what_future_missed__no_commit)."""
     required_pair, future_id = cc_pair_and_future
     future_ss = db_session.get(SearchSettings, future_id)
     assert future_ss is not None
@@ -1656,11 +1657,11 @@ def test_port_swap_ready_scoped_to_required_cc_pairs(
         # not blocked by the INVALID-only deferred doc
         assert _port_swap_ready(db_session, future_ss, [required_pair], []) is True
 
-        # a deferred doc on the REQUIRED pair DOES still block the swap
+        # a deferred doc on the REQUIRED pair does not block the swap either
         [req_doc] = _seed_cc_pair_documents(db_session, required_pair, 1, unique=True)
         mark_document_synced_secondary_pending(req_doc, db_session)
         db_session.commit()
-        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is False
+        assert _port_swap_ready(db_session, future_ss, [required_pair], []) is True
     finally:
         _cleanup_pairs(db_session, invalid_pair)
 
