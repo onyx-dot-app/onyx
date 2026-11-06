@@ -10,6 +10,8 @@ from opensearchpy.helpers.errors import BulkIndexError
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import (
     MAX_CHUNKS_PER_DOC_BATCH,
+    OPENSEARCH_EXPLAIN_ENABLED,
+    OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED,
     VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT,
 )
 from onyx.configs.constants import PUBLIC_DOC_PAT, OnyxRedisLocks
@@ -1047,6 +1049,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # decision when passing in the query param. See the above comment in the
         # function signature.
         final_query = " ".join(final_keywords) if final_keywords else query
+        # Highlighting and explain read the chunk source in the hybrid query
+        # itself, so they keep the single-request path.
+        chunk_keys_only = (
+            OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED and not OPENSEARCH_EXPLAIN_ENABLED
+        )
         query_body = DocumentQuery.get_hybrid_search_query(
             query_text=final_query,
             query_vector=query_embedding,
@@ -1061,13 +1068,20 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             include_hidden=False,
             vector_quantization=self._vector_quantization,
+            chunk_keys_only=chunk_keys_only,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
-        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
-            body=query_body,
-            search_pipeline_id=normalization_pipeline_name,
-            search_type=OpenSearchSearchType.HYBRID,
-        )
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]]
+        if chunk_keys_only:
+            search_hits = self._get_hybrid_search_hits_by_chunk_keys(
+                query_body, normalization_pipeline_name
+            )
+        else:
+            search_hits = self._client.search(
+                body=query_body,
+                search_pipeline_id=normalization_pipeline_name,
+                search_type=OpenSearchSearchType.HYBRID,
+            )
 
         # Good place for a breakpoint to inspect the search hits if you have
         # "explain" enabled.
@@ -1082,6 +1096,60 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         return inference_chunks
+
+    def _get_hybrid_search_hits_by_chunk_keys(
+        self, query_body: dict[str, Any], normalization_pipeline_name: str
+    ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
+        """Runs a keys-only hybrid search, then fetches the top hits' source.
+
+        A single-shard search fetches every hybrid candidate before
+        normalization keeps the top hits, so reading only doc values there and
+        the source of the top hits here avoids reading the source of
+        candidates that are discarded.
+        """
+        chunk_key_hits = self._client.search_for_chunk_keys(
+            body=query_body,
+            search_pipeline_id=normalization_pipeline_name,
+            search_type=OpenSearchSearchType.HYBRID,
+        )
+        if not chunk_key_hits:
+            return []
+
+        fetch_body = DocumentQuery.get_from_chunk_keys_query(
+            chunk_keys=[
+                (hit.document_id, hit.chunk_index, hit.max_chunk_size)
+                for hit in chunk_key_hits
+            ],
+            tenant_state=self._tenant_state,
+        )
+        fetched_hits = self._client.search(
+            body=fetch_body,
+            search_pipeline_id=None,
+            search_type=OpenSearchSearchType.HYBRID_FETCH,
+        )
+        chunks_by_key: dict[tuple[str, int, int], DocumentChunkWithoutVectors] = {
+            (
+                hit.document_chunk.document_id,
+                hit.document_chunk.chunk_index,
+                hit.document_chunk.max_chunk_size,
+            ): hit.document_chunk
+            for hit in fetched_hits
+        }
+
+        # Keep the hybrid order and scores. A chunk deleted between the two
+        # requests is dropped.
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
+        for hit in chunk_key_hits:
+            chunk = chunks_by_key.get(
+                (hit.document_id, hit.chunk_index, hit.max_chunk_size)
+            )
+            if chunk is not None:
+                search_hits.append(
+                    SearchHit[DocumentChunkWithoutVectors](
+                        document_chunk=chunk, score=hit.score
+                    )
+                )
+        return search_hits
 
     def keyword_retrieval(
         self,

@@ -125,6 +125,17 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     explanation: dict[str, Any] | None = None
 
 
+class ChunkKeySearchHit(BaseModel):
+    """A search hit identified by its doc values instead of its stored source."""
+
+    model_config = {"frozen": True}
+
+    document_id: str
+    chunk_index: int
+    max_chunk_size: int
+    score: float | None = None
+
+
 class IndexInfo(BaseModel):
     """
     Represents information about an OpenSearch index.
@@ -1787,6 +1798,95 @@ class OpenSearchIndexClient(OpenSearchClient):
             self._index_name,
             search_pipeline_id,
         )
+        hits = self._run_search(
+            body=body, search_pipeline_id=search_pipeline_id, search_type=search_type
+        )
+
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
+        for hit in hits:
+            document_chunk_source: dict[str, Any] | None = hit.get("_source")
+            if not document_chunk_source:
+                raise RuntimeError(
+                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
+                )
+            document_chunk_score = hit.get("_score", None)
+            match_highlights: dict[str, list[str]] = hit.get("highlight", {})
+            explanation: dict[str, Any] | None = hit.get("_explanation", None)
+            search_hit = SearchHit[DocumentChunkWithoutVectors](
+                document_chunk=DocumentChunkWithoutVectors.model_validate(
+                    document_chunk_source
+                ),
+                score=document_chunk_score,
+                match_highlights=match_highlights,
+                explanation=explanation,
+            )
+            search_hits.append(search_hit)
+        logger.debug(
+            "Successfully searched index %s and got %s hits.",
+            self._index_name,
+            len(search_hits),
+        )
+        return search_hits
+
+    def search_for_chunk_keys(
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
+    ) -> list[ChunkKeySearchHit]:
+        """Searches the index and returns only the key fields of each hit.
+
+        The body must request the key fields as doc values and no stored
+        fields (see DocumentQuery.get_hybrid_search_query with
+        chunk_keys_only=True), so the search reads no chunk source.
+
+        Args:
+            body: The body of the search request.
+            search_pipeline_id: The ID of the search pipeline to use. If None,
+                the default search pipeline will be used.
+            search_type: Label for Prometheus metrics. Does not affect search
+                behavior.
+
+        Raises:
+            Exception: There was an error searching the index, or a hit is
+                missing a key field.
+
+        Returns:
+            The key fields and score of each hit, in result order.
+        """
+        hits = self._run_search(
+            body=body, search_pipeline_id=search_pipeline_id, search_type=search_type
+        )
+        chunk_key_hits: list[ChunkKeySearchHit] = []
+        for hit in hits:
+            fields: dict[str, list[Any]] = hit.get("fields", {})
+            try:
+                chunk_key_hits.append(
+                    ChunkKeySearchHit(
+                        document_id=fields[DOCUMENT_ID_FIELD_NAME][0],
+                        chunk_index=fields[CHUNK_INDEX_FIELD_NAME][0],
+                        max_chunk_size=fields[MAX_CHUNK_SIZE_FIELD_NAME][0],
+                        score=hit.get("_score"),
+                    )
+                )
+            except (KeyError, IndexError) as e:
+                raise RuntimeError(
+                    f"Search hit is missing a chunk key field: {fields}."
+                ) from e
+        return chunk_key_hits
+
+    def _run_search(
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType,
+    ) -> list[Any]:
+        """Runs a search, records its metrics, and returns the raw hits.
+
+        Raises:
+            Exception: There was an error searching the index, or the search
+                timed out.
+        """
         result: dict[str, Any]
         params = {"phase_took": "true"}
         ctx = self._get_emit_metrics_context_manager(search_type)
@@ -1823,32 +1923,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 if self._emit_metrics:
                     record_opensearch_search_error(search_type, e)
                 raise
-
-        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
-        for hit in hits:
-            document_chunk_source: dict[str, Any] | None = hit.get("_source")
-            if not document_chunk_source:
-                raise RuntimeError(
-                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
-                )
-            document_chunk_score = hit.get("_score", None)
-            match_highlights: dict[str, list[str]] = hit.get("highlight", {})
-            explanation: dict[str, Any] | None = hit.get("_explanation", None)
-            search_hit = SearchHit[DocumentChunkWithoutVectors](
-                document_chunk=DocumentChunkWithoutVectors.model_validate(
-                    document_chunk_source
-                ),
-                score=document_chunk_score,
-                match_highlights=match_highlights,
-                explanation=explanation,
-            )
-            search_hits.append(search_hit)
-        logger.debug(
-            "Successfully searched index %s and got %s hits.",
-            self._index_name,
-            len(search_hits),
-        )
-        return search_hits
+        return hits
 
     @log_function_time(debug_only=True)
     def search_for_document_ids(

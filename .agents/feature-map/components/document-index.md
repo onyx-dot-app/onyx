@@ -267,6 +267,12 @@ it deletes the old one.
   only rows without the flag.
 - **The old index is kept for a soak period.** It allows a rollback while the new
   model is judged, and the PAST row stays forever as a record.
+- **Hybrid search reads chunk keys first, then the top hits.** On a
+  single-shard index, OpenSearch fetches every hybrid candidate before
+  normalization keeps the top hits, up to about 1,000 chunks per search.
+  `OpenSearchDocumentIndex.hybrid_retrieval` asks for doc values only and
+  fetches the source of the top hits in a second request. Highlighting and
+  explain need the source, so they keep one request.
 
 ## Known issues
 

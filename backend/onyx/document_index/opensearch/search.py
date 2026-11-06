@@ -153,6 +153,14 @@ def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
         )
 
 
+# Fields that identify a chunk within a tenant, read from doc values.
+CHUNK_KEY_FIELD_NAMES = (
+    DOCUMENT_ID_FIELD_NAME,
+    CHUNK_INDEX_FIELD_NAME,
+    MAX_CHUNK_SIZE_FIELD_NAME,
+)
+
+
 class DocumentQuery:
     """
     TODO(andrei): Implement multi-phase search strategies.
@@ -429,6 +437,7 @@ class DocumentQuery:
         index_filters: IndexFilters,
         include_hidden: bool,
         vector_quantization: VectorQuantization = VectorQuantization.NONE,
+        chunk_keys_only: bool = False,
     ) -> dict[str, Any]:
         """Returns a final hybrid search query.
 
@@ -448,6 +457,9 @@ class DocumentQuery:
             include_hidden: Whether to include hidden documents.
             vector_quantization: Quantization of the index vector fields. Sets
                 the rescoring of the vector subqueries.
+            chunk_keys_only: Return only the chunk key fields, read from doc
+                values, instead of the stored source. Highlighting and explain
+                need the source, so they are left out of this query.
 
         Returns:
             A dictionary representing the final hybrid search query.
@@ -527,6 +539,17 @@ class DocumentQuery:
             },
         }
 
+        if chunk_keys_only:
+            # On a single-shard index, OpenSearch fetches every hybrid candidate
+            # (up to pagination_depth per subquery) before the normalization
+            # processor keeps the top num_hits. Reading no stored fields, not
+            # even _id, keeps that fetch to a few bytes of doc values per
+            # candidate; the caller fetches the source of the top hits.
+            del final_hybrid_search_body["_source"]
+            final_hybrid_search_body["stored_fields"] = "_none_"
+            final_hybrid_search_body["docvalue_fields"] = list(CHUNK_KEY_FIELD_NAMES)
+            return final_hybrid_search_body
+
         if not OPENSEARCH_MATCH_HIGHLIGHTS_DISABLED:
             final_hybrid_search_body["highlight"] = (
                 DocumentQuery._get_match_highlights_configuration()
@@ -538,6 +561,56 @@ class DocumentQuery:
             final_hybrid_search_body["explain"] = True
 
         return final_hybrid_search_body
+
+    @staticmethod
+    def get_from_chunk_keys_query(
+        chunk_keys: list[tuple[str, int, int]],
+        tenant_state: TenantState,
+    ) -> dict[str, Any]:
+        """Returns a query for the chunks with the given keys.
+
+        The caller already applied the search filters to choose these chunks,
+        so only the tenant filter is repeated here.
+
+        Args:
+            chunk_keys: (document_id, chunk_index, max_chunk_size) of each
+                chunk to get.
+            tenant_state: Tenant state containing the tenant ID.
+
+        Returns:
+            A dictionary representing the final chunk retrieval query.
+        """
+        chunk_clauses: list[dict[str, Any]] = [
+            {
+                "bool": {
+                    "filter": [
+                        {"term": {DOCUMENT_ID_FIELD_NAME: {"value": document_id}}},
+                        {"term": {CHUNK_INDEX_FIELD_NAME: {"value": chunk_index}}},
+                        {
+                            "term": {
+                                MAX_CHUNK_SIZE_FIELD_NAME: {"value": max_chunk_size}
+                            }
+                        },
+                    ]
+                }
+            }
+            for document_id, chunk_index, max_chunk_size in chunk_keys
+        ]
+        query: dict[str, Any] = {
+            "bool": {"should": chunk_clauses, "minimum_should_match": 1}
+        }
+        if tenant_state.multitenant:
+            query["bool"]["filter"] = [
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            ]
+        return {
+            "query": query,
+            "size": len(chunk_keys),
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+            "_source": {
+                "excludes": [TITLE_VECTOR_FIELD_NAME, CONTENT_VECTOR_FIELD_NAME]
+            },
+        }
 
     @staticmethod
     def get_keyword_search_query(
