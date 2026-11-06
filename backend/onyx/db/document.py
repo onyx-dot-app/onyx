@@ -18,7 +18,6 @@ from sqlalchemy import (
     cast,
     column,
     delete,
-    distinct,
     exists,
     func,
     literal,
@@ -113,8 +112,7 @@ def count_documents_by_needs_sync(session: Session) -> int:
 
 def count_secondary_only_sync_pending_documents(db_session: Session) -> int:
     """Global count of docs whose deferred FUTURE metadata sync hasn't drained (via
-    ix_document_secondary_only_sync_pending). The swap gate must use the
-    *_for_cc_pairs variant — an INVALID/DELETING-only doc's flag never clears."""
+    ix_document_secondary_only_sync_pending)."""
     return db_session.execute(
         select(func.count()).where(DbDocument.secondary_only_sync_pending.is_(True))
     ).scalar_one()
@@ -147,37 +145,6 @@ def document_has_indexable_cc_pair(db_session: Session, document_id: str) -> boo
         ).first()
         is not None
     )
-
-
-def count_secondary_only_sync_pending_documents_for_cc_pairs(
-    db_session: Session, cc_pair_ids: list[int]
-) -> int:
-    """Deferred-FUTURE-sync count scoped to docs owned by one of the given cc_pairs
-    (DISTINCT; counts if ANY owner is in the set). The swap gate passes its required
-    (ported) set so INVALID/DELETING-only deferred flags can't block the swap."""
-    if not cc_pair_ids:
-        return 0
-    return db_session.execute(
-        select(func.count(distinct(DbDocument.id)))
-        .select_from(DbDocument)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .join(
-            ConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
-        )
-        .where(
-            DbDocument.secondary_only_sync_pending.is_(True),
-            ConnectorCredentialPair.id.in_(cc_pair_ids),
-        )
-    ).scalar_one()
 
 
 def has_secondary_only_sync_pending_documents(
