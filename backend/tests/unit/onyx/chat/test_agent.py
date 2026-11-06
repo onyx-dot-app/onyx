@@ -659,7 +659,6 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
     replace_base: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("onyx.chat.prompt_utils.get_company_context", lambda: None)
-    monkeypatch.setattr("onyx.chat.prompt_formatting.PROMPT_CACHE_CHAT_HISTORY", True)
     files = ExtractedContextFiles(
         file_texts=["Attached evidence"],
         image_files=[],
@@ -736,7 +735,6 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
     monkeypatch.setattr(
         "onyx.chat.prompt_utils.get_company_context", lambda: "Acme Inc"
     )
-    monkeypatch.setattr("onyx.chat.prompt_formatting.PROMPT_CACHE_CHAT_HISTORY", True)
     requests = []
     for name in ("Alice", "Bob"):
         agent = ChatAgent(

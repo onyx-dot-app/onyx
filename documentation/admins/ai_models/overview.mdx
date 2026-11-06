@@ -64,6 +64,12 @@ The page has these sections:
 - Use open-weight families such as **Llama**, **Qwen**, **DeepSeek**, or **gpt-oss** if you self-host.
 - Keep the visible model list short so users choose between a few intentional options.
 
+### Prompt Caching
+
+Onyx marks stable chat history for prompt caching, including earlier messages and tool results.
+Supported providers can reuse this prefix across model calls to reduce repeated processing.
+Cache reuse depends on the provider and model.
+
 ## Configure Your Providers
 
 <Columns cols={3}>
