@@ -7796,6 +7796,12 @@
             "description": "Sélectionnez les modèles à rendre disponibles pour ce fournisseur.",
             "title": "Modèles"
           },
+          "foldButton": {
+            "label": "Replier les modèles"
+          },
+          "moreButton": {
+            "label": "Plus de modèles"
+          },
           "refetch": {
             "label": "Actualiser les modèles",
             "errorToast": "Échec de la récupération des modèles"
