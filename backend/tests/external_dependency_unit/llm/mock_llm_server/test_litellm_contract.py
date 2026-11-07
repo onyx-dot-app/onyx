@@ -288,16 +288,22 @@ def test_step_permissions_keep_provider_tool_definitions_stable(
             Reply(
                 text="answer",
                 conditions=RequestConditions(
-                    offers=["internal_search", "web_search"], tool_choice=choice
+                    offers=["internal_search", "web_search", "other"],
+                    tool_choice=choice,
                 ),
             )
-            for choice in [named, "auto", "none"]
+            for choice in [named, "auto", "auto", "required", "none"]
         ],
     )
-    definitions = [ToolDefinition.model_validate(tool["function"]) for tool in TOOLS]
+    definitions = [
+        ToolDefinition.model_validate(tool["function"])
+        for tool in [*TOOLS, _tool("other")]
+    ]
     for allowed, choice in [
         (frozenset({"internal_search"}), ToolChoiceOptions.REQUIRED),
         (None, ToolChoiceOptions.AUTO),
+        (frozenset({"internal_search"}), ToolChoiceOptions.AUTO),
+        (frozenset({"internal_search", "web_search"}), ToolChoiceOptions.REQUIRED),
         (frozenset(), ToolChoiceOptions.NONE),
     ]:
         request = GenerationRequest(
@@ -313,11 +319,9 @@ def test_step_permissions_keep_provider_tool_definitions_stable(
             llm.invoke(request)
         assert request.model_dump_json() == original
     requests = script.requests
-    assert len(requests) == 3
-    assert (
-        requests[0].body["tools"]
-        == requests[1].body["tools"]
-        == requests[2].body["tools"]
+    assert len(requests) == 5
+    assert all(
+        request.body["tools"] == requests[0].body["tools"] for request in requests
     )
     script.verify()
 
@@ -439,9 +443,9 @@ def test_response_recovery_obeys_permissions_over_http(
     script.verify()
 
 
-@pytest.mark.parametrize("forced", [False, True])
+@pytest.mark.parametrize("mode", ["auto", "required_one", "required_many"])
 def test_recovered_forbidden_call_returns_error_without_execution(
-    script: MockLLMScript, llm: LitellmLLM, forced: bool
+    script: MockLLMScript, llm: LitellmLLM, mode: str
 ) -> None:
     script.conversation(
         "main",
@@ -465,13 +469,15 @@ def test_recovered_forbidden_call_returns_error_without_execution(
                 definition=ToolDefinition.model_validate(tool["function"]),
                 execute=execute,
             )
-            for tool in TOOLS
+            for tool in [*TOOLS, _tool("other")]
         ],
         prepare_step=lambda _: PreparedStep(
-            allowed_tool_names=frozenset({"internal_search"}),
+            allowed_tool_names=frozenset({"internal_search", "other"})
+            if mode == "required_many"
+            else frozenset({"internal_search"}),
             options=GenerationOptions(
                 tool_choice=ToolChoiceOptions.REQUIRED
-                if forced
+                if mode != "auto"
                 else ToolChoiceOptions.AUTO
             ),
         ),
