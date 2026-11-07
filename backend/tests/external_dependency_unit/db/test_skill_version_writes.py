@@ -223,8 +223,9 @@ def test_rezip_noop(session: Session, user: User) -> None:
 
 
 @pytest.mark.parametrize("save", [False, True])
+@pytest.mark.parametrize("classified", [False, True])
 def test_lazy_validity_keeps_one_version(
-    session: Session, user: User, save: bool
+    session: Session, user: User, save: bool, classified: bool
 ) -> None:
     response = api.create_custom_skill(
         upload(bundle("legacy-validity")), False, user, session
@@ -234,7 +235,9 @@ def test_lazy_validity_keeps_one_version(
     current = versions(skill, session)[0]
     current.is_valid = skill.is_valid = None
     session.commit()
-    persist_skill_validity([SkillValidityUpdate(skill.id, skill.bundle_file_id, save)])
+    persist_skill_validity(
+        [SkillValidityUpdate(skill.id, skill.bundle_file_id, classified)]
+    )
     if save:
         api.patch_current_user_skill(
             skill.id,
@@ -247,7 +250,7 @@ def test_lazy_validity_keeps_one_version(
         session.commit()
     session.expire_all()
     assert versions(skill, session) == [current]
-    assert current.is_valid is save
+    assert current.is_valid is (True if save else classified)
 
 
 def test_builtin_cannot_create_version(session: Session, user: User) -> None:

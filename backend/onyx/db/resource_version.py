@@ -132,6 +132,9 @@ def write_resource_version[Version: BundleVersionMixin](
             and metadata is not None
             and (current.content_digest == metadata.content_digest)
         ):
+            current.is_valid = is_valid
+            adapter.publish(current)
+            db_session.flush()
             return current
         latest = db_session.scalars(adapter.versions().limit(1)).first()
         version = adapter.new_version()
