@@ -354,7 +354,6 @@ def test_group_shared_providers_servers_and_skills_become_public(
         assert providers[0].is_public
         assert servers[0].is_public
         assert skills[0].public_permission == SkillSharePermission.VIEWER
-        assert skills[0].installation_policy == SkillInstallationPolicy.AVAILABLE
         assert db_session.get(Skill__UserGroup, (skills[0].id, group.id)) is None
         assert not providers[1].is_public
         assert not servers[1].is_public

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic.migration import MigrationContext
@@ -7,12 +8,12 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, select, text
+from sqlalchemy import Engine, inspect, select, text
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
+from onyx.db.enums import SkillInstallationPolicy
 from onyx.db.models import Skill, Skill__UserGroup
 from onyx.db.skill import set_skill_installation_policy
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -144,51 +145,59 @@ def test_database_setter_rejects_not_available_before_name_index(
         db_session.rollback()
 
 
-@pytest.mark.usefixtures("tenant_context")
-def test_group_policy_migration_preserves_shares(db_session: Session) -> None:
-    try:
-        skill = make_skill(db_session, is_public=True)
-        group = make_group(db_session)
-        scripts = ScriptDirectory(str(Path(__file__).resolve().parents[3] / "alembic"))
-        migration = scripts.get_revision("13a2d6969b0b")
-        assert migration is not None
-        connection = db_session.connection()
+def test_group_policy_migration_preserves_shares(isolated_engine: Engine) -> None:
+    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[3] / "alembic"))
+    migration = scripts.get_revision("13a2d6969b0b")
+    assert migration is not None
+    schema = f"test_group_policy_{uuid4().hex}"
+    with isolated_engine.connect() as connection, connection.begin():
+        connection.execute(text(f"CREATE SCHEMA {schema}"))
+        connection.execute(
+            text(
+                f"CREATE TABLE {schema}.skill__user_group "
+                "(LIKE skill__user_group INCLUDING ALL)"
+            )
+        )
+        connection.execute(text(f"SET LOCAL search_path TO {schema}"))
         with Operations.context(MigrationContext.configure(connection)):
             migration.module.downgrade()
             connection.execute(
                 text(
                     "INSERT INTO skill__user_group (skill_id, user_group_id, permission) "
-                    "VALUES (:skill_id, :group_id, 'EDITOR')"
+                    "VALUES (:skill_id, 1, 'EDITOR')"
                 ),
-                {"skill_id": skill.id, "group_id": group.id},
+                {"skill_id": uuid4()},
             )
             migration.module.upgrade()
-            share = db_session.get(Skill__UserGroup, (skill.id, group.id))
-            assert share is not None
-            assert share.installation_policy is None
-            assert share.permission == SkillSharePermission.EDITOR
+            row = connection.execute(
+                text("SELECT permission, installation_policy FROM skill__user_group")
+            ).one()
+            assert row == ("EDITOR", None)
             for policy in SkillInstallationPolicy:
-                share.installation_policy = policy
-                db_session.flush()
-                db_session.refresh(share)
-                assert share.installation_policy == policy
+                connection.execute(
+                    text("UPDATE skill__user_group SET installation_policy = :policy"),
+                    {"policy": policy.value},
+                )
+                assert (
+                    connection.scalar(
+                        text("SELECT installation_policy FROM skill__user_group")
+                    )
+                    == policy.value
+                )
             migration.module.downgrade()
             assert "installation_policy" not in {
                 column["name"]
                 for column in inspect(connection).get_columns("skill__user_group")
             }
             assert (
-                connection.scalar(
-                    text(
-                        "SELECT permission FROM skill__user_group WHERE skill_id = :skill_id"
-                    ),
-                    {"skill_id": skill.id},
-                )
+                connection.scalar(text("SELECT permission FROM skill__user_group"))
                 == "EDITOR"
             )
             migration.module.upgrade()
-            db_session.refresh(share)
-            assert share.installation_policy is None
-            assert db_session.get(Skill, skill.id) is not None
-    finally:
-        db_session.rollback()
+            assert (
+                connection.scalar(
+                    text("SELECT installation_policy FROM skill__user_group")
+                )
+                is None
+            )
+        connection.rollback()
