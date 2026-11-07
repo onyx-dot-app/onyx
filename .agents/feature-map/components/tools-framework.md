@@ -145,8 +145,9 @@ return `ChildRunWait`; the runtime calls `result_from_children` when the child
 ends ([[#child-wait-cleanup]]). A step count bounds the coding agent, not time:
 `CodingAgentTool` gives it `MAX_CODING_AGENT_CYCLES + 1` steps.
 `coding_agent/agent.py:CodingAgent._prepare_step` forces a final answer step
-with no tools on the last step, after a `generate_answer` call, or after a step
-with no tool calls. Their control functions, such as `think_tool`, `generate_report` and
+with tool execution disabled on the last step, after a `generate_answer` call, or after a step
+with no tool calls. Definitions remain advertised for cache reuse where the provider permits it.
+Their control functions, such as `think_tool`, `generate_report` and
 `generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
 

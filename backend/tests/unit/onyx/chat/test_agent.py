@@ -74,10 +74,10 @@ from tests.unit.onyx.agents.fakes import (
     ("model_name", "deployment_name", "forced_choice", "last_has_tools"),
     [
         ("test-model", None, NamedToolChoice(name="echo"), True),
-        ("claude-haiku-4-5", None, ToolChoiceOptions.REQUIRED, True),
-        ("qwen3.7-plus", None, ToolChoiceOptions.REQUIRED, False),
-        ("z-ai/glm-5.3", None, ToolChoiceOptions.REQUIRED, False),
-        ("alias", "glm-5.3", ToolChoiceOptions.REQUIRED, False),
+        ("claude-haiku-4-5", None, ToolChoiceOptions.AUTO, True),
+        ("qwen3.7-plus", None, ToolChoiceOptions.AUTO, False),
+        ("z-ai/glm-5.3", None, ToolChoiceOptions.AUTO, False),
+        ("alias", "glm-5.3", ToolChoiceOptions.AUTO, False),
     ],
 )
 def test_chat_preserves_parallel_tool_history_forcing_and_packets(
@@ -778,10 +778,14 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         UserMessage(content="Current question"),
     ]
     original = [message.model_dump() for message in history]
-    first = prepared.generation_request(history)
+    first = prepared.generation_request(
+        history, tools=[tool.definition for tool in agent.tools]
+    )
     files.file_texts[0] = "Changed attachment"
     agent.custom_agent_prompt = "Changed instructions"
-    second = prepared.generation_request([history[-1]])
+    second = prepared.generation_request(
+        [history[-1]], tools=[tool.definition for tool in agent.tools]
+    )
     for request in [first, second]:
         assert request.messages[0].text.startswith(
             "Replacement instructions" if replace_base else "Base instructions"
