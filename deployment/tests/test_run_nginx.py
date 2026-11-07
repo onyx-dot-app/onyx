@@ -34,12 +34,12 @@ def mock_nginx_env(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     app_template = conf_dir / "app.conf.template"
     app_template.write_text(
         "upstream api { server ${ONYX_BACKEND_API_HOST}:8080; }\n"
-        "include ${CONF_DIR}/mcp_upstream.conf.inc;\n"
+        'include "${CONF_DIR}/mcp_upstream.conf.inc";\n'
         "server {\n"
         "    listen 80;\n"
         "    server_name ${DOMAIN};\n"
-        "    include ${CONF_DIR}/mcp.conf.inc;\n"
-        "    include ${CONF_DIR}/webhook.conf.inc;\n"
+        '    include "${CONF_DIR}/mcp.conf.inc";\n'
+        '    include "${CONF_DIR}/webhook.conf.inc";\n'
         "}\n"
     )
 
@@ -91,7 +91,7 @@ def test_run_nginx_mcp_enabled_with_templates(
     assert (conf_dir / "webhook.conf.inc").is_file()
 
     app_content = (conf_dir / "app.conf").read_text()
-    assert f"include {conf_dir}/mcp_upstream.conf.inc;" in app_content
+    assert f'include "{conf_dir}/mcp_upstream.conf.inc";' in app_content
     assert "${CONF_DIR}" not in app_content
 
     upstream_content = (conf_dir / "mcp_upstream.conf.inc").read_text()
