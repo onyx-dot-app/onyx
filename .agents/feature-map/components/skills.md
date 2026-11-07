@@ -245,7 +245,7 @@ The library preview of an external-app skill calls the same renderer
     must compare the legacy columns with the current version, append a version
     from the legacy columns when they differ, and tolerate missing old files.
     Built-ins have no version. The initial
-    snapshot copies database values without opening bundles; its digest,
+    snapshot copies database values without opening bundles; its content digest,
     unpacked size and file count stay unknown until an application backfill.
     Do not use these snapshots as runtime content during this rollout.
 
