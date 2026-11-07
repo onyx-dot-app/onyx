@@ -216,7 +216,9 @@ so another browser starts again. The input lock is a comparison against
 **Action preference.** At send time `onSubmit` filters the selected Action through
 `web/src/lib/plugins/chat.ts:effectiveChatPreferredToolId`. Sending a message
 preserves the selected preference for later messages in that chat. Each request
-sends the current selection; it does not restrict which available tools may run. [[plugins]] owns Action availability.
+sends the current eligible selection, except Deep Research requests send no
+preference. A preference does not restrict which available tools may run.
+[[plugins]] owns Action availability.
 
 **The development `/api` proxy.**
 `web/src/app/api/[...path]/route.ts` forwards every method under `/api` to

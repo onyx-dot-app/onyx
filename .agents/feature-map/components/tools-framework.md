@@ -412,6 +412,8 @@ Their control functions, such as `think_tool`, `generate_report` and
   the preference does not change tool definitions or execution permissions.
   Use a scripted model to test a required call deterministically, as in
   `backend/tests/integration/tests/llm_workflows/test_tool_policy_enforcement.py`.
+  When project files replace retrieval, preparation omits an enabled, configured,
+  allowed Search preference and its reminder for that request.
   Unavailable preferred Actions return `BAD_REQUEST`; Deep Research rejects a
   preference at request validation. Non-null `forced_tool_id` requests are rejected
   with migration guidance, rather than silently weakening the old contract.

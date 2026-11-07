@@ -89,7 +89,8 @@ class LocalEvalProvider(EvalProvider):
         if data is None:
             raise ValueError("data is required for LocalEvalProvider")
 
-        total = len(data)
+        inputs = [evaluation_input(item.get("input", {}), item) for item in data]
+        total = len(inputs)
         # Use lists to allow mutation in helper function
         passed = [0]
         failed = [0]
@@ -98,9 +99,7 @@ class LocalEvalProvider(EvalProvider):
         print(f"\n{BOLD}Running {total} evaluation(s)...{RESET}\n")
         print("=" * 60)
 
-        for i, item in enumerate(data, 1):
-            input_data = evaluation_input(item.get("input", {}), item)
-
+        for i, input_data in enumerate(inputs, 1):
             # Check if this is a multi-turn eval (has 'messages' array)
             if "messages" in input_data:
                 self._run_multi_turn_eval(

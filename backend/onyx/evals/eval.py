@@ -44,8 +44,6 @@ logger = setup_logger()
 def _preferred_tool_id(db_session: Session, tool_type: str | None) -> int | None:
     if tool_type is None:
         return None
-    if tool_type not in BUILT_IN_TOOL_MAP:
-        raise ValueError(f"Unknown preferred tool: {tool_type}")
     return get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[tool_type]).id
 
 

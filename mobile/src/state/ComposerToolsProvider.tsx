@@ -437,7 +437,6 @@ export function useComposerToolsState({
         // A preferred id that's filtered out, or belongs to another agent, fails the turn mid-stream.
         const preferenceIsSendable =
           preferredToolId != null &&
-          availableToolsLoaded &&
           !unavailableToolIds.includes(preferredToolId) &&
           !disabledToolIds.includes(preferredToolId) &&
           (effectiveAgent?.tools.some((tool) => tool.id === preferredToolId) ??
@@ -471,7 +470,6 @@ export function useComposerToolsState({
       toggleDeepResearch,
       actionTools,
       unavailableToolIds,
-      availableToolsLoaded,
       preferredToolId,
       togglePreferredTool,
       disabledToolIds,

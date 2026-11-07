@@ -311,7 +311,7 @@ termination grace period is much shorter, so it ends running turns first
 - **An unavailable preference fails the message.** `preferred_tool_id` selects an
   Action from the tools built for this request. Disabled, unavailable, or excluded
   Actions fail with `BAD_REQUEST` in `chat/execution.py:create_chat_agent`.
-  When project context replaces retrieval, preparation omits a configured and allowed Search preference
+  When project context replaces retrieval, preparation omits an enabled, configured, and allowed Search preference
   for that request. Preferences do not grant access. Tool construction applies
   `allowed_tool_ids` except to MemoryTool, which follows the user's memory setting.
 - **Stop waits for blocked work.** Cancellation takes effect when a provider

@@ -5,6 +5,7 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { apiFetch, type ApiFetchInit } from "@/api/client";
+import { QUERY_KEYS } from "@/api/query-keys";
 import type { MinimalAgent } from "@/chat/agents";
 import {
   FILE_READER_TOOL_ID,
@@ -135,6 +136,7 @@ function mockApi({
   holdConnectors = false,
   availableTools = [searchTool, imageTool, fileReaderTool],
   holdTools = false,
+  toolError = false,
 }: {
   preferences?: Record<string, { disabled_tool_ids: number[] }>;
   connectors?: string[];
@@ -147,6 +149,7 @@ function mockApi({
   holdConnectors?: boolean;
   availableTools?: ToolSnapshot[];
   holdTools?: boolean;
+  toolError?: boolean;
 } = {}) {
   const stored: Record<string, { disabled_tool_ids: number[] }> = {
     ...preferences,
@@ -164,10 +167,13 @@ function mockApi({
     releaseConnectorGate = resolve;
   });
   apiFetchMock.mockImplementation((path: string, init?: ApiFetchInit) => {
-    if (path === "/tool")
+    if (path === "/tool") {
+      if (toolError)
+        return Promise.reject(new Error("Tool availability unavailable"));
       return holdTools
         ? new Promise(() => {})
         : Promise.resolve(availableTools);
+    }
     if (path === "/manage/connector-status") {
       const rows = () =>
         connectors.map((source) => ({
@@ -337,17 +343,31 @@ describe("useComposerToolsState", () => {
     );
   });
 
-  it.each([false, true])(
-    "does not send an unavailable or unresolved preference (pending: %s)",
-    async (pending) => {
-      mockApi({ availableTools: [searchTool], holdTools: pending });
+  it("does not send a preference confirmed unavailable", async () => {
+    mockApi({ availableTools: [searchTool] });
+    const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
+    act(() => result.current.togglePreferredTool(2));
+    await waitFor(() => expect(result.current.unavailableToolIds).toContain(2));
+    expect(result.current.resolveToolOptions().preferredToolId).toBeNull();
+  });
+
+  it.each(["pending", "error"] as const)(
+    "preserves the selected preference while availability is %s",
+    async (status) => {
+      mockApi({
+        holdTools: status === "pending",
+        toolError: status === "error",
+      });
       const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
       act(() => result.current.togglePreferredTool(2));
-      if (!pending)
-        await waitFor(() =>
-          expect(result.current.unavailableToolIds).toContain(2),
-        );
-      expect(result.current.resolveToolOptions().preferredToolId).toBeNull();
+      await waitFor(() =>
+        expect(
+          client.getQueryState(
+            QUERY_KEYS.availableTools("https://example.test"),
+          )?.status,
+        ).toBe(status),
+      );
+      expect(result.current.resolveToolOptions().preferredToolId).toBe(2);
     },
   );
 

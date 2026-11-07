@@ -15,7 +15,7 @@ from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
 def evaluation_input(
     values: dict[str, Any], overrides: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Validate input and merge explicit dataset overrides without erasing nested values."""
+    """Validate preferences and apply case defaults beneath explicit turn settings."""
     overrides = overrides or {}
     if (
         overrides.get("force_tools")
@@ -25,21 +25,28 @@ def evaluation_input(
         raise ValueError(
             "force_tools is no longer supported; use preferred_tool and expected_tools assertions"
         )
-    return {
+    settings = (
+        "preferred_tool",
+        "expected_tools",
+        "require_all_tools",
+        "model",
+        "model_provider",
+        "temperature",
+    )
+    normalized = {
         **values,
-        **{
-            key: overrides[key]
-            for key in (
-                "preferred_tool",
-                "expected_tools",
-                "require_all_tools",
-                "model",
-                "model_provider",
-                "temperature",
-            )
-            if key in overrides
-        },
+        **{key: overrides[key] for key in settings if key in overrides},
     }
+    preferred_tool = normalized.get("preferred_tool")
+    if preferred_tool is not None and preferred_tool not in BUILT_IN_TOOL_MAP:
+        raise ValueError(f"Unknown preferred tool: {preferred_tool}")
+    if "messages" in normalized:
+        defaults = {key: normalized[key] for key in settings if key in normalized}
+        normalized["messages"] = [
+            evaluation_input({**defaults, **message})
+            for message in normalized["messages"]
+        ]
+    return normalized
 
 
 class ToolAssertion(BaseModel):

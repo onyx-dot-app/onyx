@@ -137,9 +137,10 @@ write their own system messages in `deep_research/agent.py` and
 `deep_research/research_agent.py` with no company context and no agent prompt,
 or an agent that replaces the base prompt.
 
-**Tool definitions.** Chat preferences keep the full tool definitions and order.
+**Tool definitions.** Action preferences keep the full tool definitions and order.
 The selected Action appears in a request-only trailing reminder, outside the cached
-prefix. Final steps use `NONE`; providers that cannot enforce it omit definitions.
+prefix. When project files replace retrieval, preparation omits an enabled,
+configured, allowed Search preference and its reminder. Final steps use `NONE`; providers that cannot enforce it omit definitions.
 Those provider exceptions can invalidate cache reuse. The shared policy lives in
 `llm/model_capabilities.py` and `llm/multi_llm.py`.
 

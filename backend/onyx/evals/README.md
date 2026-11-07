@@ -75,7 +75,7 @@ Configure tool preference, assertions, and model settings per-test by adding opt
 
 - `preferred_tool`: Tool type to prefer for this test. Invocation is optional.
 
-Legacy `force_tools` inputs are rejected. Use `preferred_tool` for model guidance and
+Nonempty `force_tools` inputs are rejected. Use `preferred_tool` for model guidance and
 `expected_tools` to fail an evaluation when a required tool was not called.
 - `expected_tools`: List of tool type names expected to be called
 - `require_all_tools`: If true, all expected tools must be called (default: false)
@@ -139,6 +139,10 @@ For testing realistic multi-turn conversations where each turn may require diffe
   }
 }
 ```
+
+Case-level tool, assertion, and model settings provide defaults for every turn.
+Settings beside `input` override settings inside `input`. Explicit per-message settings
+override these defaults, including `null`, `false`, and empty lists.
 
 Each message in the `messages` array can have its own configuration:
 - `message`: The user message text (required)
