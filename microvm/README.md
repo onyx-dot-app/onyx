@@ -95,6 +95,38 @@ temporary file, which is synced and renamed over the record; then the directory 
 - The API serves only after recovery. While the agent restarts, new calls fail for a few seconds (5.5 s
   in the KVM test, 7 s in T6). VMs and their programs keep running.
 
+### Egress relay
+
+A VM has no network card. Its egress goes guest → vsock port 3128 → the agent relay
+(`<chroot>/root/v.sock_3128`) → sandbox-proxy (`--egress-proxy`). Design: `plans/craft-fc-d1-egress-identity.md`
+(D1-A). The proxy side is PR #17174 (`backend/onyx/sandbox_proxy/sandbox_identity/signed.py`).
+
+- The relay reads one request head per connection, with strict parsing (no bare LF, no obs-fold, at most
+  64 KiB). A bad head gets a 400 and never reaches the proxy.
+- It removes every `Proxy-Authorization` and `X-Onyx-Session-Hint` from the VM, then adds
+  `Proxy-Authorization: Bearer <token>`. The user name of a Basic `Proxy-Authorization` (the proxy URL
+  userinfo) becomes `X-Onyx-Session-Hint`.
+- A plain HTTP request (not CONNECT, not Upgrade) gets `Connection: close`: one signed request per
+  connection.
+- After the head, the relay streams both ways without buffering. When either side ends, both close
+  (Firecracker vsock does not carry a half-close). The idle timeout is `--relay-idle-timeout` (default
+  15 min, never under 180 s). Every VM connection gets its own proxy connection.
+- One VM can have at most `--relay-max-conns` open relay connections (default 256). The relay closes a
+  new connection over the cap at once, so one VM cannot use up the agent's memory or file descriptors.
+  An accept error (for example `EMFILE`) does not stop the relay: it waits (5 ms, doubling up to 1 s)
+  and accepts again.
+- The token is an EdDSA JWT: header `{"alg":"EdDSA","typ":"JWT","kid"}`, claims `sub`
+  (`spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>`), `gen`, `node`, `iat`, `exp` (60 s), `jti`.
+  `internal/relay/testdata/signed_identity_vectors.json` is a copy of the proxy's shared test vectors; a
+  test fails if the two differ, or if the proxy file exists but cannot be read.
+- The agent makes a new Ed25519 node key at each start (`kid` = `<node-id>-<unix time>`) and registers it
+  with `PUT <--api-server-url>/build/sandbox-node/signing-key` and
+  `Authorization: Bearer $SANDBOX_NODE_REGISTRATION_SECRET`. It registers again every 20 min (the cache
+  TTL is 1 h) and retries every 10 s after a failure.
+- `CloseConnections(sandbox_id, attempt, generation)` closes every relay connection of the VM (T5 in
+  `results/prebuild.md`); new connections still work. Stop and VM exit also close them. After an agent
+  restart, the agent attaches the relay to each adopted VM again.
+
 ### Node requirements
 
 - Linux, root, `/dev/kvm`, cgroup v2, systemd on the host.
@@ -161,4 +193,12 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 # Agent restart: runs the agent binary (KVM_AGENT_BIN, default /opt/agent/host-agent) in a privileged
 # --pid=host --cgroupns=host container (KVM_AGENT_IMAGE, default debian:trixie-slim) and restarts it.
 ./hostagent-kvm.test -test.v -test.run TestRestartKVM
+# Egress: needs the proxy harness from plans/craft-sandbox-bench/work-host-agent/ (KVM_HARNESS_DIR,
+# default /opt/harness), the PR #17174 backend (KVM_PR_BACKEND, default /opt/pr/backend), its Python env
+# (KVM_PYTHON) and Docker for Redis.
+./hostagent-kvm.test -test.v -test.run TestEgressKVM
 ```
+
+To check relay tokens against the proxy verifier on a dev machine:
+`RELAY_TOKENS_OUT=/tmp/tokens.json go test -run TestWriteTokensForProxyVerifier ./internal/relay/`, then run
+`verify_tokens.py` from the test kit with the backend Python env.

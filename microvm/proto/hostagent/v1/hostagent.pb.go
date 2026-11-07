@@ -205,7 +205,10 @@ type CreateRequest struct {
 	MemMib uint32 `protobuf:"varint,5,opt,name=mem_mib,json=memMib,proto3" json:"mem_mib,omitempty"`
 	// Scratch disk size. Must be at least the template's scratch size. A
 	// larger value grows the disk; the guest daemon grows the file system.
-	ScratchGib    uint32 `protobuf:"varint,6,opt,name=scratch_gib,json=scratchGib,proto3" json:"scratch_gib,omitempty"`
+	ScratchGib uint32 `protobuf:"varint,6,opt,name=scratch_gib,json=scratchGib,proto3" json:"scratch_gib,omitempty"`
+	// Tenant of the sandbox (^[A-Za-z0-9_-]+$). The egress relay stamps
+	// spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>.
+	TenantId      string `protobuf:"bytes,7,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -280,6 +283,13 @@ func (x *CreateRequest) GetScratchGib() uint32 {
 		return x.ScratchGib
 	}
 	return 0
+}
+
+func (x *CreateRequest) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
 }
 
 type CreateResponse struct {
@@ -537,6 +547,7 @@ type VM struct {
 	// Jailer UID and GID of the VM.
 	Uid           uint32                 `protobuf:"varint,10,opt,name=uid,proto3" json:"uid,omitempty"`
 	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	TenantId      string                 `protobuf:"bytes,12,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -648,6 +659,118 @@ func (x *VM) GetStartedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *VM) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+type CloseConnectionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Attempt       uint64                 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Generation    uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseConnectionsRequest) Reset() {
+	*x = CloseConnectionsRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseConnectionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseConnectionsRequest) ProtoMessage() {}
+
+func (x *CloseConnectionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseConnectionsRequest.ProtoReflect.Descriptor instead.
+func (*CloseConnectionsRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CloseConnectionsRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *CloseConnectionsRequest) GetAttempt() uint64 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *CloseConnectionsRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+type CloseConnectionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Number of relay connections that were closed.
+	Closed        uint32 `protobuf:"varint,1,opt,name=closed,proto3" json:"closed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseConnectionsResponse) Reset() {
+	*x = CloseConnectionsResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseConnectionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseConnectionsResponse) ProtoMessage() {}
+
+func (x *CloseConnectionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseConnectionsResponse.ProtoReflect.Descriptor instead.
+func (*CloseConnectionsResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *CloseConnectionsResponse) GetClosed() uint32 {
+	if x != nil {
+		return x.Closed
+	}
+	return 0
+}
+
 type NodeInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -656,7 +779,7 @@ type NodeInfoRequest struct {
 
 func (x *NodeInfoRequest) Reset() {
 	*x = NodeInfoRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -668,7 +791,7 @@ func (x *NodeInfoRequest) String() string {
 func (*NodeInfoRequest) ProtoMessage() {}
 
 func (x *NodeInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[7]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -681,7 +804,7 @@ func (x *NodeInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInfoRequest.ProtoReflect.Descriptor instead.
 func (*NodeInfoRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{7}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{9}
 }
 
 type NodeInfoResponse struct {
@@ -704,7 +827,7 @@ type NodeInfoResponse struct {
 
 func (x *NodeInfoResponse) Reset() {
 	*x = NodeInfoResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -716,7 +839,7 @@ func (x *NodeInfoResponse) String() string {
 func (*NodeInfoResponse) ProtoMessage() {}
 
 func (x *NodeInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[8]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -729,7 +852,7 @@ func (x *NodeInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInfoResponse.ProtoReflect.Descriptor instead.
 func (*NodeInfoResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{8}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *NodeInfoResponse) GetMemTotalMib() uint64 {
@@ -810,7 +933,7 @@ type TemplateInfo struct {
 
 func (x *TemplateInfo) Reset() {
 	*x = TemplateInfo{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -822,7 +945,7 @@ func (x *TemplateInfo) String() string {
 func (*TemplateInfo) ProtoMessage() {}
 
 func (x *TemplateInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[9]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -835,7 +958,7 @@ func (x *TemplateInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TemplateInfo.ProtoReflect.Descriptor instead.
 func (*TemplateInfo) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{9}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TemplateInfo) GetVersion() string {
@@ -884,7 +1007,7 @@ var File_hostagent_v1_hostagent_proto protoreflect.FileDescriptor
 
 const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\n" +
-	"\x1chostagent/v1/hostagent.proto\x12\x12craft.hostagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb4\x01\n" +
+	"\x1chostagent/v1/hostagent.proto\x12\x12craft.hostagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd1\x01\n" +
 	"\rCreateRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
@@ -893,7 +1016,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x05vcpus\x18\x04 \x01(\rR\x05vcpus\x12\x17\n" +
 	"\amem_mib\x18\x05 \x01(\rR\x06memMib\x12\x1f\n" +
 	"\vscratch_gib\x18\x06 \x01(\rR\n" +
-	"scratchGib\"R\n" +
+	"scratchGib\x12\x1b\n" +
+	"\ttenant_id\x18\a \x01(\tR\btenantId\"R\n" +
 	"\x0eCreateResponse\x12&\n" +
 	"\x02vm\x18\x01 \x01(\v2\x16.craft.hostagent.v1.VMR\x02vm\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"f\n" +
@@ -908,7 +1032,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x0falready_stopped\x18\x01 \x01(\bR\x0ealreadyStopped\"\r\n" +
 	"\vListRequest\"8\n" +
 	"\fListResponse\x12(\n" +
-	"\x03vms\x18\x01 \x03(\v2\x16.craft.hostagent.v1.VMR\x03vms\"\xdb\x02\n" +
+	"\x03vms\x18\x01 \x03(\v2\x16.craft.hostagent.v1.VMR\x03vms\"\xf8\x02\n" +
 	"\x02VM\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
@@ -926,7 +1050,17 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x03uid\x18\n" +
 	" \x01(\rR\x03uid\x129\n" +
 	"\n" +
-	"started_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\"\x11\n" +
+	"started_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12\x1b\n" +
+	"\ttenant_id\x18\f \x01(\tR\btenantId\"r\n" +
+	"\x17CloseConnectionsRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
+	"\aattempt\x18\x02 \x01(\x04R\aattempt\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x03 \x01(\x04R\n" +
+	"generation\"2\n" +
+	"\x18CloseConnectionsResponse\x12\x16\n" +
+	"\x06closed\x18\x01 \x01(\rR\x06closed\"\x11\n" +
 	"\x0fNodeInfoRequest\"\xf5\x02\n" +
 	"\x10NodeInfoResponse\x12\"\n" +
 	"\rmem_total_mib\x18\x01 \x01(\x04R\vmemTotalMib\x12*\n" +
@@ -971,12 +1105,13 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x14VM_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11VM_STATE_STARTING\x10\x01\x12\x14\n" +
 	"\x10VM_STATE_RUNNING\x10\x02\x12\x13\n" +
-	"\x0fVM_STATE_EXITED\x10\x032\xc9\x02\n" +
+	"\x0fVM_STATE_EXITED\x10\x032\xb8\x03\n" +
 	"\tHostAgent\x12O\n" +
 	"\x06Create\x12!.craft.hostagent.v1.CreateRequest\x1a\".craft.hostagent.v1.CreateResponse\x12I\n" +
 	"\x04Stop\x12\x1f.craft.hostagent.v1.StopRequest\x1a .craft.hostagent.v1.StopResponse\x12I\n" +
 	"\x04List\x12\x1f.craft.hostagent.v1.ListRequest\x1a .craft.hostagent.v1.ListResponse\x12U\n" +
-	"\bNodeInfo\x12#.craft.hostagent.v1.NodeInfoRequest\x1a$.craft.hostagent.v1.NodeInfoResponseBEZCgithub.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1b\x06proto3"
+	"\bNodeInfo\x12#.craft.hostagent.v1.NodeInfoRequest\x1a$.craft.hostagent.v1.NodeInfoResponse\x12m\n" +
+	"\x10CloseConnections\x12+.craft.hostagent.v1.CloseConnectionsRequest\x1a,.craft.hostagent.v1.CloseConnectionsResponseBEZCgithub.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1b\x06proto3"
 
 var (
 	file_hostagent_v1_hostagent_proto_rawDescOnce sync.Once
@@ -991,38 +1126,42 @@ func file_hostagent_v1_hostagent_proto_rawDescGZIP() []byte {
 }
 
 var file_hostagent_v1_hostagent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_hostagent_v1_hostagent_proto_goTypes = []any{
-	(ErrorReason)(0),              // 0: craft.hostagent.v1.ErrorReason
-	(VMState)(0),                  // 1: craft.hostagent.v1.VMState
-	(*CreateRequest)(nil),         // 2: craft.hostagent.v1.CreateRequest
-	(*CreateResponse)(nil),        // 3: craft.hostagent.v1.CreateResponse
-	(*StopRequest)(nil),           // 4: craft.hostagent.v1.StopRequest
-	(*StopResponse)(nil),          // 5: craft.hostagent.v1.StopResponse
-	(*ListRequest)(nil),           // 6: craft.hostagent.v1.ListRequest
-	(*ListResponse)(nil),          // 7: craft.hostagent.v1.ListResponse
-	(*VM)(nil),                    // 8: craft.hostagent.v1.VM
-	(*NodeInfoRequest)(nil),       // 9: craft.hostagent.v1.NodeInfoRequest
-	(*NodeInfoResponse)(nil),      // 10: craft.hostagent.v1.NodeInfoResponse
-	(*TemplateInfo)(nil),          // 11: craft.hostagent.v1.TemplateInfo
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(ErrorReason)(0),                 // 0: craft.hostagent.v1.ErrorReason
+	(VMState)(0),                     // 1: craft.hostagent.v1.VMState
+	(*CreateRequest)(nil),            // 2: craft.hostagent.v1.CreateRequest
+	(*CreateResponse)(nil),           // 3: craft.hostagent.v1.CreateResponse
+	(*StopRequest)(nil),              // 4: craft.hostagent.v1.StopRequest
+	(*StopResponse)(nil),             // 5: craft.hostagent.v1.StopResponse
+	(*ListRequest)(nil),              // 6: craft.hostagent.v1.ListRequest
+	(*ListResponse)(nil),             // 7: craft.hostagent.v1.ListResponse
+	(*VM)(nil),                       // 8: craft.hostagent.v1.VM
+	(*CloseConnectionsRequest)(nil),  // 9: craft.hostagent.v1.CloseConnectionsRequest
+	(*CloseConnectionsResponse)(nil), // 10: craft.hostagent.v1.CloseConnectionsResponse
+	(*NodeInfoRequest)(nil),          // 11: craft.hostagent.v1.NodeInfoRequest
+	(*NodeInfoResponse)(nil),         // 12: craft.hostagent.v1.NodeInfoResponse
+	(*TemplateInfo)(nil),             // 13: craft.hostagent.v1.TemplateInfo
+	(*timestamppb.Timestamp)(nil),    // 14: google.protobuf.Timestamp
 }
 var file_hostagent_v1_hostagent_proto_depIdxs = []int32{
 	8,  // 0: craft.hostagent.v1.CreateResponse.vm:type_name -> craft.hostagent.v1.VM
 	8,  // 1: craft.hostagent.v1.ListResponse.vms:type_name -> craft.hostagent.v1.VM
 	1,  // 2: craft.hostagent.v1.VM.state:type_name -> craft.hostagent.v1.VMState
-	12, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
-	11, // 4: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
+	14, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
+	13, // 4: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
 	2,  // 5: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
 	4,  // 6: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
 	6,  // 7: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
-	9,  // 8: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
-	3,  // 9: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
-	5,  // 10: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
-	7,  // 11: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
-	10, // 12: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
-	9,  // [9:13] is the sub-list for method output_type
-	5,  // [5:9] is the sub-list for method input_type
+	11, // 8: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
+	9,  // 9: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
+	3,  // 10: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
+	5,  // 11: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
+	7,  // 12: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
+	12, // 13: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
+	10, // 14: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
+	10, // [10:15] is the sub-list for method output_type
+	5,  // [5:10] is the sub-list for method input_type
 	5,  // [5:5] is the sub-list for extension type_name
 	5,  // [5:5] is the sub-list for extension extendee
 	0,  // [0:5] is the sub-list for field type_name
@@ -1039,7 +1178,7 @@ func file_hostagent_v1_hostagent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hostagent_v1_hostagent_proto_rawDesc), len(file_hostagent_v1_hostagent_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

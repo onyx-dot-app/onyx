@@ -19,10 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HostAgent_Create_FullMethodName   = "/craft.hostagent.v1.HostAgent/Create"
-	HostAgent_Stop_FullMethodName     = "/craft.hostagent.v1.HostAgent/Stop"
-	HostAgent_List_FullMethodName     = "/craft.hostagent.v1.HostAgent/List"
-	HostAgent_NodeInfo_FullMethodName = "/craft.hostagent.v1.HostAgent/NodeInfo"
+	HostAgent_Create_FullMethodName           = "/craft.hostagent.v1.HostAgent/Create"
+	HostAgent_Stop_FullMethodName             = "/craft.hostagent.v1.HostAgent/Stop"
+	HostAgent_List_FullMethodName             = "/craft.hostagent.v1.HostAgent/List"
+	HostAgent_NodeInfo_FullMethodName         = "/craft.hostagent.v1.HostAgent/NodeInfo"
+	HostAgent_CloseConnections_FullMethodName = "/craft.hostagent.v1.HostAgent/CloseConnections"
 )
 
 // HostAgentClient is the client API for HostAgent service.
@@ -48,6 +49,11 @@ type HostAgentClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
 	// NodeInfo returns the node capacity, versions and templates.
 	NodeInfo(ctx context.Context, in *NodeInfoRequest, opts ...grpc.CallOption) (*NodeInfoResponse, error)
+	// CloseConnections closes every egress relay connection of the VM, with
+	// the same preconditions as Stop. New connections still work. The
+	// api_server calls it in the daemon Init sequence after a restore, so that
+	// pooled client connections in the guest fail fast and reconnect.
+	CloseConnections(ctx context.Context, in *CloseConnectionsRequest, opts ...grpc.CallOption) (*CloseConnectionsResponse, error)
 }
 
 type hostAgentClient struct {
@@ -98,6 +104,16 @@ func (c *hostAgentClient) NodeInfo(ctx context.Context, in *NodeInfoRequest, opt
 	return out, nil
 }
 
+func (c *hostAgentClient) CloseConnections(ctx context.Context, in *CloseConnectionsRequest, opts ...grpc.CallOption) (*CloseConnectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseConnectionsResponse)
+	err := c.cc.Invoke(ctx, HostAgent_CloseConnections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HostAgentServer is the server API for HostAgent service.
 // All implementations must embed UnimplementedHostAgentServer
 // for forward compatibility.
@@ -121,6 +137,11 @@ type HostAgentServer interface {
 	List(context.Context, *ListRequest) (*ListResponse, error)
 	// NodeInfo returns the node capacity, versions and templates.
 	NodeInfo(context.Context, *NodeInfoRequest) (*NodeInfoResponse, error)
+	// CloseConnections closes every egress relay connection of the VM, with
+	// the same preconditions as Stop. New connections still work. The
+	// api_server calls it in the daemon Init sequence after a restore, so that
+	// pooled client connections in the guest fail fast and reconnect.
+	CloseConnections(context.Context, *CloseConnectionsRequest) (*CloseConnectionsResponse, error)
 	mustEmbedUnimplementedHostAgentServer()
 }
 
@@ -142,6 +163,9 @@ func (UnimplementedHostAgentServer) List(context.Context, *ListRequest) (*ListRe
 }
 func (UnimplementedHostAgentServer) NodeInfo(context.Context, *NodeInfoRequest) (*NodeInfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method NodeInfo not implemented")
+}
+func (UnimplementedHostAgentServer) CloseConnections(context.Context, *CloseConnectionsRequest) (*CloseConnectionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloseConnections not implemented")
 }
 func (UnimplementedHostAgentServer) mustEmbedUnimplementedHostAgentServer() {}
 func (UnimplementedHostAgentServer) testEmbeddedByValue()                   {}
@@ -236,6 +260,24 @@ func _HostAgent_NodeInfo_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HostAgent_CloseConnections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseConnectionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).CloseConnections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_CloseConnections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).CloseConnections(ctx, req.(*CloseConnectionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HostAgent_ServiceDesc is the grpc.ServiceDesc for HostAgent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -258,6 +300,10 @@ var HostAgent_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NodeInfo",
 			Handler:    _HostAgent_NodeInfo_Handler,
+		},
+		{
+			MethodName: "CloseConnections",
+			Handler:    _HostAgent_CloseConnections_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

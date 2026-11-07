@@ -138,7 +138,7 @@ func newFixture(t *testing.T, uidCount uint32) *fixture {
 }
 
 func req(id string, attempt uint64) CreateRequest {
-	return CreateRequest{SandboxID: id, Attempt: attempt, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4}
+	return CreateRequest{SandboxID: id, Attempt: attempt, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4, TenantID: "public"}
 }
 
 func wantReason(t *testing.T, err error, want pb.ErrorReason) {

@@ -6,6 +6,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"strconv"
 	"errors"
 	"flag"
 	"fmt"
@@ -25,6 +27,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
+	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
@@ -50,6 +53,11 @@ type flags struct {
 	startTimeout  time.Duration
 	stopTimeout   time.Duration
 	logLevel      string
+	nodeID        string
+	egressProxy   string
+	apiServerURL  string
+	relayIdle     time.Duration
+	relayMaxConns int
 }
 
 func main() {
@@ -67,6 +75,11 @@ func main() {
 	flag.DurationVar(&f.startTimeout, "start-timeout", 30*time.Second, "limit for one VM start")
 	flag.DurationVar(&f.stopTimeout, "stop-timeout", 30*time.Second, "limit for one VM stop")
 	flag.StringVar(&f.logLevel, "firecracker-log-level", "Warning", "Firecracker log level")
+	flag.StringVar(&f.nodeID, "node-id", os.Getenv("NODE_NAME"), "node name in the signed egress identity (default $NODE_NAME)")
+	flag.StringVar(&f.egressProxy, "egress-proxy", "", "sandbox-proxy relay listener host:port; empty turns VM egress off")
+	flag.StringVar(&f.apiServerURL, "api-server-url", "", "api_server URL for the node key registration (needs $SANDBOX_NODE_REGISTRATION_SECRET)")
+	flag.DurationVar(&f.relayIdle, "relay-idle-timeout", relay.DefaultIdleTimeout, "close a relay connection after this long without traffic (at least 180s)")
+	flag.IntVar(&f.relayMaxConns, "relay-max-conns", relay.DefaultMaxConns, "most open relay connections per VM; new ones over the cap are closed")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -120,6 +133,11 @@ func run(f flags, log *slog.Logger) error {
 		log,
 	)
 	m.UseJournal(&journal.Journal{Dir: filepath.Join(f.dataDir, "journal")})
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := setupEgress(ctx, f, m, log); err != nil {
+		return err
+	}
 	t0 := time.Now()
 	rep, err := m.Recover(context.Background(), launcher)
 	if err != nil {
@@ -134,8 +152,6 @@ func run(f flags, log *slog.Logger) error {
 		return err
 	}
 	srv := server.New(m)
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 	go func() {
 		<-ctx.Done()
 		// VMs keep running: they are in the host slice, not in this process.
@@ -143,6 +159,40 @@ func run(f flags, log *slog.Logger) error {
 	}()
 	log.Info("host agent ready", "socket", f.socket, "firecracker", bins.Version, "version", version)
 	return srv.Serve(ln)
+}
+
+// setupEgress makes a fresh node signing key, attaches the relay to the
+// Manager and keeps the key registered with the api_server.
+func setupEgress(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) error {
+	if f.egressProxy == "" {
+		log.Warn("no --egress-proxy: VMs have no egress")
+		return nil
+	}
+	if f.nodeID == "" {
+		return errors.New("--egress-proxy needs --node-id (or $NODE_NAME)")
+	}
+	if f.relayMaxConns < 1 {
+		return fmt.Errorf("--relay-max-conns %d must be 1 or more", f.relayMaxConns)
+	}
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return err
+	}
+	signer := relay.NewSigner(f.nodeID, f.nodeID+"-"+strconv.FormatInt(time.Now().Unix(), 10), key)
+	m.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{
+		Signer: signer, Upstream: f.egressProxy, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, Log: log,
+	}})
+	if f.apiServerURL == "" {
+		log.Warn("no --api-server-url: the node signing key is not registered, so the proxy rejects VM egress")
+		return nil
+	}
+	secret := os.Getenv("SANDBOX_NODE_REGISTRATION_SECRET")
+	if secret == "" {
+		return errors.New("--api-server-url needs $SANDBOX_NODE_REGISTRATION_SECRET")
+	}
+	g := &relay.Registrar{BaseURL: f.apiServerURL, Secret: secret, Signer: signer, Log: log}
+	go g.Run(ctx)
+	return nil
 }
 
 func preflight(f flags, lay jailer.Layout) error {
