@@ -215,11 +215,13 @@ answers before appending its text-file messages and question. A small response
 index keeps run IDs, output IDs and each response’s checkpoint even when child-agent
 payloads are evicted. Continuation and regeneration use the selected parent’s
 checkpoint, never the last sibling saved. A failed save or eviction can leave a
-selected database response without temporary content. Replay omits that response
-and never substitutes a sibling. Image metadata keeps file references, not image bytes. Regeneration reuses the saved
+selected database response without temporary content. The next turn’s temporary
+prompt history omits that response and never substitutes a sibling. The chat-session
+API still returns its blank database row and replay stop. Image metadata keeps file references, not image bytes. Regeneration reuses the saved
 input group; it fails when the question has expired or was trimmed.
-The list keeps at most 200 messages and 1 MB: older sub-agent records go first,
-then complete oldest turns, including attachments, questions, and response/tool messages.
+The list keeps at most 200 messages and 1 MB. For byte overflows, older sub-agent
+records go first. Remaining byte overflows and message-count overflows remove complete
+oldest turns, including attachments, questions, and response/tool messages.
 An input or response that cannot fit with its complete current turn fails its save
 (`chat/incognito_context.py:_retained_state`). The answer save is two writes
 that are not atomic: the Postgres usage row commits first, then Redis. A
