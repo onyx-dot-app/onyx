@@ -300,6 +300,124 @@ describe("SkillsPage preference toggles", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens an admin row with the keyboard and keeps selection separate from preview", async () => {
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select first-skill" })
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const row = screen.getByRole("row", { name: "first-skill" });
+    row.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Skill instructions");
+  });
+
+  it("locks the pending admin switch and bulk actions without opening a preview", async () => {
+    const mutation = deferred<CustomSkill>();
+    mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    const toggle = screen.getByRole("switch", { name: "Enable first-skill" });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-disabled", "true");
+    expect(toggle).toHaveFocus();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select first-skill" })
+    );
+    expect(
+      within(screen.getByRole("group", { name: "Select skills" })).getByRole(
+        "button",
+        { name: "More actions" }
+      )
+    ).toBeDisabled();
+    await act(async () => {
+      mutation.resolve(enabledCustomAt(0));
+      await mutation.promise;
+    });
+    await waitFor(() =>
+      expect(toggle).not.toHaveAttribute("aria-disabled", "true")
+    );
+  });
+
+  it("shows server access and group names and keeps invalid skills manageable", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("invalid", "invalid-skill"),
+        public_permission: null,
+        is_personal: false,
+        is_valid: false,
+        user_permission: "OWNER",
+        group_shares: [
+          { group_id: 1, group_name: "Engineering", permission: "VIEWER" },
+          { group_id: 2, group_name: "Research", permission: "VIEWER" },
+        ],
+      },
+    ];
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    const row = screen.getByRole("row", { name: "invalid-skill" });
+    expect(within(row).getByText("Shared")).toBeVisible();
+    expect(within(row).getByText("Engineering, Research")).toBeVisible();
+    expect(within(row).getByRole("switch")).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    expect(screen.getByRole("menuitem", { name: "Edit skill" })).toBeVisible();
+    await user.click(screen.getByRole("menuitem", { name: "Delete skill" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("invalid-skill");
+    expect(mockDeleteUserSkill).not.toHaveBeenCalled();
+  });
+
+  it("keeps all admin rows visible and bulk targets limited to the current search", async () => {
+    skillsData.customs = Array.from({ length: 12 }, (_, i) =>
+      customSkill(`id-${i}`, `skill-${i}`)
+    );
+    mockBulkUpdateSkills.mockResolvedValue({
+      succeeded: ["id-11"],
+      failed: [],
+    });
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    expect(screen.getAllByRole("row")).toHaveLength(13);
+    await user.type(
+      screen.getByPlaceholderText("Search skills..."),
+      "skill-11"
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+    );
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+    await waitFor(() =>
+      expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
+        action: "enable",
+        skill_ids: ["id-11"],
+      })
+    );
+  });
+
+  it.each([false, true])(
+    "keeps loading and load failures distinct from an empty admin library (error=%s)",
+    (error) => {
+      mockUseUserSkills.mockReturnValue({
+        data: undefined,
+        error: error ? new Error("offline") : undefined,
+        isLoading: !error,
+        refresh: mockRefresh,
+      });
+      render(<SkillsPage admin />);
+      expect(
+        screen.queryByText("No custom skills yet")
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      if (error)
+        expect(screen.getByText("Failed to load skills")).toBeVisible();
+    }
+  );
+
   it("replaces the selection label with the count and restores it when cleared", async () => {
     render(<SkillsPage />);
     const user = setupUser();
@@ -323,38 +441,43 @@ describe("SkillsPage preference toggles", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("enables all selected skills and keeps failed skills selected", async () => {
-    mockBulkUpdateSkills.mockResolvedValue({
-      succeeded: ["first-id"],
-      failed: [{ skill_id: "second-id", detail: "App connection required" }],
-    });
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    const browseRow = screen.getByRole("group", { name: "Select skills" });
-    expect(within(browseRow).getByText("2 selected")).toBeInTheDocument();
-    await user.click(
-      within(browseRow).getByRole("button", { name: "More actions" })
-    );
-    await user.click(screen.getByText("Enable for me", { exact: true }));
-    await waitFor(() =>
-      expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
-        action: "enable",
-        skill_ids: ["first-id", "second-id"],
-      })
-    );
-    expect(
-      screen.getByText("1 skill could not be updated")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("checkbox", { name: "Select second-skill" })
-    ).toBeChecked();
-    expect(
-      screen.getByRole("checkbox", { name: "Select first-skill" })
-    ).not.toBeChecked();
-  });
+  it.each([false, true])(
+    "enables all selected skills and keeps failed skills selected (admin=%s)",
+    async (admin) => {
+      mockBulkUpdateSkills.mockResolvedValue({
+        succeeded: ["first-id"],
+        failed: [{ skill_id: "second-id", detail: "App connection required" }],
+      });
+      render(<SkillsPage admin={admin} />);
+      const user = setupUser();
+      await user.click(
+        screen.getByRole("checkbox", {
+          name: "Select all visible custom skills",
+        })
+      );
+      const browseRow = screen.getByRole("group", { name: "Select skills" });
+      expect(within(browseRow).getByText("2 selected")).toBeInTheDocument();
+      await user.click(
+        within(browseRow).getByRole("button", { name: "More actions" })
+      );
+      await user.click(screen.getByText("Enable for me", { exact: true }));
+      await waitFor(() =>
+        expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
+          action: "enable",
+          skill_ids: ["first-id", "second-id"],
+        })
+      );
+      expect(
+        screen.getByText("1 skill could not be updated")
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("checkbox", { name: "Select second-skill" })
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: "Select first-skill" })
+      ).not.toBeChecked();
+    }
+  );
 
   it.each([
     { enabled: [true, true], enable: false, disable: true },
@@ -385,26 +508,31 @@ describe("SkillsPage preference toggles", () => {
     }
   );
 
-  it("toggles only the selected skills the user can toggle", async () => {
-    skillsData.customs[1] = { ...skillsData.customs[1]!, can_toggle: false };
-    mockBulkUpdateSkills.mockResolvedValue({
-      succeeded: ["first-id"],
-      failed: [],
-    });
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    await user.click(screen.getByText("Enable for me", { exact: true }));
-    await waitFor(() =>
-      expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
-        action: "enable",
-        skill_ids: ["first-id"],
-      })
-    );
-  });
+  it.each([false, true])(
+    "toggles only the selected skills the user can toggle (admin=%s)",
+    async (admin) => {
+      skillsData.customs[1] = { ...skillsData.customs[1]!, can_toggle: false };
+      mockBulkUpdateSkills.mockResolvedValue({
+        succeeded: ["first-id"],
+        failed: [],
+      });
+      render(<SkillsPage admin={admin} />);
+      const user = setupUser();
+      await user.click(
+        screen.getByRole("checkbox", {
+          name: "Select all visible custom skills",
+        })
+      );
+      await user.click(screen.getByRole("button", { name: "More actions" }));
+      await user.click(screen.getByText("Enable for me", { exact: true }));
+      await waitFor(() =>
+        expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
+          action: "enable",
+          skill_ids: ["first-id"],
+        })
+      );
+    }
+  );
 
   it("holds bulk actions while a selected skill toggle is pending", async () => {
     const user = setupUser();
@@ -488,20 +616,25 @@ describe("SkillsPage preference toggles", () => {
     expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
   });
 
-  it("clears selection when search changes so hidden skills are not changed", async () => {
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    await user.type(screen.getByPlaceholderText("Search skills..."), "first");
-    expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
-    expect(screen.getByText("Select skills")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Enable for me" })
-    ).not.toBeInTheDocument();
-    expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
-  });
+  it.each([false, true])(
+    "clears selection when search changes so hidden skills are not changed (admin=%s)",
+    async (admin) => {
+      render(<SkillsPage admin={admin} />);
+      const user = setupUser();
+      await user.click(
+        screen.getByRole("checkbox", {
+          name: "Select all visible custom skills",
+        })
+      );
+      await user.type(screen.getByPlaceholderText("Search skills..."), "first");
+      expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+      expect(screen.getByText("Select skills")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Enable for me" })
+      ).not.toBeInTheDocument();
+      expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
+    }
+  );
 
   it("deletes an invalid skill only after confirmation and removes it from the list", async () => {
     skillsData.customs = [
