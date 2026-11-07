@@ -31,6 +31,7 @@ class WebSearchProviderType(str, Enum):
     BRAVE = "brave"
     TAVILY = "tavily"
     FIRECRAWL = "firecrawl"
+    KEENABLE = "keenable"
 
 
 class WebContentProviderType(str, Enum):

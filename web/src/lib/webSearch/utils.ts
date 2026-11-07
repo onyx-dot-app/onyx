@@ -3,6 +3,7 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
+  SvgKeenable,
   SvgSearXNG,
   SvgSerper,
   SvgTavily,
@@ -29,45 +30,51 @@ export const SEARCH_PROVIDER_DETAILS: Record<
 > = {
   exa: {
     label: "Exa",
-    subtitle: "Exa.ai",
+    subtitleKey: "searchProviders.exa.subtitle",
     logo: SvgExa,
     apiKeyUrl: "https://dashboard.exa.ai/api-keys",
   },
   serper: {
     label: "Serper",
-    subtitle: "Serper.dev",
+    subtitleKey: "searchProviders.serper.subtitle",
     logo: SvgSerper,
     apiKeyUrl: "https://serper.dev/api-key",
   },
   brave: {
     label: "Brave",
-    subtitle: "Brave Search API",
+    subtitleKey: "searchProviders.brave.subtitle",
     logo: SvgBrave,
     apiKeyUrl:
       "https://api-dashboard.search.brave.com/app/documentation/web-search/get-started",
   },
   google_pse: {
     label: "Google PSE",
-    subtitle: "Google",
+    subtitleKey: "searchProviders.googlePse.subtitle",
     logo: SvgGoogle,
     apiKeyUrl: "https://programmablesearchengine.google.com/controlpanel/all",
   },
   searxng: {
     label: "SearXNG",
-    subtitle: "SearXNG",
+    subtitleKey: "searchProviders.searxng.subtitle",
     logo: SvgSearXNG,
   },
   tavily: {
     label: "Tavily",
-    subtitle: "Tavily AI",
+    subtitleKey: "searchProviders.tavily.subtitle",
     apiKeyUrl: "https://app.tavily.com/home",
     logo: SvgTavily,
   },
   firecrawl: {
     label: "Firecrawl",
-    subtitle: "Firecrawl Search",
+    subtitleKey: "searchProviders.firecrawl.subtitle",
     apiKeyUrl: "https://www.firecrawl.dev/app/api-keys",
     logo: SvgFirecrawl,
+  },
+  keenable: {
+    label: "Keenable",
+    subtitleKey: "searchProviders.keenable.subtitle",
+    logo: SvgKeenable,
+    apiKeyUrl: "https://app.keenable.ai/console",
   },
 };
 
@@ -130,6 +137,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   firecrawl: {
     requiresApiKey: true,
     requiredConfigKeys: ["base_url"],
+  },
+  keenable: {
+    requiresApiKey: false,
+    requiredConfigKeys: [],
   },
 };
 

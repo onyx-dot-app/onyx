@@ -157,7 +157,9 @@ export default function WebSearchPage() {
         key: provider?.id ?? providerType,
         providerType,
         label: getSearchProviderDisplayLabel(providerType, provider?.name),
-        subtitle: details.subtitle,
+        subtitle: details?.subtitleKey
+          ? t(details.subtitleKey)
+          : providerType,
         logo: details.logo,
         provider,
       };

@@ -16,7 +16,8 @@ export type WebSearchProviderType =
   | "searxng"
   | "brave"
   | "tavily"
-  | "firecrawl";
+  | "firecrawl"
+  | "keenable";
 
 export type WebContentProviderType =
   | "firecrawl"
@@ -105,8 +106,7 @@ export interface ConfigFieldSpec {
 
 export interface SearchProviderDetail {
   label: string;
-  // Brand or product name, not translated.
-  subtitle: string;
+  subtitleKey: WebSearchMessageKey;
   logo?: IconFunctionComponent;
   apiKeyUrl?: string;
 }
