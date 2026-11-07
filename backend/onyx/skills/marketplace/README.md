@@ -57,3 +57,39 @@ duplicate paths, and file/directory conflicts fail the read. Special members
 remain visible as unreadable entries, so callers can reject affected content
 without opening links or devices. Colons in relative filenames are accepted;
 Windows drive paths are refused. A single leading `./` is accepted.
+
+## Complete marketplace reads
+
+`read_marketplace_archive` selects the Claude manifest before the Codex manifest,
+at the requested folder only. A missing or invalid manifest fails the read.
+A blocked skill keeps its plugin/name key. Reconciliation must retain its current
+version. Failed reads return no entries and must never cause retirement.
+
+Explicit entry `skills` paths replace default discovery. Each path can name a
+skill folder or a container of direct child skill folders. This deliberately
+differs from Claude's additive default. Invalid skills remain blocked entries.
+Mixed-component and remote plugins remain unsupported entries.
+
+Each skill path builds once per read, even when many plugins reference it.
+Unique generated bundles share a 256 MiB ceiling. This permits ten maximum-size
+25 MiB ZIPs while bounding retained output. Nested skill paths count separately,
+because their bundles differ. Exceeding this ceiling fails the whole read.
+One in-progress bundle also consumes bounded memory under the per-skill limits.
+This ceiling can reject otherwise valid large catalogs. It is separate from
+unpacked skill limits and includes no duplicate charge for a shared path.
+
+Markdown definitions in plugin `agents/` and `commands/` are components;
+`agents/openai.yaml` metadata alone is not. Claude's bin, output-styles, monitors,
+workflows, settings, and experimental monitors/themes also prevent skill import.
+An unreadable manifest or plugin config fails the read. An unreadable skill
+member blocks that skill. Unrelated special members do not affect the result.
+
+The reader accepts leading `./` archive entries and Claude `metadata.pluginRoot`
+for bare source names. It identifies Codex root `plugin.json` as an unsupported
+format rather than assuming legacy manifest semantics. Root `mcp.json` prevents
+partial skill import. Full Agent Plugins schema support needs separate work.
+
+References: [Claude manifest](https://code.claude.com/docs/en/plugins-reference),
+[Claude marketplace](https://code.claude.com/docs/en/plugins/marketplace-reference),
+[Codex metadata](https://learn.chatgpt.com/docs/build-skills), and
+[Codex Agent Plugins parser](https://github.com/openai/codex/blob/main/codex-rs/core-plugins/src/agent_plugin_manifest.rs).

@@ -383,7 +383,13 @@ The library preview of an external-app skill calls the same renderer
     maps stop before large allocation or deep parser recursion. Sparse members
     fail the read. One member stream call returns at most `MEMBER_CALL_MAX_BYTES`
     and fails instead of truncating; callers read large members in chunks.
-    It inflates gzip once into a temporary spool. See `backend/onyx/skills/marketplace/README.md` for compatibility costs.
+    It inflates gzip once into a temporary spool.
+    `skills/marketplace/reader.py:read_marketplace_archive` reads only the
+    declared marketplace. Blocked keys retain their current version; a failed
+    read cannot retire anything. Shared paths reuse bundle bytes. Unique output
+    has a separate ceiling, including nested paths. Mixed plugins are unsupported.
+    See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
+    This pure reader does not change the one-time GitHub import.
 
 ---
 
