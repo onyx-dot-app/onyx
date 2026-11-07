@@ -1,5 +1,8 @@
+import json
+
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.custom_config_mapping import (
+    OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS,
     get_unsupported_custom_config_keys,
     map_custom_config_to_model_kwargs,
 )
@@ -175,6 +178,79 @@ def test_unsupported_keys_reported() -> None:
 def test_empty_config_has_no_unsupported_keys() -> None:
     assert get_unsupported_custom_config_keys("openai", None) == set()
     assert get_unsupported_custom_config_keys("openai", {}) == set()
+
+
+def test_openai_compatible_off_signal_maps_to_extra_body() -> None:
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        custom_config={
+            OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: json.dumps(
+                {"chat_template_kwargs": {"enable_thinking": False}}
+            )
+        },
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}
+    }
+    assert mapping.consumed_keys == {OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS}
+    assert (
+        get_unsupported_custom_config_keys(
+            LlmProviderNames.OPENAI_COMPATIBLE,
+            {
+                OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: json.dumps(
+                    {"chat_template_kwargs": {"enable_thinking": False}}
+                )
+            },
+        )
+        == set()
+    )
+
+
+def test_openai_compatible_malformed_off_signal_dropped_but_consumed() -> None:
+    """A typo must not block saving and must never fall through to env
+    injection, so the key stays consumed even when its value is dropped."""
+    custom_config = {OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: "{not json"}
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        custom_config=custom_config,
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {}
+    assert mapping.consumed_keys == {OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS}
+    assert (
+        get_unsupported_custom_config_keys(
+            LlmProviderNames.OPENAI_COMPATIBLE, custom_config
+        )
+        == set()
+    )
+
+
+def test_openai_compatible_non_object_off_signal_dropped() -> None:
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        custom_config={OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: '["not", "an", "object"]'},
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {}
+    assert mapping.consumed_keys == {OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS}
+
+
+def test_off_signal_key_unrecognized_on_other_providers() -> None:
+    custom_config = {OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: "{}"}
+    mapping = map_custom_config_to_model_kwargs(
+        model_provider=LlmProviderNames.OPENAI,
+        custom_config=custom_config,
+        api_key=None,
+        api_base=None,
+    )
+    assert mapping.model_kwargs == {}
+    assert get_unsupported_custom_config_keys(
+        LlmProviderNames.OPENAI, custom_config
+    ) == {OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS}
 
 
 def test_bedrock_auth_method_ignored_but_not_rejected() -> None:
