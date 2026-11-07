@@ -89,7 +89,8 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
        lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
        build_user_skills_payload         per sandbox user
          list_runtime_skills_for_user    db/skill.py: the one runtime gate
-         _assemble_fileset               built-ins from disk, custom from FileStore
+         _assemble_fileset               built-ins from disk, custom from FileStore;
+                                         resolves ${CLAUDE_SKILL_DIR} in each SKILL.md
          build_connectable_apps_list     guidance for unconnected apps
        compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
        push_to_sandboxes(SKILLS_MOUNT_PATH)
@@ -253,6 +254,17 @@ The library preview of an external-app skill calls the same renderer
     snapshot copies database values without opening bundles; its content digest,
     unpacked size and file count stay unknown until an application backfill.
     Do not use these snapshots as runtime content during this rollout.
+16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
+    `skills/push.py:_assemble_fileset` replaces each `${CLAUDE_SKILL_DIR}` in
+    a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
+    sent bytes change. The stored bundle, its SHA-256 and other files keep the
+    placeholder. The sent bytes feed the runtime hash. OpenCode adds the base
+    folder line and the relative-path rule itself, so the push adds neither.
+    `tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
+    `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
+    still does this. A harness that loads skills in the API server must give the
+    model `skills/rendering.py:render_skill_for_model`, which resolves the
+    placeholder and adds the same two lines. No such harness is on main yet.
 
 ---
 

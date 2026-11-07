@@ -35,11 +35,13 @@ from onyx.skills.built_in import (
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
 )
-from onyx.skills.bundle import TEMPLATE_SUFFIX
+from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
 from onyx.skills.content import iter_builtin_skill_files
 from onyx.skills.rendering import (
+    CLAUDE_SKILL_DIR_PLACEHOLDER,
     render_company_search_skill,
     render_external_app_files,
+    resolve_skill_dir_placeholder,
 )
 from onyx.skills.validation import (
     load_stored_custom_skill_bundle,
@@ -134,6 +136,20 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
         )
 
 
+def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
+    """Point ``${CLAUDE_SKILL_DIR}`` in each root ``SKILL.md`` at the skill's
+    sandbox folder. Only the sent copy changes, not the stored bundle."""
+    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
+    for name in skill_names:
+        path = f"{name}/{SKILL_MD_NAME}"
+        content = files.get(path)
+        if content is None or placeholder not in content:
+            continue
+        files[path] = resolve_skill_dir_placeholder(
+            content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
+        ).encode("utf-8")
+
+
 def _assemble_fileset(
     skills: Iterable[Skill],
     user: User,
@@ -211,6 +227,8 @@ def _assemble_fileset(
         _add_static_builtin(files, skill, definition)
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
+
+    _resolve_skill_dirs(files, seen_names)
 
     try:
         persist_skill_validity(validity_updates)
