@@ -8,6 +8,7 @@ import os
 import stat
 import sys
 import zipfile
+from collections.abc import Callable, Mapping
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
@@ -15,7 +16,6 @@ from typing import IO, Final, Literal
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.metadata import (
     parse_skill_document,
     parse_skill_md_frontmatter,
@@ -212,6 +212,8 @@ def rewrite_custom_bundle_skill_md(
     through unchanged. The resulting archive is structurally normalized before
     it is returned to callers for storage.
     """
+    from onyx.skills.built_in import BUILT_IN_SKILLS
+
     if canonical_name in BUILT_IN_SKILLS:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -377,6 +379,38 @@ def _bundle_wrapper_prefix(file_paths: list[str]) -> str | None:
     return wrapper_prefix
 
 
+def _copy_bundle_stream(
+    source: IO[bytes],
+    target: IO[bytes] | None,
+    output_path: str,
+    per_file_max_bytes: int,
+    total_bytes_before_file: int,
+    total_max_bytes: int,
+) -> int:
+    size = 0
+    while True:
+        chunk = source.read(64 * 1024)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > per_file_max_bytes:
+            raise _bundle_limit_error(
+                "file_bytes",
+                per_file_max_bytes,
+                f"file '{output_path}' exceeds "
+                f"{per_file_max_bytes // (1024 * 1024)} MiB",
+            )
+        if total_bytes_before_file + size > total_max_bytes:
+            raise _bundle_limit_error(
+                "total_bytes",
+                total_max_bytes,
+                f"bundle exceeds {total_max_bytes // (1024 * 1024)} MiB uncompressed",
+            )
+        if target is not None:
+            target.write(chunk)
+    return size
+
+
 def _copy_validated_bundle_file(
     *,
     source_zip: zipfile.ZipFile,
@@ -399,27 +433,14 @@ def _copy_validated_bundle_file(
                 target_info.compress_type = zipfile.ZIP_DEFLATED
                 target = target_zip.open(target_info, mode="w")
 
-            while True:
-                chunk = source.read(64 * 1024)
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > per_file_max_bytes:
-                    raise _bundle_limit_error(
-                        "file_bytes",
-                        per_file_max_bytes,
-                        f"file '{output_path}' exceeds "
-                        f"{per_file_max_bytes // (1024 * 1024)} MiB",
-                    )
-                if total_bytes_before_file + size > total_max_bytes:
-                    raise _bundle_limit_error(
-                        "total_bytes",
-                        total_max_bytes,
-                        f"bundle exceeds "
-                        f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
-                    )
-                if target is not None:
-                    target.write(chunk)
+            size = _copy_bundle_stream(
+                source,
+                target,
+                output_path,
+                per_file_max_bytes,
+                total_bytes_before_file,
+                total_max_bytes,
+            )
     except OnyxError:
         raise
     except Exception as exc:
@@ -737,3 +758,35 @@ def compute_bundle_sha256(zip_bytes: bytes) -> str:
     with identical contents but different timestamps still hash differently.
     """
     return hashlib.sha256(zip_bytes).hexdigest()
+
+
+def build_custom_bundle(files: Mapping[str, Callable[[], IO[bytes]]]) -> bytes:
+    """Build a deterministic bundle from archive members without unbounded reads."""
+    _check_bundle_file_count(len(files), DEFAULT_MAX_FILE_COUNT)
+    output = io.BytesIO()
+    total = 0
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as target_zip:
+        for path, open_file in sorted(files.items()):
+            _validated_bundle_path(zipfile.ZipInfo(path))
+            if _is_ignored_bundle_path(path):
+                continue
+            info = zipfile.ZipInfo(path)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            with open_file() as source, target_zip.open(info, "w") as target:
+                total += _copy_bundle_stream(
+                    source,
+                    target,
+                    path,
+                    DEFAULT_PER_FILE_MAX_BYTES,
+                    total,
+                    DEFAULT_TOTAL_MAX_BYTES,
+                )
+            if output.tell() > DEFAULT_ZIP_MAX_BYTES:
+                raise _zip_too_large_error(DEFAULT_ZIP_MAX_BYTES)
+    return normalize_custom_bundle(
+        output.getvalue(),
+        zip_max_bytes=DEFAULT_ZIP_MAX_BYTES,
+        max_file_count=DEFAULT_MAX_FILE_COUNT,
+        per_file_max_bytes=DEFAULT_PER_FILE_MAX_BYTES,
+        total_max_bytes=DEFAULT_TOTAL_MAX_BYTES,
+    ).content

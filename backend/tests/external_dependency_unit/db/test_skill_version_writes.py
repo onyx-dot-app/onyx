@@ -33,7 +33,6 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import (
     VERSION_FILES_NOT_KEPT,
-    compute_bundle_metadata,
     read_version_bundle,
     repair_version_metadata,
 )
@@ -64,6 +63,7 @@ from onyx.server.features.skill.models import (
 )
 from onyx.skills.bundle import build_single_file_bundle, build_skill_md
 from onyx.skills.ingest import ingested_skill_bundle, save_skill_bundle_bytes
+from onyx.utils.bundle import compute_bundle_metadata
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.craft.db_helpers import make_user
 

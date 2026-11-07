@@ -265,7 +265,8 @@ The library preview of an external-app skill calls the same renderer
     adapts the generic `db/resource_version.py` service. A row lock serializes
     version numbers. The version, pointer and legacy columns change in one
     transaction. Equal content digests keep the current version and stored-byte
-    hash; ZIP timestamps and entry order do not affect the digest. See
+    hash. `utils/bundle.py:compute_bundle_metadata` computes the digest without
+    database imports; ZIP timestamps and entry order do not affect it. See
     [[#bundle-retention]] for which bundle files stay.
     Legacy columns remain for V2 compatibility and repair. A save repairs a stale
     or missing pointer before writing its new content. A recovery snapshot has

@@ -1,8 +1,5 @@
 """Bundle history shared by skills and other versioned resources."""
 
-import hashlib
-import io
-import zipfile
 from typing import Protocol
 from uuid import UUID
 
@@ -18,6 +15,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, is_missing_object
 from onyx.file_store.models import BundleMetadata
+from onyx.utils.bundle import compute_bundle_metadata
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -35,32 +33,6 @@ class ResourceVersionAdapter[Version: BundleVersionMixin](Protocol):
     def versions(self) -> Select[tuple[Version]]: ...
     def new_version(self) -> Version: ...
     def publish(self, version: Version) -> None: ...
-
-
-def compute_bundle_metadata(bundle_bytes: bytes) -> BundleMetadata:
-    digest = hashlib.sha256()
-    total = 0
-    count = 0
-    with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as archive:
-        for info in sorted(archive.infolist(), key=lambda entry: entry.filename):
-            if info.is_dir():
-                continue
-            path = info.filename.encode("utf-8")
-            content_hash = hashlib.sha256()
-            size = 0
-            with archive.open(info) as source:
-                while chunk := source.read(64 * 1024):
-                    content_hash.update(chunk)
-                    size += len(chunk)
-            digest.update(len(path).to_bytes(8, "big"))
-            digest.update(path)
-            digest.update(size.to_bytes(8, "big"))
-            digest.update(content_hash.digest())
-            total += size
-            count += 1
-    return BundleMetadata(
-        content_digest=digest.hexdigest(), unpacked_size_bytes=total, file_count=count
-    )
 
 
 def fill_version_metadata(
