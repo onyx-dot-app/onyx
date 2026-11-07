@@ -76,7 +76,6 @@ const toolConfiguration: ToolConfigurationHandle = {
   setToolState: jest.fn(),
   toggleToolState: jest.fn(),
   clearPreferredTool: jest.fn(),
-  acknowledgePreferredTool: jest.fn(),
   preferredToolId: null,
   disabledToolIds: [],
   ready: true,
@@ -274,10 +273,6 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
     });
   });
   await waitFor(() => expect(sendMessage).toHaveBeenCalled());
-  expect(toolConfiguration.acknowledgePreferredTool).toHaveBeenCalledWith(
-    "session",
-    null
-  );
   let stopping: Promise<void> | undefined;
   act(() => {
     stopping = result.current.stopGenerating();
@@ -449,7 +444,7 @@ test("abort releases a reader with packets queued before its first paint", async
 });
 
 test.each([false, true])(
-  "tool preference is consumed only after admission (%s)",
+  "tool preference persists after submission (%s)",
   async (accepted) => {
     useChatSessionStore.setState({
       sessions: new Map(),
@@ -524,13 +519,18 @@ test.each([false, true])(
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({ preferredToolId: 3 })
     );
-    if (accepted)
-      expect(toolConfiguration.acknowledgePreferredTool).toHaveBeenCalledWith(
-        "session",
-        3
-      );
-    expect(toolConfiguration.acknowledgePreferredTool).toHaveBeenCalledTimes(
-      accepted ? 1 : 0
+    expect(toolConfiguration.clearPreferredTool).not.toHaveBeenCalled();
+    expect(toolConfiguration.setToolState).not.toHaveBeenCalled();
+    await act(async () =>
+      result.current.onSubmit({
+        message: "Follow-up",
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ preferredToolId: 3 })
     );
   }
 );

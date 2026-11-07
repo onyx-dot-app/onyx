@@ -23,8 +23,7 @@ export function usePreferredTools({
   agentId,
   projectId,
 }: UsePreferredToolsArgs): PreferredTools {
-  const [preference, setPreference] = useState<{ toolId: number } | null>(null);
-  const preferredToolId = preference?.toolId ?? null;
+  const [preferredToolId, setPreferredToolId] = useState<number | null>(null);
   const previousChatSessionId = useRef<string | null>(chatSessionId);
   const previousAgentId = useRef<number | undefined>(agentId);
   const previousProjectId = useRef<number | null>(projectId);
@@ -34,20 +33,20 @@ export function usePreferredTools({
     const previousId = previousChatSessionId.current;
     previousChatSessionId.current = chatSessionId;
     if (previousId !== null && previousId !== chatSessionId) {
-      setPreference(null);
+      setPreferredToolId(null);
     }
   }, [chatSessionId]);
 
   /*
    * Only known→known counts as a switch; the unresolved step after a send must not clear the
-   * force that send just used.
+   * preference that send just used.
    */
   useEffect(() => {
     if (agentId === undefined) return;
     const previousId = previousAgentId.current;
     previousAgentId.current = agentId;
     if (previousId !== undefined && previousId !== agentId) {
-      setPreference(null);
+      setPreferredToolId(null);
     }
   }, [agentId]);
 
@@ -58,23 +57,18 @@ export function usePreferredTools({
   useEffect(() => {
     const previousId = previousProjectId.current;
     previousProjectId.current = projectId;
-    if (previousId !== projectId) setPreference(null);
+    if (previousId !== projectId) setPreferredToolId(null);
   }, [projectId]);
 
   const togglePreferredTool = useCallback((toolId: number) => {
-    setPreference((current) =>
-      current?.toolId === toolId ? null : { toolId },
-    );
+    setPreferredToolId((current) => (current === toolId ? null : toolId));
   }, []);
 
   const preferTool = useCallback((toolId: number) => {
-    setPreference({ toolId });
+    setPreferredToolId(toolId);
   }, []);
 
-  const clearPreferredTool = useCallback(
-    () => setPreference((current) => (current === preference ? null : current)),
-    [preference],
-  );
+  const clearPreferredTool = useCallback(() => setPreferredToolId(null), []);
 
   return {
     preferredToolId,

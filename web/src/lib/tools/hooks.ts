@@ -1,6 +1,5 @@
 "use client";
 
-import { randomUuid } from "@/lib/uuid";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -64,16 +63,14 @@ export function useAvailableTools() {
   };
 }
 
-// Tool permissions and source filters belong to the chat. A tool preference belongs
-// to the next message and is consumed only after the server accepts that message.
+// Tool preferences, permissions, and source filters belong to the chat.
+// Sending a message preserves the selection.
 
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
 
 /** Everything a chat's next message is configured with. */
 interface ChatConfiguration {
   tools: ToolConfiguration;
-  // Admission consumes this selection, not a later selection of the same tool.
-  preferenceRevision: string | null;
   filters: ChatSearchFilters;
 }
 
@@ -86,7 +83,6 @@ const NEUTRAL_FILTERS: ChatSearchFilters = {
 
 const NEUTRAL: ChatConfiguration = {
   tools: {},
-  preferenceRevision: null,
   filters: NEUTRAL_FILTERS,
 };
 
@@ -249,10 +245,6 @@ function parseConfiguration(raw: string): ChatConfiguration {
   if (isRecord(value.tools)) {
     return {
       tools: parseTools(value.tools),
-      preferenceRevision:
-        typeof value.preferenceRevision === "string"
-          ? value.preferenceRevision
-          : null,
       filters: isRecord(value.filters)
         ? parseFilters(value.filters)
         : NEUTRAL_FILTERS,
@@ -260,7 +252,6 @@ function parseConfiguration(raw: string): ChatConfiguration {
   }
   return {
     tools: parseTools(value),
-    preferenceRevision: null,
     filters: NEUTRAL_FILTERS,
   };
 }
@@ -341,13 +332,7 @@ export interface ToolConfigurationHandle {
    * rules hold.
    */
   clearPreferredTool: () => void;
-  /** Consume the submitted preference after server admission, including new-chat handoff. */
-  acknowledgePreferredTool: (
-    chatSessionId: string,
-    toolId: number | null
-  ) => void;
-
-  /** The preferred tool for the next message, if any. */
+  /** The preferred tool for this chat, if any. */
   preferredToolId: number | null;
   /** The tools the model may not use in this chat. */
   disabledToolIds: number[];
@@ -481,7 +466,6 @@ export function useToolConfiguration(
       change: (current: ToolState | null) => ToolState | null
     ) => {
       if (key === null) return;
-      const preferenceRevision = randomUuid();
       setEntry((previous) => {
         // Between a key change and its storage read, a write would land on
         // NEUTRAL and then be clobbered by the read. `ready` documents that
@@ -493,19 +477,7 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return {
-          key,
-          configuration: {
-            ...current,
-            tools,
-            preferenceRevision:
-              tools[toolId] === "preferred"
-                ? preferenceRevision
-                : current.tools[toolId] === "preferred"
-                  ? null
-                  : current.preferenceRevision,
-          },
-        };
+        return { key, configuration: { ...current, tools } };
       });
     },
     [key]
@@ -533,34 +505,6 @@ export function useToolConfiguration(
     [configuration]
   );
 
-  const acknowledgePreferredTool = useCallback(
-    (chatSessionId: string, toolId: number | null) => {
-      if (toolId === null) return;
-      const targetKey = chatKey(chatSessionId);
-      const consume = (current: ChatConfiguration): ChatConfiguration => {
-        if (
-          current.tools[toolId] !== "preferred" ||
-          current.preferenceRevision !== configuration.preferenceRevision
-        )
-          return current;
-        return {
-          ...current,
-          tools: withToolState(current.tools, toolId, () => null),
-          preferenceRevision: null,
-        };
-      };
-      writeConfiguration(targetKey, consume(readConfiguration(targetKey)));
-      setEntry((previous) => {
-        if (previous.key !== targetKey && previous.key !== key) return previous;
-        const next = consume(previous.configuration);
-        return next === previous.configuration
-          ? previous
-          : { ...previous, configuration: next };
-      });
-    },
-    [configuration.preferenceRevision, key]
-  );
-
   const handOffToNewChatWith = useCallback(
     (agentId: number, projectId: number | null = null) =>
       writeConfiguration(
@@ -581,7 +525,6 @@ export function useToolConfiguration(
       setToolState,
       toggleToolState: (toolId: number, state: ToolState) =>
         setToolState(toolId, (current) => (current === state ? null : state)),
-      acknowledgePreferredTool,
       clearPreferredTool: () => {
         if (preferredToolId !== null) {
           setToolState(preferredToolId, (current) =>
@@ -606,7 +549,6 @@ export function useToolConfiguration(
     setFilters,
     handOffTo,
     handOffToNewChatWith,
-    acknowledgePreferredTool,
   ]);
 }
 

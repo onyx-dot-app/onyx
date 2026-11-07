@@ -52,7 +52,6 @@ export interface ComposerTools {
   unavailableToolIds: number[];
   preferredToolId: number | null;
   togglePreferredTool: (toolId: number) => void;
-  clearPreferredTool: () => void;
   disabledToolIds: number[];
   toggleToolEnabled: (toolId: number) => void;
   modelOptions: ModelOption[];
@@ -413,7 +412,6 @@ export function useComposerToolsState({
        * re-enables every source here instead, which discards a partial selection.
        */
       togglePreferredTool,
-      clearPreferredTool,
       disabledToolIds,
       toggleToolEnabled,
       modelOptions,
@@ -476,7 +474,6 @@ export function useComposerToolsState({
       availableToolsLoaded,
       preferredToolId,
       togglePreferredTool,
-      clearPreferredTool,
       disabledToolIds,
       toggleToolEnabled,
       modelOptions,

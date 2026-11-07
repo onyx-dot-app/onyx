@@ -141,7 +141,7 @@
         "label": "Suchquellen auswählen"
       },
       "preference": {
-        "tooltip": "{description}\nDieses Tool für die nächste Nachricht bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
+        "tooltip": "{description}\nDieses Tool für diesen Chat bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
       }
     },
     "addMcpModal": {

@@ -64,7 +64,7 @@ export function ActionLineItem({
       description={
         isUnavailable
           ? "Ask an admin to configure this."
-          : "Prefer for the next message; use is optional."
+          : "Prefer this tool; use is optional."
       }
       sizePreset="main-ui"
       variant="section"

@@ -1120,16 +1120,6 @@ export default function useChatController({
 
         if (controller.signal.aborted || !ownsStream()) return;
         const stack = new CurrentMessageFIFO();
-        void stack.acknowledged
-          .then((messageId) => {
-            if (messageId !== null) {
-              toolConfiguration.acknowledgePreferredTool(
-                frozenSessionId,
-                effectivePreferredToolId
-              );
-            }
-          })
-          .catch(() => {});
         useChatSessionStore.getState().updateSessionData(frozenSessionId, {
           sendAcknowledged: stack.acknowledged,
           readerFinished,

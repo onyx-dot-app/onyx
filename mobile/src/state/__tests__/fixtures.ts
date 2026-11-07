@@ -13,7 +13,6 @@ export function makeComposerTools(
     unavailableToolIds: [],
     preferredToolId: null,
     togglePreferredTool: jest.fn(),
-    clearPreferredTool: jest.fn(),
     disabledToolIds: [],
     toggleToolEnabled: jest.fn(),
     modelOptions: [],

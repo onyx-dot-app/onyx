@@ -146,10 +146,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     submit(
       message ?? draft.text,
       draft.descriptors,
-      () => {
-        clearDraft();
-        composerTools.clearPreferredTool();
-      },
+      clearDraft,
       composerTools.resolveToolOptions(),
       () => composerTools.notePendingSend(sentWithAgent),
     );

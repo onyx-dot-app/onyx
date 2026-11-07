@@ -226,83 +226,25 @@ describe("toggleSourceSelection: edit-boundary normalization", () => {
   });
 });
 
-describe("request-scoped tool preference", () => {
-  test("admission consumes the preference in the composer and handed-off chat", () => {
-    const { result, rerender } = renderHook(() => useToolConfiguration());
-    act(() => {
-      result.current.setToolState(1, () => "preferred");
-      result.current.setToolState(2, () => "disabled");
-      result.current.setFilters((current) => ({
-        ...current,
-        selectedSources: ["notion"],
-      }));
-    });
-    act(() => result.current.handOffTo("created"));
-    const acknowledge = result.current.acknowledgePreferredTool;
-    mockChatId = "created";
-    rerender();
-    act(() => acknowledge("created", 1));
-    expect(result.current.preferredToolId).toBeNull();
-    expect(result.current.disabledToolIds).toEqual([2]);
-    expect(result.current.filters.selectedSources).toEqual(["notion"]);
-  });
-
-  test("admission consumes an inline composer's preference without navigation", () => {
-    const { result } = renderHook(() => useToolConfiguration(5));
-    act(() => result.current.setToolState(1, () => "preferred"));
-    act(() => result.current.handOffTo("created"));
-    act(() => result.current.acknowledgePreferredTool("created", 1));
-    expect(result.current.preferredToolId).toBeNull();
-    expect(sessionStorage.getItem("onyx:tools:chat:created")).toBeNull();
-  });
-
-  test("tool selection works without secure-context randomUUID", () => {
-    const original = crypto.randomUUID;
-    Object.defineProperty(crypto, "randomUUID", {
-      configurable: true,
-      value: undefined,
-    });
-    try {
-      const { result } = renderHook(() => useToolConfiguration());
-      act(() => result.current.setToolState(1, () => "preferred"));
-      expect(result.current.preferredToolId).toBe(1);
-      act(() => result.current.setToolState(1, () => "disabled"));
-      expect(result.current.preferredToolId).toBeNull();
-      expect(result.current.disabledToolIds).toEqual([1]);
-    } finally {
-      Object.defineProperty(crypto, "randomUUID", {
-        configurable: true,
-        value: original,
-      });
-    }
-  });
-
-  test.each([1, 2])(
-    "late admission preserves a newer selection of tool %s",
-    (nextId) => {
-      const { result } = renderHook(() => useToolConfiguration());
-      act(() => result.current.setToolState(1, () => "preferred"));
-      const acknowledge = result.current.acknowledgePreferredTool;
-      act(() => result.current.setToolState(1, () => null));
-      act(() => result.current.setToolState(nextId, () => "preferred"));
-      act(() => acknowledge("abc", 1));
-      expect(result.current.preferredToolId).toBe(nextId);
-    }
+test("tool preference persists through chat handoff and reload", () => {
+  const { result, rerender, unmount } = renderHook(() =>
+    useToolConfiguration()
   );
-});
-
-test("old send admission does not consume a new landing draft", () => {
-  const { result } = renderHook(() => useToolConfiguration(5));
-  act(() => result.current.setToolState(1, () => "preferred"));
+  act(() => {
+    result.current.setToolState(1, () => "preferred");
+    result.current.setToolState(2, () => "disabled");
+  });
   act(() => result.current.handOffTo("created"));
-  const acknowledge = result.current.acknowledgePreferredTool;
-  act(() => result.current.setToolState(1, () => null));
-  act(() => result.current.setToolState(1, () => "preferred"));
-  act(() => acknowledge("created", 1));
   expect(result.current.preferredToolId).toBe(1);
-  expect(
-    JSON.parse(sessionStorage.getItem("onyx:tools:chat:created") ?? "{}").tools
-  ).toBeUndefined();
+  mockChatId = "created";
+  rerender();
+  expect(result.current.preferredToolId).toBe(1);
+  expect(result.current.disabledToolIds).toEqual([2]);
+  unmount();
+  const reloaded = renderHook(() => useToolConfiguration());
+  expect(reloaded.result.current.preferredToolId).toBe(1);
+  act(() => reloaded.result.current.clearPreferredTool());
+  expect(reloaded.result.current.preferredToolId).toBeNull();
 });
 
 test("Deep Research and a tool preference are mutually exclusive", () => {

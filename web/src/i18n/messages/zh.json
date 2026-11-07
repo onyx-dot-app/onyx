@@ -141,7 +141,7 @@
         "label": "选择搜索来源"
       },
       "preference": {
-        "tooltip": "{description}\n在下一条消息中优先使用此工具。智能体也可能不使用该工具直接回答。"
+        "tooltip": "{description}\n在此聊天中优先使用此工具。智能体也可能不使用该工具直接回答。"
       }
     },
     "addMcpModal": {

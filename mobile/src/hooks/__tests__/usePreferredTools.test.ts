@@ -20,7 +20,7 @@ function renderPreferred(
 }
 
 describe("usePreferredTools", () => {
-  it("starts unpreferred and forces on toggle", () => {
+  it("starts unpreferred and selects on toggle", () => {
     const { result } = renderPreferred(null, 0);
     expect(result.current.preferredToolId).toBeNull();
 
@@ -48,19 +48,6 @@ describe("usePreferredTools", () => {
     act(() => result.current.clearPreferredTool());
     expect(result.current.preferredToolId).toBeNull();
   });
-
-  it.each([3, 7])(
-    "late admission does not clear a newer selection of tool %s",
-    (nextId) => {
-      const { result } = renderPreferred(null, 0);
-      act(() => result.current.togglePreferredTool(3));
-      const onAccepted = result.current.clearPreferredTool;
-      act(() => result.current.togglePreferredTool(3));
-      act(() => result.current.togglePreferredTool(nextId));
-      act(() => onAccepted());
-      expect(result.current.preferredToolId).toBe(nextId);
-    },
-  );
 
   it("preserves the preference when the landing gets its new session", () => {
     const { result, rerender } = renderPreferred(null, 0);

@@ -141,7 +141,7 @@
         "label": "Seleccionar fuentes de búsqueda"
       },
       "preference": {
-        "tooltip": "{description}\nPreferir esta herramienta para el siguiente mensaje. El agente puede responder sin usarla."
+        "tooltip": "{description}\nPreferir esta herramienta para este chat. El agente puede responder sin usarla."
       }
     },
     "addMcpModal": {

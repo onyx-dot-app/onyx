@@ -141,7 +141,7 @@
         "label": "검색 소스 선택"
       },
       "preference": {
-        "tooltip": "{description}\n다음 메시지에서 이 도구를 우선 사용합니다. 에이전트가 도구 없이 답변할 수도 있습니다."
+        "tooltip": "{description}\n이 채팅에서 이 도구를 우선 사용합니다. 에이전트가 도구 없이 답변할 수도 있습니다."
       }
     },
     "addMcpModal": {

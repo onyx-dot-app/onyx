@@ -231,7 +231,7 @@ describe("useComposerToolsState", () => {
     });
   });
 
-  it("makes Deep Research and the next-message preference mutually exclusive", () => {
+  it("makes Deep Research and the tool preference mutually exclusive", () => {
     const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
     act(() => result.current.togglePreferredTool(2));
     act(() => result.current.toggleDeepResearch());
@@ -545,7 +545,7 @@ describe("useComposerToolsState", () => {
     });
   });
 
-  it("still sends the force and the allowlist while the agent is momentarily unknown", async () => {
+  it("preserves the preference and allowlist across session creation and follow-up sends", async () => {
     mockApi({ preferences: { "0": { disabled_tool_ids: [2] } } });
     const sendAgent = agent([searchTool, imageTool, fileReaderTool]);
     const { result, rerender } = renderHook(
@@ -574,6 +574,15 @@ describe("useComposerToolsState", () => {
 
     expect(result.current.resolveToolOptions().preferredToolId).toBe(1);
     expect(result.current.resolveToolOptions().allowedToolIds).toEqual([1, 3]);
+
+    rerender({
+      chatSessionId: "session-1",
+      agent: sendAgent,
+      isProjectWorkflow: false,
+      projectId: null,
+    });
+    act(() => result.current.notePendingSend(sendAgent));
+    expect(result.current.resolveToolOptions().preferredToolId).toBe(1);
   });
 
   it("never sends a preferred id that is also disabled", async () => {

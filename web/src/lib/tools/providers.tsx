@@ -39,7 +39,7 @@ export interface ToolsPopoverValue extends ToolsPopoverInputs {
   /** How many of {@link configuredSources} are on, and how many there are. */
   sourceCounts: { enabled: number; total: number };
   isSourceEnabled: (uniqueKey: string) => boolean;
-  /** Pins a tool for the next message, or releases it. */
+  /** Pins a preferred tool for this chat, or releases it. */
   togglePreferred: (toolId: number) => void;
   /** Switches a tool off for this chat, or back on. */
   toggleEnabled: (toolId: number) => void;
