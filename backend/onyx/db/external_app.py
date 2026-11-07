@@ -422,6 +422,7 @@ def associate_custom_skill_with_external_app__no_commit(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found.")
+    db_session.refresh(skill, ["current_version"])
     if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -511,6 +512,8 @@ def replace_custom_skill_associations__no_commit(
     )
     if len(target_skills) != len(target_ids):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "One or more skills were not found.")
+    for skill in target_skills:
+        db_session.refresh(skill, ["current_version"])
     if any(not skill.is_custom for skill in target_skills):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

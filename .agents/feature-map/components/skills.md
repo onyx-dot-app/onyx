@@ -258,7 +258,10 @@ The library preview of an external-app skill calls the same renderer
 15. `version-rollout-reads` **Custom readers use `Skill.current_version`.**
     Its eager outer join retains built-ins, which have no versions. A custom
     row without a pointer cannot load or enable. Locks on joined skill queries
-    must specify `of=Skill`. Publishing also refreshes the loaded relationship. Custom writers call `db/skill_version.py`, which
+    must specify `of=Skill`. Reload `current_version` after a locking read before
+    using its content or validity. A statement that waits on a concurrent edit
+    can combine the new skill pointer with the old joined version snapshot.
+    Publishing also refreshes the loaded relationship. Custom writers call `db/skill_version.py`, which
     adapts the generic `db/resource_version.py` service. A row lock serializes
     version numbers. The version, pointer and legacy columns change in one
     transaction. Equal content digests keep the current version and stored-byte

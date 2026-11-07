@@ -410,7 +410,10 @@ def fetch_skill(
     ).where(Skill.id == skill_id)
     if lock_for_update:
         stmt = stmt.with_for_update(of=Skill)
-    return db_session.scalars(stmt).one_or_none()
+    skill = db_session.scalars(stmt).one_or_none()
+    if skill is not None and lock_for_update:
+        db_session.refresh(skill, ["current_version"])
+    return skill
 
 
 def add_new_skill__no_commit(
