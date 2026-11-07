@@ -187,16 +187,20 @@ falls back to `ChatMessage.error` on legacy rows
 (`db/chat.py:translate_db_message_to_chat_message_detail`); a change to the
 failure shape must keep old rows readable.
 
-**History for the next turn.** Saved tool output remains in model history until
-context-budget compaction or truncation removes older history. Runtime results retain their
-recorded bodies through `chat/chat_utils.py:capture_chat_history`; legacy results
-replay their saved text, with a placeholder when the output is missing or empty.
-Legacy generated-image records retain their file identifiers and prompts.
-Usage-only storage can evict evidence earlier under its limits described below.
-`messages_for_model` still
-removes incomplete tool exchanges and unsigned thinking, so interrupted runs do
-not create invalid provider requests. PostgreSQL content remains intact for replay
-and citations; compaction and truncation change the working context, not those saved records.
+**History for the next turn.** `chat/chat_utils.py:capture_chat_history` reconstructs
+runtime results from their recorded bodies. For legacy generated-image results,
+`_build_tool_call_response_history_message` prefers usable stored file IDs and revised
+prompts. If none are usable, it falls back to saved response text, then a placeholder.
+Other legacy results use saved response text, then the placeholder.
+
+The runtime builds its working context from that history. `messages_for_model`
+removes incomplete tool exchanges and unsigned thinking. Context-budget compaction
+can summarize older results; truncation can remove them. These operations change
+model input, not the source records.
+
+Content-persisting sessions retain PostgreSQL evidence for replay and citations.
+`USAGE_ONLY` sessions store no conversation content there. Their temporary history
+can lose evidence before model compaction under the retention limits below.
 
 **Incognito.** A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings

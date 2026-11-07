@@ -268,11 +268,12 @@ counts what is sent, not the stored token counts.
     test.
 11. `new-context-element-decisions` **Each new context element needs five
     decisions.** Its position relative to the agent prompt and project files,
-    whether `calculate_reserved_tokens` counts it, whether it is request-only
-    (then set `allow_compaction_cutoff=False`,
-    [[agent-runtime#stable-message-ids]]), what each incognito mode stores
+    whether `calculate_reserved_tokens` counts it, whether it belongs to recorded
+    history or request-only prompt assembly, what each incognito mode stores
     ([[chat-persistence#incognito-decision-per-field]]), and whether a resumed
-    turn needs it. A resumed turn rebuilds `ChatAgent` only from
+    turn needs it. Add request-only context through `prepare_prompt`, outside recorded
+    history. Compaction cutoffs identify recorded messages; they must not reference
+    request-only context. A resumed turn rebuilds `ChatAgent` only from
     `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
     not from the current persona or settings. A new prompt input that is not in
     that state, `ChatAgent.capture_state` and `ChatAgent.restore_state` is lost
