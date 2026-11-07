@@ -145,8 +145,8 @@ Onyx rejects it with HTTP 413. The response gives the `limit` and its `limit_val
 Skills that you saved before these limits continue to work. Onyx applies the limits when you save the Skill again.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,
-`SKILL_BUNDLE_PER_FILE_MAX_BYTES` and `SKILL_BUNDLE_TOTAL_MAX_BYTES`.
-If your reverse proxy sets a request size limit, allow space for the bundle and multipart form data.
+`SKILL_BUNDLE_PER_FILE_MAX_BYTES` and `SKILL_BUNDLE_TOTAL_MAX_BYTES`. If your reverse proxy sets a request size limit,
+allow space for the bundle and multipart form data.
 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
