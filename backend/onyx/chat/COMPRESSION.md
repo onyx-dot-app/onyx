@@ -31,7 +31,7 @@ Chat lists files removed from context. The agent can reread them only if its ava
 Without those tools, facts found only in the attachment body are unavailable after compaction.
 Compaction selects the cutoff before summarizing. Request-only additional context stays in the trailing prompt suffix and is not summarized.
 
-Emergency truncation saves its cutoff in a SUMMARY row with empty summary text.
+For chats that retain content, emergency truncation saves its cutoff in a SUMMARY row with empty summary text.
 Later turns reuse that cutoff instead of restoring discarded history.
 Content-free temporary chats keep the root checkpoint with conversation content in the temporary store,
 including empty-summary cutoffs. They never write summary content to PostgreSQL.
