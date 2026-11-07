@@ -24,6 +24,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
+	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
@@ -102,6 +103,7 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	launcher := &fcvm.Launcher{Cmd: cmd, Log: log}
 	m := agent.NewManager(agent.Config{
 		MinFreeMemMiB:    f.minFreeMemMiB,
 		MinFreeDiskBytes: f.minFreeDiskGB * uint64(scratch.GiB),
@@ -111,12 +113,22 @@ func run(f flags, log *slog.Logger) error {
 		TombstoneTTL:     24 * time.Hour,
 	},
 		&template.Store{Dir: filepath.Join(f.dataDir, "templates")},
-		&fcvm.Launcher{Cmd: cmd, Log: log},
+		launcher,
 		hostinfo.Stats{DataDir: f.dataDir},
 		uids,
 		agent.Versions{Firecracker: bins.Version, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(), Agent: version},
 		log,
 	)
+	m.UseJournal(&journal.Journal{Dir: filepath.Join(f.dataDir, "journal")})
+	t0 := time.Now()
+	rep, err := m.Recover(context.Background(), launcher)
+	if err != nil {
+		return err
+	}
+	log.Info("recovered VMs", "adopted", rep.Adopted, "unresponsive", rep.Unresponsive, "exited", rep.Exited,
+		"abandoned", rep.Abandoned, "unverified", rep.Unverified, "unreadable", rep.Unreadable,
+		"tombstones", rep.Tombstones, "orphans_killed", rep.Orphans, "leftovers_removed", rep.Leftovers,
+		"ms", time.Since(t0).Milliseconds())
 	ln, err := server.ListenUnix(f.socket)
 	if err != nil {
 		return err
@@ -143,7 +155,7 @@ func preflight(f flags, lay jailer.Layout) error {
 	if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
 		return fmt.Errorf("cgroup v2 is not mounted at /sys/fs/cgroup: %w", err)
 	}
-	for _, d := range []string{"templates", "jail", "bin", "run"} {
+	for _, d := range []string{"templates", "jail", "bin", "run", "journal"} {
 		if err := os.MkdirAll(filepath.Join(f.dataDir, d), 0o700); err != nil {
 			return err
 		}

@@ -46,7 +46,7 @@ func Code(r pb.ErrorReason) codes.Code {
 	case pb.ErrorReason_TEMPLATE_MISSING, pb.ErrorReason_SANDBOX_NOT_FOUND:
 		return codes.NotFound
 	case pb.ErrorReason_TEMPLATE_INCOMPATIBLE, pb.ErrorReason_ATTEMPT_CONFLICT,
-		pb.ErrorReason_STALE_ATTEMPT, pb.ErrorReason_INSTANCE_MISMATCH:
+		pb.ErrorReason_STALE_ATTEMPT, pb.ErrorReason_INSTANCE_MISMATCH, pb.ErrorReason_SANDBOX_IN_DOUBT:
 		return codes.FailedPrecondition
 	case pb.ErrorReason_CAPACITY_MEMORY, pb.ErrorReason_CAPACITY_DISK, pb.ErrorReason_CAPACITY_VM_SLOTS:
 		return codes.ResourceExhausted

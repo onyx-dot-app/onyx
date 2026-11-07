@@ -59,6 +59,11 @@ const (
 	ErrorReason_VMM_FAILED ErrorReason = 14
 	// Any other error.
 	ErrorReason_INTERNAL ErrorReason = 15
+	// The agent keeps a Firecracker process for the sandbox that it could not
+	// verify (an unreadable journal record, a failed check at start-up, or a
+	// failed start). Create and Stop fail until that process exits, or until an
+	// operator fixes the journal record and restarts the agent.
+	ErrorReason_SANDBOX_IN_DOUBT ErrorReason = 16
 )
 
 // Enum value maps for ErrorReason.
@@ -80,6 +85,7 @@ var (
 		13: "INSTANCE_MISMATCH",
 		14: "VMM_FAILED",
 		15: "INTERNAL",
+		16: "SANDBOX_IN_DOUBT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -98,6 +104,7 @@ var (
 		"INSTANCE_MISMATCH":        13,
 		"VMM_FAILED":               14,
 		"INTERNAL":                 15,
+		"SANDBOX_IN_DOUBT":         16,
 	}
 )
 
@@ -939,7 +946,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vscratch_gib\x18\x04 \x01(\rR\n" +
 	"scratchGib\x12!\n" +
 	"\fguest_kernel\x18\x05 \x01(\tR\vguestKernel\x12/\n" +
-	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\xf1\x02\n" +
+	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\x87\x03\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -958,7 +965,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x11INSTANCE_MISMATCH\x10\r\x12\x0e\n" +
 	"\n" +
 	"VMM_FAILED\x10\x0e\x12\f\n" +
-	"\bINTERNAL\x10\x0f*e\n" +
+	"\bINTERNAL\x10\x0f\x12\x14\n" +
+	"\x10SANDBOX_IN_DOUBT\x10\x10*e\n" +
 	"\aVMState\x12\x18\n" +
 	"\x14VM_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11VM_STATE_STARTING\x10\x01\x12\x14\n" +
