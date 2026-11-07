@@ -46,6 +46,18 @@ CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = [
     {
+        "name": "repair-skill-versions",
+        "task": OnyxCeleryTask.REPAIR_SKILL_VERSIONS,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": 4 * 60,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "cleanup-oauth-provider-grants",
         "task": OnyxCeleryTask.CLEANUP_OAUTH_PROVIDER_GRANTS,
         "schedule": timedelta(days=1),

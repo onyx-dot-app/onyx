@@ -269,9 +269,17 @@ The library preview of an external-app skill calls the same renderer
     Identical saves verify the existing bundle before reusing it. A missing,
     changed or unreadable current file creates a fresh version from the upload.
     Missing or corrupt historical files retain unknown metadata. Built-ins have
-    no versions. The next layer adds bounded tenant repair; finish a fresh drift
-    check after old writers drain before switching readers. No migration reads
-    blobs.
+    no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
+    tenant in bounded batches. The deadline is cooperative between skills;
+    a single skill's blob reads can exceed it. Each skill commits before its
+    UUID cursor advances. Transient reads fail without advancing progress.
+    Progress reloads from PostgreSQL because KV caching precedes its commit.
+    After the initial scan, `db/skill_version.py:skill_version_repair_batch`
+    checks pointer, file, hash and validity drift with an outer join and
+    null-safe comparisons. This catches old-writer edits and pointerless
+    inserts below the cursor. The completed flag means only the initial scan
+    finished. Before switching readers, drain old writers and require a fresh
+    empty drift query, not that flag. No migration reads blobs.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the

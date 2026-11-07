@@ -6,7 +6,7 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from typing import Never
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from botocore.exceptions import ClientError
@@ -17,11 +17,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from onyx.background.celery.tasks.skill_versions import tasks as repair_tasks
+from onyx.background.celery.tasks.skill_versions.tasks import (
+    PROGRESS_KEY,
+    repair_skill_versions,
+)
 from onyx.background.celery.tasks.skills.tasks import (
     check_for_orphan_skill_bundle_cleanup,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheLockLostError
+from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.constants import FileOrigin, OnyxRedisLocks
 from onyx.db import skill_version
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -44,12 +49,14 @@ from onyx.db.skill_version import (
     delete_unreferenced_skill_bundles,
     repair_skill_version,
     save_skill_version,
+    skill_version_repair_batch,
 )
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store import staging
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.key_value_store.store import REDIS_KEY_PREFIX
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import (
     SkillBulkActionRequest,
@@ -844,3 +851,312 @@ def test_orphan_cleanup_deadline_resumes_without_skipping(
     assert len(stored_bundles(session)) == 3 - first_pass_count
     assert delete_orphan_skill_bundles() == 3 - first_pass_count
     assert stored_bundles(session) == set()
+
+
+@pytest.mark.parametrize("delete_history", [False, True])
+@pytest.mark.parametrize("completed", [False, True])
+def test_tenant_repair_stale_deleted_and_pointerless(
+    tenant: str, session: Session, user: User, delete_history: bool, completed: bool
+) -> None:
+    store = get_default_file_store()
+    name = f"legacy-{uuid4().hex[:8]}"
+    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    if completed:
+        repair_skill_versions.run(tenant_id=tenant)
+        repair_skill_versions.run(tenant_id=tenant)
+        assert get_kv_store().load(PROGRESS_KEY) == "completed"
+    old = versions(skill, session)[0]
+    # The V1 migration deliberately uses the skill UUID as version UUID.
+    old.id = skill.id
+    skill.current_version_id = skill.id
+    old.content_digest = old.unpacked_size_bytes = old.file_count = None
+    session.commit()
+    assert old.bundle_file_id is not None
+    deleted_file_id = old.bundle_file_id
+    with ingested_skill_bundle(
+        bundle(name, "Legacy writer"), "skill.zip", store
+    ) as ingested:
+        skill.bundle_file_id = ingested.bundle_file_id
+        skill.bundle_sha256 = ingested.bundle_sha256
+        session.commit()
+    if delete_history:
+        store.delete_file(deleted_file_id)
+    orphan_name = f"pointerless-{uuid4().hex[:8]}"
+    with ingested_skill_bundle(bundle(orphan_name), "skill.zip", store) as ingested:
+        pointerless = Skill(
+            name=orphan_name,
+            description="Legacy",
+            author_user_id=user.id,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            is_valid=True,
+        )
+        session.add(pointerless)
+        session.commit()
+    built_in = Skill(
+        name="test-builtin", description="Built in", built_in_skill_id="test-builtin"
+    )
+    session.add(built_in)
+    session.commit()
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("public")
+    try:
+        repair_skill_versions.run(tenant_id=tenant)
+        assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "public"
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    session.expire_all()
+    repaired = versions(skill, session)
+    assert len(repaired) == 2
+    assert repaired[0].created_by_user_id is None
+    assert repaired[0].content_digest is not None
+    assert repaired[0].bundle_file_id == skill.bundle_file_id
+    assert (repaired[1].content_digest is None) == delete_history
+    assert len(versions(pointerless, session)) == 1
+    assert versions(pointerless, session)[0].file_count == 1
+    assert built_in.current_version_id is None
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == "completed"
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(skill, session)) == 2
+
+
+def legacy_skill(session: Session, user: User, number: int) -> Skill:
+    name = f"legacy-{number}"
+    with ingested_skill_bundle(
+        bundle(name), "skill.zip", get_default_file_store()
+    ) as ingested:
+        skill = Skill(
+            id=UUID(int=number),
+            name=name,
+            description="Legacy",
+            author_user_id=user.id,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            is_valid=True,
+        )
+        session.add(skill)
+        session.commit()
+    return skill
+
+
+def test_late_insert_below_cursor(tenant: str, session: Session, user: User) -> None:
+    first = legacy_skill(session, user, 100)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == str(first.id)
+    late = legacy_skill(session, user, 1)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == "completed"
+    assert skill_version_repair_batch(session, None, drift_only=True) == [late]
+    session.commit()
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(late, session)) == 1
+    assert skill_version_repair_batch(session, None, drift_only=True) == []
+
+
+@pytest.mark.parametrize("validity", [False, True, None])
+def test_completed_validity_drift(
+    tenant: str, session: Session, user: User, validity: bool | None
+) -> None:
+    skill = legacy_skill(session, user, 1)
+    repair_skill_versions.run(tenant_id=tenant)
+    repair_skill_versions.run(tenant_id=tenant)
+    current = versions(skill, session)[0]
+    skill.is_valid = validity
+    session.commit()
+    repair_skill_versions.run(tenant_id=tenant)
+    session.expire_all()
+    assert versions(skill, session) == [current]
+    assert current.is_valid is validity
+    assert skill_version_repair_batch(session, None, drift_only=True) == []
+
+
+def test_deadline_resumes_before_next_skill(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = legacy_skill(session, user, 1)
+    second = legacy_skill(session, user, 2)
+    clock = iter([0.0, 0.0, 31.0])
+    with monkeypatch.context() as patch:
+        patch.setattr(repair_tasks, "monotonic", lambda: next(clock))
+        repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == str(first.id)
+    session.refresh(second)
+    assert second.current_version_id is None
+    assert len(versions(first, session)) == 1
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(second, session)) == 1
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == "completed"
+
+
+def test_batch_bound(tenant: str, session: Session, user: User) -> None:
+    skills = [legacy_skill(session, user, number) for number in range(1, 52)]
+    repair_skill_versions.run(tenant_id=tenant)
+    assert session.scalar(select(func.count()).select_from(SkillVersion)) == 50
+    assert get_kv_store().load(PROGRESS_KEY) == str(skills[49].id)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(skills[50], session)) == 1
+
+
+def test_lock_contention_and_tenant_cleanup(
+    tenant: str, session: Session, user: User
+) -> None:
+    skill = legacy_skill(session, user, 1)
+    lock = get_cache_backend().lock(PROGRESS_KEY, timeout=300)
+    assert lock.acquire(blocking=False)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("public")
+    try:
+        repair_skill_versions.run(tenant_id=tenant)
+        assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "public"
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        lock.release()
+    session.refresh(skill)
+    assert skill.current_version_id is None
+    with pytest.raises(KvKeyNotFoundError):
+        get_kv_store().load(PROGRESS_KEY)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(skill, session)) == 1
+
+
+def test_lost_lock_rolls_back_before_progress(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = legacy_skill(session, user, 1)
+    backend = get_cache_backend()
+    lock = backend.lock(PROGRESS_KEY, timeout=300)
+    renewals = 0
+
+    def extend(ttl_seconds: float) -> None:
+        nonlocal renewals
+        assert ttl_seconds == 300
+        renewals += 1
+        if renewals == 2:
+            lock.release()
+            raise CacheLockLostError("expired during repair")
+
+    def task_lock(name: str, timeout: float) -> CacheLock:
+        assert name == PROGRESS_KEY and timeout == 300
+        return lock
+
+    with monkeypatch.context() as patch:
+        patch.setattr(repair_tasks, "get_cache_backend", lambda: backend)
+        patch.setattr(backend, "lock", task_lock)
+        patch.setattr(lock, "extend", extend)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set("public")
+        try:
+            with pytest.raises(CacheLockLostError):
+                repair_skill_versions.run(tenant_id=tenant)
+            assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "public"
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    session.refresh(skill)
+    assert skill.current_version_id is None
+    with pytest.raises(KvKeyNotFoundError):
+        get_kv_store().load(PROGRESS_KEY)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(skill, session)) == 1
+
+
+@pytest.mark.parametrize("completed", [False, True])
+def test_transient_read_keeps_repair_pending(
+    tenant: str,
+    session: Session,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    completed: bool,
+) -> None:
+    skill = legacy_skill(session, user, 1)
+    store = get_default_file_store()
+    if completed:
+        get_kv_store().store(PROGRESS_KEY, "completed")
+
+    def unavailable(file_id: str) -> None:
+        raise ConnectionError(file_id)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(repair_tasks, "get_default_file_store", lambda: store)
+        patch.setattr(store, "read_file", unavailable)
+        with pytest.raises(ConnectionError):
+            repair_skill_versions.run(tenant_id=tenant)
+    session.refresh(skill)
+    assert skill.current_version_id is None
+    if completed:
+        assert get_kv_store().load(PROGRESS_KEY) == "completed"
+    else:
+        with pytest.raises(KvKeyNotFoundError):
+            get_kv_store().load(PROGRESS_KEY)
+    assert not get_cache_backend().lock(PROGRESS_KEY, timeout=300).owned()
+    repair_skill_versions.run(tenant_id=tenant)
+    assert versions(skill, session)[0].content_digest is not None
+
+
+def test_stale_cached_completion_does_not_skip_backfill(
+    tenant: str, session: Session, user: User
+) -> None:
+    skill = legacy_skill(session, user, 1)
+    repair_skill_version(skill, session)
+    session.commit()
+    # KV store writes its cache before PostgreSQL; emulate a failed durable write.
+    get_cache_backend().set(REDIS_KEY_PREFIX + PROGRESS_KEY, '"completed"')
+    repair_skill_versions.run(tenant_id=tenant)
+    assert versions(skill, session)[0].content_digest is not None
+    assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
+
+
+@pytest.mark.parametrize("damage", ["missing", "invalid_zip", "invalid_utf8"])
+def test_bad_history_does_not_block_later_skills(
+    tenant: str, session: Session, user: User, damage: str
+) -> None:
+    bad = legacy_skill(session, user, 1)
+    good = legacy_skill(session, user, 2)
+    store = get_default_file_store()
+    assert bad.bundle_file_id is not None
+    store.delete_file(bad.bundle_file_id)
+    if damage != "missing":
+        data = bytearray(bundle(bad.name))
+        # Mark the central-directory filename UTF-8, then make it invalid UTF-8.
+        offset = data.index(b"PK\x01\x02")
+        data[offset + 8 : offset + 10] = (0x800).to_bytes(2, "little")
+        data[offset + 46] = 0xFF
+        store.save_file(
+            io.BytesIO(bytes(data) if damage == "invalid_utf8" else b"not a ZIP"),
+            "damaged.zip",
+            FileOrigin.SKILL_BUNDLE,
+            "application/zip",
+            file_id=bad.bundle_file_id,
+        )
+    repair_skill_versions.run(tenant_id=tenant)
+    assert versions(bad, session)[0].content_digest is None
+    assert versions(good, session)[0].file_count == 1
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == "completed"
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(bad, session)) == 1
+
+
+def test_failed_repair_commit_does_not_advance(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = legacy_skill(session, user, 1)
+    repair = repair_tasks.repair_skill_version_metadata
+
+    def invalid_pointer(
+        skill: Skill, db_session: Session, file_store: FileStore
+    ) -> None:
+        repair(skill, db_session, file_store)
+        skill.current_version_id = uuid4()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(repair_tasks, "repair_skill_version_metadata", invalid_pointer)
+        with pytest.raises(IntegrityError):
+            repair_skill_versions.run(tenant_id=tenant)
+    session.refresh(skill)
+    assert skill.current_version_id is None
+    assert session.scalar(select(func.count()).select_from(SkillVersion)) == 0
+    with pytest.raises(KvKeyNotFoundError):
+        get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(skill, session)) == 1
