@@ -96,11 +96,13 @@ def upgrade() -> None:
 def downgrade() -> None:
     if op.get_bind().scalar(
         sa.text(
-            "SELECT EXISTS (SELECT 1 FROM skill WHERE marketplace_id IS NOT NULL AND author_user_id IS NULL)"
+            "SELECT EXISTS (SELECT 1 FROM skill WHERE "
+            "(marketplace_id IS NOT NULL AND author_user_id IS NULL) OR retired_at IS NOT NULL)"
         )
     ):
         raise RuntimeError(
-            "Cannot downgrade while ownerless marketplace skills exist. Remove them or assign owners first."
+            "Cannot downgrade while ownerless marketplace skills or retired skills exist. "
+            "Remove retired skills and assign owners to remaining marketplace skills first."
         )
     op.drop_constraint("ck_private_skill_has_owner", "skill", type_="check")
     op.create_check_constraint(

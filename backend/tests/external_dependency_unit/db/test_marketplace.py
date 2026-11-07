@@ -8,11 +8,14 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy import delete, inspect, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.schema import CreateSchema
 
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import (
+    Base,
     EncryptedString,
     Marketplace,
     Marketplace__UserGroup,
@@ -50,9 +53,54 @@ def marketplace(db_session: Session) -> Generator[Marketplace, None, None]:
         db_session.rollback()
 
 
+@pytest.fixture
+def migration_session(isolated_engine: Engine) -> Generator[Session, None, None]:
+    schema = f"marketplace_migration_{uuid4().hex}"
+    tables = {
+        Base.metadata.tables[name]
+        for name in (
+            "marketplace",
+            "marketplace__user_group",
+            "skill",
+            "skill_version",
+            "oauth_account",
+            "user__pinned_persona",
+        )
+    }
+    while (
+        dependencies := {
+            fk.column.table for table in tables for fk in table.foreign_keys
+        }
+        - tables
+    ):
+        tables |= dependencies
+    with isolated_engine.connect() as connection:
+        try:
+            connection.execute(CreateSchema(schema))
+            connection.execute(
+                text("SELECT set_config('search_path', :schema, true)"),
+                {"schema": schema},
+            )
+            Base.metadata.create_all(connection, tables=list(tables))
+            with Session(connection) as session:
+                yield session
+        finally:
+            connection.rollback()
+
+
 def test_migration_round_trip_and_refusal(
-    db_session: Session, marketplace: Marketplace
+    migration_session: Session,
 ) -> None:
+    db_session = migration_session
+    marketplace = Marketplace(
+        name="migration",
+        provider=MarketplaceProvider.GITHUB,
+        provider_config=GitHubMarketplaceConfig(
+            owner="acme", repo="skills", ref="main"
+        ),
+    )
+    db_session.add(marketplace)
+    db_session.flush()
     scripts = ScriptDirectory(str(Path(__file__).resolve().parents[3] / "alembic"))
     revision = scripts.get_revision("1c894e757414")
     assert revision is not None
@@ -66,12 +114,17 @@ def test_migration_round_trip_and_refusal(
         # Public ownerless marketplace skills must also block the downgrade.
         with pytest.raises(RuntimeError, match="ownerless marketplace skills"):
             revision.module.downgrade()
-        set_skill_public_permission(
-            skill=skill, public_permission=None, db_session=db_session
-        )
+        skill.public_permission = None
+        db_session.flush()
         with pytest.raises(RuntimeError, match="ownerless marketplace skills"):
             revision.module.downgrade()
         skill.author_user_id = make_user(db_session).id
+        skill.retired_at = datetime.now(timezone.utc)
+        db_session.flush()
+        connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        with pytest.raises(RuntimeError, match="retired skills"):
+            revision.module.downgrade()
+        skill.retired_at = None
         db_session.flush()
         # Flush deferred version-FK events before ALTER TABLE.
         connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
