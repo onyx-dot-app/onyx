@@ -2679,7 +2679,27 @@ def test_bedrock_final_request_preserves_evidence_without_tool_definitions(
     else:
         assert sent["tools"]
         assert sent["tool_choice"] == ToolChoiceOptions.AUTO
-        assert any(message["role"] == "tool" for message in sent["messages"])
+        calls = [
+            message["tool_calls"]
+            for message in sent["messages"]
+            if message.get("tool_calls")
+        ]
+        assert calls == [
+            [
+                {
+                    "id": "weather-call",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": '{"location":"Paris"}',
+                    },
+                }
+            ]
+        ]
+        results = [message for message in sent["messages"] if message["role"] == "tool"]
+        assert results == [
+            {"role": "tool", "tool_call_id": "weather-call", "content": "Sunny, 20C"}
+        ]
     assert [message.model_dump() for message in messages] == original
 
 

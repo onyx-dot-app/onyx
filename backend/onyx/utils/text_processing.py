@@ -2,6 +2,8 @@ import codecs
 import json
 import re
 import string
+from collections.abc import Iterator
+from typing import Any
 from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger
@@ -149,7 +151,7 @@ def _balanced_brace_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
-def find_all_json_objects(text: str) -> list[dict]:
+def find_all_json_objects(text: str) -> list[dict[str, Any]]:
     """Find all JSON objects in text using balanced brace matching.
 
     Each balanced '{...}' substring (counting braces only) is validated as JSON.
@@ -166,7 +168,13 @@ def find_all_json_objects(text: str) -> list[dict]:
     Returns:
         A list of all successfully parsed JSON objects (dicts only).
     """
-    json_objects: list[dict] = []
+    return [obj for _, _, obj in iter_json_objects_with_spans(text)]
+
+
+def iter_json_objects_with_spans(
+    text: str,
+) -> Iterator[tuple[int, int, dict[str, Any]]]:
+    """Yield decoded objects with source bounds, including nested candidates."""
     group_end = -1
     budget = 0
 
@@ -185,9 +193,7 @@ def find_all_json_objects(text: str) -> list[dict]:
         except (json.JSONDecodeError, RecursionError):
             continue
         if isinstance(parsed, dict):
-            json_objects.append(parsed)
-
-    return json_objects
+            yield start, end, parsed
 
 
 def _find_fenced_json_span(content: str) -> tuple[int, int] | None:
