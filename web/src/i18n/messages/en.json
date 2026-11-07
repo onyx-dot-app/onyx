@@ -16195,7 +16195,7 @@
       "columns": "Columns",
       "descending": "Descending",
       "deselectAll": "Deselect all",
-      "selectAll": "Select all visible rows",
+      "selectAll": "Select all rows",
       "selectRow": "Select {name}",
       "dragToReorder": "Drag to reorder",
       "manualOrdering": "Manual Ordering",

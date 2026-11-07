@@ -16195,7 +16195,7 @@
       "columns": "열",
       "descending": "내림차순",
       "deselectAll": "모두 선택 해제",
-      "selectAll": "표시된 모든 행 선택",
+      "selectAll": "모든 행 선택",
       "selectRow": "{name} 선택",
       "dragToReorder": "드래그하여 순서 변경",
       "manualOrdering": "수동 정렬",

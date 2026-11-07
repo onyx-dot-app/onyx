@@ -16195,7 +16195,7 @@
       "columns": "الأعمدة",
       "descending": "تنازلي",
       "deselectAll": "إلغاء تحديد الكل",
-      "selectAll": "تحديد جميع الصفوف المرئية",
+      "selectAll": "تحديد جميع الصفوف",
       "selectRow": "تحديد {name}",
       "dragToReorder": "اسحب لإعادة الترتيب",
       "manualOrdering": "ترتيب يدوي",

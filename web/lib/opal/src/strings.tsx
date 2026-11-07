@@ -232,7 +232,7 @@ export const defaultOpalStrings: OpalStrings = {
   columns: "Columns",
   shownColumns: "Shown Columns",
   alwaysShown: "Always Shown",
-  tableSelectAll: "Select all visible rows",
+  tableSelectAll: "Select all rows",
   tableSelectRow: (name) => `Select ${name}`,
   dragToReorder: "Drag to reorder",
   viewSelected: "View selected",

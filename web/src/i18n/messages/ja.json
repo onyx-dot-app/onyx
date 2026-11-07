@@ -16195,7 +16195,7 @@
       "columns": "列",
       "descending": "降順",
       "deselectAll": "すべて選択解除",
-      "selectAll": "表示されているすべての行を選択",
+      "selectAll": "すべての行を選択",
       "selectRow": "{name}を選択",
       "dragToReorder": "ドラッグして並べ替え",
       "manualOrdering": "手動の順序",

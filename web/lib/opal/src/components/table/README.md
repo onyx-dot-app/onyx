@@ -106,7 +106,8 @@ The footer mode is derived automatically from `selectionBehavior`:
 ## Selection and focus
 
 Use a `qualifier` column with `selectionBehavior="multi-select"` for header and row checkboxes.
-The header selects all filtered rows, across pages. A partial selection becomes a full selection when checked.
+The header selects all filtered rows, across pages. Its default label is "Select all rows".
+A partial selection becomes a full selection when checked.
 Caller labels override the localized OpalStrings defaults. Default row labels use `getRowLabel`, or the row ID.
 
 Checkbox labels provide 36px targets at the default row size, and 28px targets for compact rows.

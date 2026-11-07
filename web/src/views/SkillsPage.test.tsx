@@ -324,9 +324,9 @@ describe("SkillsPage preference toggles", () => {
     const header = screen.getByRole("columnheader", {
       name: "Select all visible custom skills",
     });
-    expect(
-      screen.queryByRole("group", { name: "Select skills" })
-    ).not.toBeInTheDocument();
+    const toolbar = screen.getByRole("group", { name: "Select skills" });
+    expect(within(toolbar).getByText("Select skills")).toBeVisible();
+    expect(within(toolbar).queryByRole("checkbox")).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "Select first-skill" })
     );
@@ -338,6 +338,9 @@ describe("SkillsPage preference toggles", () => {
       screen.getByRole("checkbox", { name: "Select second-skill" })
     ).toBeChecked();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(selectAll);
+    expect(screen.getByRole("group", { name: "Select skills" })).toBe(toolbar);
+    expect(within(toolbar).getByText("Select skills")).toBeVisible();
   });
 
   it("opens an admin row with the keyboard and keeps selection separate from preview", async () => {
@@ -469,7 +472,9 @@ describe("SkillsPage preference toggles", () => {
       "skill-11"
     );
     await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+      screen.getByRole("checkbox", {
+        name: "Select all visible custom skills",
+      })
     );
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
@@ -515,7 +520,9 @@ describe("SkillsPage preference toggles", () => {
     );
     expect(within(row).getByText("2 selected")).toBeInTheDocument();
     await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+      screen.getByRole("checkbox", {
+        name: "Select all visible custom skills",
+      })
     );
     expect(within(row).getByText("Select skills")).toBeInTheDocument();
     expect(
@@ -623,7 +630,9 @@ describe("SkillsPage preference toggles", () => {
     render(<SkillsPage />);
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
     await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+      screen.getByRole("checkbox", {
+        name: "Select all visible custom skills",
+      })
     );
     const browseRow = screen.getByRole("group", { name: "Select skills" });
     expect(
@@ -658,7 +667,9 @@ describe("SkillsPage preference toggles", () => {
     render(<SkillsPage />);
     const user = setupUser();
     await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+      screen.getByRole("checkbox", {
+        name: "Select all visible custom skills",
+      })
     );
     await user.click(screen.getByRole("button", { name: "Share" }));
     expect(

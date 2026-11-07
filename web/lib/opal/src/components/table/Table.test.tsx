@@ -63,11 +63,33 @@ describe("Table selection", () => {
     ...COLUMNS,
   ];
 
+  it("labels selection across pages without calling off-page rows visible", async () => {
+    const items = Array.from({ length: 12 }, (_, index) => ({
+      id: String(index),
+      name: `Row ${index}`,
+    }));
+    const onSelectionChange = jest.fn();
+    renderTable({
+      items,
+      columns,
+      pageSize: 10,
+      selectionBehavior: "multi-select",
+      onSelectionChange,
+    });
+    expect(screen.getAllByText(/^Row /)).toHaveLength(10);
+    await setupUser().click(
+      screen.getByRole("checkbox", { name: "Select all rows" })
+    );
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      new Set(items.map((row) => row.id))
+    );
+  });
+
   it("selects all filtered rows, completes partial selection and clears it", async () => {
     renderTable({ columns, selectionBehavior: "multi-select", query: "Row a" });
     const user = setupUser();
     const all = screen.getByRole("checkbox", {
-      name: "Select all visible rows",
+      name: "Select all rows",
     });
     await user.click(all);
     expect(screen.getByRole("checkbox", { name: "Select a" })).toBeChecked();
@@ -88,7 +110,7 @@ describe("Table selection", () => {
     const checkbox = screen.getByRole("checkbox", { name: "Select Row a" });
     await user.tab();
     expect(
-      screen.getByRole("checkbox", { name: "Select all visible rows" })
+      screen.getByRole("checkbox", { name: "Select all rows" })
     ).toHaveFocus();
     await user.tab();
     const row = screen.getByRole("row", { name: "Row a" });
@@ -119,9 +141,7 @@ describe("Table selection", () => {
     await user.click(label);
     expect(checkbox).toBeChecked();
     expect(onRowClick).not.toHaveBeenCalled();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible rows" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all rows" }));
     for (const name of ["a", "b", "c"]) {
       expect(
         screen.getByRole("checkbox", { name: `Select ${name}` })
@@ -143,7 +163,7 @@ describe("Table selection", () => {
     });
     const user = setupUser();
     const all = screen.getByRole("checkbox", {
-      name: "Select all visible rows",
+      name: "Select all rows",
     });
     expect(all).toBePartiallyChecked();
     for (const checkbox of screen.getAllByRole("checkbox")) {
