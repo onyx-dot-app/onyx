@@ -181,6 +181,29 @@ def _has_components(
     return mixed
 
 
+def _declared_skills(files: ArchiveFiles, root: str, declared: JsonValue) -> list[str]:
+    paths = [declared] if isinstance(declared, str) else declared
+    if not isinstance(paths, list):
+        raise ValueError(f"Invalid skills list: {root}")
+    skill_paths: list[str] = []
+    for path in paths:
+        if not isinstance(path, str):
+            raise ValueError(f"Invalid skills path: {root}")
+        target = _join(root, path)
+        if target in files:
+            skill_paths.append(target)
+            continue
+        require_regular_path(files, target)
+        children = _children(files, target)
+        is_container = _join(target, SKILL_MD_NAME) not in files and any(
+            _join(child, SKILL_MD_NAME) in files for child in children
+        )
+        skill_paths.extend(children if is_container else [target])
+    if len(skill_paths) != len(set(skill_paths)):
+        raise ValueError(f"Duplicate skill paths: {root}")
+    return skill_paths
+
+
 def _plugin_skills(
     files: ArchiveFiles,
     folder: str,
@@ -211,10 +234,13 @@ def _plugin_skills(
     if not relative:
         raise ValueError(f"Plugin folder is missing: {root}")
     manifests = [plugin]
+    configs: dict[str, dict[str, JsonValue]] = {}
     for path in _PLUGIN_MANIFESTS:
         require_regular_path(files, prefix + path)
         if path in relative:
-            manifests.append(_json(files, prefix + path))
+            config = _json(files, prefix + path)
+            configs[path] = config
+            manifests.append(config)
     if "plugin.json" in relative:
         return UnsupportedPlugin(
             entry_key=name, reason="Root plugin.json format is not supported"
@@ -224,25 +250,25 @@ def _plugin_skills(
         return UnsupportedPlugin(
             entry_key=name, reason="Plugin contains components other than skills"
         )
-    declared = plugin.get("skills")
-    if "skills" in plugin:
-        paths = [declared] if isinstance(declared, str) else declared
-        if not isinstance(paths, list) or any(not isinstance(p, str) for p in paths):
-            raise ValueError(f"Invalid skills list: {name}")
-        skill_paths: list[str] = []
-        for path in paths:
-            if not isinstance(path, str):
-                continue
-            target = _join(root, path)
-            if _join(target, SKILL_MD_NAME) in files or target in files:
-                skill_paths.append(target)
-            else:
-                require_regular_path(files, target)
-                skill_paths.extend(_children(files, target) or [target])
-        return skill_paths
+    config_path = next((p for p in _PLUGIN_MANIFESTS if p in configs), None)
+    config = configs[config_path] if config_path else {}
     target = _join(root, "skills")
-    require_regular_path(files, target)
-    return _children(files, target)
+    skill_paths = []
+    if "skills" in plugin:
+        skill_paths = _declared_skills(files, root, plugin["skills"])
+    elif "skills" not in config or config_path == ".claude-plugin/plugin.json":
+        require_regular_path(files, target)
+        skill_paths = _children(files, target)
+    if "skills" in config:
+        skill_paths.extend(_declared_skills(files, root, config["skills"]))
+    elif (
+        "skills" not in plugin
+        and root
+        and _join(root, SKILL_MD_NAME) in files
+        and not any(p == target or p.startswith(target + "/") for p in files)
+    ):
+        skill_paths = [root]
+    return list(dict.fromkeys(skill_paths))
 
 
 def _plugin_root(manifest: dict[str, JsonValue]) -> str:

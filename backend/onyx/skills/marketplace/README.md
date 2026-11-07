@@ -70,6 +70,19 @@ skill folder or a container of direct child skill folders. This deliberately
 differs from Claude's additive default. Invalid skills remain blocked entries.
 Mixed-component and remote plugins remain unsupported entries.
 
+A declared path becomes a container only when a direct child has `SKILL.md`.
+Otherwise it retains its own key, even when its definition is missing.
+Plugin manifest `skills` paths also load. Claude paths add to default discovery;
+Codex compatibility paths replace it. Entry paths suppress defaults but retain
+manifest paths. When both compatibility manifests exist, Claude takes precedence.
+Overlapping discovery sources load each path once; different paths with the same
+key fail the read. A nested plugin can load its root `SKILL.md` when neither a
+`skills` key nor a default skills directory with members exists.
+
+Tar reads require an end marker after the last member. A valid gzip wrapper
+does not prove that its tar body is complete. Missing or damaged tar headers
+fail the read before reconciliation can infer removed skills.
+
 Each skill path builds once per read, even when many plugins reference it.
 Unique generated bundles share a 256 MiB ceiling. This permits ten maximum-size
 25 MiB ZIPs while bounding retained output. Nested skill paths count separately,

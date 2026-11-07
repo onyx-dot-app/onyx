@@ -390,6 +390,11 @@ The library preview of an external-app skill calls the same renderer
     has a separate ceiling, including nested paths. Mixed plugins are unsupported.
     Completed entries form an immutable snapshot. Present catalog metadata must
     be an object. Empty declarations cannot hide agent or command Markdown files.
+    Tar reads require an end marker, including when gzip itself is intact.
+    Missing explicit skill definitions keep their keys as blocked entries.
+    Plugin manifest skill paths participate in discovery; Claude paths add to
+    defaults, while Codex compatibility paths replace defaults. Entry paths
+    suppress defaults but retain manifest paths. Overlapping paths load once.
     See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
     This pure reader does not change the one-time GitHub import.
 
