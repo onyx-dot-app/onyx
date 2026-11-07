@@ -291,8 +291,9 @@ The library preview of an external-app skill calls the same renderer
     which keeps any file that a version row or the legacy
     `Skill.bundle_file_id` still uses. Old writers and pointerless skills use
     only the legacy column, so a cleanup that checks only versions deletes
-    live bundles. The hourly `check_for_orphan_skill_bundle_cleanup` task
-    retries failed deletes: it deletes `SKILL_BUNDLE` files older than one
+    live bundles. The hourly `check_for_orphan_skill_bundle_cleanup` task uses
+    the configured tenant-scoped cache lock. It retries failed deletes and
+    removes `SKILL_BUNDLE` files older than one
     hour that nothing uses. An upload saves its file before its row commits, so
     a younger file can be live. A version preview or restore must read through
     `read_version_bundle`, which gives NOT_FOUND "The files of this version are

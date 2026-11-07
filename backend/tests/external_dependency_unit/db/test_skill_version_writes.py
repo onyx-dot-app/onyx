@@ -19,6 +19,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from onyx.background.celery.tasks.skills.tasks import (
+    check_for_orphan_skill_bundle_cleanup,
+)
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
@@ -665,3 +668,20 @@ def test_rolled_back_prune_keeps_files(session: Session, user: User) -> None:
     delete_unreferenced_skill_bundles(stale, session)
     assert before <= stored_bundles(session)
     assert all(version.bundle_file_id for version in versions(skill, session))
+
+
+def test_cleanup_task_uses_configured_cache_and_tenant(
+    tenant: str, session: Session
+) -> None:
+    store = get_default_file_store()
+    orphan = save_skill_bundle_bytes(
+        bundle("orphan"), display_name="orphan.zip", file_store=store
+    )
+    make_old({orphan}, session)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("another_tenant")
+    try:
+        check_for_orphan_skill_bundle_cleanup.run(tenant_id=tenant)
+        assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "another_tenant"
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    assert orphan not in stored_bundles(session)
