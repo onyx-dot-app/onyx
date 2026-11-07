@@ -135,7 +135,8 @@ The stored `SKILL.md` keeps the variable.
 | Maximum bundle size | 100 MB total.                                                                                                                               |
 
 Self-hosted operators can change the size limits with `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and
-`SKILL_BUNDLE_TOTAL_MAX_BYTES`.
+`SKILL_BUNDLE_TOTAL_MAX_BYTES`. Onyx validates the complete uploaded bundle against these limits.
+If your reverse proxy sets a request size limit, allow space for the bundle and multipart form data.
 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
