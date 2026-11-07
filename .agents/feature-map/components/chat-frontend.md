@@ -135,8 +135,9 @@ route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
 use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
 `web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
 URL's page loader (the agents catalog, the agent editor, Plugins, user
-settings, the page loader, or blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
-loader shows while Next commits the route.
+settings, a chat, the page loader, or blank for another view of `/app`).
+`/app/loading.tsx` re-exports it, so the same loader shows while Next commits
+the route.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.
