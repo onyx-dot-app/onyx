@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jiraServiceManagement": {
+          "description": "Atlassian service desk & ITSM"
         }
       }
     },
@@ -4928,6 +4931,14 @@
             "mailboxes": {
               "label": "Mailboxes",
               "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "fields": {
+            "everything": {
+              "description": "Onyx indexes all issues in every Jira Service Management (service desk) project that the selected account can read. To index fewer, choose another tab."
             }
           }
         }

@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "Rechercher dans Slack à la requête"
+        },
+        "jiraServiceManagement": {
+          "description": "Centre de services et ITSM Atlassian"
         }
       }
     },
@@ -4928,6 +4931,14 @@
             "mailboxes": {
               "label": "Boîtes aux lettres",
               "description": "Indiquez les boîtes aux lettres à indexer (par ex. INBOX, Sent, Drafts). Laissez vide pour indexer toutes les boîtes aux lettres."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "fields": {
+            "everything": {
+              "description": "Onyx indexe tous les tickets de chaque projet Jira Service Management (centre de services) que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
             }
           }
         }
