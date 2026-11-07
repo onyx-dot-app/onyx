@@ -38,11 +38,6 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
-from onyx.llm.model_capabilities import (
-    model_identity_names,
-    model_prefers_auto_tool_choice,
-    model_requires_auto_tool_choice,
-)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -261,31 +256,23 @@ class ChatAgent(Agent, RestorableFeature):
             for message in state.messages
             if isinstance(message, ToolResultMessage)
         ]
-        tools = self.application_tools
-        request_tools = list(self.tools)
-        model_names = model_identity_names(
-            self.llm.config.model_name, self.llm.config.deployment_name
-        )
-        tool_choice: ToolChoiceOptions | NamedToolChoice = ToolChoiceOptions.AUTO
-        available_tool_names = {tool.name for tool in tools}
+        allowed_tool_names: frozenset[str] | None = None
+        tool_choice = ToolChoiceOptions.AUTO
+        available_tool_names = {tool.name for tool in self.application_tools}
         if self.forced_tool_id is not None and state.step.index == 0:
-            forced_tools = [tool for tool in tools if tool.id == self.forced_tool_id]
-            if not forced_tools:
+            allowed_tool_names = frozenset(
+                tool.name
+                for tool in self.application_tools
+                if tool.id == self.forced_tool_id
+            )
+            if not allowed_tool_names:
                 raise ValueError(f"Tool {self.forced_tool_id} not found")
-            available_tool_names = {tool.name for tool in forced_tools}
-            if len(forced_tools) > 1 or model_prefers_auto_tool_choice(model_names):
-                # One database tool can contain several OpenAPI operations.
-                request_tools = [
-                    tool for tool in request_tools if tool.name in available_tool_names
-                ]
-                tool_choice = ToolChoiceOptions.REQUIRED
-            else:
-                tool_choice = NamedToolChoice(name=forced_tools[0].name)
+            available_tool_names = set(allowed_tool_names)
+            tool_choice = ToolChoiceOptions.REQUIRED
         elif state.step.is_last:
             tool_choice = ToolChoiceOptions.NONE
+            allowed_tool_names = frozenset()
             available_tool_names = set()
-            if model_requires_auto_tool_choice(model_names):
-                request_tools = []
         prompt = build_chat_prompt(
             tools=self.application_tools,
             persona=self.persona,
@@ -301,7 +288,7 @@ class ChatAgent(Agent, RestorableFeature):
             has_history_citations=bool(self.citation_processor.citation_to_doc),
         )
         return PreparedStep(
-            tools=request_tools,
+            allowed_tool_names=allowed_tool_names,
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),

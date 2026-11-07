@@ -141,11 +141,11 @@ class DeepResearchAgent(Agent, RestorableFeature):
         )
         self.citation_mapping: CitationMapping = {}
         self._citation_lock = Lock()
-        self.clarification_tools = [
+        clarification_tools = [
             self._control_tool(definition, "Proceed to planning.")
             for definition in get_clarification_tool_definitions()
         ]
-        self.research_tools = [
+        research_tools = [
             AgentTool(
                 definition=definition,
                 execute=self._research,
@@ -162,7 +162,15 @@ class DeepResearchAgent(Agent, RestorableFeature):
         ]
         super().__init__(
             llm,
-            tools=[*self.clarification_tools, *self.research_tools],
+            tools=[*clarification_tools, *research_tools],
+            tool_phases={
+                ResearchPhase.CLARIFICATION.value: [
+                    tool.name for tool in clarification_tools
+                ],
+                ResearchPhase.PLANNING.value: [],
+                ResearchPhase.RESEARCH.value: [tool.name for tool in research_tools],
+                ResearchPhase.REPORT.value: [],
+            },
             agent_id=agent_id,
             previous_run_id=previous_run_id,
             state=AgentState(
@@ -237,7 +245,6 @@ class DeepResearchAgent(Agent, RestorableFeature):
             if phase == ResearchPhase.REPORT
             else ORCHESTRATION_OUTPUT_TOKENS
         )
-        tools = []
         options.tool_choice = ToolChoiceOptions.NONE
         reminder = None
         now = get_current_llm_day_time(full_sentence=False)
@@ -251,7 +258,6 @@ class DeepResearchAgent(Agent, RestorableFeature):
                 ),
                 self.language_section,
             )
-            tools = list(self.clarification_tools)
             options.tool_choice = ToolChoiceOptions.AUTO
         elif phase == ResearchPhase.PLANNING:
             system_prompt = RESEARCH_PLAN_PROMPT.format(current_datetime=now)
@@ -276,7 +282,6 @@ class DeepResearchAgent(Agent, RestorableFeature):
             )
             if research_steps == 1:
                 reminder += f"\n\n{FIRST_CYCLE_REMINDER}"
-            tools = list(self.research_tools)
             options.tool_choice = ToolChoiceOptions.REQUIRED
         else:
             system_prompt = with_language_section(
@@ -292,7 +297,7 @@ class DeepResearchAgent(Agent, RestorableFeature):
             elapsed_seconds=time.monotonic() - self.started,
         )
         return PreparedStep(
-            tools=tools,
+            tool_phase=phase.value,
             options=options,
             stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S
             if phase == ResearchPhase.REPORT

@@ -179,16 +179,7 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                 state: StepInput,
                 token_counter: Callable[[str], int] = token_counter,
                 llm_config: LLMConfig = model.config,
-                tool: AgentTool = tool,
             ) -> PreparedStep:
-                tool.definition = tool.definition.model_copy(
-                    update={
-                        "description": "Search updated sources"
-                        if state.step.index == 2
-                        else "Search"
-                    }
-                )
-
                 def assemble(messages: Sequence[Message]) -> list[Message]:
                     updated_messages = [
                         message.model_copy(update={"content": revised_evidence})
@@ -207,7 +198,9 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                         llm_config=llm_config,
                     )
 
-                return PreparedStep(tools=[tool], assemble_messages=assemble)
+                return PreparedStep(
+                    assemble_messages=assemble,
+                )
 
             agent = Agent(
                 model,
@@ -445,7 +438,9 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         execution_threads.append(threading.current_thread())
         step = decision.step
         prepared.append(step.index)
-        return PreparedStep(tools=tools, assemble_messages=render)
+        return PreparedStep(
+            assemble_messages=render,
+        )
 
     def render(messages: Sequence[Message]) -> list[Message]:
         assert threading.current_thread() is execution_threads[0]
@@ -600,7 +595,7 @@ def test_step_timeout_override_does_not_change_later_steps() -> None:
 
     def prepare(state: StepInput) -> PreparedStep:
         return PreparedStep(
-            tools=[tool], stall_timeout_s=37 if state.step.index == 0 else None
+            stall_timeout_s=37 if state.step.index == 0 else None,
         )
 
     agent = Agent(

@@ -37,6 +37,7 @@ from onyx.llm.models import (
     NamedToolChoice,
     TextContent,
     ToolCall,
+    ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -462,7 +463,7 @@ def test_preparation_previous_output_shares_only_detached_callback_messages() ->
             previous.options.max_tokens = 1
             state.history.clear()
             state.input_messages.clear()
-        return PreparedStep(tools=[tool], options=GenerationOptions(max_tokens=128))
+        return PreparedStep(options=GenerationOptions(max_tokens=128))
 
     agent = Agent(
         FakeModelClient(generate),
@@ -937,3 +938,115 @@ def test_coordinator_view_inherits_ownership_independently_of_store(
         assert events == [f"{scope}.register", "save", f"{scope}.release"]
     finally:
         assert owner.close(3)
+
+
+@pytest.mark.parametrize("restriction", ["named", "subset", "none"])
+def test_tool_configuration_and_permissions_survive_caller_and_model_mutation(
+    restriction: str,
+) -> None:
+    executed: list[str] = []
+    approved: list[str] = []
+    requests: list[list[ToolDefinition]] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(str(invocation.arguments["name"]))
+        return ToolResult(content="ok")
+
+    tools = [
+        AgentTool(
+            definition=ToolDefinition(name=name, description="original", parameters={}),
+            execute=execute,
+        )
+        for name in ("selected", "other")
+    ]
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append([tool.model_copy(deep=True) for tool in request.tools])
+        if len(requests) > 1:
+            return answer()
+        tools[0].definition.parameters["changed"] = "caller"
+        inspection = agent.tools
+        inspection[0].definition.parameters["changed"] = "inspection"
+        request.tools.clear()
+        request.allowed_tool_names = None
+        request.options.tool_choice = ToolChoiceOptions.AUTO
+        return AssistantMessage(
+            content=[
+                ToolCall(id=name, name=name, arguments={"name": name})
+                for name in ("selected", "other")
+            ]
+        )
+
+    def prepare(_state: StepInput) -> PreparedStep:
+        return PreparedStep(
+            allowed_tool_names=None
+            if restriction == "named"
+            else (frozenset({"selected"}) if restriction == "subset" else frozenset()),
+            options=GenerationOptions(
+                tool_choice=NamedToolChoice(name="selected")
+                if restriction == "named"
+                else ToolChoiceOptions.AUTO
+            ),
+        )
+
+    def approve(context: ToolCallContext) -> None:
+        approved.append(context.call.name)
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=tools,
+        prepare_step=prepare,
+        before_tool_call=approve,
+    )
+    run_agent(agent, max_steps=2)
+    assert requests[0] == requests[1]
+    assert [tool.name for tool in requests[0]] == ["selected", "other"]
+    assert all(
+        tool.description == "original" and tool.parameters == {} for tool in requests[0]
+    )
+    assert executed == approved == ([] if restriction == "none" else ["selected"])
+
+
+def test_tool_phases_preserve_configured_order_and_reject_permission_broadening() -> (
+    None
+):
+    requests: list[GenerationRequest] = []
+    tools = [
+        AgentTool(
+            definition=ToolDefinition(name=name, description="", parameters={}),
+            execute=lambda _: ToolResult(content="ok"),
+        )
+        for name in ("first", "second")
+    ]
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return calls(name="first") if len(requests) == 1 else answer()
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=tools,
+        tool_phases={"both": ["second", "first"], "finish": ["second"]},
+        prepare_step=lambda state: PreparedStep(
+            tool_phase="both" if state.step.index == 0 else "finish"
+        ),
+    )
+    run_agent(agent, max_steps=2)
+    assert [[tool.name for tool in request.tools] for request in requests] == [
+        ["first", "second"],
+        ["second"],
+    ]
+    agent.prepare_step = lambda _: PreparedStep(
+        tool_phase="finish", allowed_tool_names=frozenset({"first"})
+    )
+    run = agent.start(background=False, max_steps=1)
+    with pytest.raises(RunFailed):
+        run.result()
+    assert run.wait_for_idle(3)
+    assert len(requests) == 2

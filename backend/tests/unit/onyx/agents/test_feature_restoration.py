@@ -47,7 +47,10 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchCycle, SearchDoc
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
-from onyx.deep_research.tool_definitions import GENERATE_REPORT_TOOL_NAME
+from onyx.deep_research.tool_definitions import (
+    GENERATE_PLAN_TOOL_NAME,
+    GENERATE_REPORT_TOOL_NAME,
+)
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
@@ -219,10 +222,14 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
     encoded = original.capture_state().model_dump_json()
     restored = feature()
     restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
-    names = {tool.name for tool in prepared.tools}
-    tools = [tool for tool in restored.tools if tool.name in names]
+    assert prepared.tool_phase == "clarification"
+    tools = [tool for tool in restored.tools if tool.name == GENERATE_PLAN_TOOL_NAME]
     assert restored.citation_mapping[4].document_id == "reference"
-    assert tools[0].definition == prepared.tools[0].definition
+    assert tools[0].definition == next(
+        tool.definition
+        for tool in original.tools
+        if tool.name == GENERATE_PLAN_TOOL_NAME
+    )
     result = tools[0].execute(
         ToolInvocation(
             call_id="call",

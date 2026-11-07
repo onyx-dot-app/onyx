@@ -2630,17 +2630,25 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
 
 
 @pytest.mark.parametrize(
-    "provider", [LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE]
+    "provider",
+    [
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.BEDROCK_CONVERSE,
+        LlmProviderNames.OLLAMA,
+        LlmProviderNames.OLLAMA_CHAT,
+    ],
 )
 @pytest.mark.parametrize("choice", [ToolChoiceOptions.NONE, ToolChoiceOptions.AUTO])
-def test_bedrock_final_request_preserves_evidence_without_tool_definitions(
+def test_native_final_request_preserves_evidence_without_tool_definitions(
     provider: str,
     choice: ToolChoiceOptions,
 ) -> None:
     llm = LitellmLLM(
         api_key=None,
         model_provider=provider,
-        model_name="anthropic.claude-sonnet-4-20250514-v1:0",
+        model_name="llama3.2"
+        if provider in {LlmProviderNames.OLLAMA, LlmProviderNames.OLLAMA_CHAT}
+        else "anthropic.claude-sonnet-4-20250514-v1:0",
         max_input_tokens=200000,
     )
     messages: list[ChatCompletionMessage] = [
@@ -2669,10 +2677,11 @@ def test_bedrock_final_request_preserves_evidence_without_tool_definitions(
     if choice == ToolChoiceOptions.NONE:
         assert not sent.get("tools")
         assert "tool_choice" not in sent
-        assert all(
-            message["role"] != "tool" and not message.get("tool_calls")
-            for message in sent["messages"]
-        )
+        if provider in {LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE}:
+            assert all(
+                message["role"] != "tool" and not message.get("tool_calls")
+                for message in sent["messages"]
+            )
         assert "get_weather" in str(sent["messages"])
         assert "Paris" in str(sent["messages"])
         assert "Sunny, 20C" in str(sent["messages"])

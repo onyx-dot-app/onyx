@@ -571,10 +571,7 @@ class MessageAccumulator:
     ) -> Generator[GenerationEvent, None, None]:
         """Stream provider text as events, then recover calls written as text."""
         ids: dict[int, str] = {}
-        recovery_enabled = (
-            bool(request.tools)
-            and request.options.tool_choice != ToolChoiceOptions.NONE
-        )
+        recovery_enabled = bool(_recovery_tools(request))
         recover = recovery_enabled
         raw_text: list[str] = []
         raw_thinking: list[str] = []
@@ -674,11 +671,20 @@ class MessageAccumulator:
         return events
 
 
+def _recovery_tools(request: GenerationRequest) -> list[ToolDefinition]:
+    """Select candidates for implicit recovery; explicit calls retain provider names."""
+    if request.options.tool_choice == ToolChoiceOptions.NONE:
+        return []
+    allowed = request.allowed_tool_names
+    return [tool for tool in request.tools if allowed is None or tool.name in allowed]
+
+
 def recover_tool_calls(
     message: AssistantMessage, request: GenerationRequest
 ) -> AssistantMessage:
     """Recover provider text tool payloads when native calls are absent."""
-    if message.tool_calls or request.options.tool_choice == ToolChoiceOptions.NONE:
+    eligible_tools = _recovery_tools(request)
+    if message.tool_calls or not eligible_tools:
         return message
     should_try = (
         request.options.tool_choice == ToolChoiceOptions.REQUIRED
@@ -689,16 +695,19 @@ def recover_tool_calls(
     )
     if not should_try:
         return message
-    implicit_tool_names = (
-        frozenset({request.options.tool_choice.name})
+    eligible_names = {tool.name for tool in eligible_tools}
+    implicit_names = (
+        eligible_names & {request.options.tool_choice.name}
         if isinstance(request.options.tool_choice, NamedToolChoice)
-        else None
+        else eligible_names
     )
     calls = extract_tool_calls_from_response_text(
-        message.text, request.tools, implicit_tool_names=implicit_tool_names
+        message.text, request.tools, implicit_tool_names=implicit_names
     ) or extract_tool_calls_from_response_text(
-        message.thinking, request.tools, implicit_tool_names=implicit_tool_names
+        message.thinking, request.tools, implicit_tool_names=implicit_names
     )
+    # Explicit provider calls retain their names, like native calls. The runtime
+    # rejects forbidden calls and returns tool errors; only inference is restricted.
     if not calls:
         return message
     tools = {tool.name: tool for tool in request.tools}
