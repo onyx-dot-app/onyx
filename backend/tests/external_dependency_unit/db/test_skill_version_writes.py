@@ -21,14 +21,20 @@ from onyx.background.celery.tasks.skill_versions.tasks import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import compute_bundle_metadata
-from onyx.db.skill import create_skill_from_bundle__no_commit, replace_skill_bundle
-from onyx.db.skill_version import SkillVersionAdapter
+from onyx.db.skill import (
+    SkillValidityUpdate,
+    create_skill_from_bundle__no_commit,
+    persist_skill_validity,
+    replace_skill_bundle,
+)
+from onyx.db.skill_version import SkillVersionAdapter, save_skill_version
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.skills.bundle import build_single_file_bundle, build_skill_md
-from onyx.skills.ingest import ingested_skill_bundle
+from onyx.skills.ingest import ingested_skill_bundle, save_skill_bundle_bytes
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.craft.db_helpers import make_user
 
@@ -157,6 +163,10 @@ def test_all_writers(creation: str, session: Session, user: User) -> None:
     )
     assert len(versions(skill, session)) == 3
     assert versions(skill, session)[0].file_count == 2
+    api.upload_current_user_skill_files(
+        skill.id, upload(b"support", "notes.txt"), user, session
+    )
+    assert len(versions(skill, session)) == 3
     api.remove_current_user_skill_file(skill.id, "notes.txt", user, session)
     assert len(versions(skill, session)) == 4
     request = SkillPatchRequest(instructions_markdown="Edited instructions")
@@ -166,6 +176,10 @@ def test_all_writers(creation: str, session: Session, user: User) -> None:
     api.patch_current_user_skill(skill.id, request, user, session)
     assert len(versions(skill, session)) == 5
     assert skill.bundle_file_id == current_file
+    api.patch_current_user_skill(
+        skill.id, SkillPatchRequest(description="Version test"), user, session
+    )
+    assert len(versions(skill, session)) == 5
     for version in versions(skill, session):
         assert version.created_by_user_id == user.id
         assert version.bundle_file_id is not None
@@ -209,14 +223,19 @@ def test_rezip_noop(session: Session, user: User) -> None:
 
 
 @pytest.mark.parametrize("delete_history", [False, True])
+@pytest.mark.parametrize("completed", [False, True])
 def test_tenant_repair_stale_deleted_and_pointerless(
-    tenant: str, session: Session, user: User, delete_history: bool
+    tenant: str, session: Session, user: User, delete_history: bool, completed: bool
 ) -> None:
     store = get_default_file_store()
     name = f"legacy-{uuid4().hex[:8]}"
     response = api.create_custom_skill(upload(bundle(name)), False, user, session)
     skill = session.get(Skill, response.id)
     assert skill is not None
+    if completed:
+        repair_skill_versions.run(tenant_id=tenant)
+        repair_skill_versions.run(tenant_id=tenant)
+        assert get_kv_store().load(PROGRESS_KEY) == "completed"
     old = versions(skill, session)[0]
     # The V1 migration deliberately uses the skill UUID as version UUID.
     old.id = skill.id
@@ -269,6 +288,46 @@ def test_tenant_repair_stale_deleted_and_pointerless(
     assert get_kv_store().load(PROGRESS_KEY) == "completed"
     repair_skill_versions.run(tenant_id=tenant)
     assert len(versions(skill, session)) == 2
+
+
+@pytest.mark.parametrize("save", [False, True])
+def test_lazy_validity_keeps_one_version(
+    tenant: str, session: Session, user: User, save: bool
+) -> None:
+    response = api.create_custom_skill(
+        upload(bundle("legacy-validity")), False, user, session
+    )
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    current = versions(skill, session)[0]
+    current.is_valid = skill.is_valid = None
+    session.commit()
+    persist_skill_validity([SkillValidityUpdate(skill.id, skill.bundle_file_id, save)])
+    if save:
+        api.patch_current_user_skill(
+            skill.id,
+            SkillPatchRequest(instructions_markdown="First instructions"),
+            user,
+            session,
+        )
+    else:
+        repair_skill_versions.run(tenant_id=tenant)
+    session.expire_all()
+    assert versions(skill, session) == [current]
+    assert current.is_valid is save
+
+
+def test_builtin_cannot_create_version(session: Session, user: User) -> None:
+    skill = Skill(name="builtin", description="Built in", built_in_skill_id="builtin")
+    session.add(skill)
+    session.commit()
+    with ingested_skill_bundle(
+        bundle("builtin"), "skill.zip", get_default_file_store()
+    ) as ingested:
+        with pytest.raises(OnyxError, match="Only custom skills"):
+            save_skill_version(skill, ingested, user.id, session, initial=True)
+        session.rollback()
+    assert session.scalar(select(func.count()).select_from(SkillVersion)) == 0
 
 
 def test_failed_write_rolls_back(session: Session, user: User) -> None:
@@ -333,3 +392,33 @@ def test_concurrent_replacements(tenant: str, session: Session, user: User) -> N
     skill = session.get(Skill, skill_id)
     assert skill is not None
     assert [version.version_number for version in versions(skill, session)] == [3, 2, 1]
+
+
+@pytest.mark.parametrize("compression", [0, 99])
+def test_corrupt_legacy_bundle_does_not_block_repair_or_replace(
+    tenant: str, session: Session, user: User, compression: int
+) -> None:
+    response = api.create_custom_skill(
+        upload(bundle("corrupt-history")), False, user, session
+    )
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    data = bytearray(bundle(skill.name))
+    # Central-directory method 99 is unsupported; an invalid signature is not a ZIP.
+    offset = data.index(b"PK\x01\x02") + 10
+    data[offset : offset + 2] = compression.to_bytes(2, "little")
+    store = get_default_file_store()
+    skill.bundle_file_id = save_skill_bundle_bytes(
+        bytes(data) if compression else b"not a ZIP",
+        display_name="old.zip",
+        file_store=store,
+    )
+    session.commit()
+    repair_skill_versions.run(tenant_id=tenant)
+    session.expire_all()
+    assert len(versions(skill, session)) == 2
+    api.replace_current_user_skill_bundle(
+        skill.id, upload(bundle(skill.name, "Fixed")), user, session
+    )
+    assert len(versions(skill, session)) == 3
+    assert versions(skill, session)[0].content_digest is not None

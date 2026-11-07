@@ -262,14 +262,17 @@ The library preview of an external-app skill calls the same renderer
     never deletes a historical bundle. Cleanup of staged, unused blobs stays
     with ingestion and the caller.
     `background/celery/tasks/skill_versions/tasks.py` repairs each tenant through
-    the primary queue. Its durable cursor resumes interrupted passes; completion
-    makes later ticks no-ops. Legacy columns remain authoritative during repair:
-    a stale or missing pointer appends a snapshot before metadata reads. Missing
+    the primary queue. Its durable cursor resumes interrupted metadata passes.
+    Later ticks reconcile pointers changed by old writers, including inserts
+    below the cursor. Legacy columns remain authoritative during repair:
+    a stale or missing pointer appends a snapshot before metadata reads. A save
+    after legacy content drift retains that recovery snapshot with no creator,
+    then appends the user's content change. Validity-only changes update the
+    existing version without creating history or duplicating its blob. Missing
     historical files keep unknown metadata and produce a warning. Built-ins
     have no versions. Run repair after old writers have drained, before switching
     readers. Clear `skill_version_metadata_v2` through the tenant KV store to
-    repeat a completed pass after a rollback to old writers. No migration reads
-    blobs.
+    repeat metadata repair. No migration reads blobs.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the

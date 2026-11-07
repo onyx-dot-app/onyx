@@ -3,6 +3,7 @@
 import hashlib
 import io
 import zipfile
+import zlib
 from typing import Protocol
 from uuid import UUID
 
@@ -77,7 +78,7 @@ def repair_version_metadata(version: BundleVersionMixin, file_store: FileStore) 
         return
     try:
         with file_store.read_file(version.bundle_file_id) as source:
-            metadata = compute_bundle_metadata(source.read())
+            bundle_bytes = source.read()
     except (
         FileRecordNotFoundError,
         FileNotFoundError,
@@ -91,8 +92,10 @@ def repair_version_metadata(version: BundleVersionMixin, file_store: FileStore) 
             raise
         logger.warning("Version bundle is missing: %s", version.id)
         return
-    except zipfile.BadZipFile:
-        logger.warning("Version bundle is not a ZIP: %s", version.id)
+    try:
+        metadata = compute_bundle_metadata(bundle_bytes)
+    except (zipfile.BadZipFile, zlib.error, NotImplementedError, RuntimeError):
+        logger.warning("Version bundle cannot be decoded: %s", version.id)
         return
     fill_version_metadata(version, metadata)
 

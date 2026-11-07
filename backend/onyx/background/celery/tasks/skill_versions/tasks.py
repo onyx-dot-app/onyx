@@ -1,4 +1,4 @@
-"""One completed pass per tenant; incomplete passes resume after worker restarts."""
+"""Resume metadata repair and reconcile legacy writers after the first pass."""
 
 import time
 from uuid import UUID
@@ -26,12 +26,6 @@ def repair_skill_versions(*, tenant_id: str) -> None:
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
         store = get_kv_store()
-        try:
-            progress = store.load(PROGRESS_KEY)
-        except KvKeyNotFoundError:
-            progress = None
-        if progress == _COMPLETED:
-            return
         lock = get_cache_backend().lock(PROGRESS_KEY, timeout=300)
         if not lock.acquire(blocking=False):
             return
@@ -41,22 +35,26 @@ def repair_skill_versions(*, tenant_id: str) -> None:
                 progress = store.load(PROGRESS_KEY)
             except KvKeyNotFoundError:
                 progress = None
-            if progress == _COMPLETED:
-                return
-            cursor = UUID(str(progress)) if progress is not None else None
+            completed = progress == _COMPLETED
+            cursor = (
+                UUID(str(progress)) if progress is not None and not completed else None
+            )
             deadline = time.monotonic() + 30
             file_store = get_default_file_store()
             with get_session_with_current_tenant() as session:
-                batch = skill_version_repair_batch(session, cursor)
+                batch = skill_version_repair_batch(
+                    session, cursor, drift_only=completed
+                )
                 for skill in batch:
                     repair_skill_version_metadata(skill, session, file_store)
                     cursor = skill.id
                     session.commit()
-                    store.store(PROGRESS_KEY, str(cursor))
+                    if not completed:
+                        store.store(PROGRESS_KEY, str(cursor))
                     lock.extend(300)
                     if time.monotonic() >= deadline:
                         return
-                if not batch:
+                if not batch and not completed:
                     store.store(PROGRESS_KEY, _COMPLETED)
         finally:
             if lock.owned():

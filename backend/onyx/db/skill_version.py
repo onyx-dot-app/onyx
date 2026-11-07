@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, SkillVersion
@@ -37,6 +37,10 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
         )
 
     def new_version(self) -> SkillVersion:
+        if not self.skill.is_custom:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT, "Only custom skills have bundle versions"
+            )
         return SkillVersion(skill_id=self.skill.id)
 
     def publish(self, version: SkillVersion) -> None:
@@ -58,8 +62,7 @@ def repair_skill_version(skill: Skill, db_session: Session) -> SkillVersion:
     if current is None or (
         current.bundle_file_id,
         current.bundle_sha256,
-        current.is_valid,
-    ) != (skill.bundle_file_id, skill.bundle_sha256, skill.is_valid):
+    ) != (skill.bundle_file_id, skill.bundle_sha256):
         current = write_resource_version(
             adapter,
             bundle_file_id=skill.bundle_file_id,
@@ -69,6 +72,7 @@ def repair_skill_version(skill: Skill, db_session: Session) -> SkillVersion:
             created_by_user_id=None,
             db_session=db_session,
         )
+    current.is_valid = skill.is_valid
     return current
 
 
@@ -99,8 +103,21 @@ def save_skill_version(
     return version.bundle_file_id == ingested.bundle_file_id
 
 
-def skill_version_repair_batch(db_session: Session, after: UUID | None) -> list[Skill]:
+def skill_version_repair_batch(
+    db_session: Session, after: UUID | None, *, drift_only: bool = False
+) -> list[Skill]:
     statement = select(Skill).where(Skill.built_in_skill_id.is_(None))
+    if drift_only:
+        statement = statement.outerjoin(
+            SkillVersion, SkillVersion.id == Skill.current_version_id
+        ).where(
+            or_(
+                SkillVersion.id.is_(None),
+                SkillVersion.bundle_file_id.is_distinct_from(Skill.bundle_file_id),
+                SkillVersion.bundle_sha256.is_distinct_from(Skill.bundle_sha256),
+                SkillVersion.is_valid.is_distinct_from(Skill.is_valid),
+            )
+        )
     if after is not None:
         statement = statement.where(Skill.id > after)
     return list(db_session.scalars(statement.order_by(Skill.id).limit(50)))
