@@ -2629,6 +2629,60 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
     assert "headline news" in merged
 
 
+@pytest.mark.parametrize(
+    "provider", [LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE]
+)
+@pytest.mark.parametrize("choice", [ToolChoiceOptions.NONE, ToolChoiceOptions.AUTO])
+def test_bedrock_final_request_preserves_evidence_without_tool_definitions(
+    provider: str,
+    choice: ToolChoiceOptions,
+) -> None:
+    llm = LitellmLLM(
+        api_key=None,
+        model_provider=provider,
+        model_name="anthropic.claude-sonnet-4-20250514-v1:0",
+        max_input_tokens=200000,
+    )
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="Weather?"),
+        AssistantMessage(
+            content="Checking",
+            tool_calls=[
+                ToolCall(
+                    id="weather-call",
+                    function=RequestFunctionCall(
+                        name="get_weather", arguments='{"location":"Paris"}'
+                    ),
+                )
+            ],
+        ),
+        ToolMessage(tool_call_id="weather-call", content="Sunny, 20C"),
+    ]
+    original = [message.model_dump() for message in messages]
+    with patch("litellm.completion", return_value=[]) as completion:
+        list(
+            llm.stream_raw(
+                messages, tools=_TOOL_CHOICE_DOWNGRADE_TOOLS, tool_choice=choice
+            )
+        )
+    sent = completion.call_args.kwargs
+    if choice == ToolChoiceOptions.NONE:
+        assert not sent.get("tools")
+        assert "tool_choice" not in sent
+        assert all(
+            message["role"] != "tool" and not message.get("tool_calls")
+            for message in sent["messages"]
+        )
+        assert "get_weather" in str(sent["messages"])
+        assert "Paris" in str(sent["messages"])
+        assert "Sunny, 20C" in str(sent["messages"])
+    else:
+        assert sent["tools"]
+        assert sent["tool_choice"] == ToolChoiceOptions.AUTO
+        assert any(message["role"] == "tool" for message in sent["messages"])
+    assert [message.model_dump() for message in messages] == original
+
+
 def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> None:
     """Regression test for providers (e.g. Fireworks) that reject tool_choice=null.
 

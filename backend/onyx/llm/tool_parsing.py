@@ -3,7 +3,7 @@
 import json
 import re
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from html import unescape
 from typing import Any
 
@@ -112,6 +112,8 @@ def looks_like_xml_tool_call_payload(text: str | None) -> bool:
 def extract_tool_calls_from_response_text(
     response_text: str | None,
     tool_definitions: Sequence[ToolDefinition],
+    *,
+    implicit_tool_names: Collection[str] | None = None,
 ) -> list[ToolCall]:
     """Extract tool calls from LLM response text by matching JSON against tool definitions.
 
@@ -123,6 +125,7 @@ def extract_tool_calls_from_response_text(
     Args:
         response_text: The LLM's text response to search for tool calls
         tool_definitions: List of tool definitions to match against
+        implicit_tool_names: Candidates for unnamed arguments; explicit names stay intact.
 
     Returns:
         List of canonical ToolCall objects for matched tools
@@ -136,31 +139,23 @@ def extract_tool_calls_from_response_text(
     # Find all JSON objects in the response text
     json_objects = find_all_json_objects(response_text)
     prev_json_obj: dict[str, Any] | None = None
-    prev_tool_call: tuple[str, dict[str, Any]] | None = None
 
     for json_obj in json_objects:
-        matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
-        if not matched_tool_call:
-            continue
-
-        # `find_all_json_objects` can return both an outer tool-call object and
-        # its nested arguments object. If both resolve to the same tool call,
-        # drop only this nested duplicate artifact.
-        if (
-            prev_json_obj is not None
-            and prev_tool_call is not None
-            and matched_tool_call == prev_tool_call
-            and _is_nested_arguments_duplicate(
-                previous_json_obj=prev_json_obj,
-                current_json_obj=json_obj,
-                tool_name_to_def=tool_name_to_def,
-            )
+        # Never reinterpret a named call's nested arguments as another tool.
+        if prev_json_obj is not None and _is_nested_arguments_duplicate(
+            previous_json_obj=prev_json_obj,
+            current_json_obj=json_obj,
+            tool_name_to_def=tool_name_to_def,
         ):
+            continue
+        matched_tool_call = _try_match_json_to_tool(
+            json_obj, tool_name_to_def, implicit_tool_names=implicit_tool_names
+        )
+        if not matched_tool_call:
             continue
 
         matched_tool_calls.append(matched_tool_call)
         prev_json_obj = json_obj
-        prev_tool_call = matched_tool_call
 
     # Some providers/models emit XML-style function calls instead of JSON objects.
     # Keep this as a fallback behind JSON extraction to preserve current behavior.
@@ -288,6 +283,8 @@ def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
 def _try_match_json_to_tool(
     json_obj: dict[str, Any],
     tool_name_to_def: dict[str, ToolDefinition],
+    *,
+    implicit_tool_names: Collection[str] | None = None,
 ) -> tuple[str, dict[str, Any]] | None:
     """Try to match a JSON object to a tool definition.
 
@@ -329,6 +326,8 @@ def _try_match_json_to_tool(
 
     # Format 4: Check if the JSON object matches a tool's parameter schema
     for tool_name, func_def in tool_name_to_def.items():
+        if implicit_tool_names is not None and tool_name not in implicit_tool_names:
+            continue
         params = func_def.parameters
         properties = params.get("properties", {})
         required = params.get("required", [])

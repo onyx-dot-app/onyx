@@ -482,6 +482,58 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     assert final.thinking == (payload if reasoning else "")
 
 
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ('{"queries":["weather"]}', "web_search"),
+        (
+            '{"name":"internal_search","arguments":{"queries":["weather"]}}',
+            "internal_search",
+        ),
+        ('{"internal_search":{"queries":["weather"]}}', "internal_search"),
+    ],
+)
+def test_named_recovery_infers_only_unnamed_arguments(
+    streaming: bool,
+    payload: str,
+    expected: str,
+) -> None:
+    request = GenerationRequest(
+        tools=[
+            ToolDefinition(
+                name=name,
+                description=name,
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "queries": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": ["queries"],
+                },
+            )
+            for name in ("internal_search", "web_search")
+        ],
+        options=GenerationOptions(tool_choice=NamedToolChoice(name="web_search")),
+    )
+    if streaming:
+        client = ScriptedLLM([Delta(content=payload)])
+        result = collect_generation(client.stream(request))
+    else:
+        result = to_assistant_message(
+            ModelResponse(
+                id="response",
+                created="1",
+                choice=Choice(message=ResponseMessage(content=payload)),
+            ),
+            request,
+        )
+    assert [(call.name, call.arguments) for call in result.tool_calls] == [
+        (expected, {"queries": ["weather"]})
+    ]
+    assert [tool.name for tool in request.tools] == ["internal_search", "web_search"]
+
+
 def test_stream_failure_recovers_no_call_from_an_unfinished_payload() -> None:
     payload = '{"name":"search","arguments":{"query":"unfinished'
     failure = RuntimeError("provider failed")

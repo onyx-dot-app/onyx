@@ -263,6 +263,7 @@ def test_named_tool_choice_matches_script_with_other_tools_available(
     ] == ["internal_search"]
     (request,) = script.requests
     assert request.tool_choice == choice
+    assert request.tools == ["internal_search", "web_search"]
     assert not RequestConditions(tool_choice="required").matches(request)
     assert not RequestConditions(
         tool_choice={"type": "function", "function": {"name": "web_search"}}

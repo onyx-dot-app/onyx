@@ -1105,6 +1105,14 @@ class LitellmLLM(LLM):
         ):
             tool_choice = ToolChoiceOptions.AUTO
 
+        # Bedrock Converse drops NONE; omit schemas and use the existing text
+        # history conversion so final answers cannot request another tool.
+        if tool_choice == ToolChoiceOptions.NONE and self._model_provider in {
+            LlmProviderNames.BEDROCK,
+            LlmProviderNames.BEDROCK_CONVERSE,
+        }:
+            tools = None
+
         # If no tools are provided, tool_choice should be None
         if not tools:
             tool_choice = None
