@@ -428,12 +428,17 @@ def test_invoke_records_provider_failures_on_its_span() -> None:
     )
 
 
-def test_tool_recovery_keeps_answer_text_and_signed_thinking() -> None:
+@pytest.mark.parametrize(
+    "choice", [ToolChoiceOptions.REQUIRED, NamedToolChoice(name="search")]
+)
+def test_tool_recovery_keeps_answer_text_and_signed_thinking(
+    choice: ToolChoiceOptions | NamedToolChoice,
+) -> None:
     signed = ThinkingBlock(thinking="plan", signature="provider-signature")
     payload = '{"name": "search", "arguments": {"query": "onyx"}}'
     request = GenerationRequest(
         tools=[ToolDefinition(name="search", description="Search", parameters={})],
-        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+        options=GenerationOptions(tool_choice=choice),
     )
     response = _response(
         Message(

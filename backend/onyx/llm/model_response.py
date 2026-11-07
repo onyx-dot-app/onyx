@@ -20,6 +20,7 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
+    NamedToolChoice,
     TextContent,
     TextDeltaEvent,
     ThinkingContent,
@@ -681,15 +682,23 @@ def recover_tool_calls(
         return message
     should_try = (
         request.options.tool_choice == ToolChoiceOptions.REQUIRED
+        or isinstance(request.options.tool_choice, NamedToolChoice)
         or bool(message.thinking and not message.text)
         or looks_like_xml_tool_call_payload(message.text)
         or looks_like_xml_tool_call_payload(message.thinking)
     )
     if not should_try:
         return message
+    implicit_tool_names = (
+        frozenset({request.options.tool_choice.name})
+        if isinstance(request.options.tool_choice, NamedToolChoice)
+        else None
+    )
     calls = extract_tool_calls_from_response_text(
-        message.text, request.tools
-    ) or extract_tool_calls_from_response_text(message.thinking, request.tools)
+        message.text, request.tools, implicit_tool_names=implicit_tool_names
+    ) or extract_tool_calls_from_response_text(
+        message.thinking, request.tools, implicit_tool_names=implicit_tool_names
+    )
     if not calls:
         return message
     tools = {tool.name: tool for tool in request.tools}

@@ -49,7 +49,7 @@ def _ensure_llm_provider(admin_user: DATestUser) -> None:
 
 
 def _script_forced_search(mock_llm: MockLLMScript, query: str) -> None:
-    """The forced turn offers only internal_search with tool_choice=required."""
+    """The forced turn names internal_search while retaining stable tool definitions."""
     mock_llm.conversation(
         "chat",
         Reply(
@@ -61,7 +61,11 @@ def _script_forced_search(mock_llm: MockLLMScript, query: str) -> None:
                 )
             ],
             conditions=RequestConditions(
-                offers=["internal_search"], tool_choice="required"
+                offers=["internal_search"],
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": "internal_search"},
+                },
             ),
         ),
         Reply(
@@ -238,7 +242,11 @@ def test_parallel_tool_calls_each_get_a_debug_entry(
                 for call_id, query in zip(call_ids, ["alpha", "beta"], strict=True)
             ],
             conditions=RequestConditions(
-                offers=["internal_search"], tool_choice="required"
+                offers=["internal_search"],
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": "internal_search"},
+                },
             ),
         ),
         # The merged search call keeps the first call's id.
@@ -287,7 +295,11 @@ def test_forced_tool_call_written_as_text_executes(
                 '{"name":"internal_search","arguments":{"queries":["delta"]}}'
             ),
             conditions=RequestConditions(
-                offers=["internal_search"], tool_choice="required"
+                offers=["internal_search"],
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": "internal_search"},
+                },
             ),
         ),
         Reply(text=_ANSWER, conditions=RequestConditions(tool_choice="auto")),
