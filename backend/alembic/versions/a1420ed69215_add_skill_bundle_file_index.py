@@ -1,7 +1,7 @@
 """add partial index on skill bundle files
 
 Revision ID: a1420ed69215
-Revises: 13a2d6969b0b
+Revises: 1c894e757414
 Create Date: 2026-11-07 12:00:00.000000
 
 The hourly orphan skill bundle cleanup selects old skill bundle files. The
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a1420ed69215"
-down_revision = "13a2d6969b0b"
+down_revision = "1c894e757414"
 branch_labels = None
 depends_on = None
 

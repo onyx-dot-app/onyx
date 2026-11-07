@@ -23,6 +23,7 @@ from onyx.background.celery.tasks.skills.tasks import (
     check_for_orphan_skill_bundle_cleanup,
 )
 from onyx.configs.constants import FileOrigin
+from onyx.db import skill_version
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import (
@@ -685,3 +686,42 @@ def test_cleanup_task_uses_configured_cache_and_tenant(
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
     assert orphan not in stored_bundles(session)
+
+
+def test_cleanup_advances_past_failed_batch(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = get_default_file_store()
+    files = {
+        save_skill_bundle_bytes(
+            bundle(f"orphan-{index}"), display_name="orphan.zip", file_store=store
+        )
+        for index in range(3)
+    }
+    for index, file_id in enumerate(sorted(files)):
+        session.execute(
+            update(FileRecord)
+            .where(FileRecord.file_id == file_id)
+            .values(
+                created_at=func.now() - timedelta(hours=2) + timedelta(seconds=index)
+            )
+        )
+    session.commit()
+    failed = set(sorted(files)[:2])
+    delete = store.delete_file
+
+    def selective_delete(file_id: str, error_on_missing: bool = True) -> None:
+        if file_id in failed:
+            raise RuntimeError("This bundle cannot be deleted yet")
+        delete(file_id, error_on_missing=error_on_missing)
+
+    monkeypatch.setattr(skill_version, "_ORPHAN_BATCH_SIZE", 2)
+    monkeypatch.setattr(store, "delete_file", selective_delete)
+    monkeypatch.setattr(staging, "get_default_file_store", lambda: store)
+    assert delete_orphan_skill_bundles() == 0
+    assert delete_orphan_skill_bundles() == 1
+    assert stored_bundles(session) == failed
+    failed.clear()
+    assert delete_orphan_skill_bundles() == 0
+    assert delete_orphan_skill_bundles() == 2
+    assert stored_bundles(session) == set()

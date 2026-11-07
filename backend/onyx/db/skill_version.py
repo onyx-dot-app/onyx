@@ -1,8 +1,9 @@
 from collections.abc import Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, exists, func, select
+from pydantic import BaseModel
+from sqlalchemy import ColumnElement, Select, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -18,6 +19,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.skills.ingest import IngestedBundle
 from onyx.utils.logger import setup_logger
 
@@ -27,6 +30,12 @@ logger = setup_logger()
 ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
 # Bounds one cleanup pass; a backlog clears over later passes.
 _ORPHAN_BATCH_SIZE = 500
+_ORPHAN_PROGRESS_KEY = "orphan_skill_bundle_cursor"
+
+
+class _OrphanCursor(BaseModel):
+    created_at: datetime
+    file_id: str
 
 
 class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
@@ -154,16 +163,40 @@ def delete_unreferenced_skill_bundles(
 
 
 def delete_orphan_skill_bundles() -> int:
-    """Deletes one batch of old skill bundle files that nothing uses. Returns
-    how many it deleted."""
-    with get_session_with_current_tenant() as db_session:
-        file_ids = list(
-            db_session.scalars(
-                _unused_skill_bundles(
-                    FileRecord.created_at < func.now() - ORPHAN_BUNDLE_MIN_AGE
-                )
-                .order_by(FileRecord.created_at)
-                .limit(_ORPHAN_BATCH_SIZE)
+    """Delete one batch; wrap the cursor to retry failures after each full scan."""
+    store = get_kv_store()
+    try:
+        progress = store.load(_ORPHAN_PROGRESS_KEY, refresh_cache=True)
+    except KvKeyNotFoundError:
+        progress = None
+    cursor = _OrphanCursor.model_validate(progress) if progress is not None else None
+    statement = (
+        _unused_skill_bundles(
+            FileRecord.created_at < func.now() - ORPHAN_BUNDLE_MIN_AGE
+        )
+        .add_columns(FileRecord.created_at)
+        .order_by(FileRecord.created_at, FileRecord.file_id)
+        .limit(_ORPHAN_BATCH_SIZE)
+    )
+    if cursor is not None:
+        statement = statement.where(
+            or_(
+                FileRecord.created_at > cursor.created_at,
+                (FileRecord.created_at == cursor.created_at)
+                & (FileRecord.file_id > cursor.file_id),
             )
         )
-    return delete_files_best_effort(file_ids, context="orphan skill bundle cleanup")
+    with get_session_with_current_tenant() as db_session:
+        rows = list(db_session.execute(statement).tuples())
+    deleted = delete_files_best_effort(
+        [file_id for file_id, _ in rows], context="orphan skill bundle cleanup"
+    )
+    if rows:
+        file_id, created_at = rows[-1]
+        store.store(
+            _ORPHAN_PROGRESS_KEY,
+            {"created_at": created_at.isoformat(), "file_id": file_id},
+        )
+    else:
+        store.store(_ORPHAN_PROGRESS_KEY, None)
+    return deleted
