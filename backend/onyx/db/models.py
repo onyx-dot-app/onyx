@@ -5340,6 +5340,12 @@ class FileRecord(Base):
             "created_at",
             postgresql_where=text("file_metadata ? 'staged_for_cc_pair_id'"),
         ),
+        # Orphan skill bundle cleanup.
+        Index(
+            "ix_file_record_skill_bundles",
+            "created_at",
+            postgresql_where=text("file_origin = 'SKILL_BUNDLE'"),
+        ),
     )
 
 

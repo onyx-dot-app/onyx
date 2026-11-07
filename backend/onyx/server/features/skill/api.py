@@ -39,6 +39,7 @@ from onyx.db.skill import (
     share_skill__no_commit,
     transfer_skill_ownership,
 )
+from onyx.db.skill_version import delete_unreferenced_skill_bundles
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -225,7 +226,7 @@ def _replace_skill_bundle_from_editor(
         file_store,
         expected_name=skill.name,
     ) as ingested:
-        bundle_used = replace_skill_bundle(
+        stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             creator_id=user.id,
@@ -233,8 +234,7 @@ def _replace_skill_bundle_from_editor(
         )
         db_session.commit()
 
-    if not bundle_used:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
+    delete_unreferenced_skill_bundles(stale_file_ids, db_session)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
@@ -274,7 +274,7 @@ def bulk_update_skills(
     deleted_file_ids: list[str] = []
     for skill_id in sorted(set(request.skill_ids)):
         try:
-            item_affected, deleted_file_id = bulk_update_skill__no_commit(
+            item_affected, item_file_ids = bulk_update_skill__no_commit(
                 skill_id, request.action, change, user, db_session
             )
         except OnyxError as exc:
@@ -282,15 +282,11 @@ def bulk_update_skills(
             continue
         succeeded.append(skill_id)
         affected |= item_affected
-        if deleted_file_id is not None:
-            deleted_file_ids.append(deleted_file_id)
+        deleted_file_ids.extend(item_file_ids)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    if deleted_file_ids:
-        file_store = get_default_file_store()
-        for file_id in deleted_file_ids:
-            delete_bundle_blob(file_store, file_id)
+    delete_unreferenced_skill_bundles(deleted_file_ids, db_session)
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
 
@@ -668,7 +664,7 @@ def replace_current_user_skill_bundle(
         file_store,
         expected_name=skill.name,
     ) as ingested:
-        bundle_used = replace_skill_bundle(
+        stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             creator_id=user.id,
@@ -676,8 +672,7 @@ def replace_current_user_skill_bundle(
         )
         db_session.commit()
 
-    if not bundle_used:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
+    delete_unreferenced_skill_bundles(stale_file_ids, db_session)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
@@ -775,7 +770,7 @@ def patch_current_user_skill(
     before_affected = affected_user_ids_for_skill(skill, db_session)
     file_store = get_default_file_store() if patch_req.has_details_update else None
     new_bundle_file_id: str | None = None
-    bundle_used = True
+    stale_file_ids: list[str] = []
 
     try:
         if file_store is not None:
@@ -803,7 +798,7 @@ def patch_current_user_skill(
                 expected_name=skill.name,
             )
             new_bundle_file_id = ingested.bundle_file_id
-            bundle_used = replace_skill_bundle(
+            stale_file_ids = replace_skill_bundle(
                 skill=skill,
                 ingested=ingested,
                 creator_id=user.id,
@@ -827,8 +822,7 @@ def patch_current_user_skill(
             delete_bundle_blob(file_store, new_bundle_file_id)
         raise
 
-    if file_store is not None and new_bundle_file_id is not None and not bundle_used:
-        delete_bundle_blob(file_store, new_bundle_file_id)
+    delete_unreferenced_skill_bundles(stale_file_ids, db_session)
 
     db_session.expire(skill)
     visibility_changed = old_public_permission != skill.public_permission
@@ -994,10 +988,9 @@ def delete_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    affected, old_file_id = delete_skill_for_user__no_commit(skill, user, db_session)
+    affected, file_ids = delete_skill_for_user__no_commit(skill, user, db_session)
     db_session.commit()
 
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    if old_file_id is not None:
-        delete_bundle_blob(get_default_file_store(), old_file_id)
+    delete_unreferenced_skill_bundles(file_ids, db_session)

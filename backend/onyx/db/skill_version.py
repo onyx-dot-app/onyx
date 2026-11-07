@@ -1,21 +1,32 @@
+from collections.abc import Sequence
+from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import ColumnElement, Select, exists, func, select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Skill, SkillVersion
+from onyx.configs.constants import FileOrigin
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import FileRecord, Skill, SkillVersion
 from onyx.db.resource_version import (
     ResourceVersionAdapter,
+    prune_resource_bundles,
     repair_version_metadata,
     write_resource_version,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.skills.ingest import IngestedBundle
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Uploads save the bundle before the row that uses it commits.
+ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
+# Bounds one cleanup pass; a backlog clears over later passes.
+_ORPHAN_BATCH_SIZE = 500
 
 
 class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
@@ -86,7 +97,9 @@ def save_skill_version(
     db_session: Session,
     *,
     initial: bool = False,
-) -> bool:
+) -> list[str]:
+    """Returns the bundle files to delete after commit: pruned bundles and the
+    staged upload when the current version is reused."""
     adapter = SkillVersionAdapter(skill)
     adapter.lock(db_session)
     reuse_current = False
@@ -112,5 +125,45 @@ def save_skill_version(
         reuse_current=reuse_current,
     )
     skill.description = ingested.description
-    db_session.flush()
-    return version.bundle_file_id == ingested.bundle_file_id
+    stale_file_ids = prune_resource_bundles(adapter, db_session)
+    if version.bundle_file_id != ingested.bundle_file_id:
+        stale_file_ids.append(ingested.bundle_file_id)
+    return stale_file_ids
+
+
+def _unused_skill_bundles(*conditions: ColumnElement[bool]) -> Select[tuple[str]]:
+    """Legacy skill columns count: old writers and pointerless skills use them."""
+    return select(FileRecord.file_id).where(
+        FileRecord.file_origin == FileOrigin.SKILL_BUNDLE,
+        ~exists().where(SkillVersion.bundle_file_id == FileRecord.file_id),
+        ~exists().where(Skill.bundle_file_id == FileRecord.file_id),
+        *conditions,
+    )
+
+
+def delete_unreferenced_skill_bundles(
+    file_ids: Sequence[str], db_session: Session
+) -> None:
+    """Call after commit. Keeps files that any skill or version still uses."""
+    if not file_ids:
+        return
+    unused = list(
+        db_session.scalars(_unused_skill_bundles(FileRecord.file_id.in_(set(file_ids))))
+    )
+    delete_files_best_effort(unused, context="skill bundle cleanup")
+
+
+def delete_orphan_skill_bundles() -> int:
+    """Deletes one batch of old skill bundle files that nothing uses. Returns
+    how many it deleted."""
+    with get_session_with_current_tenant() as db_session:
+        file_ids = list(
+            db_session.scalars(
+                _unused_skill_bundles(
+                    FileRecord.created_at < func.now() - ORPHAN_BUNDLE_MIN_AGE
+                )
+                .order_by(FileRecord.created_at)
+                .limit(_ORPHAN_BATCH_SIZE)
+            )
+        )
+    return delete_files_best_effort(file_ids, context="orphan skill bundle cleanup")

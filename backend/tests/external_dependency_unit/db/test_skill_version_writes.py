@@ -5,12 +5,15 @@ import zipfile
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Never
+
+
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
 from botocore.exceptions import ClientError
 from fastapi import UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,7 +22,12 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
-from onyx.db.resource_version import compute_bundle_metadata, repair_version_metadata
+from onyx.db.resource_version import (
+    VERSION_FILES_NOT_KEPT,
+    compute_bundle_metadata,
+    read_version_bundle,
+    repair_version_metadata,
+)
 from onyx.db.skill import (
     SkillValidityUpdate,
     create_skill_from_bundle__no_commit,
@@ -28,13 +36,19 @@ from onyx.db.skill import (
 )
 from onyx.db.skill_version import (
     SkillVersionAdapter,
+    delete_orphan_skill_bundles,
+    delete_unreferenced_skill_bundles,
     repair_skill_version,
     save_skill_version,
 )
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store import staging
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill import api
-from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.server.features.skill.models import (
+    SkillBulkActionRequest,
+    SkillPatchRequest,
+)
 from onyx.skills.bundle import build_single_file_bundle, build_skill_md
 from onyx.skills.ingest import ingested_skill_bundle, save_skill_bundle_bytes
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -472,3 +486,182 @@ def test_metadata_repair_classifies_object_store_errors(
             repair_version_metadata(version, store, verify_bundle=True)
     else:
         assert not repair_version_metadata(version, store, verify_bundle=True)
+
+
+def skill_with_versions(session: Session, user: User, count: int) -> Skill:
+    name = f"kept-{uuid4().hex[:8]}"
+    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    for number in range(2, count + 1):
+        api.replace_current_user_skill_bundle(
+            response.id, upload(bundle(name, f"Version {number}")), user, session
+        )
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    return skill
+
+
+def stored_bundles(session: Session) -> set[str]:
+    session.expire_all()
+    return set(
+        session.scalars(
+            select(FileRecord.file_id).where(
+                FileRecord.file_origin == FileOrigin.SKILL_BUNDLE
+            )
+        )
+    )
+
+
+def make_old(file_ids: set[str], session: Session) -> None:
+    session.execute(
+        update(FileRecord)
+        .where(FileRecord.file_id.in_(file_ids))
+        .values(created_at=func.now() - timedelta(hours=2))
+    )
+    session.commit()
+
+
+class FailingStore:
+    def delete_file(self, file_id: str, error_on_missing: bool = True) -> None:
+        raise RuntimeError(f"store unavailable: {file_id} {error_on_missing}")
+
+
+def test_eleventh_version_prunes_oldest_bundle(session: Session, user: User) -> None:
+    skill = skill_with_versions(session, user, 10)
+    oldest = versions(skill, session)[-1]
+    oldest_file = oldest.bundle_file_id
+    assert oldest_file is not None and len(stored_bundles(session)) == 10
+    api.replace_current_user_skill_bundle(
+        skill.id, upload(bundle(skill.name, "Eleventh")), user, session
+    )
+    history = versions(skill, session)
+    assert [version.version_number for version in history] == list(range(11, 0, -1))
+    assert history[-1].bundle_file_id is None
+    assert all(version.bundle_file_id for version in history[:10])
+    assert stored_bundles(session) == {v.bundle_file_id for v in history[:10]}
+    store = get_default_file_store()
+    with pytest.raises(OnyxError, match=VERSION_FILES_NOT_KEPT):
+        read_version_bundle(history[-1], store)
+    # A reader that loaded the row before pruning committed gets the same error.
+    oldest.bundle_file_id = oldest_file
+    with pytest.raises(OnyxError, match=VERSION_FILES_NOT_KEPT):
+        read_version_bundle(oldest, store)
+    session.rollback()
+
+
+def test_concurrent_writes_keep_ten_bundles(
+    tenant: str, session: Session, user: User
+) -> None:
+    skill = skill_with_versions(session, user, 9)
+    skill_id, user_id, name = skill.id, user.id, skill.name
+    session.commit()
+
+    def replace(body: str) -> None:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant)
+        try:
+            with get_session_with_current_tenant() as writer:
+                writer_user = writer.get(User, user_id)
+                assert writer_user is not None
+                api.replace_current_user_skill_bundle(
+                    skill_id, upload(bundle(name, body)), writer_user, writer
+                )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(replace, ["A", "B", "C", "D"]))
+    history = versions(skill, session)
+    assert [version.version_number for version in history] == list(range(13, 0, -1))
+    assert [version.bundle_file_id is None for version in history] == [False] * 10 + [
+        True
+    ] * 3
+    assert stored_bundles(session) == {v.bundle_file_id for v in history[:10]}
+
+
+def test_delete_skill_with_twelve_versions(session: Session, user: User) -> None:
+    skill = skill_with_versions(session, user, 12)
+    skill_id = skill.id
+    assert len(versions(skill, session)) == 12
+    assert len(stored_bundles(session)) == 10
+    api.delete_current_user_skill(skill_id, user, session)
+    count = select(func.count()).where(SkillVersion.skill_id == skill_id)
+    assert session.scalar(count) == 0
+    assert stored_bundles(session) == set()
+
+
+def test_bulk_delete_removes_every_retained_bundle(
+    session: Session, user: User
+) -> None:
+    first = skill_with_versions(session, user, 3)
+    second = skill_with_versions(session, user, 2)
+    assert len(stored_bundles(session)) == 5
+    response = api.bulk_update_skills(
+        SkillBulkActionRequest(skill_ids=[first.id, second.id], action="delete"),
+        user,
+        session,
+    )
+    assert response.failed == []
+    assert session.scalar(select(func.count()).select_from(SkillVersion)) == 0
+    assert stored_bundles(session) == set()
+
+
+def test_cleanup_task_retries_failed_deletes(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = skill_with_versions(session, user, 2)
+    with monkeypatch.context() as patch:
+        patch.setattr(staging, "get_default_file_store", FailingStore)
+        api.delete_current_user_skill(skill.id, user, session)
+    leaked = stored_bundles(session)
+    assert len(leaked) == 2
+    # Younger than one hour: an upload may not have committed its row yet.
+    assert delete_orphan_skill_bundles() == 0
+    assert stored_bundles(session) == leaked
+    make_old(leaked, session)
+    assert delete_orphan_skill_bundles() == 2
+    assert stored_bundles(session) == set()
+
+
+def test_cleanup_keeps_files_in_use(session: Session, user: User) -> None:
+    store = get_default_file_store()
+    legacy = Skill(
+        name="pointerless",
+        description="Old writer",
+        bundle_file_id=save_skill_bundle_bytes(
+            bundle("pointerless"), display_name="old.zip", file_store=store
+        ),
+        author_user_id=user.id,
+    )
+    session.add(legacy)
+    deleted = skill_with_versions(session, user, 1)
+    kept = skill_with_versions(session, user, 1)
+    shared = versions(deleted, session)[0].bundle_file_id
+    assert shared is not None
+    # A historical anomaly: another skill's version uses the same blob.
+    session.add(SkillVersion(skill_id=kept.id, version_number=2, bundle_file_id=shared))
+    other_origin = store.save_file(
+        io.BytesIO(b"chat"), "chat.txt", FileOrigin.CHAT_UPLOAD, "text/plain"
+    )
+    session.commit()
+    api.delete_current_user_skill(deleted.id, user, session)
+    in_use = stored_bundles(session)
+    assert {legacy.bundle_file_id, shared} <= in_use
+    make_old(in_use | {other_origin}, session)
+    assert delete_orphan_skill_bundles() == 0
+    assert stored_bundles(session) == in_use
+    assert store.has_file(other_origin, FileOrigin.CHAT_UPLOAD, "text/plain")
+
+
+def test_rolled_back_prune_keeps_files(session: Session, user: User) -> None:
+    skill = skill_with_versions(session, user, 10)
+    before = stored_bundles(session)
+    with ingested_skill_bundle(
+        bundle(skill.name, "Rolled back"), "skill.zip", get_default_file_store()
+    ) as ingested:
+        stale = replace_skill_bundle(
+            skill=skill, ingested=ingested, creator_id=user.id, db_session=session
+        )
+        session.rollback()
+    assert stale and set(stale) < before
+    delete_unreferenced_skill_bundles(stale, session)
+    assert before <= stored_bundles(session)
+    assert all(version.bundle_file_id for version in versions(skill, session))
