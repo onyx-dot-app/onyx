@@ -131,9 +131,20 @@ def prune_resource_bundles[Version: BundleVersionMixin](
     """Empty the bundle file ids of versions older than the newest kept ones.
     Call under the adapter lock; delete the returned files only after commit."""
     current = adapter.current(db_session)
+    cutoff = db_session.scalars(
+        adapter.versions().offset(BUNDLES_KEPT - 1).limit(1)
+    ).first()
+    if current is None or cutoff is None:
+        return []
+    version_model = type(cutoff)
+    candidates = adapter.versions().where(
+        version_model.version_number < cutoff.version_number,
+        version_model.bundle_file_id.is_not(None),
+        version_model.id != current.id,
+    )
     pruned: list[str] = []
-    for version in db_session.scalars(adapter.versions().offset(BUNDLES_KEPT)):
-        if version.bundle_file_id is None or version is current:
+    for version in db_session.scalars(candidates):
+        if version.bundle_file_id is None:
             continue
         pruned.append(version.bundle_file_id)
         version.bundle_file_id = None

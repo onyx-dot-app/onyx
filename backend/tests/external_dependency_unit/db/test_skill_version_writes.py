@@ -13,7 +13,7 @@ from uuid import uuid4
 import pytest
 from botocore.exceptions import ClientError
 from fastapi import UploadFile
-from sqlalchemy import func, select, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,7 +22,9 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from onyx.background.celery.tasks.skills.tasks import (
     check_for_orphan_skill_bundle_cleanup,
 )
-from onyx.configs.constants import FileOrigin
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLockLostError
+from onyx.configs.constants import FileOrigin, OnyxRedisLocks
 from onyx.db import skill_version
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
@@ -48,6 +50,8 @@ from onyx.db.skill_version import (
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store import staging
 from onyx.file_store.file_store import get_default_file_store
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import (
     SkillBulkActionRequest,
@@ -725,3 +729,99 @@ def test_cleanup_advances_past_failed_batch(
     assert delete_orphan_skill_bundles() == 0
     assert delete_orphan_skill_bundles() == 2
     assert stored_bundles(session) == set()
+
+
+def test_lite_poller_retries_orphan_bundle(session: Session) -> None:
+    from onyx.background.periodic_poller import _build_periodic_tasks
+
+    orphan = save_skill_bundle_bytes(
+        bundle("lite-orphan"),
+        display_name="orphan.zip",
+        file_store=get_default_file_store(),
+    )
+    make_old({orphan}, session)
+    tasks = _build_periodic_tasks()
+    assert len({task.lock_id for task in tasks}) == len(tasks)
+    task = next(task for task in tasks if task.name == "skill-bundle-cleanup")
+    task.run_fn()
+    assert orphan not in stored_bundles(session)
+
+
+def test_pruning_does_not_load_cleared_history(session: Session, user: User) -> None:
+    skill = skill_with_versions(session, user, 30)
+    skill_id, user_id, name = skill.id, user.id, skill.name
+    session.expunge_all()
+    writer = session.get(User, user_id)
+    assert writer is not None
+    loaded: list[SkillVersion] = []
+
+    def record_load(_session: Session, instance: object) -> None:
+        if isinstance(instance, SkillVersion):
+            loaded.append(instance)
+
+    event.listen(session, "loaded_as_persistent", record_load)
+    try:
+        api.replace_current_user_skill_bundle(
+            skill_id, upload(bundle(name, "Next version")), writer, session
+        )
+    finally:
+        event.remove(session, "loaded_as_persistent", record_load)
+    assert len(loaded) <= 4
+    assert len(stored_bundles(session)) == 10
+
+
+def test_cleanup_lost_lease_keeps_cursor_pending(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = get_default_file_store()
+    files = {
+        save_skill_bundle_bytes(
+            bundle(f"lease-{n}"), display_name="orphan.zip", file_store=store
+        )
+        for n in range(2)
+    }
+    make_old(files, session)
+    backend = get_cache_backend()
+    lock = backend.lock(
+        OnyxRedisLocks.ORPHAN_SKILL_BUNDLE_CLEANUP_BEAT_LOCK, timeout=120
+    )
+    renewals = 0
+
+    def expire_after_delete(_ttl: float) -> None:
+        nonlocal renewals
+        renewals += 1
+        if renewals == 2:
+            lock.release()
+            raise CacheLockLostError("expired during delete")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(skill_version, "get_cache_backend", lambda: backend)
+        patch.setattr(backend, "lock", lambda *_args, **_kwargs: lock)
+        patch.setattr(lock, "extend", expire_after_delete)
+        with pytest.raises(CacheLockLostError):
+            delete_orphan_skill_bundles()
+    assert len(stored_bundles(session)) == 1
+    with pytest.raises(KvKeyNotFoundError):
+        get_kv_store().load("orphan_skill_bundle_cursor", refresh_cache=True)
+    assert delete_orphan_skill_bundles() == 1
+    assert stored_bundles(session) == set()
+
+
+def test_cleanup_retries_failures_despite_new_arrivals(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = get_default_file_store()
+    failed = save_skill_bundle_bytes(
+        bundle("failed"), display_name="old.zip", file_store=store
+    )
+    make_old({failed}, session)
+    with monkeypatch.context() as patch:
+        patch.setattr(staging, "get_default_file_store", FailingStore)
+        assert delete_orphan_skill_bundles() == 0
+    for number in range(4):
+        new = save_skill_bundle_bytes(
+            bundle(f"arrival-{number}"), display_name="new.zip", file_store=store
+        )
+        make_old({new}, session)
+        delete_orphan_skill_bundles()
+    assert failed not in stored_bundles(session)
