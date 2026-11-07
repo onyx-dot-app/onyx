@@ -156,8 +156,11 @@ The library preview of an external-app skill calls the same renderer
    it, so the opt-out returns when the policy goes back to default.
 5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
    unique index `uq_user_skill_preference_name` allows one enabled choice per
-   user and name. `uq_skill_automatic_name` allows one default or required
-   skill per name in the tenant. Every write that enables a preference first
+   user and name. `uq_skill_automatic_name` covers every policy except
+   AVAILABLE. `server/features/skill/models.py:SkillShareRequest` and
+   `db/skill.py:set_skill_installation_policy`
+   reject NOT_AVAILABLE until effective-policy resolution and write rules support it.
+   Every write that enables a preference first
    takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
    lock on the user row. The lock orders concurrent enables of one name, so
    the second one gets `SKILL_NAME_CONFLICT`, not an `IntegrityError`. The
@@ -205,7 +208,9 @@ The library preview of an external-app skill calls the same renderer
     access settings all call it with a `SkillSharingChange`
     (`SkillShareRequest.to_change()` builds one). A change
     to `installation_policy` needs `FULL_ADMIN_PANEL_ACCESS`, and
-    `db/skill.py:set_skill_installation_policy` refuses a built-in. EDIT on a
+    `db/skill.py:set_skill_installation_policy` refuses a built-in.
+    Group install settings are storage-only; NULL keeps the skill-wide behavior.
+    Community downgrade removes group grants with their install settings. EDIT on a
     skill is not enough to change its groups:
     `db/skill.py:_assert_group_share_within_scope` treats any change to the
     group set or levels as a `MANAGE_SKILLS` action within scope

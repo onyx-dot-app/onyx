@@ -18,6 +18,7 @@ from onyx.db.enums import (
     GrantSource,
     Permission,
     PersonaSharePermission,
+    SkillInstallationPolicy,
     SkillSharePermission,
     UserFileStatus,
 )
@@ -302,8 +303,10 @@ def _make_skill(db_session: Session, author: User) -> Skill:
 
 
 @pytest.mark.usefixtures("tenant_context")
+@pytest.mark.parametrize("policy", [None, *SkillInstallationPolicy])
 def test_group_shared_providers_servers_and_skills_become_public(
     db_session: Session,
+    policy: SkillInstallationPolicy | None,
 ) -> None:
     try:
         owner = _make_user(db_session, in_basic=True)
@@ -335,7 +338,11 @@ def test_group_shared_providers_servers_and_skills_become_public(
                 MCPServer__UserGroup(
                     mcp_server_id=servers[0].id, user_group_id=group.id
                 ),
-                Skill__UserGroup(skill_id=skills[0].id, user_group_id=group.id),
+                Skill__UserGroup(
+                    skill_id=skills[0].id,
+                    user_group_id=group.id,
+                    installation_policy=policy,
+                ),
             ]
         )
         db_session.flush()
@@ -347,6 +354,8 @@ def test_group_shared_providers_servers_and_skills_become_public(
         assert providers[0].is_public
         assert servers[0].is_public
         assert skills[0].public_permission == SkillSharePermission.VIEWER
+        assert skills[0].installation_policy == SkillInstallationPolicy.AVAILABLE
+        assert db_session.get(Skill__UserGroup, (skills[0].id, group.id)) is None
         assert not providers[1].is_public
         assert not servers[1].is_public
         assert skills[1].public_permission is None

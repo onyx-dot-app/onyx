@@ -5697,6 +5697,11 @@ class Skill__UserGroup(Base):
         server_default=SkillSharePermission.VIEWER.value,
     )
 
+    # NULL preserves the skill-wide policy; group overrides are not exposed yet.
+    installation_policy: Mapped[SkillInstallationPolicy | None] = mapped_column(
+        Enum(SkillInstallationPolicy, native_enum=False), nullable=True
+    )
+
     user_group: Mapped["UserGroup"] = relationship("UserGroup")
 
 
