@@ -260,7 +260,7 @@ The library preview of an external-app skill calls the same renderer
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
     placeholder. The sent bytes feed the runtime hash. OpenCode adds the base
     folder line and the relative-path rule itself, so the push adds neither.
-    `tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
+    `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
     `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
     still does this. A harness that loads skills in the API server must give the
     model `skills/rendering.py:render_skill_for_model`, which resolves the
