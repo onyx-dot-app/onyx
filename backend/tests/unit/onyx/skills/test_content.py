@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from onyx.db.models import Skill
+from onyx.db.models import Skill, SkillVersion
 from onyx.file_store.file_store import FileStore
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
@@ -62,7 +62,10 @@ def test_read_custom_skill_bundle_instructions_reads_bundle_from_file_store() ->
     file_store.read_file.return_value = io.BytesIO(zip_bytes)
 
     instructions = read_custom_skill_bundle_instructions(
-        Skill(name="preview-test", bundle_file_id="bundle-file-id"),
+        Skill(
+            name="preview-test",
+            current_version=SkillVersion(bundle_file_id="bundle-file-id"),
+        ),
         file_store,
     )
 
