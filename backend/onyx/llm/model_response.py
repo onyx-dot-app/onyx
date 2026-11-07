@@ -120,8 +120,10 @@ class ModelResponse(BaseModel):
     model: str | None = None
 
 
-class _CachedTokens(BaseModel):
+class _PromptTokensDetails(BaseModel):
     cached_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    cache_creation_tokens: int | None = None
 
 
 class _ProviderUsage(BaseModel):
@@ -130,19 +132,25 @@ class _ProviderUsage(BaseModel):
     total_tokens: int | None = None
     cache_creation_input_tokens: int | None = None
     cache_read_input_tokens: int | None = None
-    prompt_tokens_details: _CachedTokens | None = None
+    prompt_tokens_details: _PromptTokensDetails | None = None
 
     def to_usage(self) -> Usage:
         cached = self.cache_read_input_tokens
         if cached is None and self.prompt_tokens_details is not None:
             cached = self.prompt_tokens_details.cached_tokens
+        created = self.cache_creation_input_tokens
+        if created is None and self.prompt_tokens_details is not None:
+            # These are aliases for the same writes, not separate token buckets.
+            created = self.prompt_tokens_details.cache_write_tokens
+            if created is None:
+                created = self.prompt_tokens_details.cache_creation_tokens
         # NOTE: sometimes the usage data dictionary has these keys and the values are None
         # hence the "or 0" instead of just using default values
         return Usage(
             completion_tokens=self.completion_tokens or 0,
             prompt_tokens=self.prompt_tokens or 0,
             total_tokens=self.total_tokens or 0,
-            cache_creation_input_tokens=self.cache_creation_input_tokens or 0,
+            cache_creation_input_tokens=created or 0,
             cache_read_input_tokens=cached or 0,
         )
 
