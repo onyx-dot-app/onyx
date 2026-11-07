@@ -27,6 +27,7 @@ from onyx.db.models import (
     User,
     UserSkillPreference,
 )
+from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -463,7 +464,9 @@ def associate_custom_skill_with_external_app__no_commit(
             (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
         )
 
-    skill.public_permission = SkillSharePermission.VIEWER
+    assert_skill_mutable(skill)
+    if not is_company_marketplace_skill(skill, db_session):
+        skill.public_permission = SkillSharePermission.VIEWER
     db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
     db_session.flush()
     return skill
@@ -578,7 +581,9 @@ def replace_custom_skill_associations__no_commit(
         )
 
     for skill in target_skills:
-        skill.public_permission = SkillSharePermission.VIEWER
+        assert_skill_mutable(skill)
+        if not is_company_marketplace_skill(skill, db_session):
+            skill.public_permission = SkillSharePermission.VIEWER
         if skill.id not in current_ids:
             db_session.add(
                 ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)

@@ -20,7 +20,7 @@ Callers normally control the transaction boundary so multi-step operations can
 roll back atomically.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
@@ -40,7 +40,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, contains_eager, selectinload
 
 from onyx.auth.permissions import has_global_permission, has_permission
-from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     Permission,
@@ -64,10 +63,19 @@ from onyx.db.models import (
     User__UserGroup,
     UserSkillPreference,
 )
+from onyx.db.resource_access import (
+    ResourceAccessAdapter,
+    ResourceAccessState,
+    mutate_resource_access,
+)
+from onyx.db.resource_access import (
+    ResourceAccessChange as SkillSharingChange,
+)
 from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
 from onyx.db.skill_version import (
     persist_skill_version_validity,
     save_skill_version,
@@ -148,6 +156,7 @@ def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool
 
 def _is_owned_custom_skill(user: User) -> ColumnElement[bool]:
     return and_(
+        Skill.author_user_id.is_not(None),
         Skill.author_user_id == user.id,
         Skill.built_in_skill_id.is_(None),
     )
@@ -300,50 +309,49 @@ def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
 
 
 def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
-    """Return user IDs with a running sandbox that should contain this skill.
+    return affected_user_ids_for_skills([skill.id], db_session).get(skill.id, set())
 
-    Deliberately does not filter by user preference: disable/delete flows still
-    need previous recipients so the push pipeline can remove the skill files.
-    """
-    if skill.public_permission is not None:
-        stmt = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
-        return set(db_session.scalars(stmt))
 
-    group_share_stmt = (
-        select(Sandbox.user_id)
+def affected_user_ids_for_skills(
+    skill_ids: Collection[UUID], db_session: Session
+) -> dict[UUID, set[UUID]]:
+    recipients: dict[UUID, set[UUID]] = {}
+    if not skill_ids:
+        return recipients
+    direct = exists().where(
+        Skill__User.skill_id == Skill.id, Skill__User.user_id == Sandbox.user_id
+    )
+    group = (
+        select(Skill__UserGroup.skill_id)
         .join(
             User__UserGroup,
+            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
+        )
+        .where(
+            Skill__UserGroup.skill_id == Skill.id,
             User__UserGroup.user_id == Sandbox.user_id,
         )
-        .join(
-            Skill__UserGroup,
-            Skill__UserGroup.user_group_id == User__UserGroup.user_group_id,
-        )
-        .where(Skill__UserGroup.skill_id == skill.id)
-        .where(Sandbox.status == SandboxStatus.RUNNING)
+        .exists()
     )
-    user_ids = set(db_session.scalars(group_share_stmt))
-
-    user_share_stmt = (
-        select(Sandbox.user_id)
+    rows = db_session.execute(
+        select(Skill.id, Sandbox.user_id)
         .join(
-            Skill__User,
-            Skill__User.user_id == Sandbox.user_id,
+            Sandbox,
+            and_(
+                Sandbox.status == SandboxStatus.RUNNING,
+                or_(
+                    Skill.public_permission.is_not(None),
+                    Skill.author_user_id == Sandbox.user_id,
+                    direct,
+                    group,
+                ),
+            ),
         )
-        .where(Skill__User.skill_id == skill.id)
-        .where(Sandbox.status == SandboxStatus.RUNNING)
+        .where(Skill.id.in_(skill_ids))
     )
-    user_ids |= set(db_session.scalars(user_share_stmt))
-
-    if skill.author_user_id is not None:
-        author_stmt = (
-            select(Sandbox.user_id)
-            .where(Sandbox.user_id == skill.author_user_id)
-            .where(Sandbox.status == SandboxStatus.RUNNING)
-        )
-        user_ids |= set(db_session.scalars(author_stmt))
-
-    return user_ids
+    for skill_id, user_id in rows:
+        recipients.setdefault(skill_id, set()).add(user_id)
+    return recipients
 
 
 def list_skills(
@@ -401,6 +409,7 @@ def fetch_skill(
     db_session: Session,
     user: User,
     lock_for_update: bool = False,
+    allow_retired: bool = False,
 ) -> Skill | None:
     stmt = _skill_select_for_management_policy(
         policy=policy,
@@ -409,10 +418,12 @@ def fetch_skill(
         order_by_name=False,
     ).where(Skill.id == skill_id)
     if lock_for_update:
-        stmt = stmt.with_for_update(of=Skill)
+        stmt = stmt.with_for_update(of=Skill).execution_options(populate_existing=True)
     skill = db_session.scalars(stmt).one_or_none()
     if skill is not None and lock_for_update:
         db_session.refresh(skill, ["current_version"])
+        if not allow_retired:
+            assert_skill_mutable(skill)
     return skill
 
 
@@ -510,7 +521,11 @@ def set_skill_public_permission(
             )
         )
     )
-    if is_associated and public_permission != SkillSharePermission.VIEWER:
+    if (
+        is_associated
+        and not is_company_marketplace_skill(skill, db_session)
+        and public_permission != SkillSharePermission.VIEWER
+    ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Skills associated with an external app must remain visible to the "
@@ -705,6 +720,8 @@ def replace_skill_shares(
     db_session: Session,
     user_shares: Mapping[UUID, SkillSharePermission] | None = None,
     group_shares: Mapping[int, SkillSharePermission] | None = None,
+    group_installation_policies: Mapping[int, SkillInstallationPolicy | None]
+    | None = None,
 ) -> None:
     if user_shares is not None:
         db_session.execute(delete(Skill__User).where(Skill__User.skill_id == skill.id))
@@ -716,6 +733,12 @@ def replace_skill_shares(
         db_session.expire(skill, ["user_shares"])
 
     if group_shares is not None:
+        policies = {
+            share.user_group_id: share.installation_policy
+            for share in skill.group_shares
+        }
+        if group_installation_policies is not None:
+            policies.update(group_installation_policies)
         assert_not_shared_with_default_group(db_session, list(group_shares))
         db_session.execute(
             delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
@@ -726,6 +749,7 @@ def replace_skill_shares(
                     skill_id=skill.id,
                     user_group_id=group_id,
                     permission=permission,
+                    installation_policy=policies.get(group_id),
                 )
             )
         _flush_shares(db_session, "One or more group share targets do not exist.")
@@ -812,57 +836,78 @@ def persist_skill_validity(
         db_session.commit()
 
 
-@dataclass(frozen=True)
-class SkillSharingChange:
-    """A partial update to a skill's access. None leaves a setting unchanged;
-    set_public_permission marks public_permission as supplied."""
-
-    public_permission: SkillSharePermission | None = None
-    set_public_permission: bool = False
-    installation_policy: SkillInstallationPolicy | None = None
-    user_shares: Mapping[UUID, SkillSharePermission] | None = None
-    group_shares: Mapping[int, SkillSharePermission] | None = None
-
-
-SkillBulkAction = Literal["share", "enable", "disable", "delete"]
+SkillBulkAction = Literal["enable", "disable", "delete"]
 
 
 def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
-    if skill.author_user_id == user.id:
-        return
-    if has_global_permission(user, Permission.MANAGE_SKILLS):
-        return
-    raise OnyxError(
-        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-        "You do not have permission to change organization-wide skill access.",
-    )
+    assert_skill_mutable(skill)
+    if not has_global_permission(user, Permission.MANAGE_SKILLS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Company access changes require global manage-skills permission.",
+        )
 
 
-def _assert_group_share_within_scope(
-    skill: Skill,
-    change: SkillSharingChange,
-    user: User,
-    db_session: Session,
-) -> None:
-    """Changing a skill's group shares is a MANAGE_SKILLS action, matching how
-    agents treat group attachment. EDIT on the skill is not enough: an owner
-    could otherwise publish into any group and inject the skill into that group
-    manager's scope. Shares are read from the DB, never the request, so a
-    reassignment cannot escape scope. Re-sending the current set is a no-op."""
-    if change.group_shares is None:
-        return
-    current = {share.user_group_id: share.permission for share in skill.group_shares}
-    if current == dict(change.group_shares):
-        return
-    assert_within_scope(
-        user,
-        db_session,
-        permission=Permission.MANAGE_SKILLS,
-        current_group_ids=list(current),
-        requested_group_ids=list(change.group_shares),
-        is_non_public=skill.public_permission is None
-        and change.public_permission is None,
-    )
+class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
+    permission = Permission.MANAGE_SKILLS
+
+    def load(self, resource_id: UUID, user: User, db_session: Session) -> Skill:
+        skill = fetch_skill(
+            resource_id,
+            policy=SkillManagementPolicy.EDIT,
+            user=user,
+            db_session=db_session,
+            lock_for_update=True,
+        )
+        if skill is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+        if is_company_marketplace_skill(skill, db_session):
+            ensure_can_edit_org_visibility(skill, user)
+        return skill
+
+    def state(self, resource: Skill) -> ResourceAccessState:
+        return ResourceAccessState(
+            owner_user_id=resource.author_user_id,
+            public_permission=resource.public_permission,
+            user_shares={
+                share.user_id: share.permission for share in resource.user_shares
+            },
+            group_shares={
+                share.user_group_id: share.permission for share in resource.group_shares
+            },
+            group_installation_policies={
+                share.user_group_id: share.installation_policy
+                for share in resource.group_shares
+            },
+        )
+
+    def write(
+        self, resource: Skill, change: SkillSharingChange, db_session: Session
+    ) -> None:
+        if change.set_public_permission:
+            set_skill_public_permission(
+                skill=resource,
+                public_permission=change.public_permission,
+                db_session=db_session,
+            )
+        if change.installation_policy is not None:
+            set_skill_installation_policy(
+                resource, change.installation_policy, db_session
+            )
+        replace_skill_shares(
+            skill=resource,
+            user_shares=change.user_shares,
+            group_shares=change.group_shares,
+            group_installation_policies=change.group_installation_policies,
+            db_session=db_session,
+        )
+        if is_company_marketplace_skill(resource, db_session):
+            resource.follows_marketplace_access = False
+
+    def affected_users(
+        self, resource_ids: Collection[UUID], db_session: Session
+    ) -> dict[UUID, set[UUID]]:
+        return affected_user_ids_for_skills(resource_ids, db_session)
 
 
 def share_skill__no_commit(
@@ -870,60 +915,14 @@ def share_skill__no_commit(
     change: SkillSharingChange,
     user: User,
     db_session: Session,
-    *,
-    merge_existing: bool = False,
 ) -> set[UUID]:
-    """Apply an access change and return every user whose sandbox is affected,
-    before or after the change. With merge_existing, supplied user and group
-    grants are added to the current ones instead of replacing them."""
-    if change.installation_policy is not None and not has_global_permission(
-        user, Permission.FULL_ADMIN_PANEL_ACCESS
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can change skill installation policies.",
-        )
-    if change.set_public_permission:
-        ensure_can_edit_org_visibility(skill, user)
-    # Anchor on the pre-call visibility so a public->private convert plus a
-    # group-share in one request can't slip a published skill into managed scope.
-    _assert_group_share_within_scope(skill, change, user, db_session)
-
-    before = affected_user_ids_for_skill(skill, db_session)
-    if change.set_public_permission:
-        set_skill_public_permission(
-            skill=skill,
-            public_permission=change.public_permission,
-            db_session=db_session,
-        )
-    if change.installation_policy is not None:
-        set_skill_installation_policy(skill, change.installation_policy, db_session)
-
-    user_shares: dict[UUID, SkillSharePermission] | None = None
-    if change.user_shares is not None:
-        user_shares = {
-            user_id: permission
-            for user_id, permission in change.user_shares.items()
-            if user_id != skill.author_user_id
-        }
-        if merge_existing:
-            user_shares = {
-                share.user_id: share.permission for share in skill.user_shares
-            } | user_shares
-    group_shares: dict[int, SkillSharePermission] | None = None
-    if change.group_shares is not None:
-        group_shares = dict(change.group_shares)
-        if merge_existing:
-            group_shares = {
-                share.user_group_id: share.permission for share in skill.group_shares
-            } | group_shares
-    replace_skill_shares(
-        skill=skill,
-        user_shares=user_shares,
-        group_shares=group_shares,
-        db_session=db_session,
-    )
-    return before | affected_user_ids_for_skill(skill, db_session)
+    return mutate_resource_access(
+        [skill.id],
+        change,
+        user,
+        db_session,
+        SkillAccessAdapter(),
+    ).affected
 
 
 def delete_skill_for_user__no_commit(
@@ -933,11 +932,11 @@ def delete_skill_for_user__no_commit(
     bundle file ids for cleanup after commit."""
     if (
         skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+        and not has_global_permission(user, Permission.MANAGE_SKILLS)
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only admins can delete required skills.",
+            "Deleting required skills requires global manage-skills permission.",
         )
     affected = affected_user_ids_for_skill(skill, db_session)
     return affected, delete_skill(skill, db_session)
@@ -969,7 +968,6 @@ def create_skill_from_bundle__no_commit(
 def bulk_update_skill__no_commit(
     skill_id: UUID,
     action: SkillBulkAction,
-    change: SkillSharingChange | None,
     user: User,
     db_session: Session,
 ) -> tuple[set[UUID], list[str]]:
@@ -991,13 +989,8 @@ def bulk_update_skill__no_commit(
             user=user,
             db_session=db_session,
             lock_for_update=True,
+            allow_retired=action == "delete",
         )
         if skill is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-        if action == "share":
-            if change is None:
-                raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Sharing is required.")
-            return share_skill__no_commit(
-                skill, change, user, db_session, merge_existing=True
-            ), []
         return delete_skill_for_user__no_commit(skill, user, db_session)

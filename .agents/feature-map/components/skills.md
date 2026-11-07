@@ -26,7 +26,7 @@
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
-  and the user cannot turn it off). Only an admin can delete a required skill.
+  and the user cannot turn it off). Global manage-skills permission is required to delete a required skill.
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
@@ -209,7 +209,8 @@ The library preview of an external-app skill calls the same renderer
    such check.
 10. `app-skill-org-visible` **An app skill stays visible to the
     organization.** `db/skill.py:set_skill_public_permission` accepts only `VIEWER` for a
-    skill linked to an external app. A private custom skill must have an
+    skill linked to an external app, except company marketplace skills. App linking
+    preserves their access. A private custom skill must have an
     owner or a marketplace: `ck_private_skill_has_owner` enforces this in SQL,
     and the visibility setter applies the same rule. Transfer or delete private
     uploaded skills before removing their owner.
@@ -219,31 +220,23 @@ The library preview of an external-app skill calls the same renderer
     and the caller commits. The push catches and logs every exception, so a
     failed push never fails the API call. The next push repairs it, because
     the hash of a failed sandbox is not written.
-12. `sharing-single-entry` **Sharing and policy writes go through
-    `db/skill.py:share_skill__no_commit`.** The share route, the editor create
-    route, the patch route's visibility change, bulk sharing and imports with
-    access settings all call it with a `SkillSharingChange`
-    (`SkillShareRequest.to_change()` builds one). A change
-    to `installation_policy` needs `FULL_ADMIN_PANEL_ACCESS`, and
-    `db/skill.py:set_skill_installation_policy` refuses a built-in.
-    Group install settings are storage-only; NULL keeps the skill-wide behavior.
-    Community downgrade removes group grants with their install settings. EDIT on a
-    skill is not enough to change its groups:
-    `db/skill.py:_assert_group_share_within_scope` treats any change to the
-    group set or levels as a `MANAGE_SKILLS` action within scope
-    ([[authorization]]). Without it, an owner could push a skill into any
-    group manager's scope. It compares against the stored shares, and the
-    privacy check uses the stored visibility and the request, so a
-    public-to-private change in the same request cannot get past it. A
-    `public_permission` change needs the author or global `MANAGE_SKILLS`
-    (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
-    too). A new sharing entry point must call `share_skill__no_commit`, not
-    `db/skill.py:replace_skill_shares`.
-    Agents apply a looser form of the rule
-    ([[agents-personas#group-share-needs-manage-agents]]).
-    `POST /skills/bulk` applies each item in a savepoint, reports expected
-    business errors per skill, and pushes the combined affected audience after
-    commit. Bulk enable and disable change only the caller's preference.
+12. `sharing-single-entry` **Access writes use the resource adapter.**
+    `db/resource_access.py:mutate_resource_access` handles single and bulk changes.
+    `db/skill.py:SkillAccessAdapter` supplies skill grants with real foreign keys,
+    locked EDIT authorization and eligibility checks. Company visibility and
+    installation settings require global `MANAGE_SKILLS`, even for owners.
+    Changed group grants and explicit group settings use `assert_within_scope`
+    against stored groups and visibility. Group managers cannot change another
+    group's settings or company settings. An omitted group setting preserves
+    its value; explicit NULL clears it. Group settings remain unused at runtime
+    until effective-policy resolution ships. NOT_AVAILABLE remains rejected.
+    Bulk sharing adds or updates grants and preserves omitted grants. It reads
+    affected users in two batch queries and pushes once after commit. Expected
+    failures roll back one skill's savepoint. Bulk toggles affect only the caller.
+    Company marketplace access changes clear `follows_marketplace_access`.
+    `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
+    deletion explicitly allows retirement. New access entry points must use the
+    adapter function, not `db/skill.py:replace_skill_shares`.
     `POST /skills/custom/batch` and GitHub import create each bundle through
     `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
     so a bad bundle or a name conflict under a DEFAULT or REQUIRED policy lands
@@ -459,6 +452,12 @@ The library preview of an external-app skill calls the same renderer
 ---
 
 ## Known issues
+
+- **Marketplace access reset is not connected.** Marketplace storage has group
+  grants but no company visibility or installation-policy fields. S7 must add
+  those defaults and copy them through the access mutation function, restoring
+  `follows_marketplace_access` in the same transaction. Plugin membership is not
+  modeled yet; its access guard belongs in `SkillAccessAdapter.load`.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing
