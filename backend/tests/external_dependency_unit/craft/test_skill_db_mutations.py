@@ -33,6 +33,8 @@ from tests.common.craft.skill_table_isolation import (
     restore_skill_tables,
     snapshot_skill_tables,
 )
+from onyx.file_store.models import BundleMetadata
+from onyx.skills.ingest import IngestedBundle
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_built_in_skill_row,
@@ -600,9 +602,16 @@ def test_installation_policies_preserve_choices_through_updates(
     )
     replace_skill_bundle(
         skill=skill,
-        new_bundle_file_id="updated-bundle",
-        new_bundle_sha256="new-hash",
-        new_description="Updated",
+        ingested=IngestedBundle(
+            skill.name,
+            "updated-bundle",
+            "new-hash",
+            "Updated",
+            BundleMetadata(
+                content_digest="a" * 64, unpacked_size_bytes=1, file_count=1
+            ),
+        ),
+        creator_id=user.id,
         db_session=db_session,
     )
     assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled

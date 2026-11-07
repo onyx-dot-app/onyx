@@ -1,0 +1,335 @@
+"""Real PostgreSQL and FileStore coverage in a disposable tenant schema."""
+
+import io
+import zipfile
+from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
+
+import pytest
+from fastapi import UploadFile
+from sqlalchemy import func, select
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+from sqlalchemy.schema import CreateSchema, DropSchema
+
+from onyx.background.celery.tasks.skill_versions.tasks import (
+    PROGRESS_KEY,
+    repair_skill_versions,
+)
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
+from onyx.db.resource_version import compute_bundle_metadata
+from onyx.db.skill import create_skill_from_bundle__no_commit, replace_skill_bundle
+from onyx.db.skill_version import SkillVersionAdapter
+from onyx.file_store.file_store import get_default_file_store
+from onyx.key_value_store.factory import get_kv_store
+from onyx.server.features.skill import api
+from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.skills.bundle import build_single_file_bundle, build_skill_md
+from onyx.skills.ingest import ingested_skill_bundle
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.external_dependency_unit.craft.db_helpers import make_user
+
+
+@pytest.fixture
+def tenant(isolated_engine: Engine) -> Generator[str, None, None]:
+    schema = f"skill_v2_{uuid4().hex}"
+    with isolated_engine.begin() as connection:
+        connection.execute(CreateSchema(schema))
+        names = {
+            "user",
+            "oauth_account",
+            "user__pinned_persona",
+            "skill",
+            "skill_version",
+            "skill__user",
+            "skill__user_group",
+            "user_skill_preference",
+            "user_group",
+            "user__user_group",
+            "sandbox",
+            "external_app",
+            "external_app__skill",
+            "external_app_user_credential",
+            "file_record",
+            "file_content",
+            "key_value_store",
+            "cache_store",
+        }
+        tables = {Base.metadata.tables[name] for name in names}
+        while (
+            dependencies := {
+                fk.column.table for table in tables for fk in table.foreign_keys
+            }
+            - tables
+        ):
+            tables |= dependencies
+        Base.metadata.create_all(
+            connection.execution_options(schema_translate_map={None: schema}),
+            tables=list(tables),
+        )
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(schema)
+    try:
+        yield schema
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        with isolated_engine.begin() as connection:
+            connection.execute(DropSchema(schema, cascade=True))
+
+
+@pytest.fixture
+def session(tenant: str) -> Generator[Session, None, None]:
+    assert CURRENT_TENANT_ID_CONTEXTVAR.get() == tenant
+    with get_session_with_current_tenant() as session:
+        yield session
+
+
+@pytest.fixture
+def user(session: Session) -> User:
+    user = make_user(session)
+    session.commit()
+    return user
+
+
+def bundle(name: str, body: str = "First instructions") -> bytes:
+    return build_single_file_bundle(
+        "SKILL.md",
+        build_skill_md(
+            name=name,
+            description="Version test",
+            instructions_markdown=body,
+        ).encode(),
+    )
+
+
+def upload(content: bytes, filename: str = "skill.zip") -> UploadFile:
+    return UploadFile(file=io.BytesIO(content), filename=filename)
+
+
+def versions(skill: Skill, session: Session) -> list[SkillVersion]:
+    session.refresh(skill)
+    result = list(session.scalars(SkillVersionAdapter(skill).versions()))
+    assert skill.current_version_id == result[0].id
+    assert (skill.bundle_file_id, skill.bundle_sha256, skill.is_valid) == (
+        result[0].bundle_file_id,
+        result[0].bundle_sha256,
+        result[0].is_valid,
+    )
+    return result
+
+
+@pytest.mark.parametrize("creation", ["upload", "editor", "import"])
+def test_all_writers(creation: str, session: Session, user: User) -> None:
+    name = f"version-{uuid4().hex[:8]}"
+    if creation == "upload":
+        response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+        skill = session.get(Skill, response.id)
+    elif creation == "editor":
+        response = api.create_custom_skill_from_editor(
+            name,
+            "Version test",
+            "First instructions",
+            auto_enable=False,
+            user=user,
+            db_session=session,
+        )
+        skill = session.get(Skill, response.id)
+    else:
+        with ingested_skill_bundle(
+            bundle(name), "skill.zip", get_default_file_store()
+        ) as ingested:
+            skill, _, _ = create_skill_from_bundle__no_commit(
+                ingested, None, False, user, session
+            )
+            session.commit()
+    assert skill is not None
+    first = versions(skill, session)[0]
+    assert first.created_by_user_id == user.id
+    assert first.file_count == 1
+    api.replace_current_user_skill_bundle(
+        skill.id, upload(bundle(name, "Replaced")), user, session
+    )
+    assert len(versions(skill, session)) == 2
+    api.upload_current_user_skill_files(
+        skill.id, upload(b"support", "notes.txt"), user, session
+    )
+    assert len(versions(skill, session)) == 3
+    assert versions(skill, session)[0].file_count == 2
+    api.remove_current_user_skill_file(skill.id, "notes.txt", user, session)
+    assert len(versions(skill, session)) == 4
+    request = SkillPatchRequest(instructions_markdown="Edited instructions")
+    api.patch_current_user_skill(skill.id, request, user, session)
+    assert len(versions(skill, session)) == 5
+    current_file = skill.bundle_file_id
+    api.patch_current_user_skill(skill.id, request, user, session)
+    assert len(versions(skill, session)) == 5
+    assert skill.bundle_file_id == current_file
+    for version in versions(skill, session):
+        assert version.created_by_user_id == user.id
+        assert version.bundle_file_id is not None
+        with get_default_file_store().read_file(version.bundle_file_id) as source:
+            assert (
+                compute_bundle_metadata(source.read()).content_digest
+                == version.content_digest
+            )
+
+
+def test_rezip_noop(session: Session, user: User) -> None:
+    name = f"rezip-{uuid4().hex[:8]}"
+    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    api.upload_current_user_skill_files(
+        skill.id, upload(b"support", "notes.txt"), user, session
+    )
+    old = versions(skill, session)[0]
+    assert old.bundle_file_id is not None
+    with get_default_file_store().read_file(old.bundle_file_id) as source:
+        original = source.read()
+    output = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(original)) as archive,
+        zipfile.ZipFile(output, "w") as target,
+    ):
+        for info in reversed(archive.infolist()):
+            target.writestr(
+                zipfile.ZipInfo(info.filename, (2026, 11, 6, 12, 0, 0)),
+                archive.read(info),
+            )
+    assert output.getvalue() != original
+    file_count = session.scalar(select(func.count()).select_from(FileRecord))
+    api.replace_current_user_skill_bundle(
+        skill.id, upload(output.getvalue()), user, session
+    )
+    assert session.scalar(select(func.count()).select_from(FileRecord)) == file_count
+    assert len(versions(skill, session)) == 2
+    assert skill.bundle_file_id == old.bundle_file_id
+
+
+@pytest.mark.parametrize("delete_history", [False, True])
+def test_tenant_repair_stale_deleted_and_pointerless(
+    tenant: str, session: Session, user: User, delete_history: bool
+) -> None:
+    store = get_default_file_store()
+    name = f"legacy-{uuid4().hex[:8]}"
+    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    old = versions(skill, session)[0]
+    # The V1 migration deliberately uses the skill UUID as version UUID.
+    old.id = skill.id
+    skill.current_version_id = skill.id
+    old.content_digest = old.unpacked_size_bytes = old.file_count = None
+    session.commit()
+    assert old.bundle_file_id is not None
+    deleted_file_id = old.bundle_file_id
+    with ingested_skill_bundle(
+        bundle(name, "Legacy writer"), "skill.zip", store
+    ) as ingested:
+        skill.bundle_file_id = ingested.bundle_file_id
+        skill.bundle_sha256 = ingested.bundle_sha256
+        session.commit()
+    if delete_history:
+        store.delete_file(deleted_file_id)
+    orphan_name = f"pointerless-{uuid4().hex[:8]}"
+    with ingested_skill_bundle(bundle(orphan_name), "skill.zip", store) as ingested:
+        pointerless = Skill(
+            name=orphan_name,
+            description="Legacy",
+            author_user_id=user.id,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            is_valid=True,
+        )
+        session.add(pointerless)
+        session.commit()
+    built_in = Skill(
+        name="test-builtin", description="Built in", built_in_skill_id="test-builtin"
+    )
+    session.add(built_in)
+    session.commit()
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("public")
+    try:
+        repair_skill_versions.run(tenant_id=tenant)
+        assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "public"
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    session.expire_all()
+    repaired = versions(skill, session)
+    assert len(repaired) == 2
+    assert repaired[0].content_digest is not None
+    assert repaired[0].bundle_file_id == skill.bundle_file_id
+    assert (repaired[1].content_digest is None) == delete_history
+    assert len(versions(pointerless, session)) == 1
+    assert versions(pointerless, session)[0].file_count == 1
+    assert built_in.current_version_id is None
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == "completed"
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(versions(skill, session)) == 2
+
+
+def test_failed_write_rolls_back(session: Session, user: User) -> None:
+    name = f"rollback-{uuid4().hex[:8]}"
+    store = get_default_file_store()
+    with pytest.raises(RuntimeError, match="abort"):
+        with ingested_skill_bundle(bundle(name), "skill.zip", store) as ingested:
+            create_skill_from_bundle__no_commit(ingested, None, False, user, session)
+            session.rollback()
+            raise RuntimeError("abort")
+    assert session.scalar(select(Skill).where(Skill.name == name)) is None
+    with pytest.raises(FileNotFoundError):
+        store.get_file_size(ingested.bundle_file_id)
+
+
+def test_failed_replacement_preserves_pointer(session: Session, user: User) -> None:
+    name = f"failed-{uuid4().hex[:8]}"
+    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    original = versions(skill, session)[0]
+    store = get_default_file_store()
+    with pytest.raises(IntegrityError):
+        with ingested_skill_bundle(
+            bundle(name, "Rejected"), "skill.zip", store
+        ) as ingested:
+            replace_skill_bundle(
+                skill=skill, ingested=ingested, creator_id=uuid4(), db_session=session
+            )
+    session.commit()
+    assert versions(skill, session) == [original]
+    assert skill.bundle_file_id == original.bundle_file_id
+
+
+def test_concurrent_replacements(tenant: str, session: Session, user: User) -> None:
+    name = f"concurrent-{uuid4().hex[:8]}"
+    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    skill_id, creator_id = response.id, user.id
+    session.commit()
+
+    def replace(body: str) -> None:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant)
+        try:
+            with get_session_with_current_tenant() as writer:
+                skill = writer.get(Skill, skill_id)
+                assert skill is not None
+                with ingested_skill_bundle(
+                    bundle(name, body), "skill.zip", get_default_file_store()
+                ) as ingested:
+                    replace_skill_bundle(
+                        skill=skill,
+                        ingested=ingested,
+                        creator_id=creator_id,
+                        db_session=writer,
+                    )
+                    writer.commit()
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(replace, ["Second", "Third"]))
+    skill = session.get(Skill, skill_id)
+    assert skill is not None
+    assert [version.version_number for version in versions(skill, session)] == [3, 2, 1]
