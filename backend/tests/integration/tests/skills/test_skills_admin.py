@@ -14,6 +14,7 @@ from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.skills.bundle import DEFAULT_MAX_FILE_COUNT
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import (
@@ -262,25 +263,25 @@ def _bundle_with_file_count(name: str, file_count: int) -> bytes:
 
 
 def test_create_skill_file_count_limit(admin_user: DATestUser) -> None:
-    """A version holds at most 500 files; folders do not count."""
+    """Enforce the configured file count; folders do not count."""
     too_many = f"too-many-{uuid4().hex[:8]}"
     with pytest.raises(httpx.HTTPStatusError) as exc_info:
         SkillManager.create_custom(
             admin_user,
             name=too_many,
-            bundle_bytes=_bundle_with_file_count(too_many, 501),
+            bundle_bytes=_bundle_with_file_count(too_many, DEFAULT_MAX_FILE_COUNT + 1),
             auto_enable=False,
         )
     response = exc_info.value.response
     assert response.status_code == 413
     assert response.json()["limit"] == "file_count"
-    assert response.json()["limit_value"] == 500
+    assert response.json()["limit_value"] == DEFAULT_MAX_FILE_COUNT
 
     at_limit = f"at-limit-{uuid4().hex[:8]}"
     created = SkillManager.create_custom(
         admin_user,
         name=at_limit,
-        bundle_bytes=_bundle_with_file_count(at_limit, 500),
+        bundle_bytes=_bundle_with_file_count(at_limit, DEFAULT_MAX_FILE_COUNT),
         auto_enable=False,
     )
     assert created.name == at_limit

@@ -187,7 +187,8 @@ The library preview of an external-app skill calls the same renderer
    read cap; ZIP uploads use the ZIP cap.
    Stored-bundle reads (`skills/validation.py:load_stored_custom_skill_bundle`)
    skip the zip size and file count limits, so a skill saved before them
-   still loads and pushes. Do not tighten a limit on that read path.
+   still loads and pushes within the existing per-file and expanded-total limits.
+   Do not tighten a limit on that read path.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
