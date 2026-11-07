@@ -448,9 +448,6 @@ def test_saved_tools_survive_replay_and_request_preparation(
         history = convert_chat_history(
             capture_chat_history([saved_question, saved_response], {}, len),
             files=[],
-            context_image_files=[],
-            additional_context=None,
-            token_counter=len,
         ).messages
         original_messages = [message.model_dump() for message in history]
         history.append(UserMessage(content="Next question"))

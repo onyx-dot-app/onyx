@@ -25,7 +25,7 @@
   tool, the model is told which files it lost and how to read them. Without it,
   the model is not told ([[#forgotten-files-need-metadata]]).
 - **Project files** that fit go into every step as full text and can be cited.
-  Project images go on the newest user message as images. A project that is too
+  Project images stay beside project text in the fixed preamble. A project that is too
   large is searched instead ([[projects]]).
 - **Long chats** keep working. When a request reaches about 85% of the model's
   usable input, older history is summarized before the model call. Research and
@@ -37,9 +37,10 @@
   the image. With `ENABLE_AZURE_IMAGE_CAP=true`, an Azure model gets at most 50
   images per request: the most recent ones, and a notice of how many were
   dropped. No other provider has a cap.
-- **Incognito.** In a usage-only session, the model never sees the text files
-  or request context of a message, only the forgotten-files notice
-  ([[#usage-only-history-shape]]). If the stored conversation expires, a new
+- **Incognito.** A usage-only session retains questions, text-file messages, image references,
+  and full tool results in temporary history
+  ([[#usage-only-history-shape]]). Request-only context reaches the current turn
+  through its trailing reminder. If the stored conversation expires, a new
   message continues without the earlier messages and with no error
   ([[chat-persistence]]).
 - **When it breaks**, users report that the assistant "forgot" a file, ignored
@@ -83,12 +84,11 @@ compaction candidate. The list on each model call:
 ```
 [system]                    base prompt, shared user-information framing, tool guidance   stable
 [user information]          SYSTEM message: per-user block                                stable
+[custom agent prompt]       USER message, fixed before conversation history               stable
+[project files and images]  USER message, JSON documents and image content blocks          stable
 [conversation summary]      SYSTEM message, when a compaction checkpoint applies          stable
-[history before last user]  includes the newest message's file and request-context messages stable
-[custom agent prompt]       USER message, placed above the newest user message            stable
-[project files]             USER message, JSON documents                                  stable
-[last user message]         also carries project images, with no token count              stable
-[this turn's tool calls and responses]                                                    stable
+[chronological history]     questions, attachments, assistant messages, full tool results stable
+[request-only context]      USER reminder, supplied only for the current request
 [oversized-files notice]    USER, names the retrieval tools offered this step
 [forgotten-files notice]    USER, files that are not in the working history
 [reminder]                  USER, wrapped in <system-reminder>
@@ -118,7 +118,8 @@ document and text) with a pointer to that result
 search result JSON must keep that parse working. Later turns retain saved tool-result
 content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
 Compaction controls history growth; starting a new user turn does not rewrite
-previous evidence. `backend/onyx/chat/README.md` has worked examples of prompt assembly.
+previous evidence. `backend/onyx/chat/README.md` has worked examples of the fixed
+preamble and growing history.
 
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the
 `{{CURRENT_DATETIME}}`, `{{CITATION_GUIDANCE}}` and `{{REMINDER_TAG_DESCRIPTION}}`
@@ -136,13 +137,19 @@ write their own system messages in `deep_research/agent.py` and
 `deep_research/research_agent.py` with no company context and no agent prompt,
 or an agent that replaces the base prompt.
 
+**Tool definitions.** Chat keeps all tool definitions by default. A forced action
+with several operations exposes only that group. Claude, Qwen, and GLM forced
+steps expose only the selected operations and use the automatic-choice fallback. Final Qwen and GLM steps omit tools because
+those providers can reject explicit `none` choices. These schema changes can
+invalidate cache reuse. The shared policy lives in `llm/model_capabilities.py`.
+
 **Custom agent prompt.** `chat/process_message.py:prepare_chat_turn` labels
 project and agent instructions when both exist, and tells the model to follow
 the agent on a conflict. The default assistant gives no agent instructions. If
 `persona.replace_base_system_prompt` is set, the persona's own prompt is the
 system message, and the custom agent prompt holds only project instructions. If
 the default base prompt is empty, the custom agent prompt becomes the system
-message and stops moving (`build_chat_prompt`).
+message (`build_chat_prompt`).
 
 **Reminder.** `chat/prompt_utils.py:build_chat_reminder` starts from the persona
 task prompt, or the open-URL nudge after a web search that found results when
@@ -151,8 +158,10 @@ the task prompt only when this turn has no image-generation calls. Image
 generation does not replace the task prompt, including failed calls and steps
 that also search.
 `chat/prompt_utils.py:build_reminder_message` then adds the last-step reminder,
-the citation guidance once a citeable tool has run in this turn or the turn has
-project files (inline or searched), the file reminder after Python makes a file,
+the citation guidance when saved history has citation sources, a citeable tool
+has run in this turn, or the turn has project files (inline or searched).
+Saved sources do not trigger old image, file, or open-URL reminders.
+It adds the file reminder after Python makes a file,
 and the image reminder when this turn has a result with generated images.
 Failed image calls without images do not add the image reminder.
 `chat/prompt_formatting.py:prepare_model_messages` wraps it in
@@ -179,10 +188,10 @@ content, `db/chat_response.py` saves a changed summary as a `SUMMARY` row whose
 parent is the response where compaction ran. The next turn loads the summary of
 the nearest ancestor on its branch (`db/chat.py:find_summary_for_branch`), so a
 sibling answer or a branch that forks earlier does not see it. A truncation
-fallback saves an empty summary with its cutoff, so the next turn does not
-restore discarded history. A content-free incognito session saves no summary row
-and keeps no root checkpoint, so each of its turns above the trigger summarizes
-the stored history again. `chat/COMPRESSION.md` describes the stored form.
+fallback saves its cutoff in an empty `SUMMARY` row, so later turns do not
+restore the discarded prefix. A content-free incognito session saves no summary
+row; its temporary state retains the root checkpoint for later turns.
+Regeneration validates the cutoff against the selected history. `chat/COMPRESSION.md` describes the stored form.
 
 **Images in history.** `chat/prompt_formatting.py:prepare_model_messages` runs
 on each request. It takes `LLMConfig.supports_images`, or the model catalog when
@@ -207,12 +216,13 @@ counts what is sent, not the stored token counts.
 2. `no-citation-guidance-in-system-prompt` **Citation guidance is never in the
    live system prompt.** A `{{CITATION_GUIDANCE}}` tag in the base or agent
    prompt resolves to empty. The same tag in a persona task prompt resolves to
-   the guidance once citing applies (a citeable tool ran, or the turn has
-   project files), because the task prompt is in the reminder.
+   the guidance once citing applies (saved history has citations, a citeable tool
+   ran, or the turn has project files), because the task prompt is in the reminder.
    `include_all_guidance` adds the guidance only for the token estimate.
 3. `agent-prompt-separate-message` **The custom agent prompt is a separate user
-   message.** It moves to sit just above the newest user message. Do not merge it
-   into the system prompt.
+   message.** With a base prompt, it stays in the fixed preamble before history.
+   With no base prompt or base-prompt replacement, it becomes the system message.
+   Do not move it ahead of each new question.
 4. `reserve-before-extract` **Reserve before you extract.**
    `chat/prompt_utils.py:calculate_reserved_tokens` runs before
    `chat/files.py:extract_context_files` in
@@ -220,8 +230,8 @@ counts what is sent, not the stored token counts.
    takes space the prompt needs.
 5. `fixed-parts-must-fit` **The fixed parts must fit, or the response fails.**
    The head prompt, project files, notices, the reminder and the newest
-   question always stay. Before the first model step, its attachments and
-   request context also stay. After a tool round, compaction can summarize this
+   question and request-only context always stay. Before the first model step,
+   the question's attachments also stay. After a tool round, compaction can summarize this
    turn's earlier tool rounds and attachments, and truncation can drop the
    attachments ([[agent-runtime#run-input-protected]]).
    `agents/runtime.py:_truncate_context` raises
@@ -267,14 +277,20 @@ counts what is sent, not the stored token counts.
     not from the current persona or settings. A new prompt input that is not in
     that state, `ChatAgent.capture_state` and `ChatAgent.restore_state` is lost
     on resume or makes the restore fail.
-12. `usage-only-history-shape` **A usage-only session replaces the history.**
-    `chat/history_store.py:RedisChatHistoryStore.prepare_messages` returns the
-    stored Redis messages plus the bare question. The newest message's text-file
-    messages and request-context message are dropped, and earlier turns never
-    stored them. Only images on the question survive. The files reach the model
-    only through the forgotten-files notice ([[#forgotten-files-need-metadata]]).
-    A new element that `convert_chat_history` puts before the question does not
-    reach a usage-only turn.
+12. `usage-only-history-shape` **A usage-only session retains complete input groups.**
+    `chat/history_store.py:RedisChatHistoryStore.prepare_messages` combines
+    the selected branch of temporary history with the accepted question and its
+    preceding text-file messages ([[chat-persistence]]). Regeneration reuses the
+    saved question and attachments. Only new attachments need text extraction;
+    earlier text comes from temporary history. Image references
+    restore lazy file descriptors; temporary history stores no image bytes.
+    Temporary file metadata preserves names and sizes for retrieval notices. The current
+    branch and available tools still determine which files a notice can list.
+    Full tool results and the compaction checkpoint remain in temporary state.
+    Request-only context is supplied separately after stable history and rebuilt
+    from feature state for an active run. It is not replayed on later turns.
+    If regeneration or storage limits remove a checkpoint's cutoff, the runtime
+    discards that checkpoint and budgets the remaining selected history again.
 
 ---
 
@@ -287,13 +303,18 @@ counts what is sent, not the stored token counts.
   [cost model and examples](../../../backend/onyx/llm/prompt_cache/README.md#why-caching-is-always-enabled)
   explain the break-even point and why output length changes the percentage saved.
 
-- **Agent instructions are a moving user message.** In the system prompt they
-  were followed poorly, conflicted with the base prompt, and made weaker models
-  produce broken tool calls. A fixed position fades as the chat grows
-  (`chat/README.md`).
-- **Attached files stay where they were attached.** Moving every file forward
-  would crowd out the question. Project files move forward, because the user
-  works from them (`chat/README.md`, "Product considerations").
+- **Agent instructions and project files form a fixed preamble.** The earlier
+  design moved these blocks toward each new question to improve attention.
+  That rewrote the prompt prefix on every user turn. The current design keeps
+  the separate user-message role and uses trailing reminders for focused guidance.
+  Evaluate long-history instruction following when changing this tradeoff.
+- **History retains evidence until compaction.** Automatic tool-result removal
+  changed cached prefixes and removed evidence needed for follow-up questions.
+  Full results remain available while the runtime manages the context budget.
+- **Attached files stay where they were attached.** User attachments remain
+  beside their question; project files and images remain in the preamble.
+  Changes to project content, configuration, image limits, or a compaction
+  checkpoint can intentionally invalidate cache prefixes.
 
 ---
 

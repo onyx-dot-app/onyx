@@ -160,8 +160,9 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    both first ([[multi-tenancy#threads-copy-context]],
    [[observability#root-trace-required]]).
 5. `run-input-protected` **Pass the whole current input in one `start` call.**
-   The question, its attachment text and request context go in
-   `start(messages=...)`. Compaction and truncation keep that group until the
+   The question and its attachment text go in `start(messages=...)`.
+   Chat supplies request-only context through prompt assembly, outside compacted history.
+   Compaction and truncation keep the input group until the
    model's first step in the run answers it, and input that cannot fit fails the
    run with `agents/compaction.py:ContextLimitError` instead of losing an
    attachment. Later steps can summarize or cut the attachment text; only the
@@ -175,7 +176,8 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    `agents/compaction.py:checkpoint_boundary` rejects it and the runtime
    silently drops the summary. Chat builds IDs such as `chat:<message id>` in
    `chat/chat_utils.py`; a change to that scheme discards every saved summary.
-   Mark request-only messages with `allow_compaction_cutoff=False`.
+   Keep transient request context outside recorded history. [[context-assembly]]
+   owns its placement in the uncached suffix, separate from summary input.
 7. `run-id-is-message-id` **A durable chat run ID is the assistant message ID.**
    The run ID is the reserved `ChatMessage.id` as a string, and child responses
    are reserved before their runs start. `ChatRunStore` and the Postgres history

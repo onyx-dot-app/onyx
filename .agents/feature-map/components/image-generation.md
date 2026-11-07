@@ -135,7 +135,8 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    shows the tool and fails at run time.
 3. `image-ends-tool-phase` **Image generation does not end the tool phase.**
    `chat/agent.py:ChatAgent._prepare_step` keeps tools available after successful
-   or failed image calls. The final cycle still offers no tools. When reminders
+   or failed image calls. The final cycle disables tool calls
+   ([[core-chat-loop#stopping-tools]]). When reminders
    are on, a result with generated images adds `IMAGE_GEN_REMINDER` without
    replacing the agent's task prompt. The reminder allows continued work and
    tells the model not to link or embed the generated images.
