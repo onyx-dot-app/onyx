@@ -182,6 +182,9 @@ The library preview of an external-app skill calls the same renderer
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the same bundle.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
+   Count all non-directory archive entries, including ignored files. Check
+   both the incoming and normalized ZIP sizes. Raw uploads use the per-file
+   read cap; ZIP uploads use the ZIP cap.
    Stored-bundle reads (`skills/validation.py:load_stored_custom_skill_bundle`)
    skip the zip size and file count limits, so a skill saved before them
    still loads and pushes. Do not tighten a limit on that read path.

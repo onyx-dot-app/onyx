@@ -137,6 +137,9 @@ The stored `SKILL.md` keeps the variable.
 | Maximum bundle size | 100 MB total in the extracted bundle.                                                                                                       |
 
 Onyx checks each limit separately and counts the bytes that it extracts.
+The file count includes hidden files that Onyx removes during import. Folders do not count.
+The ZIP limit applies to both the uploaded ZIP and the ZIP that Onyx stores after normalization.
+Standalone files use the per-file limit before compression.
 Each Skill from a GitHub repository must also pass these limits. When a bundle is over a limit,
 Onyx rejects it with HTTP 413. The response gives the `limit` and its `limit_value`.
 Skills that you saved before these limits continue to work. Onyx applies the limits when you save the Skill again.

@@ -74,13 +74,32 @@ def _zip_too_large_error(max_bytes: int) -> OnyxError:
 
 
 def read_bundle_file(
-    bundle_file: IO[bytes], *, max_bytes: int = DEFAULT_ZIP_MAX_BYTES
+    bundle_file: IO[bytes],
+    *,
+    filename: str | None = None,
+    max_bytes: int | None = None,
 ) -> bytes:
     """Read a bundle stream without buffering an arbitrarily large body."""
+    is_raw_file = filename is not None and not filename.lower().endswith(".zip")
+    if max_bytes is None:
+        max_bytes = DEFAULT_PER_FILE_MAX_BYTES if is_raw_file else DEFAULT_ZIP_MAX_BYTES
     data = bundle_file.read(max_bytes + 1)
     if len(data) > max_bytes:
+        if is_raw_file:
+            raise _bundle_limit_error(
+                "file_bytes", max_bytes, f"file '{filename}' exceeds the per-file limit"
+            )
         raise _zip_too_large_error(max_bytes)
     return data
+
+
+def _check_bundle_file_count(count: int, max_file_count: int | None) -> None:
+    if max_file_count is not None and count > max_file_count:
+        raise _bundle_limit_error(
+            "file_count",
+            max_file_count,
+            f"bundle contains more than {max_file_count} files",
+        )
 
 
 def strip_skill_md_frontmatter(content: str) -> str:
@@ -450,15 +469,7 @@ def normalize_custom_bundle(
         file_paths = [
             normalized for info, normalized in normalized_infos if not info.is_dir()
         ]
-        if max_file_count is not None and (
-            sum(not _is_ignored_bundle_path(path) for path in file_paths)
-            > max_file_count
-        ):
-            raise _bundle_limit_error(
-                "file_count",
-                max_file_count,
-                f"bundle contains more than {max_file_count} files",
-            )
+        _check_bundle_file_count(len(file_paths), max_file_count)
         wrapper_prefix = _bundle_wrapper_prefix(file_paths)
         needs_rewrite = wrapper_prefix is not None or any(
             _is_ignored_bundle_path(path) for path in file_paths
@@ -560,10 +571,10 @@ def normalize_custom_bundle(
             "SKILL.md missing at bundle root or directly inside one "
             "top-level directory",
         )
-    return NormalizedSkillBundle(
-        content=output.getvalue() if needs_rewrite else zip_bytes,
-        source_directory=wrapper_prefix,
-    )
+    content = output.getvalue() if needs_rewrite else zip_bytes
+    if zip_max_bytes is not None and len(content) > zip_max_bytes:
+        raise _zip_too_large_error(zip_max_bytes)
+    return NormalizedSkillBundle(content=content, source_directory=wrapper_prefix)
 
 
 def update_custom_bundle_files(
@@ -597,6 +608,11 @@ def update_custom_bundle_files(
         changed_paths: set[str]
         if upload_bytes is not None:
             assert filename is not None
+            if (
+                filename.lower().endswith(".zip")
+                and len(upload_bytes) > DEFAULT_ZIP_MAX_BYTES
+            ):
+                raise _zip_too_large_error(DEFAULT_ZIP_MAX_BYTES)
             upload_archive_bytes = (
                 upload_bytes
                 if filename.lower().endswith(".zip")
@@ -619,6 +635,10 @@ def update_custom_bundle_files(
             upload_infos = [
                 (info, _validated_bundle_path(info)) for info in upload_zip.infolist()
             ]
+            _check_bundle_file_count(
+                sum(not info.is_dir() for info, _ in upload_infos),
+                DEFAULT_MAX_FILE_COUNT,
+            )
             upload_file_paths = [
                 path
                 for info, path in upload_infos

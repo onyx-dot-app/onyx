@@ -8,10 +8,37 @@ from typing import cast
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+import pytest
+
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill
 from onyx.file_store.file_store import FileStore
+from onyx.skills import validation
+from onyx.skills.bundle import normalize_custom_bundle
 from onyx.skills.validation import validate_stored_custom_skill
+
+
+def test_stored_read_accepts_zip_larger_than_extracted_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(validation, "DEFAULT_TOTAL_MAX_BYTES", 1024)
+    monkeypatch.setattr(validation, "DEFAULT_ZIP_MAX_BYTES", 4096, raising=False)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w") as zf:
+        zf.writestr(
+            "SKILL.md", b"---\nname: canonical-name\ndescription: Limits\n---\n\nBody"
+        )
+        for index in range(10):
+            zf.writestr(f"{index}.txt", b"a" * 80)
+    stored = normalize_custom_bundle(
+        buf.getvalue(), zip_max_bytes=4096, total_max_bytes=1024
+    ).content
+    assert 1024 < len(stored) < 4096
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(stored)
+    assert (
+        validation.load_stored_custom_skill_bundle("id", file_store).content == stored
+    )
 
 
 def _skill(name: str = "canonical-name") -> Skill:
