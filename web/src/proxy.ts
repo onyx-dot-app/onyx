@@ -14,28 +14,18 @@ const PROTECTED_ROUTES = ["/admin", "/agents", "/connector"];
 // Public route prefixes (no authentication required)
 const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 
-// Multipart API uploads must bypass Proxy: Next clones and truncates matched
-// request bodies at 10 MiB. The API route streams uploads and adds the same CSP.
+// The API catch-all owns its CSP, preserving backend sandbox restrictions.
+// Bypassing Proxy also avoids Next's 10 MiB request-body clone for uploads.
 // Page requests still pass through the auth gate, including multipart requests.
 // Matchers must be static literals for Next's build-time analysis.
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|api(?:/|$)).*)",
-    // These routes bypass the API catch-all, which sets the upload response CSP.
+    // These routes bypass the API catch-all and still need the page CSP.
+    "/api",
     "/api/docs/:path*",
     "/api/chat/mcp/oauth/callback",
     "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
-    {
-      source: "/api/:path*",
-      missing: [
-        {
-          type: "header",
-          key: "content-type",
-          value:
-            "[mM][uU][lL][tT][iI][pP][aA][rR][tT]/[fF][oO][rR][mM]-[dD][aA][tT][aA](?:;.*)?",
-        },
-      ],
-    },
   ],
 } satisfies ProxyConfig;
 

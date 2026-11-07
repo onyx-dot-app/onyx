@@ -29,6 +29,9 @@ const sentryConnectSrc = (() => {
   try {
     return new URL(dsn).origin;
   } catch {
+    console.warn(
+      "NEXT_PUBLIC_SENTRY_DSN is not a valid URL; omitting its origin from connect-src."
+    );
     return "";
   }
 })();
@@ -80,6 +83,8 @@ const CSP_HEADER = [
   .join(" ");
 
 export function withSecurityHeaders(response: NextResponse): NextResponse {
-  response.headers.set("Content-Security-Policy", CSP_HEADER);
+  if (!response.headers.has("Content-Security-Policy")) {
+    response.headers.set("Content-Security-Policy", CSP_HEADER);
+  }
   return response;
 }

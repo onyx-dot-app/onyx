@@ -1,7 +1,8 @@
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest, NextResponse } from "next/server";
 import { config, proxy } from "@/proxy";
-import { withSecurityHeaders } from "@/securityHeaders";
+import { GET, POST } from "@/app/api/[...path]/route";
+import { ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 
 const origin = "http://localhost:3000";
 
@@ -48,16 +49,17 @@ describe("multipart upload routing", () => {
     }
   );
 
-  test.each(["/api/auth/login", "/api/docs", "/api/chat/mcp/oauth/callback"])(
-    "keeps the proxy for non-upload requests to %s",
+  test.each(["/api/auth/login", "/api/health", "/api/chat/file/test"])(
+    "lets the catch-all own non-upload response headers for %s",
     (path) => {
       expect(unstable_doesMiddlewareMatch({ config, url: origin + path })).toBe(
-        true
+        false
       );
     }
   );
 
   test.each([
+    "/api",
     "/api/docs",
     "/api/docs/oauth2-redirect",
     "/api/chat/mcp/oauth/callback",
@@ -74,21 +76,107 @@ describe("multipart upload routing", () => {
       ).toBe(true);
     }
   );
+});
 
-  test("uses the page CSP on streamed API responses without reading the body", async () => {
-    const body = new ReadableStream<Uint8Array>();
-    const response = withSecurityHeaders(
-      new NextResponse(body, { status: 413 })
+describe("API route response policies", () => {
+  beforeEach(() => {
+    jest.replaceProperty(process, "env", {
+      ...process.env,
+      OVERRIDE_API_PRODUCTION: "true",
+    });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  test("POST streams multipart input and adds CSP to a backend error", async () => {
+    const form = new FormData();
+    form.set("file", new Blob(["bundle contents"]), "skill.zip");
+    const request = new NextRequest(
+      origin + "/api/skills/custom?inspect=true",
+      {
+        method: "POST",
+        body: form,
+        headers: { [ORIGINAL_PATH_HEADER]: "/spoofed" },
+      }
     );
+    const backend = new Response("bundle too large", { status: 413 });
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(backend);
+    const response = await POST(request, {
+      params: Promise.resolve({ path: ["skills", "custom"] }),
+    });
     const page = await proxy(new NextRequest(origin + "/app"));
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({
+        method: "POST",
+        body: request.body,
+        duplex: "half",
+        redirect: "manual",
+      })
+    );
+    const options = fetchSpy.mock.calls[0]?.[1];
+    const headers = new Headers(options?.headers);
+    expect(headers.get(ORIGINAL_PATH_HEADER)).toBe(
+      "/api/skills/custom?inspect=true"
+    );
+    expect(headers.get("content-type")).toContain(
+      "multipart/form-data; boundary="
+    );
+    expect(request.bodyUsed).toBe(false);
     expect(response.headers.get("Content-Security-Policy")).toBe(
       page.headers.get("Content-Security-Policy")
     );
     expect(response.headers.get("Content-Security-Policy")).toContain(
       "object-src 'none'"
     );
-    expect(response.bodyUsed).toBe(false);
     expect(response.status).toBe(413);
-    await response.body?.cancel();
+    expect(response.bodyUsed).toBe(false);
+    expect(backend.bodyUsed).toBe(false);
+    expect(await response.text()).toBe("bundle too large");
+    expect(await request.text()).toContain("bundle contents");
+  });
+
+  test.each(["text/html", "text/event-stream"])(
+    "GET preserves backend sandbox policy for %s",
+    async (contentType) => {
+      const backend = new Response("safe response", {
+        headers: {
+          "Content-Security-Policy": "sandbox; default-src 'none'",
+          "Content-Type": contentType,
+          "X-Content-Type-Options": "nosniff",
+          "Set-Cookie": "test=value; HttpOnly",
+        },
+      });
+      jest.spyOn(global, "fetch").mockResolvedValue(backend);
+      const response = await GET(
+        new NextRequest(origin + "/api/chat/file/test"),
+        {
+          params: Promise.resolve({ path: ["chat", "file", "test"] }),
+        }
+      );
+      expect(response.headers.get("Content-Security-Policy")).toBe(
+        "sandbox; default-src 'none'"
+      );
+      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(response.headers.get("Set-Cookie")).toContain("test=value");
+      expect(response.bodyUsed).toBe(false);
+      expect(await response.text()).toBe("safe response");
+    }
+  );
+
+  test("invalid Sentry configuration warns without its value", () => {
+    process.env.NEXT_PUBLIC_SENTRY_DSN = "private-invalid-DSN";
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    jest.isolateModules(() => {
+      jest.requireActual<typeof import("@/securityHeaders")>(
+        "@/securityHeaders"
+      );
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("NEXT_PUBLIC_SENTRY_DSN")
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(
+      "private-invalid-DSN"
+    );
   });
 });
