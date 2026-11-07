@@ -240,7 +240,11 @@ The library preview of an external-app skill calls the same renderer
 15. `version-rollout-reads` **Runtime reads still use the bundle columns on
     `db/models.py:Skill`.** The version schema alone does not capture new
     writes. A custom skill can have no current pointer until version writes
-    and their repair task ship. Built-ins have no version. The initial
+    and their repair task ship. An old writer can also leave a stale pointer
+    and delete its version's bundle. Before readers switch, the repair task
+    must compare the legacy columns with the current version, append a version
+    from the legacy columns when they differ, and tolerate missing old files.
+    Built-ins have no version. The initial
     snapshot copies database values without opening bundles; its digest,
     unpacked size and file count stay unknown until an application backfill.
     Do not use these snapshots as runtime content during this rollout.
