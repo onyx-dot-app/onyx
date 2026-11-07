@@ -153,3 +153,27 @@ def test_probe_results_are_tenant_scoped(monkeypatch: pytest.MonkeyPatch) -> Non
         ("tenant_a", "fakeprov/shared-name-model"),
         ("tenant_b", "fakeprov/shared-name-model"),
     ]
+
+
+def test_reasoning_fallback_uses_provider_prefix_not_substring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provider substring inside a custom model name must not suppress its prefix."""
+    calls = []
+
+    def fake_supports_reasoning(model: str) -> bool:
+        calls.append(model)
+        return False
+
+    monkeypatch.setattr(
+        model_capabilities, "_litellm_supports_reasoning", fake_supports_reasoning
+    )
+    monkeypatch.setattr(model_capabilities, "_LITELLM_SUPPORTS_REASONING_CACHE", {})
+
+    model_is_reasoning_model("my-openai-compatible-model", "openai")
+    model_is_reasoning_model("openai/gpt-4o", "openai")
+
+    assert calls == [
+        "openai/my-openai-compatible-model",
+        "openai/gpt-4o",
+    ]
