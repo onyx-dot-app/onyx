@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 from mcp.types import Tool as MCPLibTool
+from pydantic import JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -19,8 +20,8 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.models import MCPServer, Tool
-from onyx.db.tools import get_tools_by_mcp_server_id
+from onyx.db.models import MCPServer, Persona, Tool
+from onyx.db.tools import capture_persona_tool_configuration, get_tools_by_mcp_server_id
 from onyx.server.features.mcp import api as mcp_api
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -130,3 +131,93 @@ def test_sync_collapses_existing_duplicates_and_drops_stale_tools(
 
     remaining = get_tools_by_mcp_server_id(server.id, db_session)
     assert [(t.id, t.name) for t in remaining] == [(keeper_id, "keep")]
+
+
+def test_output_schema_survives_sync_and_detached_configuration(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    server = _make_server(db_session)
+    persona = Persona(name=f"schema-{uuid4().hex[:8]}", description="Schema test")
+    db_session.add(persona)
+    db_session.commit()
+    server_id, persona_id = server.id, persona.id
+    schemas: list[dict[str, JsonValue] | None] = [
+        None,
+        {
+            "type": "object",
+            "$defs": {"Result": {"type": "string"}},
+            "properties": {"result": {"$ref": "#/$defs/Result"}},
+            "required": ["result"],
+        },
+        {"type": "object", "properties": {"count": {"type": "integer"}}},
+        {},
+        None,
+    ]
+    try:
+        tool_id: int | None = None
+        for schema in schemas:
+            mcp_api._sync_mcp_server_tools(
+                server_id,
+                [MCPLibTool(name="result", inputSchema={}, outputSchema=schema)],
+                db_session,
+            )
+            with get_session_with_current_tenant() as fresh:
+                tool = get_tools_by_mcp_server_id(server_id, fresh)[0]
+                assert tool.mcp_output_schema == schema
+                if tool_id is None:
+                    tool_id = tool.id
+                    tool.enabled = False
+                    saved_persona = fresh.get(Persona, persona_id)
+                    assert saved_persona is not None
+                    saved_persona.tools = [tool]
+                    fresh.commit()
+                else:
+                    assert tool.id == tool_id
+                    assert not tool.enabled
+                saved_persona = fresh.get(Persona, persona_id)
+                assert saved_persona is not None
+                configuration = capture_persona_tool_configuration(saved_persona)
+            assert configuration.tools[0].mcp_output_schema == schema
+            assert configuration.tools[0].mcp_input_schema == {}
+    finally:
+        db_session.rollback()
+        db_session.delete(persona)
+        db_session.delete(server)
+        db_session.commit()
+
+
+def test_output_schema_sync_respects_setup_transaction(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    server = _make_server(db_session)
+    server_id = server.id
+    original = {"type": "object", "properties": {"old": {"type": "string"}}}
+    changed = {"type": "object", "properties": {"new": {"type": "number"}}}
+    try:
+        mcp_api._sync_mcp_server_tools(
+            server_id,
+            [MCPLibTool(name="existing", inputSchema={}, outputSchema=original)],
+            db_session,
+        )
+        mcp_api._sync_mcp_server_tools(
+            server_id,
+            [
+                MCPLibTool(name="existing", inputSchema={}, outputSchema=changed),
+                MCPLibTool(name="new", inputSchema={}, outputSchema=changed),
+            ],
+            db_session,
+            commit=False,
+        )
+        db_session.flush()
+        db_session.rollback()
+        with get_session_with_current_tenant() as fresh:
+            tools = get_tools_by_mcp_server_id(server_id, fresh)
+            assert [(tool.name, tool.mcp_output_schema) for tool in tools] == [
+                ("existing", original)
+            ]
+    finally:
+        db_session.rollback()
+        db_session.delete(server)
+        db_session.commit()

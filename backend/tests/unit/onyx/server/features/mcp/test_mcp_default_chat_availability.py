@@ -246,6 +246,7 @@ def test_default_chat_checks_access_before_resolving_credentials(
                 enabled=True,
                 openapi_schema=None,
                 mcp_input_schema=None,
+                mcp_output_schema=None,
                 custom_headers=None,
                 passthrough_auth=False,
                 mcp_server_id=42,

@@ -88,6 +88,7 @@ class ToolConfiguration(BaseModel):
     enabled: bool
     openapi_schema: dict[str, JsonValue] | None
     mcp_input_schema: dict[str, JsonValue] | None
+    mcp_output_schema: dict[str, JsonValue] | None
     custom_headers: list[HeaderItemDict] | None
     passthrough_auth: bool
     mcp_server_id: int | None

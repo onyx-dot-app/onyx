@@ -182,8 +182,10 @@ Policy precedence is in [[craft-external-apps]].
    setup, and when a manager lists tools from the live server
    (`_list_mcp_tools_by_id` with `is_admin`, which
    `admin_list_mcp_tools_by_id` and `get_mcp_server_tools_snapshots` call). The
-   member route `user_list_mcp_tools_by_id` discovers but never writes. OpenAPI
-   tools need no sync.
+   member route `user_list_mcp_tools_by_id` discovers but never writes. Sync also
+   stores `Tool.mcp_output_schema` for detached tool configuration. A refresh
+   replaces it, including clearing it when the server omits the schema; an empty
+   schema remains `{}`. OpenAPI tools need no sync.
 6. `sync-matches-by-name` **Sync matches tools by name.**
    `server/features/mcp/api.py:_sync_mcp_server_tools` treats a tool that the
    remote server renames as a new tool: it is deleted and inserted again with
