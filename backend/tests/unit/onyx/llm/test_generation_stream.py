@@ -36,6 +36,7 @@ from onyx.llm.models import (
     GenerationRequestParams,
     GenerationStartEvent,
     GenerationTextEvent,
+    NamedToolChoice,
     ReasoningEffort,
     TextContent,
     TextDeltaEvent,
@@ -417,8 +418,12 @@ def test_stream_conversion_closes_provider_source(ending: str) -> None:
 
 
 @pytest.mark.parametrize("reasoning", [False, True])
+@pytest.mark.parametrize(
+    "choice", [ToolChoiceOptions.REQUIRED, NamedToolChoice(name="search")]
+)
 def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     reasoning: bool,
+    choice: ToolChoiceOptions | NamedToolChoice,
 ) -> None:
     payload = '{"name":"search","arguments":{"query":"recovered"}}'
     usage = Usage(
@@ -430,7 +435,7 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     )
     request = GenerationRequest(
         tools=[ToolDefinition(name="search", description="Search", parameters={})],
-        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+        options=GenerationOptions(tool_choice=choice),
     )
     signed = ThinkingBlock(thinking=payload, signature="provider-signature")
     closed: list[bool] = []
@@ -475,6 +480,123 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     assert final.tool_calls == [call_end.tool_call]
     assert final.text == ("" if reasoning else payload)
     assert final.thinking == (payload if reasoning else "")
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ('{"queries":["weather"]}', "web_search"),
+        (
+            '{"name":"internal_search","arguments":{"queries":["weather"]}}',
+            "internal_search",
+        ),
+        ('{"internal_search":{"queries":["weather"]}}', "internal_search"),
+    ],
+)
+def test_named_recovery_infers_only_unnamed_arguments(
+    streaming: bool,
+    payload: str,
+    expected: str,
+) -> None:
+    request = GenerationRequest(
+        tools=[
+            ToolDefinition(
+                name=name,
+                description=name,
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "queries": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": ["queries"],
+                },
+            )
+            for name in ("internal_search", "web_search")
+        ],
+        options=GenerationOptions(tool_choice=NamedToolChoice(name="web_search")),
+    )
+    if streaming:
+        client = ScriptedLLM([Delta(content=payload)])
+        result = collect_generation(client.stream(request))
+    else:
+        result = to_assistant_message(
+            ModelResponse(
+                id="response",
+                created="1",
+                choice=Choice(message=ResponseMessage(content=payload)),
+            ),
+            request,
+        )
+    assert [(call.name, call.arguments) for call in result.tool_calls] == [
+        (expected, {"queries": ["weather"]})
+    ]
+    assert [tool.name for tool in request.tools] == ["internal_search", "web_search"]
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("named", [False, True])
+@pytest.mark.parametrize("wrapper", ["direct", "function", "keyed"])
+def test_recovery_preserves_separate_calls_with_identical_arguments(
+    streaming: bool,
+    named: bool,
+    wrapper: str,
+) -> None:
+    arguments = {"queries": ["weather"]}
+    explicit: dict[str, Any]
+    if wrapper == "direct":
+        explicit = {"name": "internal_search", "arguments": arguments}
+    elif wrapper == "function":
+        explicit = {"function": {"name": "internal_search", "arguments": arguments}}
+    else:
+        explicit = {"internal_search": arguments}
+    payload = (
+        json.dumps(explicit)
+        + "\n"
+        + json.dumps(arguments)
+        + "\n"
+        + json.dumps(arguments)
+    )
+    request = GenerationRequest(
+        tools=[
+            ToolDefinition(
+                name=name,
+                description=name,
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "queries": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": ["queries"],
+                },
+            )
+            for name in ("internal_search", "web_search")
+        ],
+        options=GenerationOptions(
+            tool_choice=NamedToolChoice(name="web_search")
+            if named
+            else ToolChoiceOptions.REQUIRED
+        ),
+    )
+    if streaming:
+        result = collect_generation(
+            ScriptedLLM([Delta(content=payload)]).stream(request)
+        )
+    else:
+        result = to_assistant_message(
+            ModelResponse(
+                id="response",
+                created="1",
+                choice=Choice(message=ResponseMessage(content=payload)),
+            ),
+            request,
+        )
+    assert [(call.name, call.arguments) for call in result.tool_calls] == [
+        ("internal_search", arguments),
+        ("web_search" if named else "internal_search", arguments),
+        ("web_search" if named else "internal_search", arguments),
+    ]
+    assert len({call.id for call in result.tool_calls}) == 3
 
 
 def test_stream_failure_recovers_no_call_from_an_unfinished_payload() -> None:

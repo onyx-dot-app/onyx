@@ -67,6 +67,7 @@ from onyx.llm.model_capabilities import (
     get_model_map,
     is_true_openai_model,
     model_is_reasoning_model,
+    model_prefers_auto_tool_choice,
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
@@ -1015,8 +1016,6 @@ class LitellmLLM(LLM):
             self.config.model_name, self.config.deployment_name
         )
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
-        is_qwen_model = any("qwen" in name.lower() for name in model_identity_names)
-        is_glm_model = any("glm" in name.lower() for name in model_identity_names)
         uses_adaptive_thinking = any(
             anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
@@ -1101,10 +1100,18 @@ class LitellmLLM(LLM):
         # thinking is skipped below instead, and the other models may still
         # reject the forced tool upstream (a loud 400 beats silently ignoring
         # the caller's forced tool).
-        if (is_claude_model or is_qwen_model or is_glm_model) and (
+        if model_prefers_auto_tool_choice(model_identity_names) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
             tool_choice = ToolChoiceOptions.AUTO
+
+        # Bedrock Converse drops NONE; omit schemas and use the existing text
+        # history conversion so final answers cannot request another tool.
+        if tool_choice == ToolChoiceOptions.NONE and self._model_provider in {
+            LlmProviderNames.BEDROCK,
+            LlmProviderNames.BEDROCK_CONVERSE,
+        }:
+            tools = None
 
         # If no tools are provided, tool_choice should be None
         if not tools:

@@ -294,7 +294,11 @@ def test_mcp_oauth_cimd_only_flow(
                     )
                 ],
                 conditions=RequestConditions(
-                    offers=[MCP_TOOL_NAME], tool_choice="required"
+                    offers=[MCP_TOOL_NAME],
+                    tool_choice={
+                        "type": "function",
+                        "function": {"name": MCP_TOOL_NAME},
+                    },
                 ),
             ),
             Reply(

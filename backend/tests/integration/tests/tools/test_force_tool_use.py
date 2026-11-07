@@ -1,5 +1,5 @@
 """
-Integration test for forced tool use to verify that web_search can be forced.
+Integration test for forcing image generation through the chat API.
 This test verifies that forcing a tool use works through the complete API flow.
 """
 
@@ -11,6 +11,7 @@ from onyx.db.models import Tool
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.test_models import (
     DATestImageGenerationConfig,
+    DATestLLMProvider,
     DATestUser,
     ToolName,
 )
@@ -18,6 +19,7 @@ from tests.integration.common_utils.test_models import (
 
 def test_force_tool_use(
     basic_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
     image_generation_config: DATestImageGenerationConfig,  # noqa: ARG001
 ) -> None:
     with get_session_with_current_tenant() as db_session:

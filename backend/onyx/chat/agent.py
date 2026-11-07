@@ -37,6 +37,11 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
+from onyx.llm.model_capabilities import (
+    model_identity_names,
+    model_prefers_auto_tool_choice,
+    model_requires_auto_tool_choice,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -250,15 +255,30 @@ class ChatAgent(Agent, RestorableFeature):
             if isinstance(message, ToolResultMessage)
         ]
         tools = self.application_tools
-        tool_choice = ToolChoiceOptions.AUTO
+        request_tools = list(self.tools)
+        model_names = model_identity_names(
+            self.llm.config.model_name, self.llm.config.deployment_name
+        )
+        tool_choice: ToolChoiceOptions | NamedToolChoice = ToolChoiceOptions.AUTO
+        available_tool_names = {tool.name for tool in tools}
         if self.forced_tool_id is not None and state.step.index == 0:
-            tools = [tool for tool in tools if tool.id == self.forced_tool_id]
-            if not tools:
+            forced_tools = [tool for tool in tools if tool.id == self.forced_tool_id]
+            if not forced_tools:
                 raise ValueError(f"Tool {self.forced_tool_id} not found")
-            tool_choice = ToolChoiceOptions.REQUIRED
+            available_tool_names = {tool.name for tool in forced_tools}
+            if len(forced_tools) > 1 or model_prefers_auto_tool_choice(model_names):
+                # One database tool can contain several OpenAPI operations.
+                request_tools = [
+                    tool for tool in request_tools if tool.name in available_tool_names
+                ]
+                tool_choice = ToolChoiceOptions.REQUIRED
+            else:
+                tool_choice = NamedToolChoice(name=forced_tools[0].name)
         elif state.step.is_last:
-            tools = []
             tool_choice = ToolChoiceOptions.NONE
+            available_tool_names = set()
+            if model_requires_auto_tool_choice(model_names):
+                request_tools = []
         prompt = build_chat_prompt(
             tools=self.application_tools,
             persona=self.persona,
@@ -272,9 +292,8 @@ class ChatAgent(Agent, RestorableFeature):
             previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
         )
-        available_tool_names = {tool.name for tool in tools}
         return PreparedStep(
-            tools=[tool for tool in self.tools if tool.name in available_tool_names],
+            tools=request_tools,
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),

@@ -406,7 +406,9 @@ with no tool calls. Their control functions, such as `think_tool`, `generate_rep
   look for the credential warning. Last, check for a name collision (Known
   issues).
 - `force-tool-call` **Force a tool call in a test or a reproduction.** Send `forced_tool_id` with
-  the message. Copy `backend/tests/integration/tests/tools/test_force_tool_use.py`.
+  the message. The ID selects all operations in an OpenAPI action; the model
+  chooses an operation from that group. Copy
+  `backend/tests/integration/tests/tools/test_force_tool_use.py`.
   `chat/process_message.py:prepare_chat_turn` drops a forced ID with no error
   when the tool fails `is_tool_available_for_persona`, or when it is search and
   search is disabled; the model then answers without the forced call. Any

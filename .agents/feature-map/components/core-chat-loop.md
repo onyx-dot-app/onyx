@@ -284,8 +284,10 @@ termination grace period is much shorter, so it ends running turns first
     does stream resume. Code that assumes a real user breaks public agents.
     `stop_chat_session` does not allow anonymous users, so their Stop fails
     authentication (see Known issues).
-16. `stopping-tools` **The step cap removes tools.**
-    `chat/agent.py:ChatAgent._prepare_step` offers no tools at the step cap.
+16. `stopping-tools` **The step cap disables tool execution.**
+    `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
+    Definitions remain where providers support this choice. Qwen, GLM, and
+    Bedrock omit definitions; Bedrock converts prior tool exchanges to text.
     Image generation does not remove tools, even when the image call fails.
     The default cap is six cycles, including the final answer cycle.
 
