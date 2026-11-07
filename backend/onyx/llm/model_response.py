@@ -20,6 +20,7 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
+    NamedToolChoice,
     TextContent,
     TextDeltaEvent,
     ThinkingContent,
@@ -681,6 +682,7 @@ def recover_tool_calls(
         return message
     should_try = (
         request.options.tool_choice == ToolChoiceOptions.REQUIRED
+        or isinstance(request.options.tool_choice, NamedToolChoice)
         or bool(message.thinking and not message.text)
         or looks_like_xml_tool_call_payload(message.text)
         or looks_like_xml_tool_call_payload(message.thinking)

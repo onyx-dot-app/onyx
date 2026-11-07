@@ -36,6 +36,7 @@ from onyx.llm.models import (
     GenerationRequestParams,
     GenerationStartEvent,
     GenerationTextEvent,
+    NamedToolChoice,
     ReasoningEffort,
     TextContent,
     TextDeltaEvent,
@@ -417,8 +418,12 @@ def test_stream_conversion_closes_provider_source(ending: str) -> None:
 
 
 @pytest.mark.parametrize("reasoning", [False, True])
+@pytest.mark.parametrize(
+    "choice", [ToolChoiceOptions.REQUIRED, NamedToolChoice(name="search")]
+)
 def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     reasoning: bool,
+    choice: ToolChoiceOptions | NamedToolChoice,
 ) -> None:
     payload = '{"name":"search","arguments":{"query":"recovered"}}'
     usage = Usage(
@@ -430,7 +435,7 @@ def test_buffered_recovery_preserves_content_and_emits_one_call_with_usage(
     )
     request = GenerationRequest(
         tools=[ToolDefinition(name="search", description="Search", parameters={})],
-        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+        options=GenerationOptions(tool_choice=choice),
     )
     signed = ThinkingBlock(thinking=payload, signature="provider-signature")
     closed: list[bool] = []
