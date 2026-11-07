@@ -110,7 +110,8 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.server.query_and_chat.token_limit import check_model_spend_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.tools.constants import FILE_READER_TOOL_ID
+from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
+from onyx.tools.models import SearchToolUsage
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -382,6 +383,10 @@ def prepare_chat_turn(
                 raise ValueError("Research tool configuration is missing")
             tool_names = {tool.id: tool.name for tool in tools}
             preferred_tool_id = new_msg_req.preferred_tool_id
+            prefers_search = any(
+                tool.id == preferred_tool_id and tool.in_code_tool_id == SEARCH_TOOL_ID
+                for tool in tools
+            )
             summary_message = find_summary_for_branch(db_session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
             descriptors = {
@@ -447,6 +452,9 @@ def prepare_chat_turn(
         )
         admission.refresh()
         search_params = determine_search_params(persona_id, project_id, extracted_files)
+        # Inline project context replaces retrieval for this request.
+        if prefers_search and search_params.search_usage == SearchToolUsage.DISABLED:
+            preferred_tool_id = None
         # Temporary history already owns earlier attachment text. Only new inputs need extraction.
         text_file_ids: set[str] | None = None
         if not record_mode_persists_content(incognito_record_mode):

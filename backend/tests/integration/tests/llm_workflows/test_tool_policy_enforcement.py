@@ -6,6 +6,7 @@ from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
+from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser, ToolName
 from tests.integration.mock_services.mock_llm_server.models import (
@@ -101,6 +102,49 @@ def test_preferred_tool_executes_when_available(
     assert len(response.tool_call_debug) == 1
     assert response.tool_call_debug[0].tool_name == "internal_search"
     assert response.tool_call_debug[0].tool_args == {"queries": ["alpha"]}
+
+
+def test_search_preference_uses_inline_project_files(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    _assert_integration_mode_enabled()
+    project = ProjectManager.create(
+        name="Inline project search preference", user_performing_action=admin_user
+    )
+    evidence = "The project access code is HARBOR-5729."
+    uploaded = ProjectManager.upload_files(
+        project_id=project.id,
+        files=[("access-code.txt", evidence.encode())],
+        user_performing_action=admin_user,
+    )
+    assert len(uploaded.user_files) == 1
+    assert not uploaded.rejected_files
+    assert uploaded.user_files[0].token_count
+    mock_llm.conversation(
+        "inline-project",
+        Reply(
+            text="The code is HARBOR-5729.",
+            conditions=RequestConditions(
+                prompt_contains=[evidence], does_not_offer=["internal_search"]
+            ),
+        ),
+    )
+    chat_session = ChatSessionManager.create(
+        project_id=project.id, user_performing_action=admin_user
+    )
+    response = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="What is the project access code?",
+        user_performing_action=admin_user,
+        preferred_tool_id=_get_internal_search_tool_id(admin_user),
+    )
+
+    assert response.error is None, f"Unexpected stream error: {response.error}"
+    assert response.full_message == "The code is HARBOR-5729."
+    assert not response.used_tools
+    requests = mock_llm.requests_in("inline-project")
+    assert len(requests) == 1
+    assert "The user selected these operations" not in requests[0].prompt_text
 
 
 def test_preferred_tool_rejected_when_not_in_persona_tools(
