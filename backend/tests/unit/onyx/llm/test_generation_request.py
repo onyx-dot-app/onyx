@@ -587,7 +587,7 @@ def test_tool_recovery_keeps_answer_text_and_signed_thinking(
 @pytest.mark.parametrize(
     "allowed", [frozenset(), frozenset({"other"}), frozenset({"search"})]
 )
-def test_recovered_explicit_call_respects_tool_permissions(
+def test_recovered_explicit_call_preserves_name_for_runtime_permissions(
     allowed: frozenset[str],
 ) -> None:
     text = '<function_calls><invoke name="search"></invoke></function_calls>'
@@ -601,10 +601,8 @@ def test_recovered_explicit_call_respects_tool_permissions(
     message = recover_tool_calls(
         AssistantMessage(content=[TextContent(text=text)]), request
     )
-    assert [call.name for call in message.tool_calls] == (
-        ["search"] if "search" in allowed else []
-    )
-    if "search" not in allowed:
+    assert [call.name for call in message.tool_calls] == (["search"] if allowed else [])
+    if not allowed:
         assert message.text == text
 
 

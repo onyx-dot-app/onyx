@@ -672,7 +672,7 @@ class MessageAccumulator:
 
 
 def _recovery_tools(request: GenerationRequest) -> list[ToolDefinition]:
-    """Limit text recovery to executable tools while retaining declared schemas."""
+    """Select candidates for implicit recovery; explicit calls retain provider names."""
     if request.options.tool_choice == ToolChoiceOptions.NONE:
         return []
     allowed = request.allowed_tool_names
@@ -706,10 +706,11 @@ def recover_tool_calls(
     ) or extract_tool_calls_from_response_text(
         message.thinking, request.tools, implicit_tool_names=implicit_names
     )
-    calls = [call for call in calls if call.name in eligible_names]
+    # Explicit provider calls retain their names, like native calls. The runtime
+    # rejects forbidden calls and returns tool errors; only inference is restricted.
     if not calls:
         return message
-    tools = {tool.name: tool for tool in eligible_tools}
+    tools = {tool.name: tool for tool in request.tools}
     for call in calls:
         call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
     # Preserve signed thinking for provider replay; hide only XML call payloads.

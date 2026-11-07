@@ -9,6 +9,10 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from onyx.agents.models import PreparedStep
+from onyx.agents.runtime import Agent
+from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import (
@@ -20,12 +24,14 @@ from onyx.llm.models import (
     ToolCallEndEvent,
     ToolChoiceOptions,
     ToolDefinition,
+    ToolResult,
     apply_generation_event,
 )
 from onyx.llm.models import (
     UserMessage as AppUserMessage,
 )
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.tracing.flows import LLMFlow
 from tests.external_dependency_unit.llm.mock_llm_server.conftest import make_llm
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.mock_services.mock_llm_server.models import (
@@ -422,8 +428,64 @@ def test_response_recovery_obeys_permissions_over_http(
     else:
         message = llm.invoke(request)
     assert [call.name for call in message.tool_calls] == (
-        ["internal_search"] if case == "bare_arguments" else []
+        ["internal_search"]
+        if case == "bare_arguments"
+        else ["web_search"]
+        if case == "disallowed"
+        else []
     )
     if case == "disabled":
         assert message.text == text
     script.verify()
+
+
+@pytest.mark.parametrize("forced", [False, True])
+def test_recovered_forbidden_call_returns_error_without_execution(
+    script: MockLLMScript, llm: LitellmLLM, forced: bool
+) -> None:
+    script.conversation(
+        "main",
+        Reply(
+            text='<function_calls><invoke name="web_search"></invoke></function_calls>'
+        ),
+        Reply(text="Answered after the permission error."),
+    )
+    executed: list[str] = []
+    approved: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(invocation.call_id)
+        return ToolResult(content="unexpected execution")
+
+    agent = Agent(
+        llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition.model_validate(tool["function"]),
+                execute=execute,
+            )
+            for tool in TOOLS
+        ],
+        prepare_step=lambda _: PreparedStep(
+            allowed_tool_names=frozenset({"internal_search"}),
+            options=GenerationOptions(
+                tool_choice=ToolChoiceOptions.REQUIRED
+                if forced
+                else ToolChoiceOptions.AUTO
+            ),
+        ),
+        before_tool_call=lambda context: approved.append(context.call.name),
+    )
+    run = agent.start(messages=[AppUserMessage(content="Search")], max_steps=2)
+    try:
+        assert run.result(10).output.text == "Answered after the permission error."
+        assert executed == approved == []
+        assert len(script.requests) == 2
+        assert "Tool web_search is unavailable for this step." in str(
+            script.requests[1].body
+        )
+        script.verify()
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(10)

@@ -191,6 +191,8 @@ Each model call receives a separate context copy. Compaction applies its own tra
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
 The executor enforces step permissions, `NONE`, and `NamedToolChoice` before tool approval or execution.
 Other tool definitions can remain in the request for cache reuse.
+Explicit calls recovered from model text follow the same permission checks as native calls.
+A forbidden call returns a tool error so the model can retry; generation alone does not authorize execution.
 
 Two optional tool callbacks cover interception and enrichment:
 
