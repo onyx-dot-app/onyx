@@ -67,7 +67,7 @@ export async function expectMcpToolNotInvoked(
   const counts = await sendMcpToolCall(page, toolName);
   expect((await requestPromise).postDataJSON()).toMatchObject({
     allowed_tool_ids: expect.not.arrayContaining([excludedToolId]),
-    forced_tool_id: null,
+    preferred_tool_id: null,
   });
   expect(counts.start).toBe(0);
   expect(counts.delta).toBe(0);

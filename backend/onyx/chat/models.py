@@ -601,7 +601,7 @@ class ChatFeatureState(BaseModel):
     reasoning_effort: ReasoningEffort
     include_citations: bool
     inject_memories: bool
-    forced_tool_id: int | None
+    preferred_tool_id: int | None = None
     base_prompt: str
     custom_prompt: str | None
     request_context: str | None = None
@@ -654,7 +654,7 @@ class ChatTurnSetup(BaseModel):
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
-    forced_tool_id: int | None
+    preferred_tool_id: int | None
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext

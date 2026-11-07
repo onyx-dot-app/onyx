@@ -19,11 +19,11 @@ function renderRow(
 ) {
   const props = {
     tool,
-    isForced: false,
+    isPreferred: false,
     isDisabled: false,
     isUnavailable: false,
     sourceCounts: null,
-    onForceToggle: jest.fn(),
+    onPreferenceToggle: jest.fn(),
     onToggleEnabled: jest.fn(),
     onOpenSources: jest.fn(),
     onClose: jest.fn(),
@@ -44,28 +44,28 @@ describe("ActionLineItem", () => {
     expect(screen.getByText("internal_search")).toBeTruthy();
   });
 
-  it("forces the tool and closes the menu on row press", () => {
+  it("prefers the tool and closes the menu on row press", () => {
     const props = renderRow();
     fireEvent.press(screen.getByText("Search"));
 
-    expect(props.onForceToggle).toHaveBeenCalledTimes(1);
+    expect(props.onPreferenceToggle).toHaveBeenCalledTimes(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
     expect(props.onToggleEnabled).not.toHaveBeenCalled();
   });
 
-  it("re-enables and forces in one gesture when the tool is switched off", () => {
+  it("re-enables and prefers in one gesture when the tool is switched off", () => {
     const props = renderRow({ isDisabled: true });
     fireEvent.press(screen.getByText("Search"));
 
     expect(props.onToggleEnabled).toHaveBeenCalledTimes(1);
-    expect(props.onForceToggle).toHaveBeenCalledTimes(1);
+    expect(props.onPreferenceToggle).toHaveBeenCalledTimes(1);
   });
 
-  it("renders a forced row differently from an unforced one", () => {
-    const unforced = renderRow({ isForced: false }).toJSON();
-    const forced = renderRow({ isForced: true }).toJSON();
+  it("renders a preferred row differently from an unpreferred one", () => {
+    const unpreferred = renderRow({ isPreferred: false }).toJSON();
+    const preferred = renderRow({ isPreferred: true }).toJSON();
 
-    expect(JSON.stringify(forced)).not.toEqual(JSON.stringify(unforced));
+    expect(JSON.stringify(preferred)).not.toEqual(JSON.stringify(unpreferred));
   });
 
   it("offers Disable while the tool is on", () => {
@@ -84,7 +84,7 @@ describe("ActionLineItem", () => {
     fireEvent.press(screen.getByLabelText("Disable"));
 
     expect(props.onToggleEnabled).toHaveBeenCalledTimes(1);
-    expect(props.onForceToggle).not.toHaveBeenCalled();
+    expect(props.onPreferenceToggle).not.toHaveBeenCalled();
     expect(props.onClose).not.toHaveBeenCalled();
   });
 
@@ -93,12 +93,12 @@ describe("ActionLineItem", () => {
     expect(screen.queryByLabelText("Configure Sources")).toBeNull();
   });
 
-  it("drills into the sources from the chevron without forcing anything", () => {
+  it("drills into the sources from the chevron without preferring anything", () => {
     const props = renderRow({ sourceCounts: { enabled: 2, total: 3 } });
     fireEvent.press(screen.getByLabelText("Configure Sources"));
 
     expect(props.onOpenSources).toHaveBeenCalledTimes(1);
-    expect(props.onForceToggle).not.toHaveBeenCalled();
+    expect(props.onPreferenceToggle).not.toHaveBeenCalled();
     expect(props.onClose).not.toHaveBeenCalled();
   });
 
@@ -106,33 +106,33 @@ describe("ActionLineItem", () => {
     const props = renderRow({ sourceCounts: { enabled: 3, total: 3 } });
     fireEvent.press(screen.getByText("Search"));
 
-    expect(props.onForceToggle).toHaveBeenCalledTimes(1);
+    expect(props.onPreferenceToggle).toHaveBeenCalledTimes(1);
     expect(props.onOpenSources).toHaveBeenCalledTimes(1);
     expect(props.onClose).not.toHaveBeenCalled();
   });
 
   it("just closes when the row releases search", () => {
     const props = renderRow({
-      isForced: true,
+      isPreferred: true,
       sourceCounts: { enabled: 3, total: 3 },
     });
     fireEvent.press(screen.getByText("Search"));
 
-    expect(props.onForceToggle).toHaveBeenCalledTimes(1);
+    expect(props.onPreferenceToggle).toHaveBeenCalledTimes(1);
     expect(props.onOpenSources).not.toHaveBeenCalled();
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
   it("counts the sources only while search is pinned and narrowed", () => {
-    renderRow({ isForced: true, sourceCounts: { enabled: 2, total: 3 } });
+    renderRow({ isPreferred: true, sourceCounts: { enabled: 2, total: 3 } });
     expect(screen.getByText("2 of 3")).toBeTruthy();
   });
 
   it("says nothing about a count that carries no information", () => {
-    renderRow({ isForced: true, sourceCounts: { enabled: 3, total: 3 } });
+    renderRow({ isPreferred: true, sourceCounts: { enabled: 3, total: 3 } });
     expect(screen.queryByText("3 of 3")).toBeNull();
 
-    renderRow({ isForced: false, sourceCounts: { enabled: 2, total: 3 } });
+    renderRow({ isPreferred: false, sourceCounts: { enabled: 2, total: 3 } });
     expect(screen.queryByText("2 of 3")).toBeNull();
   });
 });

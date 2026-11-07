@@ -387,7 +387,9 @@ class Agent:
                     if _snapshot is not None
                     else RunState(
                         progress=RunProgress(
-                            step_limit=max_steps, deadline_at=deadline_at
+                            step_limit=max_steps,
+                            deadline_at=deadline_at,
+                            tool_configuration_digest=self._tool_configuration_digest,
                         ),
                         run_id=run_id,
                         agent_id=self.id,
@@ -911,16 +913,13 @@ class Run:
                     )
                 )
             if state.progress is not None:
-                if state.progress.tool_configuration_digest not in (
-                    None,
-                    agent._tool_configuration_digest,
+                if (
+                    state.progress.tool_configuration_digest
+                    != agent._tool_configuration_digest
                 ):
                     raise ValueError(
                         "Restored tool configuration does not match the saved run"
                     )
-                state.progress.tool_configuration_digest = (
-                    agent._tool_configuration_digest
-                )
                 feature_state = state.progress.feature_state
                 if feature_state is not None:
                     if agent._restoration is None:

@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Sélectionner les sources de recherche"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrivilégier cet outil pour cette conversation. L’agent peut répondre sans l’utiliser."
       }
     },
     "addMcpModal": {

@@ -902,7 +902,7 @@ def test_run_can_capture_and_release_without_its_creating_agent() -> None:
 
 
 @pytest.mark.parametrize(
-    "change", ["order", "extra", "inactive_phase", "schema_order", "same", "legacy"]
+    "change", ["order", "extra", "inactive_phase", "schema_order", "same"]
 )
 def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
     effects: list[str] = []
@@ -957,8 +957,6 @@ def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
     assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
     assert run.wait_for_idle(3)
     saved = run.handoff().model_dump(mode="json")
-    if change == "legacy":
-        del saved["run_state"]["progress"]["tool_configuration_digest"]
     checkpoint = ExecutionCheckpoint.model_validate(saved)
     rebuilt = make_agent(checkpoint.agent_state, restored=True)
     if change in {"order", "extra", "inactive_phase", "schema_order"}:
@@ -971,7 +969,6 @@ def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
         assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
         progress = resumed.snapshot().progress
         assert progress is not None
-        assert progress.tool_configuration_digest is not None
         resumed.submit(_approve())
         assert resumed.result(3).output.text == "done"
         assert effects == ["sent"]

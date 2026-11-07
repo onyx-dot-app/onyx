@@ -405,7 +405,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     setup.user_identity = LLMUserIdentity(
         user_id="test-user", session_id="test-session"
     )
-    setup.forced_tool_id = None
+    setup.preferred_tool_id = None
     setup.previous_run_id = None
     setup.messages = []
     setup.input_messages = []
@@ -3433,7 +3433,7 @@ def test_a_run_that_ends_at_the_deadline_but_saves_past_the_backstop_stops_once(
 @pytest.mark.parametrize(
     "invalid_setting, detail",
     [
-        ("forced_tool", "Forced tool 1 not found in tools"),
+        ("preferred_tool", "Preferred tool 1 not found in tools"),
         ("research_project", "Deep research is not supported for projects"),
         (
             "research_context",
@@ -3446,8 +3446,8 @@ def test_invalid_chat_settings_return_actionable_errors(
     detail: str,
 ) -> None:
     setup = _make_setup(n_models=1)
-    setup.new_msg_req.deep_research = invalid_setting != "forced_tool"
-    setup.forced_tool_id = 1 if invalid_setting == "forced_tool" else None
+    setup.new_msg_req.deep_research = invalid_setting != "preferred_tool"
+    setup.preferred_tool_id = 1 if invalid_setting == "preferred_tool" else None
     setup.chat_session_project_id = 1 if invalid_setting == "research_project" else None
     setup.research_tool_id = 2
     with patch("onyx.chat.execution.construct_tools", return_value={}):

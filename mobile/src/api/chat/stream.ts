@@ -23,9 +23,9 @@ export interface SendMessageBody {
   file_descriptors: FileDescriptor[];
   deep_research: boolean;
   origin: string;
-  // Omitted/null = backend defaults: allow all tools, force none, no source filter.
+  // Omitted/null = backend defaults: allow all tools, prefer none, no source filter.
   allowed_tool_ids?: number[] | null;
-  forced_tool_id?: number | null;
+  preferred_tool_id?: number | null;
   internal_search_filters?: InternalSearchFilters | null;
   // Omitted or null runs the agent's own default model. Note the singular name: `llm_overrides`
   // is a separate field for multi-model comparison, which mobile does not use.
@@ -35,7 +35,7 @@ export interface SendMessageBody {
 export interface ChatToolOptions {
   deepResearch: boolean;
   allowedToolIds: number[] | null;
-  forcedToolId: number | null;
+  preferredToolId: number | null;
   internalSearchFilters: InternalSearchFilters | null;
   llmOverride: LlmOverride | null;
 }

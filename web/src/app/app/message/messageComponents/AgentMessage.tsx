@@ -41,7 +41,7 @@ import { getLatestMessageChain } from "@/app/app/services/messageTree";
 export type RegenerationFactory = (regenerationRequest: {
   messageId: number;
   parentMessage: Message;
-  forceSearch?: boolean;
+  preferSearch?: boolean;
 }) => (modelOverride: LlmDescriptor) => Promise<void>;
 
 export interface AgentMessageProps {

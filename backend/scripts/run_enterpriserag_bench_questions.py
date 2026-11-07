@@ -64,8 +64,8 @@ class Citation(TypedDict, total=False):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Submit questions to Onyx chat with internal search forced and write "
-            "answers to a JSONL file."
+            "Submit questions to Onyx chat with internal search preferred and write "
+            "answers to a JSONL file. Responses without internal search fail the case."
         )
     )
     parser.add_argument(
@@ -405,7 +405,7 @@ async def submit_question(
         "parent_message_id": None,
         "file_descriptors": [],
         "allowed_tool_ids": [internal_search_tool_id],
-        "forced_tool_id": internal_search_tool_id,
+        "preferred_tool_id": internal_search_tool_id,
         "stream": False,
     }
 
@@ -420,6 +420,18 @@ async def submit_question(
     if not isinstance(response_payload, dict):
         raise RuntimeError(
             "Expected `/chat/send-chat-message` to return an object when `stream=false`."
+        )
+
+    tool_calls = response_payload.get("tool_calls")
+    if not isinstance(tool_calls, list) or not any(
+        isinstance(call, dict)
+        and call.get("tool_name") == INTERNAL_SEARCH_TOOL_NAME
+        and isinstance(call.get("search_docs"), list)
+        for call in tool_calls
+    ):
+        raise RuntimeError(
+            f"Response for question {question_record.question_id} did not complete internal search. "
+            "Use --search-only to evaluate retrieval without model tool selection."
         )
 
     answer = response_payload.get("answer_citationless")

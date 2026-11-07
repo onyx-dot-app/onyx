@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from slack_sdk.errors import SlackApiError
 
-from onyx.chat.models import ChatBasicResponse
+from onyx.chat.models import ChatFullResponse, ToolCallResponse
 from onyx.context.search.models import Tag
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.handlers.handle_regular_answer import (
@@ -509,9 +509,9 @@ def test_private_channel_non_ephemeral_attributes_usage(
     logger = _mock_logger()
     observed_user_ids: list[str | None] = []
 
-    def _gather_stream(_: object) -> ChatBasicResponse:
+    def _gather_stream(_: object, _future: object) -> ChatFullResponse:
         observed_user_ids.append(get_current_user_id())
-        return ChatBasicResponse(
+        return ChatFullResponse(
             answer="answer",
             answer_citationless="answer",
             top_documents=[],
@@ -542,7 +542,7 @@ def test_private_channel_non_ephemeral_attributes_usage(
             return_value=("private-channel", False),
         ),
         patch(
-            f"{_HANDLE_REGULAR_ANSWER}.gather_stream",
+            f"{_HANDLE_REGULAR_ANSWER}.gather_stream_full",
             side_effect=_gather_stream,
         ),
         patch(
@@ -592,21 +592,37 @@ def test_private_channel_non_ephemeral_attributes_usage(
 
 
 @pytest.mark.parametrize(
-    "has_search_tool,search_available,search_enabled,expected_forced_id",
+    "has_search_tool,search_available,search_enabled,expected_preferred_id",
     [
-        (True, True, True, 77),  # persona has SearchTool and it is usable -> forced
-        (True, False, True, None),  # SearchTool attached but unavailable -> not forced
-        (True, True, False, None),  # SearchTool attached but disabled -> not forced
-        (False, True, True, None),  # persona without SearchTool -> not forced
+        (True, True, True, 77),  # persona has SearchTool and it is usable -> preferred
+        (
+            True,
+            False,
+            True,
+            None,
+        ),  # SearchTool attached but unavailable -> not preferred
+        (True, True, False, None),  # SearchTool attached but disabled -> not preferred
+        (False, True, True, None),  # persona without SearchTool -> not preferred
     ],
 )
-def test_search_tool_forced_only_when_usable(
+@pytest.mark.parametrize(
+    "called_tool,search_completed",
+    [
+        (None, False),
+        ("internal_search", True),
+        ("internal_search", False),
+        ("web_search", True),
+    ],
+)
+def test_search_tool_preferred_only_when_usable(
     has_search_tool: bool,
     search_available: bool,
     search_enabled: bool,
-    expected_forced_id: int | None,
+    expected_preferred_id: int | None,
+    called_tool: str | None,
+    search_completed: bool,
 ) -> None:
-    """Slack answers force the persona's search tool on the first LLM cycle
+    """Slack answers prefer the persona's usable search tool for the request
     (regression for the #7399 refactor dropping guaranteed retrieval), but
     never for personas without a usable search tool."""
     slack_channel_config = _make_slack_channel_config()
@@ -621,14 +637,24 @@ def test_search_tool_forced_only_when_usable(
     user = MagicMock()
     user.id = uuid4()
 
-    def _gather_stream(_: object) -> ChatBasicResponse:
-        return ChatBasicResponse(
+    def _gather_stream(_: object, _future: object) -> ChatFullResponse:
+        return ChatFullResponse(
             answer="answer",
             answer_citationless="answer",
             top_documents=[],
             error_msg=None,
             message_id=1,
             citation_info=[],
+            tool_calls=[
+                ToolCallResponse(
+                    tool_name=called_tool,
+                    tool_arguments={},
+                    tool_result="No results",
+                    search_docs=[] if search_completed else None,
+                )
+            ]
+            if called_tool
+            else [],
         )
 
     with (
@@ -643,8 +669,16 @@ def test_search_tool_forced_only_when_usable(
             f"{_HANDLE_REGULAR_ANSWER}.get_channel_name_from_id",
             return_value=("channel", False),
         ),
-        patch(f"{_HANDLE_REGULAR_ANSWER}.gather_stream", side_effect=_gather_stream),
-        patch(f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks", return_value=[]),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.gather_stream_full", side_effect=_gather_stream
+        ),
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks", return_value=[]
+        ) as build_blocks,
+        patch(
+            f"{_HANDLE_REGULAR_ANSWER}.resolve_channel_references",
+            return_value=("Question", [Tag(tag_key="Channel", tag_value="eng")]),
+        ),
         patch(
             f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
             return_value=iter(()),
@@ -654,6 +688,7 @@ def test_search_tool_forced_only_when_usable(
         patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react"),
     ):
         mock_search_tool_cls.is_available.return_value = search_available
+        mock_search_tool_cls.NAME = "internal_search"
         handle_regular_answer(
             message_info=_make_slack_message_info(ChannelType.IM),
             slack_channel_config=slack_channel_config,
@@ -666,4 +701,10 @@ def test_search_tool_forced_only_when_usable(
         )
 
     stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
-    assert stream_call_kwargs["new_msg_req"].forced_tool_id == expected_forced_id
+    assert stream_call_kwargs["new_msg_req"].preferred_tool_id == expected_preferred_id
+
+    answer = build_blocks.call_args.kwargs["answer"]
+    if called_tool == "internal_search" and search_completed:
+        assert answer.answer.startswith("No indexed data found for #eng.")
+    else:
+        assert answer.answer == "answer"

@@ -4,13 +4,14 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.agents.models import AgentState, CompactionCheckpoint
+from onyx.agents.models import AgentState, CompactionCheckpoint, PreparedStep, StepInput
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.models import (
     Message,
+    NamedToolChoice,
     ReasoningEffort,
     ToolDefinition,
     ToolResult,
@@ -99,7 +100,6 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
     def agent(
         messages: list[Message],
         *,
-        force_catalog: bool = False,
         client: LitellmLLM = model,
         checkpoint: CompactionCheckpoint | None = None,
     ) -> ChatAgent:
@@ -114,7 +114,6 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
             llm=client,
             token_counter=get_llm_token_counter(client),
             checkpoint=checkpoint,
-            forced_tool_id=tool.id if force_catalog else None,
             reasoning_effort=ReasoningEffort.OFF,
             include_citations=False,
             reminders_enabled=False,
@@ -126,8 +125,24 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
                 content="Load the catalog. Then reply only READY, with the required prefix. Do not reveal any catalog values yet."
             )
         ],
-        force_catalog=True,
     )
+    prepare = first.prepare_step
+    assert prepare is not None
+
+    def load_catalog_first(step: StepInput) -> PreparedStep:
+        prepared = prepare(step)
+        if step.step.index == 0:
+            return prepared.model_copy(
+                update={
+                    "options": prepared.options.model_copy(
+                        update={"tool_choice": NamedToolChoice(name=tool.name)}
+                    )
+                }
+            )
+        return prepared
+
+    # Make evidence setup deterministic; this test measures replay, not tool selection.
+    first.prepare_step = load_catalog_first
     loaded = run_agent(first, max_steps=2)
     assert "HARBOR:" in loaded.output.text
     assert "READY" in loaded.output.text

@@ -97,7 +97,6 @@ from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
-from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     SendMessageRequest,
@@ -383,13 +382,7 @@ def prepare_chat_turn(
             if new_msg_req.deep_research and research_tool_id is None:
                 raise ValueError("Research tool configuration is missing")
             tool_names = {tool.id: tool.name for tool in tools}
-            forced_tool_id = new_msg_req.forced_tool_id
-            if forced_tool_id in {
-                tool.id
-                for tool in tools
-                if not is_tool_available_for_persona(tool, persona.id)
-            }:
-                forced_tool_id = None
+            preferred_tool_id = new_msg_req.preferred_tool_id
             summary_message = find_summary_for_branch(db_session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
             descriptors = {
@@ -443,10 +436,6 @@ def prepare_chat_turn(
             reasoning_effort = (
                 chat_session.reasoning_effort_override or ReasoningEffort.AUTO
             )
-            search_tool_id = next(
-                (tool.id for tool in tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
-                None,
-            )
             skip_clarification = is_last_assistant_message_clarification(chat_history)
         # File loading can be slow; release the preparation DB session first.
         admission.refresh()
@@ -459,11 +448,21 @@ def prepare_chat_turn(
         )
         admission.refresh()
         search_params = determine_search_params(persona_id, project_id, extracted_files)
+        # Inline project context replaces retrieval for this request.
         if (
             search_params.search_usage == SearchToolUsage.DISABLED
-            and forced_tool_id == search_tool_id
+            and (
+                new_msg_req.allowed_tool_ids is None
+                or preferred_tool_id in new_msg_req.allowed_tool_ids
+            )
+            and any(
+                tool.id == preferred_tool_id
+                and tool.in_code_tool_id == SEARCH_TOOL_ID
+                and tool.enabled
+                for tool in tool_configuration.tools
+            )
         ):
-            forced_tool_id = None
+            preferred_tool_id = None
         # Temporary history already owns earlier attachment text. Only new inputs need extraction.
         text_file_ids: set[str] | None = None
         if not record_mode_persists_content(incognito_record_mode):
@@ -549,7 +548,7 @@ def prepare_chat_turn(
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
             available_files=available_files,
-            forced_tool_id=forced_tool_id,
+            preferred_tool_id=preferred_tool_id,
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,

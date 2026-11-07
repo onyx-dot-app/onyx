@@ -109,7 +109,7 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         allowed_tool_ids: list[int] | None = None,
-        forced_tool_ids: list[int] | None = None,
+        preferred_tool_id: int | None = None,
         chat_session: DATestChatSession | None = None,
         deep_research: bool = False,
         llm_override: LLMOverride | None = None,
@@ -124,7 +124,7 @@ class ChatSessionManager:
             ),
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
+            preferred_tool_id=preferred_tool_id,
             deep_research=deep_research,
             llm_override=llm_override,
         )
@@ -167,7 +167,7 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         allowed_tool_ids: list[int] | None = None,
-        forced_tool_ids: list[int] | None = None,
+        preferred_tool_id: int | None = None,
         deep_research: bool = False,
         llm_override: LLMOverride | None = None,
     ) -> None:
@@ -196,7 +196,7 @@ class ChatSessionManager:
             ),
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
+            preferred_tool_id=preferred_tool_id,
             deep_research=deep_research,
             llm_override=llm_override,
         )

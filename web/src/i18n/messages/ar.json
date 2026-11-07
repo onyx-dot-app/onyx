@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "تحديد مصادر البحث"
+      },
+      "preference": {
+        "tooltip": "{description}\nفضّل هذه الأداة لهذه المحادثة. قد يجيب الوكيل دون استخدامها."
       }
     },
     "addMcpModal": {

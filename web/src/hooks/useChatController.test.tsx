@@ -3,6 +3,7 @@ import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatController from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { createChatSession, sendMessage } from "@/app/app/services/lib";
+import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
@@ -34,7 +35,10 @@ jest.mock("@/hooks/useChatSessions", () => ({
   }),
 }));
 jest.mock("@/lib/agents/hooks", () => ({
-  usePinnedAgents: () => ({ pinnedAgents: [], togglePinnedAgent: jest.fn() }),
+  usePinnedAgents: () => ({
+    pinnedAgents: [],
+    togglePinnedAgent: jest.fn(async () => {}),
+  }),
 }));
 jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => ({
@@ -71,8 +75,8 @@ const toolConfiguration: ToolConfigurationHandle = {
   stateOf: jest.fn(),
   setToolState: jest.fn(),
   toggleToolState: jest.fn(),
-  clearForcedTool: jest.fn(),
-  forcedToolId: null,
+  clearPreferredTool: jest.fn(),
+  preferredToolId: null,
   disabledToolIds: [],
   ready: true,
   filters: {
@@ -438,3 +442,95 @@ test("abort releases a reader with packets queued before its first paint", async
   await expect(session.readerFinished).resolves.toBeUndefined();
   unmount();
 });
+
+test.each([false, true])(
+  "tool preference persists after submission (%s)",
+  async (accepted) => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: "session",
+    });
+    useChatSessionStore
+      .getState()
+      .createSession("session", { incognito: true });
+    jest.mocked(sendMessage).mockImplementation(async function* () {
+      if (accepted)
+        yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+      yield {
+        error: "Request failed",
+        error_code: "API_ERROR",
+        is_retryable: true,
+        stack_trace: "",
+        details: {},
+      };
+    });
+    const preferredAgent: MinimalAgent = {
+      id: 7,
+      name: "Agent",
+      description: "",
+      starter_messages: null,
+      document_sets: [],
+      is_public: true,
+      is_listed: true,
+      display_priority: null,
+      is_featured: false,
+      builtin_persona: false,
+      owner: null,
+      owner_group: null,
+      user_permission: null,
+      tools: [
+        {
+          id: 3,
+          name: "SearchTool",
+          display_name: "Search",
+          description: "",
+          in_code_tool_id: "SearchTool",
+          definition: null,
+          custom_headers: null,
+          passthrough_auth: false,
+          agent_creation_selectable: true,
+          default_enabled: true,
+          enabled: true,
+          chat_selectable: true,
+        },
+      ],
+    };
+    const selectedConfiguration = { ...toolConfiguration, preferredToolId: 3 };
+    const { result } = renderHook(() =>
+      useChatController({
+        llmManager: createLlmManager(),
+        toolConfiguration: selectedConfiguration,
+        activeAgent: preferredAgent,
+        availableAgents: [],
+        existingChatSessionId: "session",
+        selectedDocuments: [],
+        searchParams: new ReadonlyURLSearchParams(),
+        resetInputBar: jest.fn(),
+        restoreInputBar: jest.fn(),
+      })
+    );
+    await act(async () =>
+      result.current.onSubmit({
+        message: "Question",
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredToolId: 3 })
+    );
+    expect(toolConfiguration.clearPreferredTool).not.toHaveBeenCalled();
+    expect(toolConfiguration.setToolState).not.toHaveBeenCalled();
+    await act(async () =>
+      result.current.onSubmit({
+        message: "Follow-up",
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ preferredToolId: 3 })
+    );
+  }
+);
