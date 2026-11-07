@@ -39,13 +39,26 @@ class TestBuildToolCallResponseHistoryMessage:
         )
         assert message == '[{"file_id": "img-1", "revised_prompt": "p1"}]'
 
-    def test_non_image_tool_uses_placeholder(self) -> None:
+    def test_non_image_tool_preserves_saved_result(self) -> None:
         message = _build_tool_call_response_history_message(
             tool_name="web_search",
             generated_images=None,
             tool_call_response='{"raw":"value"}',
         )
-        assert message == TOOL_CALL_RESPONSE_CROSS_MESSAGE
+        assert message == '{"raw":"value"}'
+
+    @pytest.mark.parametrize("saved_result", [None, ""])
+    def test_missing_tool_result_uses_placeholder(
+        self, saved_result: str | None
+    ) -> None:
+        assert (
+            _build_tool_call_response_history_message(
+                tool_name="web_search",
+                generated_images=None,
+                tool_call_response=saved_result,
+            )
+            == TOOL_CALL_RESPONSE_CROSS_MESSAGE
+        )
 
 
 class TestConvertChatHistory:
@@ -114,10 +127,8 @@ class TestConvertChatHistory:
         assert len(images) == 1
         assert images[0].file_id == "project_image"
 
-    def test_tool_response_placeholder_token_count_is_measured(self) -> None:
-        """Cross-turn tool responses are replayed as a placeholder — its
-        budgeted token count must come from the token counter, not a
-        hardcoded constant."""
+    def test_tool_response_token_count_is_measured(self) -> None:
+        """Saved results retain their content and measured token count."""
         tool_call = MagicMock()
         tool_call.turn_number = 0
         tool_call.tool_id = 1
@@ -149,9 +160,9 @@ class TestConvertChatHistory:
 
         tool_responses = [m for m in result.messages if m.role == "tool_result"]
         assert len(tool_responses) == 1
-        assert tool_responses[0].text == TOOL_CALL_RESPONSE_CROSS_MESSAGE
+        assert tool_responses[0].text == "original tool output"
         assert prompt_metadata(tool_responses[0]).token_count == len(
-            TOOL_CALL_RESPONSE_CROSS_MESSAGE
+            "original tool output"
         )
 
 

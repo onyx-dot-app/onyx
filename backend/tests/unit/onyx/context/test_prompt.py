@@ -29,7 +29,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 
 
 def test_instructions_files_and_reminder_surround_current_task() -> None:
@@ -192,14 +191,14 @@ def test_prompt_can_be_rebuilt_without_a_user_message(history: list[Message]) ->
 
 
 @pytest.mark.parametrize("with_model", [False, True])
-def test_historical_tool_filter_preserves_checkpoint_and_current_evidence(
+def test_prompt_preserves_historical_and_current_evidence_after_checkpoint(
     with_model: bool,
 ) -> None:
     prior_result = ToolResultMessage(
         tool_call_id="old",
         tool_name="web_search",
         content="Old evidence",
-        metadata=PromptMetadata(omit_tool_result_content=True, token_count=9000),
+        metadata=PromptMetadata(token_count=9000),
     )
     image_result = ToolResultMessage(
         tool_call_id="image",
@@ -243,13 +242,15 @@ def test_historical_tool_filter_preserves_checkpoint_and_current_evidence(
     )
     results = [message for message in request if isinstance(message, ToolResultMessage)]
     assert [message.text for message in results] == [
-        TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+        "Old evidence",
         image_result.text,
         "Current evidence",
     ]
-    assert prompt_metadata(results[0]).token_count == len(
-        TOOL_CALL_RESPONSE_CROSS_MESSAGE
-    )
+    if with_model:
+        assert results[0].metadata is None
+        assert results[0].estimated_tokens == 9000
+    else:
+        assert prompt_metadata(results[0]).token_count == 9000
     assert prior_result.text == "Old evidence"
     assert prompt_metadata(prior_result).token_count == 9000
     assert [message.model_dump() for message in history] == original
@@ -324,8 +325,12 @@ def test_prompt_output_isolates_history_and_captured_instructions(
     tool_result = next(
         message for message in result if isinstance(message, ToolResultMessage)
     )
-    assert isinstance(tool_result.details, SearchDocsResponse)
-    tool_result.details.citation_mapping[1] = "changed"
+    if with_model:
+        assert tool_result.details is None
+    else:
+        assert isinstance(tool_result.details, SearchDocsResponse)
+        tool_result.details.citation_mapping[1] = "changed"
+    tool_result.content = "Changed evidence"
     for message in result:
         if isinstance(message, (UserMessage, SystemMessage)):
             message.content = "changed"

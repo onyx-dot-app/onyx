@@ -81,7 +81,6 @@ class PromptMetadata(CompactionMetadata):
     should_cache: bool = False
     file_id: str | None = None
     is_reminder: bool = False
-    omit_tool_result_content: bool = False
 
 
 class FileContextResult(BaseModel):
