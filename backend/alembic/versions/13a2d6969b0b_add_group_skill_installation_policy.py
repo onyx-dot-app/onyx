@@ -1,7 +1,7 @@
 """add group skill installation policy
 
 Revision ID: 13a2d6969b0b
-Revises: c3e8a1f5d702
+Revises: 6476b236ec97
 Create Date: 2026-11-07 13:02:58.420714
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "13a2d6969b0b"
-down_revision = "c3e8a1f5d702"
+down_revision = "6476b236ec97"
 branch_labels = None
 depends_on = None
 
