@@ -31,7 +31,7 @@ from onyx.llm.models import (
 )
 
 
-def test_instructions_files_and_reminder_surround_current_task() -> None:
+def test_stable_preamble_precedes_history_and_dynamic_reminders() -> None:
     history: list[Message] = [
         UserMessage(content="Earlier question"),
         AssistantMessage(content=[TextContent(text="Earlier answer")]),
@@ -72,15 +72,15 @@ def test_instructions_files_and_reminder_surround_current_task() -> None:
         token_counter=len,
         available_tool_names={"read_file"},
     )
-    assert [message.text for message in result[:4]] == [
+    assert [message.text for message in result[:2]] == [
         "System instructions",
-        "Earlier question",
-        "Earlier answer",
         "Task instructions",
     ]
-    assert '"title": "project.txt"' in result[4].text
-    assert '"contents": "Project evidence"' in result[4].text
-    assert [message.text for message in result[5:8]] == [
+    assert '"title": "project.txt"' in result[2].text
+    assert '"contents": "Project evidence"' in result[2].text
+    assert [message.text for message in result[3:8]] == [
+        "Earlier question",
+        "Earlier answer",
         "Current question",
         "",
         "Evidence",
@@ -94,7 +94,7 @@ def test_instructions_files_and_reminder_surround_current_task() -> None:
     assert prompt_metadata(result[0]).should_cache
 
 
-def test_project_image_already_in_history_is_not_duplicated() -> None:
+def test_project_image_is_in_preamble_without_changing_user_history() -> None:
     image = ChatLoadedFile(
         file_id="image",
         filename="image.png",
@@ -106,7 +106,6 @@ def test_project_image_already_in_history_is_not_duplicated() -> None:
     history: list[Message] = [
         UserMessage(
             content="Describe the image",
-            metadata=PromptMetadata(image_files=[image], image_token_count=100),
         )
     ]
     result = prepare_prompt(
@@ -131,6 +130,10 @@ def test_project_image_already_in_history_is_not_duplicated() -> None:
         for image in (prompt_metadata(message).image_files or [])
     ]
     assert [image.file_id for image in images] == ["image"]
+    assert prompt_metadata(result[0]).image_files == [image]
+    assert prompt_metadata(result[0]).image_token_count == 100
+    assert result[1].text == "Describe the image"
+    assert prompt_metadata(history[0]).image_files is None
 
 
 @pytest.mark.parametrize("keep_first_file", [True, False])
@@ -185,8 +188,8 @@ def test_prompt_can_be_rebuilt_without_a_user_message(history: list[Message]) ->
     )
     assert [message.text for message in result] == [
         "System",
-        *[message.text for message in history],
         "Task",
+        *[message.text for message in history],
     ]
 
 

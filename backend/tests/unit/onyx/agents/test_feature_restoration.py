@@ -617,7 +617,7 @@ def test_checkpoint_file_storage_preserves_binary_feature_data() -> None:
     assert saved_file.filename == "result.bin"
     assert saved_file.content is None
     assert saved_file.file_id is not None
-    with patch("onyx.tools.file_snapshot.get_default_file_store") as file_store:
+    with patch("onyx.file_store.file_store.get_default_file_store") as file_store:
         file_store.return_value.read_file.return_value = BytesIO(payload)
         assert saved_file.restore().content == payload
 
@@ -697,7 +697,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
     assert restored.progress is not None
     saved = ChatFeatureState.model_validate(restored.progress.feature_state)
     assert loads == []
-    with patch("onyx.tools.file_snapshot.get_default_file_store") as file_store:
+    with patch("onyx.file_store.file_store.get_default_file_store") as file_store:
         file_store.return_value.read_file.side_effect = lambda *_args, **_kwargs: (
             BytesIO(payload)
         )

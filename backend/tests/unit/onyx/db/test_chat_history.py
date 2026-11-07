@@ -62,7 +62,7 @@ class TestBuildToolCallResponseHistoryMessage:
 
 
 class TestConvertChatHistory:
-    """Project images attach once, to the last user message in history."""
+    """User attachments keep their original place in replayed history."""
 
     def _make_chat_message(
         self,
@@ -83,14 +83,14 @@ class TestConvertChatHistory:
         msg.tool_calls = None
         return msg
 
-    def test_attaches_project_images_to_last_user_message_only_once(
+    def test_user_images_stay_attached_to_original_user_message(
         self,
     ) -> None:
-        project_image = ChatLoadedFile(
-            file_id="project_image",
+        user_image = ChatLoadedFile(
+            file_id="user_image",
             content=b"",
             file_type=ChatFileType.IMAGE,
-            filename="project.png",
+            filename="attachment.png",
             content_text=None,
             token_count=50,
         )
@@ -101,34 +101,27 @@ class TestConvertChatHistory:
             self._make_chat_message("Second question", MessageType.USER),
         ]
 
+        chat_history[0].files = [{"id": "user_image", "type": "image"}]
+
         result = convert_chat_history(
             chat_history=capture_chat_history(
                 cast(list[ChatMessage], chat_history), {}, lambda s: len(s)
             ),
-            files=[],
-            context_image_files=[project_image],
-            additional_context=None,
-            token_counter=lambda s: len(s),
+            files=[user_image],
         )
 
         user_messages = [m for m in result.messages if m.role == "user"]
         assert len(user_messages) == 2
 
-        # First USER message must NOT carry the project image.
         first_user = user_messages[0]
         assert first_user.text == "First question"
-        assert prompt_metadata(first_user).image_files is None
-
-        # Last USER message carries the project image exactly once.
-        last_user = user_messages[-1]
-        assert last_user.text == "Second question"
-        images = prompt_metadata(last_user).image_files
+        images = prompt_metadata(first_user).image_files
         assert images is not None
-        assert len(images) == 1
-        assert images[0].file_id == "project_image"
+        assert [image.file_id for image in images] == ["user_image"]
+        assert prompt_metadata(user_messages[-1]).image_files is None
 
     def test_tool_response_token_count_is_measured(self) -> None:
-        """Saved results retain their content and measured token count."""
+        """Saved results retain their content and use its measured token count."""
         tool_call = MagicMock()
         tool_call.turn_number = 0
         tool_call.tool_id = 1
@@ -153,9 +146,6 @@ class TestConvertChatHistory:
                 lambda s: len(s),
             ),
             files=[],
-            context_image_files=[],
-            additional_context=None,
-            token_counter=lambda s: len(s),
         )
 
         tool_responses = [m for m in result.messages if m.role == "tool_result"]

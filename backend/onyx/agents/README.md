@@ -181,6 +181,8 @@ Caller cancellation propagates into the run. Run failure or cancellation does no
 Each model call receives a separate context copy. Compaction applies its own tracing flow and timeout.
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
+The executor enforces `NONE` and `NamedToolChoice` before tool approval or execution.
+Other tool definitions can remain in the request for cache reuse.
 
 Two optional tool callbacks cover interception and enrichment:
 
@@ -529,9 +531,10 @@ Compaction can include them in a summary, but selects another message as its cut
 
 For chats that retain content, Chat stores new summaries as SUMMARY message rows.
 The existing `last_summarized_message_id` column stores the cutoff as a string. Reusing a summary creates no new row.
-For these content-retaining chats, emergency truncation saves an empty SUMMARY row with its cutoff.
-The next turn keeps that cutoff instead of restoring discarded history.
-Temporary chats do not write SUMMARY rows. Suspended runs retain the cutoff in run state, including temporary chats.
+Emergency truncation retains a cutoff in run state so suspended execution can resume.
+Chat saves that cutoff as an empty SUMMARY row for content-retaining sessions.
+Content-free temporary sessions keep the root cutoff in their temporary context.
+Later turns reuse the selected cutoff instead of restoring discarded history.
 
 If a provider still rejects a request for size,
 the runtime compacts and retries the generation once, provided no partial output has
@@ -653,7 +656,7 @@ An expired owner is reported as interrupted when its response is inspected. Unce
 
 Released runs have no local execution owner. Stop requests use the application’s run-ID route.
 Closing the old coordinator does not cancel execution claimed by another pod.
-Incognito runs keep local ownership and do not write checkpoints or child conversations.
+Content-free incognito runs keep local ownership and do not write durable execution checkpoints or child conversations to PostgreSQL.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
 Deleting the chat removes those files. Tool execution loads file contents when needed.

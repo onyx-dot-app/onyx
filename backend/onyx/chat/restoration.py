@@ -53,6 +53,7 @@ def restore_chat_agent(
             messages=context.messages,
             tools=tools,
             custom_agent_prompt=state.custom_prompt,
+            additional_context=state.request_context,
             base_system_prompt=state.base_prompt,
             context_files=state.context_files.restore(),
             persona=state.persona,
@@ -86,6 +87,8 @@ def restore_chat_agent(
     return DeepResearchAgent(
         messages=context.messages,
         allowed_tools=tools,
+        additional_context=state.request_context,
+        context_files=state.context_files.restore() if state.context_files else None,
         llm=llm,
         token_counter=token_counter,
         user_identity=user_identity,

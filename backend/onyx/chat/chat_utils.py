@@ -51,7 +51,6 @@ from onyx.llm.models import (
 )
 from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.prompts.chat_prompts import (
-    ADDITIONAL_CONTEXT_PROMPT,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
 from onyx.server.query_and_chat.models import (
@@ -351,9 +350,6 @@ def capture_chat_history(
 def convert_chat_history(
     chat_history: list[ChatHistoryMessage],
     files: list[ChatLoadedFile],
-    context_image_files: list[ChatLoadedFile],
-    additional_context: str | None,
-    token_counter: Callable[[str], int],
 ) -> ChatHistoryResult:
     """Load canonical assistant output and attach user files to message history."""
     messages: list[Message] = []
@@ -363,17 +359,7 @@ def convert_chat_history(
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
 
-    # Find the index of the last USER message
-    last_user_message_idx = next(
-        (
-            index
-            for index in range(len(chat_history) - 1, -1, -1)
-            if chat_history[index].message_type == MessageType.USER
-        ),
-        None,
-    )
-
-    for idx, chat_message in enumerate(chat_history):
+    for chat_message in chat_history:
         if chat_message.message_type == MessageType.USER:
             input_start = len(messages)
             # Process files attached to this message
@@ -411,33 +397,12 @@ def convert_chat_history(
                 messages.append(ctx.message)
                 all_injected_file_metadata[tool_id] = ctx.tool_metadata
 
-            # Sum token counts from image files (excluding project image files)
+            # Count the images attached to this user message.
             image_token_count = (
                 sum(img.token_count for img in image_files) if image_files else 0
             )
 
-            # Add the user message with image files attached
-            # If this is the last USER message, also include context_image_files
-            # Note: context image file tokens are NOT counted in the token count
-            if idx == last_user_message_idx:
-                if context_image_files:
-                    image_files.extend(context_image_files)
-
-                if additional_context:
-                    messages.append(
-                        UserMessage(
-                            id=f"chat:{chat_message.id}:context",
-                            content=ADDITIONAL_CONTEXT_PROMPT.format(
-                                additional_context=additional_context
-                            ),
-                            metadata=PromptMetadata(
-                                token_count=token_counter(additional_context),
-                                image_files=None,
-                                allow_compaction_cutoff=False,
-                            ),
-                        )
-                    )
-
+            # User attachments remain attached to their original message.
             messages.append(
                 UserMessage(
                     id=f"chat:{chat_message.id}",

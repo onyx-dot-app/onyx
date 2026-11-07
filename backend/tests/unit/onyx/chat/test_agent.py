@@ -46,6 +46,12 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.prompts.chat_prompts import (
+    FILE_REMINDER,
+    IMAGE_GEN_REMINDER,
+    OPEN_URL_REMINDER,
+    REQUIRE_CITATION_GUIDANCE,
+)
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.models import ChatFile
@@ -556,6 +562,9 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         history = IncognitoState.model_validate_json(
             IncognitoState(messages=history).model_dump_json()
         ).messages
+    llm = ScriptedLLM(
+        [Delta(content="Evidence [4]"), Delta(content="More evidence [4]")], 128000
+    )
     feature = ChatAgent(
         messages=history,
         tools=[],
@@ -571,9 +580,7 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         ),
         persona=None,
         user_memory_context=None,
-        llm=ScriptedLLM(
-            [Delta(content="Evidence [4]"), Delta(content="More evidence [4]")], 128000
-        ),
+        llm=llm,
         token_counter=len,
     )
     for _ in range(2):
@@ -587,6 +594,12 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
                 Emitter(model_idx=0, publish=output.put_nowait)
             ).consume,
         )
+        reminder = llm.requests[-1]["prompt"][-1].content
+        assert isinstance(reminder, str)
+        assert REQUIRE_CITATION_GUIDANCE.strip() in reminder
+        assert FILE_REMINDER.strip() not in reminder
+        assert IMAGE_GEN_REMINDER.strip() not in reminder
+        assert OPEN_URL_REMINDER.strip() not in reminder
         assert feature.citation_mapping == {4: "reference"}
         assert feature.citation_processor.citation_to_doc == {4: document}
         assert feature.gathered_documents == [document]

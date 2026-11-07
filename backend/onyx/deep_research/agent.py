@@ -47,7 +47,7 @@ from onyx.deep_research.tool_definitions import (
     get_clarification_tool_definitions,
     get_orchestrator_tools,
 )
-from onyx.file_store.models import FileToolMetadata
+from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
@@ -62,6 +62,7 @@ from onyx.llm.models import (
     ToolResult,
     UserMessage,
 )
+from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.prompts.deep_research.orchestration_layer import (
     CLARIFICATION_PROMPT,
     FINAL_REPORT_PROMPT,
@@ -76,6 +77,7 @@ from onyx.prompts.deep_research.orchestration_layer import (
 )
 from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.prompt_utils import get_current_llm_day_time
+from onyx.tools.file_snapshot import SavedContextFiles
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.flows import LLMFlow
@@ -110,6 +112,8 @@ class DeepResearchAgent(Agent, RestorableFeature):
         checkpoint: CompactionCheckpoint | None = None,
         previous_run_id: str | None = None,
         agent_id: str | None = None,
+        additional_context: str | None = None,
+        context_files: ExtractedContextFiles | None = None,
     ) -> None:
         self.application_tools = allowed_tools
         self.token_counter = token_counter
@@ -117,6 +121,10 @@ class DeepResearchAgent(Agent, RestorableFeature):
         self.language_section = language_section
         self.reasoning_effort = reasoning_effort
         self.file_metadata = all_injected_file_metadata
+        self.request_context = additional_context
+        self.context_files = (
+            context_files.model_copy(deep=True) if context_files is not None else None
+        )
         self.started = time.monotonic()
         self.skip_clarification = skip_clarification
         self.is_reasoning_model = model_is_reasoning_model(
@@ -175,6 +183,10 @@ class DeepResearchAgent(Agent, RestorableFeature):
                 language_section=self.language_section,
                 reasoning_effort=self.reasoning_effort,
                 file_metadata=self.file_metadata,
+                request_context=self.request_context,
+                context_files=SavedContextFiles.capture(self.context_files)
+                if self.context_files is not None
+                else None,
                 skip_clarification=self.skip_clarification,
                 elapsed_seconds=max(0.0, time.monotonic() - self.started),
                 citation_mapping=self.citation_mapping,
@@ -186,6 +198,13 @@ class DeepResearchAgent(Agent, RestorableFeature):
             saved.language_section != self.language_section
             or saved.reasoning_effort != self.reasoning_effort
             or saved.file_metadata != self.file_metadata
+            or saved.request_context != self.request_context
+            or saved.context_files
+            != (
+                SavedContextFiles.capture(self.context_files)
+                if self.context_files is not None
+                else None
+            )
             or saved.skip_clarification != self.skip_clarification
         ):
             raise ValueError("Deep research restoration configuration does not match")
@@ -245,14 +264,18 @@ class DeepResearchAgent(Agent, RestorableFeature):
             )
             system_prompt = template.format(
                 current_datetime=now,
-                current_cycle_count=research_steps,
                 max_cycles=self.max_orchestrator_cycles,
                 research_plan=plan,
                 internal_search_research_task_guidance=INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE
                 if self.has_internal_search
                 else "",
             )
-            reminder = FIRST_CYCLE_REMINDER if research_steps == 1 else None
+            reminder = (
+                f"You have currently used {research_steps} of "
+                f"{self.max_orchestrator_cycles} max research cycles."
+            )
+            if research_steps == 1:
+                reminder += f"\n\n{FIRST_CYCLE_REMINDER}"
             tools = list(self.research_tools)
             options.tool_choice = ToolChoiceOptions.REQUIRED
         else:
@@ -279,12 +302,20 @@ class DeepResearchAgent(Agent, RestorableFeature):
                 prepare_prompt,
                 system_prompt=SystemMessage(content=system_prompt),
                 custom_agent_prompt=None,
+                request_context_message=UserMessage(
+                    content=ADDITIONAL_CONTEXT_PROMPT.format(
+                        additional_context=self.request_context
+                    ),
+                    metadata=PromptMetadata(is_reminder=True),
+                )
+                if self.request_context
+                else None,
                 reminder_message=UserMessage(
                     content=reminder, metadata=PromptMetadata(is_reminder=True)
                 )
                 if reminder
                 else None,
-                context_files=None,
+                context_files=self.context_files,
                 token_counter=self.token_counter,
                 llm_config=self.llm.config,
                 all_injected_file_metadata=dict(self.file_metadata)
