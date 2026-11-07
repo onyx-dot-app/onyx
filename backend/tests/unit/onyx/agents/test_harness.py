@@ -34,6 +34,7 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
     GenerationRequest,
+    NamedToolChoice,
     TextContent,
     ToolCall,
     ToolDefinition,
@@ -354,6 +355,67 @@ def test_invalid_calls_get_paired_errors(invalid: str) -> None:
     tool_result = agent.state.messages[1]
     assert isinstance(tool_result, ToolResultMessage)
     assert tool_result.is_error and tool_result.tool_call_id == "0"
+
+
+def test_named_tool_choice_blocks_other_declared_tools() -> None:
+    requests: list[GenerationRequest] = []
+    executed: list[str] = []
+    intercepted: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(invocation.call_id)
+        return ToolResult(content="allowed result")
+
+    tools = [
+        AgentTool(
+            definition=ToolDefinition(
+                name=name, description=name, parameters={"type": "object"}
+            ),
+            execute=execute,
+        )
+        for name in ("selected", "other")
+    ]
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        if len(requests) > 1:
+            return answer()
+        return AssistantMessage(
+            content=[
+                ToolCall(id=name, name=name, arguments={})
+                for name in ("selected", "other")
+            ]
+        )
+
+    def before_tool_call(context: ToolCallContext) -> None:
+        intercepted.append(context.call.name)
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=tools,
+        options=GenerationOptions(tool_choice=NamedToolChoice(name="selected")),
+        before_tool_call=before_tool_call,
+    )
+    run_agent(agent, runs=[], max_steps=2)
+    assert executed == ["selected"]
+    assert intercepted == ["selected"]
+    assert all(
+        [tool.name for tool in request.tools] == ["selected", "other"]
+        for request in requests
+    )
+    results = [
+        message
+        for message in requests[1].messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert [(result.tool_call_id, result.is_error) for result in results] == [
+        ("selected", False),
+        ("other", True),
+    ]
+    assert results[1].content == "Tool other is unavailable for this step."
 
 
 def test_context_transform_does_not_rewrite_durable_history() -> None:

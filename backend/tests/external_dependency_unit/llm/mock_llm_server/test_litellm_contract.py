@@ -16,6 +16,7 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationOptions,
     GenerationRequest,
+    NamedToolChoice,
     ToolCallEndEvent,
     ToolChoiceOptions,
     ToolDefinition,
@@ -233,6 +234,40 @@ def test_invoke_without_streaming(script: MockLLMScript, llm: LitellmLLM) -> Non
     (request,) = script.requests
     assert not request.body.get("stream")
     assert request.tool_choice == "required"
+
+
+def test_named_tool_choice_matches_script_with_other_tools_available(
+    script: MockLLMScript, llm: LitellmLLM
+) -> None:
+    choice = {"type": "function", "function": {"name": "internal_search"}}
+    script.conversation(
+        "forced",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="search",
+                    name="internal_search",
+                    arguments={"queries": ["alpha"]},
+                )
+            ],
+            conditions=RequestConditions(
+                offers=["internal_search", "web_search"], tool_choice=choice
+            ),
+        ),
+    )
+    response = llm.invoke_raw(
+        prompt=PROMPT, tools=TOOLS, tool_choice=NamedToolChoice(name="internal_search")
+    )
+    assert [
+        call.function.name for call in response.choice.message.tool_calls or []
+    ] == ["internal_search"]
+    (request,) = script.requests
+    assert request.tool_choice == choice
+    assert not RequestConditions(tool_choice="required").matches(request)
+    assert not RequestConditions(
+        tool_choice={"type": "function", "function": {"name": "web_search"}}
+    ).matches(request)
+    script.verify()
 
 
 @pytest.mark.parametrize("inject_env", [False, True])

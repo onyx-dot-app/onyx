@@ -28,6 +28,7 @@ from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -37,6 +38,7 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
     Message,
+    NamedToolChoice,
     TextContent,
     ToolCall,
     ToolChoiceOptions,
@@ -58,15 +60,58 @@ from tests.unit.onyx.agents.fakes import (
 )
 
 
+@pytest.mark.parametrize("multiple_operations", [False, True])
 @pytest.mark.parametrize(
     "render, observer_fails", [(True, False), (False, False), (True, True)]
+)
+@pytest.mark.parametrize(
+    ("model_name", "deployment_name", "forced_choice", "last_has_tools"),
+    [
+        ("test-model", None, NamedToolChoice(name="echo"), True),
+        ("claude-haiku-4-5", None, ToolChoiceOptions.REQUIRED, True),
+        ("qwen3.7-plus", None, ToolChoiceOptions.REQUIRED, False),
+        ("z-ai/glm-5.3", None, ToolChoiceOptions.REQUIRED, False),
+        ("alias", "glm-5.3", ToolChoiceOptions.REQUIRED, False),
+    ],
 )
 def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     render: bool,
     observer_fails: bool,
     monkeypatch: pytest.MonkeyPatch,
+    model_name: str,
+    deployment_name: str | None,
+    forced_choice: ToolChoiceOptions | NamedToolChoice,
+    last_has_tools: bool,
+    multiple_operations: bool,
 ) -> None:
+    class SecondOperation(EchoTool):
+        @property
+        def name(self) -> str:
+            return "second_operation"
+
+    class OtherTool(EchoTool):
+        @property
+        def id(self) -> int:
+            return 2
+
+        @property
+        def name(self) -> str:
+            return "other"
+
     runs: list[Run] = []
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider="openai",
+                model_name=model_name,
+                deployment_name=deployment_name,
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
     if observer_fails:
 
         def broken_observer(_presenter: ResponsePresenter, _event: AgentEvent) -> None:
@@ -76,6 +121,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
             "onyx.chat.presentation.ResponsePresenter.consume", broken_observer
         )
 
+    operation_name = "second_operation" if multiple_operations else "echo"
     llm = ScriptedLLM(
         [
             Delta(
@@ -84,7 +130,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
                         id=f"call-{index}",
                         index=index,
                         function=ResponseFunctionCall(
-                            name="echo", arguments='{"value":"hello"}'
+                            name=operation_name, arguments='{"value":"hello"}'
                         ),
                     )
                     for index in range(2)
@@ -108,7 +154,11 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     ]
     agent = ChatAgent(
         messages=[],
-        tools=[EchoTool()],
+        tools=[
+            EchoTool(),
+            *([SecondOperation()] if multiple_operations else []),
+            OtherTool(),
+        ],
         custom_agent_prompt=None,
         base_system_prompt="",
         context_files=ExtractedContextFiles(
@@ -142,8 +192,21 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         observation.finish()
         assert telemetry.call_args.args[1]["llm_cycles"] == 2
     assert len(llm.requests) == 2
-    assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.REQUIRED
-    assert llm.requests[1]["tools"] is None
+    assert llm.requests[0]["tool_choice"] == (
+        ToolChoiceOptions.REQUIRED if multiple_operations else forced_choice
+    )
+    expected_tools = ["echo", "second_operation"] if multiple_operations else ["echo"]
+    if not multiple_operations and isinstance(forced_choice, NamedToolChoice):
+        expected_tools.append("other")
+    assert [
+        tool["function"]["name"] for tool in llm.requests[0]["tools"]
+    ] == expected_tools
+    if last_has_tools:
+        assert [tool["function"]["name"] for tool in llm.requests[1]["tools"]] == [
+            tool.name for tool in agent.application_tools
+        ]
+    else:
+        assert llm.requests[1]["tools"] is None
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
     assert [message.role for message in agent.state.messages] == [
         "user",
@@ -157,6 +220,11 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         for message in agent.state.messages[2:4]
         if message.role == "tool_result"
     ] == ["call-0", "call-1"]
+    assert all(
+        message.tool_name == operation_name and not message.is_error
+        for message in agent.state.messages[2:4]
+        if isinstance(message, ToolResultMessage)
+    )
     assert agent.state.messages[-1].text == "Final answer"
     snapshot = project(runs[-1].snapshot())
     assert snapshot.answer == "Final answer"
