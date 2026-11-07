@@ -1,5 +1,7 @@
 """Checkpoint file values preserve bytes and defer stored file reads."""
 
+from unittest.mock import patch
+
 import pytest
 
 from onyx.chat.models import ChatSearchResult
@@ -68,11 +70,20 @@ def test_context_images_keep_metadata_and_lazy_storage_references(
         file_metadata=[],
         uncapped_token_count=15,
     )
-    saved = SavedContextFiles.capture(original)
-    restored = SavedContextFiles.model_validate_json(saved.model_dump_json()).restore()
+    # Binary descriptors are represented by references, not copied into snapshots.
+    with patch.object(
+        ChatLoadedFile, "__deepcopy__", side_effect=AssertionError("image copied")
+    ):
+        saved = SavedContextFiles.capture(original)
+        restored = SavedContextFiles.model_validate_json(
+            saved.model_dump_json()
+        ).restore()
+    original.file_texts.append("later edit")
+    restored.file_texts.append("restored edit")
+    assert saved.context.file_texts == ["included context"]
     assert reads == []
     assert len(original.image_files) == 1
-    assert restored.file_texts == ["included context"]
+    assert restored.file_texts == ["included context", "restored edit"]
     assert restored.image_files[0].token_count == 12
     assert restored.image_files[0].content == b"\xff\x00"
     assert reads == ["image-id"]

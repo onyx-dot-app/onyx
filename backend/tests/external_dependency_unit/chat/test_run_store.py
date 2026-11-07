@@ -670,7 +670,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 "onyx.chat.restoration.get_default_file_store", return_value=file_store
             ),
             patch(
-                "onyx.tools.file_snapshot.get_default_file_store",
+                "onyx.file_store.file_store.get_default_file_store",
                 return_value=file_store,
             ),
             patch("onyx.db.chat.get_default_file_store", return_value=file_store),

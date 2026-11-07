@@ -92,10 +92,8 @@ def _select_recent_image_indices(
     """Pick which (msg_idx, part_idx) positions to keep when the request has
     more images than the cap. Walks messages newest-to-oldest (recency wins
     across turns) but walks images within each message in attachment order
-    (earlier positions preferred). This matters in mixed messages where
-    user-attached images appear first in image_files and project-context
-    images are appended at the end — when the cap bites, we prefer to keep
-    what the user explicitly attached over project-context fill.
+    (earlier positions preferred). Project images are in the fixed preamble,
+    so newer user attachments take priority when the cap is reached.
 
     Returns the keep-set and the count of images that would be dropped. Only
     image parts on non-reminder user messages count, so cap slots aren't

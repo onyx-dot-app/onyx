@@ -477,7 +477,10 @@ def _get_or_extract_plaintext(
 
 
 def _load_chat_file(
-    file_descriptor: FileDescriptor, token_count: int, content_pending: bool
+    file_descriptor: FileDescriptor,
+    token_count: int,
+    content_pending: bool,
+    include_text: bool = True,
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
@@ -502,7 +505,7 @@ def _load_chat_file(
     # cached-plaintext path avoids reading the original bytes on the steady
     # state; only the cache miss branch opens the binary stream.
     content_text: str | None = None
-    if file_type.is_text_file():
+    if include_text and file_type.is_text_file():
 
         def _extract() -> str:
             # Only invoked on cache miss; bytes-read happens here, not upfront.
@@ -573,8 +576,17 @@ def _load_chat_file(
 _MAX_PARALLEL_CHAT_FILE_LOADS = 16
 
 
-def load_chat_files(inputs: list[ChatFileInput]) -> list[ChatLoadedFile]:
-    """Load attachments from metadata without retaining a preparation session."""
+def load_chat_files(
+    inputs: list[ChatFileInput], *, text_file_ids: set[str] | None = None
+) -> list[ChatLoadedFile]:
+    """Load selected attachment text; keep every file available through lazy byte reads."""
+    if text_file_ids is not None and not text_file_ids:
+        return [
+            _load_chat_file(
+                item.descriptor, item.token_count, item.content_pending, False
+            )
+            for item in inputs
+        ]
     # Raw bytes are loaded lazily. Even so, cap fan-out so a session with
     # hundreds of files cannot start hundreds of concurrent storage reads.
     # The shared parallel helper erases each callable's return type.
@@ -584,7 +596,12 @@ def load_chat_files(inputs: list[ChatFileInput]) -> list[ChatLoadedFile]:
             [
                 (
                     _load_chat_file,
-                    (item.descriptor, item.token_count, item.content_pending),
+                    (
+                        item.descriptor,
+                        item.token_count,
+                        item.content_pending,
+                        text_file_ids is None or item.descriptor["id"] in text_file_ids,
+                    ),
                 )
                 for item in inputs
             ],

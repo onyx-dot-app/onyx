@@ -26,6 +26,7 @@ from onyx.chat.models import (
     ChatSearchResult,
     CitationMode,
     PersonaPromptConfig,
+    PromptMetadata,
 )
 from onyx.chat.prompt_utils import (
     build_chat_prompt,
@@ -51,7 +52,9 @@ from onyx.llm.models import (
     ToolChoiceOptions,
     ToolResult,
     ToolResultMessage,
+    UserMessage,
 )
+from onyx.prompts.chat_prompts import ADDITIONAL_CONTEXT_PROMPT
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -90,10 +93,12 @@ class ChatAgent(Agent, RestorableFeature):
         checkpoint: CompactionCheckpoint | None = None,
         previous_run_id: str | None = None,
         agent_id: str | None = None,
+        additional_context: str | None = None,
     ) -> None:
         self.max_steps = MAX_LLM_CYCLES
         self.custom_agent_prompt = custom_agent_prompt
-        self.context_files = context_files
+        self.additional_context = additional_context
+        self.context_files = context_files.model_copy(deep=True)
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
         self.application_tools = list(tools)
@@ -162,6 +167,7 @@ class ChatAgent(Agent, RestorableFeature):
             forced_tool_id=self.forced_tool_id,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
+            request_context=self.additional_context,
             reminders_enabled=self.reminders_enabled,
             elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
@@ -185,6 +191,7 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.forced_tool_id != self.forced_tool_id
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
+            or saved.request_context != self.additional_context
             or saved.reminders_enabled != self.reminders_enabled
         ):
             raise ValueError("Chat restoration configuration does not match")
@@ -291,6 +298,7 @@ class ChatAgent(Agent, RestorableFeature):
             results=results,
             previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
+            has_history_citations=bool(self.citation_processor.citation_to_doc),
         )
         return PreparedStep(
             tools=request_tools,
@@ -309,7 +317,15 @@ class ChatAgent(Agent, RestorableFeature):
                 user_info_prompt=prompt.user_info_prompt,
                 custom_agent_prompt=prompt.custom_prompt,
                 reminder_message=prompt.reminder,
-                context_files=self.context_files.model_copy(deep=True),
+                request_context_message=UserMessage(
+                    content=ADDITIONAL_CONTEXT_PROMPT.format(
+                        additional_context=self.additional_context
+                    ),
+                    metadata=PromptMetadata(is_reminder=True),
+                )
+                if self.additional_context
+                else None,
+                context_files=self.context_files,
                 context_file_citations={
                     doc.document_id: number
                     for number, doc in self.initial_citations.items()

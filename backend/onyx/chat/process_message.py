@@ -32,7 +32,7 @@ from onyx.chat.files import (
     load_context_user_files_for_tools,
     resolve_context_user_files,
 )
-from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.history_store import RedisChatHistoryStore
 from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
@@ -92,7 +92,7 @@ from onyx.llm.factory import (
     get_llm_token_counter,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
@@ -427,6 +427,16 @@ def prepare_chat_turn(
                 token_counter,
                 checkpoint,
             )
+            if accepted_text is not None and not record_mode_persists_content(
+                incognito_record_mode
+            ):
+                # Filenames belong to the live input, not the content-free database row.
+                descriptors.update(
+                    {
+                        descriptor["id"]: descriptor
+                        for descriptor in new_msg_req.file_descriptors
+                    }
+                )
             file_inputs = prepare_chat_file_inputs(
                 list(descriptors.values()), db_session
             )
@@ -454,7 +464,15 @@ def prepare_chat_turn(
             and forced_tool_id == search_tool_id
         ):
             forced_tool_id = None
-        loaded_files = load_chat_files(file_inputs)
+        # Temporary history already owns earlier attachment text. Only new inputs need extraction.
+        text_file_ids: set[str] | None = None
+        if not record_mode_persists_content(incognito_record_mode):
+            text_file_ids = (
+                {descriptor["id"] for descriptor in new_msg_req.file_descriptors}
+                if accepted_text is not None
+                else set()
+            )
+        loaded_files = load_chat_files(file_inputs, text_file_ids=text_file_ids)
         chat_files_for_tools = convert_loaded_files_to_chat_files(loaded_files)
         chat_files_for_tools.extend(
             load_context_user_files_for_tools(
@@ -464,9 +482,6 @@ def prepare_chat_turn(
         history = convert_chat_history(
             chat_history=captured_history,
             files=loaded_files,
-            context_image_files=extracted_files.image_files,
-            token_counter=token_counter,
-            additional_context=additional_context or new_msg_req.additional_context,
         )
         if not any(
             tool.in_code_tool_id == FILE_READER_TOOL_ID
@@ -476,33 +491,17 @@ def prepare_chat_turn(
         # Persistent history and the accepted user row are already loaded and saved.
         if not record_mode_persists_content(incognito_record_mode):
             admission.refresh()
-            history_store = get_chat_history_store(
+            history_store = RedisChatHistoryStore(
                 message_id=user_message_id,
                 chat_session_id=chat_session_id,
-                persist_content=False,
+                visible_message_ids=(),
                 admission=admission,
             )
-            input_ids = {
-                message.id for message in history.messages[history.input_start :]
-            }
-            history.messages, previous_run_id = history_store.prepare_messages(
-                history.messages, previous_run_id, accepted_text
+            history, previous_run_id, checkpoint = history_store.prepare_messages(
+                history, accepted_text
             )
-            history.input_start = next(
-                (
-                    index
-                    for index, message in enumerate(history.messages)
-                    if message.id in input_ids
-                ),
-                len(history.messages) - 1,
-            )
-            selected_user_message = history.messages[-1] if history.messages else None
-            if not isinstance(selected_user_message, UserMessage):
-                raise ValueError(
-                    "History storage must retain the accepted user message last"
-                )
             admission.refresh()
-            history_store.save_user_message(selected_user_message)
+            history_store.save_user_messages(history)
             if incognito_session_ended(chat_session_id):
                 raise RuntimeError("Incognito session ended")
         admission.refresh()
@@ -531,14 +530,7 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             research_tool_id=research_tool_id,
-            checkpoint=next(
-                (
-                    message.checkpoint
-                    for message in reversed(captured_history)
-                    if message.checkpoint is not None
-                ),
-                None,
-            ),
+            checkpoint=checkpoint,
             user_message_id=user_message_id,
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"
@@ -550,6 +542,7 @@ def prepare_chat_turn(
             messages=history.messages[: history.input_start],
             input_messages=history.messages[history.input_start :],
             previous_run_id=previous_run_id,
+            additional_context=additional_context or new_msg_req.additional_context,
             extracted_context_files=extracted_files,
             stream_id=user_message_id if is_multi else models[0].message_id,
             reasoning_effort=reasoning_effort,

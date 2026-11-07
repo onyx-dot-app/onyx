@@ -79,7 +79,7 @@ availability and the record mode; this component applies them.
 ```
 prepare_chat_turn                          chat/process_message.py
   create_new_chat_message (user row)       commits at once; survives a failed answer
-  ChatHistoryStore.save_user_message       USAGE_ONLY: Redis, before reservation
+  RedisChatHistoryStore.save_user_messages      USAGE_ONLY: Redis, before reservation
   reserve_chat_response_ids                db/chat.py: assistant row(s), placeholder
                                            text, response_status NULL, committed;
                                            moves the parent's active pointer to it
@@ -187,12 +187,16 @@ falls back to `ChatMessage.error` on legacy rows
 (`db/chat.py:translate_db_message_to_chat_message_detail`); a change to the
 failure shape must keep old rows readable.
 
-**History for the next turn.** Later turns retain saved tool output in both
-PostgreSQL and temporary history. Legacy image-generation rows replay stored file
-IDs and revised prompts when available. Other legacy results use their saved
-response; missing or empty output uses a placeholder. Compaction can summarize older results;
-emergency truncation can remove them from the model's working context. Saved
-PostgreSQL evidence remains intact for replay and citations.
+**History for the next turn.** Saved tool output remains in model history until
+context-budget compaction or truncation removes older history. Runtime results retain their
+recorded bodies through `chat/chat_utils.py:capture_chat_history`; legacy results
+replay their saved text, with a placeholder when the output is missing or empty.
+Legacy generated-image records retain their file identifiers and prompts.
+Usage-only storage can evict evidence earlier under its limits described below.
+`messages_for_model` still
+removes incomplete tool exchanges and unsigned thinking, so interrupted runs do
+not create invalid provider requests. PostgreSQL content remains intact for replay
+and citations; compaction and truncation change the working context, not those saved records.
 
 **Incognito.** A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings
@@ -201,11 +205,18 @@ from the owner. `USAGE_ONLY` (the default) writes rows with blank text and
 real token counts, sets only `response_status` on the answer, writes no
 response items, tool calls, sources, citations or checkpoints, and keeps the
 conversation in Redis through `chat/history_store.py:RedisChatHistoryStore`.
-That history is one linear list for the latest run, not a tree. A new message
-appends to what is stored. A regenerate cuts the list at the selected question
-and fails when that question has expired or was trimmed. The list keeps at
-most 200 messages and 1 MB: older sub-agent records go first, then the oldest
-messages, with no error; one response that cannot fit fails its save
+The database branch selects retained user messages and response output IDs from
+the temporary list. Saving a new input removes future turns and unselected model
+answers before appending its text-file messages and question. A small response
+index keeps run IDs, output IDs and each response’s checkpoint even when child-agent
+payloads are evicted. Continuation and regeneration use the selected parent’s
+checkpoint, never the last sibling saved. A failed save or eviction can leave a
+selected database response without temporary content. Replay omits that response
+and never substitutes a sibling. Image metadata keeps file references, not image bytes. Regeneration reuses the saved
+input group; it fails when the question has expired or was trimmed.
+The list keeps at most 200 messages and 1 MB: older sub-agent records go first,
+then complete oldest turns, including attachments, questions, and response/tool messages.
+An input or response that cannot fit with its complete current turn fails its save
 (`chat/incognito_context.py:_retained_state`). The answer save is two writes
 that are not atomic: the Postgres usage row commits first, then Redis. A
 teardown or lost admission between them leaves a final row, a
@@ -215,6 +226,11 @@ Incognito needs the Redis cache backend and is off on the Postgres one
 `end-incognito-session`, which marks uploads for deletion, drops the Redis
 context and deletes generated files. Deleting an incognito session runs the
 same teardown. A TTL and a server sweep clean up when the call never arrives.
+The stored-value format requires response ownership. Older unindexed values
+are ignored on read: new turns continue without that context, and old questions
+cannot be regenerated. Redis retains the value until a write replaces it, teardown
+deletes it, or its TTL expires. The key namespace stays stable so teardown fences
+survive upgrades.
 `chat/incognito_context.py:teardown_incognito_session` adds the session to a
 tenant pending set and writes the tombstone at once. Under the session lock it
 deletes the context, then deletes the buffered stream keys. When the lock is

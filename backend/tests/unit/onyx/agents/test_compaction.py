@@ -357,7 +357,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 
 
 @pytest.mark.parametrize("long_question", [False, True])
-def test_summary_cutoff_survives_request_context_removal(long_question: bool) -> None:
+def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     model = ContextModel()
     old_answer = ChatHistoryMessage(
         id=1,
@@ -384,22 +384,14 @@ def test_summary_cutoff_survives_request_context_removal(long_question: bool) ->
     source = convert_chat_history(
         [old_answer, question],
         files=[],
-        context_image_files=[],
-        additional_context="Temporary request detail. " * 160,
-        token_counter=len,
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
-    summary_input = "\n".join(request.messages[0].text for request in model.summaries)
-    assert "Temporary request detail" not in summary_input
 
     next_question = question.model_copy(update={"id": 3, "message": "Next question"})
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=len,
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -802,9 +794,6 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=count_tokens,
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
