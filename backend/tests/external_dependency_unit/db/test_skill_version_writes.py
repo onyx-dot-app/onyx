@@ -275,8 +275,9 @@ def test_failed_write_rolls_back(session: Session, user: User) -> None:
             session.rollback()
             raise RuntimeError("abort")
     assert session.scalar(select(Skill).where(Skill.name == name)) is None
-    with pytest.raises(FileNotFoundError):
-        store.get_file_size(ingested.bundle_file_id)
+    assert not store.has_file(
+        ingested.bundle_file_id, FileOrigin.SKILL_BUNDLE, "application/zip"
+    )
 
 
 def test_failed_replacement_preserves_pointer(session: Session, user: User) -> None:
