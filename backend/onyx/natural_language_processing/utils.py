@@ -258,7 +258,7 @@ def _resolve_tokenizer_for_model(
         if candidate in _MODEL_TOKENIZER_CACHE:
             return _MODEL_TOKENIZER_CACHE[candidate]
         try:
-            tokenizer = TiktokenTokenizer(candidate)
+            tokenizer: BaseTokenizer = TiktokenTokenizer(candidate)
             _MODEL_TOKENIZER_CACHE[candidate] = tokenizer
             return tokenizer
         except Exception as tiktoken_error:
@@ -272,7 +272,7 @@ def _resolve_tokenizer_for_model(
         if candidate in _MODEL_TOKENIZER_CACHE:
             return _MODEL_TOKENIZER_CACHE[candidate]
         try:
-            tokenizer = HuggingFaceTokenizer(candidate)
+            tokenizer: BaseTokenizer = HuggingFaceTokenizer(candidate)
             _MODEL_TOKENIZER_CACHE[candidate] = tokenizer
             return tokenizer
         except Exception as hf_error:
