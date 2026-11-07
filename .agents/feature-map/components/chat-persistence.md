@@ -227,8 +227,10 @@ Incognito needs the Redis cache backend and is off on the Postgres one
 context and deletes generated files. Deleting an incognito session runs the
 same teardown. A TTL and a server sweep clean up when the call never arrives.
 The stored-value format requires response ownership. Older unindexed values
-expire on read: new turns continue without that context, and old questions cannot
-be regenerated. The key namespace stays stable so teardown fences survive upgrades.
+are ignored on read: new turns continue without that context, and old questions
+cannot be regenerated. Redis retains the value until a write replaces it, teardown
+deletes it, or its TTL expires. The key namespace stays stable so teardown fences
+survive upgrades.
 `chat/incognito_context.py:teardown_incognito_session` adds the session to a
 tenant pending set and writes the tombstone at once. Under the session lock it
 deletes the context, then deletes the buffered stream keys. When the lock is
