@@ -182,19 +182,13 @@ class JiraServiceManagementConnector(JiraConnector):
         )
         self._service_desk_project_keys: list[str] | None = None
 
-    def _get_default_scope_clause(self) -> str:
-        """Returns the default JQL scope clause when neither ``project_key`` nor
-        ``jql_query`` is set.
-
-        Jira Cloud supports ``projectType = "service_desk"`` directly in JQL.
-        Jira Server / Data Center does not support the ``projectType`` JQL field,
-        so we resolve Service Desk project keys through the Projects REST API.
-        """
-        if self._source_operations is None or is_cloud_gateway(self.source_operations):
-            return _CLOUD_DEFAULT_JSM_SCOPE
-
+    def _resolve_service_desk_project_keys(self) -> list[str]:
         if self._service_desk_project_keys is None:
-            projects = self.source_operations.list_projects()
+            try:
+                projects = self.source_operations.list_projects()
+            except Exception as e:
+                self._handle_jira_connector_settings_error(e)
+                raise
             self._service_desk_project_keys = [
                 str(p["key"])
                 for p in projects
@@ -207,9 +201,31 @@ class JiraServiceManagementConnector(JiraConnector):
             raise ConnectorValidationError(
                 "No Jira Service Management (service_desk) projects found on this Jira instance."
             )
+        return self._service_desk_project_keys
 
-        quoted_keys = ", ".join(f'"{k}"' for k in self._service_desk_project_keys)
+    def _get_default_scope_clause(self) -> str:
+        """Returns the default JQL scope clause when neither ``project_key`` nor
+        ``jql_query`` is set.
+
+        Jira Cloud supports ``projectType = "service_desk"`` directly in JQL.
+        Jira Server / Data Center does not support the ``projectType`` JQL field,
+        so we resolve Service Desk project keys through the Projects REST API.
+        """
+        if self._source_operations is None or is_cloud_gateway(self.source_operations):
+            return _CLOUD_DEFAULT_JSM_SCOPE
+
+        quoted_keys = ", ".join(
+            f'"{k}"' for k in self._resolve_service_desk_project_keys()
+        )
         return f"project in ({quoted_keys})"
+
+    @override
+    def _fetch_issues_by_key(
+        self, issue_keys: list[str]
+    ) -> tuple[list[JiraIssue], dict[str, Exception]]:
+        if not self.jira_project and not self.jql_query:
+            self._get_default_scope_clause()
+        return super()._fetch_issues_by_key(issue_keys)
 
     @override
     def _get_jql_query(
@@ -303,24 +319,13 @@ class JiraServiceManagementConnector(JiraConnector):
                     f"expected '{SERVICE_DESK_PROJECT_TYPE}' for Jira Service Management."
                 )
         else:
-            try:
-                projects = self.source_operations.list_projects()
-            except Exception as e:
-                self._handle_jira_connector_settings_error(e)
-                return
-
-            if not is_cloud_gateway(self.source_operations):
-                sd_keys = [
-                    str(p["key"])
-                    for p in projects
-                    if isinstance(p, dict)
-                    and p.get("key")
-                    and p.get("projectTypeKey") in (None, SERVICE_DESK_PROJECT_TYPE)
-                ]
-                if not sd_keys:
-                    raise ConnectorValidationError(
-                        "No Jira Service Management (service_desk) projects found on this Jira instance."
-                    )
+            if is_cloud_gateway(self.source_operations):
+                try:
+                    self.source_operations.list_projects()
+                except Exception as e:
+                    self._handle_jira_connector_settings_error(e)
+            else:
+                self._resolve_service_desk_project_keys()
 
 
 if __name__ == "__main__":
