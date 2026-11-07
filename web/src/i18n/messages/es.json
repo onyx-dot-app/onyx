@@ -17499,6 +17499,7 @@
       "disable": "Desactivar para mí",
       "delete": "Eliminar",
       "selectSkill": "Seleccionar {name}",
+      "moreActionsForSkill": "Más acciones para {name}",
       "updated": "{count, plural, one {# habilidad actualizada} other {# habilidades actualizadas}}",
       "failed": "No se pudieron actualizar las habilidades. Inténtalo de nuevo.",
       "partialFailure": "{count, plural, one {No se pudo actualizar # habilidad} other {No se pudieron actualizar # habilidades}}",

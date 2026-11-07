@@ -144,8 +144,8 @@ function SkillActions({
               size="md"
               prominence="tertiary"
               icon={SvgMoreHorizontal}
-              aria-label={t("bulk.moreActions")}
-              tooltip={t("bulk.moreActions")}
+              aria-label={t("bulk.moreActionsForSkill", { name: item.name })}
+              tooltip={t("bulk.moreActionsForSkill", { name: item.name })}
               disabled={enablementPending}
             />
           </Dropdown.Trigger>
@@ -193,7 +193,7 @@ export default function SkillsTable({
         kind: "display",
         id: "skill",
         title: t("page.header.title"),
-        width: { weight: 48, minWidth: 160 },
+        width: { weight: 48, minWidth: isMobile ? 96 : 160 },
         hideable: false,
         cell: (props) => <SkillName {...props} />,
       },
@@ -221,13 +221,7 @@ export default function SkillsTable({
                     : "skill.tags.shared.label"
               )}
             />
-            <Section
-              height="auto"
-              gap={0}
-              alignItems="stretch"
-              width={0}
-              className="min-w-full"
-            >
+            {skill.group_shares.length > 0 && (
               <Text
                 font="secondary-body"
                 color="text-03"
@@ -235,15 +229,9 @@ export default function SkillsTable({
                 maxLines={1}
                 overflowTooltip
               >
-                {skill.group_shares.length > 0
-                  ? skill.group_shares
-                      .map((share) => share.group_name)
-                      .join(", ")
-                  : (skill.owner?.email ??
-                    skill.author_email ??
-                    t("modals.share.noOwnerTitle"))}
+                {skill.group_shares.map((share) => share.group_name).join(", ")}
               </Text>
-            </Section>
+            )}
           </Section>
         ),
       },
@@ -273,14 +261,14 @@ export default function SkillsTable({
       {
         kind: "display",
         id: "actions",
-        title: t("bulk.moreActions"),
-        width: { fixed: 88 },
+        title: t("bulk.enable"),
+        width: { fixed: 104 },
         hideable: false,
         alignment: "right",
         cell: (props) => <SkillActions {...props} />,
       },
     ],
-    [t, cards]
+    [t, cards, isMobile]
   );
   const visibleColumns = useMemo(
     () =>

@@ -38,7 +38,8 @@
   Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal. The table shows
-  groups when supplied, else the owner. The list currently omits share details.
+  groups only when supplied. Owner identity is not an access grant. The list
+  currently omits share details. The Enable for me column controls personal use.
   Narrow tables keep names and actions; sharing settings stay in the dialog.
   The table keeps page ordering and all filtered rows without pagination.
   `web/src/lib/skills/hooks.ts` is shared by cards and rows for permission, dependency,

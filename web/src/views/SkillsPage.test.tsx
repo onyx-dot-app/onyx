@@ -300,6 +300,23 @@ describe("SkillsPage preference toggles", () => {
     ).toBeInTheDocument();
   });
 
+  it("labels personal enablement and does not present the owner as an access grant", () => {
+    skillsData.customs = [
+      { ...customSkill("first", "first-skill"), user_permission: "OWNER" },
+    ];
+    render(<SkillsPage admin />);
+    expect(
+      screen.getByRole("columnheader", { name: "Enable for me" })
+    ).toBeVisible();
+    const row = screen.getByRole("row", { name: "first-skill" });
+    expect(
+      within(row).queryByText("owner@example.com")
+    ).not.toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: "More actions for first-skill" })
+    ).toBeVisible();
+  });
+
   it("opens an admin row with the keyboard and keeps selection separate from preview", async () => {
     render(<SkillsPage admin />);
     const user = setupUser();
@@ -364,7 +381,11 @@ describe("SkillsPage preference toggles", () => {
       "aria-disabled",
       "true"
     );
-    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    await user.click(
+      within(row).getByRole("button", {
+        name: "More actions for invalid-skill",
+      })
+    );
     expect(screen.getByRole("menuitem", { name: "Edit skill" })).toBeVisible();
     await user.click(screen.getByRole("menuitem", { name: "Delete skill" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("invalid-skill");
@@ -460,7 +481,7 @@ describe("SkillsPage preference toggles", () => {
       await user.click(
         within(browseRow).getByRole("button", { name: "More actions" })
       );
-      await user.click(screen.getByText("Enable for me", { exact: true }));
+      await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
       await waitFor(() =>
         expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
           action: "enable",
@@ -524,7 +545,7 @@ describe("SkillsPage preference toggles", () => {
         })
       );
       await user.click(screen.getByRole("button", { name: "More actions" }));
-      await user.click(screen.getByText("Enable for me", { exact: true }));
+      await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
       await waitFor(() =>
         expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
           action: "enable",
