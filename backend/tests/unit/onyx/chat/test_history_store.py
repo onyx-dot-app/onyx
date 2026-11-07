@@ -28,7 +28,6 @@ from onyx.chat.models import (
     IncognitoState,
 )
 from onyx.chat.presentation import project_response
-from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -304,9 +303,7 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
-def test_incognito_regeneration_uses_selected_question_and_prompt_only_tool_policy() -> (
-    None
-):
+def test_incognito_regeneration_preserves_results_before_selected_question() -> None:
     store = RedisChatHistoryStore(
         message_id=17, chat_session_id=uuid4(), visible_message_ids=()
     )
@@ -328,7 +325,6 @@ def test_incognito_regeneration_uses_selected_question_and_prompt_only_tool_poli
     assert messages[-1] is question
     assert answer not in messages
     assert previous is None
-    assert prompt_metadata(messages[0]).omit_tool_result_content
-    assert not prompt_metadata(messages[1]).omit_tool_result_content
+    assert messages[:2] == [search, image]
     assert search.metadata is None
     assert cached.messages[-1] is answer

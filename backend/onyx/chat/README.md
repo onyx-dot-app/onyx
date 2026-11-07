@@ -85,16 +85,11 @@ If a search related tool is called at any point during the turn, the reminder wi
 
 ## Tool Calls
 
-As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are current replaced with a hardcoded
-string saying it is no longer available. Tool Call details like the search query and other arguments are kept in the history as this is information
-rich and generally very few tokens.
-
+Tool-call arguments and full results stay in chronological history across user turns. This preserves evidence for follow-up
+questions and avoids rewriting a cached prefix. The original results remain available until the runtime compacts or truncates
+history to meet the context budget. Legacy records use a placeholder only when no saved result is available.
 > Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
 > The tool-call arguments keep only the queries the LLM provided, and so does the model's history. The expanded queries are saved in the tool result (`SearchDocsResponse.queries`) and reach the client in `SearchToolQueriesDelta` packets, also on replay.
-
-**Possible Future Extension**:
-Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
-this is questionable value add because anything relevant and useful should be already captured in the Agent response.
 
 ## Examples
 

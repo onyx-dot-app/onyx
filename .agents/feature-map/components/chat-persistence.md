@@ -187,14 +187,12 @@ falls back to `ChatMessage.error` on legacy rows
 (`db/chat.py:translate_db_message_to_chat_message_detail`); a change to the
 failure shape must keep old rows readable.
 
-**History for the next turn.** A later turn does not see earlier tool output.
-`chat/chat_utils.py:omit_prior_tool_result_content` marks saved runtime tool
-results, and `chat/prompt_utils.py:prepare_prompt` replaces their content with
-`TOOL_CALL_RESPONSE_CROSS_MESSAGE`. Legacy rows get the same placeholder from
-`chat/chat_utils.py:_build_tool_call_response_history_message`. Image
-generation is the exception in both: its output stays. The incognito store
-applies the same rule. Within one turn the run keeps the full tool output. The
-stored content stays intact for replay and citations.
+**History for the next turn.** Later turns retain saved tool output in both
+PostgreSQL and temporary history. Legacy image-generation rows replay stored file
+IDs and revised prompts when available. Other legacy results use their saved
+response; missing or empty output uses a placeholder. Compaction can summarize older results;
+emergency truncation can remove them from the model's working context. Saved
+PostgreSQL evidence remains intact for replay and citations.
 
 **Incognito.** A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings

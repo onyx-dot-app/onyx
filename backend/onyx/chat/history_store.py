@@ -10,7 +10,6 @@ from uuid import UUID
 
 from onyx.agents.models import AgentInfo
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
-from onyx.chat.chat_utils import omit_prior_tool_result_content
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.incognito_context import (
     load_incognito_agent_history,
@@ -168,16 +167,14 @@ class RedisChatHistoryStore(ChatHistoryStore):
         ):
             current_user = messages[-1].model_copy(update={"content": accepted_text})
             return (
-                omit_prior_tool_result_content(stored.messages) + [current_user],
+                stored.messages + [current_user],
                 stored.previous_run_id,
             )
         selected_id = f"chat:{self.message_id}"
         for index, message in enumerate(stored.messages):
             if isinstance(message, UserMessage) and message.id == selected_id:
                 # The cache tracks only the latest run, which regeneration replaces.
-                return omit_prior_tool_result_content(
-                    stored.messages[: index + 1]
-                ), None
+                return stored.messages[: index + 1], None
         raise ValueError("The selected question is no longer in temporary chat history")
 
     def save_user_message(self, message: UserMessage) -> None:

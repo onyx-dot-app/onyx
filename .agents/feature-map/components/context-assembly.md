@@ -115,11 +115,10 @@ the messages it receives and never changes recorded history. Within one step it
 replaces a search passage that repeats an earlier result's passage (same
 document and text) with a pointer to that result
 (`chat/prompt_utils.py:_deduplicate_search_passages`), so a change to the
-search result JSON must keep that parse working. On a later turn, saved tool results carry
-`omit_tool_result_content` (`chat/chat_utils.py:omit_prior_tool_result_content`),
-and `prepare_prompt` sends `TOOL_CALL_RESPONSE_CROSS_MESSAGE` in their place.
-Image generation results stay visible. `backend/onyx/chat/README.md` has worked
-examples of how the agent prompt and project files move from turn to turn.
+search result JSON must keep that parse working. Later turns retain saved tool-result
+content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
+Compaction controls history growth; starting a new user turn does not rewrite
+previous evidence. `backend/onyx/chat/README.md` has worked examples of prompt assembly.
 
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the
 `{{CURRENT_DATETIME}}`, `{{CITATION_GUIDANCE}}` and `{{REMINDER_TAG_DESCRIPTION}}`
@@ -180,8 +179,8 @@ content, `db/chat_response.py` saves a changed summary as a `SUMMARY` row whose
 parent is the response where compaction ran. The next turn loads the summary of
 the nearest ancestor on its branch (`db/chat.py:find_summary_for_branch`), so a
 sibling answer or a branch that forks earlier does not see it. A truncation
-fallback sends no summary and saves none, so the next turn starts again from
-the last saved summary. A content-free incognito session saves no summary row
+fallback saves an empty summary with its cutoff, so the next turn does not
+restore discarded history. A content-free incognito session saves no summary row
 and keeps no root checkpoint, so each of its turns above the trigger summarizes
 the stored history again. `chat/COMPRESSION.md` describes the stored form.
 
