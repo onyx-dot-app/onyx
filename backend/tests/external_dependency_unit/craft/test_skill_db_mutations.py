@@ -29,12 +29,12 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.models import BundleMetadata
+from onyx.skills.ingest import IngestedBundle
 from tests.common.craft.skill_table_isolation import (
     restore_skill_tables,
     snapshot_skill_tables,
 )
-from onyx.file_store.models import BundleMetadata
-from onyx.skills.ingest import IngestedBundle
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_built_in_skill_row,
