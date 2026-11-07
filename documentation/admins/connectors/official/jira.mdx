@@ -286,3 +286,18 @@ Review these limitations before you enable permission sync:
 - Assignee
 - Assignee Email
 ```
+
+## Jira Service Management
+
+Use the **Jira Service Management** connector in **Admin Panel → Connectors** to index requests from a single Jira Service Management (`service_desk`) project.
+
+- **Authentication**: Reuses the same Jira Cloud API token (`read:jira-work` scope) or Jira Data Center personal access token described above.
+- **Configuration**: Enter your Jira **Site URL** and the target service desk **Service Project Key** (for example, `SUP`). The connector validates that the project has `projectTypeKey == "service_desk"`.
+- **Internal comment filtering**: Indexes only comments that Jira explicitly marks as customer-visible. Internal agent-only notes (`jsdPublic: false`) and comments with unknown visibility are not indexed.
+- **Service desk metadata**: Indexes standard Jira metadata plus `request_type`, `request_status`, SLA cycle state (`sla_<name>`), and `sla_breached`.
+
+<Warning>
+  Both the **Jira** and **Jira Service Management** connectors use the canonical issue URL (`<site-url>/browse/<KEY>`) as the document ID.
+  Do not index the same service desk project with both a **Jira** connector (such as **Everything** mode or an overlapping **Project** / **JQL Query**) and a **Jira Service Management** connector.
+  If a general **Jira** connector indexes the same service project, unchanged-issue skips or subsequent Jira syncs can retain or overwrite the shared document with unfiltered internal notes.
+</Warning>
