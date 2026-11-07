@@ -68,6 +68,10 @@ class TestParseGithubSource:
     @pytest.mark.parametrize(
         "source",
         [
+            "./skills",
+            "../skills",
+            "acme/.",
+            "acme/..",
             "http://github.com/onyx-dot-app/onyx",
             "git@github.com:onyx-dot-app/onyx",
             "https://gitlab.com/onyx-dot-app/onyx",

@@ -74,6 +74,10 @@ def test_missing_login_stops_before_fetch() -> None:
     "field,value",
     [
         ("owner", "x/y"),
+        ("owner", "."),
+        ("owner", ".."),
+        ("repo", "."),
+        ("repo", ".."),
         ("repo", ""),
         ("folder", "../x"),
         ("folder", "/x"),

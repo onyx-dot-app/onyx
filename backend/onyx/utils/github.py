@@ -95,7 +95,8 @@ def parse_github_source(
                 )
 
     if not all(
-        _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part) for part in (owner, repo)
+        part not in {".", ".."} and _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part)
+        for part in (owner, repo)
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

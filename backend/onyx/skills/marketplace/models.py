@@ -17,6 +17,13 @@ class GitHubMarketplaceConfig(BaseModel):
     folder: str | None = None
     ref: str = Field(min_length=1)
 
+    @field_validator("owner", "repo")
+    @classmethod
+    def validate_repository_component(cls, value: str) -> str:
+        if value in {".", ".."}:
+            raise ValueError("Use a repository name without dot segments.")
+        return value
+
     @field_validator("folder")
     @classmethod
     def validate_folder(cls, value: str | None) -> str | None:

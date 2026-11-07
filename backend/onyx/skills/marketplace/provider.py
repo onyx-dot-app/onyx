@@ -50,7 +50,7 @@ class GitHubMarketplaceAdapter(MarketplaceProviderAdapter):
     def fetch_if_changed(self) -> MarketplaceArchive | None:
         authorization = self._authorization()
         source = self._source()
-        # Even a pinned SHA must exist in the repository; do not use the SHA shortcut.
+        # Resolve pinned SHAs through GitHub too; do not use the SHA shortcut.
         revision = resolve_github_revision(source, authorization).revision
         if revision == self.marketplace.last_synced_revision:
             return None
