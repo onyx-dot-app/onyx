@@ -6,6 +6,7 @@ import re
 import tarfile
 import zipfile
 import zlib
+from dataclasses import dataclass
 
 from pydantic import JsonValue
 
@@ -31,6 +32,22 @@ from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
 from onyx.utils.bundle import compute_bundle_metadata
 
 BUNDLE_CACHE_MAX_BYTES = 256 * 1024 * 1024
+PLUGIN_MAX_COUNT = 500
+DECLARED_PATH_MAX_COUNT = 500
+
+
+@dataclass
+class _DiscoveryBudget:
+    remaining: int
+
+    def consume(self, count: int) -> None:
+        self.remaining -= count
+        if self.remaining < 0:
+            raise ArchiveLimitError(
+                f"Marketplace exceeds {DECLARED_PATH_MAX_COUNT} declared skill paths"
+            )
+
+
 _MANIFESTS = (".claude-plugin/marketplace.json", ".agents/plugins/marketplace.json")
 _PLUGIN_MANIFESTS = (
     ".claude-plugin/plugin.json",
@@ -181,10 +198,13 @@ def _has_components(
     return mixed
 
 
-def _declared_skills(files: ArchiveFiles, root: str, declared: JsonValue) -> list[str]:
+def _declared_skills(
+    files: ArchiveFiles, root: str, declared: JsonValue, budget: _DiscoveryBudget
+) -> list[str]:
     paths = [declared] if isinstance(declared, str) else declared
     if not isinstance(paths, list):
         raise ValueError(f"Invalid skills list: {root}")
+    budget.consume(len(paths))
     skill_paths: list[str] = []
     for path in paths:
         if not isinstance(path, str):
@@ -195,8 +215,9 @@ def _declared_skills(files: ArchiveFiles, root: str, declared: JsonValue) -> lis
             continue
         require_regular_path(files, target)
         children = _children(files, target)
-        is_container = _join(target, SKILL_MD_NAME) not in files and any(
-            _join(child, SKILL_MD_NAME) in files for child in children
+        is_container = _join(target, SKILL_MD_NAME) not in files and (
+            target == _join(root, "skills")
+            or any(_join(child, SKILL_MD_NAME) in files for child in children)
         )
         skill_paths.extend(children if is_container else [target])
     if len(skill_paths) != len(set(skill_paths)):
@@ -210,6 +231,7 @@ def _plugin_skills(
     name: str,
     plugin: dict[str, JsonValue],
     plugin_root: str,
+    budget: _DiscoveryBudget,
 ) -> list[str] | UnsupportedPlugin:
     source = plugin.get("source")
     if isinstance(source, dict):
@@ -255,12 +277,12 @@ def _plugin_skills(
     target = _join(root, "skills")
     skill_paths = []
     if "skills" in plugin:
-        skill_paths = _declared_skills(files, root, plugin["skills"])
+        skill_paths = _declared_skills(files, root, plugin["skills"], budget)
     elif "skills" not in config or config_path == ".claude-plugin/plugin.json":
         require_regular_path(files, target)
         skill_paths = _children(files, target)
     if "skills" in config:
-        skill_paths.extend(_declared_skills(files, root, config["skills"]))
+        skill_paths.extend(_declared_skills(files, root, config["skills"], budget))
     elif (
         "skills" not in plugin
         and root
@@ -279,6 +301,29 @@ def _plugin_root(manifest: dict[str, JsonValue]) -> str:
     if not isinstance(plugin_root, str):
         raise ValueError("Invalid metadata.pluginRoot")
     return archive_path(plugin_root)
+
+
+def _plugins(manifest: dict[str, JsonValue]) -> list[tuple[str, dict[str, JsonValue]]]:
+    plugins = manifest.get("plugins")
+    if not isinstance(plugins, list):
+        raise ValueError("Marketplace plugins must be an array")
+    if len(plugins) > PLUGIN_MAX_COUNT:
+        raise ArchiveLimitError(f"Marketplace exceeds {PLUGIN_MAX_COUNT} plugins")
+    entries: list[tuple[str, dict[str, JsonValue]]] = []
+    names: set[str] = set()
+    for plugin in plugins:
+        if not isinstance(plugin, dict):
+            raise ValueError("Plugin entry must be an object")
+        name = plugin.get("name")
+        if not isinstance(name, str) or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]*", name
+        ):
+            raise ValueError("Invalid plugin name")
+        if name in names:
+            raise ValueError(f"Duplicate plugin identity: {name}")
+        names.add(name)
+        entries.append((name, plugin))
+    return entries
 
 
 def read_marketplace_archive(
@@ -309,26 +354,16 @@ def read_marketplace_archive(
             plugin_root = _plugin_root(manifest)
             if not isinstance(manifest.get("name"), str) or not manifest["name"]:
                 raise ValueError("Marketplace name is missing")
-            plugins = manifest.get("plugins")
-            if not isinstance(plugins, list):
-                raise ValueError("Marketplace plugins must be an array")
+            plugins = _plugins(manifest)
+            budget = _DiscoveryBudget(DECLARED_PATH_MAX_COUNT)
             entries: list[ReadySkill | BlockedSkill | UnsupportedPlugin] = []
-            plugin_names: set[str] = set()
             skill_keys: set[str] = set()
             cache: dict[str, ReadySkill | BlockedSkill] = {}
             bundle_bytes = 0
-            for plugin in plugins:
-                if not isinstance(plugin, dict):
-                    raise ValueError("Plugin entry must be an object")
-                name = plugin.get("name")
-                if not isinstance(name, str) or not re.fullmatch(
-                    r"[A-Za-z0-9][A-Za-z0-9._-]*", name
-                ):
-                    raise ValueError("Invalid plugin name")
-                if name in plugin_names:
-                    raise ValueError(f"Duplicate plugin identity: {name}")
-                plugin_names.add(name)
-                skill_paths = _plugin_skills(files, folder, name, plugin, plugin_root)
+            for name, plugin in plugins:
+                skill_paths = _plugin_skills(
+                    files, folder, name, plugin, plugin_root, budget
+                )
                 if isinstance(skill_paths, UnsupportedPlugin):
                     entries.append(skill_paths)
                     continue

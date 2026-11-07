@@ -688,3 +688,68 @@ def test_explicit_special_skill_path_stays_blocked() -> None:
     assert len(result.entries) == 1
     assert isinstance(result.entries[0], BlockedSkill)
     assert result.entries[0].entry_key == "tools/hello"
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("declaration", ["entry", "claude", "codex"])
+@pytest.mark.parametrize("names", [["one"], ["one", "two"]])
+def test_declared_default_container_keeps_broken_child_keys(
+    kind: str, declaration: str, names: list[str]
+) -> None:
+    files = {CLAUDE: _catalog()}
+    if declaration == "entry":
+        files[CLAUDE] = _catalog(skills="./skills/")
+    else:
+        files[f".{declaration}-plugin/plugin.json"] = b'{"skills":"./skills/"}'
+    for name in names:
+        files[f"skills/{name}/scripts/run.py"] = b"pass"
+    entries = _entries(files, kind)
+    assert {entry.entry_key for entry in entries} == {f"tools/{name}" for name in names}
+    assert all(isinstance(entry, BlockedSkill) for entry in entries)
+
+
+def test_plugin_count_rejected_before_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reader, "PLUGIN_MAX_COUNT", 2)
+    files = _files()
+    files[CLAUDE] = json.dumps(
+        {"name": "m", "plugins": [{"name": str(i), "source": "./"} for i in range(3)]}
+    ).encode()
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "plugins" in result.reason
+
+
+@pytest.mark.parametrize("source", ["entry", "claude", "codex"])
+def test_declared_path_limit_applies_before_expansion(
+    source: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 2)
+    paths = ["./missing"] * 3
+    files = _files(skills=paths) if source == "entry" else _files()
+    if source != "entry":
+        files[f".{source}-plugin/plugin.json"] = json.dumps({"skills": paths}).encode()
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "declared skill paths" in result.reason
+
+
+def test_declared_path_budget_shared_across_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 2)
+    files = _files()
+    files[CLAUDE] = json.dumps(
+        {
+            "name": "m",
+            "plugins": [
+                {"name": str(i), "source": "./", "skills": "./skills"} for i in range(2)
+            ],
+        }
+    ).encode()
+    assert len(_entries(files)) == 2
+    files[".codex-plugin/plugin.json"] = b'{"skills":"./skills"}'
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "declared skill paths" in result.reason

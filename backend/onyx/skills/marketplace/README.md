@@ -39,6 +39,9 @@ The archive reader also has independent processing safeguards:
   of each key and value. This is a conservative estimate, not exact memory use.
   Global headers count for every copy, including GitHub commit headers.
   Path limits apply before unbounded prefix allocation.
+- A read accepts at most 500 plugin entries and 500 declared skill paths across
+  all entries and plugin manifests. These counts are checked before discovery
+  or path expansion. Repeated declarations consume the same budget.
 
 The 1 GiB ceiling permits ten full 100 MiB skills plus tar overhead.
 It bounds temporary disk and decompression work for highly compressed inputs.
@@ -70,8 +73,10 @@ skill folder or a container of direct child skill folders. This deliberately
 differs from Claude's additive default. Invalid skills remain blocked entries.
 Mixed-component and remote plugins remain unsupported entries.
 
-A declared path becomes a container only when a direct child has `SKILL.md`.
-Otherwise it retains its own key, even when its definition is missing.
+The default `skills/` path remains a container when all child definitions are
+missing. Its declared and implicit forms preserve the same child keys.
+Other declared paths become containers when a direct child has `SKILL.md`.
+Otherwise they retain their own key, even when their definition is missing.
 Plugin manifest `skills` paths also load. Claude paths add to default discovery;
 Codex compatibility paths replace it. Entry paths suppress defaults but retain
 manifest paths. When both compatibility manifests exist, Claude takes precedence.
