@@ -284,7 +284,10 @@ def skill_version_repair_batch(
 
 def repair_skill_version_metadata(
     skill: Skill, db_session: Session, file_store: FileStore
-) -> None:
+) -> list[str]:
     repair_skill_version(skill, db_session)
-    for version in db_session.scalars(SkillVersionAdapter(skill).versions()):
+    adapter = SkillVersionAdapter(skill)
+    stale_file_ids = prune_resource_bundles(adapter, db_session)
+    for version in db_session.scalars(adapter.versions()):
         repair_version_metadata(version, file_store)
+    return stale_file_ids

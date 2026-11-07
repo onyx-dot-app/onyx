@@ -1145,9 +1145,10 @@ def test_failed_repair_commit_does_not_advance(
 
     def invalid_pointer(
         skill: Skill, db_session: Session, file_store: FileStore
-    ) -> None:
-        repair(skill, db_session, file_store)
+    ) -> list[str]:
+        stale_file_ids = repair(skill, db_session, file_store)
         skill.current_version_id = uuid4()
+        return stale_file_ids
 
     with monkeypatch.context() as patch:
         patch.setattr(repair_tasks, "repair_skill_version_metadata", invalid_pointer)
@@ -1160,3 +1161,79 @@ def test_failed_repair_commit_does_not_advance(
         get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
     repair_skill_versions.run(tenant_id=tenant)
     assert len(versions(skill, session)) == 1
+
+
+@pytest.mark.parametrize("completed", [False, True])
+def test_background_repair_prunes_old_writer_history(
+    tenant: str, session: Session, user: User, completed: bool
+) -> None:
+    skill = skill_with_versions(session, user, 10)
+    if completed:
+        get_kv_store().store(PROGRESS_KEY, "completed")
+    for number in range(11, 14):
+        with ingested_skill_bundle(
+            bundle(skill.name, f"Old writer {number}"),
+            "skill.zip",
+            get_default_file_store(),
+        ) as ingested:
+            skill.bundle_file_id = ingested.bundle_file_id
+            skill.bundle_sha256 = ingested.bundle_sha256
+            session.commit()
+        repair_skill_versions.run(tenant_id=tenant)
+        session.expire_all()
+        history = versions(skill, session)
+        assert len(history) == number
+        assert all(version.bundle_file_id for version in history[:10])
+        assert all(version.bundle_file_id is None for version in history[10:])
+        assert stored_bundles(session) == {v.bundle_file_id for v in history[:10]}
+        if not completed:
+            repair_skill_versions.run(tenant_id=tenant)
+
+
+def test_lite_poller_repairs_skill_metadata(session: Session, user: User) -> None:
+    from onyx.background.periodic_poller import _build_periodic_tasks
+
+    skill = legacy_skill(session, user, 1)
+    tasks = _build_periodic_tasks()
+    assert len({task.lock_id for task in tasks}) == len(tasks)
+    task = next(task for task in tasks if task.name == "skill-version-repair")
+    assert task.interval_seconds == 300
+    task.run_fn()
+    session.refresh(skill)
+    assert skill.current_version_id is not None
+    assert versions(skill, session)[0].content_digest is not None
+
+
+def test_failed_repair_commit_keeps_pruned_files(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = skill_with_versions(session, user, 10)
+    with ingested_skill_bundle(
+        bundle(skill.name, "Old writer"), "skill.zip", get_default_file_store()
+    ) as ingested:
+        skill.bundle_file_id = ingested.bundle_file_id
+        skill.bundle_sha256 = ingested.bundle_sha256
+        session.commit()
+    before = stored_bundles(session)
+    repair = repair_tasks.repair_skill_version_metadata
+
+    def fail_commit(
+        skill: Skill, db_session: Session, file_store: FileStore
+    ) -> list[str]:
+        stale_files = repair(skill, db_session, file_store)
+        assert len(stale_files) == 1
+        skill.current_version_id = uuid4()
+        return stale_files
+
+    with monkeypatch.context() as patch:
+        patch.setattr(repair_tasks, "repair_skill_version_metadata", fail_commit)
+        with pytest.raises(IntegrityError):
+            repair_skill_versions.run(tenant_id=tenant)
+    assert stored_bundles(session) == before
+    history = list(session.scalars(SkillVersionAdapter(skill).versions()))
+    assert len(history) == 10
+    assert all(v.bundle_file_id for v in history)
+    with pytest.raises(KvKeyNotFoundError):
+        get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert len(stored_bundles(session)) == 10

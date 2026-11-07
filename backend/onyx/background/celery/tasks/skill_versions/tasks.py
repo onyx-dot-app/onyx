@@ -9,6 +9,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.skill_version import (
+    delete_unreferenced_skill_bundles,
     repair_skill_version_metadata,
     skill_version_repair_batch,
 )
@@ -51,10 +52,14 @@ def repair_skill_versions(*, tenant_id: str) -> None:
                     if monotonic() >= deadline:
                         return
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
-                    repair_skill_version_metadata(skill, session, file_store)
+                    stale_file_ids = repair_skill_version_metadata(
+                        skill, session, file_store
+                    )
                     cursor = skill.id
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
                     session.commit()
+                    lock.extend(_LOCK_TIMEOUT_SECONDS)
+                    delete_unreferenced_skill_bundles(stale_file_ids, session)
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
                     if not completed:
                         store.store(PROGRESS_KEY, str(cursor))
