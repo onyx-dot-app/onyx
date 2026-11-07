@@ -189,8 +189,9 @@ failure shape must keep old rows readable.
 
 **History for the next turn.** Later turns retain saved tool output in both
 PostgreSQL and temporary history. Legacy tool rows use their saved response;
-missing or empty output uses a placeholder. Compaction controls history growth
-instead of replacing earlier evidence at each new turn.
+missing or empty output uses a placeholder. Compaction can summarize older results;
+emergency truncation can remove them from the model's working context. Saved
+PostgreSQL evidence remains intact for replay and citations.
 
 **Incognito.** A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings

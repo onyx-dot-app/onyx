@@ -116,7 +116,7 @@ replaces a search passage that repeats an earlier result's passage (same
 document and text) with a pointer to that result
 (`chat/prompt_utils.py:_deduplicate_search_passages`), so a change to the
 search result JSON must keep that parse working. Later turns retain saved tool-result
-content. A placeholder is used when a legacy record has missing or empty output.
+content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
 Compaction controls history growth; starting a new user turn does not rewrite
 previous evidence. `backend/onyx/chat/README.md` has worked examples of prompt assembly.
 
