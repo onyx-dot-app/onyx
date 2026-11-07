@@ -13,7 +13,6 @@ from pydantic import (
     TypeAdapter,
     field_serializer,
     field_validator,
-    model_validator,
 )
 
 from onyx.agents.models import (
@@ -615,15 +614,6 @@ class ChatFeatureState(BaseModel):
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
     search_context: SearchContext
-
-    @model_validator(mode="before")
-    @classmethod
-    def reject_forced_action_restore(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("forced_tool_id") is not None:
-            raise ValueError(
-                "A run with forced_tool_id cannot resume after forced Actions were removed"
-            )
-        return data
 
 
 class ReservedChatResponse(BaseModel):

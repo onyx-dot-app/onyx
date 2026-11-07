@@ -91,7 +91,7 @@ process_slack_event                                  per event
       handle_standard_answers -> True: stop
       handle_regular_answer                          handlers/handle_regular_answer.py
         persona access check, check_token_rate_limits
-        handle_stream_message_objects + gather_stream   in-process, origin SLACKBOT
+        handle_stream_message_objects + gather_stream_full   in-process, origin SLACKBOT
         build_slack_response_blocks, respond_in_thread_or_channel
 ```
 
@@ -120,7 +120,8 @@ when the persona's document sets link a Slack federated connector
 (`tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data`).
 The turn prefers search when the persona has an enabled search tool and
 `SearchTool.is_available` is true. Retrieval remains optional; the preference
-does not guarantee a grounded answer.
+does not guarantee a grounded answer. The empty-channel-search notice replaces
+an answer only when recorded tool calls include search and no sources were returned.
 
 **Channel-only agents.** When an admin picks document sets instead of an agent,
 `db/slack_channel_config.py:create_slack_channel_persona` creates a public
@@ -210,7 +211,7 @@ prefix. Deleting the channel config marks that persona deleted.
 12. `answer-retry-reruns-turn` **Each retry is a new chat turn in a new
     session.** `_get_slack_answer` in `handle_regular_answer` retries on any
     exception, up to `ONYX_BOT_NUM_RETRIES` (5) times. It raises whenever
-    `gather_stream` returns an `error_msg`, that is, for any root
+    `gather_stream_full` returns an `error_msg`, that is, for any root
     `StreamingError`. Every attempt sends `chat_session_info`, so the prepare
     step creates a new `ChatSession` and runs the LLM and tools again. A
     `RESPONSE_SAVE_ERROR` after a complete answer

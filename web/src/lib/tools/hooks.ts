@@ -1,5 +1,6 @@
 "use client";
 
+import { randomUuid } from "@/lib/uuid";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -480,7 +481,7 @@ export function useToolConfiguration(
       change: (current: ToolState | null) => ToolState | null
     ) => {
       if (key === null) return;
-      const preferenceRevision = crypto.randomUUID();
+      const preferenceRevision = randomUuid();
       setEntry((previous) => {
         // Between a key change and its storage read, a write would land on
         // NEUTRAL and then be clobbered by the read. `ready` documents that
@@ -550,14 +551,14 @@ export function useToolConfiguration(
       };
       writeConfiguration(targetKey, consume(readConfiguration(targetKey)));
       setEntry((previous) => {
-        if (previous.key !== targetKey) return previous;
+        if (previous.key !== targetKey && previous.key !== key) return previous;
         const next = consume(previous.configuration);
         return next === previous.configuration
           ? previous
           : { ...previous, configuration: next };
       });
     },
-    [configuration.preferenceRevision]
+    [configuration.preferenceRevision, key]
   );
 
   const handOffToNewChatWith = useCallback(

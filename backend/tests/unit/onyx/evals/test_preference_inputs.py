@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 import pytest
 
-from onyx.evals.models import EvalConfigurationOptions, EvalProvider, EvalToolResult
+from onyx.evals.models import (
+    EvalConfigurationOptions,
+    EvalProvider,
+    EvalToolResult,
+    MultiTurnEvalResult,
+)
 from onyx.evals.providers.braintrust import BraintrustEvalProvider
 from onyx.evals.providers.local import LocalEvalProvider
 
@@ -50,13 +55,21 @@ def test_dataset_preference_reaches_task(
 
 
 @pytest.mark.parametrize("provider", [LocalEvalProvider, BraintrustEvalProvider])
-@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("location", ["outer", "input", "message"])
+@pytest.mark.parametrize("multi_turn", [False, True])
 def test_dataset_legacy_forcing_is_rejected_before_task(
-    provider: type[EvalProvider], nested: bool
+    provider: type[EvalProvider], location: str, multi_turn: bool
 ) -> None:
     input_value: dict[str, Any] = {"message": "Question"}
     data: dict[str, Any] = {"input": input_value}
-    (input_value if nested else data)["force_tools"] = ["SearchTool"]
+    message: dict[str, Any] = {"message": "Question"}
+    if multi_turn or location == "message":
+        input_value = {"messages": [message]}
+        data["input"] = input_value
+    target: dict[str, Any] = data if location == "outer" else input_value
+    if location == "message":
+        target = message
+    target["force_tools"] = ["SearchTool"]
     with patch("onyx.evals.providers.braintrust.Eval") as remote:
         with pytest.raises(ValueError, match="force_tools is no longer supported"):
             provider().eval(
@@ -67,3 +80,91 @@ def test_dataset_legacy_forcing_is_rejected_before_task(
                 data=[data],
             )
         remote.assert_not_called()
+
+
+@pytest.mark.parametrize("location", ["input", "message"])
+def test_remote_dataset_rejects_forcing_before_dispatch(location: str) -> None:
+    value: dict[str, Any] = {"messages": [{"message": "Question"}]}
+    target: dict[str, Any] = value if location == "input" else value["messages"][0]
+    target["force_tools"] = ["SearchTool"]
+
+    def remote_eval(**kwargs: Any) -> None:
+        kwargs["task"](value)
+
+    with (
+        patch("onyx.evals.providers.braintrust.init_dataset"),
+        patch("onyx.evals.providers.braintrust.Eval", side_effect=remote_eval),
+        pytest.raises(ValueError, match="force_tools is no longer supported"),
+    ):
+        BraintrustEvalProvider().eval(
+            lambda _: pytest.fail("Legacy input reached task"),
+            EvalConfigurationOptions(
+                search_permissions_email="test@example.com", dataset_name="test"
+            ),
+            remote_dataset_name="remote",
+            multi_turn_task=lambda _: pytest.fail(
+                "Legacy input reached multi-turn task"
+            ),
+        )
+
+
+@pytest.mark.parametrize("provider", [LocalEvalProvider, BraintrustEvalProvider])
+def test_multiturn_dataset_preserves_preferences_and_outer_overrides(
+    provider: type[EvalProvider],
+) -> None:
+    seen: list[dict[str, Any]] = []
+    value = {
+        "messages": [{"message": "Question", "preferred_tool": "SearchTool"}],
+        "temperature": 0.2,
+    }
+
+    def task(data: dict[str, Any]) -> MultiTurnEvalResult:
+        seen.append(data)
+        return MultiTurnEvalResult(
+            turn_results=[], all_passed=True, pass_count=0, fail_count=0, total_turns=0
+        )
+
+    def remote_eval(**kwargs: Any) -> None:
+        for case in kwargs["data"]:
+            kwargs["task"](case.input)
+
+    with patch("onyx.evals.providers.braintrust.Eval", side_effect=remote_eval):
+        provider().eval(
+            lambda _: pytest.fail("Multi-turn data reached single-turn task"),
+            EvalConfigurationOptions(
+                search_permissions_email="test@example.com", dataset_name="test"
+            ),
+            data=[{"input": value, "temperature": 0.4}],
+            multi_turn_task=task,
+        )
+    assert seen == [{"messages": value["messages"], "temperature": 0.4}]
+
+
+@pytest.mark.parametrize(
+    "multi_turn,per_message", [(False, False), (True, False), (True, True)]
+)
+def test_task_entry_rejects_forcing_before_database_access(
+    multi_turn: bool, per_message: bool
+) -> None:
+    from onyx.evals.eval import (
+        _get_answer_with_tools,
+        _get_multi_turn_answer_with_tools,
+    )
+
+    value: dict[str, Any] = {"message": "Question"}
+    if multi_turn:
+        value = {"messages": [{"message": "Question"}]}
+    target: dict[str, Any] = (
+        value["messages"][0] if multi_turn and per_message else value
+    )
+    target["force_tools"] = ["SearchTool"]
+    task = _get_multi_turn_answer_with_tools if multi_turn else _get_answer_with_tools
+    with patch("onyx.evals.eval.get_sqlalchemy_engine") as database:
+        with pytest.raises(ValueError, match="force_tools is no longer supported"):
+            task(
+                value,
+                EvalConfigurationOptions(
+                    search_permissions_email="test@example.com", dataset_name="test"
+                ),
+            )
+        database.assert_not_called()

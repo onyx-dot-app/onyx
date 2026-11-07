@@ -72,10 +72,7 @@ def _setup_search_infrastructure(
             ],
             conditions=RequestConditions(
                 offers=["internal_search"],
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "internal_search"},
-                },
+                tool_choice="auto",
             ),
             required=search_expected,
         ),

@@ -116,6 +116,7 @@ class BraintrustEvalProvider(EvalProvider):
 
         # Create a wrapper task that dispatches to the appropriate handler
         def dispatch_task(eval_input: dict[str, Any]) -> EvalResult:
+            eval_input = evaluation_input(eval_input)
             if "messages" in eval_input and multi_turn_task is not None:
                 return multi_turn_task(eval_input)
             return task(eval_input)
@@ -130,7 +131,7 @@ class BraintrustEvalProvider(EvalProvider):
             if data:
                 eval_data = [
                     EvalCase(
-                        input=evaluation_input(item),
+                        input=evaluation_input(item.get("input", {}), item),
                         expected=item.get("expected"),
                     )
                     for item in data

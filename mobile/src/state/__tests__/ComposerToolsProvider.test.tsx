@@ -133,6 +133,8 @@ function mockApi({
   holdPreferences = false,
   holdPatch = false,
   holdConnectors = false,
+  availableTools = [searchTool, imageTool, fileReaderTool],
+  holdTools = false,
 }: {
   preferences?: Record<string, { disabled_tool_ids: number[] }>;
   connectors?: string[];
@@ -143,6 +145,8 @@ function mockApi({
   holdPatch?: boolean;
   // Leaves the connector list pending, so a test can act before it resolves.
   holdConnectors?: boolean;
+  availableTools?: ToolSnapshot[];
+  holdTools?: boolean;
 } = {}) {
   const stored: Record<string, { disabled_tool_ids: number[] }> = {
     ...preferences,
@@ -160,6 +164,10 @@ function mockApi({
     releaseConnectorGate = resolve;
   });
   apiFetchMock.mockImplementation((path: string, init?: ApiFetchInit) => {
+    if (path === "/tool")
+      return holdTools
+        ? new Promise(() => {})
+        : Promise.resolve(availableTools);
     if (path === "/manage/connector-status") {
       const rows = () =>
         connectors.map((source) => ({
@@ -224,7 +232,7 @@ describe("useComposerToolsState", () => {
   });
 
   it("makes Deep Research and the next-message preference mutually exclusive", () => {
-    const { result } = renderTools();
+    const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
     act(() => result.current.togglePreferredTool(2));
     act(() => result.current.toggleDeepResearch());
     expect(result.current.preferredToolId).toBeNull();
@@ -321,11 +329,27 @@ describe("useComposerToolsState", () => {
     expect(renderTools({ agent: null }).result.current.actionTools).toEqual([]);
   });
 
-  it("sends the preferred tool id once a row is preferred", () => {
+  it("sends the preferred tool id once a row is preferred", async () => {
     const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
     act(() => result.current.togglePreferredTool(2));
-    expect(result.current.resolveToolOptions().preferredToolId).toBe(2);
+    await waitFor(() =>
+      expect(result.current.resolveToolOptions().preferredToolId).toBe(2),
+    );
   });
+
+  it.each([false, true])(
+    "does not send an unavailable or unresolved preference (pending: %s)",
+    async (pending) => {
+      mockApi({ availableTools: [searchTool], holdTools: pending });
+      const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
+      act(() => result.current.togglePreferredTool(2));
+      if (!pending)
+        await waitFor(() =>
+          expect(result.current.unavailableToolIds).toContain(2),
+        );
+      expect(result.current.resolveToolOptions().preferredToolId).toBeNull();
+    },
+  );
 
   it("refuses to send a preferred id the agent doesn't expose", () => {
     const { result } = renderTools({ agent: agent([searchTool]) });

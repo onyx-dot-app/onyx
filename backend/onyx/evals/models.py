@@ -12,24 +12,34 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
 
 
-def evaluation_input(item: dict[str, Any]) -> dict[str, Any]:
-    """Merge dataset overrides without erasing values supplied inside input."""
-    values = dict(item.get("input", {}))
-    if item.get("force_tools") or values.get("force_tools"):
+def evaluation_input(
+    values: dict[str, Any], overrides: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Validate input and merge explicit dataset overrides without erasing nested values."""
+    overrides = overrides or {}
+    if (
+        overrides.get("force_tools")
+        or values.get("force_tools")
+        or any(message.get("force_tools") for message in values.get("messages", []))
+    ):
         raise ValueError(
             "force_tools is no longer supported; use preferred_tool and expected_tools assertions"
         )
-    for key in (
-        "preferred_tool",
-        "expected_tools",
-        "require_all_tools",
-        "model",
-        "model_provider",
-        "temperature",
-    ):
-        if key in item:
-            values[key] = item[key]
-    return values
+    return {
+        **values,
+        **{
+            key: overrides[key]
+            for key in (
+                "preferred_tool",
+                "expected_tools",
+                "require_all_tools",
+                "model",
+                "model_provider",
+                "temperature",
+            )
+            if key in overrides
+        },
+    }
 
 
 class ToolAssertion(BaseModel):

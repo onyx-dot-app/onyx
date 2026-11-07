@@ -406,7 +406,7 @@ Their control functions, such as `think_tool`, `generate_report` and
   no vector DB. For Default Chat, check the user's plugin preferences. For MCP,
   look for the credential warning. Last, check for a name collision (Known
   issues).
-- `prefer-tool-call` **Prefer an Action for the current request.** Send
+- `force-tool-call` **Prefer an Action for the current request.** Send
   `preferred_tool_id` with the message. The trailing reminder names that Action's
   operations on every model step. The model may call another tool or answer directly;
   the preference does not change tool definitions or execution permissions.

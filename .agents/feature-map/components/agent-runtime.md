@@ -146,8 +146,8 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    saved step's declaration, or `backend/onyx/agents/runtime.py:_execute_tools`
    raises `ValueError`. Saved execution permissions are separate from advertised
    definitions; restoration must not enable a tool merely because it was advertised.
-   A saved configuration digest protects definitions, order and named phases
-   across restoration. Older checkpoints still validate saved step declarations.
+   A required configuration digest protects definitions, order and named phases
+   across restoration.
    Steps narrow permissions; registered phases permit deliberate schema changes.
    `chat/agent.py:ChatAgent.restore_state` also raises when
    the saved prompt, files, memory or settings differ. Keep a tool's definition

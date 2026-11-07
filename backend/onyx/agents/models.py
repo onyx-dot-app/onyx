@@ -240,7 +240,7 @@ class RunProgress(BaseModel):
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
     allowed_tool_names: frozenset[str] | None = None
-    tool_configuration_digest: str | None = None
+    tool_configuration_digest: str
     previous_options: GenerationOptions | None = None
     finalized_tool_call_ids: set[str] = Field(default_factory=set)
     feature_state: dict[str, JsonValue] | None = None

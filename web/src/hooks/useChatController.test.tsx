@@ -3,6 +3,7 @@ import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatController from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { createChatSession, sendMessage } from "@/app/app/services/lib";
+import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
@@ -34,7 +35,10 @@ jest.mock("@/hooks/useChatSessions", () => ({
   }),
 }));
 jest.mock("@/lib/agents/hooks", () => ({
-  usePinnedAgents: () => ({ pinnedAgents: [], togglePinnedAgent: jest.fn() }),
+  usePinnedAgents: () => ({
+    pinnedAgents: [],
+    togglePinnedAgent: jest.fn(async () => {}),
+  }),
 }));
 jest.mock("@/lib/projects/providers", () => ({
   useProjectsContext: () => ({
@@ -465,11 +469,43 @@ test.each([false, true])(
         details: {},
       };
     });
+    const preferredAgent: MinimalAgent = {
+      id: 7,
+      name: "Agent",
+      description: "",
+      starter_messages: null,
+      document_sets: [],
+      is_public: true,
+      is_listed: true,
+      display_priority: null,
+      is_featured: false,
+      builtin_persona: false,
+      owner: null,
+      owner_group: null,
+      user_permission: null,
+      tools: [
+        {
+          id: 3,
+          name: "SearchTool",
+          display_name: "Search",
+          description: "",
+          in_code_tool_id: "SearchTool",
+          definition: null,
+          custom_headers: null,
+          passthrough_auth: false,
+          agent_creation_selectable: true,
+          default_enabled: true,
+          enabled: true,
+          chat_selectable: true,
+        },
+      ],
+    };
+    const selectedConfiguration = { ...toolConfiguration, preferredToolId: 3 };
     const { result } = renderHook(() =>
       useChatController({
         llmManager: createLlmManager(),
-        toolConfiguration,
-        activeAgent: undefined,
+        toolConfiguration: selectedConfiguration,
+        activeAgent: preferredAgent,
         availableAgents: [],
         existingChatSessionId: "session",
         selectedDocuments: [],
@@ -485,6 +521,14 @@ test.each([false, true])(
         deepResearch: false,
       })
     );
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredToolId: 3 })
+    );
+    if (accepted)
+      expect(toolConfiguration.acknowledgePreferredTool).toHaveBeenCalledWith(
+        "session",
+        3
+      );
     expect(toolConfiguration.acknowledgePreferredTool).toHaveBeenCalledTimes(
       accepted ? 1 : 0
     );

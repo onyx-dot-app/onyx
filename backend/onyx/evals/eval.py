@@ -25,6 +25,7 @@ from onyx.evals.models import (
     EvalToolResult,
     MultiTurnEvalResult,
     ToolAssertion,
+    evaluation_input,
 )
 from onyx.evals.provider import get_provider
 from onyx.llm.override_models import LLMOverride
@@ -176,10 +177,7 @@ def _get_answer_with_tools(
     Returns:
         EvalToolResult containing the answer and tool call information
     """
-    if eval_input.get("force_tools"):
-        raise ValueError(
-            "force_tools is no longer supported; use preferred_tool and expected_tools assertions"
-        )
+    eval_input = evaluation_input(eval_input)
     engine = get_sqlalchemy_engine()
     with isolated_ephemeral_session_factory(engine) as SessionLocal:
         with SessionLocal() as db_session:
@@ -288,14 +286,10 @@ def _get_multi_turn_answer_with_tools(
     Returns:
         MultiTurnEvalResult containing per-turn results and aggregate metrics
     """
+    eval_input = evaluation_input(eval_input)
     messages_data = eval_input.get("messages", [])
     if not messages_data:
         raise ValueError("Multi-turn eval requires 'messages' array in input")
-
-    if any(message.get("force_tools") for message in messages_data):
-        raise ValueError(
-            "force_tools is no longer supported; use preferred_tool and expected_tools assertions"
-        )
 
     # Parse messages into EvalMessage objects
     messages: list[EvalMessage] = [

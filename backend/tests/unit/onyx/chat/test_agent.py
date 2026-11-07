@@ -962,5 +962,3 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     assert not any(
         "The user selected" in message.text for message in requests[-1].messages
     )
-    with pytest.raises(ValueError, match="forced_tool_id cannot resume"):
-        restored.restore_state({**saved, "forced_tool_id": 1})

@@ -148,7 +148,9 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
             status=RunStatus.SUSPENDED,
             steps=[],
             progress=RunProgress(
-                step_limit=3, feature_state=state.model_dump(mode="json")
+                tool_configuration_digest="test-tool-configuration",
+                step_limit=3,
+                feature_state=state.model_dump(mode="json"),
             ),
         ),
     )
@@ -221,7 +223,9 @@ def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
             agent_id="coding-agent",
             status=RunStatus.SUSPENDED,
             steps=[],
-            progress=RunProgress(step_limit=3),
+            progress=RunProgress(
+                tool_configuration_digest="test-tool-configuration", step_limit=3
+            ),
         ),
     )
     llm = FakeModelClient(

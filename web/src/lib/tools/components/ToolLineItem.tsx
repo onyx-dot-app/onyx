@@ -1,5 +1,6 @@
 "use client";
 
+import { escapeMarkdown, markdown } from "@opal/utils";
 import { useNavigation } from "@opal/navigation";
 import { Section } from "@opal/layouts";
 import { Fragment, useMemo } from "react";
@@ -291,15 +292,19 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         }
         disabled={needsConnectors || (isUnavailable && !isPreferred)}
         tooltip={
-          isConfigured
-            ? t("actionLineItem.preference.tooltip", {
-                description: getToolTooltip(
-                  tool,
-                  isConfigured,
-                  canManageActions,
-                  tooltipMessages
-                ),
-              })
+          !isUnavailable
+            ? markdown(
+                t("actionLineItem.preference.tooltip", {
+                  description: escapeMarkdown(
+                    getToolTooltip(
+                      tool,
+                      isConfigured,
+                      canManageActions,
+                      tooltipMessages
+                    )
+                  ),
+                })
+              )
             : getToolTooltip(
                 tool,
                 isConfigured,

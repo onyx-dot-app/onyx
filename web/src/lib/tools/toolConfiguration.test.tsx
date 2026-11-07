@@ -247,6 +247,36 @@ describe("request-scoped tool preference", () => {
     expect(result.current.filters.selectedSources).toEqual(["notion"]);
   });
 
+  test("admission consumes an inline composer's preference without navigation", () => {
+    const { result } = renderHook(() => useToolConfiguration(5));
+    act(() => result.current.setToolState(1, () => "preferred"));
+    act(() => result.current.handOffTo("created"));
+    act(() => result.current.acknowledgePreferredTool("created", 1));
+    expect(result.current.preferredToolId).toBeNull();
+    expect(sessionStorage.getItem("onyx:tools:chat:created")).toBeNull();
+  });
+
+  test("tool selection works without secure-context randomUUID", () => {
+    const original = crypto.randomUUID;
+    Object.defineProperty(crypto, "randomUUID", {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const { result } = renderHook(() => useToolConfiguration());
+      act(() => result.current.setToolState(1, () => "preferred"));
+      expect(result.current.preferredToolId).toBe(1);
+      act(() => result.current.setToolState(1, () => "disabled"));
+      expect(result.current.preferredToolId).toBeNull();
+      expect(result.current.disabledToolIds).toEqual([1]);
+    } finally {
+      Object.defineProperty(crypto, "randomUUID", {
+        configurable: true,
+        value: original,
+      });
+    }
+  });
+
   test.each([1, 2])(
     "late admission preserves a newer selection of tool %s",
     (nextId) => {

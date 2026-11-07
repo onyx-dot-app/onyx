@@ -215,9 +215,9 @@ so another browser starts again. The input lock is a comparison against
 
 **Action preference.** At send time `onSubmit` filters the selected Action through
 `web/src/lib/plugins/chat.ts:effectiveChatPreferredToolId`. An accepted request
-consumes its preference; rejected requests retain it. The preference applies to
-one turn and does not restrict which available tools may run. [[plugins]] owns
-Action availability.
+consumes only the preference actually sent; rejected requests retain it. The
+preference applies to one turn and does not restrict which available tools may
+run. [[plugins]] owns Action availability.
 
 **The development `/api` proxy.**
 `web/src/app/api/[...path]/route.ts` forwards every method under `/api` to

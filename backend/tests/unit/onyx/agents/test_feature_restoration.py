@@ -149,6 +149,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
         status=RunStatus.SUSPENDED,
         steps=[],
         progress=RunProgress(
+            tool_configuration_digest="test-tool-configuration",
             step_limit=3,
             feature_state=original.capture_state().model_dump(mode="json"),
         ),
@@ -606,6 +607,7 @@ def test_checkpoint_file_storage_preserves_binary_feature_data() -> None:
             run_id="file-checkpoint",
             status=RunStatus.SUSPENDED,
             progress=RunProgress(
+                tool_configuration_digest="test-tool-configuration",
                 step_limit=2,
                 feature_state=original.capture_state().model_dump(mode="json"),
             ),
@@ -687,7 +689,9 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
             )
         ],
         progress=RunProgress(
-            step_limit=2, feature_state=original.capture_state().model_dump(mode="json")
+            tool_configuration_digest="test-tool-configuration",
+            step_limit=2,
+            feature_state=original.capture_state().model_dump(mode="json"),
         ),
     )
     codec = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES)
