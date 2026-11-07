@@ -396,19 +396,6 @@ beat_task_templates.append(
     }
 )
 
-beat_task_templates.append(
-    {
-        "name": "repair-skill-versions",
-        "task": OnyxCeleryTask.REPAIR_SKILL_VERSIONS,
-        "schedule": timedelta(minutes=1),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.PRIMARY,
-        },
-    }
-)
-
 # Gated here as well as in the task body, which would still cost one message
 # per tenant every 5 minutes.
 if TABULAR_RECHUNK_ENABLED:

@@ -3,7 +3,6 @@
 import hashlib
 import io
 import zipfile
-import zlib
 from typing import Protocol
 from uuid import UUID
 
@@ -66,8 +65,12 @@ def fill_version_metadata(
     version.file_count = metadata.file_count
 
 
-def repair_version_metadata(version: BundleVersionMixin, file_store: FileStore) -> None:
-    if version.bundle_file_id is None or all(
+def repair_version_metadata(
+    version: BundleVersionMixin, file_store: FileStore, *, verify_bundle: bool = False
+) -> bool:
+    if version.bundle_file_id is None:
+        return False
+    if not verify_bundle and all(
         value is not None
         for value in (
             version.content_digest,
@@ -75,7 +78,7 @@ def repair_version_metadata(version: BundleVersionMixin, file_store: FileStore) 
             version.file_count,
         )
     ):
-        return
+        return True
     try:
         with file_store.read_file(version.bundle_file_id) as source:
             bundle_bytes = source.read()
@@ -86,18 +89,25 @@ def repair_version_metadata(version: BundleVersionMixin, file_store: FileStore) 
         NotFound,
     ):
         logger.warning("Version bundle is missing: %s", version.id)
-        return
+        return False
     except ClientError as exc:
         if exc.response["Error"]["Code"] not in ("NoSuchKey", "404"):
             raise
         logger.warning("Version bundle is missing: %s", version.id)
-        return
+        return False
     try:
         metadata = compute_bundle_metadata(bundle_bytes)
-    except (zipfile.BadZipFile, zlib.error, NotImplementedError, RuntimeError):
+    except Exception:
         logger.warning("Version bundle cannot be decoded: %s", version.id)
-        return
+        return False
+    if (
+        version.content_digest is not None
+        and version.content_digest != metadata.content_digest
+    ):
+        logger.warning("Version bundle content changed: %s", version.id)
+        return False
     fill_version_metadata(version, metadata)
+    return True
 
 
 def write_resource_version[Version: BundleVersionMixin](
@@ -110,13 +120,15 @@ def write_resource_version[Version: BundleVersionMixin](
     created_by_user_id: UUID | None,
     db_session: Session,
     marketplace_revision: str | None = None,
+    reuse_current: bool = False,
 ) -> Version:
     """Append and publish atomically; the caller owns commit and staged blob cleanup."""
     with db_session.begin_nested():
         adapter.lock(db_session)
         current = adapter.current(db_session)
         if (
-            current is not None
+            reuse_current
+            and current is not None
             and metadata is not None
             and (current.content_digest == metadata.content_digest)
         ):

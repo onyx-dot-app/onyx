@@ -14,10 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from onyx.background.celery.tasks.skill_versions.tasks import (
-    PROGRESS_KEY,
-    repair_skill_versions,
-)
+from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import compute_bundle_metadata
@@ -27,10 +24,13 @@ from onyx.db.skill import (
     persist_skill_validity,
     replace_skill_bundle,
 )
-from onyx.db.skill_version import SkillVersionAdapter, save_skill_version
+from onyx.db.skill_version import (
+    SkillVersionAdapter,
+    repair_skill_version,
+    save_skill_version,
+)
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.key_value_store.factory import get_kv_store
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.skills.bundle import build_single_file_bundle, build_skill_md
@@ -222,77 +222,9 @@ def test_rezip_noop(session: Session, user: User) -> None:
     assert skill.bundle_file_id == old.bundle_file_id
 
 
-@pytest.mark.parametrize("delete_history", [False, True])
-@pytest.mark.parametrize("completed", [False, True])
-def test_tenant_repair_stale_deleted_and_pointerless(
-    tenant: str, session: Session, user: User, delete_history: bool, completed: bool
-) -> None:
-    store = get_default_file_store()
-    name = f"legacy-{uuid4().hex[:8]}"
-    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
-    skill = session.get(Skill, response.id)
-    assert skill is not None
-    if completed:
-        repair_skill_versions.run(tenant_id=tenant)
-        repair_skill_versions.run(tenant_id=tenant)
-        assert get_kv_store().load(PROGRESS_KEY) == "completed"
-    old = versions(skill, session)[0]
-    # The V1 migration deliberately uses the skill UUID as version UUID.
-    old.id = skill.id
-    skill.current_version_id = skill.id
-    old.content_digest = old.unpacked_size_bytes = old.file_count = None
-    session.commit()
-    assert old.bundle_file_id is not None
-    deleted_file_id = old.bundle_file_id
-    with ingested_skill_bundle(
-        bundle(name, "Legacy writer"), "skill.zip", store
-    ) as ingested:
-        skill.bundle_file_id = ingested.bundle_file_id
-        skill.bundle_sha256 = ingested.bundle_sha256
-        session.commit()
-    if delete_history:
-        store.delete_file(deleted_file_id)
-    orphan_name = f"pointerless-{uuid4().hex[:8]}"
-    with ingested_skill_bundle(bundle(orphan_name), "skill.zip", store) as ingested:
-        pointerless = Skill(
-            name=orphan_name,
-            description="Legacy",
-            author_user_id=user.id,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            is_valid=True,
-        )
-        session.add(pointerless)
-        session.commit()
-    built_in = Skill(
-        name="test-builtin", description="Built in", built_in_skill_id="test-builtin"
-    )
-    session.add(built_in)
-    session.commit()
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set("public")
-    try:
-        repair_skill_versions.run(tenant_id=tenant)
-        assert CURRENT_TENANT_ID_CONTEXTVAR.get() == "public"
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-    session.expire_all()
-    repaired = versions(skill, session)
-    assert len(repaired) == 2
-    assert repaired[0].content_digest is not None
-    assert repaired[0].bundle_file_id == skill.bundle_file_id
-    assert (repaired[1].content_digest is None) == delete_history
-    assert len(versions(pointerless, session)) == 1
-    assert versions(pointerless, session)[0].file_count == 1
-    assert built_in.current_version_id is None
-    repair_skill_versions.run(tenant_id=tenant)
-    assert get_kv_store().load(PROGRESS_KEY) == "completed"
-    repair_skill_versions.run(tenant_id=tenant)
-    assert len(versions(skill, session)) == 2
-
-
 @pytest.mark.parametrize("save", [False, True])
 def test_lazy_validity_keeps_one_version(
-    tenant: str, session: Session, user: User, save: bool
+    session: Session, user: User, save: bool
 ) -> None:
     response = api.create_custom_skill(
         upload(bundle("legacy-validity")), False, user, session
@@ -311,7 +243,8 @@ def test_lazy_validity_keeps_one_version(
             session,
         )
     else:
-        repair_skill_versions.run(tenant_id=tenant)
+        repair_skill_version(skill, session)
+        session.commit()
     session.expire_all()
     assert versions(skill, session) == [current]
     assert current.is_valid is save
@@ -396,7 +329,7 @@ def test_concurrent_replacements(tenant: str, session: Session, user: User) -> N
 
 @pytest.mark.parametrize("compression", [0, 99])
 def test_corrupt_legacy_bundle_does_not_block_repair_or_replace(
-    tenant: str, session: Session, user: User, compression: int
+    session: Session, user: User, compression: int
 ) -> None:
     response = api.create_custom_skill(
         upload(bundle("corrupt-history")), False, user, session
@@ -414,7 +347,8 @@ def test_corrupt_legacy_bundle_does_not_block_repair_or_replace(
         file_store=store,
     )
     session.commit()
-    repair_skill_versions.run(tenant_id=tenant)
+    repair_skill_version(skill, session)
+    session.commit()
     session.expire_all()
     assert len(versions(skill, session)) == 2
     api.replace_current_user_skill_bundle(
@@ -422,3 +356,35 @@ def test_corrupt_legacy_bundle_does_not_block_repair_or_replace(
     )
     assert len(versions(skill, session)) == 3
     assert versions(skill, session)[0].content_digest is not None
+
+
+@pytest.mark.parametrize("damage", ["missing", "invalid_zip", "different_content"])
+def test_identical_reupload_repairs_damaged_current_bundle(
+    session: Session, user: User, damage: str
+) -> None:
+    content = bundle("recovered")
+    response = api.create_custom_skill(upload(content), False, user, session)
+    skill = session.get(Skill, response.id)
+    assert skill is not None and skill.bundle_file_id is not None
+    lost_file = skill.bundle_file_id
+    store = get_default_file_store()
+    store.delete_file(lost_file)
+    if damage != "missing":
+        store.save_file(
+            io.BytesIO(
+                b"corrupt"
+                if damage == "invalid_zip"
+                else bundle("recovered", "Corrupted instructions")
+            ),
+            "damaged.zip",
+            FileOrigin.SKILL_BUNDLE,
+            "application/zip",
+            file_id=lost_file,
+        )
+    api.replace_current_user_skill_bundle(skill.id, upload(content), user, session)
+    assert len(versions(skill, session)) == 2
+    assert skill.bundle_file_id != lost_file
+    with store.read_file(skill.bundle_file_id) as source:
+        assert compute_bundle_metadata(source.read()) == compute_bundle_metadata(
+            content
+        )
