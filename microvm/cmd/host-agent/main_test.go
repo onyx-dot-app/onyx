@@ -22,3 +22,14 @@ func TestCheckRanges(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePortsRejectsAnEmptyList(t *testing.T) {
+	for _, in := range []string{"", ",", " , "} {
+		if ports, err := parsePorts(in); err == nil {
+			t.Errorf("%q: got %v, want an error", in, ports)
+		}
+	}
+	if ports, err := parsePorts("52, 3010"); err != nil || len(ports) != 2 || ports[0] != 52 || ports[1] != 3010 {
+		t.Fatalf("parse: %v %v", ports, err)
+	}
+}
