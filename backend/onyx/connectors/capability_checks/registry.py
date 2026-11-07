@@ -40,6 +40,9 @@ from onyx.connectors.sharepoint.capability_checks import (
     build_sharepoint_indexing_checks,
 )
 from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
+from onyx.connectors.jira_service_management.capability_checks import (
+    build_jsm_indexing_checks,
+)
 from onyx.connectors.source_operations import get_source_operations_class
 from onyx.connectors.youtrack.capability_checks import (
     build_youtrack_indexing_checks,
@@ -57,6 +60,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.OUTLOOK: build_outlook_indexing_checks(),
     DocumentSource.HUBSPOT: build_hubspot_indexing_checks(),
     DocumentSource.JIRA: build_jira_indexing_checks(),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: build_jsm_indexing_checks(),
     DocumentSource.LINEAR: build_linear_indexing_checks(),
     DocumentSource.NOTION: build_notion_indexing_checks(),
     DocumentSource.SHAREPOINT: build_sharepoint_indexing_checks(),

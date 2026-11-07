@@ -46,7 +46,7 @@ from onyx.connectors.google_drive.models import (
     GoogleGroupMember,
 )
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
-from onyx.connectors.jira.models import JiraGroupPage
+from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
     DriveDeltaPage,
@@ -197,6 +197,34 @@ def _configure_jira_server_spy(spy: MagicMock) -> None:
     """A Data Center credential: the checks search with the v2 search."""
     _configure_jira_site(spy)
     spy._is_cloud.return_value = False
+
+
+def _configure_jsm_spy(spy: MagicMock) -> None:
+    """A service desk with one readable request.
+
+    Real return values, not MagicMock truthiness: the request-read check must
+    be proved against the shapes the real operations return, so a return-shape
+    regression in the check is caught here.
+    """
+    spy.get_service_desk.return_value = {
+        "id": "5",
+        "projectKey": "SUPPORT",
+        "projectName": "IT Support",
+    }
+    spy.get_request_type.return_value = {"id": "10", "name": "Get IT help"}
+    spy.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["10001"], next_page_token=None
+    )
+    spy.bulk_fetch_issues.return_value = [
+        {
+            "id": "10001",
+            "key": "SUPPORT-1",
+            "fields": {
+                "summary": "Cannot log in",
+                "project": {"key": "SUPPORT", "name": "IT Support"},
+            },
+        }
+    ]
 
 
 def _configure_sharepoint_spy(spy: MagicMock) -> None:
@@ -415,6 +443,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     ],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [_configure_jsm_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],
@@ -449,6 +478,11 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
     DocumentSource.LINEAR: [{"team_keys": ["ENG"], "projects": ["Roadmap"]}],
     DocumentSource.AZURE_DATALAKE: [
         {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
+    ],
+    # The service desk checks read a configured project, and the request read
+    # runs only when a project is set.
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [
+        {"jira_base_url": "https://example.atlassian.net", "project_key": "SUPPORT"}
     ],
 }
 
