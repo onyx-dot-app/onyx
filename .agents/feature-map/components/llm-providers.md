@@ -120,9 +120,10 @@ of the chat picker.
 **The wrapper.** `llm/multi_llm.py:LitellmLLM` has two layers. `invoke_raw` and
 `stream_raw` return provider chunks (`ModelResponseStream`). `invoke` and
 `stream` add the event layer (`GenerationEvent`, see `backend/onyx/llm/README.md`)
-and open a generation span. The agent runtime
-(`agents/runtime.py`) uses `stream`; the gateway uses the raw layer and opens
-its own spans. `_completion` shapes the request
+and open a generation span. These typed calls translate semantic tool permissions
+into provider-compatible tool definitions and choices without changing the runtime's
+execution policy. The agent runtime (`agents/runtime.py`) uses `stream`; the gateway
+uses the raw layer and opens its own spans. `_completion` shapes the request
 for each model family and provider. Supported OpenAI and Azure requests mark tool
 results with explicit cache breakpoints after message normalization. Cache endpoint
 checks run under the same environment lock as each dispatch. The lock releases

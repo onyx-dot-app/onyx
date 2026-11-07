@@ -1,6 +1,7 @@
 """Shared-message requests map onto the provider API and back without losing data."""
 
 import json
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -20,9 +21,12 @@ from onyx.llm.model_request import UserMessage as ProviderUserMessage
 from onyx.llm.model_response import (
     ChatCompletionMessageToolCall,
     Choice,
+    Delta,
     Message,
     ModelResponse,
+    ModelResponseStream,
     ResponseFunctionCall,
+    StreamingChoice,
     recover_tool_calls,
     to_assistant_message,
 )
@@ -63,19 +67,132 @@ def _response(message: Message, finish_reason: str | None = "stop") -> ModelResp
 
 
 class RecordingProvider(LitellmLLM):
-    def __init__(self, response: ModelResponse | None = None) -> None:
+    def __init__(
+        self, response: ModelResponse | None = None, *, config: LLMConfig | None = None
+    ) -> None:
+        self._config = config or _config()
         self.calls: list[dict[str, Any]] = []
         self._response = response or _response(Message(content="answer"))
         self._model_kwargs: dict[str, Any] = {}
 
     @property
     def config(self) -> LLMConfig:
-        return _config()
+        return self._config
 
     def invoke_raw(self, prompt: Any, *args: Any, **kwargs: Any) -> ModelResponse:
         assert not args
         self.calls.append({"prompt": prompt, **kwargs})
         return self._response
+
+    def stream_raw(
+        self, prompt: Any, *args: Any, **kwargs: Any
+    ) -> Iterator[ModelResponseStream]:
+        assert not args
+        self.calls.append({"prompt": prompt, **kwargs})
+        yield ModelResponseStream(
+            id="stream",
+            created="1",
+            choice=StreamingChoice(delta=Delta(content="answer"), finish_reason="stop"),
+        )
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    "model_name,deployment_name,allowed,choice,expected_names,expected_choice",
+    [
+        ("ordinary", None, None, "auto", ["lookup", "other"], "auto"),
+        (
+            "ordinary",
+            None,
+            frozenset({"lookup"}),
+            "required",
+            ["lookup", "other"],
+            "lookup",
+        ),
+        (
+            "claude-sonnet-4-5",
+            None,
+            frozenset({"lookup"}),
+            "required",
+            ["lookup"],
+            "auto",
+        ),
+        ("qwen3", None, frozenset({"lookup"}), "required", ["lookup"], "auto"),
+        ("alias", "glm-5", frozenset({"lookup"}), "required", ["lookup"], "auto"),
+        (
+            "ordinary",
+            None,
+            frozenset({"lookup", "other"}),
+            "required",
+            ["lookup", "other"],
+            "required",
+        ),
+        ("ordinary", None, None, "required", ["lookup", "other"], "required"),
+        ("ordinary", None, frozenset(), "none", ["lookup", "other"], "none"),
+        ("claude-sonnet-4-5", None, frozenset(), "none", ["lookup", "other"], "none"),
+        ("qwen3", None, frozenset(), "none", [], "none"),
+        ("alias", "glm-5", frozenset(), "none", [], "none"),
+        ("ordinary", None, frozenset({"other"}), "auto", ["other"], "auto"),
+    ],
+)
+def test_tool_permissions_preserve_declared_tools_and_semantic_options(
+    stream: bool,
+    model_name: str,
+    deployment_name: str | None,
+    allowed: frozenset[str] | None,
+    choice: str,
+    expected_names: list[str],
+    expected_choice: str,
+) -> None:
+    provider = RecordingProvider(
+        config=_config(model_name=model_name).model_copy(
+            update={"deployment_name": deployment_name}
+        )
+    )
+    request = GenerationRequest(
+        messages=[UserMessage(content="question")],
+        tools=[
+            ToolDefinition(name=name, description=name, parameters={})
+            for name in ["lookup", "other"]
+        ],
+        allowed_tool_names=allowed,
+        options=GenerationOptions(tool_choice=ToolChoiceOptions(choice)),
+    )
+    original = request.model_dump_json()
+    if stream:
+        list(provider.stream(request))
+    else:
+        provider.invoke(request)
+    (call,) = provider.calls
+    assert [tool["function"]["name"] for tool in call["tools"] or []] == expected_names
+    assert call["tool_choice"] == (
+        NamedToolChoice(name=expected_choice)
+        if expected_choice == "lookup"
+        else ToolChoiceOptions(expected_choice)
+    )
+    assert request.model_dump_json() == original
+
+
+@pytest.mark.parametrize(
+    "allowed,choice,error",
+    [
+        (frozenset({"unknown"}), ToolChoiceOptions.AUTO, "not declared"),
+        (frozenset(), ToolChoiceOptions.REQUIRED, "needs an allowed tool"),
+        (frozenset(), NamedToolChoice(name="lookup"), "not allowed"),
+    ],
+)
+def test_invalid_tool_permissions_fail_before_provider_call(
+    allowed: frozenset[str], choice: ToolChoiceOptions | NamedToolChoice, error: str
+) -> None:
+    provider = RecordingProvider()
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="lookup", description="", parameters={})],
+        allowed_tool_names=allowed,
+        options=GenerationOptions(tool_choice=choice),
+    )
+    with pytest.raises(ValueError, match=error):
+        provider.invoke(request)
+    assert provider.calls == []
 
 
 def test_invoke_preserves_options_and_returns_shared_content() -> None:

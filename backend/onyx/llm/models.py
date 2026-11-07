@@ -317,6 +317,7 @@ class GenerationRequest(BaseModel):
     messages: list[Message] = Field(default_factory=list)
     system_prompt: str = ""
     tools: list[ToolDefinition] = Field(default_factory=list)
+    allowed_tool_names: frozenset[str] | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
 
 

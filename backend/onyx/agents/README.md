@@ -27,7 +27,7 @@ An **agent** holds the configuration and conversation state used to execute a ru
 Chat creates a fresh `Agent` for each request from saved history.
 `AgentState` holds the in-memory messages and compaction checkpoint.
 SDK callers can also reuse an `Agent` across runs; each run appends to its history.
-Instructions, tools, and generation settings are Agent defaults or choices captured for a step in `PreparedStep`.
+Tools are fixed at agent construction. Instructions, execution permissions, and generation settings can change in `PreparedStep`.
 
 A **run** is one execution of an agent, with a step budget. It drives the agent until the
 model produces a final answer (`COMPLETE`), the budget runs out (`LIMIT`), someone cancels it
@@ -153,10 +153,18 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
 The input is detached from runtime state. `previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
-A custom callback returns the complete step configuration; the runtime does not merge agent defaults into it.
-Register executable tools on `Agent.tools`. `PreparedStep.tools` selects those same instances;
-it cannot supply new implementations. Invalid selections fail before the model call.
-On restoration, the registered tools must match the saved step's declarations.
+A custom callback supplies the step's instructions and generation options; the runtime does not merge those defaults into it.
+Pass executable tools to `Agent(tools=...)`. Construction snapshots their definitions and fixes their order.
+`Agent.tools` returns detached inspection copies; changing those copies cannot change the configured tools.
+`PreparedStep.allowed_tool_names` restricts execution without changing the advertised definitions.
+`None` allows every tool in the active phase; an empty set disables tool execution.
+The runtime rejects unknown permission names and contradictory required or named tool choices before generation.
+
+For deliberate schema changes, register named subsets with `Agent(tool_phases=...)` and select `PreparedStep.tool_phase`.
+Each phase preserves the configured tool order. Deep Research uses phases for clarification, planning, research, and reporting.
+Ordinary step restrictions should use permissions instead of creating a phase.
+The LLM adapter handles provider exceptions that require narrower advertised definitions.
+Saved steps retain both advertised declarations and execution permissions. Restoration validates the declarations before using those permissions.
 
 `after_step(StepResult)` processes each completed step, including the last allowed step.
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
@@ -181,7 +189,7 @@ Caller cancellation propagates into the run. Run failure or cancellation does no
 Each model call receives a separate context copy. Compaction applies its own tracing flow and timeout.
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
-The executor enforces `NONE` and `NamedToolChoice` before tool approval or execution.
+The executor enforces step permissions, `NONE`, and `NamedToolChoice` before tool approval or execution.
 Other tool definitions can remain in the request for cache reuse.
 
 Two optional tool callbacks cover interception and enrichment:
@@ -447,7 +455,9 @@ The SDK invokes release once; applications implement the storage operation.
 If release fails, handoff, local waiters, and pending parent dependencies report the cleanup error.
 A new execution owner can register the same run ID once ownership is released.
 
-Register executable tools on `Agent.tools`; the runtime restores the saved step's selection.
+Pass executable tools to `Agent(tools=...)`; the runtime restores the saved declarations and execution permissions.
+A configuration digest rejects changed definitions, order, or tool phases before restoration callbacks run.
+Older checkpoints without a digest still validate their saved step declarations.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.
 Rebuild the feature agent and its live resources with `restored.agent_state` and the saved `agent_id`.

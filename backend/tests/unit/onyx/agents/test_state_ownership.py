@@ -360,7 +360,6 @@ def test_request_assembly_keeps_logical_tool_context_and_metadata() -> None:
 
     def prepare(_input: StepInput) -> PreparedStep:
         return PreparedStep(
-            tools=[tool],
             output_metadata=metadata,
             assemble_messages=lambda _: [UserMessage(content="provider prompt")],
         )

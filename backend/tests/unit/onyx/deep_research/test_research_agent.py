@@ -26,6 +26,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     TextContent,
     ToolCall,
+    ToolChoiceOptions,
     ToolResultMessage,
     UserMessage,
 )
@@ -134,7 +135,12 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
                     ]
                 )
             )
-        assert not request.tools
+        assert request.options.tool_choice == ToolChoiceOptions.NONE
+        assert request.allowed_tool_names == frozenset()
+        if parent:
+            assert not request.tools
+        else:
+            assert request.tools == requests[0].tools
         return AssistantMessage(content=[TextContent(text="Report")])
 
     llm = FakeModelClient(reply)
@@ -348,7 +354,7 @@ def test_project_images_use_stable_preamble_and_file_references(
 
 
 @pytest.mark.parametrize("reasoning", [False, True])
-def test_research_cycles_keep_system_and_tools_stable(
+def test_research_cycles_keep_system_and_tool_phase_stable(
     reasoning: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from onyx.agents.models import AgentStep, StepInput, StepResult
@@ -402,9 +408,9 @@ def test_research_cycles_keep_system_and_tools_stable(
                 step=AgentStep(index=2 if completed else 1, limit=8),
             )
         )
+        assert prepared.tool_phase == ResearchPhase.RESEARCH.value
         requests.append(prepared.generation_request([question, plan, *completed]))
     assert requests[0].messages[0] == requests[1].messages[0]
-    assert requests[0].tools == requests[1].tools
     assert "currently used" not in requests[0].messages[0].text
     assert "currently used 0" in requests[0].messages[-1].text
     assert "currently used 1" in requests[1].messages[-1].text

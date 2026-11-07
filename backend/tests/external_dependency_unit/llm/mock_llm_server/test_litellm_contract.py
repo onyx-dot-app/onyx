@@ -271,6 +271,51 @@ def test_named_tool_choice_matches_script_with_other_tools_available(
     script.verify()
 
 
+@pytest.mark.parametrize("stream", [False, True])
+def test_step_permissions_keep_provider_tool_definitions_stable(
+    script: MockLLMScript, llm: LitellmLLM, stream: bool
+) -> None:
+    named = {"type": "function", "function": {"name": "internal_search"}}
+    script.conversation(
+        "steps",
+        *[
+            Reply(
+                text="answer",
+                conditions=RequestConditions(
+                    offers=["internal_search", "web_search"], tool_choice=choice
+                ),
+            )
+            for choice in [named, "auto", "none"]
+        ],
+    )
+    definitions = [ToolDefinition.model_validate(tool["function"]) for tool in TOOLS]
+    for allowed, choice in [
+        (frozenset({"internal_search"}), ToolChoiceOptions.REQUIRED),
+        (None, ToolChoiceOptions.AUTO),
+        (frozenset(), ToolChoiceOptions.NONE),
+    ]:
+        request = GenerationRequest(
+            messages=[AppUserMessage(content="hi")],
+            tools=definitions,
+            allowed_tool_names=allowed,
+            options=GenerationOptions(tool_choice=choice),
+        )
+        original = request.model_dump_json()
+        if stream:
+            list(llm.stream(request))
+        else:
+            llm.invoke(request)
+        assert request.model_dump_json() == original
+    requests = script.requests
+    assert len(requests) == 3
+    assert (
+        requests[0].body["tools"]
+        == requests[1].body["tools"]
+        == requests[2].body["tools"]
+    )
+    script.verify()
+
+
 @pytest.mark.parametrize("inject_env", [False, True])
 def test_invoke_streams_only_with_actual_env_injection(
     script: MockLLMScript, inject_env: bool

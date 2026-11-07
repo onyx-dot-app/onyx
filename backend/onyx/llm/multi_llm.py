@@ -68,6 +68,7 @@ from onyx.llm.model_capabilities import (
     is_true_openai_model,
     model_is_reasoning_model,
     model_prefers_auto_tool_choice,
+    model_requires_auto_tool_choice,
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
@@ -102,6 +103,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     ToolChoice,
     ToolChoiceOptions,
+    ToolDefinition,
     Usage,
     resolve_reasoning_effort,
 )
@@ -2040,6 +2042,39 @@ class LitellmLLM(LLM):
                 if client is not None:
                     client.close()
 
+    def _prepare_tools(
+        self, request: GenerationRequest
+    ) -> tuple[list[ToolDefinition], ToolChoice]:
+        """Apply provider constraints without changing the run's declared tools or policy."""
+        tools = request.tools
+        choice = request.options.tool_choice
+        allowed = request.allowed_tool_names
+        model_names = resolve_model_identity_names(
+            self.config.model_name, self.config.deployment_name
+        )
+        if allowed is not None:
+            if unknown := allowed - {tool.name for tool in tools}:
+                raise ValueError(f"Allowed tools are not declared: {sorted(unknown)}")
+            if isinstance(choice, NamedToolChoice) and choice.name not in allowed:
+                raise ValueError("Named tool is not allowed for this request")
+            if not allowed:
+                if choice == ToolChoiceOptions.REQUIRED:
+                    raise ValueError("Required tool choice needs an allowed tool")
+                choice = ToolChoiceOptions.NONE
+            elif choice == ToolChoiceOptions.REQUIRED and len(allowed) == 1:
+                choice = NamedToolChoice(name=next(iter(allowed)))
+            if isinstance(choice, NamedToolChoice):
+                if model_prefers_auto_tool_choice(model_names):
+                    tools = [tool for tool in tools if tool.name == choice.name]
+                    choice = ToolChoiceOptions.AUTO
+            elif choice != ToolChoiceOptions.NONE:
+                tools = [tool for tool in tools if tool.name in allowed]
+        if choice == ToolChoiceOptions.NONE and model_requires_auto_tool_choice(
+            model_names
+        ):
+            tools = []
+        return tools, choice
+
     def _prepare_request(
         self, request: GenerationRequest
     ) -> tuple[list[ChatCompletionMessage], dict[str, str]]:
@@ -2060,7 +2095,8 @@ class LitellmLLM(LLM):
     ) -> AssistantMessage:
         context = context or GenerationContext()
         messages, cache_stats = self._prepare_request(request)
-        tools = serialize_tools(request.tools) or None
+        definitions, tool_choice = self._prepare_tools(request)
+        tools = serialize_tools(definitions) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
@@ -2080,7 +2116,7 @@ class LitellmLLM(LLM):
                 response = self.invoke_raw(
                     messages,
                     tools=tools,
-                    tool_choice=request.options.tool_choice,
+                    tool_choice=tool_choice,
                     structured_response_format=request.options.structured_response_format,
                     manage_tool_strictness=True,
                     total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
@@ -2112,7 +2148,8 @@ class LitellmLLM(LLM):
         operation = ProviderOperation()
         accumulator = MessageAccumulator(request.tools)
         messages, cache_stats = self._prepare_request(request)
-        tools = serialize_tools(request.tools) or None
+        definitions, tool_choice = self._prepare_tools(request)
+        tools = serialize_tools(definitions) or None
         with (
             _provider_scope(context, self) as signal,
             llm_generation_span(
@@ -2139,7 +2176,7 @@ class LitellmLLM(LLM):
                         self.stream_raw(
                             messages,
                             tools=tools,
-                            tool_choice=request.options.tool_choice,
+                            tool_choice=tool_choice,
                             max_tokens=request.options.max_tokens,
                             reasoning_effort=request.options.reasoning_effort,
                             user_identity=context.user_identity,
