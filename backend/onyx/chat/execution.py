@@ -49,6 +49,7 @@ from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS, DeepResearchAg
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.server.query_and_chat.models import (
@@ -669,12 +670,12 @@ def create_chat_agent(
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
 
-        if setup.forced_tool_id and setup.forced_tool_id not in {
+        if setup.preferred_tool_id is not None and setup.preferred_tool_id not in {
             tool.id for tool in tools
         }:
             raise OnyxError(
                 OnyxErrorCode.BAD_REQUEST,
-                f"Forced tool {setup.forced_tool_id} not found in tools",
+                f"Preferred tool {setup.preferred_tool_id} not found in tools",
             )
 
         agent_id = str(setup.chat_session_id)
@@ -696,6 +697,18 @@ def create_chat_agent(
                 agent_id=agent_id,
                 messages=list(setup.messages),
                 allowed_tools=tools,
+                additional_context=setup.additional_context,
+                context_files=ExtractedContextFiles(
+                    file_texts=[],
+                    image_files=setup.extracted_context_files.image_files,
+                    use_as_search_filter=False,
+                    total_token_count=sum(
+                        image.token_count
+                        for image in setup.extracted_context_files.image_files
+                    ),
+                    file_metadata=[],
+                    uncapped_token_count=None,
+                ),
                 llm=llm,
                 token_counter=get_llm_token_counter(llm),
                 user_identity=setup.user_identity,
@@ -714,6 +727,7 @@ def create_chat_agent(
             messages=list(setup.messages),
             tools=tools,
             custom_agent_prompt=setup.custom_agent_prompt,
+            additional_context=setup.additional_context,
             context_files=setup.extracted_context_files,
             persona=setup.persona,
             base_system_prompt=setup.base_system_prompt,
@@ -722,7 +736,7 @@ def create_chat_agent(
             user_memory_context=setup.user_memory_context,
             llm=llm,
             token_counter=get_llm_token_counter(llm),
-            forced_tool_id=setup.forced_tool_id,
+            preferred_tool_id=setup.preferred_tool_id,
             user_identity=setup.user_identity,
             chat_files=setup.chat_files_for_tools,
             reasoning_effort=setup.reasoning_effort,

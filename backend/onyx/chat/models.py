@@ -56,7 +56,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
 )
-from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
+from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
     GeneratedImage,
@@ -69,6 +69,7 @@ from onyx.tools.tool_implementations.search.models import SearchContext
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
+_INCOGNITO_IMAGES = TypeAdapter(list[SavedLoadedFile])
 _INCOGNITO_SOURCE_DETAILS = TypeAdapter(
     Annotated[SearchDocsResponse | ResearchAgentCallResult, Field(discriminator="type")]
 )
@@ -81,7 +82,6 @@ class PromptMetadata(CompactionMetadata):
     should_cache: bool = False
     file_id: str | None = None
     is_reminder: bool = False
-    omit_tool_result_content: bool = False
 
 
 class FileContextResult(BaseModel):
@@ -214,13 +214,6 @@ class ResponseLink(BaseModel):
     status: RunStatus
 
 
-class IncognitoContext(BaseModel):
-    """Temporary conversation history and its latest saved response."""
-
-    messages: list[Message]
-    previous_run_id: str | None = None
-
-
 class IncognitoAgentState(BaseModel):
     parent_agent_id: str | None = None
     agent_id: str
@@ -232,6 +225,9 @@ class IncognitoAgentState(BaseModel):
 
 
 class IncognitoAgentResponse(BaseModel):
+    run_id: str | None = None
+    checkpoint: CompactionCheckpoint | None = None
+    message_ids: list[str] = Field(default_factory=list)
     replay_digest: str
     agents: list[IncognitoAgentState] = Field(default_factory=list)
 
@@ -241,6 +237,16 @@ def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
         return value
     data = dict(value)
     raw_metadata = data.pop("metadata", {})
+    if isinstance(raw_metadata, dict) and raw_metadata.get("image_files"):
+        raw_metadata = {
+            **raw_metadata,
+            "image_files": [
+                image.restore()
+                for image in _INCOGNITO_IMAGES.validate_python(
+                    raw_metadata["image_files"]
+                )
+            ],
+        }
     metadata = (
         ChatMessageMetadata.model_validate(raw_metadata)
         if isinstance(raw_metadata, dict) and "sources" in raw_metadata
@@ -267,7 +273,15 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
     data["metadata"] = (
         message.metadata.model_dump(mode="json", include={"sources"})
         if isinstance(message.metadata, ChatMessageMetadata)
-        else metadata.model_dump(exclude={"image_files", "image_token_count"})
+        else {
+            **metadata.model_dump(exclude={"image_files"}),
+            "image_files": [
+                SavedLoadedFile.capture(image).model_dump(mode="json")
+                for image in metadata.image_files
+            ]
+            if metadata.image_files is not None
+            else None,
+        }
     )
     if isinstance(message, ToolResultMessage):
         if isinstance(message.details, SearchDocsResponse):
@@ -287,7 +301,9 @@ IncognitoMessage = Annotated[
 
 
 class IncognitoState(BaseModel):
+    format_version: Literal[3] = 3
     messages: list[IncognitoMessage] = Field(default_factory=list)
+    file_metadata: dict[str, FileToolMetadata] = Field(default_factory=dict)
     previous_run_id: str | None = None
     responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)
 
@@ -585,9 +601,10 @@ class ChatFeatureState(BaseModel):
     reasoning_effort: ReasoningEffort
     include_citations: bool
     inject_memories: bool
-    forced_tool_id: int | None
+    preferred_tool_id: int | None = None
     base_prompt: str
     custom_prompt: str | None
+    request_context: str | None = None
     reminders_enabled: bool
 
     elapsed_seconds: float
@@ -629,6 +646,7 @@ class ChatTurnSetup(BaseModel):
     messages: list[Message]
     input_messages: list[Message]
     previous_run_id: str | None = None
+    additional_context: str | None = None
     extracted_context_files: ExtractedContextFiles
     # Fences processing status and identifies the buffered stream.
     stream_id: int
@@ -636,7 +654,7 @@ class ChatTurnSetup(BaseModel):
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
-    forced_tool_id: int | None
+    preferred_tool_id: int | None
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext

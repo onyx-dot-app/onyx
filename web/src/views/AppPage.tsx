@@ -281,6 +281,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // Incognito lives in context so the top-bar toggle and this page stay in

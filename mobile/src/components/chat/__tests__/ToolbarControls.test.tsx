@@ -65,34 +65,34 @@ describe("ToolbarControls", () => {
     expect(screen.getByLabelText("Manage Actions")).toBeTruthy();
   });
 
-  it("shows no forced pill when nothing is forced", () => {
+  it("shows no preferred pill when nothing is preferred", () => {
     renderControls({ actionTools: [searchTool] });
-    expect(screen.queryByLabelText("Search (forced)")).toBeNull();
+    expect(screen.queryByLabelText("Search (preferred)")).toBeNull();
   });
 
-  it("shows a labelled forced pill and releases the force on press", () => {
+  it("shows a labelled preferred pill and clears the preference on press", () => {
     const value = renderControls({
       actionTools: [searchTool],
-      forcedToolId: 1,
+      preferredToolId: 1,
     });
-    const pill = screen.getByLabelText("Search (forced)");
+    const pill = screen.getByLabelText("Search (preferred)");
     expect(pill.props.accessibilityState.selected).toBe(true);
 
     fireEvent.press(pill);
-    expect(value.toggleForcedTool).toHaveBeenCalledWith(1);
+    expect(value.togglePreferredTool).toHaveBeenCalledWith(1);
   });
 
-  it("ignores a forced id the current agent doesn't expose", () => {
-    renderControls({ actionTools: [searchTool], forcedToolId: 99 });
-    expect(screen.queryByLabelText("Search (forced)")).toBeNull();
+  it("ignores a preferred id the current agent doesn't expose", () => {
+    renderControls({ actionTools: [searchTool], preferredToolId: 99 });
+    expect(screen.queryByLabelText("Search (preferred)")).toBeNull();
   });
 
-  it("hides the pill for a forced tool that is switched off, matching what gets sent", () => {
+  it("hides the pill for a preferred tool that is switched off, matching what gets sent", () => {
     renderControls({
       actionTools: [searchTool],
-      forcedToolId: 1,
+      preferredToolId: 1,
       disabledToolIds: [1],
     });
-    expect(screen.queryByLabelText("Search (forced)")).toBeNull();
+    expect(screen.queryByLabelText("Search (preferred)")).toBeNull();
   });
 });

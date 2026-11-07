@@ -179,16 +179,7 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                 state: StepInput,
                 token_counter: Callable[[str], int] = token_counter,
                 llm_config: LLMConfig = model.config,
-                tool: AgentTool = tool,
             ) -> PreparedStep:
-                tool.definition = tool.definition.model_copy(
-                    update={
-                        "description": "Search updated sources"
-                        if state.step.index == 2
-                        else "Search"
-                    }
-                )
-
                 def assemble(messages: Sequence[Message]) -> list[Message]:
                     updated_messages = [
                         message.model_copy(update={"content": revised_evidence})
@@ -207,7 +198,9 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                         llm_config=llm_config,
                     )
 
-                return PreparedStep(tools=[tool], assemble_messages=assemble)
+                return PreparedStep(
+                    assemble_messages=assemble,
+                )
 
             agent = Agent(
                 model,
@@ -357,7 +350,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 
 
 @pytest.mark.parametrize("long_question", [False, True])
-def test_summary_cutoff_survives_request_context_removal(long_question: bool) -> None:
+def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     model = ContextModel()
     old_answer = ChatHistoryMessage(
         id=1,
@@ -384,22 +377,14 @@ def test_summary_cutoff_survives_request_context_removal(long_question: bool) ->
     source = convert_chat_history(
         [old_answer, question],
         files=[],
-        context_image_files=[],
-        additional_context="Temporary request detail. " * 160,
-        token_counter=len,
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
-    summary_input = "\n".join(request.messages[0].text for request in model.summaries)
-    assert "Temporary request detail" not in summary_input
 
     next_question = question.model_copy(update={"id": 3, "message": "Next question"})
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=len,
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -453,7 +438,9 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         execution_threads.append(threading.current_thread())
         step = decision.step
         prepared.append(step.index)
-        return PreparedStep(tools=tools, assemble_messages=render)
+        return PreparedStep(
+            assemble_messages=render,
+        )
 
     def render(messages: Sequence[Message]) -> list[Message]:
         assert threading.current_thread() is execution_threads[0]
@@ -608,7 +595,7 @@ def test_step_timeout_override_does_not_change_later_steps() -> None:
 
     def prepare(state: StepInput) -> PreparedStep:
         return PreparedStep(
-            tools=[tool], stall_timeout_s=37 if state.step.index == 0 else None
+            stall_timeout_s=37 if state.step.index == 0 else None,
         )
 
     agent = Agent(
@@ -802,9 +789,6 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=count_tokens,
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()

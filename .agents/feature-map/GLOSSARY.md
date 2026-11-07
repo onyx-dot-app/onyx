@@ -179,7 +179,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Presenter and renderer | `ResponsePresenter` and `MessageRenderer` turn runtime events into packets. They never drive execution. See [[core-chat-loop#presentation-does-not-drive-execution]]. |
 | Emitter | The object that stamps `model_index` on a packet and hands it to delivery. See [[streaming-protocol#emitter-sets-model-index]]. |
 | Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
-| Custom agent prompt | The agent's instructions, sent as a user message near the newest user message. See [[context-assembly]]. |
+| Custom agent prompt | The agent's instructions, normally sent as a fixed user message before conversation history. With an empty base prompt and no base-prompt replacement, they become the system message. See [[context-assembly]]. |
 | Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission and the live stream ID after `ChatTurnAdmission.publish`. The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
 | Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#stopping-tools]]. |
 | `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |

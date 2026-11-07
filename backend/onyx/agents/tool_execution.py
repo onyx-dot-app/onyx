@@ -28,6 +28,7 @@ from onyx.agents.tools import (
 )
 from onyx.llm.models import (
     Message,
+    NamedToolChoice,
     ToolCall,
     ToolChoiceOptions,
     ToolResult,
@@ -274,7 +275,14 @@ class ToolBatch:
         tool = self.tools.get(call.name)
         self.run.start_tool_calls(calls)
         cancellation_signal.check()
-        if tool is None or options.tool_choice == ToolChoiceOptions.NONE:
+        if (
+            tool is None
+            or options.tool_choice == ToolChoiceOptions.NONE
+            or (
+                isinstance(options.tool_choice, NamedToolChoice)
+                and call.name != options.tool_choice.name
+            )
+        ):
             return ToolResult(
                 content=f"Tool {call.name} is unavailable for this step.",
                 is_error=True,

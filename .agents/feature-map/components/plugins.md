@@ -89,7 +89,7 @@ connection before they report success.
 **Default Chat at turn time.** `tools/tool_constructor.py:_construct_tools_impl`
 loads the user's preferences only for the default assistant and skips a tool
 whose preference has `enabled_in_chat` false. On the web,
-`lib/plugins/chat.ts:effectiveChatForcedToolId` drops a forced plugin tool in
+`lib/plugins/chat.ts:effectiveChatPreferredToolId` drops an unavailable preferred plugin tool in
 Default Chat when the user's preference turns it off.
 
 ---

@@ -85,7 +85,8 @@ overflow. For the default assistant in a project, search is on when files
 overflow, and off when the files fit or the project has no files. A custom
 agent keeps its own search setting. Overflow adds the project and agent
 filters to the agent's own knowledge; it does not add a tool the agent lacks.
-`prepare_chat_turn` clears a forced search tool when search is off. Inside
+When this policy turns search off, preparation omits a configured and allowed Search preference for
+that request. The UI selection remains active for later requests. Inside
 `SearchTool._run`, an inferred source scope gets `USER_FILE` added back when
 project or agent files need retrieval, unless the user's own source filter
 leaves it out. A project-only search (`project_id_filter` set,
