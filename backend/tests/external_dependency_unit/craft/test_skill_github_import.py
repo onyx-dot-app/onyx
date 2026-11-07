@@ -100,7 +100,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
         ),
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api._github_authorization_header",
+        "onyx.server.features.skill.api.github_authorization_header",
         lambda *_args: None,
     )
     pushed_user_ids: list[set[UUID]] = []
@@ -187,7 +187,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
         ),
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api._github_authorization_header",
+        "onyx.server.features.skill.api.github_authorization_header",
         lambda *_args: None,
     )
     monkeypatch.setattr(
@@ -239,7 +239,7 @@ def test_import_applies_shared_access_before_publication(
         ),
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api._github_authorization_header",
+        "onyx.server.features.skill.api.github_authorization_header",
         lambda *_args: None,
     )
     published: list[SkillSharePermission | None] = []
@@ -294,7 +294,7 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
         ),
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api._github_authorization_header",
+        "onyx.server.features.skill.api.github_authorization_header",
         lambda *_args: None,
     )
     monkeypatch.setattr(

@@ -65,7 +65,8 @@ When it fails:
 
 This component owns the skill row and version snapshots, its shares,
 installation policy and user preferences; bundle parsing and validation;
-built-in skill definitions; per-user rendering of templates; GitHub import;
+built-in skill definitions; per-user rendering of templates; GitHub import
+and marketplace storage and provider adapters;
 the push of a user's skill files into a sandbox; and the skills library UI.
 
 Neighbours own the rest:
@@ -204,9 +205,9 @@ The library preview of an external-app skill calls the same renderer
 10. `app-skill-org-visible` **An app skill stays visible to the
     organization.** `db/skill.py:set_skill_public_permission` accepts only `VIEWER` for a
     skill linked to an external app. A private custom skill must have an
-    owner: `ck_private_skill_has_owner` rejects a private skill with no
-    author, so transfer or delete private skills before their owner is
-    removed.
+    owner or a marketplace: `ck_private_skill_has_owner` enforces this in SQL,
+    and the visibility setter applies the same rule. Transfer or delete private
+    uploaded skills before removing their owner.
 11. `push-holds-row-locks` **The push holds row locks during network I/O.**
     `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then calls the
     sandbox push while the transaction is open. The hash write is a savepoint,
@@ -284,6 +285,20 @@ The library preview of an external-app skill calls the same renderer
     model `skills/rendering.py:render_skill_for_model`, which resolves the
     placeholder and adds the same two lines. No such harness is on main yet.
 
+17. `marketplace-provider-boundary` **Only the provider adapter reads provider
+    config.** `skills/marketplace/provider.py:MarketplaceProviderAdapter` owns
+    login checks, ref resolution, change checks and webhook capability. GitHub
+    verifies every ref, including pinned commits, and fetches one bounded archive
+    at that commit. Reconciliation receives bytes and a folder, not GitHub config.
+    Webhooks remain unsupported until the self-hosted webhook ticket ships.
+18. `marketplace-ownership` **A personal marketplace blocks owner deletion.**
+    Its owner FK uses RESTRICT; the login and version creator FKs use SET NULL.
+    `db/users.py:delete_user_from_db__no_commit` names owned marketplaces and
+    records a login error when deleting another marketplace's login user.
+    A missing, inactive or disconnected login stops the adapter before fetch.
+    Downgrade refuses every ownerless marketplace skill, including public ones.
+    Entry keys identify the plugin entry and skill, not the folder; only live
+    entries are unique, so a retired entry can return as a new skill.
 
 ---
 
@@ -333,7 +348,7 @@ The library preview of an external-app skill calls the same renderer
   live runtime.
 - [[craft-external-apps]]: app readiness and action policy views. GitHub
   import and preview authenticate with the user's GitHub app credential
-  (`server/features/skill/api.py:_github_authorization_header`).
+  (`skills/github_auth.py:github_authorization_header`).
 - [[authorization]]: `MANAGE_SKILLS` and the scoped-manager group check
   (`assert_within_scope`).
 - [[file-store-and-user-files]]: bundle blobs.

@@ -9,6 +9,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.url import SSRFException, ssrf_safe_get
 
+GITHUB_ARCHIVE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
+
 GITHUB_COMMIT_SHA_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{40}$")
 
 _GITHUB_FETCH_TIMEOUT_SECONDS: Final[int] = 30
