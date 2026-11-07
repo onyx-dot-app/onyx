@@ -11,7 +11,7 @@ import zipfile
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
-from typing import IO, Final
+from typing import IO, Final, Literal
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -30,6 +30,14 @@ DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
 DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_TOTAL_MAX_BYTES") or 100 * 1024 * 1024
 )
+DEFAULT_ZIP_MAX_BYTES: Final[int] = int(
+    os.environ.get("SKILL_BUNDLE_ZIP_MAX_BYTES") or 25 * 1024 * 1024
+)
+DEFAULT_MAX_FILE_COUNT: Final[int] = int(
+    os.environ.get("SKILL_BUNDLE_MAX_FILE_COUNT") or 500
+)
+
+SkillBundleLimit = Literal["zip_bytes", "file_count", "file_bytes", "total_bytes"]
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
@@ -47,14 +55,31 @@ class NormalizedSkillBundle:
     source_directory: str | None
 
 
-def read_bundle_file(bundle_file: IO[bytes]) -> bytes:
+def _bundle_limit_error(
+    limit: SkillBundleLimit, limit_value: int, detail: str
+) -> OnyxError:
+    return OnyxError(
+        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        detail,
+        extra={"limit": limit, "limit_value": limit_value},
+    )
+
+
+def _zip_too_large_error(max_bytes: int) -> OnyxError:
+    return _bundle_limit_error(
+        "zip_bytes",
+        max_bytes,
+        f"Skill bundle zip exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
+    )
+
+
+def read_bundle_file(
+    bundle_file: IO[bytes], *, max_bytes: int = DEFAULT_ZIP_MAX_BYTES
+) -> bytes:
     """Read a bundle stream without buffering an arbitrarily large body."""
-    data = bundle_file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
-    if len(data) > DEFAULT_TOTAL_MAX_BYTES:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            f"Skill bundle exceeds the {DEFAULT_TOTAL_MAX_BYTES} byte limit.",
-        )
+    data = bundle_file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise _zip_too_large_error(max_bytes)
     return data
 
 
@@ -175,8 +200,9 @@ def rewrite_custom_bundle_skill_md(
         instructions_markdown=instructions_markdown,
     ).encode("utf-8")
     if len(base_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        raise _bundle_limit_error(
+            "file_bytes",
+            DEFAULT_PER_FILE_MAX_BYTES,
             f"file '{SKILL_MD_NAME}' exceeds "
             f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
         )
@@ -224,8 +250,9 @@ def rewrite_custom_bundle_skill_md(
                     instructions_markdown,
                 ).encode("utf-8")
                 if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "file_bytes",
+                        DEFAULT_PER_FILE_MAX_BYTES,
                         f"file '{SKILL_MD_NAME}' exceeds "
                         f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
                     )
@@ -355,14 +382,16 @@ def _copy_validated_bundle_file(
                     break
                 size += len(chunk)
                 if size > per_file_max_bytes:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "file_bytes",
+                        per_file_max_bytes,
                         f"file '{output_path}' exceeds "
                         f"{per_file_max_bytes // (1024 * 1024)} MiB",
                     )
                 if total_bytes_before_file + size > total_max_bytes:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "total_bytes",
+                        total_max_bytes,
                         f"bundle exceeds "
                         f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
                     )
@@ -392,6 +421,8 @@ def _copy_validated_bundle_file(
 def normalize_custom_bundle(
     zip_bytes: bytes,
     *,
+    zip_max_bytes: int | None = DEFAULT_ZIP_MAX_BYTES,
+    max_file_count: int | None = DEFAULT_MAX_FILE_COUNT,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
 ) -> NormalizedSkillBundle:
@@ -400,7 +431,13 @@ def normalize_custom_bundle(
     Stored custom bundles always use a canonical root-level ``SKILL.md`` layout.
     A common ``zip -r skill.zip skill`` archive is accepted at ingestion and
     flattened here before metadata parsing, hashing, and storage.
+
+    Each limit is checked on its own and the first one that fails raises a
+    413. ``None`` skips the zip size or file count check; reads of bundles
+    stored before those limits existed use it.
     """
+    if zip_max_bytes is not None and len(zip_bytes) > zip_max_bytes:
+        raise _zip_too_large_error(zip_max_bytes)
     try:
         source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
     except zipfile.BadZipFile:
@@ -413,6 +450,15 @@ def normalize_custom_bundle(
         file_paths = [
             normalized for info, normalized in normalized_infos if not info.is_dir()
         ]
+        if max_file_count is not None and (
+            sum(not _is_ignored_bundle_path(path) for path in file_paths)
+            > max_file_count
+        ):
+            raise _bundle_limit_error(
+                "file_count",
+                max_file_count,
+                f"bundle contains more than {max_file_count} files",
+            )
         wrapper_prefix = _bundle_wrapper_prefix(file_paths)
         needs_rewrite = wrapper_prefix is not None or any(
             _is_ignored_bundle_path(path) for path in file_paths

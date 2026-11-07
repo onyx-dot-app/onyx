@@ -247,6 +247,45 @@ def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
     assert exc_info.value.response.status_code == 413
 
 
+def _bundle_with_file_count(name: str, file_count: int) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"{name}/", b"")
+        zf.writestr(
+            f"{name}/SKILL.md",
+            f"---\nname: {name}\ndescription: Many files\n---\nbody\n",
+        )
+        zf.writestr(f"{name}/refs/", b"")
+        for index in range(file_count - 1):
+            zf.writestr(f"{name}/refs/{index}.md", b"x")
+    return buf.getvalue()
+
+
+def test_create_skill_file_count_limit(admin_user: DATestUser) -> None:
+    """A version holds at most 500 files; folders do not count."""
+    too_many = f"too-many-{uuid4().hex[:8]}"
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.create_custom(
+            admin_user,
+            name=too_many,
+            bundle_bytes=_bundle_with_file_count(too_many, 501),
+            auto_enable=False,
+        )
+    response = exc_info.value.response
+    assert response.status_code == 413
+    assert response.json()["limit"] == "file_count"
+    assert response.json()["limit_value"] == 500
+
+    at_limit = f"at-limit-{uuid4().hex[:8]}"
+    created = SkillManager.create_custom(
+        admin_user,
+        name=at_limit,
+        bundle_bytes=_bundle_with_file_count(at_limit, 500),
+        auto_enable=False,
+    )
+    assert created.name == at_limit
+
+
 # ---------------------------------------------------------------------------
 # Sharing
 # ---------------------------------------------------------------------------

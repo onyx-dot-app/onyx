@@ -12,6 +12,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
+    DEFAULT_TOTAL_MAX_BYTES,
     SKILL_MD_NAME,
     NormalizedSkillBundle,
     normalize_custom_bundle,
@@ -32,12 +33,18 @@ def load_stored_custom_skill_bundle(
     bundle_file_id: str,
     file_store: FileStore,
 ) -> NormalizedSkillBundle:
+    # Bundles saved before the zip size and file count limits may exceed them.
+    # Those limits apply on the next save; reads keep the older read cap.
     bundle_stream = file_store.read_file(bundle_file_id)
     try:
-        bundle_bytes = read_bundle_file(bundle_stream)
+        bundle_bytes = read_bundle_file(
+            bundle_stream, max_bytes=DEFAULT_TOTAL_MAX_BYTES
+        )
     finally:
         bundle_stream.close()
-    return normalize_custom_bundle(bundle_bytes)
+    return normalize_custom_bundle(
+        bundle_bytes, zip_max_bytes=None, max_file_count=None
+    )
 
 
 def _is_missing_file_error(exc: Exception) -> bool:
