@@ -14,8 +14,8 @@ import (
 )
 
 // SigningKeyPath is the api_server route that registers a node signing key
-// (backend/onyx/server/features/build/sandbox_nodes.py).
-const SigningKeyPath = "/build/sandbox-node/signing-key"
+// (backend/onyx/server/features/microvm/api.py).
+const SigningKeyPath = "/microvm/node/signing-key"
 
 // KeyTTL is the cache TTL of a registered key on the api_server side.
 const KeyTTL = time.Hour

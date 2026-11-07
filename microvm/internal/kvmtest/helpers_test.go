@@ -89,6 +89,13 @@ func newCommand(t *testing.T, e env) jailer.Command {
 // stand-in for the template pipeline (ENG-4566).
 func buildTemplate(t *testing.T, e env, cmd jailer.Command) {
 	t.Helper()
+	buildTemplateWith(t, e, cmd, bootArgs, waitPing)
+}
+
+// buildTemplateWith is buildTemplate with other boot args and another check
+// that the guest is ready for the snapshot.
+func buildTemplateWith(t *testing.T, e env, cmd jailer.Command, args string, ready func(ctx context.Context, vsockPath string) error) {
+	t.Helper()
 	store := &template.Store{Dir: filepath.Join(e.DataDir, "templates")}
 	if _, err := store.Get(e.Template); err == nil {
 		t.Logf("template %s already built", e.Template)
@@ -114,7 +121,7 @@ func buildTemplate(t *testing.T, e env, cmd jailer.Command) {
 			t.Fatalf("%s: %v (console: %s)", what, err, readTail(cmd.Layout.ConsoleLog(id)))
 		}
 	}
-	kernel, args := "/vmlinux", bootArgs
+	kernel := "/vmlinux"
 	_, err = api.PutGuestBootSourceContext(ctx, &operations.PutGuestBootSourceParams{Body: &models.BootSource{KernelImagePath: &kernel, BootArgs: args}})
 	must("boot source", err)
 	for _, d := range []struct {
@@ -138,7 +145,7 @@ func buildTemplate(t *testing.T, e env, cmd jailer.Command) {
 	_, err = api.CreateSyncActionContext(ctx, &operations.CreateSyncActionParams{Info: &models.InstanceActionInfo{ActionType: &start}})
 	must("start", err)
 	vsockPath := cmd.Layout.HostPath(id, template.VsockUDS)
-	must("guest agent", waitPing(ctx, vsockPath))
+	must("guest ready", ready(ctx, vsockPath))
 	paused := models.VMStatePaused
 	_, err = api.PatchVMContext(ctx, &operations.PatchVMParams{Body: &models.VM{State: &paused}})
 	must("pause", err)

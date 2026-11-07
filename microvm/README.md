@@ -23,6 +23,7 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 | `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk, CPU model, Firecracker, host kernel and guest kernel versions. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes the VM's egress relay connections (see Egress relay). |
 | `Dial(sandbox_id, guest_port)` | Byte stream to a guest vsock port (see below). |
+| `craft.sandboxd.v1.Sandboxd/*` | Any guest daemon call, forwarded to the VM named by `x-sandbox-id` (see Guest daemon pass-through). |
 
 Errors are typed. Each error is a gRPC status with one `google.rpc.ErrorInfo` detail: the domain is
 `hostagent.craft.onyx.app` and the reason is an `ErrorReason` name, for example `CAPACITY_MEMORY`,
@@ -36,8 +37,12 @@ Rules for the Create parameters:
   disk can only grow. The agent extends the disk and tells Firecracker the new size. The guest daemon must
   then grow the file system in `Init` with the `EXT4_IOC_RESIZE_FS` ioctl on the mount point (the online
   grow that `resize2fs` uses; the sandbox image has no e2fsprogs).
-- `generation` is unique on the node and increases with each Create. It starts from the wall clock, so it
-  also increases across agent restarts.
+- `generation` is unique on the node and increases with each new VM instance. It starts from the wall
+  clock, so it also increases across agent restarts. It is the host-side boot ID of a VM instance
+  (ENG-4606): every Create that makes a new VM (a snapshot restore) gets a new one. A repeated, idempotent
+  Create returns the existing VM and its generation, so it is not a new boot. The guest's own
+  `/proc/sys/kernel/random/boot_id` is the same in every clone of a template, so it is not an identity.
+  The api_server passes the generation to the daemon's `Init` after each restore.
 
 The agent serves the API on a Unix socket (`<data-dir>/run/host-agent.sock`, mode 0600, root only) and,
 with `--listen`, on an mTLS TCP listener for the api_server (D2):
@@ -49,11 +54,35 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 
 `Dial(sandbox_id, guest_port)` is a bidirectional stream of byte frames to a vsock port of a running VM:
 the guest daemon port or the app preview (3010). Only the ports in `--dial-ports` (default `52,3010`; 52
-is the prototype daemon port until ENG-4571 fixes the daemon port) are allowed (`PORT_NOT_ALLOWED`). The
+is the guest daemon port) are allowed (`PORT_NOT_ALLOWED`). The
 agent does not start with an empty `--dial-ports`. If nothing in the VM accepts the connection, the call
 fails with `GUEST_UNREACHABLE`. A failed write to the guest also ends the call with `GUEST_UNREACHABLE`.
 When the client ends its send side, the agent keeps reading until the guest closes, because Firecracker
 turns a host half-close into a full close.
+
+### Guest daemon pass-through
+
+The api_server calls the guest daemon (`craft.sandboxd.v1.Sandboxd`, `cmd/guest-daemon/`) with normal
+gRPC stubs on the agent's listeners (the mTLS listener and the Unix socket). The agent forwards each
+call to the daemon of one VM on vsock port `--daemon-port` (default 52). It never decodes the daemon
+messages, so a new daemon call needs no agent change (`internal/server/passthrough.go`).
+
+- Metadata `x-sandbox-id` (one lowercase UUID) names the VM. The agent removes it and forwards all other
+  metadata, so `x-sandboxd-key` (the per-VM key from `Init`) reaches the daemon. Headers, trailers and the
+  daemon's status (domain `sandboxd.craft.onyx.app`) come back unchanged. The caller's deadline and
+  cancel apply to the daemon call.
+- Other services get `UNIMPLEMENTED`. A missing or bad `x-sandbox-id` is `INVALID_ARGUMENT`. No VM for
+  the sandbox is `SANDBOX_NOT_FOUND`; a VM that is starting, stopping or exited is `VM_NOT_RUNNING`. If
+  the daemon does not accept the vsock connection, the call fails with `GUEST_UNREACHABLE`. These errors
+  have the agent's domain, so the client sees which side failed.
+- The agent keeps one gRPC connection per VM instance (sandbox and generation) and shares it between
+  calls. It closes the connection when the VM stops or exits; calls on it end with `VM_NOT_RUNNING`. An
+  idle connection closes after 10 min and opens again on the next call.
+- A message can be at most 16 MiB in each direction.
+- After an agent restart, the first call opens a new connection. Commands in the VM keep running; a
+  client re-attaches with `Stream(execution_id, offsets)`.
+
+### Agent restart
 
 While the agent restarts, new calls (including `Dial` and the egress relay) fail for a few seconds: 5.5 s
 in the KVM restart test, about 7 s in T6. Open `Dial` streams and relay connections end with the old
@@ -74,8 +103,11 @@ process. VMs and their programs keep running; callers retry.
 4. The agent checks the PID (`comm` is `firecracker`, the cgroup is the VM scope), restores the snapshot
    and resumes the VM.
 
-Stop sends SIGKILL through a pidfd, waits for the exit, stops the scope and removes the chroot. The
-api_server saves the session before it calls Stop. A VM that exits by itself shows as `EXITED`; its
+Stop first removes everything that names the VM: its relay listener and identity, its relay
+connections and its daemon pass-through connection. Only then does it send SIGKILL through a pidfd,
+wait for the exit, stop the scope and remove the chroot (with the vsock socket), and then free the
+jailer UID. A VM exit and a failed start use the same order. So a reused UID or socket path never
+carries the old identity (ENG-4606). The api_server saves the session before it calls Stop. A VM that exits by itself shows as `EXITED`; its
 files are removed at once.
 
 If a cleanup fails, the VM shows as `EXITED` once its process is gone, and a repeat Stop retries the
@@ -139,7 +171,7 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   `internal/relay/testdata/signed_identity_vectors.json` is a copy of the proxy's shared test vectors; a
   test fails if the two differ, or if the proxy file exists but cannot be read.
 - The agent makes a new Ed25519 node key at each start (`kid` = `<node-id>-<unix time>`) and registers it
-  with `PUT <--api-server-url>/build/sandbox-node/signing-key` and
+  with `PUT <--api-server-url>/microvm/node/signing-key` and
   `Authorization: Bearer $SANDBOX_NODE_REGISTRATION_SECRET`. It registers again every 20 min (the cache
   TTL is 1 h) and retries every 10 s after a failure.
 - `CloseConnections(sandbox_id, attempt, generation)` closes every relay connection of the VM (T5 in
@@ -149,7 +181,17 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 ### Node requirements
 
 - Linux, root, `/dev/kvm`, cgroup v2, systemd on the host.
-- In a container: privileged, `hostPID`, and the host `/sys/fs/cgroup`.
+- In a container: privileged and `hostPID`, with cgroup v2 mounted at `/sys/fs/cgroup` (the agent
+  checks it). In a private cgroup namespace that mount shows the pod's own tree; the agent reads the
+  host tree through `/proc/1/root/sys/fs/cgroup`.
+- The agent works in the host cgroup namespace or in a pod's own one (ENG-4610). It compares its cgroup
+  namespace with the one of PID 1 at start-up. In its own namespace, `/proc/<pid>/cgroup` of a VM reads
+  `0::/../../fcvms.slice/fcvm-<id>.scope` (the number of `..` steps depends on the pod's cgroup). The
+  agent then accepts a VM scope only if the host's `fcvms.slice/fcvm-<id>.scope/cgroup.procs`, read
+  through `/proc/1/root/sys/fs/cgroup`, lists the PID. A read error is never a match, so the agent does
+  not kill on doubt. If the host cgroup tree cannot be read, the agent does not start. An `nsenter
+  --cgroup` wrapper is not needed. The agent does not `setns` itself: a cgroup namespace switch applies
+  to one thread only, and Go runs on many threads.
 - The data dir must be on XFS with reflink (the agent checks this at start-up). It must be mounted at
   the same path in the container and on the host, because the jailer runs in the host mount namespace.
   The path must be short enough for Unix socket paths (the agent checks this too).
@@ -218,6 +260,10 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 ./hostagent-kvm.test -test.v -test.run TestEgressKVM
 # mTLS listener and Dial (test CAs from internal/testcerts).
 ./hostagent-kvm.test -test.v -test.run TestDialKVM
+# Guest daemon pass-through, end to end: the agent binary in a --cgroupns=private container (KVM_CGROUPNS),
+# a template from the deployment/craft-fc/rootfs root drive (KVM_IMG_DIR) booted with craft.scratch=defer,
+# Init/Run/Start/Stream/Cancel over mTLS, egress through the proxy harness, agent restart, Stop order.
+KVM_IMG_DIR=/opt/craft-fc-test/img3 KVM_TEMPLATE=pt-1 ./hostagent-kvm.test -test.v -test.run TestPassthroughKVM
 ```
 
 To check relay tokens against the proxy verifier on a dev machine:
