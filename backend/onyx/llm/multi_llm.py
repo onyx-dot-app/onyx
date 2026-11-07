@@ -1098,10 +1098,8 @@ class LitellmLLM(LLM):
         # to recover tool calls from text. Matched by model name
         # rather than `is_reasoning` because the litellm/local registry lags
         # behind new Qwen/GLM releases (e.g. qwen3.7-plus, glm-5.3).
-        # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
-        # thinking is skipped below instead, and the other models may still
-        # reject the forced tool upstream (a loud 400 beats silently ignoring
-        # the caller's forced tool).
+        # Shared requests adapt named choices in _prepare_tools. Raw callers
+        # retain their explicit named choice and its provider validation.
         if model_prefers_auto_tool_choice(model_identity_names) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
@@ -2063,12 +2061,17 @@ class LitellmLLM(LLM):
                 choice = ToolChoiceOptions.NONE
             elif choice == ToolChoiceOptions.REQUIRED and len(allowed) == 1:
                 choice = NamedToolChoice(name=next(iter(allowed)))
-            if isinstance(choice, NamedToolChoice):
-                if model_prefers_auto_tool_choice(model_names):
-                    tools = [tool for tool in tools if tool.name == choice.name]
-                    choice = ToolChoiceOptions.AUTO
-            elif choice != ToolChoiceOptions.NONE:
+            if (
+                not isinstance(choice, NamedToolChoice)
+                and choice != ToolChoiceOptions.NONE
+            ):
                 tools = [tool for tool in tools if tool.name in allowed]
+        if isinstance(choice, NamedToolChoice):
+            if choice.name not in {tool.name for tool in tools}:
+                raise ValueError("Named tool is not declared for this request")
+            if model_prefers_auto_tool_choice(model_names):
+                tools = [tool for tool in tools if tool.name == choice.name]
+                choice = ToolChoiceOptions.AUTO
         if choice == ToolChoiceOptions.NONE and model_requires_auto_tool_choice(
             model_names
         ):

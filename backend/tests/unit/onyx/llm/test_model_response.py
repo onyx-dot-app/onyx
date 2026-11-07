@@ -647,15 +647,18 @@ def test_tool_recovery_does_not_delay_answer_text(
         events.close()
 
 
-@pytest.mark.parametrize("has_tools", [False, True])
-def test_disabled_recovery_preserves_literal_xml(has_tools: bool) -> None:
+@pytest.mark.parametrize("mode", ["no_tools", "choice_none", "empty_permissions"])
+def test_disabled_recovery_preserves_literal_xml(mode: str) -> None:
     text = '<function_calls><invoke name="search"></invoke></function_calls>'
     request = GenerationRequest(
         tools=[ToolDefinition(name="search", description="Search", parameters={})]
-        if has_tools
+        if mode != "no_tools"
         else [],
+        allowed_tool_names=frozenset() if mode == "empty_permissions" else None,
         options=GenerationOptions(
-            tool_choice=ToolChoiceOptions.NONE if has_tools else ToolChoiceOptions.AUTO
+            tool_choice=ToolChoiceOptions.NONE
+            if mode == "choice_none"
+            else ToolChoiceOptions.AUTO
         ),
     )
     accumulator = MessageAccumulator(request.tools)

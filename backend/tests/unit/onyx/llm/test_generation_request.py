@@ -101,6 +101,9 @@ class RecordingProvider(LitellmLLM):
     "model_name,deployment_name,allowed,choice,expected_names,expected_choice",
     [
         ("ordinary", None, None, "auto", ["lookup", "other"], "auto"),
+        ("claude-sonnet-4-5", None, None, "lookup", ["lookup"], "auto"),
+        ("qwen3", None, None, "lookup", ["lookup"], "auto"),
+        ("alias", "glm-5", None, "lookup", ["lookup"], "auto"),
         (
             "ordinary",
             None,
@@ -156,7 +159,11 @@ def test_tool_permissions_preserve_declared_tools_and_semantic_options(
             for name in ["lookup", "other"]
         ],
         allowed_tool_names=allowed,
-        options=GenerationOptions(tool_choice=ToolChoiceOptions(choice)),
+        options=GenerationOptions(
+            tool_choice=NamedToolChoice(name="lookup")
+            if choice == "lookup"
+            else ToolChoiceOptions(choice)
+        ),
     )
     original = request.model_dump_json()
     if stream:
@@ -177,12 +184,15 @@ def test_tool_permissions_preserve_declared_tools_and_semantic_options(
     "allowed,choice,error",
     [
         (frozenset({"unknown"}), ToolChoiceOptions.AUTO, "not declared"),
+        (None, NamedToolChoice(name="unknown"), "not declared"),
         (frozenset(), ToolChoiceOptions.REQUIRED, "needs an allowed tool"),
         (frozenset(), NamedToolChoice(name="lookup"), "not allowed"),
     ],
 )
 def test_invalid_tool_permissions_fail_before_provider_call(
-    allowed: frozenset[str], choice: ToolChoiceOptions | NamedToolChoice, error: str
+    allowed: frozenset[str] | None,
+    choice: ToolChoiceOptions | NamedToolChoice,
+    error: str,
 ) -> None:
     provider = RecordingProvider()
     request = GenerationRequest(
@@ -572,3 +582,55 @@ def test_tool_recovery_keeps_answer_text_and_signed_thinking(
     assert message.thinking_blocks == [signed]
     assert [call.name for call in message.tool_calls] == ["search"]
     assert message.tool_calls[0].arguments == {"query": "onyx"}
+
+
+@pytest.mark.parametrize(
+    "allowed", [frozenset(), frozenset({"other"}), frozenset({"search"})]
+)
+def test_recovered_explicit_call_respects_tool_permissions(
+    allowed: frozenset[str],
+) -> None:
+    text = '<function_calls><invoke name="search"></invoke></function_calls>'
+    request = GenerationRequest(
+        tools=[
+            ToolDefinition(name=name, description="", parameters={})
+            for name in ("search", "other")
+        ],
+        allowed_tool_names=allowed,
+    )
+    message = recover_tool_calls(
+        AssistantMessage(content=[TextContent(text=text)]), request
+    )
+    assert [call.name for call in message.tool_calls] == (
+        ["search"] if "search" in allowed else []
+    )
+    if "search" not in allowed:
+        assert message.text == text
+
+
+def test_bare_argument_recovery_uses_allowed_tools_without_changing_semantic_choice() -> (
+    None
+):
+    provider = RecordingProvider(
+        _response(Message(content='{"query":"Onyx"}')),
+        config=_config(model_name="claude-sonnet-4-5"),
+    )
+    request = GenerationRequest(
+        tools=[
+            ToolDefinition(
+                name=name,
+                description="",
+                parameters={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
+            )
+            for name in ("search", "other")
+        ],
+        allowed_tool_names=frozenset({"search"}),
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    message = provider.invoke(request)
+    assert provider.calls[0]["tool_choice"] == ToolChoiceOptions.AUTO
+    assert request.options.tool_choice == ToolChoiceOptions.REQUIRED
+    assert [call.name for call in message.tool_calls] == ["search"]
