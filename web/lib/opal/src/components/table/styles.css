@@ -105,11 +105,6 @@ table.tbl .tbl-row[data-drag-handle] > td:last-child {
   border-radius: 0;
 }
 
-table.tbl .tbl-row:focus-visible > td,
-table.tbl .tbl-row:has(:focus-visible) > td {
-  @apply bg-action-selection-01;
-}
-
 /* ---- Qualifier tile ---- */
 
 /* At rest the tile stands apart from its row: tint-01 on a primary (tint-00)

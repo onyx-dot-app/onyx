@@ -16195,6 +16195,8 @@
       "columns": "列",
       "descending": "降序",
       "deselectAll": "取消全选",
+      "selectAll": "选择所有可见行",
+      "selectRow": "选择 {name}",
       "dragToReorder": "拖动以重新排序",
       "manualOrdering": "手动排序",
       "selectAnItemToContinue": "选择一个项目以继续",

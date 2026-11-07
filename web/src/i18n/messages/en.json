@@ -16195,6 +16195,8 @@
       "columns": "Columns",
       "descending": "Descending",
       "deselectAll": "Deselect all",
+      "selectAll": "Select all visible rows",
+      "selectRow": "Select {name}",
       "dragToReorder": "Drag to reorder",
       "manualOrdering": "Manual Ordering",
       "selectAnItemToContinue": "Select an item to continue",

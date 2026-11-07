@@ -8,6 +8,7 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
+import type { BulkSkillResult } from "@/lib/skills/api";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 
 const mockSetSkillEnabled = jest.fn();
@@ -317,6 +318,28 @@ describe("SkillsPage preference toggles", () => {
     ).toBeVisible();
   });
 
+  it("keeps select-all in the admin header and fills a partial selection", async () => {
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    const header = screen.getByRole("columnheader", {
+      name: "Select all visible custom skills",
+    });
+    expect(
+      screen.queryByRole("group", { name: "Select skills" })
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select first-skill" })
+    );
+    const selectAll = within(header).getByRole("checkbox");
+    expect(selectAll).toBePartiallyChecked();
+    await user.click(selectAll);
+    expect(selectAll).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select second-skill" })
+    ).toBeChecked();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("opens an admin row with the keyboard and keeps selection separate from preview", async () => {
     render(<SkillsPage admin />);
     const user = setupUser();
@@ -328,6 +351,44 @@ describe("SkillsPage preference toggles", () => {
     row.focus();
     await user.keyboard("{Enter}");
     expect(screen.getByRole("dialog")).toHaveTextContent("Skill instructions");
+  });
+
+  it("locks admin selection while a bulk request runs and keeps failed rows selected", async () => {
+    const mutation = deferred<BulkSkillResult>();
+    mockBulkUpdateSkills.mockReturnValueOnce(mutation.promise);
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    const selectAll = screen.getByRole("checkbox", {
+      name: "Select all visible custom skills",
+    });
+    await user.click(selectAll);
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      expect(checkbox).toHaveAttribute("tabindex", "-1");
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+    }
+    expect(screen.getByRole("button", { name: "More actions" })).toBeDisabled();
+    expect(
+      screen.getByRole("switch", { name: "Enable first-skill" })
+    ).toHaveAttribute("aria-disabled", "true");
+    await act(async () => {
+      mutation.resolve({
+        succeeded: ["first-id"],
+        failed: [{ skill_id: "second-id", detail: "Unavailable" }],
+      });
+      await mutation.promise;
+    });
+    expect(selectAll).toBePartiallyChecked();
+    expect(selectAll).toHaveAttribute("tabindex", "0");
+    expect(
+      screen.getByRole("checkbox", { name: "Select second-skill" })
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select first-skill" })
+    ).not.toBeChecked();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("locks the pending admin switch and bulk actions without opening a preview", async () => {
@@ -649,7 +710,7 @@ describe("SkillsPage preference toggles", () => {
       );
       await user.type(screen.getByPlaceholderText("Search skills..."), "first");
       expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
-      expect(screen.getByText("Select skills")).toBeInTheDocument();
+      if (!admin) expect(screen.getByText("Select skills")).toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Enable for me" })
       ).not.toBeInTheDocument();

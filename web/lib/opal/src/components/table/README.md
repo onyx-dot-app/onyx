@@ -67,6 +67,9 @@ function UsersTable({ users }: { users: User[] }) {
 | `selectionBehavior`       | `"no-select" \| "single-select" \| "multi-select"` | `"no-select"`                      | Row selection behavior                                                                                  |
 | `values`                  | `ReadonlySet<string>`                              | —                                  | The selected row IDs. Given, the selection is controlled                                                |
 | `onSelectionChange`       | `(values: ReadonlySet<string>) => void`            | —                                  | Called with the next selection                                                                          |
+| `selectionDisabled` | `boolean` | `false` | Locks checkboxes, row selection and footer clearing; row actions and pagination stay available |
+| `selectAllLabel` | `string` | localized | Accessible label for the header checkbox |
+| `getRowSelectionLabel` | `(row: TData) => string` | localized | Accessible label for each row checkbox |
 | `initialViewSelected`     | `boolean`                                          | `false`                            | Start filtered to `values`, when it is non-empty at mount                                               |
 | `initialSorting`          | `SortingState`                                     | —                                  | Initial sort state                                                                                      |
 | `initialColumnVisibility` | `VisibilityState`                                  | —                                  | Initial column visibility                                                                               |
@@ -98,3 +101,15 @@ The footer mode is derived automatically from `selectionBehavior`:
 
 - **Selection footer** (when `selectionBehavior` is `"single-select"` or `"multi-select"`) — shows selection count, optional view/clear buttons, count pagination
 - **Summary footer** (when `selectionBehavior` is `"no-select"` or omitted) — shows "Showing X\~Y of Z", list pagination, optional extra element
+
+
+## Selection and focus
+
+Use a `qualifier` column with `selectionBehavior="multi-select"` for header and row checkboxes.
+The header selects all filtered rows, across pages. A partial selection becomes a full selection when checked.
+Caller labels override the localized OpalStrings defaults. Default row labels use `getRowLabel`, or the row ID.
+
+Checkbox labels provide 36px targets at the default row size, and 28px targets for compact rows.
+Checkbox clicks and keyboard presses change selection without calling `onRowClick`.
+Enter or Space on a focused clickable row calls `onRowClick`.
+Rows use the shared neutral keyboard focus state. Checked boxes and the selected state identify selection.

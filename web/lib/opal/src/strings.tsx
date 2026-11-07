@@ -96,6 +96,8 @@ export type OpalStrings = {
   columns: string;
   shownColumns: string;
   alwaysShown: string;
+  tableSelectAll: string;
+  tableSelectRow: (name: string) => string;
   dragToReorder: string;
   viewSelected: string;
   deselectAll: string;
@@ -230,6 +232,8 @@ export const defaultOpalStrings: OpalStrings = {
   columns: "Columns",
   shownColumns: "Shown Columns",
   alwaysShown: "Always Shown",
+  tableSelectAll: "Select all visible rows",
+  tableSelectRow: (name) => `Select ${name}`,
   dragToReorder: "Drag to reorder",
   viewSelected: "View selected",
   deselectAll: "Deselect all",

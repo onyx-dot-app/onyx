@@ -34,7 +34,9 @@
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Search changes clear selection.
+  stay selected. Search changes clear selection. The admin table header selects all filtered
+  custom skills. It uses Opal multi-selection, disabled during bulk requests. Row activation
+  opens the preview; checkbox activation changes selection without opening it.
   Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal. The table shows

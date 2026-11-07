@@ -33,6 +33,7 @@ interface FooterSelectionModeProps {
   isViewingSelected?: boolean;
   /** Clears all selections. */
   onClear?: () => void;
+  selectionDisabled?: boolean;
   /** Number of items displayed per page. */
   pageSize: number;
   /** Total number of items across all pages. */
@@ -122,6 +123,7 @@ export default function Footer(props: FooterProps) {
             onView={props.onView}
             isViewingSelected={props.isViewingSelected}
             onClear={props.onClear}
+            selectionDisabled={props.selectionDisabled}
             isSmall={isSmall}
           />
         ) : (
@@ -175,6 +177,7 @@ interface SelectionLeftProps {
   onView?: () => void;
   isViewingSelected?: boolean;
   onClear?: () => void;
+  selectionDisabled?: boolean;
   isSmall: boolean;
 }
 
@@ -185,6 +188,7 @@ function SelectionLeft({
   onView,
   isViewingSelected = false,
   onClear,
+  selectionDisabled,
   isSmall,
 }: SelectionLeftProps) {
   const strings = useOpalStrings();
@@ -231,7 +235,9 @@ function SelectionLeft({
           {onClear && (
             <Button
               icon={SvgXCircle}
+              disabled={selectionDisabled}
               onClick={onClear}
+              aria-label={strings.deselectAll}
               tooltip={strings.deselectAll}
               size={isSmall ? "sm" : "md"}
               prominence="tertiary"

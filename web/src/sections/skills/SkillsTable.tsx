@@ -7,7 +7,6 @@ import {
   Badge,
   Button,
   Dropdown,
-  InputCheckbox,
   InputSwitch,
   Table,
   Text,
@@ -27,6 +26,8 @@ type SkillTableItem = SkillCardProps & { item: CustomSkillCardItem };
 interface SkillsTableProps {
   items: CustomSkillCardItem[];
   selectedIds: ReadonlySet<string>;
+  onSelectionChange: (values: ReadonlySet<string>) => void;
+  selectionDisabled: boolean;
   getItemProps: (item: CustomSkillCardItem) => SkillCardProps;
 }
 
@@ -159,6 +160,8 @@ function SkillActions({
 export default function SkillsTable({
   items,
   selectedIds,
+  onSelectionChange,
+  selectionDisabled,
   getItemProps,
 }: SkillsTableProps) {
   const t = useTranslations("skills");
@@ -166,34 +169,12 @@ export default function SkillsTable({
   const { isMobile } = useScreenSize();
   const columns = useMemo<TableColumn<SkillTableItem>[]>(
     () => [
-      {
-        kind: "display",
-        id: "selection",
-        width: { fixed: 36 },
-        hideable: false,
-        cell: ({ item, selection }) => {
-          return (
-            selection && (
-              <Section
-                width="auto"
-                height="auto"
-                padding={2}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <InputCheckbox
-                  {...selection}
-                  aria-label={t("bulk.selectSkill", { name: item.name })}
-                />
-              </Section>
-            )
-          );
-        },
-      },
+      { kind: "qualifier", content: "checkbox" },
       {
         kind: "display",
         id: "skill",
         title: t("page.header.title"),
-        width: { weight: 48, minWidth: isMobile ? 96 : 160 },
+        width: { weight: 48, minWidth: isMobile ? 88 : 160 },
         hideable: false,
         cell: (props) => <SkillName {...props} />,
       },
@@ -288,6 +269,13 @@ export default function SkillsTable({
       columns={visibleColumns}
       getRowId={({ item }) => item.id}
       values={selectedIds}
+      selectionBehavior="multi-select"
+      selectionDisabled={selectionDisabled}
+      onSelectionChange={onSelectionChange}
+      selectAllLabel={t("bulk.selectAll")}
+      getRowSelectionLabel={({ item }) =>
+        t("bulk.selectSkill", { name: item.name })
+      }
       pageSize={false}
       onRowClick={({ item, onClick }) => onClick?.(item)}
       getRowLabel={({ item }) => item.name}

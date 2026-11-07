@@ -16195,6 +16195,8 @@
       "columns": "Columnas",
       "descending": "Descendente",
       "deselectAll": "Deseleccionar todo",
+      "selectAll": "Seleccionar todas las filas visibles",
+      "selectRow": "Seleccionar {name}",
       "dragToReorder": "Arrastra para reordenar",
       "manualOrdering": "Orden manual",
       "selectAnItemToContinue": "Selecciona un elemento para continuar",

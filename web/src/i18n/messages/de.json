@@ -16195,6 +16195,8 @@
       "columns": "Spalten",
       "descending": "Absteigend",
       "deselectAll": "Auswahl aufheben",
+      "selectAll": "Alle sichtbaren Zeilen auswählen",
+      "selectRow": "{name} auswählen",
       "dragToReorder": "Ziehen zum Umsortieren",
       "manualOrdering": "Manuelle Reihenfolge",
       "selectAnItemToContinue": "Element auswählen, um fortzufahren",
