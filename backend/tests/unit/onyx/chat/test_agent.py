@@ -201,7 +201,10 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     assert llm.requests[0]["tool_choice"] == (
         ToolChoiceOptions.REQUIRED if multiple_operations else forced_choice
     )
-    expected_tools = ["echo", "second_operation"] if multiple_operations else ["echo"]
+    # Multiple-operation permissions keep the configured schemas on the wire.
+    expected_tools = (
+        ["echo", "second_operation", "other"] if multiple_operations else ["echo"]
+    )
     if not multiple_operations and isinstance(forced_choice, NamedToolChoice):
         expected_tools.append("other")
     assert [
