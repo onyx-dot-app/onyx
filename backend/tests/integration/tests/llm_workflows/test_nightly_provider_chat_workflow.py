@@ -329,7 +329,7 @@ def _run_chat_assertions(
                 "then summarize the result in one short sentence."
             ),
             user_performing_action=admin_user,
-            forced_tool_ids=[search_tool_id],
+            preferred_tool_id=search_tool_id,
         )
 
         if response.error is None:

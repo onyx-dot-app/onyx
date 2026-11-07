@@ -10,6 +10,7 @@ from onyx.evals.models import (
     EvalProvider,
     EvalToolResult,
     MultiTurnEvalResult,
+    evaluation_input,
 )
 from onyx.utils.logger import setup_logger
 
@@ -129,17 +130,7 @@ class BraintrustEvalProvider(EvalProvider):
             if data:
                 eval_data = [
                     EvalCase(
-                        input={
-                            **item.get("input", {}),
-                            # Pass through per-test tool configuration (for single-turn)
-                            "force_tools": item.get("force_tools", []),
-                            "expected_tools": item.get("expected_tools", []),
-                            "require_all_tools": item.get("require_all_tools", False),
-                            # Pass through per-test model configuration
-                            "model": item.get("model"),
-                            "model_provider": item.get("model_provider"),
-                            "temperature": item.get("temperature"),
-                        },
+                        input=evaluation_input(item),
                         expected=item.get("expected"),
                     )
                     for item in data

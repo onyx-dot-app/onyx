@@ -12,6 +12,26 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
 
 
+def evaluation_input(item: dict[str, Any]) -> dict[str, Any]:
+    """Merge dataset overrides without erasing values supplied inside input."""
+    values = dict(item.get("input", {}))
+    if item.get("force_tools") or values.get("force_tools"):
+        raise ValueError(
+            "force_tools is no longer supported; use preferred_tool and expected_tools assertions"
+        )
+    for key in (
+        "preferred_tool",
+        "expected_tools",
+        "require_all_tools",
+        "model",
+        "model_provider",
+        "temperature",
+    ):
+        if key in item:
+            values[key] = item[key]
+    return values
+
+
 class ToolAssertion(BaseModel):
     """Assertion about expected tool usage during evaluation."""
 
@@ -64,7 +84,7 @@ class EvalMessage(BaseModel):
     model: str | None = None
     model_provider: str | None = None
     temperature: float | None = None
-    force_tools: list[str] = Field(default_factory=list)  # Tools to force for this turn
+    preferred_tool: str | None = None
 
 
 class MultiTurnEvalResult(BaseModel):

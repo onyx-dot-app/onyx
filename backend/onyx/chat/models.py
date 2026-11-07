@@ -13,6 +13,7 @@ from pydantic import (
     TypeAdapter,
     field_serializer,
     field_validator,
+    model_validator,
 )
 
 from onyx.agents.models import (
@@ -601,7 +602,7 @@ class ChatFeatureState(BaseModel):
     reasoning_effort: ReasoningEffort
     include_citations: bool
     inject_memories: bool
-    forced_tool_id: int | None
+    preferred_tool_id: int | None = None
     base_prompt: str
     custom_prompt: str | None
     request_context: str | None = None
@@ -614,6 +615,15 @@ class ChatFeatureState(BaseModel):
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
     search_context: SearchContext
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_forced_action_restore(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("forced_tool_id") is not None:
+            raise ValueError(
+                "A run with forced_tool_id cannot resume after forced Actions were removed"
+            )
+        return data
 
 
 class ReservedChatResponse(BaseModel):
@@ -654,7 +664,7 @@ class ChatTurnSetup(BaseModel):
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
-    forced_tool_id: int | None
+    preferred_tool_id: int | None
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext

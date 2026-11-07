@@ -373,12 +373,9 @@ def handle_regular_answer(
             tags=channel_tags or None,
         )
 
-        # Slack answers should be grounded in retrieval (pre-#7399 behavior):
-        # force the search tool on the first LLM cycle, but only when the
-        # channel persona actually has a usable one — non-search personas,
-        # disabled search tools and deployments without connectors keep the
-        # unforced behavior.
-        forced_search_tool_id = next(
+        # Prefer retrieval when this persona has usable search. Evidence and
+        # citation safeguards still apply when the model chooses to search.
+        preferred_search_tool_id = next(
             (
                 tool.id
                 for tool in persona.tools
@@ -386,15 +383,15 @@ def handle_regular_answer(
             ),
             None,
         )
-        if forced_search_tool_id is not None and not SearchTool.is_available(
+        if preferred_search_tool_id is not None and not SearchTool.is_available(
             db_session
         ):
-            forced_search_tool_id = None
+            preferred_search_tool_id = None
 
         new_message_request = SendMessageRequest(
             message=user_message.message,
             allowed_tool_ids=None,
-            forced_tool_id=forced_search_tool_id,
+            preferred_tool_id=preferred_search_tool_id,
             file_descriptors=[],
             internal_search_filters=filters,
             deep_research=False,

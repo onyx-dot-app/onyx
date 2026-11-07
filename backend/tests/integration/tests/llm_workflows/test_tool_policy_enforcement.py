@@ -48,8 +48,8 @@ def _ensure_llm_provider(admin_user: DATestUser) -> None:
     )
 
 
-def _script_forced_search(mock_llm: MockLLMScript, query: str) -> None:
-    """The forced turn names internal_search while retaining stable tool definitions."""
+def _script_preferred_search(mock_llm: MockLLMScript, query: str) -> None:
+    """The preferred search remains optional while definitions stay stable."""
     mock_llm.conversation(
         "chat",
         Reply(
@@ -62,10 +62,7 @@ def _script_forced_search(mock_llm: MockLLMScript, query: str) -> None:
             ],
             conditions=RequestConditions(
                 offers=["internal_search"],
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "internal_search"},
-                },
+                tool_choice="auto",
             ),
         ),
         Reply(
@@ -75,12 +72,12 @@ def _script_forced_search(mock_llm: MockLLMScript, query: str) -> None:
     )
 
 
-def test_forced_tool_executes_when_available(
+def test_preferred_tool_executes_when_available(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     _assert_integration_mode_enabled()
     _seed_connector_for_search_tool(admin_user)
-    _script_forced_search(mock_llm, "alpha")
+    _script_preferred_search(mock_llm, "alpha")
 
     search_tool_id = _get_internal_search_tool_id(admin_user)
     persona = PersonaManager.create(
@@ -92,9 +89,9 @@ def test_forced_tool_executes_when_available(
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="force the search tool",
+        message="prefer the search tool",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -106,7 +103,7 @@ def test_forced_tool_executes_when_available(
     assert response.tool_call_debug[0].tool_args == {"queries": ["alpha"]}
 
 
-def test_forced_tool_rejected_when_not_in_persona_tools(
+def test_preferred_tool_rejected_when_not_in_persona_tools(
     admin_user: DATestUser,
 ) -> None:
     _assert_integration_mode_enabled()
@@ -121,13 +118,13 @@ def test_forced_tool_rejected_when_not_in_persona_tools(
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="try forcing a missing tool",
+        message="prefer a missing tool",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is not None
-    assert response.error.error == f"Forced tool {search_tool_id} not found in tools"
+    assert response.error.error == f"Preferred tool {search_tool_id} not found in tools"
     assert response.used_tools == []
 
 
@@ -165,7 +162,7 @@ def test_allowed_tool_ids_excludes_tools_outside_allowlist(
     assert response.tool_call_debug == []
 
 
-def test_forced_and_allowlist_conflict_returns_validation_error(
+def test_preferred_and_allowlist_conflict_returns_validation_error(
     admin_user: DATestUser,
 ) -> None:
     _assert_integration_mode_enabled()
@@ -182,24 +179,31 @@ def test_forced_and_allowlist_conflict_returns_validation_error(
 
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="force a tool blocked by allowlist",
+        message="prefer a tool blocked by allowlist",
         user_performing_action=admin_user,
         allowed_tool_ids=[],
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is not None
-    assert response.error.error == f"Forced tool {search_tool_id} not found in tools"
+    assert response.error.error == f"Preferred tool {search_tool_id} not found in tools"
     assert response.used_tools == []
 
 
-def test_run_search_always_maps_to_forced_search_tool(
+def test_preference_is_optional_and_does_not_leak_into_followup(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     _assert_integration_mode_enabled()
     _seed_connector_for_search_tool(admin_user)
-    _script_forced_search(mock_llm, "gamma")
-
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            text="No search needed.", conditions=RequestConditions(tool_choice="auto")
+        ),
+        Reply(
+            text="Follow-up answer.", conditions=RequestConditions(tool_choice="auto")
+        ),
+    )
     search_tool_id = _get_internal_search_tool_id(admin_user)
     persona = PersonaManager.create(
         tool_ids=[search_tool_id], user_performing_action=admin_user
@@ -207,21 +211,29 @@ def test_run_search_always_maps_to_forced_search_tool(
     chat_session = ChatSessionManager.create(
         persona_id=persona.id, user_performing_action=admin_user
     )
-
-    response = ChatSessionManager.send_message(
+    first = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
-        message="always run search",
+        message="Hello",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
-
-    assert response.error is None, f"Unexpected stream error: {response.error}"
-    assert any(
-        tool.tool_name == ToolName.INTERNAL_SEARCH for tool in response.used_tools
+    second = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="Hello again",
+        user_performing_action=admin_user,
     )
-    assert len(response.tool_call_debug) == 1
-    assert response.tool_call_debug[0].tool_name == "internal_search"
-    assert response.tool_call_debug[0].tool_args == {"queries": ["gamma"]}
+    assert first.error is second.error is None
+    assert first.used_tools == second.used_tools == []
+    first_request, second_request = mock_llm.requests_in("chat")
+    assert (
+        "The user selected these operations for this request: internal_search."
+        in str(first_request.body["messages"])
+    )
+    assert "The user selected these operations" not in str(
+        second_request.body["messages"]
+    )
+    assert first_request.body["tools"] == second_request.body["tools"]
+    mock_llm.verify()
 
 
 def test_parallel_tool_calls_each_get_a_debug_entry(
@@ -243,10 +255,7 @@ def test_parallel_tool_calls_each_get_a_debug_entry(
             ],
             conditions=RequestConditions(
                 offers=["internal_search"],
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "internal_search"},
-                },
+                tool_choice="auto",
             ),
         ),
         # The merged search call keeps the first call's id.
@@ -265,7 +274,7 @@ def test_parallel_tool_calls_each_get_a_debug_entry(
         chat_session_id=chat_session.id,
         message="run the search tool twice",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"
@@ -280,26 +289,23 @@ def test_parallel_tool_calls_each_get_a_debug_entry(
     assert [entry.tool_call_id for entry in response.tool_call_debug] == call_ids
 
 
-def test_forced_tool_call_written_as_text_executes(
+def test_preferred_tool_call_written_as_xml_executes(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
-    """A model that writes the forced tool call as JSON in its text, instead of
-    a native tool call, still runs the tool."""
+    """Explicit XML tool calls still execute when the request has a preference."""
     _assert_integration_mode_enabled()
     _seed_connector_for_search_tool(admin_user)
     mock_llm.conversation(
         "chat",
         Reply(
             text=(
-                "I will call a tool now. "
-                '{"name":"internal_search","arguments":{"queries":["delta"]}}'
+                '<function_calls><invoke name="internal_search">'
+                '<parameter name="queries">["delta"]</parameter>'
+                "</invoke></function_calls>"
             ),
             conditions=RequestConditions(
                 offers=["internal_search"],
-                tool_choice={
-                    "type": "function",
-                    "function": {"name": "internal_search"},
-                },
+                tool_choice="auto",
             ),
         ),
         Reply(text=_ANSWER, conditions=RequestConditions(tool_choice="auto")),
@@ -317,7 +323,7 @@ def test_forced_tool_call_written_as_text_executes(
         chat_session_id=chat_session.id,
         message="use the search tool",
         user_performing_action=admin_user,
-        forced_tool_ids=[search_tool_id],
+        preferred_tool_id=search_tool_id,
     )
 
     assert response.error is None, f"Unexpected stream error: {response.error}"

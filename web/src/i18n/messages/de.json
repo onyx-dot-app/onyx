@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Suchquellen auswählen"
+      },
+      "preference": {
+        "tooltip": "{description}\nDieses Tool für die nächste Nachricht bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
       }
     },
     "addMcpModal": {

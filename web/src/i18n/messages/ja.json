@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "検索ソースを選択"
+      },
+      "preference": {
+        "tooltip": "{description}\n次のメッセージではこのツールを優先します。エージェントは使用せずに回答する場合があります。"
       }
     },
     "addMcpModal": {

@@ -406,15 +406,15 @@ Their control functions, such as `think_tool`, `generate_report` and
   no vector DB. For Default Chat, check the user's plugin preferences. For MCP,
   look for the credential warning. Last, check for a name collision (Known
   issues).
-- `force-tool-call` **Force a tool call in a test or a reproduction.** Send `forced_tool_id` with
-  the message. The ID selects all operations in an OpenAPI action; the model
-  chooses an operation from that group. Copy
-  `backend/tests/integration/tests/tools/test_force_tool_use.py`.
-  `chat/process_message.py:prepare_chat_turn` drops a forced ID with no error
-  when the tool fails `is_tool_available_for_persona`, or when it is search and
-  search is disabled; the model then answers without the forced call. Any
-  other forced ID that construction did not build makes
-  `chat/execution.py:create_chat_agent` fail the message with `BAD_REQUEST`.
+- `prefer-tool-call` **Prefer an Action for the current request.** Send
+  `preferred_tool_id` with the message. The trailing reminder names that Action's
+  operations on every model step. The model may call another tool or answer directly;
+  the preference does not change tool definitions or execution permissions.
+  Use a scripted model to test a required call deterministically, as in
+  `backend/tests/integration/tests/llm_workflows/test_tool_policy_enforcement.py`.
+  Unavailable preferred Actions return `BAD_REQUEST`; Deep Research rejects a
+  preference at request validation. Non-null `forced_tool_id` requests are rejected
+  with migration guidance, rather than silently weakening the old contract.
 
 ---
 

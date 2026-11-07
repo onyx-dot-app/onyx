@@ -41,7 +41,7 @@
   setting, a Query Processing hook that rejects the message), the user sees one
   error, and no response row is reserved. A failure after reservation is saved
   per model: a launch failure adds one `CHAT_STARTUP_ERROR` packet, then each
-  model streams and saves its own error. Agent construction errors (forced tool
+  model streams and saves its own error. Agent construction errors (preferred tool
   missing, deep research in a project or with a small model) and failures during
   the run are also saved on that model's reserved row. An incognito session
   that does not keep content stores a generic error text instead, because
@@ -308,13 +308,10 @@ termination grace period is much shorter, so it ends running turns first
 
 ## Known issues
 
-- **A forced tool that construction did not build fails the whole message.**
-  `chat/process_message.py:prepare_chat_turn` clears `forced_tool_id` only when
-  it names the search tool and search is disabled, or when
-  `is_tool_available_for_persona` excludes the tool. A tool that `is_available`
-  or `allowed_tool_ids` hides fails every model with "Forced tool ... not found
-  in tools" (`chat/execution.py:create_chat_agent`). See the "Force a tool call"
-  recipe in [[tools-framework]].
+- **An unavailable preference fails the message.** `preferred_tool_id` selects an
+  Action from the tools built for this request. Disabled, unavailable, or excluded
+  Actions fail with `BAD_REQUEST` in `chat/execution.py:create_chat_agent`.
+  A preference does not grant access or override `allowed_tool_ids`.
 - **Stop waits for blocked work.** Cancellation takes effect when a provider
   read returns or times out. Tools that honor `ToolInvocation.cancellation` can
   stop earlier; tools that ignore it keep running until they return.

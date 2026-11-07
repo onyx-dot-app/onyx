@@ -38,7 +38,6 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
     Message,
-    NamedToolChoice,
     TextContent,
     ToolCall,
     ToolChoiceOptions,
@@ -71,22 +70,21 @@ from tests.unit.onyx.agents.fakes import (
     "render, observer_fails", [(True, False), (False, False), (True, True)]
 )
 @pytest.mark.parametrize(
-    ("model_name", "deployment_name", "forced_choice", "last_has_tools"),
+    ("model_name", "deployment_name", "last_has_tools"),
     [
-        ("test-model", None, NamedToolChoice(name="echo"), True),
-        ("claude-haiku-4-5", None, ToolChoiceOptions.AUTO, True),
-        ("qwen3.7-plus", None, ToolChoiceOptions.AUTO, False),
-        ("z-ai/glm-5.3", None, ToolChoiceOptions.AUTO, False),
-        ("alias", "glm-5.3", ToolChoiceOptions.AUTO, False),
+        ("test-model", None, True),
+        ("claude-haiku-4-5", None, True),
+        ("qwen3.7-plus", None, False),
+        ("z-ai/glm-5.3", None, False),
+        ("alias", "glm-5.3", False),
     ],
 )
-def test_chat_preserves_parallel_tool_history_forcing_and_packets(
+def test_chat_preserves_parallel_tool_history_preference_and_packets(
     render: bool,
     observer_fails: bool,
     monkeypatch: pytest.MonkeyPatch,
     model_name: str,
     deployment_name: str | None,
-    forced_choice: ToolChoiceOptions | NamedToolChoice,
     last_has_tools: bool,
     multiple_operations: bool,
 ) -> None:
@@ -179,7 +177,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         user_memory_context=None,
         llm=llm,
         token_counter=len,
-        forced_tool_id=1,
+        preferred_tool_id=1,
     )
     project = partial(
         project_response,
@@ -198,18 +196,14 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         observation.finish()
         assert telemetry.call_args.args[1]["llm_cycles"] == 2
     assert len(llm.requests) == 2
-    assert llm.requests[0]["tool_choice"] == (
-        ToolChoiceOptions.REQUIRED if multiple_operations else forced_choice
-    )
-    # Multiple-operation permissions keep the configured schemas on the wire.
-    expected_tools = (
-        ["echo", "second_operation", "other"] if multiple_operations else ["echo"]
-    )
-    if not multiple_operations and isinstance(forced_choice, NamedToolChoice):
-        expected_tools.append("other")
-    assert [
-        tool["function"]["name"] for tool in llm.requests[0]["tools"]
-    ] == expected_tools
+    assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.AUTO
+    assert [tool["function"]["name"] for tool in llm.requests[0]["tools"]] == [
+        tool.name for tool in agent.application_tools
+    ]
+    for request in llm.requests:
+        assert "The user selected these operations for this request: " in str(
+            request["prompt"]
+        )
     if last_has_tools:
         assert [tool["function"]["name"] for tool in llm.requests[1]["tools"]] == [
             tool.name for tool in agent.application_tools
@@ -875,3 +869,98 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
         assert "prefers bullet points" in user_info.text
         assert ("works on billing" in user_info.text) == inject_memories
         assert question.text == "Question"
+
+
+@pytest.mark.parametrize("use_other_tool", [False, True])
+def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
+    use_other_tool: bool,
+) -> None:
+    class OtherTool(EchoTool):
+        @property
+        def id(self) -> int:
+            return 2
+
+        @property
+        def name(self) -> str:
+            return "other"
+
+    requests: list[GenerationRequest] = []
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        if use_other_tool and len(requests) == 1:
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="other-call", name="other", arguments={"value": "evidence"}
+                    )
+                ]
+            )
+        return AssistantMessage(
+            content=[TextContent(text="Answered without the preferred tool.")]
+        )
+
+    make_agent = partial(
+        ChatAgent,
+        tools=[EchoTool(), OtherTool()],
+        custom_agent_prompt="Stable instructions",
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+        reminders_enabled=False,
+    )
+    original = make_agent(messages=[], preferred_tool_id=1)
+    saved = TypeAdapter(dict[str, JsonValue]).validate_json(
+        original.capture_state().model_dump_json()
+    )
+    restored = make_agent(messages=[], preferred_tool_id=1)
+    restored.restore_state(saved)
+    outcome = run_agent(
+        restored, messages=[UserMessage(content="Question")], max_steps=2
+    )
+    assert outcome.output.text == "Answered without the preferred tool."
+    assert len(requests) == (2 if use_other_tool else 1)
+    for request in requests:
+        assert [tool.name for tool in request.tools] == ["echo", "other"]
+        reminder = request.messages[-1]
+        assert (
+            "The user selected these operations for this request: echo."
+            in reminder.text
+        )
+        assert not reminder.cacheable
+        assert request.messages[0].text.startswith("Stable instructions")
+        assert request.messages[0] == requests[0].messages[0]
+        assert request.messages[0].cacheable
+    assert requests[0].options.tool_choice == ToolChoiceOptions.AUTO
+    assert requests[0].allowed_tool_names is None
+    if use_other_tool:
+        assert requests[-1].options.tool_choice == ToolChoiceOptions.NONE
+        assert "Prefer them when" not in requests[-1].messages[-1].text
+        result = next(
+            message
+            for message in restored.state.messages
+            if isinstance(message, ToolResultMessage)
+        )
+        assert result.tool_name == "other" and not result.is_error
+    assert not any(
+        "The user selected" in message.text for message in restored.state.messages
+    )
+    followup = make_agent(messages=restored.state.messages)
+    run_agent(followup, messages=[UserMessage(content="Next question")], max_steps=2)
+    assert not any(
+        "The user selected" in message.text for message in requests[-1].messages
+    )
+    with pytest.raises(ValueError, match="forced_tool_id cannot resume"):
+        restored.restore_state({**saved, "forced_tool_id": 1})

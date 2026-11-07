@@ -71,8 +71,9 @@ const toolConfiguration: ToolConfigurationHandle = {
   stateOf: jest.fn(),
   setToolState: jest.fn(),
   toggleToolState: jest.fn(),
-  clearForcedTool: jest.fn(),
-  forcedToolId: null,
+  clearPreferredTool: jest.fn(),
+  acknowledgePreferredTool: jest.fn(),
+  preferredToolId: null,
   disabledToolIds: [],
   ready: true,
   filters: {
@@ -269,6 +270,10 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
     });
   });
   await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+  expect(toolConfiguration.acknowledgePreferredTool).toHaveBeenCalledWith(
+    "session",
+    null
+  );
   let stopping: Promise<void> | undefined;
   act(() => {
     stopping = result.current.stopGenerating();
@@ -438,3 +443,50 @@ test("abort releases a reader with packets queued before its first paint", async
   await expect(session.readerFinished).resolves.toBeUndefined();
   unmount();
 });
+
+test.each([false, true])(
+  "tool preference is consumed only after admission (%s)",
+  async (accepted) => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: "session",
+    });
+    useChatSessionStore
+      .getState()
+      .createSession("session", { incognito: true });
+    jest.mocked(sendMessage).mockImplementation(async function* () {
+      if (accepted)
+        yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+      yield {
+        error: "Request failed",
+        error_code: "API_ERROR",
+        is_retryable: true,
+        stack_trace: "",
+        details: {},
+      };
+    });
+    const { result } = renderHook(() =>
+      useChatController({
+        llmManager: createLlmManager(),
+        toolConfiguration,
+        activeAgent: undefined,
+        availableAgents: [],
+        existingChatSessionId: "session",
+        selectedDocuments: [],
+        searchParams: new ReadonlyURLSearchParams(),
+        resetInputBar: jest.fn(),
+        restoreInputBar: jest.fn(),
+      })
+    );
+    await act(async () =>
+      result.current.onSubmit({
+        message: "Question",
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+    expect(toolConfiguration.acknowledgePreferredTool).toHaveBeenCalledTimes(
+      accepted ? 1 : 0
+    );
+  }
+);

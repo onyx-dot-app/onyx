@@ -114,7 +114,7 @@ export interface OAuthTokenStatus {
  * after the choice was made is therefore already neutral, with nothing having
  * to go and enrol it.
  */
-export type ToolState = "forced" | "disabled";
+export type ToolState = "preferred" | "disabled";
 
 /**
  * The search-filter selection this chat sends with, in its stored form.

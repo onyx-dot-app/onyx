@@ -63,7 +63,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     agent,
     toolConfiguration,
     sourceCounts,
-    toggleForced,
+    togglePreferred,
     toggleEnabled,
     openSources,
     close,
@@ -109,7 +109,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     [t]
   );
 
-  const isForced = toolConfiguration.forcedToolId === tool.id;
+  const isPreferred = toolConfiguration.preferredToolId === tool.id;
   // Switched off for this chat. The row stays interactive: pressing it turns
   // the tool back on and pins it in one gesture.
   const isDisabled = toolConfiguration.disabledToolIds.includes(tool.id);
@@ -147,7 +147,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const sourcesNarrowed =
     ownsSources &&
     !needsConnectors &&
-    isForced &&
+    isPreferred &&
     sourceCounts.enabled > 0 &&
     sourceCounts.enabled < sourceCounts.total;
 
@@ -158,14 +158,14 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
 
   function handleClick() {
     if (isUnavailable) {
-      toggleForced(tool.id);
+      togglePreferred(tool.id);
       return;
     }
     if (isDisabled) toggleEnabled(tool.id);
-    toggleForced(tool.id);
+    togglePreferred(tool.id);
     // Pinning search is when its sources matter, so drill in rather than
     // dismissing. Releasing it just closes.
-    if (ownsSources && !isForced) openSources();
+    if (ownsSources && !isPreferred) openSources();
     else close();
   }
 
@@ -281,21 +281,32 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         title={label}
         icon={getIconForAction(tool)}
         rounding={2}
-        state={isForced ? "selected" : "empty"}
+        state={isPreferred ? "selected" : "empty"}
         strikethrough={isDisabled}
         color={
-          (isUnavailable && isForced) || isDisabled ? "default" : undefined
+          (isUnavailable && isPreferred) || isDisabled ? "default" : undefined
         }
         titleColor={
-          (isUnavailable && isForced) || isDisabled ? "text-03" : undefined
+          (isUnavailable && isPreferred) || isDisabled ? "text-03" : undefined
         }
-        disabled={needsConnectors || (isUnavailable && !isForced)}
-        tooltip={getToolTooltip(
-          tool,
-          isConfigured,
-          canManageActions,
-          tooltipMessages
-        )}
+        disabled={needsConnectors || (isUnavailable && !isPreferred)}
+        tooltip={
+          isConfigured
+            ? t("actionLineItem.preference.tooltip", {
+                description: getToolTooltip(
+                  tool,
+                  isConfigured,
+                  canManageActions,
+                  tooltipMessages
+                ),
+              })
+            : getToolTooltip(
+                tool,
+                isConfigured,
+                canManageActions,
+                tooltipMessages
+              )
+        }
         onClick={handleClick}
         rightChildren={
           <Section gap={1} flexDirection="row">

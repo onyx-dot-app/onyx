@@ -670,12 +670,12 @@ def create_chat_agent(
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
 
-        if setup.forced_tool_id and setup.forced_tool_id not in {
+        if setup.preferred_tool_id is not None and setup.preferred_tool_id not in {
             tool.id for tool in tools
         }:
             raise OnyxError(
                 OnyxErrorCode.BAD_REQUEST,
-                f"Forced tool {setup.forced_tool_id} not found in tools",
+                f"Preferred tool {setup.preferred_tool_id} not found in tools",
             )
 
         agent_id = str(setup.chat_session_id)
@@ -736,7 +736,7 @@ def create_chat_agent(
             user_memory_context=setup.user_memory_context,
             llm=llm,
             token_counter=get_llm_token_counter(llm),
-            forced_tool_id=setup.forced_tool_id,
+            preferred_tool_id=setup.preferred_tool_id,
             user_identity=setup.user_identity,
             chat_files=setup.chat_files_for_tools,
             reasoning_effort=setup.reasoning_effort,

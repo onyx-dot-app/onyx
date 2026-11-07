@@ -18,12 +18,12 @@ SSO providers (OIDC, SAML) have no mobile sign-in.
 The user can then:
 - start a chat or open a past session from the sidebar, and open a project;
 - pick an agent and a model, attach a document or a photo from the library,
-  turn on deep research, force a tool, and turn tools and sources on or off;
+  turn on deep research, prefer an Action, and turn tools and sources on or off;
 - watch the answer stream, open its citations in a sources sheet, and stop
   the answer.
 
 A tool disabled on mobile is also disabled on web, because the server saves
-the setting per agent. The forced tool, the deep-research switch and the
+the setting per agent. The preferred tool, the deep-research switch and the
 source selection stay on the device.
 
 The user cannot regenerate or edit a message, give feedback, compare models,
@@ -121,9 +121,9 @@ lint forbids reading refs during render: `usePacketProcessor` regroups in a
 `useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
 **Composer tools.** `state/ComposerToolsProvider.tsx` holds the tool state.
-`resolveToolOptions` gives the controller `deep_research`, `forced_tool_id`,
+`resolveToolOptions` gives the controller `deep_research`, `preferred_tool_id`,
 `allowed_tool_ids` and the search filters at send time. Sources are tied to the
-search tool: turning a source on forces search, and turning search off clears
+search tool: turning a source on prefers search, and turning search off clears
 the sources.
 
 ---

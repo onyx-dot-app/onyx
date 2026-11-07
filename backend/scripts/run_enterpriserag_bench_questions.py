@@ -405,7 +405,7 @@ async def submit_question(
         "parent_message_id": None,
         "file_descriptors": [],
         "allowed_tool_ids": [internal_search_tool_id],
-        "forced_tool_id": internal_search_tool_id,
+        "preferred_tool_id": internal_search_tool_id,
         "stream": False,
     }
 

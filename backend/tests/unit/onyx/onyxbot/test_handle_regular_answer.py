@@ -592,21 +592,26 @@ def test_private_channel_non_ephemeral_attributes_usage(
 
 
 @pytest.mark.parametrize(
-    "has_search_tool,search_available,search_enabled,expected_forced_id",
+    "has_search_tool,search_available,search_enabled,expected_preferred_id",
     [
-        (True, True, True, 77),  # persona has SearchTool and it is usable -> forced
-        (True, False, True, None),  # SearchTool attached but unavailable -> not forced
-        (True, True, False, None),  # SearchTool attached but disabled -> not forced
-        (False, True, True, None),  # persona without SearchTool -> not forced
+        (True, True, True, 77),  # persona has SearchTool and it is usable -> preferred
+        (
+            True,
+            False,
+            True,
+            None,
+        ),  # SearchTool attached but unavailable -> not preferred
+        (True, True, False, None),  # SearchTool attached but disabled -> not preferred
+        (False, True, True, None),  # persona without SearchTool -> not preferred
     ],
 )
-def test_search_tool_forced_only_when_usable(
+def test_search_tool_preferred_only_when_usable(
     has_search_tool: bool,
     search_available: bool,
     search_enabled: bool,
-    expected_forced_id: int | None,
+    expected_preferred_id: int | None,
 ) -> None:
-    """Slack answers force the persona's search tool on the first LLM cycle
+    """Slack answers prefer the persona's usable search tool for the request
     (regression for the #7399 refactor dropping guaranteed retrieval), but
     never for personas without a usable search tool."""
     slack_channel_config = _make_slack_channel_config()
@@ -666,4 +671,4 @@ def test_search_tool_forced_only_when_usable(
         )
 
     stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
-    assert stream_call_kwargs["new_msg_req"].forced_tool_id == expected_forced_id
+    assert stream_call_kwargs["new_msg_req"].preferred_tool_id == expected_preferred_id

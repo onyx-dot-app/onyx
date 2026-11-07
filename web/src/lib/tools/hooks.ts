@@ -63,20 +63,16 @@ export function useAvailableTools() {
   };
 }
 
-// # NOTE (@raunakab):
-// ## The tool configuration
-//
-// What a message is sent with — the tool it must use, the tools it may not —
-// belongs to the chat it was chosen in, and returning any of it to neutral is
-// always something the user does. Nothing below is exported: a configuration
-// is only reachable through `useToolConfiguration`, so the two rules that hold
-// it together cannot be worked around by building one somewhere else.
+// Tool permissions and source filters belong to the chat. A tool preference belongs
+// to the next message and is consumed only after the server accepts that message.
 
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
 
 /** Everything a chat's next message is configured with. */
 interface ChatConfiguration {
   tools: ToolConfiguration;
+  // Admission consumes this selection, not a later selection of the same tool.
+  preferenceRevision: string | null;
   filters: ChatSearchFilters;
 }
 
@@ -89,6 +85,7 @@ const NEUTRAL_FILTERS: ChatSearchFilters = {
 
 const NEUTRAL: ChatConfiguration = {
   tools: {},
+  preferenceRevision: null,
   filters: NEUTRAL_FILTERS,
 };
 
@@ -120,8 +117,8 @@ function isChatKey(key: string): boolean {
 }
 
 /**
- * Applies the one rule a map cannot state: a single tool is forced at a time,
- * because a message carries a single `forced_tool_id`. That a tool is forced,
+ * Applies the one rule a map cannot state: a single tool is preferred at a time,
+ * because a message carries a single `preferred_tool_id`. That a tool is preferred,
  * disabled or neutral and never two of those comes free, since a key holds one
  * value.
  *
@@ -141,8 +138,8 @@ function withToolState(
   for (const key of Object.keys(configuration)) {
     const id = Number(key);
     if (id === toolId) continue;
-    // Forcing this tool releases whatever was forced before it.
-    if (next === "forced" && configuration[id] === "forced") continue;
+    // Preferring this tool releases whatever was preferred before it.
+    if (next === "preferred" && configuration[id] === "preferred") continue;
     updated[id] = configuration[id]!;
   }
   if (next !== null) updated[toolId] = next;
@@ -211,7 +208,7 @@ function parseFilters(entries: Record<string, unknown>): ChatSearchFilters {
 /** The tool half of {@link parseConfiguration}, on an already-checked object. */
 function parseTools(entries: Record<string, unknown>): ToolConfiguration {
   const configuration: Record<number, ToolState> = {};
-  let hasForced = false;
+  let hasPreferred = false;
   for (const key of Object.keys(entries)) {
     const toolId = Number(key);
     if (!Number.isInteger(toolId)) continue;
@@ -219,9 +216,9 @@ function parseTools(entries: Record<string, unknown>): ToolConfiguration {
     const state = entries[key];
     if (state === "disabled") {
       configuration[toolId] = "disabled";
-    } else if (state === "forced" && !hasForced) {
-      hasForced = true;
-      configuration[toolId] = "forced";
+    } else if (state === "preferred" && !hasPreferred) {
+      hasPreferred = true;
+      configuration[toolId] = "preferred";
     }
   }
   return configuration;
@@ -232,7 +229,7 @@ function parseTools(entries: Record<string, unknown>): ToolConfiguration {
  *
  * The rules are applied again rather than assumed: storage can be edited by
  * hand, and an older build may have written a shape this one does not know. So
- * text claiming two forced tools keeps one, and anything unrecognised is
+ * text claiming two preferred tools keeps one, and anything unrecognised is
  * dropped instead of carried through.
  *
  * A build before the filters moved in wrote the tool map bare. That shape is
@@ -251,12 +248,20 @@ function parseConfiguration(raw: string): ChatConfiguration {
   if (isRecord(value.tools)) {
     return {
       tools: parseTools(value.tools),
+      preferenceRevision:
+        typeof value.preferenceRevision === "string"
+          ? value.preferenceRevision
+          : null,
       filters: isRecord(value.filters)
         ? parseFilters(value.filters)
         : NEUTRAL_FILTERS,
     };
   }
-  return { tools: parseTools(value), filters: NEUTRAL_FILTERS };
+  return {
+    tools: parseTools(value),
+    preferenceRevision: null,
+    filters: NEUTRAL_FILTERS,
+  };
 }
 
 /** Session storage throws outright rather than degrading when it is blocked. */
@@ -311,8 +316,8 @@ export interface ToolConfigurationHandle {
   /** What this chat has been told about one tool, or null for neutral. */
   stateOf: (toolId: number) => ToolState | null;
   /**
-   * The only way to change a tool's state. Forcing a tool releases whatever
-   * was forced; a tool returned to neutral is forgotten rather than recorded.
+   * The only way to change a tool's state. Preferring a tool releases whatever
+   * was preferred; a tool returned to neutral is forgotten rather than recorded.
    */
   setToolState: (
     toolId: number,
@@ -330,14 +335,19 @@ export interface ToolConfigurationHandle {
   toggleToolState: (toolId: number, state: ToolState) => void;
 
   /**
-   * Releases whatever is forced, for the callers that want no forced tool
+   * Releases whatever is preferred, for the callers that want no preferred tool
    * without caring which one is. Still goes through `setToolState`, so the
    * rules hold.
    */
-  clearForcedTool: () => void;
+  clearPreferredTool: () => void;
+  /** Consume the submitted preference after server admission, including new-chat handoff. */
+  acknowledgePreferredTool: (
+    chatSessionId: string,
+    toolId: number | null
+  ) => void;
 
-  /** The tool every message in this chat is made to use, if any. */
-  forcedToolId: number | null;
+  /** The preferred tool for the next message, if any. */
+  preferredToolId: number | null;
   /** The tools the model may not use in this chat. */
   disabledToolIds: number[];
 
@@ -470,6 +480,7 @@ export function useToolConfiguration(
       change: (current: ToolState | null) => ToolState | null
     ) => {
       if (key === null) return;
+      const preferenceRevision = crypto.randomUUID();
       setEntry((previous) => {
         // Between a key change and its storage read, a write would land on
         // NEUTRAL and then be clobbered by the read. `ready` documents that
@@ -481,7 +492,19 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return { key, configuration: { ...current, tools } };
+        return {
+          key,
+          configuration: {
+            ...current,
+            tools,
+            preferenceRevision:
+              tools[toolId] === "preferred"
+                ? preferenceRevision
+                : current.tools[toolId] === "preferred"
+                  ? null
+                  : current.preferenceRevision,
+          },
+        };
       });
     },
     [key]
@@ -509,6 +532,34 @@ export function useToolConfiguration(
     [configuration]
   );
 
+  const acknowledgePreferredTool = useCallback(
+    (chatSessionId: string, toolId: number | null) => {
+      if (toolId === null) return;
+      const targetKey = chatKey(chatSessionId);
+      const consume = (current: ChatConfiguration): ChatConfiguration => {
+        if (
+          current.tools[toolId] !== "preferred" ||
+          current.preferenceRevision !== configuration.preferenceRevision
+        )
+          return current;
+        return {
+          ...current,
+          tools: withToolState(current.tools, toolId, () => null),
+          preferenceRevision: null,
+        };
+      };
+      writeConfiguration(targetKey, consume(readConfiguration(targetKey)));
+      setEntry((previous) => {
+        if (previous.key !== targetKey) return previous;
+        const next = consume(previous.configuration);
+        return next === previous.configuration
+          ? previous
+          : { ...previous, configuration: next };
+      });
+    },
+    [configuration.preferenceRevision]
+  );
+
   const handOffToNewChatWith = useCallback(
     (agentId: number, projectId: number | null = null) =>
       writeConfiguration(
@@ -522,17 +573,22 @@ export function useToolConfiguration(
 
   return useMemo(() => {
     const ids = Object.keys(configuration.tools).map(Number);
-    const forcedToolId =
-      ids.find((toolId) => configuration.tools[toolId] === "forced") ?? null;
+    const preferredToolId =
+      ids.find((toolId) => configuration.tools[toolId] === "preferred") ?? null;
     return {
       stateOf: (toolId: number) => configuration.tools[toolId] ?? null,
       setToolState,
       toggleToolState: (toolId: number, state: ToolState) =>
         setToolState(toolId, (current) => (current === state ? null : state)),
-      clearForcedTool: () => {
-        if (forcedToolId !== null) setToolState(forcedToolId, () => null);
+      acknowledgePreferredTool,
+      clearPreferredTool: () => {
+        if (preferredToolId !== null) {
+          setToolState(preferredToolId, (current) =>
+            current === "preferred" ? null : current
+          );
+        }
       },
-      forcedToolId,
+      preferredToolId,
       disabledToolIds: ids.filter(
         (toolId) => configuration.tools[toolId] === "disabled"
       ),
@@ -549,6 +605,7 @@ export function useToolConfiguration(
     setFilters,
     handOffTo,
     handOffToNewChatWith,
+    acknowledgePreferredTool,
   ]);
 }
 

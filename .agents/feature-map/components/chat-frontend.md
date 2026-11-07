@@ -213,9 +213,11 @@ so another browser starts again. The input lock is a comparison against
 `STEP_CONFIG[OnboardingStep.OptionalSetup].index` in the input bar's
 `disabled` prop in `AppPage`; a change to the step order must keep it.
 
-**Forced tools.** At send time `onSubmit` filters the forced tool through
-`web/src/lib/plugins/chat.ts:effectiveChatForcedToolId`. The stored per-chat
-choice does not change. [[plugins]] owns the rule.
+**Action preference.** At send time `onSubmit` filters the selected Action through
+`web/src/lib/plugins/chat.ts:effectiveChatPreferredToolId`. An accepted request
+consumes its preference; rejected requests retain it. The preference applies to
+one turn and does not restrict which available tools may run. [[plugins]] owns
+Action availability.
 
 **The development `/api` proxy.**
 `web/src/app/api/[...path]/route.ts` forwards every method under `/api` to
@@ -416,7 +418,7 @@ up its own branding.
 - [[llm-providers]]: `useLlmManager` and model capabilities.
 - [[file-store-and-user-files]]: `beginUpload` and attached files.
 - [[voice]]: `VoiceModeProvider` wraps the layout.
-- [[plugins]]: the forced-tool rule and the member plugins sent with a turn.
+- [[plugins]]: the Action-preference rule and the member plugins sent with a turn.
 - [[rate-and-usage-limits]]: the 429 usage-limit response shape.
 
 ---
@@ -454,6 +456,6 @@ up its own branding.
   `web/tests/e2e/utils/`.
 - Jest: the `*.test.ts` and `*.test.tsx` files beside the code in
   `web/src/app/app/`.
-- By hand: force a tool call, edit, switch back, stop mid-answer, and reload.
+- By hand: select an Action preference, edit, switch back, stop mid-answer, and reload.
   Citations resolve, the branch holds, and the partial answer stays. Queue a
   message during an answer: it sends only after the input returns to idle.

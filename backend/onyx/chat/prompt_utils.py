@@ -156,6 +156,7 @@ def build_chat_prompt(
     previous_results: Sequence[ToolResultMessage],
     is_last_step: bool,
     has_history_citations: bool = False,
+    preferred_tool_id: int | None = None,
 ) -> ChatPrompt:
     """Select instructions and reminders before assembling conversation history."""
     values = memory.user_info.placeholder_values if memory else {}
@@ -220,6 +221,26 @@ def build_chat_prompt(
         enabled=reminders_enabled,
         has_history_citations=has_history_citations,
     )
+    if preferred_tool_id is not None:
+        preferred_names = [tool.name for tool in tools if tool.id == preferred_tool_id]
+        if not preferred_names:
+            raise ValueError(f"Preferred tool {preferred_tool_id} is not available")
+        preference = (
+            "The user selected these operations for this request: "
+            + ", ".join(preferred_names)
+            + ". "
+        )
+        if is_last_step:
+            preference += "No more tools can run. Answer from the available evidence."
+        else:
+            preference += (
+                "Prefer them when they help answer the request. "
+                "You may use other available tools or answer without tools."
+            )
+        preference += (
+            " If the selected operations are unsuitable or unavailable, explain why."
+        )
+        reminder = "\n\n".join(part for part in (reminder, preference) if part)
     return ChatPrompt(
         system_prompt=SystemMessage(content=system) if system else None,
         user_info_prompt=SystemMessage(content=user_info) if user_info else None,

@@ -12,6 +12,7 @@ from onyx.evals.models import (
     EvalProvider,
     EvalToolResult,
     MultiTurnEvalResult,
+    evaluation_input,
 )
 from onyx.utils.logger import setup_logger
 
@@ -141,25 +142,10 @@ class LocalEvalProvider(EvalProvider):
         no_assertion: list[int],
     ) -> None:
         """Run a single-turn evaluation."""
-        # Build input with tool and model config
-        eval_input = {
-            **item.get("input", {}),
-            # Tool configuration
-            "force_tools": item.get("force_tools", []),
-            "expected_tools": item.get("expected_tools", []),
-            "require_all_tools": item.get("require_all_tools", False),
-            # Model configuration
-            "model": item.get("model"),
-            "model_provider": item.get("model_provider"),
-            "temperature": item.get("temperature"),
-        }
+        eval_input = evaluation_input(item)
 
         message = eval_input.get("message", "(no message)")
-        truncated_message = (
-            message[:50] + "..."  # ty: ignore[not-subscriptable]
-            if len(message) > 50  # ty: ignore[invalid-argument-type]
-            else message
-        )
+        truncated_message = message[:50] + "..." if len(message) > 50 else message
 
         # Show model if specified
         model_info = ""

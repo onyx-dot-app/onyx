@@ -118,8 +118,9 @@ budget cannot silence the bot for every unmapped sender
 carries `slack_context`, which lets the search tool run federated Slack search
 when the persona's document sets link a Slack federated connector
 (`tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data`).
-The turn forces the search tool on the first cycle when the persona has an
-enabled one and `SearchTool.is_available` is true.
+The turn prefers search when the persona has an enabled search tool and
+`SearchTool.is_available` is true. Retrieval remains optional; the preference
+does not guarantee a grounded answer.
 
 **Channel-only agents.** When an admin picks document sets instead of an agent,
 `db/slack_channel_config.py:create_slack_channel_persona` creates a public

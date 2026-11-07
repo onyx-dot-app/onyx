@@ -26,7 +26,7 @@ from onyx.llm.models import (
     TextContent,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient
 
 PROJECT_IMAGE_BYTES = b"\x89PNG\r\n\x1a\n"
 
@@ -37,7 +37,8 @@ def feature(
     if name == "chat":
         chat = ChatAgent(
             messages=context.messages,
-            tools=[],
+            tools=[EchoTool()],
+            preferred_tool_id=1,
             custom_agent_prompt="Hello {{user.name}}",
             additional_context="Use the current request context.",
             base_system_prompt="Base instructions",
@@ -153,7 +154,12 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
     )
     checkpoint = ExecutionCheckpoint.model_validate_json(checkpoint.model_dump_json())
     saved = checkpoint.model_copy(deep=True)
-    rebuilt = restore_chat_agent(checkpoint, llm=llm, tools=[], user_identity=None)
+    rebuilt = restore_chat_agent(
+        checkpoint,
+        llm=llm,
+        tools=[EchoTool()] if name == "chat" else [],
+        user_identity=None,
+    )
     assert rebuilt is not original
     assert rebuilt.id == original.id
     assert rebuilt.state == context
@@ -178,6 +184,11 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
         )
         request = prepared.generation_request(context.messages)
         assert request.messages[0].text.startswith("Help {{user.role}}")
+        assert (
+            "The user selected these operations for this request: echo."
+            in request.messages[-1].text
+        )
+        assert not request.messages[-1].cacheable
     elif isinstance(rebuilt, DeepResearchAgent):
         prepared = rebuilt._prepare_step(
             StepInput(
