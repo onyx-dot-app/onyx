@@ -48,7 +48,6 @@ from onyx.prompts.chat_prompts import (
     LAST_CYCLE_CITATION_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
-    TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
 from onyx.prompts.prompt_utils import (
     apply_prompt_placeholders,
@@ -559,7 +558,6 @@ def _deduplicate_search_passages(messages: list[Message]) -> None:
         if (
             message.is_error
             or not isinstance(message.content, str)
-            or prompt_metadata(message).omit_tool_result_content
             or not isinstance(message.details, SearchDocsResponse)
             or not message.details.citation_mapping
         ):
@@ -611,10 +609,6 @@ def prepare_prompt(
     for message in history:
         metadata = prompt_metadata(message).model_copy()
         message.metadata = metadata
-        if isinstance(message, ToolResultMessage) and metadata.omit_tool_result_content:
-            # Keep stored evidence intact; later questions use the existing placeholder.
-            message.content = TOOL_CALL_RESPONSE_CROSS_MESSAGE
-            metadata.token_count = None
         metadata.token_count = count_message_tokens(message, token_counter)
         metadata.should_cache = not metadata.is_reminder
     insertion = next(

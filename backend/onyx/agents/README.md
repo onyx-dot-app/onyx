@@ -529,8 +529,9 @@ Compaction can include them in a summary, but selects another message as its cut
 
 For chats that retain content, Chat stores new summaries as SUMMARY message rows.
 The existing `last_summarized_message_id` column stores the cutoff as a string. Reusing a summary creates no new row.
-Emergency truncation retains a cutoff in run state so suspended execution can resume,
-but does not save an empty SUMMARY row. The next turn can try summarization again.
+For these content-retaining chats, emergency truncation saves an empty SUMMARY row with its cutoff.
+The next turn keeps that cutoff instead of restoring discarded history.
+Temporary chats do not write SUMMARY rows. Suspended runs retain the cutoff in run state, including temporary chats.
 
 If a provider still rejects a request for size,
 the runtime compacts and retries the generation once, provided no partial output has

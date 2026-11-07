@@ -32,5 +32,5 @@ Without those tools, facts found only in the attachment body are unavailable aft
 Request-only context is ineligible as a summary cutoff because it disappears between turns.
 Compaction selects the cutoff before summarizing. It can include temporary context when the summary ends at an eligible message.
 
-Emergency truncation stores a cutoff in run state without creating an empty SUMMARY row.
-Suspended execution saves this cutoff in its execution checkpoint. A later user turn can try summarization again.
+Emergency truncation stores an empty SUMMARY row with its cutoff for chats that retain content.
+The next turn keeps that cutoff instead of restoring discarded history. Suspended execution saves it in the execution checkpoint.
