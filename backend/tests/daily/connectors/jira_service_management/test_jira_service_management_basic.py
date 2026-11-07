@@ -12,6 +12,7 @@ from tests.daily.connectors.utils import load_all_from_connector
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(
+    TestSecret.JIRA_BASE_URL,
     TestSecret.JIRA_USER_EMAIL,
     TestSecret.JIRA_API_TOKEN,
 )
@@ -21,10 +22,8 @@ pytestmark = pytest.mark.secrets(
 def jsm_connector(
     test_secrets: dict[TestSecret, str],
 ) -> JiraServiceManagementConnector:
-    base_url = os.environ.get(
-        "JSM_BASE_URL", "https://danswerai.atlassian.net"
-    )
-    project_key = os.environ.get("JSM_PROJECT_KEY", "SD")
+    base_url = test_secrets[TestSecret.JIRA_BASE_URL]
+    project_key = os.environ.get("JSM_PROJECT_KEY")
     connector = JiraServiceManagementConnector(
         jira_base_url=base_url,
         project_key=project_key,
@@ -44,7 +43,7 @@ def jsm_connector(
     return_value=None,
 )
 def test_jira_service_management_connector_basic(
-    reset: None,  # noqa: ARG001
+    _mock_unstructured: object,
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
     docs = load_all_from_connector(

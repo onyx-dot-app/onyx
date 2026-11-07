@@ -1,4 +1,3 @@
-from collections.abc import Generator
 from datetime import datetime
 from typing import Any
 
@@ -9,37 +8,42 @@ from onyx.configs.app_configs import (
     JIRA_CONNECTOR_LABELS_TO_SKIP,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import (
     JiraConnector,
-    JiraConnectorCheckpoint,
     JiraIssue,
     _perform_jql_search,
+    build_jql_query,
     process_jira_issue,
+    scope_jql,
 )
-from onyx.connectors.jira.source_operations import JiraSourceOperations
-from onyx.connectors.jira.utils import get_issue_field
-from onyx.connectors.models import Document, HierarchyNode
+from onyx.connectors.jira.source_operations import is_cloud_gateway
+from onyx.connectors.models import Document
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 SERVICE_DESK_PROJECT_TYPE = "service_desk"
+_CLOUD_DEFAULT_JSM_SCOPE = f'projectType = "{SERVICE_DESK_PROJECT_TYPE}"'
 
 
 def scope_jsm_jql(
-    *, project_key: str | None, jql_query: str | None, clause: str
+    *,
+    project_key: str | None,
+    jql_query: str | None,
+    clause: str,
+    default_scope_clause: str = _CLOUD_DEFAULT_JSM_SCOPE,
 ) -> str:
     """JQL that limits ``clause`` to the configured JSM project, custom JQL query,
-    or all Jira Service Management projects (``projectType = "service_desk"``).
+    or all Jira Service Management projects.
     """
-    if jql_query:
-        return f"({jql_query}) AND {clause}"
-    if project_key:
-        return f'project = "{project_key}" AND {clause}'
-    return f'projectType = "{SERVICE_DESK_PROJECT_TYPE}" AND {clause}'
+    return scope_jql(
+        project_key=project_key,
+        jql_query=jql_query,
+        clause=clause,
+        default_scope_clause=default_scope_clause,
+    )
 
 
 def build_jsm_jql_query(
@@ -48,11 +52,15 @@ def build_jsm_jql_query(
     jql_query: str | None,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
+    default_scope_clause: str = _CLOUD_DEFAULT_JSM_SCOPE,
 ) -> str:
     """JQL for Jira Service Management tickets within the poll window."""
-    time_jql: str = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-    return scope_jsm_jql(
-        project_key=project_key, jql_query=jql_query, clause=time_jql
+    return build_jql_query(
+        project_key=project_key,
+        jql_query=jql_query,
+        start=start,
+        end=end,
+        default_scope_clause=default_scope_clause,
     )
 
 
@@ -65,6 +73,8 @@ def extract_jsm_metadata(issue: JiraIssue) -> dict[str, str | list[str]]:
         return {}
 
     jsm_meta: dict[str, str | list[str]] = {}
+    sla_seen = False
+    sla_breached = False
 
     for field_value in fields.values():
         if isinstance(field_value, dict):
@@ -80,20 +90,27 @@ def extract_jsm_metadata(issue: JiraIssue) -> dict[str, str | list[str]]:
                 if sd_id is not None:
                     jsm_meta["service_desk_id"] = str(sd_id)
 
-            # JSM SLA field object contains `ongoingCycle` or `completedCycles`
+            # JSM SLA field object contains `ongoingCycle` or `completedCycles`.
+            # A ticket can have multiple SLA fields; mark breached if any SLA is breached.
             ongoing_cycle = field_value.get("ongoingCycle")
             if isinstance(ongoing_cycle, dict) and "breached" in ongoing_cycle:
-                jsm_meta["sla_breached"] = str(bool(ongoing_cycle.get("breached")))
+                sla_seen = True
+                sla_breached = sla_breached or bool(ongoing_cycle.get("breached"))
             elif isinstance(field_value.get("completedCycles"), list):
                 cycles = field_value["completedCycles"]
                 if cycles and isinstance(cycles[-1], dict) and "breached" in cycles[-1]:
-                    jsm_meta["sla_breached"] = str(bool(cycles[-1].get("breached")))
+                    sla_seen = True
+                    sla_breached = sla_breached or bool(cycles[-1].get("breached"))
 
         elif isinstance(field_value, list) and field_value:
             # JSM Organizations or Request Participants lists
             first_elem = field_value[0]
             if isinstance(first_elem, dict):
-                if "_links" in first_elem and "name" in first_elem and "id" in first_elem:
+                if (
+                    "_links" in first_elem
+                    and "name" in first_elem
+                    and "id" in first_elem
+                ):
                     org_names = [
                         str(org["name"])
                         for org in field_value
@@ -110,6 +127,9 @@ def extract_jsm_metadata(issue: JiraIssue) -> dict[str, str | list[str]]:
                     ]
                     if participants and "request_participants" not in jsm_meta:
                         jsm_meta["request_participants"] = participants
+
+    if sla_seen:
+        jsm_meta["sla_breached"] = str(sla_breached)
 
     return jsm_meta
 
@@ -139,6 +159,8 @@ def process_jsm_issue(
 
 
 class JiraServiceManagementConnector(JiraConnector):
+    source_type: DocumentSource = DocumentSource.JIRA_SERVICE_MANAGEMENT
+
     def __init__(
         self,
         jira_base_url: str,
@@ -158,88 +180,86 @@ class JiraServiceManagementConnector(JiraConnector):
             jql_query=jql_query,
             scoped_token=scoped_token,
         )
+        self._service_desk_project_keys: list[str] | None = None
 
-    @override
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self._source_operations = JiraSourceOperations(
-            credentials_provider=OnyxStaticCredentialsProvider(
-                None, DocumentSource.JIRA_SERVICE_MANAGEMENT.value, credentials
-            ),
-            connector_specific_config={
-                "jira_base_url": self.jira_base,
-                "scoped_token": self.scoped_token,
-            },
-        )
-        return None
+    def _get_default_scope_clause(self) -> str:
+        """Returns the default JQL scope clause when neither ``project_key`` nor
+        ``jql_query`` is set.
+
+        Jira Cloud supports ``projectType = "service_desk"`` directly in JQL.
+        Jira Server / Data Center does not support the ``projectType`` JQL field,
+        so we resolve Service Desk project keys through the Projects REST API.
+        """
+        if self._source_operations is None or is_cloud_gateway(self.source_operations):
+            return _CLOUD_DEFAULT_JSM_SCOPE
+
+        if self._service_desk_project_keys is None:
+            projects = self.source_operations.list_projects()
+            self._service_desk_project_keys = [
+                str(p["key"])
+                for p in projects
+                if isinstance(p, dict)
+                and p.get("key")
+                and p.get("projectTypeKey") in (None, SERVICE_DESK_PROJECT_TYPE)
+            ]
+
+        if not self._service_desk_project_keys:
+            raise ConnectorValidationError(
+                "No Jira Service Management (service_desk) projects found on this Jira instance."
+            )
+
+        quoted_keys = ", ".join(f'"{k}"' for k in self._service_desk_project_keys)
+        return f"project in ({quoted_keys})"
 
     @override
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
+        default_clause = (
+            _CLOUD_DEFAULT_JSM_SCOPE
+            if (self.jira_project or self.jql_query)
+            else self._get_default_scope_clause()
+        )
         return build_jsm_jql_query(
             project_key=self.jira_project,
             jql_query=self.jql_query,
             start=start,
             end=end,
+            default_scope_clause=default_clause,
         )
 
     @override
     def _search_issues_by_key(self, issue_keys: list[str]) -> list[JiraIssue]:
         keys_jql: str = "key in (%s)" % ", ".join(f'"{key}"' for key in issue_keys)
+        default_clause = (
+            _CLOUD_DEFAULT_JSM_SCOPE
+            if (self.jira_project or self.jql_query)
+            else self._get_default_scope_clause()
+        )
         return list(
             self._search_all_issues(
                 scope_jsm_jql(
                     project_key=self.jira_project,
                     jql_query=self.jql_query,
                     clause=keys_jql,
+                    default_scope_clause=default_clause,
                 )
             )
         )
 
     @override
-    def _issue_to_items(
+    def _process_issue(
         self,
         issue: JiraIssue,
-        seen_hierarchy_node_ids: set[str],
-        include_permissions: bool,
-    ) -> Generator[Document | HierarchyNode, None, None]:
-        project = get_issue_field(issue, "project")
-        project_key = project["key"] if project else None
-        project_name = project.get("name") if project else None
-
-        if project_key:
-            yield from self._yield_project_hierarchy_node(
-                project_key, project_name, seen_hierarchy_node_ids
-            )
-            parent = get_issue_field(issue, "parent")
-            if parent:
-                yield from self._yield_parent_hierarchy_node_if_epic(
-                    parent, project_key, seen_hierarchy_node_ids
-                )
-            if self._is_epic(issue):
-                yield from self._yield_epic_hierarchy_node(
-                    issue, project_key, seen_hierarchy_node_ids
-                )
-
-        parent_hierarchy_raw_node_id = (
-            self._get_parent_hierarchy_raw_node_id(issue, project_key)
-            if project_key
-            else None
-        )
-
-        if document := process_jsm_issue(
+        parent_hierarchy_raw_node_id: str | None,
+    ) -> Document | None:
+        return process_jsm_issue(
             jira_base_url=self.jira_base,
             issue=issue,
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-        ):
-            if include_permissions:
-                document.external_access = self._get_project_permissions(
-                    project_key,  # ty: ignore[invalid-argument-type]
-                    add_prefix=True,
-                )
-            yield document
+        )
 
     @override
     def validate_connector_settings(self) -> None:
@@ -284,9 +304,23 @@ class JiraServiceManagementConnector(JiraConnector):
                 )
         else:
             try:
-                self.source_operations.list_projects()
+                projects = self.source_operations.list_projects()
             except Exception as e:
                 self._handle_jira_connector_settings_error(e)
+                return
+
+            if not is_cloud_gateway(self.source_operations):
+                sd_keys = [
+                    str(p["key"])
+                    for p in projects
+                    if isinstance(p, dict)
+                    and p.get("key")
+                    and p.get("projectTypeKey") in (None, SERVICE_DESK_PROJECT_TYPE)
+                ]
+                if not sd_keys:
+                    raise ConnectorValidationError(
+                        "No Jira Service Management (service_desk) projects found on this Jira instance."
+                    )
 
 
 if __name__ == "__main__":

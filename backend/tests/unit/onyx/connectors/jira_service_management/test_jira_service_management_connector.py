@@ -82,7 +82,9 @@ def _make_mock_jsm_issue(
                 {
                     "id": "1",
                     "name": "Acme Corp",
-                    "_links": {"self": "https://jira.example.com/rest/servicedeskapi/organization/1"},
+                    "_links": {
+                        "self": "https://jira.example.com/rest/servicedeskapi/organization/1"
+                    },
                 }
             ],
             "customfield_10013": [
@@ -125,6 +127,16 @@ def test_extract_jsm_metadata_and_process_jsm_issue() -> None:
         "organizations": ["Acme Corp"],
         "request_participants": ["Carol Watcher"],
     }
+
+    # Verify a breached SLA field is not overwritten by a subsequent non-breached SLA field
+    multi_sla_issue = _make_mock_jsm_issue()
+    multi_sla_issue["fields"]["customfield_10009"] = {
+        "ongoingCycle": {"breached": True}
+    }
+    multi_sla_issue["fields"]["customfield_10011"] = {
+        "ongoingCycle": {"breached": False}
+    }
+    assert extract_jsm_metadata(multi_sla_issue)["sla_breached"] == "True"
 
     doc = process_jsm_issue("https://jira.example.com", raw_issue)
     assert doc is not None
@@ -181,12 +193,31 @@ def test_jsm_connector_load_credentials_and_checkpoint() -> None:
     ]
     slim_batches = list(connector.retrieve_all_slim_docs(0, time.time()))
     slim_docs = [
-        item for batch in slim_batches for item in batch if isinstance(item, SlimDocument)
+        item
+        for batch in slim_batches
+        for item in batch
+        if isinstance(item, SlimDocument)
     ]
     assert [s.id for s in slim_docs] == [
         "https://jira.example.com/browse/SD-101",
         "https://jira.example.com/browse/SD-102",
     ]
+
+
+def test_jsm_server_dc_resolves_service_desk_projects() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.example.com",
+    )
+    mock_ops = MagicMock(spec=JiraSourceOperations)
+    mock_ops._is_cloud.return_value = False
+    mock_ops.list_projects.return_value = [
+        {"key": "SD", "projectTypeKey": "service_desk"},
+        {"key": "ENG", "projectTypeKey": "software"},
+    ]
+    connector._source_operations = mock_ops
+
+    jql = connector._get_jql_query(0, 100)
+    assert jql.startswith('project in ("SD") AND updated >=')
 
 
 def test_jsm_validate_connector_settings() -> None:
@@ -195,6 +226,7 @@ def test_jsm_validate_connector_settings() -> None:
         project_key="SD",
     )
     mock_ops = MagicMock(spec=JiraSourceOperations)
+    mock_ops._is_cloud.return_value = True
     connector._source_operations = mock_ops
 
     mock_ops.get_project.return_value = {"key": "SD", "projectTypeKey": "service_desk"}
@@ -227,3 +259,11 @@ def test_jsm_config_and_planning_rule() -> None:
     override = jira_service_management_planning_rule(cfg1, cfg2)
     assert override is not None
     assert override.scope_directions == {"project_key": ScopeDirection.NONE}
+
+    # Whitespace-only jql_query is treated as unset
+    cfg_blank = JiraServiceManagementConnectorConfig(
+        jira_base_url="https://jira.example.com",
+        project_key="OTHER",
+        jql_query="   ",
+    )
+    assert jira_service_management_planning_rule(cfg1, cfg_blank) is None

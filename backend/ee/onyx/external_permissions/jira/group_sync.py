@@ -146,7 +146,7 @@ def jira_group_sync(
 
     source_operations = JiraSourceOperations(
         credentials_provider=OnyxStaticCredentialsProvider(
-            None, DocumentSource.JIRA.value, credential_json(cc_pair)
+            None, cc_pair.connector.source.value, credential_json(cc_pair)
         ),
         connector_specific_config={
             "jira_base_url": jira_base_url,
