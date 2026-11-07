@@ -390,3 +390,40 @@ def test_scripts_are_isolated(
         assert len(script.requests) == 1 and len(other.requests) == 1
     finally:
         other.close()
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("case", ["disabled", "disallowed", "bare_arguments"])
+def test_response_recovery_obeys_permissions_over_http(
+    script: MockLLMScript, llm: LitellmLLM, streaming: bool, case: str
+) -> None:
+    text = (
+        '{"queries":["alpha"]}'
+        if case == "bare_arguments"
+        else '<function_calls><invoke name="web_search"></invoke></function_calls>'
+    )
+    script.conversation("main", Reply(text=text))
+    request = GenerationRequest(
+        messages=[AppUserMessage(content="Search")],
+        tools=[ToolDefinition.model_validate(tool["function"]) for tool in TOOLS],
+        allowed_tool_names=frozenset()
+        if case == "disabled"
+        else frozenset({"internal_search"}),
+        options=GenerationOptions(
+            tool_choice=ToolChoiceOptions.REQUIRED
+            if case == "bare_arguments"
+            else ToolChoiceOptions.AUTO
+        ),
+    )
+    if streaming:
+        message = AssistantMessage()
+        for event in llm.stream(request):
+            apply_generation_event(message, event)
+    else:
+        message = llm.invoke(request)
+    assert [call.name for call in message.tool_calls] == (
+        ["internal_search"] if case == "bare_arguments" else []
+    )
+    if case == "disabled":
+        assert message.text == text
+    script.verify()

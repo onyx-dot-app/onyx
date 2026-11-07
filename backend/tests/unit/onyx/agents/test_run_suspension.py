@@ -902,7 +902,7 @@ def test_run_can_capture_and_release_without_its_creating_agent() -> None:
 
 
 @pytest.mark.parametrize(
-    "change", ["order", "extra", "inactive_phase", "same", "legacy"]
+    "change", ["order", "extra", "inactive_phase", "schema_order", "same", "legacy"]
 )
 def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
     effects: list[str] = []
@@ -914,7 +914,13 @@ def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
     def make_agent(state: AgentState, *, restored: bool = False) -> Agent:
         tools = [
             AgentTool(
-                definition=ToolDefinition(name=name, description="", parameters={}),
+                definition=ToolDefinition(
+                    name=name,
+                    description="",
+                    parameters={"type": "object", "properties": {}}
+                    if not (restored and change == "schema_order")
+                    else {"properties": {}, "type": "object"},
+                ),
                 execute=execute,
             )
             for name in ("effect", "unused")
@@ -955,7 +961,7 @@ def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
         del saved["run_state"]["progress"]["tool_configuration_digest"]
     checkpoint = ExecutionCheckpoint.model_validate(saved)
     rebuilt = make_agent(checkpoint.agent_state, restored=True)
-    if change in {"order", "extra", "inactive_phase"}:
+    if change in {"order", "extra", "inactive_phase", "schema_order"}:
         with pytest.raises(ValueError, match="Restored tool configuration"):
             rebuilt.resume(checkpoint.run_state)
         assert effects == []

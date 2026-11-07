@@ -456,7 +456,8 @@ If release fails, handoff, local waiters, and pending parent dependencies report
 A new execution owner can register the same run ID once ownership is released.
 
 Pass executable tools to `Agent(tools=...)`; the runtime restores the saved declarations and execution permissions.
-A configuration digest rejects changed definitions, order, or tool phases before restoration callbacks run.
+A configuration digest rejects changed definitions, schema key order, tool order, or phases before restoration callbacks run.
+Schema key order matters because it changes the serialized prompt prefix.
 Older checkpoints without a digest still validate their saved step declarations.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.
