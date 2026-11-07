@@ -60,7 +60,7 @@ done
 
 # Start background reload loop only when daemon reload is requested
 if [ "${RUN_NGINX_DAEMON:-true}" = "true" ]; then
-  while :; do sleep 6h & wait; nginx -s reload; done &
+  while :; do sleep 6h & wait; nginx -s reload || echo "Warning: nginx reload failed" >&2; done &
 fi
 
 nginx -g "daemon off;"

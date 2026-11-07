@@ -1041,13 +1041,13 @@ function Main {
         Print-Info "Fetching config files matching tag $currentImageTag..."
         try {
             Download-OnyxFile "$pinnedBase/docker_compose/docker-compose.yml" $composeDest
-            try { Download-OnyxFile "$pinnedBase/data/nginx/app.conf.template" (Join-Path $script:InstallRoot "data\nginx\app.conf.template") } catch {}
-            try { Download-OnyxFile "$pinnedBase/data/nginx/run-nginx.sh" (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") } catch {}
-            try { Download-OnyxFile "$pinnedBase/data/nginx/mcp.conf.inc.template" (Join-Path $script:InstallRoot "data\nginx\mcp.conf.inc.template") } catch {}
-            try { Download-OnyxFile "$pinnedBase/data/nginx/mcp_upstream.conf.inc.template" (Join-Path $script:InstallRoot "data\nginx\mcp_upstream.conf.inc.template") } catch {}
-            try { Download-OnyxFile "$pinnedBase/data/nginx/webhook.conf.inc" (Join-Path $script:InstallRoot "data\nginx\webhook.conf.inc") } catch {}
+            try { Download-OnyxFile "$pinnedBase/data/nginx/app.conf.template" (Join-Path $script:InstallRoot "data\nginx\app.conf.template") } catch { Write-Verbose "app.conf.template not found for tag $currentImageTag" }
+            try { Download-OnyxFile "$pinnedBase/data/nginx/run-nginx.sh" (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") } catch { Write-Verbose "run-nginx.sh not found for tag $currentImageTag" }
+            try { Download-OnyxFile "$pinnedBase/data/nginx/mcp.conf.inc.template" (Join-Path $script:InstallRoot "data\nginx\mcp.conf.inc.template") } catch { Write-Verbose "mcp.conf.inc.template not found for tag $currentImageTag" }
+            try { Download-OnyxFile "$pinnedBase/data/nginx/mcp_upstream.conf.inc.template" (Join-Path $script:InstallRoot "data\nginx\mcp_upstream.conf.inc.template") } catch { Write-Verbose "mcp_upstream.conf.inc.template not found for tag $currentImageTag" }
+            try { Download-OnyxFile "$pinnedBase/data/nginx/webhook.conf.inc" (Join-Path $script:InstallRoot "data\nginx\webhook.conf.inc") } catch { Write-Verbose "webhook.conf.inc not found for tag $currentImageTag" }
             if ($script:LiteMode) {
-                try { Download-OnyxFile "$pinnedBase/docker_compose/$($script:LiteComposeFile)" $liteOverlayPath } catch {}
+                try { Download-OnyxFile "$pinnedBase/docker_compose/$($script:LiteComposeFile)" $liteOverlayPath } catch { Write-Verbose "LiteComposeFile not found for tag $currentImageTag" }
             }
             Print-Success "Config files updated to match $currentImageTag"
         } catch {
