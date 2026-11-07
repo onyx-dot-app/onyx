@@ -9,6 +9,7 @@ from onyx.agents.models import AgentInfo, RunResult, RunState
 from onyx.agents.runtime import Agent, RunFailed, result_from_snapshot
 from onyx.agents.tools import (
     AgentLifetime,
+    ChildRunCancelled,
     ChildRunWait,
     ToolInvocation,
     ToolOutcome,
@@ -18,20 +19,20 @@ from onyx.chat.citation_utils import (
     extract_citation_order_from_text,
     message_citation_sources,
 )
-from onyx.chat.models import (
-    ListAgentsInput,
-    SpawnAgentInput,
-    SubagentSelection,
-)
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S, MAX_LLM_CYCLES
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool, parse_tool_arguments
 from onyx.tools.models import (
-    SubagentResult,
     ToolCallException,
     ToolContext,
+)
+from onyx.tools.tool_implementations.subagents.models import (
+    ListAgentsInput,
+    SpawnAgentInput,
+    SubagentResult,
+    SubagentSelection,
 )
 from onyx.utils.logger import setup_logger
 
@@ -40,14 +41,7 @@ logger = setup_logger()
 
 def _selected_agent(invocation: ToolInvocation) -> AgentInfo:
     selection = parse_tool_arguments(SubagentSelection, invocation.arguments)
-    agent = next(
-        (
-            child
-            for child in invocation.agents.discover_children()
-            if child.id == selection.agent_id
-        ),
-        None,
-    )
+    agent = invocation.agents.lookup_agent(selection.agent_id)
     if agent is None:
         raise ToolCallException(
             "Subagent is unavailable on this chat branch.",
@@ -150,7 +144,13 @@ class InspectAgentTool(_SubagentTool):
         agent = _selected_agent(invocation)
         if agent.latest_run_id is None:
             raise ValueError("Subagent has no run")
-        result = invocation.agents.wait_run(agent.latest_run_id, timeout=0)
+        try:
+            result = invocation.agents.wait_run(agent.latest_run_id, timeout=0)
+        except ChildRunCancelled as error:
+            invocation.cancellation.check()
+            raise ToolCallException(
+                "Subagent was cancelled", "Subagent was cancelled"
+            ) from error
         if result is None:
             return ToolResult(
                 content=agent.model_dump_json(exclude={"restoration_config"})

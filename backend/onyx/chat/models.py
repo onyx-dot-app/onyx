@@ -62,7 +62,6 @@ from onyx.tools.models import (
     GeneratedImage,
     PersonaToolConfiguration,
     SearchToolUsage,
-    SubagentResult,
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
@@ -73,7 +72,7 @@ _MESSAGE_ADAPTER = TypeAdapter(Message)
 
 _INCOGNITO_SOURCE_DETAILS = TypeAdapter(
     Annotated[
-        SearchDocsResponse | ResearchAgentCallResult | SubagentResult,
+        SearchDocsResponse | ResearchAgentCallResult,
         Field(discriminator="type"),
     ]
 )
@@ -193,7 +192,7 @@ class ResponseStatus(BaseModel):
     message_id: int
     root_message_id: int
     root_session_id: UUID
-    parent_agent_id: str | None
+    ancestor_agent_ids: list[str]
     status: RunStatus
 
 
@@ -226,19 +225,8 @@ class IncognitoContext(BaseModel):
     previous_run_id: str | None = None
 
 
-class IncognitoAgentState(BaseModel):
-    parent_agent_id: str | None = None
-    agent_id: str
-    agent_path: str
-    description: str
-    configuration: ResearchConfiguration | None
-    responses: list[ResponseRecord]
-    sources: dict[int, SearchDoc] = Field(default_factory=dict)
-
-
-class IncognitoAgentResponse(BaseModel):
+class IncognitoResponseReceipt(BaseModel):
     replay_digest: str
-    agents: list[IncognitoAgentState] = Field(default_factory=list)
 
 
 def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
@@ -279,7 +267,7 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
             data["details"] = message.details.model_dump(
                 mode="json", include={"type", "search_docs", "citation_mapping"}
             )
-        elif isinstance(message.details, (ResearchAgentCallResult, SubagentResult)):
+        elif isinstance(message.details, ResearchAgentCallResult):
             data["details"] = message.details.model_dump(mode="json")
     return data
 
@@ -294,7 +282,7 @@ IncognitoMessage = Annotated[
 class IncognitoState(BaseModel):
     messages: list[IncognitoMessage] = Field(default_factory=list)
     previous_run_id: str | None = None
-    responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)
+    responses: dict[str, IncognitoResponseReceipt] = Field(default_factory=dict)
 
 
 class SavedAgentContext(BaseModel):
@@ -579,26 +567,6 @@ class PersonaPromptConfig(BaseModel):
     replace_base_system_prompt: bool
 
 
-class SpawnAgentInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(min_length=1, description="A short name for this agent.")
-    instruction: str = Field(
-        min_length=1,
-        description="A self-contained task. The child does not inherit this conversation.",
-    )
-
-
-class SubagentSelection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    agent_id: str = Field(min_length=1)
-
-
-class ListAgentsInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
 class ChatFeatureState(BaseModel):
     """Chat settings and accumulated state needed to resume suspended execution."""
 
@@ -611,7 +579,6 @@ class ChatFeatureState(BaseModel):
     include_citations: bool
     inject_memories: bool
     forced_tool_id: int | None
-    subagents_enabled: bool = False
     base_prompt: str
     custom_prompt: str | None
     reminders_enabled: bool

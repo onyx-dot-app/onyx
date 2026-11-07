@@ -9,7 +9,7 @@ from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMe
 from onyx.file_store.models import ContextFileMetadata
 from onyx.llm.models import Message, ToolResultMessage
 from onyx.tools.constants import CITEABLE_TOOLS_NAMES
-from onyx.tools.models import SubagentResult
+from onyx.tools.tool_implementations.subagents.models import SubagentResult
 
 
 def message_citation_sources(message: Message) -> CitationMapping:

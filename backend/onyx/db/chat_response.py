@@ -1087,6 +1087,7 @@ def read_response_status__no_commit(
         return None
     current = response
     visited: set[int] = set()
+    ancestor_agent_ids: list[str] = []
     while current.spawned_by_message_id is not None:
         if current.message_id in visited or len(visited) >= MAX_AGENT_DEPTH:
             raise ValueError("Child response hierarchy is cyclic or too deep")
@@ -1096,14 +1097,13 @@ def read_response_status__no_commit(
         parent = _read_response_ancestry(session, current.parent_response_id)
         if parent is None:
             raise ValueError("Parent response is unavailable")
+        ancestor_agent_ids.append(str(parent.session_id))
         current = parent
     return ResponseStatus(
         message_id=response.message_id,
         root_message_id=current.message_id,
         root_session_id=current.session_id,
-        parent_agent_id=str(response.parent_session_id)
-        if response.parent_session_id is not None
-        else None,
+        ancestor_agent_ids=ancestor_agent_ids,
         status=response.status,
     )
 

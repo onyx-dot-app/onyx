@@ -158,10 +158,10 @@ from onyx.tools.models import (
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
-    SubagentResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.subagents.models import SubagentResult
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict

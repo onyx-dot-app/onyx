@@ -23,10 +23,8 @@ from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     MAX_AGENT_HISTORY_RUNS,
     agent_path_from_ancestors,
-    agent_session_path,
     checkpoint_from_summary,
     find_summary_for_ancestry,
-    parent_session_id,
     session_ancestors,
     translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
@@ -356,7 +354,9 @@ def load_saved_response(
         if session_id is None:
             return None
         agent = _visible_agent(db_session, branch, str(session_id))
-        if parent_session_id(db_session, agent) != UUID(parent_agent_id):
+        ancestors = session_ancestors(db_session, [agent.id])
+        parent_id = UUID(parent_agent_id)
+        if parent_id == agent.id or parent_id not in ancestors:
             return None
         links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
         if not any(link.id == response_id for link in links):
@@ -375,7 +375,9 @@ def load_saved_response(
         )
         if response is None:
             return None
-        record = read_response_record(response, agent_session_path(db_session, agent))
+        record = read_response_record(
+            response, agent_path_from_ancestors(agent.id, ancestors)
+        )
         summary = find_summary_for_ancestry(
             db_session, agent.id, visible_message_ids(db_session, response)
         )
@@ -440,10 +442,20 @@ def load_session_agent_metadata(
                 for agent in agents
             }
         )
+        # Keep the ancestry needed to reach descendants outside the recent-agent limit.
+        missing_ids = ancestors.keys() - set(agent_ids)
+        if not include_root:
+            missing_ids.discard(branch.chat_session_id)
+        if missing_ids:
+            agents.extend(
+                db_session.scalars(
+                    select(ChatSession).where(ChatSession.id.in_(missing_ids))
+                )
+            )
         links = _selected_response_links(
             db_session,
             branch,
-            [agent_id for agent_id in agent_ids if agent_id != branch.chat_session_id],
+            [agent.id for agent in agents if agent.id != branch.chat_session_id],
         )
         metadata: list[AgentInfo] = []
         for agent in agents:
@@ -486,21 +498,21 @@ def lookup_session_agent(
         parent = _visible_agent(db_session, branch, parent_agent_id)
         responses = _selected_responses(branch)
         agent = db_session.scalar(
-            select(ChatSession)
-            .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
-            .where(
-                ChatMessage.chat_session_id == parent.id,
+            select(ChatSession).where(
                 ChatSession.id == UUID(agent_id),
                 ChatSession.spawned_by_message_id.in_(select(responses.c.id)),
             )
         )
         if agent is None:
             return None
+        ancestors = session_ancestors(db_session, [agent.id])
+        if parent.id == agent.id or parent.id not in ancestors:
+            return None
         links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
         latest = links[0] if links else None
         return _agent_metadata(
             agent,
-            session_ancestors(db_session, [agent.id]),
+            ancestors,
             latest.id if latest else None,
             latest.status if latest else None,
         )

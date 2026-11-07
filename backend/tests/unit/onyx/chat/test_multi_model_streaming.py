@@ -54,6 +54,7 @@ from onyx.chat.process_message import (
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stream_buffer import ChatStream, StreamBufferWriter
 from onyx.configs.constants import MessageType
+from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.chat import set_preferred_response
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatSession, User
@@ -70,6 +71,7 @@ from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdenti
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
+    ReasoningEffort,
     TextContent,
     ToolCall,
     ToolChoiceOptions,
@@ -92,6 +94,16 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.utils import get_json_line
+from onyx.tools.constants import CODING_AGENT_TOOL_ID
+from onyx.tools.interface import Tool
+from onyx.tools.models import (
+    PersonaToolConfiguration,
+    SearchToolUsage,
+    ToolConfiguration,
+)
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import get_current_trace
 from onyx.tracing.framework.traces import NoOpTrace
@@ -100,7 +112,12 @@ from onyx.utils.threadpool_concurrency import (
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership, FakeRunStore
+from tests.unit.onyx.agents.fakes import (
+    EchoTool,
+    FakeModelClient,
+    FakeRunOwnership,
+    FakeRunStore,
+)
 
 MODEL_REFUSAL_ERROR_CODE = "MODEL_REFUSAL"
 CONTENT_FILTER_FINISH_REASON = "content_filter"
@@ -3536,6 +3553,125 @@ def test_invalid_chat_settings_return_actionable_errors(
     }
     assert packet.error == detail
     assert not packet.is_retryable
+
+
+@pytest.mark.parametrize("mode", list(IncognitoRecordMode))
+def test_incognito_rejects_deep_research_before_constructing_tools(
+    mode: IncognitoRecordMode,
+) -> None:
+    setup = _make_setup()
+    setup.incognito_record_mode = mode
+    setup.new_msg_req.deep_research = True
+    with patch("onyx.chat.execution.construct_tools") as construct:
+        with pytest.raises(
+            OnyxError, match="Deep research is not available in incognito"
+        ):
+            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+    construct.assert_not_called()
+
+
+@pytest.mark.parametrize("mode", [None, *IncognitoRecordMode])
+def test_chat_turn_excludes_delegation_tools_in_incognito(
+    mode: IncognitoRecordMode | None,
+) -> None:
+    setup = _make_setup()
+    setup.incognito_record_mode = mode
+    coding_config = ToolConfiguration(
+        id=2,
+        name="Coding Agent",
+        description=None,
+        display_name=None,
+        in_code_tool_id=CODING_AGENT_TOOL_ID,
+        enabled=True,
+        openapi_schema=None,
+        mcp_input_schema=None,
+        custom_headers=None,
+        passthrough_auth=False,
+        mcp_server_id=None,
+        oauth_config_id=None,
+    )
+    configuration = PersonaToolConfiguration(
+        persona_id=0,
+        persona_name="Default",
+        tools=[coding_config],
+        search=PersonaSearchInfo(
+            document_set_names=[],
+            search_start_date=None,
+            attached_document_ids=[],
+            hierarchy_node_ids=[],
+        ),
+    )
+    setup.tool_configuration = configuration
+    setup.search_params.search_usage = SearchToolUsage.AUTO
+    setup.persona = None
+    setup.base_system_prompt = "Answer the question."
+    setup.custom_agent_prompt = None
+    setup.user_memory_context = None
+    setup.checkpoint = None
+    setup.reasoning_effort = ReasoningEffort.AUTO
+    setup.all_injected_file_metadata = None
+    setup.chat_files_for_tools = []
+    setup.extracted_context_files = ExtractedContextFiles(
+        file_texts=[],
+        image_files=[],
+        use_as_search_filter=False,
+        total_token_count=0,
+        file_metadata=[],
+        uncapped_token_count=None,
+    )
+    seen_tools: list[set[str]] = []
+
+    def answer(
+        request: GenerationRequest, _signal: CancellationSignal | None
+    ) -> AssistantMessage:
+        seen_tools.append({tool.name for tool in request.tools})
+        return AssistantMessage(content=[TextContent(text="Answer")])
+
+    llm = FakeModelClient(answer)
+    setup.responses[0] = ReservedChatResponse(
+        llm=llm, message_id=1000, display_name="Test"
+    )
+
+    # Tool construction is the DB/service boundary; selection and execution stay real.
+    def construct(
+        *, configuration: PersonaToolConfiguration, **_kwargs: object
+    ) -> dict[int, list[Tool]]:
+        tools: dict[int, list[Tool]] = {1: [EchoTool()]}
+        if any(
+            tool.in_code_tool_id == CODING_AGENT_TOOL_ID for tool in configuration.tools
+        ):
+            tools[2] = [CodingAgentTool(tool_id=2, llm=llm)]
+        return tools
+
+    user = User(use_memories=False)
+    with (
+        patch("onyx.chat.execution.construct_tools", side_effect=construct),
+        patch("onyx.chat.execution.get_llm_token_counter", return_value=len),
+        patch(
+            "onyx.chat.history_store.RedisChatHistoryStore.list_agents", return_value=[]
+        ),
+        patch("onyx.chat.history_store.save_chat_response_to_db"),
+        patch("onyx.chat.history_store.save_incognito_response"),
+        patch("onyx.chat.prompt_utils.get_company_context", return_value=None),
+    ):
+        packets = list(
+            _start_chat_turn(setup, user, stream_buffer=MagicMock(truncated=False))
+        )
+    assert not [packet for packet in packets if isinstance(packet, StreamingError)]
+    expected = {"echo"}
+    if mode is None:
+        expected.update(
+            {
+                "coding_agent",
+                "spawn_agent",
+                "list_agents",
+                "inspect_agent",
+                "wait_agent",
+                "cancel_agent",
+            }
+        )
+    assert seen_tools == [expected]
+    assert configuration.tools == [coding_config]
 
 
 @pytest.mark.parametrize("model_index", [None, 0, 1])

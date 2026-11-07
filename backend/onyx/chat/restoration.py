@@ -52,7 +52,6 @@ def restore_chat_agent(
         return ChatAgent(
             messages=context.messages,
             tools=tools,
-            subagents_enabled=state.subagents_enabled,
             custom_agent_prompt=state.custom_prompt,
             base_system_prompt=state.base_prompt,
             context_files=state.context_files.restore(),

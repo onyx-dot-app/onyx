@@ -32,10 +32,11 @@ document does not repeat it.
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
-- **Independent children.** Persistent single-model Chat
-  exposes `chat/subagent_tools.py` controls to spawn, list, inspect, wait for, and
-  cancel children. These children survive the root response. Later turns use
-  the existing branch-scoped directory and run store to access them.
+- **Independent children.** ChatAgent and its children expose controls from
+  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, inspect,
+  wait for, and cancel children. Incognito omits these controls. Children survive
+  the root response. Later turns use the branch-scoped directory and run store
+  to access them.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the
@@ -93,7 +94,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   completed calls in call order, and model history replays them in call order. A step with more than `MAX_TOOL_CALLS_PER_STEP` (64) calls or a
   repeated call ID fails the whole run.
 - `backend/onyx/agents/agent_coordination.py:AgentCoordinator` runs children and
-  calls the application's storage and ownership adapters.
+  calls the application's storage and ownership adapters. Explicit discovery
+  refreshes directory metadata so later turns can find newly spawned descendants.
 - `backend/onyx/agents/execution_records.py:messages_for_model` filters history
   for the model. It drops incomplete tool exchanges, orphaned results, calls
   that repeat an ID in one message (with their results) and thinking that
@@ -105,7 +107,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 |---|---|
 | `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. In a content-free incognito session no adapter saves children. |
 | `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. A content-free incognito run keeps local ownership only. |
-| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to the selected branch. |
+| `AgentDirectory` | `chat/subagents.py:ChatAgentDirectory`, limited to descendants on the selected branch. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |

@@ -66,7 +66,6 @@ def test_temporary_history_preparation_waits_for_explicit_user_message_save(
     store = RedisChatHistoryStore(
         message_id=17,
         chat_session_id=session_id,
-        visible_message_ids=(),
         admission=Mock(spec=ChatTurnAdmission),
     )
     previous = UserMessage(id="chat:17", content="Original question")
@@ -241,7 +240,6 @@ def test_temporary_response_restores_file_sources_before_serialization() -> None
     store = RedisChatHistoryStore(
         message_id=17,
         chat_session_id=uuid4(),
-        visible_message_ids=(),
         admission=Mock(spec=ChatTurnAdmission),
     )
     with (
@@ -308,7 +306,8 @@ def test_incognito_regeneration_uses_selected_question_and_prompt_only_tool_poli
     None
 ):
     store = RedisChatHistoryStore(
-        message_id=17, chat_session_id=uuid4(), visible_message_ids=()
+        message_id=17,
+        chat_session_id=uuid4(),
     )
     search = ToolResultMessage(
         tool_call_id="search", tool_name="search", content="large passages"

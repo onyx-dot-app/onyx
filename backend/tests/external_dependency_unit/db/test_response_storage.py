@@ -1351,9 +1351,10 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
             branch=branch,
         )
         assert {agent.id for agent in store.list_agents()} == expected
-    assert (
-        lookup_session_agent(base.id, str(grandchild_id), str(conversation.id)) is None
-    )
+    descendant = lookup_session_agent(base.id, str(grandchild_id), str(conversation.id))
+    assert descendant is not None
+    assert descendant.parent_id == str(child_id)
+    assert lookup_session_agent(base.id, str(child_id), str(grandchild_id)) is None
     with pytest.raises(ValueError, match="unavailable"):
         lookup_session_agent(sibling.id, str(grandchild_id), str(child_id))
 

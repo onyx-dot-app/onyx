@@ -58,10 +58,10 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     LlmPythonExecutionResult,
-    SubagentResult,
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.subagents.models import SubagentResult
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

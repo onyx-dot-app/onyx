@@ -63,6 +63,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.settings.store import load_settings
+from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -416,14 +417,12 @@ class ChatTurnExecution:
                     )
             del self._response_workers[worker]
 
-    def _clear_processing_status(self) -> bool:
+    def _clear_processing_status(self) -> None:
         try:
             self.setup.admission.release()
             self._admission_released = True
-            return True
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
-            return False
 
     def _run_response(
         self,
@@ -483,7 +482,6 @@ class ChatTurnExecution:
             history_store = get_chat_history_store(
                 message_id=persistence.message_id,
                 chat_session_id=self.setup.chat_session_id,
-                visible_message_ids=branch.message_ids,
                 persist_content=persist_content,
                 branch=branch,
             )
@@ -646,11 +644,27 @@ def create_chat_agent(
     llm = setup.responses[response_index].llm
     with cancellation_scope(cancellation):
         cancellation.check()
+        tool_configuration = setup.tool_configuration
+        if setup.incognito_record_mode is not None:
+            if setup.new_msg_req.deep_research:
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Deep research is not available in incognito. Start a normal chat to use it.",
+                )
+            tool_configuration = tool_configuration.model_copy(
+                update={
+                    "tools": [
+                        tool
+                        for tool in tool_configuration.tools
+                        if tool.in_code_tool_id != CODING_AGENT_TOOL_ID
+                    ]
+                }
+            )
         filters = setup.new_msg_req.internal_search_filters
         source_types = filters.source_type if filters else None
         # Tools open DB sessions on demand, so model I/O cannot retain a connection.
         tools_by_type = construct_tools(
-            configuration=setup.tool_configuration,
+            configuration=tool_configuration,
             user=user,
             llm=llm,
             selection_llm_factory=partial(
@@ -731,9 +745,6 @@ def create_chat_agent(
             agent_id=agent_id,
             messages=list(setup.messages),
             tools=tools,
-            subagents_enabled=(
-                len(setup.responses) == 1 and setup.incognito_record_mode is None
-            ),
             custom_agent_prompt=setup.custom_agent_prompt,
             context_files=setup.extracted_context_files,
             persona=setup.persona,

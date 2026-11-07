@@ -38,11 +38,11 @@ from onyx.tools.models import (
     LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
-    SubagentResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
+from onyx.tools.tool_implementations.subagents.models import SubagentResult
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])

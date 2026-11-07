@@ -31,13 +31,6 @@ from onyx.chat.prompt_utils import (
     build_chat_prompt,
     prepare_prompt,
 )
-from onyx.chat.subagent_tools import (
-    CancelAgentTool,
-    InspectAgentTool,
-    ListAgentsTool,
-    SpawnAgentTool,
-    WaitAgentTool,
-)
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
@@ -57,14 +50,24 @@ from onyx.llm.models import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile, SubagentResult, ToolContext
+from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.tool_constructor import disambiguate_tool_names
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.subagents.models import SubagentResult
+from onyx.tools.tool_implementations.subagents.subagent_tools import (
+    CancelAgentTool,
+    InspectAgentTool,
+    ListAgentsTool,
+    SpawnAgentTool,
+    WaitAgentTool,
+)
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
+from shared_configs.contextvars import get_current_incognito_record_mode
 
 
 class ChatAgent(Agent, RestorableFeature):
@@ -92,7 +95,6 @@ class ChatAgent(Agent, RestorableFeature):
         checkpoint: CompactionCheckpoint | None = None,
         previous_run_id: str | None = None,
         agent_id: str | None = None,
-        subagents_enabled: bool = False,
     ) -> None:
         self.max_steps = MAX_LLM_CYCLES
         self.custom_agent_prompt = custom_agent_prompt
@@ -103,7 +105,6 @@ class ChatAgent(Agent, RestorableFeature):
         self.configured_tools = list(tools)
         self.application_tools = list(self.configured_tools)
         self.stages_files = any(tool.name == PYTHON_TOOL_NAME for tool in tools)
-        self.subagents_enabled = subagents_enabled
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context
@@ -138,7 +139,8 @@ class ChatAgent(Agent, RestorableFeature):
         self.persona = persona
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
-        if subagents_enabled:
+
+        if get_current_incognito_record_mode() is None:
 
             def create_child() -> Agent:
                 return ChatAgent(
@@ -169,6 +171,7 @@ class ChatAgent(Agent, RestorableFeature):
                     CancelAgentTool(),
                 ]
             )
+        disambiguate_tool_names(self.application_tools)
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -197,7 +200,6 @@ class ChatAgent(Agent, RestorableFeature):
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
             forced_tool_id=self.forced_tool_id,
-            subagents_enabled=self.subagents_enabled,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
             reminders_enabled=self.reminders_enabled,
@@ -221,7 +223,6 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
             or saved.forced_tool_id != self.forced_tool_id
-            or saved.subagents_enabled != self.subagents_enabled
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
             or saved.reminders_enabled != self.reminders_enabled

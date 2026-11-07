@@ -37,6 +37,13 @@ class ChatAgentDirectory(AgentDirectory):
             store.tenant_id if store is not None else get_current_tenant_id()
         )
 
+    def list_agents(self) -> list[AgentInfo]:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
+        try:
+            return self.history_store.list_agents()
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
     def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
         try:

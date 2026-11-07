@@ -192,8 +192,14 @@ class ChatRunStore(RunStore, RunOwnership):
             or saved.root_message_id not in self.visible_response_ids
         ):
             raise ValueError("Response is unavailable on this branch")
-        if parent_id is not None and saved.parent_agent_id != (parent_id or None):
-            raise ValueError("Response is unavailable to this parent")
+        if parent_id is not None:
+            allowed = (
+                parent_id in saved.ancestor_agent_ids
+                if parent_id
+                else not saved.ancestor_agent_ids
+            )
+            if not allowed:
+                raise ValueError("Response is unavailable to this parent")
         if saved.status == RunStatus.RUNNING:
             with self._ownership_lock(saved.message_id):
                 if self._owner(saved.message_id) is None:

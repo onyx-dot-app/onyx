@@ -181,8 +181,8 @@ of only markers stays empty.
    the error, and the turn saves with no citations and no renderings. With
    `persist_content=False` (temporary chats), `save_chat_turn` saves no
    citations or search docs. `chat/history_store.py:RedisChatHistoryStore`
-   keeps those numbers in Redis instead, with `sources_by_run` for child agents.
-   A new save path must cover both history stores.
+   retains citation numbers and source documents in the cached root messages.
+   Incognito does not support subagents. A new save path must cover both history stores.
 5. `document-key-prompt-design` **The document JSON key and field order are
    prompt design.** The key is `document`, not `citation_id`, so the model does
    not write reasoning such as "I should reference citation_id: 5". The number
@@ -278,9 +278,11 @@ of only markers stays empty.
 - `citeable-tool` **A new citeable tool.** Copy how `WebSearchTool` is wired; list the
   current set in `tools/constants.py:CITEABLE_TOOLS_NAMES`. Add the tool name
   there. It turns on the citation reminder in `build_chat_reminder`, and
-  `chat/citation_utils.py:message_citation_sources` registers numbers only for
-  tools on that list. Without it, the numbers never reach the processor and the
-  markers render as nothing. Start its numbers at the offset in
+  `chat/citation_utils.py:message_citation_sources` reads `SearchDocsResponse`
+  only for tools on that list. Research and background-agent results carry
+  source mappings directly.
+  `tools/tool_implementations/subagents/subagent_tools.py` remaps child answer
+  citations into the receiving tool call's number block. Start search numbers at the offset in
   [[#number-block-per-tool-call]]. Return a `SearchDocsResponse` with
   `citation_mapping`, and put every cited document in `search_docs`;
   `message_citation_sources` drops numbers whose document is not there. If the

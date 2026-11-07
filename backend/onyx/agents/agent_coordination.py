@@ -75,6 +75,10 @@ class RunOwnership(Protocol):
 class AgentDirectory(Protocol):
     """Authorize agent lookup, restoration, and run control within one branch."""
 
+    def list_agents(self) -> list[AgentInfo]:
+        """Read branch-visible metadata, including the ancestors of listed agents."""
+        ...
+
     def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None: ...
 
     def restore_agent(self, agent_id: str, parent_id: str) -> Agent: ...
@@ -537,47 +541,66 @@ class AgentCoordinator:
             ]
 
     def discover_children(self, parent_id: str) -> list[AgentInfo]:
-        # Never acquire a run lock under the coordinator lock. Starts use the reverse order.
+        if self._directory is not None:
+            for info in self._directory.list_agents():
+                self.register(info)
         with self._state.lock:
-            active_runs = {
-                tracked.coordination.run.agent_id: tracked.coordination.run
-                for tracked in self._state.tracked_runs.values()
-                if tracked.coordination is not None
-            }
-            agent_ids = [
-                info.id
-                for info in self._state.registrations.values()
-                if info.parent_id == parent_id
-            ]
-            latest = dict(self._state.latest)
-            visible_runs = set(self._visible_run_ids)
-        result: list[AgentInfo] = []
-        for agent_id in agent_ids:
-            info = self._lookup(agent_id, parent_id)
-            if info is None:
-                continue
-            active = active_runs.get(info.id)
-            saved = latest.get(info.id)
-            if active is not None and active.id in visible_runs:
-                info = info.model_copy(
-                    update={"latest_run_id": active.id, "status": active.status}
-                )
-            elif saved is not None and saved.run_id in visible_runs:
-                info = info.model_copy(
-                    update={"latest_run_id": saved.run_id, "status": saved.status}
-                )
-            elif (
-                self._directory is not None
-                and info.latest_run_id is not None
-                and (info.status is None or not info.status.is_terminal)
-            ):
-                info = info.model_copy(
-                    update={
-                        "status": self.remote_run_status(info.latest_run_id, parent_id)
-                    }
-                )
-            result.append(info.model_copy(deep=True))
-        return result
+            children: dict[str, list[str]] = {}
+            for info in self._state.registrations.values():
+                if info.parent_id is not None:
+                    children.setdefault(info.parent_id, []).append(info.id)
+        descendants: list[str] = []
+        pending = list(children.get(parent_id, []))
+        visited = {parent_id}
+        while pending:
+            agent_id = pending.pop()
+            if agent_id in visited:
+                raise ValueError("Agent hierarchy contains a cycle")
+            visited.add(agent_id)
+            descendants.append(agent_id)
+            pending.extend(children.get(agent_id, []))
+        return [
+            info
+            for agent_id in descendants
+            if (info := self.lookup_agent(agent_id, parent_id)) is not None
+        ]
+
+    def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
+        """Read one visible descendant and refresh its latest execution status."""
+        info = self._lookup(agent_id, parent_id)
+        if info is None:
+            return None
+        # Run locks must be acquired outside the coordinator lock.
+        with self._state.lock:
+            active = next(
+                (
+                    tracked.coordination.run
+                    for tracked in self._state.tracked_runs.values()
+                    if tracked.coordination is not None
+                    and tracked.coordination.run.agent_id == agent_id
+                ),
+                None,
+            )
+            saved = self._state.latest.get(agent_id)
+            active_visible = active is not None and active.id in self._visible_run_ids
+            saved_visible = saved is not None and saved.run_id in self._visible_run_ids
+        if active is not None and active_visible:
+            info = info.model_copy(
+                update={"latest_run_id": active.id, "status": active.status}
+            )
+        elif saved is not None and saved_visible:
+            info = info.model_copy(
+                update={"latest_run_id": saved.run_id, "status": saved.status}
+            )
+        elif (
+            self._directory is not None
+            and info.latest_run_id is not None
+            and (info.status is None or not info.status.is_terminal)
+        ):
+            info = info.model_copy(
+                update={"status": self.remote_run_status(info.latest_run_id, parent_id)}
+            )
+        return info.model_copy(deep=True)
 
     def bind(self, run: Run) -> "RunCoordination":
         with self._state.lock:
@@ -805,21 +828,34 @@ class AgentCoordinator:
     def _lookup(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         with self._state.lock:
             info = self._visible_agents.get(agent_id)
-        if self._directory is not None and info is None:
+            ancestor = info
+            visited: set[str] = set()
+            while ancestor is not None:
+                if ancestor.id in visited or len(visited) > MAX_CHILD_DEPTH:
+                    raise ValueError(
+                        "Agent hierarchy contains a cycle or exceeds its limit"
+                    )
+                visited.add(ancestor.id)
+                if ancestor.parent_id == parent_id:
+                    return info
+                if ancestor.parent_id is None:
+                    raise ValueError("Agent is not available to this parent")
+                ancestor = self._visible_agents.get(ancestor.parent_id)
+        if self._directory is not None:
             info = self._directory.lookup_agent(agent_id, parent_id)
             if info is not None:
                 if info.id != agent_id:
                     raise ValueError("Archive returned a different agent")
                 self.register(info)
-                with self._state.lock:
-                    info = self._visible_agents[agent_id]
-        if info is not None and info.parent_id != parent_id:
+            return info
+        if info is not None:
             raise ValueError("Agent is not available to this parent")
-        return info
+        return None
 
     def resolve_child(self, agent_id: str, parent_id: str) -> Agent:
-        if self._lookup(agent_id, parent_id) is None:
-            raise ValueError("Agent is not available to this parent")
+        info = self._lookup(agent_id, parent_id)
+        if info is None or info.parent_id != parent_id:
+            raise ValueError("Only the spawning agent can start another child run")
         with self._state.lock:
             loaded = self._state.agents.get(agent_id)
             if loaded is not None and loaded.view_id == self._view_id:
@@ -1161,6 +1197,10 @@ class _ToolControl(AgentControl):
         self.owner.check_tool_active(self.active)
         return self.owner.coordinator.discover_children(self.owner.run.agent_id)
 
+    def lookup_agent(self, agent_id: str) -> AgentInfo | None:
+        self.owner.check_tool_active(self.active)
+        return self.owner.coordinator.lookup_agent(agent_id, self.owner.run.agent_id)
+
     def spawn_agent(
         self,
         agent: Agent,
@@ -1260,9 +1300,6 @@ class _ToolControl(AgentControl):
         )
         if latest is not None and latest.status.is_terminal:
             return self._result_from_child(latest)
-
-        if timeout == 0:
-            return None
 
         try:
             deadline = time.monotonic() + timeout

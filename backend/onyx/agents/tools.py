@@ -107,7 +107,10 @@ class AgentControl(Protocol):
     def wait_run(
         self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
     ) -> "RunResult | None":
-        """Return completed output, or raise ChildRunCancelled for a cancelled child."""
+        """Return completed output or raise ChildRunCancelled.
+
+        A zero timeout checks saved status once without polling for completion.
+        """
         ...
 
     def cancel_run(self, run_id: str) -> None: ...
@@ -117,6 +120,8 @@ class AgentControl(Protocol):
     ) -> Future[None]: ...
 
     def discover_children(self) -> list["AgentInfo"]: ...
+
+    def lookup_agent(self, agent_id: str) -> "AgentInfo | None": ...
 
 
 class ToolProgress(BaseModel):

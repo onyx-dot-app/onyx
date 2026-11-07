@@ -47,13 +47,6 @@ from onyx.chat.models import (
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import persist_checkpoint_files, restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
-from onyx.chat.subagent_tools import (
-    CancelAgentTool,
-    InspectAgentTool,
-    ListAgentsTool,
-    SpawnAgentTool,
-    WaitAgentTool,
-)
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, FileOrigin, MessageType
 from onyx.context.search.models import SearchDoc
@@ -76,12 +69,21 @@ from onyx.llm.models import (
     ToolCall,
     ToolDefinition,
     ToolResult,
+    ToolResultMessage,
     UserMessage,
 )
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
-from onyx.tools.models import ChatFile, FileReadResult, SubagentResult, ToolContext
+from onyx.tools.models import ChatFile, FileReadResult, ToolContext
+from onyx.tools.tool_implementations.subagents.models import SubagentResult
+from onyx.tools.tool_implementations.subagents.subagent_tools import (
+    CancelAgentTool,
+    InspectAgentTool,
+    ListAgentsTool,
+    SpawnAgentTool,
+    WaitAgentTool,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -673,9 +675,8 @@ def test_competing_resume_claims_and_stale_writer(
         coordinator.close(timeout=1)
 
 
-@pytest.mark.parametrize("subagents_enabled", [False, True])
 def test_checkpoint_files_use_durable_references_and_session_cleanup(
-    branch: tuple[UUID, int], db_session: Session, subagents_enabled: bool
+    branch: tuple[UUID, int], db_session: Session
 ) -> None:
     file_store = PostgresBackedFileStore()
     original_bytes = b"uploaded spreadsheet"
@@ -699,7 +700,6 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             feature = ChatAgent(
                 messages=[],
                 tools=[],
-                subagents_enabled=subagents_enabled,
                 custom_agent_prompt=None,
                 base_system_prompt="Help",
                 context_files=ExtractedContextFiles(
@@ -765,7 +765,6 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 user_identity=None,
             )
             assert isinstance(rebuilt, ChatAgent)
-            assert rebuilt.subagents_enabled == subagents_enabled
             assert [tool.name for tool in rebuilt.tools] == [
                 tool.name for tool in feature.tools
             ]
@@ -1352,14 +1351,20 @@ def test_resumed_child_keeps_its_original_response_tree(
         assert second.close(timeout=10)
 
 
-@pytest.mark.parametrize("cancel_child", [False, True])
+@pytest.mark.parametrize(
+    "action", ["cancel", "wait", "inspect_completed", "inspect_cancelled"]
+)
+@pytest.mark.parametrize("nested", [False, True])
 def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
     branch: tuple[UUID, int],
     db_session: Session,
     user_message: UserMessage,
-    cancel_child: bool,
+    action: str,
+    nested: bool,
 ) -> None:
+    cancel_child = action in {"cancel", "inspect_cancelled"}
     child_started = threading.Event()
+    spawn_leaf = threading.Event()
     release_child = threading.Event()
     first_owner = store(branch)
     first_coordinator = AgentCoordinator()
@@ -1380,7 +1385,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                 )
         raise TimeoutError("Test did not release the child")
 
-    def create_child() -> Agent:
+    def create_leaf() -> Agent:
         return Agent(
             FakeModelClient(child_reply),
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -1401,6 +1406,39 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                     }
                 )
             ),
+        )
+
+    def create_child() -> Agent:
+        if not nested:
+            return create_leaf()
+        replies = iter(
+            [
+                AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="spawn_leaf",
+                            name="spawn_agent",
+                            arguments={
+                                "name": "leaf",
+                                "instruction": "Find the answer",
+                            },
+                        )
+                    ]
+                ),
+                AssistantMessage(content=[TextContent(text="Leaf started")]),
+            ]
+        )
+
+        def reply(
+            _request: GenerationRequest, _cancellation: CancellationSignal
+        ) -> AssistantMessage:
+            assert spawn_leaf.wait(timeout=10)
+            return next(replies)
+
+        return Agent(
+            FakeModelClient(reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[SpawnAgentTool(create_leaf).bind(ToolContext)],
         )
 
     first_replies = iter(
@@ -1435,7 +1473,6 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         )
         assert first.result(timeout=10).output.text == "Agent started"
         assert first.wait_for_idle(timeout=10)
-        assert child_started.wait(timeout=10)
         spawned_result = first.snapshot().steps[0].tools["spawn"].result
         assert spawned_result is not None
         child = SpawnResult.model_validate_json(spawned_result.text)
@@ -1444,6 +1481,11 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             == RunStatus.RUNNING
         )
         assert first_owner.has_owned_work
+        with pytest.raises(ValueError, match="unavailable to this parent"):
+            first_owner.read_run(first.id, child.agent_id)
+        assert (
+            directory(first_owner).lookup_agent(str(branch[0]), child.agent_id) is None
+        )
 
         db_session.expire_all()
         initial_response = db_session.get(ChatMessage, branch[1])
@@ -1488,6 +1530,26 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         )
         for info in later_owner.discovery():
             later_view.register(info)
+        spawn_leaf.set()
+        if nested:
+            child_state = first_coordinator.completion(child.run_id).result(timeout=10)
+            leaf_result = child_state.steps[0].tools["spawn_leaf"].result
+            assert leaf_result is not None
+            child = SpawnResult.model_validate_json(leaf_result.text)
+            # The root can still reach a live grandchild after its parent finishes.
+            assert any(
+                info.id == child.agent_id
+                for info in first_view.discover_children(first_agent.id)
+            )
+            assert first_view.child_run(child.run_id, first_agent.id) is not None
+            assert later_view.registration(child.agent_id) is None
+        assert child_started.wait(timeout=10)
+        if action == "inspect_cancelled":
+            first_owner.cancel_run(child.run_id, str(branch[0]))
+            first_coordinator.completion(child.run_id).result(timeout=10)
+        elif action == "inspect_completed":
+            release_child.set()
+            first_coordinator.completion(child.run_id).result(timeout=10)
         later_step = 0
 
         def later_reply(
@@ -1505,6 +1567,14 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                     arguments={"agent_id": child.agent_id},
                 )
             elif later_step == 2:
+                if action in {"inspect_completed", "inspect_cancelled"}:
+                    result = request.messages[-1]
+                    assert isinstance(result, ToolResultMessage)
+                    assert result.is_error == cancel_child
+                    assert result.text == (
+                        "Subagent was cancelled" if cancel_child else "Child answer [1]"
+                    )
+                    return AssistantMessage(content=[TextContent(text="Checked")])
                 inspected = json.loads(request.messages[-1].text)
                 assert inspected["status"] == "running"
                 if cancel_child:
@@ -1539,17 +1609,24 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                 ]
             ],
         )
-        later = later_agent.start(
-            messages=[
-                UserMessage(
-                    id=f"chat:{later_question.id}", content=later_question.message
-                )
-            ],
-            max_steps=4,
-            coordinator=later_view,
-        )
-        assert later.result(timeout=15).output.text == "Checked"
-        assert later.wait_for_idle(timeout=10)
+        with patch("onyx.db.chat_subagents.MAX_DISCOVERED_AGENTS", 1):
+            limited = directory(later_owner).list_agents()
+            assert {info.parent_id for info in limited} <= {
+                str(branch[0]),
+                *(info.id for info in limited),
+            }
+            assert child.agent_id in {info.id for info in limited}
+            later = later_agent.start(
+                messages=[
+                    UserMessage(
+                        id=f"chat:{later_question.id}", content=later_question.message
+                    )
+                ],
+                max_steps=4,
+                coordinator=later_view,
+            )
+            assert later.result(timeout=15).output.text == "Checked"
+            assert later.wait_for_idle(timeout=10)
         later_coordinator.completion(later.id).result(timeout=10)
         first_coordinator.completion(child.run_id).result(timeout=10)
         saved = later_owner.read_run(child.run_id, str(branch[0]))
@@ -1558,7 +1635,10 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             RunStatus.CANCELLED if cancel_child else RunStatus.COMPLETE
         )
         if not cancel_child:
-            waited = later.snapshot().steps[2].tools["wait"].result
+            step_index, call_id = (
+                (1, "inspect") if action == "inspect_completed" else (2, "wait")
+            )
+            waited = later.snapshot().steps[step_index].tools[call_id].result
             assert waited is not None
             assert waited.text == "Child answer [1]"
             assert isinstance(waited.details, SubagentResult)
@@ -1573,6 +1653,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                 packet.model_dump_json() for packet in packets
             )
     finally:
+        spawn_leaf.set()
         release_child.set()
         assert later_coordinator.close(timeout=10)
         assert first_coordinator.close(timeout=10)

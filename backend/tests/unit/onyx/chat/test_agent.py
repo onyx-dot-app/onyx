@@ -24,9 +24,10 @@ from onyx.chat.models import (
     PromptMetadata,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
-from onyx.chat.subagent_tools import SpawnAgentTool
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.enums import IncognitoRecordMode, MCPOAuthProviderMode
+from onyx.db.models import MCPServer
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
@@ -49,10 +50,16 @@ from onyx.llm.models import (
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
-from onyx.tools.models import ChatFile, SubagentResult, ToolContext
+from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.subagents.models import SubagentResult
+from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
+from shared_configs.contextvars import CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
@@ -452,10 +459,17 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
 
 @pytest.mark.parametrize(
-    "tool_name",
-    [WebSearchTool.NAME, SearchTool.NAME, RESEARCH_AGENT_TOOL_NAME, "wait_agent"],
+    "tool_name, incognito",
+    [
+        (WebSearchTool.NAME, False),
+        (WebSearchTool.NAME, True),
+        (SearchTool.NAME, False),
+        (SearchTool.NAME, True),
+        (RESEARCH_AGENT_TOOL_NAME, False),
+        (RESEARCH_AGENT_TOOL_NAME, True),
+        ("wait_agent", False),
+    ],
 )
-@pytest.mark.parametrize("incognito", [False, True])
 def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
     tool_name: str,
     incognito: bool,
@@ -662,8 +676,11 @@ def test_context_file_citations_keep_history_numbers_across_turns(
 
 
 @pytest.mark.parametrize("replace_base", [False, True])
+@pytest.mark.parametrize("incognito_mode", [None, *IncognitoRecordMode])
 def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
-    replace_base: bool, monkeypatch: pytest.MonkeyPatch
+    replace_base: bool,
+    incognito_mode: IncognitoRecordMode | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("onyx.chat.prompt_utils.get_company_context", lambda: None)
     monkeypatch.setattr("onyx.chat.prompt_formatting.PROMPT_CACHE_CHAT_HISTORY", True)
@@ -675,23 +692,29 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         uncapped_token_count=4,
         file_metadata=[],
     )
-    agent = ChatAgent(
-        messages=[],
-        tools=[EchoTool()],
-        custom_agent_prompt="Custom instructions",
-        base_system_prompt="Base instructions",
-        context_files=files,
-        persona=PersonaPromptConfig(
-            system_prompt="Replacement instructions",
-            task_prompt="Task reminder",
-            datetime_aware=False,
-            replace_base_system_prompt=replace_base,
-        ),
-        user_memory_context=None,
-        llm=ScriptedLLM([]),
-        token_counter=len,
-        reminders_enabled=False,
+    token = CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(
+        incognito_mode.value if incognito_mode else None
     )
+    try:
+        agent = ChatAgent(
+            messages=[],
+            tools=[EchoTool()],
+            custom_agent_prompt="Custom instructions",
+            base_system_prompt="Base instructions",
+            context_files=files,
+            persona=PersonaPromptConfig(
+                system_prompt="Replacement instructions",
+                task_prompt="Task reminder",
+                datetime_aware=False,
+                replace_base_system_prompt=replace_base,
+            ),
+            user_memory_context=None,
+            llm=ScriptedLLM([]),
+            token_counter=len,
+            reminders_enabled=False,
+        )
+    finally:
+        CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.reset(token)
     prepared = agent._prepare_step(
         StepInput(
             history=[],
@@ -727,7 +750,18 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
             request.messages[-1].text
             == "<system-reminder>\nTask reminder\n</system-reminder>"
         )
-        assert [tool.name for tool in request.tools] == ["echo"]
+        assert {tool.name for tool in request.tools} == (
+            {"echo"}
+            if incognito_mode is not None
+            else {
+                "echo",
+                "spawn_agent",
+                "list_agents",
+                "inspect_agent",
+                "wait_agent",
+                "cancel_agent",
+            }
+        )
     assert any(message.text == "Earlier question" for message in first.messages)
     assert not any(message.text == "Earlier question" for message in second.messages)
     assert [message.model_dump() for message in history] == original
@@ -822,10 +856,15 @@ def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
             for message in request.messages
             if isinstance(message, ToolResultMessage)
         ]
-        if "spawn_agent" not in names:
-            child_requests.append(request)
-            assert names == {"echo"}
-            assert not {"spawn_agent", "wait_agent", "cancel_agent"} & names
+        assert names == {
+            "echo",
+            "spawn_agent",
+            "list_agents",
+            "inspect_agent",
+            "wait_agent",
+            "cancel_agent",
+        }
+        if any(message.text == "Leaf task" for message in request.messages):
             if not results:
                 return AssistantMessage(
                     content=[
@@ -838,6 +877,31 @@ def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
                 )
             assert not results[0].is_error
             assert "work complete" in results[0].content
+            return AssistantMessage(content=[TextContent(text="Leaf answer")])
+        if any(message.text == "Independent task" for message in request.messages):
+            child_requests.append(request)
+            if not results:
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="spawn-leaf",
+                            name="spawn_agent",
+                            arguments={"name": "leaf", "instruction": "Leaf task"},
+                        )
+                    ]
+                )
+            if len(results) == 1:
+                grandchild = SpawnResult.model_validate_json(results[0].content)
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="wait-leaf",
+                            name="wait_agent",
+                            arguments={"agent_id": grandchild.agent_id},
+                        )
+                    ]
+                )
+            assert results[-1].content == "Leaf answer"
             return AssistantMessage(content=[TextContent(text="Child answer")])
         if not results:
             return AssistantMessage(
@@ -874,7 +938,6 @@ def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
     agent = ChatAgent(
         messages=[],
         tools=[SlowTool()],
-        subagents_enabled=True,
         custom_agent_prompt=None,
         base_system_prompt="",
         context_files=ExtractedContextFiles(
@@ -896,9 +959,7 @@ def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
     child = spawn.create_agent()
     assert isinstance(child, ChatAgent)
     assert child.search_context is not agent.search_context
-    assert not child.subagents_enabled
-    assert agent.capture_state().subagents_enabled
-    assert not child.capture_state().subagents_enabled
+    assert {tool.name for tool in child.tools} == {tool.name for tool in agent.tools}
     coordinator = AgentCoordinator(
         store=FakeRunStore(save=lambda run: saved.append(run.snapshot()))
     )
@@ -913,7 +974,7 @@ def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
         child_run = coordinator.child_run(spawned[0].run_id, agent.id)
         assert child_run is not None
         if not wait_for_child:
-            assert child_run.status == RunStatus.RUNNING
+            assert child_run.status in (RunStatus.RUNNING, RunStatus.SUSPENDED)
             assert not child_run.cancellation_signal.cancelled
         release.set()
         assert child_run.result(10).output.text == "Child answer"
@@ -925,7 +986,7 @@ def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
             state.run_id == child_run.id and state.status == RunStatus.COMPLETE
             for state in saved
         )
-        assert len(child_requests) == 2
+        assert len(child_requests) == 3
         assert any(
             message.text == "Independent task" for message in child_requests[0].messages
         )
@@ -935,3 +996,79 @@ def test_chat_delegates_to_an_independent_agent(wait_for_child: bool) -> None:
     finally:
         release.set()
         assert coordinator.close(10)
+
+
+@pytest.mark.parametrize("custom", [False, True])
+def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) -> None:
+    configured = (
+        CustomTool(
+            id=42,
+            method_spec=MethodSpec(
+                name="list_agents",
+                raw_name="list_agents",
+                summary="List remote agents",
+                path="/agents",
+                method="get",
+                spec={},
+            ),
+            base_url="https://example.com",
+        )
+        if custom
+        else MCPTool(
+            tool_id=42,
+            mcp_server=MCPServer(
+                id=42,
+                name="remote",
+                server_url="https://example.com",
+                oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+                oauth_cimd_enabled=True,
+            ),
+            tool_name="list_agents",
+            tool_description="List remote agents",
+            tool_definition={"type": "object", "properties": {}},
+        )
+    )
+    expected_name = "custom_42_list_agents" if custom else "mcp_remote_list_agents"
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        names = [tool.name for tool in request.tools or []]
+        assert names.count("list_agents") == 1
+        assert names.count(expected_name) == 1
+        assert len(names) == len(set(names))
+        return AssistantMessage(content=[TextContent(text="Ready")])
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[configured],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    assert (
+        run_agent(
+            agent, messages=[UserMessage(content="List agents")], max_steps=2
+        ).output.text
+        == "Ready"
+    )
+    spawn = next(
+        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+    )
+    child = spawn.create_agent()
+    assert (
+        run_agent(
+            child, messages=[UserMessage(content="List agents")], max_steps=2
+        ).output.text
+        == "Ready"
+    )
+    assert configured.name == expected_name

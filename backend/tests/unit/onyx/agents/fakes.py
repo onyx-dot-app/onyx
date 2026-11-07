@@ -44,17 +44,22 @@ class FakeAgentDirectory(AgentDirectory):
     def __init__(
         self,
         *,
+        list_agents: Callable[[], list[AgentInfo]] | None = None,
         lookup_agent: Callable[[str, str], AgentInfo | None] | None = None,
         restore_agent: Callable[[str, str], Agent] | None = None,
         read_run: Callable[[str, str], RunState | None] | None = None,
         read_run_status: Callable[[str, str], RunStatus] | None = None,
         cancel_run: Callable[[str, str], None] | None = None,
     ) -> None:
+        self._list_agents = list_agents
         self._lookup_agent = lookup_agent
         self._restore_agent = restore_agent
         self._read_run = read_run
         self._read_run_status = read_run_status
         self._cancel_run = cancel_run
+
+    def list_agents(self) -> list[AgentInfo]:
+        return self._list_agents() if self._list_agents else []
 
     def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         return self._lookup_agent(agent_id, parent_id) if self._lookup_agent else None
