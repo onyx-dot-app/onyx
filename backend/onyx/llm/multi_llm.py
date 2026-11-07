@@ -1105,8 +1105,8 @@ class LitellmLLM(LLM):
         ):
             tool_choice = ToolChoiceOptions.AUTO
 
-        # These native adapters drop NONE. Omit schemas; provider-specific
-        # history normalization below preserves prior tool evidence.
+        # These native adapters drop NONE. Omit schemas but retain history;
+        # Onyx or LiteLLM serializes prior calls and results for each provider.
         if tool_choice == ToolChoiceOptions.NONE and self._model_provider in {
             LlmProviderNames.BEDROCK,
             LlmProviderNames.BEDROCK_CONVERSE,
@@ -2063,11 +2063,6 @@ class LitellmLLM(LLM):
                 choice = ToolChoiceOptions.NONE
             elif choice == ToolChoiceOptions.REQUIRED and len(allowed) == 1:
                 choice = NamedToolChoice(name=next(iter(allowed)))
-            if (
-                not isinstance(choice, NamedToolChoice)
-                and choice != ToolChoiceOptions.NONE
-            ):
-                tools = [tool for tool in tools if tool.name in allowed]
         if isinstance(choice, NamedToolChoice):
             if choice.name not in {tool.name for tool in tools}:
                 raise ValueError("Named tool is not declared for this request")

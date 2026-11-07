@@ -131,8 +131,10 @@ before retry handling; removing cache options prevents later attempts from addin
 markers again. When a provider 400 names a
 reasoning, temperature, or explicit-cache kwarg, `_completion` retries without it
 (`_retry_attempts`). A cache fallback also removes the tool-result markers. It
-never drops tools, tool choice or messages. `_track_llm_cost` counts cost only when
-usage limits are on and the key is Onyx-managed. Per-user usage comes from
+never drops tools, tool choice or messages during that retry. Separately, final-answer
+requests omit tool definitions for native Bedrock and Ollama adapters that cannot
+enforce `NONE`. Prior tool evidence stays in the messages. `_track_llm_cost` counts
+cost only when usage limits are on and the key is Onyx-managed. Per-user usage comes from
 spans, not from this call.
 
 **Env-only provider config.** Some `custom_config` keys have no LiteLLM kwarg
