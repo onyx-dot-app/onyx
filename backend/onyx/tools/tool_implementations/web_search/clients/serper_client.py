@@ -26,13 +26,22 @@ SERPER_CONTENTS_URL = "https://scrape.serper.dev"
 SERPER_REQUEST_TIMEOUT_SECONDS = 60
 
 
-class SerperClient(WebSearchProvider, WebContentProvider):
-    def __init__(self, api_key: str, num_results: int = 10) -> None:
+class SerperSearchClient(WebSearchProvider):
+    def __init__(
+        self,
+        api_key: str,
+        num_results: int = 10,
+        *,
+        search_url: str = SERPER_SEARCH_URL,
+        provider_name: str = "Serper",
+    ) -> None:
         self.headers = {
             "X-API-KEY": api_key,
             "Content-Type": "application/json",
         }
         self._num_results = num_results
+        self._search_url = search_url
+        self._provider_name = provider_name
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
@@ -42,7 +51,7 @@ class SerperClient(WebSearchProvider, WebContentProvider):
         }
 
         response = requests.post(
-            SERPER_SEARCH_URL,
+            self._search_url,
             headers=self.headers,
             data=json.dumps(payload),
             timeout=SERPER_REQUEST_TIMEOUT_SECONDS,
@@ -93,16 +102,18 @@ class SerperClient(WebSearchProvider, WebContentProvider):
             ):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid Serper API key: {error_msg}",
+                    detail=f"Invalid {self._provider_name} API key: {error_msg}",
                 ) from e
             raise HTTPException(
                 status_code=400,
-                detail=f"Serper API key validation failed: {error_msg}",
+                detail=f"{self._provider_name} API key validation failed: {error_msg}",
             ) from e
 
-        logger.info("Web search provider test succeeded for Serper.")
+        logger.info("Web search provider test succeeded for %s.", self._provider_name)
         return {"status": "ok"}
 
+
+class SerperClient(SerperSearchClient, WebContentProvider):
     def contents(self, urls: Sequence[str]) -> list[WebContent]:
         if not urls:
             return []
