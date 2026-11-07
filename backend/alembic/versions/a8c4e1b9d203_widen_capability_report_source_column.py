@@ -39,12 +39,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
+    connection: sa.Connection = op.get_bind()
+    has_jira_service_management_rows: bool = connection.execute(
         sa.text(
-            f"DELETE FROM {_TABLE} "
-            f"WHERE {_COLUMN} = 'JIRA_SERVICE_MANAGEMENT'"
+            f"SELECT EXISTS (SELECT 1 FROM {_TABLE} "
+            f"WHERE {_COLUMN} = 'JIRA_SERVICE_MANAGEMENT')"
         )
-    )
+    ).scalar_one()
+    if has_jira_service_management_rows:
+        raise RuntimeError(
+            "Cannot downgrade while JIRA_SERVICE_MANAGEMENT capability reports exist"
+        )
     op.alter_column(
         _TABLE,
         _COLUMN,
