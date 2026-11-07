@@ -1,6 +1,6 @@
 """
-Integration test for forcing image generation through the chat API.
-This test verifies that forcing a tool use works through the complete API flow.
+Integration test for requesting image generation with a preference through the chat API.
+The request asks for an image and prefers the image Action.
 """
 
 import pytest
@@ -17,7 +17,7 @@ from tests.integration.common_utils.test_models import (
 )
 
 
-def test_force_tool_use(
+def test_preferred_image_action(
     basic_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     image_generation_config: DATestImageGenerationConfig,  # noqa: ARG001
@@ -32,15 +32,13 @@ def test_force_tool_use(
     # Create a chat session
     chat_session = ChatSessionManager.create(user_performing_action=basic_user)
 
-    # Send a simple message that wouldn't normally trigger image generation
-    # but force the image generation tool to be used
-    message = "hi"
+    message = "Generate an image of a small blue boat on a calm lake."
 
     analyzed_response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message=message,
         user_performing_action=basic_user,
-        forced_tool_ids=[image_generation_tool_id],
+        preferred_tool_id=image_generation_tool_id,
     )
 
     assert analyzed_response.error is None, "Chat response should not have an error"
@@ -49,12 +47,10 @@ def test_force_tool_use(
         tool.tool_name == ToolName.IMAGE_GENERATION
         for tool in analyzed_response.used_tools
     )
-    assert image_generation_tool_used, (
-        "Image generation tool should have been forced to run"
-    )
+    assert image_generation_tool_used, "The image request should produce an image"
 
 
 if __name__ == "__main__":
     # Run with: python -m dotenv -f .vscode/.env run --
-    # python -m pytest backend/tests/integration/tests/tools/test_force_tool_use.py -v -s
+    # python -m pytest backend/tests/integration/tests/tools/test_preferred_image_action.py -v -s
     pytest.main([__file__, "-v", "-s"])

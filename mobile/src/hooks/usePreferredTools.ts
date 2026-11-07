@@ -1,30 +1,29 @@
-// Web stores a `number[]` but only ever holds one id, so a nullable id is the same thing.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface UseForcedToolsArgs {
+interface UsePreferredToolsArgs {
   chatSessionId: string | null;
   // undefined = unresolved (agents loading, or a new session missing from the sessions list).
   agentId: number | undefined;
   projectId: number | null;
 }
 
-export interface ForcedTools {
-  forcedToolId: number | null;
-  toggleForcedTool: (toolId: number) => void;
+export interface PreferredTools {
+  preferredToolId: number | null;
+  togglePreferredTool: (toolId: number) => void;
   /*
    * Unconditional: the source coupling pins search on every source change, where a toggle would
    * release an already-pinned one.
    */
-  forceTool: (toolId: number) => void;
-  clearForcedTool: () => void;
+  preferTool: (toolId: number) => void;
+  clearPreferredTool: () => void;
 }
 
-export function useForcedTools({
+export function usePreferredTools({
   chatSessionId,
   agentId,
   projectId,
-}: UseForcedToolsArgs): ForcedTools {
-  const [forcedToolId, setForcedToolId] = useState<number | null>(null);
+}: UsePreferredToolsArgs): PreferredTools {
+  const [preferredToolId, setPreferredToolId] = useState<number | null>(null);
   const previousChatSessionId = useRef<string | null>(chatSessionId);
   const previousAgentId = useRef<number | undefined>(agentId);
   const previousProjectId = useRef<number | null>(projectId);
@@ -34,20 +33,20 @@ export function useForcedTools({
     const previousId = previousChatSessionId.current;
     previousChatSessionId.current = chatSessionId;
     if (previousId !== null && previousId !== chatSessionId) {
-      setForcedToolId(null);
+      setPreferredToolId(null);
     }
   }, [chatSessionId]);
 
   /*
    * Only known→known counts as a switch; the unresolved step after a send must not clear the
-   * force that send just used.
+   * preference that send just used.
    */
   useEffect(() => {
     if (agentId === undefined) return;
     const previousId = previousAgentId.current;
     previousAgentId.current = agentId;
     if (previousId !== undefined && previousId !== agentId) {
-      setForcedToolId(null);
+      setPreferredToolId(null);
     }
   }, [agentId]);
 
@@ -58,18 +57,23 @@ export function useForcedTools({
   useEffect(() => {
     const previousId = previousProjectId.current;
     previousProjectId.current = projectId;
-    if (previousId !== projectId) setForcedToolId(null);
+    if (previousId !== projectId) setPreferredToolId(null);
   }, [projectId]);
 
-  const toggleForcedTool = useCallback((toolId: number) => {
-    setForcedToolId((current) => (current === toolId ? null : toolId));
+  const togglePreferredTool = useCallback((toolId: number) => {
+    setPreferredToolId((current) => (current === toolId ? null : toolId));
   }, []);
 
-  const forceTool = useCallback((toolId: number) => {
-    setForcedToolId(toolId);
+  const preferTool = useCallback((toolId: number) => {
+    setPreferredToolId(toolId);
   }, []);
 
-  const clearForcedTool = useCallback(() => setForcedToolId(null), []);
+  const clearPreferredTool = useCallback(() => setPreferredToolId(null), []);
 
-  return { forcedToolId, toggleForcedTool, forceTool, clearForcedTool };
+  return {
+    preferredToolId,
+    togglePreferredTool,
+    preferTool,
+    clearPreferredTool,
+  };
 }

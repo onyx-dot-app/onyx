@@ -91,7 +91,7 @@ process_slack_event                                  per event
       handle_standard_answers -> True: stop
       handle_regular_answer                          handlers/handle_regular_answer.py
         persona access check, check_token_rate_limits
-        handle_stream_message_objects + gather_stream   in-process, origin SLACKBOT
+        handle_stream_message_objects + gather_stream_full   in-process, origin SLACKBOT
         build_slack_response_blocks, respond_in_thread_or_channel
 ```
 
@@ -118,8 +118,12 @@ budget cannot silence the bot for every unmapped sender
 carries `slack_context`, which lets the search tool run federated Slack search
 when the persona's document sets link a Slack federated connector
 (`tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data`).
-The turn forces the search tool on the first cycle when the persona has an
-enabled one and `SearchTool.is_available` is true.
+The turn prefers search when the persona has an enabled search tool and
+`SearchTool.is_available` is true. Retrieval remains optional; the preference
+does not guarantee a grounded answer. The empty-channel-search notice replaces
+an answer only when a channel filter was applied, a recorded internal-search call
+has `search_docs` present (including an empty list), and the answer has neither
+citations nor top documents. Failed or skipped searches do not trigger this notice.
 
 **Channel-only agents.** When an admin picks document sets instead of an agent,
 `db/slack_channel_config.py:create_slack_channel_persona` creates a public
@@ -209,8 +213,9 @@ prefix. Deleting the channel config marks that persona deleted.
 12. `answer-retry-reruns-turn` **Each retry is a new chat turn in a new
     session.** `_get_slack_answer` in `handle_regular_answer` retries on any
     exception, up to `ONYX_BOT_NUM_RETRIES` (5) times. It raises whenever
-    `gather_stream` returns an `error_msg`, that is, for any root
-    `StreamingError`. Every attempt sends `chat_session_info`, so the prepare
+    `gather_stream_full` returns an `error_msg`, including execution and
+    persistence failures. Exceptions raised while consuming the stream also
+    reach this retry. Every attempt sends `chat_session_info`, so the prepare
     step creates a new `ChatSession` and runs the LLM and tools again. A
     `RESPONSE_SAVE_ERROR` after a complete answer
     (`chat/persistence.py:ChatResponsePersistence`) and a `QUERY_REJECTED` hook
@@ -260,7 +265,7 @@ prefix. Deleting the channel config marks that persona deleted.
 
 ## Dependencies
 
-- [[core-chat-loop]]: a change to `handle_stream_message_objects` or `chat/process_message.py:gather_stream` reaches the bot with no change here. `gather_stream` joins every root answer section and skips child-agent packets.
+- [[core-chat-loop]]: a change to `handle_stream_message_objects` or `chat/process_message.py:gather_stream_full` reaches the bot with no change here. `gather_stream_full` drains the stream, then builds the answer, tool calls, sources, and citations from the final response outcome.
 - [[standard-answers]]: runs before the regular answer and can end the turn.
 - [[agents-personas]]: the channel's persona sets the prompt, tools and document sets.
 - [[access-control]]: the anonymous user's scope bounds public-channel answers.

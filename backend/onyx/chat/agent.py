@@ -38,11 +38,6 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
-from onyx.llm.model_capabilities import (
-    model_identity_names,
-    model_prefers_auto_tool_choice,
-    model_requires_auto_tool_choice,
-)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -82,7 +77,7 @@ class ChatAgent(Agent, RestorableFeature):
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
         token_counter: Callable[[str], int],
-        forced_tool_id: int | None = None,
+        preferred_tool_id: int | None = None,
         user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -109,7 +104,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.inject_memories = inject_memories_in_prompt
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        self.forced_tool_id = forced_tool_id
+        self.preferred_tool_id = preferred_tool_id
         self.chat_files = list(chat_files or [])
         self.citation_processor = DynamicCitationProcessor(
             citation_mode=CitationMode.HYPERLINK
@@ -164,7 +159,7 @@ class ChatAgent(Agent, RestorableFeature):
             reasoning_effort=self.reasoning_effort,
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
-            forced_tool_id=self.forced_tool_id,
+            preferred_tool_id=self.preferred_tool_id,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
             request_context=self.additional_context,
@@ -188,7 +183,7 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.reasoning_effort != self.reasoning_effort
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
-            or saved.forced_tool_id != self.forced_tool_id
+            or saved.preferred_tool_id != self.preferred_tool_id
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
             or saved.request_context != self.additional_context
@@ -261,31 +256,13 @@ class ChatAgent(Agent, RestorableFeature):
             for message in state.messages
             if isinstance(message, ToolResultMessage)
         ]
-        tools = self.application_tools
-        request_tools = list(self.tools)
-        model_names = model_identity_names(
-            self.llm.config.model_name, self.llm.config.deployment_name
-        )
-        tool_choice: ToolChoiceOptions | NamedToolChoice = ToolChoiceOptions.AUTO
-        available_tool_names = {tool.name for tool in tools}
-        if self.forced_tool_id is not None and state.step.index == 0:
-            forced_tools = [tool for tool in tools if tool.id == self.forced_tool_id]
-            if not forced_tools:
-                raise ValueError(f"Tool {self.forced_tool_id} not found")
-            available_tool_names = {tool.name for tool in forced_tools}
-            if len(forced_tools) > 1 or model_prefers_auto_tool_choice(model_names):
-                # One database tool can contain several OpenAPI operations.
-                request_tools = [
-                    tool for tool in request_tools if tool.name in available_tool_names
-                ]
-                tool_choice = ToolChoiceOptions.REQUIRED
-            else:
-                tool_choice = NamedToolChoice(name=forced_tools[0].name)
-        elif state.step.is_last:
+        allowed_tool_names: frozenset[str] | None = None
+        tool_choice = ToolChoiceOptions.AUTO
+        available_tool_names = {tool.name for tool in self.application_tools}
+        if state.step.is_last:
             tool_choice = ToolChoiceOptions.NONE
+            allowed_tool_names = frozenset()
             available_tool_names = set()
-            if model_requires_auto_tool_choice(model_names):
-                request_tools = []
         prompt = build_chat_prompt(
             tools=self.application_tools,
             persona=self.persona,
@@ -299,9 +276,10 @@ class ChatAgent(Agent, RestorableFeature):
             previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
             has_history_citations=bool(self.citation_processor.citation_to_doc),
+            preferred_tool_id=self.preferred_tool_id,
         )
         return PreparedStep(
-            tools=request_tools,
+            allowed_tool_names=allowed_tool_names,
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
             ),

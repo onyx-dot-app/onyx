@@ -48,6 +48,9 @@ from onyx.prompts.chat_prompts import (
     LAST_CYCLE_CITATION_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
+    TOOL_PREFERENCE_GUIDANCE,
+    TOOL_PREFERENCE_LAST_STEP_GUIDANCE,
+    TOOL_PREFERENCE_REMINDER,
 )
 from onyx.prompts.prompt_utils import (
     apply_prompt_placeholders,
@@ -156,6 +159,7 @@ def build_chat_prompt(
     previous_results: Sequence[ToolResultMessage],
     is_last_step: bool,
     has_history_citations: bool = False,
+    preferred_tool_id: int | None = None,
 ) -> ChatPrompt:
     """Select instructions and reminders before assembling conversation history."""
     values = memory.user_info.placeholder_values if memory else {}
@@ -220,6 +224,17 @@ def build_chat_prompt(
         enabled=reminders_enabled,
         has_history_citations=has_history_citations,
     )
+    if preferred_tool_id is not None:
+        preferred_names = [tool.name for tool in tools if tool.id == preferred_tool_id]
+        if not preferred_names:
+            raise ValueError(f"Preferred tool {preferred_tool_id} is not available")
+        preference = TOOL_PREFERENCE_REMINDER.format(
+            operations=", ".join(preferred_names),
+            guidance=TOOL_PREFERENCE_LAST_STEP_GUIDANCE
+            if is_last_step
+            else TOOL_PREFERENCE_GUIDANCE,
+        )
+        reminder = "\n\n".join(part for part in (reminder, preference) if part)
     return ChatPrompt(
         system_prompt=SystemMessage(content=system) if system else None,
         user_info_prompt=SystemMessage(content=user_info) if user_info else None,

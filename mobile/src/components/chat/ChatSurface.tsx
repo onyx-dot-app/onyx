@@ -112,8 +112,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     sessionId == null || conversationPersonaKnown ? liveAgent : null;
   // Project chats are always created with the default persona (see `personaId` above), so the tool
   // controls must describe that persona — not whichever agent the sidebar happens to have selected.
-  // Otherwise the menu lists another agent's tools and a forced id from it kills the turn
-  // server-side ("Forced tool N not found in tools").
+  // The selected tool must belong to the same agent used for the request.
   const composerAgent = isProject
     ? (agents.find((candidate) => candidate.id === personaId) ?? null)
     : conversationAgent;

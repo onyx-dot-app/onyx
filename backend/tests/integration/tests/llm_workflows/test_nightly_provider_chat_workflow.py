@@ -329,7 +329,7 @@ def _run_chat_assertions(
                 "then summarize the result in one short sentence."
             ),
             user_performing_action=admin_user,
-            forced_tool_ids=[search_tool_id],
+            preferred_tool_id=search_tool_id,
         )
 
         if response.error is None:
@@ -343,7 +343,9 @@ def _run_chat_assertions(
             )
             has_answer = bool(response.full_message.strip())
 
-            if used_internal_search and debug_has_internal_search and has_answer:
+            # A preference permits a direct answer. When search runs, both response
+            # projections must record it. Scripted workflow tests require execution.
+            if used_internal_search == debug_has_internal_search and has_answer:
                 return
 
             last_error = (

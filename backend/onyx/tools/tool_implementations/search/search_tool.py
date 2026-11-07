@@ -926,8 +926,8 @@ class SearchTool(Tool):
     ) -> ToolResult:
         """Retrieve documents using the original question and optional query variants."""
         # An explicitly empty source selection is a statement, not an absent
-        # filter: the tool still runs (it may be forced), and it honestly
-        # finds nothing. `None` keeps its meaning of "no source filter".
+        # filter: if the model calls the tool, it finds nothing.
+        # `None` means "no source filter".
         # Project-only searches ignore user filters, so the guard must too.
         if (
             self.user_selected_filters is not None

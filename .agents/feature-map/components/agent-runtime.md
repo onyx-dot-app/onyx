@@ -144,7 +144,12 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    callbacks or other resources, so the new owner rebuilds them, possibly in
    another process or after a deploy. Each tool's definition must equal the
    saved step's declaration, or `backend/onyx/agents/runtime.py:_execute_tools`
-   raises `ValueError`. `chat/agent.py:ChatAgent.restore_state` also raises when
+   raises `ValueError`. Saved execution permissions are separate from advertised
+   definitions; restoration must not enable a tool merely because it was advertised.
+   A required configuration digest protects definitions, order and named phases
+   across restoration.
+   Steps narrow permissions; registered phases permit deliberate schema changes.
+   `chat/agent.py:ChatAgent.restore_state` also raises when
    the saved prompt, files, memory or settings differ. Keep a tool's definition
    stable while saved checkpoints can still resume.
 4. `context-captured-at-start` **A run copies the caller's context when it

@@ -137,11 +137,12 @@ write their own system messages in `deep_research/agent.py` and
 `deep_research/research_agent.py` with no company context and no agent prompt,
 or an agent that replaces the base prompt.
 
-**Tool definitions.** Chat keeps all tool definitions by default. A forced action
-with several operations exposes only that group. Claude, Qwen, and GLM forced
-steps expose only the selected operations and use the automatic-choice fallback. Final Qwen and GLM steps omit tools because
-those providers can reject explicit `none` choices. These schema changes can
-invalidate cache reuse. The shared policy lives in `llm/model_capabilities.py`.
+**Tool definitions.** Action preferences keep the full tool definitions and order.
+The selected Action appears in a request-only trailing reminder, outside the cached
+prefix. When project files replace retrieval, preparation omits an enabled,
+configured, allowed Search preference and its reminder. Final steps use `NONE`; providers that cannot enforce it omit definitions.
+Those provider exceptions can invalidate cache reuse. The shared policy lives in
+`llm/model_capabilities.py` and `llm/multi_llm.py`.
 
 **Custom agent prompt.** `chat/process_message.py:prepare_chat_turn` labels
 project and agent instructions when both exist, and tells the model to follow

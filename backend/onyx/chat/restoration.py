@@ -60,7 +60,7 @@ def restore_chat_agent(
             user_memory_context=state.memory,
             llm=llm,
             token_counter=token_counter,
-            forced_tool_id=state.forced_tool_id,
+            preferred_tool_id=state.preferred_tool_id,
             user_identity=user_identity,
             reasoning_effort=state.reasoning_effort,
             include_citations=state.include_citations,
