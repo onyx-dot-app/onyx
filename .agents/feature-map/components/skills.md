@@ -313,6 +313,8 @@ The library preview of an external-app skill calls the same renderer
     the configured tenant-scoped cache lock. It retries failed deletes and
     removes `SKILL_BUNDLE` files older than `ORPHAN_BUNDLE_MIN_AGE` that nothing uses.
     Lite runs the same cleanup through `background/periodic_poller.py`.
+    A pass stops between files after 30 seconds or 500 candidates. The cursor
+    advances only past attempted files. One storage call can exceed the deadline.
     The cleanup renews its lease around each file deletion and before cursor writes;
     losing the lease stops the pass without advancing its cursor.
     A durable cursor advances past failed files within a fixed scan boundary,

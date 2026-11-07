@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime, timedelta
+from time import monotonic
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -35,6 +36,7 @@ logger = setup_logger()
 ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
 # Bounds one cleanup pass; a backlog clears over later passes.
 _ORPHAN_BATCH_SIZE = 500
+_ORPHAN_TIME_BUDGET_SECONDS = 30
 _ORPHAN_PROGRESS_KEY = "orphan_skill_bundle_cursor"
 
 
@@ -177,6 +179,7 @@ def delete_orphan_skill_bundles() -> int:
     if not lock.acquire(blocking=False):
         return 0
     try:
+        deadline = monotonic() + _ORPHAN_TIME_BUDGET_SECONDS
         store = get_kv_store()
         try:
             progress = store.load(_ORPHAN_PROGRESS_KEY, refresh_cache=True)
@@ -230,15 +233,19 @@ def delete_orphan_skill_bundles() -> int:
                 )
             rows = list(db_session.execute(statement).tuples())
         deleted = 0
-        for file_id, _ in rows:
+        last_processed: tuple[str, datetime] | None = None
+        for file_id, created_at in rows:
+            if monotonic() >= deadline:
+                break
             lock.extend(CELERY_GENERIC_BEAT_LOCK_TIMEOUT)
             deleted += delete_files_best_effort(
                 [file_id], context="orphan skill bundle cleanup"
             )
             lock.extend(CELERY_GENERIC_BEAT_LOCK_TIMEOUT)
+            last_processed = (file_id, created_at)
         lock.extend(CELERY_GENERIC_BEAT_LOCK_TIMEOUT)
-        if rows and scan_end is not None:
-            file_id, created_at = rows[-1]
+        if last_processed is not None and scan_end is not None:
+            file_id, created_at = last_processed
             store.store(
                 _ORPHAN_PROGRESS_KEY,
                 {
@@ -247,7 +254,7 @@ def delete_orphan_skill_bundles() -> int:
                     "scan_end": [scan_end[0].isoformat(), scan_end[1]],
                 },
             )
-        else:
+        elif not rows:
             store.store(_ORPHAN_PROGRESS_KEY, None)
         return deleted
     finally:

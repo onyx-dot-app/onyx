@@ -825,3 +825,24 @@ def test_cleanup_retries_failures_despite_new_arrivals(
         make_old({new}, session)
         delete_orphan_skill_bundles()
     assert failed not in stored_bundles(session)
+
+
+@pytest.mark.parametrize("first_pass_count", [0, 1])
+def test_orphan_cleanup_deadline_resumes_without_skipping(
+    session: Session, monkeypatch: pytest.MonkeyPatch, first_pass_count: int
+) -> None:
+    store = get_default_file_store()
+    files = {
+        save_skill_bundle_bytes(
+            bundle(f"timed-{n}"), display_name="skill.zip", file_store=store
+        )
+        for n in range(3)
+    }
+    make_old(files, session)
+    clock = iter([0] + [0] * first_pass_count + [31, 31, 31])
+    with monkeypatch.context() as patch:
+        patch.setattr(skill_version, "monotonic", lambda: next(clock), raising=False)
+        assert delete_orphan_skill_bundles() == first_pass_count
+    assert len(stored_bundles(session)) == 3 - first_pass_count
+    assert delete_orphan_skill_bundles() == 3 - first_pass_count
+    assert stored_bundles(session) == set()
