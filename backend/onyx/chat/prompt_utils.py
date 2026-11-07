@@ -48,6 +48,9 @@ from onyx.prompts.chat_prompts import (
     LAST_CYCLE_CITATION_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
+    TOOL_PREFERENCE_GUIDANCE,
+    TOOL_PREFERENCE_LAST_STEP_GUIDANCE,
+    TOOL_PREFERENCE_REMINDER,
 )
 from onyx.prompts.prompt_utils import (
     apply_prompt_placeholders,
@@ -225,20 +228,11 @@ def build_chat_prompt(
         preferred_names = [tool.name for tool in tools if tool.id == preferred_tool_id]
         if not preferred_names:
             raise ValueError(f"Preferred tool {preferred_tool_id} is not available")
-        preference = (
-            "The user selected these operations for this request: "
-            + ", ".join(preferred_names)
-            + ". "
-        )
-        if is_last_step:
-            preference += "No more tools can run. Answer from the available evidence."
-        else:
-            preference += (
-                "Prefer them when they help answer the request. "
-                "You may use other available tools or answer without tools."
-            )
-        preference += (
-            " If the selected operations are unsuitable or unavailable, explain why."
+        preference = TOOL_PREFERENCE_REMINDER.format(
+            operations=", ".join(preferred_names),
+            guidance=TOOL_PREFERENCE_LAST_STEP_GUIDANCE
+            if is_last_step
+            else TOOL_PREFERENCE_GUIDANCE,
         )
         reminder = "\n\n".join(part for part in (reminder, preference) if part)
     return ChatPrompt(

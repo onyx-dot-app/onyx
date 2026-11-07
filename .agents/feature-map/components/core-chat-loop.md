@@ -404,7 +404,7 @@ termination grace period is much shorter, so it ends running turns first
   held.
 - Playwright: `web/tests/e2e/chat/stream_recovery.spec.ts` covers reload, network
   recovery and stop against the real API with a scripted model.
-- By hand: send a message that forces a search. Press stop during the answer and
+- By hand: send a message with Search selected as the preferred Action. Press stop during the answer and
   reload: the partial answer must stay. Send again, close the tab during the
   answer, and reopen the session: the answer must resume or show as saved. Run a
   multi-model turn and confirm that each column ends with its own answer or error.

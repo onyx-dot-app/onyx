@@ -56,15 +56,22 @@ describe("useToolConfiguration: stored shapes", () => {
     expect(result.current.filters.timeRange).toBeNull();
   });
 
-  test("obsolete forced selections are dropped while disabled tools survive", () => {
-    sessionStorage.setItem(
-      CHAT_KEY,
-      JSON.stringify({ tools: { 1: "forced", 2: "disabled" } })
-    );
-    const { result } = renderHook(() => useToolConfiguration());
-    expect(result.current.preferredToolId).toBeNull();
-    expect(result.current.disabledToolIds).toEqual([2]);
-  });
+  test.each([false, true])(
+    "obsolete forced selections are dropped in stored shape (nested=%s)",
+    (nested) => {
+      sessionStorage.setItem(
+        CHAT_KEY,
+        JSON.stringify(
+          nested
+            ? { tools: { 1: "forced", 2: "disabled" } }
+            : { 1: "forced", 2: "disabled" }
+        )
+      );
+      const { result } = renderHook(() => useToolConfiguration());
+      expect(result.current.preferredToolId).toBeNull();
+      expect(result.current.disabledToolIds).toEqual([2]);
+    }
+  );
 
   test("filters ride the snapshot through storage", () => {
     const { result, unmount } = renderHook(() => useToolConfiguration());
