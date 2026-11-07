@@ -188,8 +188,9 @@ falls back to `ChatMessage.error` on legacy rows
 failure shape must keep old rows readable.
 
 **History for the next turn.** Later turns retain saved tool output in both
-PostgreSQL and temporary history. Legacy tool rows use their saved response;
-missing or empty output uses a placeholder. Compaction can summarize older results;
+PostgreSQL and temporary history. Legacy image-generation rows replay stored file
+IDs and revised prompts when available. Other legacy results use their saved
+response; missing or empty output uses a placeholder. Compaction can summarize older results;
 emergency truncation can remove them from the model's working context. Saved
 PostgreSQL evidence remains intact for replay and citations.
 
