@@ -28,6 +28,7 @@ from onyx.file_store.file_store import (
     FileStore,
     S3BackedFileStore,
     get_default_file_store,
+    is_missing_object,
 )
 from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
@@ -234,19 +235,29 @@ def test_equal_content_recovery(
     if damage == "missing":
         store.delete_file(old_file)
     elif damage == "missing_object":
-        assert isinstance(store, postgres_file_store.PostgresBackedFileStore)
-        content = session.get(FileContent, old_file)
-        assert content is not None
-        assert session.scalar(select(func.lo_unlink(content.lobj_oid))) == 1
-        session.commit()
+        if isinstance(store, postgres_file_store.PostgresBackedFileStore):
+            content = session.get(FileContent, old_file)
+            assert content is not None
+            assert session.scalar(select(func.lo_unlink(content.lobj_oid))) == 1
+            session.commit()
+        else:
+            assert isinstance(store, S3BackedFileStore)
+            record = store.read_file_record(old_file)
+            for client in (store._get_s3_client(), store._get_legacy_s3_client()):
+                if client is not None:
+                    client.delete_object(
+                        Bucket=record.bucket_name, Key=record.object_key
+                    )
         for use_tempfile, max_bytes in [(False, None), (True, None), (False, 4096)]:
-            with pytest.raises(FileNotFoundError):
+            with pytest.raises((FileNotFoundError, ClientError)) as missing:
                 store.read_file(
                     old_file,
                     db_session=session,
                     use_tempfile=use_tempfile,
                     max_bytes=max_bytes,
                 )
+            if isinstance(missing.value, ClientError):
+                assert is_missing_object(missing.value)
             assert session.scalar(select(1)) == 1
     elif damage == "pruned":
         assert skill.current_version is not None
