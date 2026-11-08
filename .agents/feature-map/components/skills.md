@@ -55,6 +55,12 @@
   History returns at most 50 rows. The positive `before_version` cursor excludes
   that version and loads older rows without shifting when a new version is saved.
   Restore creates a new version unless its content equals the current version.
+- **Synced source metadata.** Skill responses include the marketplace name,
+  scope, repository-relative folder and access-inheritance flag. Ordinary Skill
+  viewers can read these labels without gaining marketplace management access.
+  `db/skill.py:skill_marketplace_sources` selects only display fields in one
+  query per list. `server/features/skill/response_helpers.py` omits list rows
+  whose source was deleted during the request; a detail request returns not found.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
