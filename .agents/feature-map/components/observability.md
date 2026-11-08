@@ -137,10 +137,8 @@ from `server/metrics/metrics_server.py:start_metrics_server`. Task lifecycle
 metrics come from `server/metrics/celery_task_metrics.py`, called from each
 worker app's own signal handlers. The monitoring worker serves metrics but does
 not wire these handlers. Code mode capacity metrics (`onyx_code_mode_*`) are
-per API server process and come from `server/metrics/code_mode.py`: sandbox
-workers busy, programs waiting for a worker, busy rejections, lost workers,
-dumped program bytes, tool call threads in use (each budget has a `_limit`
-gauge), running cells, and program outcomes and durations.
+per API server process. `server/metrics/code_mode.py` defines them; each
+capacity budget has a matching `_limit` gauge.
 `tools/tool_implementations/code_mode/sandbox.py` and
 `tools/tool_implementations/code_mode/cells.py` update them where they own the state ([[code-execution]]).
 
