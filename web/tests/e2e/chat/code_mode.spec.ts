@@ -10,6 +10,7 @@ import {
 } from "@tests/e2e/utils/chatMock";
 
 const TOOL = "lookup_orders";
+const TOOL_OUTPUT = "3 orders";
 const MESSAGE = "You have three open orders.";
 // Code mode runs behind the scenes; none of it is user-facing copy.
 const CODE_MODE_TEXT =
@@ -38,7 +39,7 @@ test.describe("Code mode", () => {
         buildMockCodeModeCellStream({
           code: "orders = await lookup_orders()\nprint('program output')",
           toolName: TOOL,
-          toolOutput: "3 orders",
+          toolOutput: TOOL_OUTPUT,
           message: MESSAGE,
           end,
         })
@@ -47,9 +48,9 @@ test.describe("Code mode", () => {
       await sendMessage(page, "How many orders are open?");
       await expect(chat.aiMessage()).toContainText(MESSAGE);
       await expect(chat.aiMessage()).toContainText("1 step");
-      await chat.expandTimeline();
-
-      await expect(chat.aiMessage().getByText(TOOL)).toHaveCount(1);
+      // The call completes only in the wait observation or in the closing
+      // record that follows the answer.
+      await chat.expectCustomToolResult(TOOL, TOOL_OUTPUT);
       await expect(chat.aiMessage()).not.toContainText(CODE_MODE_TEXT);
     });
   }

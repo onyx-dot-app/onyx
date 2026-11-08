@@ -239,21 +239,19 @@ export class ChatPage {
     await expect(this.inputBar.sendButton).toBeDisabled();
   }
 
-  async expandTimeline(): Promise<void> {
+  /** Expands the timeline and checks one completed step of the tool that
+   * shows `output`. */
+  async expectCustomToolResult(name: string, output: string): Promise<void> {
     await this.page
       .getByRole("button", { name: "Expand timeline", exact: true })
       .click();
-  }
-
-  async expectCustomToolResult(name: string, json: string): Promise<void> {
-    await this.expandTimeline();
     const status = this.scrollContainer.getByText(`${name} completed`, {
       exact: true,
     });
     await expect(status).toBeVisible();
     await status.click();
     await expect(
-      this.scrollContainer.getByRole("code").filter({ hasText: json })
+      this.scrollContainer.getByRole("code").filter({ hasText: output })
     ).toBeVisible();
   }
 
