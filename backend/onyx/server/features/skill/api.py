@@ -44,9 +44,12 @@ from onyx.db.skill import (
     transfer_skill_ownership,
 )
 from onyx.db.skill_version import (
+    SkillContentSnapshot,
     delete_unreferenced_skill_bundles,
     fetch_skill_version,
     list_skill_versions,
+    prepare_skill_version_write,
+    skill_content_snapshot,
 )
 from onyx.db.users import fetch_user_by_id, lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -257,11 +260,43 @@ def _commit_skill_bundle(
         raise
 
 
+def _lock_skill_after_storage(
+    skill_id: UUID,
+    user: User,
+    db_session: Session,
+    expected_content: SkillContentSnapshot | None = None,
+) -> Skill:
+    lock_group_membership(db_session)
+    db_session.refresh(user)
+    if not user.is_active or not has_global_permission(user, Permission.BASIC_ACCESS):
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+        lock_for_update=True,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    if (
+        expected_content is not None
+        and skill_content_snapshot(skill) != expected_content
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "Skill content changed. Retry this request."
+        )
+    return skill
+
+
 def _replace_skill_bundle_from_editor(
     skill: Skill,
     bundle_bytes: bytes,
     user: User,
     db_session: Session,
+    *,
+    expected_content: SkillContentSnapshot | None = None,
+    restored_version: tuple[UUID, str | None] | None = None,
 ) -> SkillEditableDetailResponse:
     file_store = get_default_file_store()
     with _commit_skill_bundle(
@@ -271,11 +306,21 @@ def _replace_skill_bundle_from_editor(
         db_session,
         expected_name=skill.name,
     ) as ingested:
+        prepared = prepare_skill_version_write(skill, ingested, db_session)
+        skill = _lock_skill_after_storage(skill.id, user, db_session, expected_content)
+        if restored_version is not None:
+            version = fetch_skill_version(skill, restored_version[0], db_session)
+            db_session.refresh(version)
+            if version.bundle_file_id != restored_version[1]:
+                raise OnyxError(
+                    OnyxErrorCode.CONFLICT, "Version files changed. Retry this request."
+                )
         stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             creator_id=user.id,
             db_session=db_session,
+            prepared=prepared,
         )
 
     delete_unreferenced_skill_bundles(stale_file_ids, db_session)
@@ -769,11 +814,11 @@ def restore_custom_skill_version(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
-        lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     version = fetch_skill_version(skill, version_id, db_session)
+    source = (version.id, version.bundle_file_id)
     return _replace_skill_bundle_from_editor(
         skill,
         read_version_bundle(
@@ -783,6 +828,7 @@ def restore_custom_skill_version(
         ),
         user,
         db_session,
+        restored_version=source,
     )
 
 
@@ -798,7 +844,6 @@ def replace_current_user_skill_bundle(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
-        lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -811,11 +856,14 @@ def replace_current_user_skill_bundle(
         db_session,
         expected_name=skill.name,
     ) as ingested:
+        prepared = prepare_skill_version_write(skill, ingested, db_session)
+        skill = _lock_skill_after_storage(skill.id, user, db_session)
         stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             creator_id=user.id,
             db_session=db_session,
+            prepared=prepared,
         )
 
     delete_unreferenced_skill_bundles(stale_file_ids, db_session)
@@ -842,11 +890,11 @@ def upload_current_user_skill_files(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
-        lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
+    expected_content = skill_content_snapshot(skill)
     existing_bundle_bytes = read_custom_skill_bundle_bytes(skill)
     updated_bundle_bytes = update_custom_bundle_files(
         existing_bundle_bytes,
@@ -854,7 +902,7 @@ def upload_current_user_skill_files(
         filename=upload.filename,
     )
     return _replace_skill_bundle_from_editor(
-        skill, updated_bundle_bytes, user, db_session
+        skill, updated_bundle_bytes, user, db_session, expected_content=expected_content
     )
 
 
@@ -870,19 +918,19 @@ def remove_current_user_skill_file(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
-        lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     if not path:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Skill file path cannot be empty")
 
+    expected_content = skill_content_snapshot(skill)
     updated_bundle_bytes = update_custom_bundle_files(
         read_custom_skill_bundle_bytes(skill),
         remove_path=path,
     )
     return _replace_skill_bundle_from_editor(
-        skill, updated_bundle_bytes, user, db_session
+        skill, updated_bundle_bytes, user, db_session, expected_content=expected_content
     )
 
 
@@ -898,7 +946,6 @@ def patch_current_user_skill(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
-        lock_for_update=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -915,7 +962,7 @@ def patch_current_user_skill(
             include_share_details=True,
         )
 
-    old_public_permission = skill.public_permission
+    expected_content = skill_content_snapshot(skill)
     file_store = get_default_file_store() if patch_req.has_details_update else None
     new_bundle_file_id: str | None = None
     stale_file_ids: list[str] = []
@@ -947,17 +994,21 @@ def patch_current_user_skill(
                 expected_name=skill.name,
             )
             new_bundle_file_id = ingested.bundle_file_id
+            prepared = prepare_skill_version_write(skill, ingested, db_session)
+            skill = _lock_skill_after_storage(
+                skill.id, user, db_session, expected_content
+            )
             stale_file_ids = replace_skill_bundle(
                 skill=skill,
                 ingested=ingested,
                 creator_id=user.id,
                 db_session=db_session,
+                prepared=prepared,
             )
+        else:
+            skill = _lock_skill_after_storage(skill.id, user, db_session)
 
-        # Content storage runs under the skill lock, never the workspace lock.
-        # Do not wait in reverse lock order if an access writer already holds it.
-        if patch_req.has_db_field_update:
-            lock_group_membership(db_session, nowait=True)
+        old_public_permission = skill.public_permission
         before_affected = affected_user_ids_for_skill(skill, db_session)
         if patch_req.has_db_field_update:
             share_skill__no_commit(

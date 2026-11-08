@@ -77,6 +77,7 @@ from onyx.db.scoped_permissions import (
 )
 from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
 from onyx.db.skill_version import (
+    PreparedSkillVersionWrite,
     persist_skill_version_validity,
     save_skill_version,
     skill_bundle_file_ids,
@@ -485,11 +486,14 @@ def replace_skill_bundle(
     ingested: IngestedBundle,
     creator_id: UUID,
     db_session: Session,
+    prepared: PreparedSkillVersionWrite | None = None,
 ) -> list[str]:
     """Keep history and legacy columns; return the files to delete after commit."""
     if not skill.is_custom:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Built-in skills have no bundle.")
-    return save_skill_version(skill, ingested, creator_id, db_session)
+    return save_skill_version(
+        skill, ingested, creator_id, db_session, prepared=prepared
+    )
 
 
 def create_skill_from_ingested_bundle(

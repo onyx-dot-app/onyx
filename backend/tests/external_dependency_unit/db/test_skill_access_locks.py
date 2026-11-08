@@ -10,11 +10,12 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import Engine, func, select, text
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill, User
+from onyx.db.models import Skill, Skill__User, Skill__UserGroup, User, User__UserGroup
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.skill import set_skill_enabled_for_user
 from onyx.db.users import lock_group_membership
@@ -23,7 +24,13 @@ from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.skills.ingest import IngestedBundle
-from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_group,
+    make_skill,
+    make_user,
+    share_skill_with_group,
+    share_skill_with_user,
+)
 from tests.external_dependency_unit.db.test_skill_access_mutations import client_for
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     bundle,
@@ -56,14 +63,30 @@ def test_content_storage_does_not_hold_membership(
     store = get_default_file_store()
     original_read, original_ingest = store.read_file, api.ingest_skill_bundle
     checked = 0
+    blocked: list[str] = []
     cleanup_ids = [skill.id]
     original_delete = api.delete_bundle_blob
 
     def check_lock() -> None:
         nonlocal checked
         with get_session_with_current_tenant() as other:
-            lock_group_membership(other, nowait=True)
-            checked += 1
+            try:
+                lock_group_membership(other, nowait=True)
+                other.scalar(
+                    select(Skill.id)
+                    .where(Skill.id == skill.id)
+                    .with_for_update(nowait=True)
+                )
+                actor = other.get(User, user.id)
+                assert actor is not None
+                set_skill_enabled_for_user(
+                    skill_id=skill.id, enabled=True, user=actor, db_session=other
+                )
+                other.commit()
+                checked += 1
+            except Exception:
+                blocked.append("Storage blocked an access writer")
+                raise
 
     def read(
         file_id: str,
@@ -147,7 +170,7 @@ def test_content_storage_does_not_hold_membership(
                     UUID(item["skill"]["id"]) for item in result.json()["imported"]
                 )
             assert result.status_code == 200, result.text
-            assert checked > 0
+            assert checked > 0 and not blocked
         db_session.refresh(skill)
         if operation == "patch":
             assert skill.description == "Changed"
@@ -158,42 +181,91 @@ def test_content_storage_does_not_hold_membership(
             api.delete_current_user_skill(skill_id, user, db_session)
 
 
-def test_mixed_patch_conflict_rolls_back_content_and_uploaded_file(
-    db_session: Session,
+@pytest.mark.parametrize("race", ["content", "direct", "group", "manager"])
+def test_staged_patch_rechecks_content_and_access(
+    db_session: Session, race: str
 ) -> None:
-    user = make_user(db_session, is_admin=True)
+    owner = make_user(db_session, is_admin=True)
+    actor = make_user(db_session, standard_account=True, is_admin=race == "manager")
     db_session.commit()
     response = api.create_custom_skill(
-        upload(bundle(f"race-{uuid4().hex}")), False, user, db_session
+        upload(bundle(f"race-{uuid4().hex}")), False, owner, db_session
     )
     skill = db_session.get(Skill, response.id)
     assert skill is not None
-    initial_version = skill.current_version_id
-    initial_files = stored_bundles(db_session)
+    if race == "group":
+        group = make_group(db_session)
+        db_session.add(User__UserGroup(user_id=actor.id, user_group_id=group.id))
+        share_skill_with_group(db_session, skill, group, SkillSharePermission.EDITOR)
+    elif race != "manager":
+        share_skill_with_user(db_session, skill, actor, SkillSharePermission.EDITOR)
+    before = stored_bundles(db_session)
     db_session.commit()
+    ingest = api.ingest_skill_bundle
+    raced = False
+
+    def concurrent_write(
+        content: bytes,
+        filename: str | None,
+        file_store: FileStore,
+        *,
+        expected_name: str | None = None,
+    ) -> IngestedBundle:
+        nonlocal raced, before
+        if not raced:
+            raced = True
+            with get_session_with_current_tenant() as other:
+                writer = other.get(User, owner.id)
+                assert writer is not None
+                if race == "content":
+                    api.patch_current_user_skill(
+                        skill.id,
+                        SkillPatchRequest(description="Concurrent"),
+                        writer,
+                        other,
+                    )
+                else:
+                    lock_group_membership(other)
+                    if race == "group":
+                        other.execute(
+                            sql_delete(Skill__UserGroup).where(
+                                Skill__UserGroup.skill_id == skill.id
+                            )
+                        )
+                    elif race == "manager":
+                        other.execute(
+                            sql_delete(User__UserGroup).where(
+                                User__UserGroup.user_id == actor.id
+                            )
+                        )
+                        recompute_user_permissions__no_commit(actor.id, other)
+                    else:
+                        other.execute(
+                            sql_delete(Skill__User).where(
+                                Skill__User.skill_id == skill.id
+                            )
+                        )
+                    other.commit()
+                before = stored_bundles(other)
+        return ingest(content, filename, file_store, expected_name=expected_name)
+
     try:
-        with get_session_with_current_tenant() as membership_writer:
-            lock_group_membership(membership_writer)
-            started = time.monotonic()
-            with pytest.raises(OnyxError, match="Retry this request"):
-                api.patch_current_user_skill(
-                    skill.id,
-                    SkillPatchRequest(
-                        description="Must roll back",
-                        public_permission=SkillSharePermission.VIEWER,
-                    ),
-                    user,
-                    db_session,
-                )
-            assert time.monotonic() - started < 5
+        with patch.object(api, "ingest_skill_bundle", side_effect=concurrent_write):
+            result = client_for(actor, db_session).patch(
+                f"/skills/custom/{skill.id}", json={"description": "Must not commit"}
+            )
+        assert result.status_code == (
+            409 if race == "content" else 403 if race == "manager" else 404
+        ), result.text
         db_session.refresh(skill)
-        assert skill.current_version_id == initial_version
-        assert skill.public_permission is None and skill.description == "Version test"
-        assert len(versions(skill, db_session)) == 1
-        assert stored_bundles(db_session) == initial_files
+        assert skill.description == (
+            "Concurrent" if race == "content" else "Version test"
+        )
+        assert len(versions(skill, db_session)) == (2 if race == "content" else 1)
+        assert stored_bundles(db_session) == before
     finally:
         db_session.rollback()
-        api.delete_current_user_skill(skill.id, user, db_session)
+        api.delete_current_user_skill(skill.id, owner, db_session)
 
 
 def test_toggle_waits_for_membership_before_locking_user(

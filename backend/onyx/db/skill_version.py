@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from time import monotonic
 from uuid import UUID
@@ -17,6 +18,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import (
     ResourceVersionAdapter,
+    fill_version_metadata,
     prune_resource_bundles,
     repair_version_metadata,
     write_resource_version,
@@ -25,6 +27,7 @@ from onyx.db.skill_mutation import assert_skill_mutable
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.file_store.models import BundleMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -48,6 +51,106 @@ class _OrphanCursor(BaseModel):
     scan_end: tuple[datetime, str] | None = None
 
 
+@dataclass(frozen=True)
+class SkillContentSnapshot:
+    skill_id: UUID
+    current_version_id: UUID | None
+    current_bundle_file_id: str | None
+    current_bundle_sha256: str | None
+    bundle_file_id: str | None
+    bundle_sha256: str | None
+    name: str
+    description: str
+
+
+def skill_content_snapshot(skill: Skill) -> SkillContentSnapshot:
+    current = skill.current_version
+    return SkillContentSnapshot(
+        skill.id,
+        skill.current_version_id,
+        current.bundle_file_id if current else None,
+        current.bundle_sha256 if current else None,
+        skill.bundle_file_id,
+        skill.bundle_sha256,
+        skill.name,
+        skill.description,
+    )
+
+
+@dataclass(frozen=True)
+class PreparedSkillVersionWrite:
+    observation: SkillContentSnapshot
+    metadata: tuple[str, int, int] | None
+
+
+def _prepare_metadata(
+    version: SkillVersion, file_store: FileStore, *, verify_bundle: bool = False
+) -> tuple[str, int, int] | None:
+    # A transient copy prevents reads and autoflush from writing observed rows.
+    observed = SkillVersion(
+        id=version.id,
+        bundle_file_id=version.bundle_file_id,
+        bundle_sha256=version.bundle_sha256,
+        content_digest=version.content_digest,
+        unpacked_size_bytes=version.unpacked_size_bytes,
+        file_count=version.file_count,
+    )
+    if not repair_version_metadata(
+        observed, file_store, limits=STORED_BUNDLE_LIMITS, verify_bundle=verify_bundle
+    ):
+        return None
+    if (
+        observed.content_digest is None
+        or observed.unpacked_size_bytes is None
+        or observed.file_count is None
+    ):
+        return None
+    return observed.content_digest, observed.unpacked_size_bytes, observed.file_count
+
+
+def _legacy_version(skill: Skill) -> SkillVersion:
+    current = skill.current_version
+    if current is not None and (current.bundle_file_id, current.bundle_sha256) == (
+        skill.bundle_file_id,
+        skill.bundle_sha256,
+    ):
+        return current
+    return SkillVersion(
+        bundle_file_id=skill.bundle_file_id, bundle_sha256=skill.bundle_sha256
+    )
+
+
+def prepare_skill_version_write(
+    skill: Skill, ingested: IngestedBundle, db_session: Session
+) -> PreparedSkillVersionWrite:
+    """Read previous content before taking any resource or membership lock."""
+    with db_session.no_autoflush:
+        observation = skill_content_snapshot(skill)
+        previous = _legacy_version(skill)
+        try:
+            metadata = _prepare_metadata(
+                previous,
+                get_default_file_store(),
+                verify_bundle=previous.content_digest
+                == ingested.metadata.content_digest,
+            )
+        except Exception:
+            logger.warning("Could not read previous skill version: %s", previous.id)
+            metadata = None
+    return PreparedSkillVersionWrite(observation, metadata)
+
+
+def _apply_metadata(version: SkillVersion, metadata: tuple[str, int, int]) -> None:
+    fill_version_metadata(
+        version,
+        BundleMetadata(
+            content_digest=metadata[0],
+            unpacked_size_bytes=metadata[1],
+            file_count=metadata[2],
+        ),
+    )
+
+
 class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
     def __init__(self, skill: Skill) -> None:
         self.skill = skill
@@ -57,7 +160,9 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
 
     def current(self, db_session: Session) -> SkillVersion | None:
         return (
-            db_session.get(SkillVersion, self.skill.current_version_id)
+            db_session.get(
+                SkillVersion, self.skill.current_version_id, populate_existing=True
+            )
             if self.skill.current_version_id is not None
             else None
         )
@@ -145,25 +250,26 @@ def save_skill_version(
     db_session: Session,
     *,
     initial: bool = False,
+    prepared: PreparedSkillVersionWrite | None = None,
 ) -> list[str]:
     """Returns the bundle files to delete after commit: pruned bundles and the
     staged upload when the current version is reused."""
+    if not initial and prepared is None:
+        prepared = prepare_skill_version_write(skill, ingested, db_session)
     adapter = SkillVersionAdapter(skill)
     adapter.lock(db_session)
+    db_session.refresh(skill, ["current_version"])
     assert_skill_mutable(skill)
     reuse_current = False
     if not initial:
+        matches = (
+            prepared is not None
+            and prepared.observation == skill_content_snapshot(skill)
+        )
         current = repair_skill_version(skill, db_session)
-        try:
-            reuse_current = repair_version_metadata(
-                current,
-                get_default_file_store(),
-                limits=STORED_BUNDLE_LIMITS,
-                verify_bundle=current.content_digest
-                == ingested.metadata.content_digest,
-            )
-        except Exception:
-            logger.warning("Could not read previous skill version: %s", current.id)
+        if matches and prepared is not None and prepared.metadata is not None:
+            _apply_metadata(current, prepared.metadata)
+            reuse_current = True
     version = write_resource_version(
         adapter,
         bundle_file_id=ingested.bundle_file_id,
@@ -362,9 +468,40 @@ def skill_version_repair_batch(
 def repair_skill_version_metadata(
     skill: Skill, db_session: Session, file_store: FileStore
 ) -> list[str]:
-    repair_skill_version(skill, db_session)
     adapter = SkillVersionAdapter(skill)
+    with db_session.no_autoflush:
+        observation = skill_content_snapshot(skill)
+        versions = list(db_session.scalars(adapter.versions()))
+        prepared = {
+            version.id: (
+                version.bundle_file_id,
+                version.bundle_sha256,
+                _prepare_metadata(version, file_store),
+            )
+            for version in versions
+        }
+        previous = _legacy_version(skill)
+        legacy_metadata = (
+            prepared[previous.id][2]
+            if previous.id in prepared
+            else _prepare_metadata(previous, file_store)
+        )
+    adapter.lock(db_session)
+    db_session.refresh(skill, ["current_version"])
+    if observation != skill_content_snapshot(skill):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "Skill content changed. Retry metadata repair."
+        )
+    current = repair_skill_version(skill, db_session)
     stale_file_ids = prune_resource_bundles(adapter, db_session)
     for version in db_session.scalars(adapter.versions()):
-        repair_version_metadata(version, file_store, limits=STORED_BUNDLE_LIMITS)
+        observed = prepared.get(version.id)
+        if (
+            observed is not None
+            and (version.bundle_file_id, version.bundle_sha256) == observed[:2]
+            and observed[2] is not None
+        ):
+            _apply_metadata(version, observed[2])
+    if current.bundle_file_id is not None and legacy_metadata is not None:
+        _apply_metadata(current, legacy_metadata)
     return stale_file_ids

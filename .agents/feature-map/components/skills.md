@@ -237,8 +237,11 @@ The library preview of an external-app skill calls the same renderer
     affected users in two batch queries and pushes once after commit. Expected
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.
     Access and preference writes acquire the membership lock before resource/user locks.
-    Content-only storage holds no membership lock. Mixed content/access PATCH takes it
-    without waiting after storage; contention rolls back and returns a retryable conflict.
+    Content and metadata preparation holds no Skill row or membership lock.
+    The final write takes membership then Skill, refreshes the user, and checks access again.
+    Derived edits compare their observed content; a changed snapshot returns a retryable conflict.
+    Full replacements append on stale observations without reusing unverified content.
+    Metadata repair stages every read before locking and retries changed snapshots.
     Batch imports stage all uploads before access locks and clean rejected blobs after
     commit. Single creation and replacement roll back before failure cleanup.
     Uncertain commits leave staged blobs for the orphan sweep.
@@ -360,15 +363,17 @@ The library preview of an external-app skill calls the same renderer
     a younger file can be live. A version preview or restore must read through
     `read_version_bundle` with the resource's stored-byte limit. It gives NOT_FOUND "The files of this version are
     no longer kept." for a pruned bundle, also when pruning wins a race. A
-    restore that copies an old version must read it under the version lock.
+    restore stages the old bytes before locking, then checks that its source bundle
+    is still retained before publishing the copy.
 20. `history-requires-edit` **History uses EDIT access, including its reads.**
     The `/skills/custom/{skill_id}/versions` family calls `fetch_skill` with
     `SkillManagementPolicy.EDIT` before listing or reading any history.
     `db/skill_version.py:fetch_skill_version` scopes version ids to that skill.
     Preview returns the historical bundle's description, instructions, and file
     list through `SkillBundleInspectResponse`; it validates expansion before inspection.
-    Restore locks the skill, then reads the selected version and calls
+    Restore reads the selected version before locking, then calls
     `server/features/skill/api.py:_replace_skill_bundle_from_editor`.
+    The final locked phase rechecks EDIT access and the selected bundle identity.
     Ingestion validates current upload limits and stages a new blob. The shared
     replacement refreshes the description and applies digest equality and retention.
     Never reuse the historical blob: this restore can prune its source version.
