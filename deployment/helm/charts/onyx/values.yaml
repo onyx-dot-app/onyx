@@ -1958,7 +1958,9 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
-  # Code mode: "true" replaces the tools that programs can call with execute_code
+  # Code mode: "true" makes most chat tools Python functions. The model calls them
+  # from programs that it runs with execute_code and wait_code. It applies to
+  # every chat in the deployment.
   CODE_MODE_ENABLED: ""
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
