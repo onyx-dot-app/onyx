@@ -205,23 +205,27 @@ processor splits a group's nested calls once per packet into
 `app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
 It reuses the `NestedCall` object of each unchanged call, and
 `expandCodeModeSteps` reuses the step it made for that object, so memoized
-renderers of finished calls do not redraw. A cell reports a
-call in every observation until the call ends, so the latest report replaces
-the earlier ones in place; the cell id from `code_mode_start` or
-`code_mode_delta` links the observations. The program, its output, `wait_code`
+renderers of finished calls do not redraw. A call is its cell and
+`sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
+states, so the latest report replaces the earlier ones in place. Pacing
+compares the last packet of each step, because a new report can have as many
+packets as the old one. The program, its output, `wait_code`
 calls, yields and closing records have no step. A program without tool calls
 shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
-in one pass: a started program whose latest observation is open and whose
-cell has no running call sets it, and the timeline header reads "Working".
+in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
+reports a status, and a running program whose cell has no running call sets
+it. A yield (status `running`) ends the program's turn: the model acts next.
+`useTimelineUIState` takes `codeModeWorking`, so the header reads "Working"
+even when the last turn group is parallel.
 The header names a step's activity from its own first packet; nested packets
 do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
-so pacing still knows restored steps. A turn group's React key is the key of
-its first step, not its position, because a cell's new call can move later
-steps into another turn group. Concurrent calls of one program show as
+so pacing still knows restored steps. The expanded timeline renders one list
+keyed by step (a parallel group by its first step), not by position, because a
+cell's new call can move later steps into another turn group. Concurrent calls of one program show as
 sequential steps, not parallel tabs: on replay the backend emits each call's
 packets one after another, and the saved calls have no start or end order, so
 the client cannot tell which calls overlapped. Mobile uses the same functions
-in `mobile/src/chat/timeline/transformers.ts`.
+in `mobile/src/chat/timeline/transformers.ts`; its tests mirror the web cases.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at
