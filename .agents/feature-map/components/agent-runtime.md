@@ -102,7 +102,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   completes with the amended result. An ended card renders only what the
   amendment added (`_amendment_packets`), after its section end; the generic
   display adds nothing. `ToolRenderer.complete` renders that part after the
-  section end too, so replay of the saved result gives the live order.
+  section end too. Live, the closing record follows the answer; replay places
+  it before the answer's `message_start`. Both orders give the same groups.
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary
