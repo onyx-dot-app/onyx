@@ -91,6 +91,9 @@ class StoreCommit(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     ordinal: int
+    # The ordinal of the last commit in the store that this commit was made
+    # against; 0 for none. The store applies a commit only after that one.
+    follows: int
     writes: Mapping[str, JsonValue]
 
     @cached_property
@@ -282,7 +285,11 @@ class StoreSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     values: Mapping[str, JsonValue]
-    # Bytes of the commits saved in the conversation branch so far.
+    # Bytes of the commits that the store applied in the conversation branch so
+    # far; a commit dropped after a server stop does not count.
     committed_bytes: int = 0
-    # The highest commit ordinal so far; 0 before the first commit.
+    # The highest commit ordinal so far, applied or not; 0 before the first
+    # commit. A new commit takes the next one.
     last_ordinal: int = 0
+    # The ordinal of the last commit that `values` include; 0 for none.
+    last_applied: int = 0

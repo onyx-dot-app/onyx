@@ -180,7 +180,10 @@ def store_snapshot(
     not yet recorded there, folded in completion order.
 
     The fold does not depend on message order, so the saved history gives the
-    store that programs saw while the response ran.
+    store that programs saw while the response ran. A commit applies only after
+    the commit it follows, so the store is always a prefix of the commit order:
+    when the server stops before it saves a commit, later commits that were
+    made against it do not apply, and do not count toward `committed_bytes`.
     """
     recorded = _commits(messages)
     known = {commit.ordinal for commit in recorded}
@@ -188,16 +191,23 @@ def store_snapshot(
     store: dict[str, JsonValue] = {}
     committed_bytes = 0
     last_ordinal = 0
+    last_applied = 0
     for commit in sorted([*recorded, *pending], key=lambda commit: commit.ordinal):
+        last_ordinal = commit.ordinal
+        if commit.follows != last_applied:
+            continue
+        committed_bytes += commit.size_bytes
         for key, value in commit.writes.items():
             if value is None:
                 store.pop(key, None)
             else:
                 store[key] = value
-        committed_bytes += commit.size_bytes
-        last_ordinal = commit.ordinal
+        last_applied = commit.ordinal
     return StoreSnapshot(
-        values=store, committed_bytes=committed_bytes, last_ordinal=last_ordinal
+        values=store,
+        committed_bytes=committed_bytes,
+        last_ordinal=last_ordinal,
+        last_applied=last_applied,
     )
 
 

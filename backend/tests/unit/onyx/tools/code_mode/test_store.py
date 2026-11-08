@@ -45,10 +45,14 @@ def _execution(
 def test_stored_values_folds_writes_in_order() -> None:
     messages: list[Message] = [
         UserMessage(content="first"),
-        _execution("1", StoreCommit(ordinal=1, writes={"a": 1, "b": [1, 2]})),
+        _execution(
+            "1", StoreCommit(ordinal=1, follows=0, writes={"a": 1, "b": [1, 2]})
+        ),
         ToolResultMessage(tool_call_id="x", tool_name="run_python", content="{}"),
-        _execution("2", StoreCommit(ordinal=2, writes={"a": 2, "c": {"k": "v"}})),
-        _execution("3", StoreCommit(ordinal=3, writes={"b": None})),
+        _execution(
+            "2", StoreCommit(ordinal=2, follows=1, writes={"a": 2, "c": {"k": "v"}})
+        ),
+        _execution("3", StoreCommit(ordinal=3, follows=2, writes={"b": None})),
     ]
     assert stored_values(messages) == {"a": 2, "c": {"k": "v"}}
     # A branch is the messages it holds; earlier prefixes give earlier stores.
@@ -63,11 +67,11 @@ def test_stored_values_reads_commit_records_and_closing_records() -> None:
         closing=CellClosing(
             reason="response_ended",
             status="completed",
-            commit=StoreCommit(ordinal=2, writes={"b": 2}),
+            commit=StoreCommit(ordinal=2, follows=1, writes={"b": 2}),
         ),
     )
     messages: list[Message] = [
-        _execution("1", StoreCommit(ordinal=1, writes={"a": 1})),
+        _execution("1", StoreCommit(ordinal=1, follows=0, writes={"a": 1})),
         _execution("2", None, status="failed"),
         ToolResultMessage(
             tool_call_id="3", tool_name="execute_code", content="", details=closed
@@ -79,17 +83,38 @@ def test_stored_values_reads_commit_records_and_closing_records() -> None:
 def test_stored_values_folds_commits_in_completion_order() -> None:
     # Saved in message order 2, 1; the commit with ordinal 2 completed last.
     messages: list[Message] = [
-        _execution("b", StoreCommit(ordinal=2, writes={"k": "b"})),
-        _execution("a", StoreCommit(ordinal=1, writes={"k": "a", "only_a": 1})),
+        _execution("b", StoreCommit(ordinal=2, follows=1, writes={"k": "b"})),
+        _execution(
+            "a", StoreCommit(ordinal=1, follows=0, writes={"k": "a", "only_a": 1})
+        ),
     ]
     assert stored_values(messages) == {"k": "b", "only_a": 1}
     # A live commit already in the messages folds once; a newer one folds last.
     live = [
-        StoreCommit(ordinal=2, writes={"k": "b"}),
-        StoreCommit(ordinal=3, writes={"only_a": None}),
+        StoreCommit(ordinal=2, follows=1, writes={"k": "b"}),
+        StoreCommit(ordinal=3, follows=2, writes={"only_a": None}),
     ]
     assert stored_values(messages[1:], live) == {"k": "b"}
     assert stored_values(messages, live) == {"k": "b"}
+
+
+def test_a_commit_applies_only_after_the_commit_it_follows() -> None:
+    # The server stopped before it saved commit 1; commit 2 was made against it.
+    messages: list[Message] = [
+        _execution("2", StoreCommit(ordinal=2, follows=1, writes={"b": 2})),
+    ]
+    snapshot = store_snapshot(messages)
+    assert (dict(snapshot.values), snapshot.last_ordinal, snapshot.last_applied) == (
+        {},
+        2,
+        0,
+    )
+    # A dropped commit does not count toward the chat's limit on saved writes.
+    assert snapshot.committed_bytes == 0
+    # A later commit follows the store as it is, and takes the next ordinal.
+    messages.append(_execution("3", StoreCommit(ordinal=3, follows=0, writes={"c": 3})))
+    assert stored_values(messages) == {"c": 3}
+    assert store_snapshot(messages).committed_bytes == len("c") + len("3")
 
 
 def test_json_value_copies_and_converts_tuples() -> None:
@@ -175,8 +200,8 @@ def test_program_store_buffers_writes_over_a_snapshot() -> None:
 
 def test_snapshot_counts_committed_bytes_and_the_chat_limit_applies() -> None:
     messages: list[Message] = [
-        _execution("1", StoreCommit(ordinal=1, writes={"a": "xy"})),
-        _execution("2", StoreCommit(ordinal=2, writes={"a": None})),
+        _execution("1", StoreCommit(ordinal=1, follows=0, writes={"a": "xy"})),
+        _execution("2", StoreCommit(ordinal=2, follows=1, writes={"a": None})),
     ]
     # 'a' + '"xy"', then the deleted key 'a'.
     assert store_snapshot(messages).committed_bytes == 5 + 1
