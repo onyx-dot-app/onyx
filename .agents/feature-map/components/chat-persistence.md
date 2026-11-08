@@ -193,17 +193,7 @@ runtime results from their recorded bodies. For legacy generated-image results,
 prompts. If none are usable, it falls back to saved response text, then a placeholder.
 Other legacy results use saved response text, then the placeholder.
 
-A code mode observation is replayed as saved, so its content carries what the
-next turn needs (`tools/tool_implementations/code_mode/prompt.py:format_content`):
-every call of a program that did not complete, those of the cell's earlier
-observations included, with their states, because those calls may have had
-effects; and the `file_id` and revised prompt of each generated image
-(`images_note`), so a later message can edit it. When the response ended after
-a cell's last observation, the saved content adds the cell's closing record,
-formatted by `format_content` like an observation. It starts with
-`closing_heading` ("Cell N stopped when the response ended" or "when the run
-paused", or how it ended) and has the output, result and store writes after
-that observation.
+A code mode result is replayed as saved ([[#code-mode-replay-content]]).
 
 The runtime builds its working context from that history. `messages_for_model`
 removes incomplete tool exchanges and unsigned thinking. Context-budget compaction
@@ -416,6 +406,23 @@ Community downgrade clears it ([[billing]]).
     restart interrupts is never resumed ([[#save-chat-turn-one-commit]]). A
     feature that starts to suspend runs must keep blobs under the root session
     id, because hard delete finds them only by that prefix.
+16. `code-mode-replay-content` **A code mode result is replayed as saved, so
+    its content must carry what the next turn needs**
+    (`tools/tool_implementations/code_mode/prompt.py:format_content`). An
+    observation that reports a program that did not complete lists every call
+    of the cell, those of earlier observations included, with their states,
+    because those calls may have had effects (`calls_note`). A running
+    observation lists no calls; the cell's last observation or its closing
+    record does. Each observation gives the `file_id` and revised prompt of
+    each image that its calls generated (`images_note`), so a later message
+    can edit it. When the response ends or the run pauses after a cell's last
+    observation, the saved content adds the cell's closing record, formatted
+    like an observation. It starts with `closing_heading` ("Cell N stopped when
+    the response ended" or "when the run paused", or how it ended) and has the
+    output, result, store writes and calls after that observation. A restored
+    run closes a cell that its saved observation reports running as
+    interrupted: the heading says that calls after the saved output are not
+    known, and the record lists the calls that the saved observations hold.
 
 ---
 
