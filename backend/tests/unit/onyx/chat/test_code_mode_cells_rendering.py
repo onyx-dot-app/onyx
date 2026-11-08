@@ -1,6 +1,7 @@
 """Cells render one card per observation, plus the closing record."""
 
 from collections.abc import Callable, Generator
+from typing import Literal
 
 import pytest
 
@@ -272,3 +273,44 @@ def test_closing_of_a_call_from_before_a_restore_renders_in_a_new_card() -> None
     ]
     assert finals == [("running", False, 1), ("terminated", True, 2)]
     assert {p.placement.turn_index for p in live} == {0}
+
+
+@pytest.mark.parametrize(
+    ("status", "result", "error"),
+    [
+        ("completed", "42", None),
+        ("failed", None, "ZeroDivisionError: division by zero"),
+    ],
+)
+def test_closing_record_reports_how_the_program_ended(
+    status: Literal["completed", "failed"], result: str | None, error: str | None
+) -> None:
+    live: list[packets.Packet] = []
+    presenter = ResponsePresenter(Emitter(live.append))
+    closing = CellClosing(
+        reason="response_ended", status=status, result=result, error=error
+    )
+    presenter.consume(
+        ToolResultAmendedEvent(
+            run_id="run",
+            message_id="message",
+            step_index=0,
+            tool_call=ToolCall(
+                id="wait", name=WAIT_CODE_TOOL_NAME, arguments={"cell_id": 1}
+            ),
+            result=ToolResult(
+                content="Execution running in cell 1",
+                details=OBSERVATIONS["wait"].model_copy(update={"closing": closing}),
+            ),
+        )
+    )
+    closing_delta = next(
+        p.obj
+        for p in live
+        if isinstance(p.obj, packets.CodeModeDelta) and p.obj.response_ended
+    )
+    assert (closing_delta.status, closing_delta.result, closing_delta.error) == (
+        status,
+        result,
+        error,
+    )

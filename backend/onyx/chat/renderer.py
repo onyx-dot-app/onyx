@@ -979,6 +979,8 @@ class CodeModeRenderer(ToolRenderer):
             packets.Packet(
                 placement=self.placement,
                 obj=packets.CodeModeDelta(
+                    result=closing.result,
+                    error=closing.error,
                     status=closing.status,
                     tool_call_count=closing.tool_call_count,
                     stored_keys=_stored_keys(closing),
