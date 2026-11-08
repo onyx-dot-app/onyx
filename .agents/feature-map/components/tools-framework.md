@@ -56,8 +56,7 @@ Neighbours own the rest:
   the OpenAPI and MCP tool classes, and MCP credential resolution.
 - [[plugins]] owns Default Chat tool selection and the per-user tool
   preferences that construction reads.
-- [[core-chat-loop]] owns the turn, the stopping-tool rule, and how the
-  sub-agents enter a turn.
+- [[core-chat-loop]] owns the turn and how the sub-agents enter a turn.
 - [[citations]] owns the meaning of the citation number blocks.
 - [[chat-persistence]] owns how tool calls are saved and replayed, and which
   tool results reach later turns.
@@ -130,6 +129,12 @@ dropped, and a result that arrives after the run closes is discarded.
 Per-request data, such as chat files, memory and the next citation number,
 comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
 `ResearchAgent._tool_context` build it when the call starts.
+
+Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
+`IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
+`DIRECT`), `code_mode_function_name` (MCP tools add their server as a
+namespace) and `code_mode_result` (the value and stub type a program
+receives); see [[code-execution]].
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error

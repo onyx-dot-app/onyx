@@ -512,6 +512,7 @@ def _construct_tools_impl(
                     tool_name=saved_tool.name,
                     tool_description=saved_tool.description or "",
                     tool_definition=saved_tool.mcp_input_schema or {},
+                    output_schema=saved_tool.mcp_output_schema,
                     user_email=user.email,
                     user_id=str(user.id),
                     user_oauth_token=mcp_credentials.user_oauth_token,

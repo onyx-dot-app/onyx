@@ -27,7 +27,12 @@ from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
-from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultSpec,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
     WebContentProvider,
@@ -39,6 +44,7 @@ from onyx.tools.tool_implementations.open_url.url_normalization import (
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
+from onyx.tools.tool_implementations.utils import SEARCH_RESULTS_CODE_MODE_RESULT
 from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
 )
@@ -475,6 +481,10 @@ class OpenURLTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -487,6 +497,10 @@ class OpenURLTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return SEARCH_RESULTS_CODE_MODE_RESULT
 
     @override
     @classmethod

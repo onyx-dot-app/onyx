@@ -1,7 +1,10 @@
+import inspect
 import json
+from typing import NotRequired, TypedDict
 
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.tools.models import CodeModeResultKind, CodeModeResultSpec
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -23,6 +26,41 @@ FILE_ASSOCIATED_GUIDANCE = (
     'file is available in the sandbox as "{filename}" — prefer the Python '
     "code interpreter to read, parse, or analyze it\n\n"
     "Excerpt: {content}"
+)
+
+
+# Search-like tool results as the model and code mode programs read them
+# (convert_inference_sections_to_llm_string). The code mode stubs declare these
+# classes from their source.
+class SearchResult(TypedDict):
+    document: int
+    """Citation number. Cite it in the answer as [n]."""
+    title: str
+    content: str
+    url: NotRequired[str]
+    updated_at: NotRequired[str]
+    authors: NotRequired[list[str]]
+    source_type: NotRequired[str]
+    file_name: NotRequired[str]
+    document_identifier: NotRequired[str]
+    metadata: NotRequired[str]
+    """JSON-encoded metadata of the document."""
+
+
+class SearchResults(TypedDict):
+    results: list[SearchResult]
+    note: NotRequired[str]
+    message: NotRequired[str]
+
+
+SEARCH_RESULTS_CODE_MODE_RESULT = CodeModeResultSpec(
+    kind=CodeModeResultKind.JSON_OBJECT,
+    annotation=SearchResults.__name__,
+    declaration="\n\n\n".join(
+        inspect.getsource(typed_dict).strip()
+        for typed_dict in (SearchResult, SearchResults)
+    ),
+    cites=True,
 )
 
 
