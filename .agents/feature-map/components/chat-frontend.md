@@ -189,9 +189,9 @@ is a new tool call and sets `finalAnswerComing` back to false. The tool starts
 with its first tool packet other than a streamed argument, so a call whose
 arguments streamed before the answer also counts when it starts. A later
 packet of a started tool, such as a code mode closing record, joins its group,
-and the answer stays shown. The
-closing record follows the answer both live and on replay, and both give the
-same groups.
+and the answer stays shown. Live,
+the closing record follows the answer. On replay, it follows its tab's section
+end, before the answer's `message_start`. Both orders give the same groups.
 The mobile app copies the group end and step-kind rules in
 `mobile/src/chat/timeline/packetHelpers.ts` and
 `mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
