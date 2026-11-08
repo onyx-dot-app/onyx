@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 import tiktoken
 
+from mock_llm import code_mode
 from mock_llm.models import (
     ChatCompletionRequest,
     ChatMessage,
@@ -98,7 +99,10 @@ def fragments(text: str, width: int) -> list[str]:
 
 
 def citation_ids(request: ChatCompletionRequest) -> list[int]:
-    """Read only the tool-result envelope, never citation-like document prose."""
+    """Read only the tool-result envelope, never citation-like document prose.
+
+    Direct search results are JSON. Code mode results are the printed lines of
+    the mock's own programs (mock_llm/code_mode.py)."""
     ids: set[int] = set()
     last_user = _last_user_index(request.messages)
     for message in request.messages[last_user + 1 :]:
@@ -107,6 +111,7 @@ def citation_ids(request: ChatCompletionRequest) -> list[int]:
         try:
             payload = json.loads(message.content)
         except ValueError:
+            ids |= code_mode.citation_ids(message.content)
             continue
         if not isinstance(payload, dict) or not isinstance(
             payload.get("results"), list
@@ -197,6 +202,9 @@ class Knobs:
         # >0 makes the mock reject requests whose estimated prompt tokens exceed
         # this, mimicking a provider context-window error (mock-maxctx16000).
         self.max_ctx_tokens: int = 0
+        # Code mode only: one program runs every planned search round
+        # (mock-profile-search-v1-codebatched) instead of one program per round.
+        self.code_batched: bool = "-codebatched" in model
         for name, value in _KNOB_RE.findall(model):
             if name == "ttft":
                 self.ttft_s = int(value) / 1000.0
@@ -315,6 +323,108 @@ def _synthesize_arguments(tool: ToolDefinition, snippet: str) -> str:
     return json.dumps(args)
 
 
+def _rounds_called(turn: list[ChatMessage], name: str) -> int:
+    """Assistant messages in the current turn that called `name`."""
+    return sum(
+        any(call.function.name == name for call in message.tool_calls or [])
+        for message in turn
+        if message.role == "assistant"
+    )
+
+
+def _round_queries(snippet: str, round_index: int, profile: TurnProfile) -> list[str]:
+    """The seeded queries of one search round; the same in direct and code mode."""
+    if round_index == 0:
+        keywords = keyword_query(snippet)
+        if keywords == snippet:
+            keywords += " overview"
+        queries = [snippet, keywords, snippet + " supporting details"][
+            : profile.queries
+        ]
+    else:
+        suffix = (" implementation", " limitations", " examples")[
+            min(round_index - 1, 2)
+        ]
+        queries = [snippet + suffix]
+    return list(dict.fromkeys(queries))
+
+
+def _new_call(name: str, arguments: str) -> ToolCall:
+    return ToolCall(
+        id=f"call_mock_{uuid.uuid4().hex[:10]}",
+        function=ToolCallFunction(name=name, arguments=arguments),
+    )
+
+
+def _search_profile_calls(
+    messages: list[ChatMessage],
+    by_name: dict[str, ToolDefinition],
+    knobs: Knobs,
+    profile: TurnProfile,
+    snippet: str,
+) -> list[ToolCall] | None:
+    """The next step of the seeded search plan; None without a search tool."""
+    turn = messages[_last_user_index(messages) + 1 :]
+    if "internal_search" in by_name:
+        completed_rounds = _rounds_called(turn, "internal_search")
+        if completed_rounds >= profile.search_rounds:
+            return []
+        queries = _round_queries(snippet, completed_rounds, profile)
+        return [_new_call("internal_search", json.dumps({"queries": queries}))]
+    if code_mode.EXECUTE_CODE in by_name:
+        return _code_mode_search(turn, by_name, knobs, profile, snippet)
+    return None
+
+
+def _code_mode_search(
+    turn: list[ChatMessage],
+    by_name: dict[str, ToolDefinition],
+    knobs: Knobs,
+    profile: TurnProfile,
+    snippet: str,
+) -> list[ToolCall]:
+    """The search plan as execute_code programs: one per round, or one program
+    that runs every round in parallel when `knobs.code_batched` is set."""
+    cell = code_mode.running_cell(turn)
+    if cell is not None and code_mode.WAIT_CODE in by_name:
+        return [_new_call(code_mode.WAIT_CODE, json.dumps({"cell_id": cell}))]
+    completed = _rounds_called(turn, code_mode.EXECUTE_CODE)
+    if knobs.code_batched:
+        if completed:
+            return []
+        rounds = range(profile.search_rounds)
+    else:
+        if completed >= profile.search_rounds:
+            return []
+        rounds = range(completed, completed + 1)
+    program = code_mode.search_program(
+        [("internal_search", _round_queries(snippet, i, profile)) for i in rounds]
+    )
+    return [_new_call(code_mode.EXECUTE_CODE, json.dumps({"code": program}))]
+
+
+def _code_mode_retrieval(
+    messages: list[ChatMessage],
+    by_name: dict[str, ToolDefinition],
+    limit: int,
+    snippet: str,
+) -> list[ToolCall]:
+    """One program that calls up to `limit` query-taking retrieval functions in
+    parallel. Empty without execute_code, after a program ran, or when the
+    program offers no such function."""
+    execute_code = by_name.get(code_mode.EXECUTE_CODE)
+    if execute_code is None or _assistant_called(messages, (code_mode.EXECUTE_CODE,)):
+        return []
+    functions = code_mode.code_functions(execute_code)
+    chosen = [name for name in code_mode.QUERY_FUNCTIONS if name in functions][
+        : max(1, limit)
+    ]
+    if not chosen:
+        return []
+    program = code_mode.search_program([(name, [snippet]) for name in chosen])
+    return [_new_call(code_mode.EXECUTE_CODE, json.dumps({"code": program}))]
+
+
 def _pick_tool(
     request: ChatCompletionRequest,
     knobs: Knobs,
@@ -329,12 +439,8 @@ def _pick_tool(
     has_tool_result = any(m.role == "tool" for m in messages)
 
     def make(tool: ToolDefinition, task: str | None = None) -> ToolCall:
-        return ToolCall(
-            id=f"call_mock_{uuid.uuid4().hex[:10]}",
-            function=ToolCallFunction(
-                name=tool.function.name,
-                arguments=_synthesize_arguments(tool, task or snippet),
-            ),
+        return _new_call(
+            tool.function.name, _synthesize_arguments(tool, task or snippet)
         )
 
     # Forced specific function: {"type": "function", "function": {"name": ...}}
@@ -361,37 +467,11 @@ def _pick_tool(
         profile is not None
         and profile.kind == "search"
         and choice == "auto"
-        and "internal_search" in by_name
         and _GENERATE_PLAN not in by_name
     ):
-        last_user = _last_user_index(messages)
-        completed_rounds = sum(
-            any(
-                call.function.name == "internal_search"
-                for call in message.tool_calls or []
-            )
-            for message in messages[last_user + 1 :]
-            if message.role == "assistant"
-        )
-        if completed_rounds >= profile.search_rounds:
-            return []
-        keywords = keyword_query(snippet)
-        if keywords == snippet:
-            keywords += " overview"
-        variants = [snippet, keywords, snippet + " supporting details"]
-        queries = (
-            variants[: profile.queries]
-            if completed_rounds == 0
-            else [
-                snippet
-                + (" implementation", " limitations", " examples")[
-                    min(completed_rounds - 1, 2)
-                ]
-            ]
-        )
-        call = make(by_name["internal_search"])
-        call.function.arguments = json.dumps({"queries": list(dict.fromkeys(queries))})
-        return [call]
+        calls = _search_profile_calls(messages, by_name, knobs, profile, snippet)
+        if calls is not None:
+            return calls
 
     if choice == "required":
         # DR orchestrator: spawn agents once, then ask for the report.
@@ -410,6 +490,10 @@ def _pick_tool(
         retrieval_tool = next((n for n in _RETRIEVAL_TOOLS if n in by_name), None)
         if retrieval_tool and not _assistant_called(messages, _RETRIEVAL_TOOLS):
             return [make(by_name[retrieval_tool])]
+        if retrieval_tool is None and (
+            calls := _code_mode_retrieval(messages, by_name, 1, snippet)
+        ):
+            return calls
         if _GENERATE_REPORT in by_name:
             return [make(by_name[_GENERATE_REPORT])]
         return [make(tools[0])]
@@ -421,6 +505,12 @@ def _pick_tool(
     if knobs.n_auto_tools > 0 and not has_tool_result:
         # Up to n_auto_tools retrieval tools in parallel; else the first tool.
         retrieval = [by_name[n] for n in _RETRIEVAL_TOOLS if n in by_name]
+        if not retrieval and (
+            calls := _code_mode_retrieval(
+                messages, by_name, knobs.n_auto_tools, snippet
+            )
+        ):
+            return calls
         chosen = retrieval[: knobs.n_auto_tools]
         if not chosen and tools:
             chosen = [tools[0]]

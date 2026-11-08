@@ -233,6 +233,7 @@ for explicit stress tests. Register every selected model name before a run.
 |---|---|
 | `mock-profile-chat-v1` | Direct answer with an assumed size mix; no automatic retrieval |
 | `mock-profile-search-v1` | Search rounds, query fan-out, reasoning, and cited answers |
+| `mock-profile-search-v1-codebatched` | The same plan; in code mode, one program runs all search rounds. See [Compare code mode](#compare-code-mode) |
 | `mock-profile-research-v1-agents2` | Existing two-agent research sequence with 900-word reports and 15-second nominal response duration |
 | `mock-profile-held-v1` | A deliberately held response: 600 words over 121 seconds |
 
@@ -275,6 +276,65 @@ or provider tail behavior. Explicit `ttft` and `itl` knobs override the schedule
 `len` overrides answer words. Keep low-delay CPU stress runs separate from capacity
 runs with representative model waits.
 
+## Compare code mode
+
+In code mode, Onyx offers an `execute_code` tool instead of direct retrieval tools.
+The model writes a Python program, and each tool is an async function in that
+program. The program runs in a sandbox on the API server. The tool result is the
+printed output of the program. Set `CODE_MODE_ENABLED=true` on the API server to
+turn on code mode.
+
+The mock detects code mode from the offered tools. When a request offers
+`execute_code` and does not offer `internal_search`, the search profile writes
+programs instead of direct search calls. The programs use the same seeded queries
+as direct mode. Each program prints one `[document] title` line for each result.
+The mock reads the document numbers from these lines, so the answer cites the
+same way as in direct mode. The answer phase does not change.
+
+| Model | Programs in a turn | Model calls in a turn |
+|---|---|---|
+| `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode |
+| `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, then the answer |
+
+When a program runs longer than its yield time, the result says that the cell is
+running. The mock then calls `wait_code` for that cell until the program ends.
+The `-codebatched` suffix has no effect in direct mode.
+
+In code mode, `MultiToolUser` (`mock-tools<n>`) runs one program that calls up to
+`n` of `internal_search` and `web_search` in parallel. The deep-research agent loop
+runs one program with one search. Other profiles do not change.
+
+### Run the arms
+
+Run each arm against the same deployment, corpus, mock seed, question file, pacing,
+and resources. Change only the API setting and, for the batched arm, the model:
+
+| Arm | API server | Locust |
+|---|---|---|
+| Direct (main) | `CODE_MODE_ENABLED` unset or `false` | `ONYX_SEARCH_MODEL=mock-profile-search-v1` |
+| Code mode, one program per round | `CODE_MODE_ENABLED=true` | `ONYX_SEARCH_MODEL=mock-profile-search-v1` |
+| Code mode, batched | `CODE_MODE_ENABLED=true` | `ONYX_SEARCH_MODEL=mock-profile-search-v1-codebatched` |
+
+Register `mock-profile-search-v1-codebatched` with the mock provider before the
+batched arm. Restart the API server after you change `CODE_MODE_ENABLED`. Then run
+`ChatWithSearchUser` for each arm:
+
+```bash
+ONYX_SEARCH_MODEL=mock-profile-search-v1 \
+  uv run --group loadtest locust --headless -u 50 -r 5 -t 15m \
+  --host "$LOCUST_HOST" --csv code-mode-per-round ChatWithSearchUser
+```
+
+Make sure that each arm ran the intended path. In the Locust `/metrics` output,
+`onyx_loadtest_code_programs` must be zero for the direct arm and nonzero for the
+code mode arms. Assess each arm's stats CSV separately with `capacity_report.py`.
+
+The per-round arm keeps the number and order of model calls of direct mode. Its
+difference from direct mode shows the cost of the sandbox. The batched arm also
+changes the model calls and runs the searches in parallel. Its difference shows
+the combined effect of the sandbox and fewer model calls. `search_calls` counts
+searches in both modes, so the arms report comparable search counts.
+
 ## Reproduce the input mix
 
 Use `ONYX_MESSAGES_FILE` for corpus-relevant questions. It accepts one question per
@@ -292,7 +352,8 @@ ONYX_MESSAGES_FILE=/path/to/questions.jsonl \
 
 Use the same file hash, model, mock seed, generator seed, worker count, and user
 count for each comparison. The manifest lists the expected one-pass mix without
-question text. It accepts base profile names, including the research agent count,
+question text. It accepts base profile names, including the research agent count
+and the `-codebatched` suffix,
 but rejects stress and fault overrides. Small corpora can sample the buckets unevenly. Check the manifest
 instead of assuming the bucket percentages occurred in your run.
 
@@ -308,6 +369,9 @@ planned token/chunk histograms, and completed responses by transport. These coun
 reset when the mock restarts. They measure model calls, not whole application turns.
 Locust `/metrics` adds `onyx_loadtest_active`, `started`, `finished`, `answer_chars`,
 `packets`, `search_calls`, `reasoning_packets`, and `citations`, labelled by scenario.
+Code mode adds `code_programs` (`execute_code` calls), `code_waits` (`wait_code`
+calls), `nested_search_calls` (searches that programs made, also in `search_calls`),
+and `code_failures`.
 Finished counts include failed setup and interrupted turns; success rates come from Locust request statistics.
 Counts reset at test start and survive a Locust statistics reset. Compare interval
 deltas when excluding warmup. Missing workers retain their last cumulative counts
@@ -499,7 +563,9 @@ the milestone packet arrives; Locust aggregates percentiles per name:
 
 A turn fails on: non-200, an error packet, a stream stalling past the read
 timeout, or a stream ending without answer content / without the `stop`
-packet (truncation).
+packet (truncation). In code mode, a turn also fails when a program ends with the
+status `failed`, `timed_out`, `cancelled`, or `terminated`, or when the sandbox is
+busy. The failure reason names the status, for example `code sandbox busy`.
 
 ### Prometheus + Grafana correlation
 
