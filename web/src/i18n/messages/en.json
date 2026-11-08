@@ -17496,6 +17496,7 @@
       "adminDescription": "Manage skills and access across your organization.",
       "selectAll": "Select all visible custom skills",
       "selected": "{count, plural, one {# selected} other {# selected}}",
+      "total": "{count, plural, one {# skill} other {# skills}}",
       "share": "Share",
       "enable": "Enable for me",
       "disable": "Disable for me",

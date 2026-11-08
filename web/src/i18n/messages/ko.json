@@ -17496,6 +17496,7 @@
       "adminDescription": "조직 전체의 스킬과 액세스를 관리합니다.",
       "selectAll": "표시된 모든 사용자 지정 스킬 선택",
       "selected": "{count, plural, one {#개 선택됨} other {#개 선택됨}}",
+      "total": "{count, plural, other {스킬 #개}}",
       "share": "공유",
       "enable": "내 스킬 활성화",
       "disable": "내 스킬 비활성화",

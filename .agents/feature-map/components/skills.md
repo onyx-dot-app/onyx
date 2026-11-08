@@ -37,13 +37,16 @@
   stay selected. Search changes clear selection. The admin table header selects all filtered
   custom skills. It uses Opal multi-selection, disabled during bulk requests. Row activation
   opens the preview; checkbox activation changes selection without opening it.
-  The bulk toolbar keeps its height when selection starts or clears, so rows do not move.
+  Admin search, count and bulk actions share a stable control region. It stacks on mobile.
+  The count changes from the filtered total to the selection count. Hidden action slots keep
+  search and table coordinates fixed when selection starts or clears. The personal toolbar stays separate.
   Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal. The table shows
   groups only when supplied. Owner identity is not an access grant. The list
   currently omits share details. The Enable for me column controls personal use.
-  Narrow tables keep names and actions; sharing settings stay in the dialog.
+  Narrow tables use two lines for names instead of descriptions; warnings remain visible.
+  Sharing settings stay in the dialog. Access badges use stronger text for focused selected rows.
   The table keeps page ordering and all filtered rows without pagination.
   `web/src/lib/skills/hooks.ts` is shared by cards and rows for permission, dependency,
   validity and toggle presentation.

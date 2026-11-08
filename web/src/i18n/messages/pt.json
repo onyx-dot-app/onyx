@@ -17496,6 +17496,7 @@
       "adminDescription": "Gerencie habilidades e acesso em toda a organização.",
       "selectAll": "Selecionar todas as habilidades personalizadas visíveis",
       "selected": "{count, plural, one {# selecionada} other {# selecionadas}}",
+      "total": "{count, plural, one {# habilidade} other {# habilidades}}",
       "share": "Compartilhar",
       "enable": "Ativar para mim",
       "disable": "Desativar para mim",

@@ -17496,6 +17496,7 @@
       "adminDescription": "Skills und Zugriff in Ihrer Organisation verwalten.",
       "selectAll": "Alle sichtbaren benutzerdefinierten Skills auswählen",
       "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
+      "total": "{count, plural, one {# Skill} other {# Skills}}",
       "share": "Teilen",
       "enable": "Für mich aktivieren",
       "disable": "Für mich deaktivieren",

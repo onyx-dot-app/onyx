@@ -113,4 +113,5 @@ Caller labels override the localized OpalStrings defaults. Default row labels us
 Checkbox labels provide 36px targets at the default row size, and 28px targets for compact rows.
 Checkbox clicks and keyboard presses change selection without calling `onRowClick`.
 Enter or Space on a focused clickable row calls `onRowClick`.
-Rows use the shared neutral keyboard focus state. Checked boxes and the selected state identify selection.
+Rows use the shared neutral keyboard focus state and an inset neutral outline.
+The outline keeps keyboard focus visible on selected rows. Checked boxes identify selection.

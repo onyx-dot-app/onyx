@@ -17496,6 +17496,7 @@
       "adminDescription": "Gérez les compétences et les accès dans votre organisation.",
       "selectAll": "Sélectionner toutes les compétences personnalisées visibles",
       "selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
+      "total": "{count, plural, one {# compétence} other {# compétences}}",
       "share": "Partager",
       "enable": "Activer pour moi",
       "disable": "Désactiver pour moi",

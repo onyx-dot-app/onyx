@@ -33,6 +33,7 @@ interface SkillsTableProps {
 
 function SkillName({ item, hasEnabledNameConflict }: SkillCardProps) {
   const t = useTranslations("cards");
+  const { isMobile } = useScreenSize();
   const { isInvalid, dependencyStatus, tooltip } = useSkillPresentation(
     item,
     hasEnabledNameConflict
@@ -49,23 +50,25 @@ function SkillName({ item, hasEnabledNameConflict }: SkillCardProps) {
         font="main-ui-body"
         color="text-05"
         as="p"
-        maxLines={1}
+        maxLines={isMobile && !isInvalid && !dependencyStatus ? 2 : 1}
         overflowTooltip
       >
         {item.name}
       </Text>
-      <Text
-        font="secondary-body"
-        color={isInvalid ? "status-warning-05" : "text-03"}
-        as="p"
-        maxLines={1}
-        overflowTooltip
-        tooltip={tooltip}
-      >
-        {isInvalid
-          ? t("skill.invalid.description")
-          : (dependencyStatus ?? item.description)}
-      </Text>
+      {(!isMobile || isInvalid || dependencyStatus) && (
+        <Text
+          font="secondary-body"
+          color={isInvalid ? "status-warning-05" : "text-03"}
+          as="p"
+          maxLines={1}
+          overflowTooltip
+          tooltip={tooltip}
+        >
+          {isInvalid
+            ? t("skill.invalid.description")
+            : (dependencyStatus ?? item.description)}
+        </Text>
+      )}
     </Section>
   );
 }
@@ -120,7 +123,7 @@ function SkillActions({
   return (
     <Section
       flexDirection="row"
-      gap={2}
+      gap={1}
       height="auto"
       justifyContent="end"
       onClick={(event) => event.stopPropagation()}
@@ -194,6 +197,7 @@ export default function SkillsTable({
           >
             <Badge
               size={5}
+              titleColor="text-04"
               title={cards(
                 skill.public_permission !== null
                   ? "skill.tags.organization.label"
@@ -243,7 +247,7 @@ export default function SkillsTable({
         kind: "display",
         id: "actions",
         title: t("bulk.enable"),
-        width: { fixed: 104 },
+        width: { fixed: isMobile ? 80 : 104 },
         hideable: false,
         alignment: "right",
         cell: (props) => <SkillActions {...props} />,

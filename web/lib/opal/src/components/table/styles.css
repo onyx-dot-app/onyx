@@ -70,10 +70,17 @@
   @apply pointer-events-none;
 }
 
-/* Suppress default focus ring on rows — the row bg is the indicator */
 .tbl-row:focus,
 .tbl-row:focus-visible {
   outline: none;
+}
+
+.tbl-row.interactive:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
+) {
+  outline: 2px solid var(--border-03);
+  outline-offset: -4px;
 }
 
 /* ---- Rows: rounded cards with a gap ---- */

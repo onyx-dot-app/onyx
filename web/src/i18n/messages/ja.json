@@ -17496,6 +17496,7 @@
       "adminDescription": "組織全体のスキルとアクセス権を管理します。",
       "selectAll": "表示中のカスタムスキルをすべて選択",
       "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
+      "total": "{count, plural, other {# 件のスキル}}",
       "share": "共有",
       "enable": "自分用に有効化",
       "disable": "自分用に無効化",

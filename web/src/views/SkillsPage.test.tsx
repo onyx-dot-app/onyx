@@ -325,12 +325,26 @@ describe("SkillsPage preference toggles", () => {
       name: "Select all visible custom skills",
     });
     const toolbar = screen.getByRole("group", { name: "Select skills" });
-    expect(within(toolbar).getByText("Select skills")).toBeVisible();
+    const search = screen.getByRole("searchbox", { name: "Search skills..." });
+    expect(within(toolbar).getByText("2 skills")).toBeVisible();
+    expect(
+      within(toolbar).queryByText("Select skills")
+    ).not.toBeInTheDocument();
+    expect(
+      within(toolbar).queryByRole("button", { name: "Share" })
+    ).not.toBeInTheDocument();
     expect(within(toolbar).queryByRole("checkbox")).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "Select first-skill" })
     );
     const selectAll = within(header).getByRole("checkbox");
+    expect(within(toolbar).getByText("1 selected")).toBeVisible();
+    expect(
+      within(toolbar).getByRole("button", { name: "Share" })
+    ).toBeVisible();
+    expect(screen.getByRole("searchbox", { name: "Search skills..." })).toBe(
+      search
+    );
     expect(selectAll).toBePartiallyChecked();
     await user.click(selectAll);
     expect(selectAll).toBeChecked();
@@ -340,7 +354,10 @@ describe("SkillsPage preference toggles", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(selectAll);
     expect(screen.getByRole("group", { name: "Select skills" })).toBe(toolbar);
-    expect(within(toolbar).getByText("Select skills")).toBeVisible();
+    expect(within(toolbar).getByText("2 skills")).toBeVisible();
+    expect(screen.getByRole("searchbox", { name: "Search skills..." })).toBe(
+      search
+    );
   });
 
   it("opens an admin row with the keyboard and keeps selection separate from preview", async () => {
