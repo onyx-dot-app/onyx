@@ -39,13 +39,14 @@ def archive_path(value: str) -> str:
         or len(value.encode()) > ARCHIVE_PATH_MAX_BYTES
     ):
         raise ArchiveLimitError("Archive path is too long")
-    value = value.removeprefix("./").removesuffix("/")
+    value = value.removeprefix("./")
+    if len(value) >= 3 and value[0].isalpha() and value[1:3] == ":/":
+        raise ValueError(f"Unsafe path: {value!r}")
+    value = value.removesuffix("/")
     if value.count("/") >= ARCHIVE_PATH_MAX_DEPTH:
         raise ArchiveLimitError("Archive path is too deep")
-    if (
-        any(c in value for c in ("\\", "\x00"))
-        or any(part in ("", ".", "..") for part in value.split("/"))
-        or (len(value) >= 3 and value[0].isalpha() and value[1:3] == ":/")
+    if any(c in value for c in ("\\", "\x00")) or any(
+        part in ("", ".", "..") for part in value.split("/")
     ):
         raise ValueError(f"Unsafe path: {value!r}")
     return value

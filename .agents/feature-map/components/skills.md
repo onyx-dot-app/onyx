@@ -369,7 +369,7 @@ The library preview of an external-app skill calls the same renderer
     replacement refreshes the description and applies digest equality and retention.
     Never reuse the historical blob: this restore can prune its source version.
     Cleanup stays after the content commit and before the sandbox push.
-21. `marketplace-processing-limits` **Archive processing failures must prevent retirement.**
+21. `marketplace-processing-limits` **Archive processing has separate read and index limits.**
     `skills/marketplace/archive.py:archive_files` bounds gzip expansion and member
     reads separately from skill limits. Every supported stream read charges the
     shared byte budget. Path depth, path bytes and the aggregate parent index

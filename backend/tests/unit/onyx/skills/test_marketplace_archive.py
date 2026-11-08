@@ -14,7 +14,17 @@ from tests.unit.onyx.skills.marketplace_fixtures import _archive, _files
 
 @pytest.mark.parametrize("kind", ["zip", "tar"])
 @pytest.mark.parametrize(
-    "path", ["../escape", "/absolute", "a/../escape", "a\\b", "a//b", "C:/escape"]
+    "path",
+    [
+        "../escape",
+        "/absolute",
+        "a/../escape",
+        "a\\b",
+        "a//b",
+        "C:/escape",
+        "C:/",
+        "./C:/",
+    ],
 )
 def test_unsafe_paths_fail_whole_read(kind: str, path: str) -> None:
     files = _files()
