@@ -186,9 +186,10 @@ The library preview of an external-app skill calls the same renderer
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
    read cap; ZIP uploads use the ZIP cap.
    Stored-bundle reads (`skills/validation.py:load_stored_custom_skill_bundle`)
-   skip the zip size and file count limits, so a skill saved before them
-   still loads and pushes within the existing per-file and expanded-total limits.
-   Do not tighten a limit on that read path.
+   skip the upload ZIP-size and file-count limits. Their separate
+   `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
+   Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
+   Stored reads retain the existing per-file and expanded-total limits.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If

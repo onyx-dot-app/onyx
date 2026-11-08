@@ -12,8 +12,9 @@ import pytest
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
-from onyx.skills import validation
+from onyx.skills import bundle, validation
 from onyx.skills.bundle import normalize_custom_bundle
 from onyx.skills.validation import validate_stored_custom_skill
 
@@ -21,8 +22,7 @@ from onyx.skills.validation import validate_stored_custom_skill
 def test_stored_read_accepts_zip_larger_than_extracted_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(validation, "DEFAULT_TOTAL_MAX_BYTES", 1024)
-    monkeypatch.setattr(validation, "DEFAULT_ZIP_MAX_BYTES", 4096, raising=False)
+    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", 4096)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w") as zf:
         zf.writestr(
@@ -39,6 +39,27 @@ def test_stored_read_accepts_zip_larger_than_extracted_cap(
     assert (
         validation.load_stored_custom_skill_bundle("id", file_store).content == stored
     )
+
+    monkeypatch.setattr(bundle, "DEFAULT_ZIP_MAX_BYTES", 1024)
+    file_store.read_file.return_value = io.BytesIO(stored)
+    assert (
+        validation.load_stored_custom_skill_bundle("id", file_store).content == stored
+    )
+    with pytest.raises(OnyxError):
+        bundle.read_bundle_file(io.BytesIO(stored), filename="skill.zip")
+
+
+def test_stored_read_still_enforces_its_own_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", 1024)
+    stream = io.BytesIO(b"x" * 1025)
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = stream
+    with pytest.raises(OnyxError) as exc:
+        validation.load_stored_custom_skill_bundle("id", file_store)
+    assert exc.value.extra == {"limit": "zip_bytes", "limit_value": 1024}
+    assert stream.closed
 
 
 def _skill(name: str = "canonical-name") -> Skill:

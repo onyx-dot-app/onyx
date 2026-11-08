@@ -12,8 +12,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
-    DEFAULT_TOTAL_MAX_BYTES,
-    DEFAULT_ZIP_MAX_BYTES,
+    DEFAULT_STORED_ZIP_MAX_BYTES,
     SKILL_MD_NAME,
     NormalizedSkillBundle,
     normalize_custom_bundle,
@@ -34,11 +33,11 @@ def load_stored_custom_skill_bundle(
     bundle_file_id: str,
     file_store: FileStore,
 ) -> NormalizedSkillBundle:
-    # Accept legacy bundles and bundles saved under a larger configured ZIP cap.
+    # Lower upload limits without lowering the allowance for existing bundles.
     bundle_stream = file_store.read_file(bundle_file_id)
     try:
         bundle_bytes = read_bundle_file(
-            bundle_stream, max_bytes=max(DEFAULT_TOTAL_MAX_BYTES, DEFAULT_ZIP_MAX_BYTES)
+            bundle_stream, max_bytes=DEFAULT_STORED_ZIP_MAX_BYTES
         )
     finally:
         bundle_stream.close()

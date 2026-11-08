@@ -5,7 +5,10 @@ from __future__ import annotations
 import io
 import os
 import random
+import subprocess
+import sys
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +24,31 @@ from onyx.skills.bundle import (
 
 _MIB = 1024 * 1024
 _SKILL_MD = b"---\nname: limits\ndescription: Limit checks\n---\n\n# Instructions\n"
+
+
+@pytest.mark.parametrize("upload_limit,expected", [(8192, 4096), (1024, 1024)])
+def test_upload_limit_cannot_exceed_stored_allowance(
+    upload_limit: int,
+    expected: int,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from onyx.skills.bundle import DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES; print(DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES)",
+        ],
+        env={
+            **os.environ,
+            "PYTHONPATH": str(Path(__file__).resolve().parents[4]),
+            "SKILL_BUNDLE_ZIP_MAX_BYTES": str(upload_limit),
+            "SKILL_BUNDLE_STORED_ZIP_MAX_BYTES": "4096",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    assert result.stdout.strip() == f"{expected} 4096"
 
 
 def _build_zip(

@@ -146,12 +146,16 @@ Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `no
 with a `reason` for each refusal.
 Repository-wide GitHub size checks can reject the whole request with HTTP 413 before individual Skills are inspected.
 Previously saved Skills keep the existing per-file and expanded-total limits.
-The new ZIP-size and file-count limits do not affect their stored bundles.
+Lowering the upload ZIP-size or file-count limit does not change stored-bundle validation.
+Stored ZIP reads have a separate 100 MiB allowance, set by `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`.
+Keep this allowance large enough for your existing bundles when you lower upload limits.
+If you previously allowed ZIPs above 100 MiB, set this allowance before upgrading.
 Onyx applies the limits when you save the Skill again.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,
 `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and `SKILL_BUNDLE_TOTAL_MAX_BYTES`. If your reverse proxy sets a request size limit,
 allow space for the bundle and multipart form data.
+The effective upload ZIP limit cannot exceed the stored ZIP allowance. Raise both settings to accept larger ZIPs.
 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
