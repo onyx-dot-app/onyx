@@ -11,7 +11,7 @@ model.
 """
 
 import math
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 
 from pydantic import JsonValue
 from pydantic_monty import MontyClassProxy
@@ -44,6 +44,10 @@ MAX_STORE_BYTES = 1024 * 1024
 # what the store adds to a chat's saved messages.
 MAX_COMMITTED_BYTES = 16 * MAX_STORE_BYTES
 MAX_STORE_KEY_CHARS = 200
+# Levels of nested lists and dicts in a value that leaves the sandbox. Monty
+# replaces values below 200 levels with a placeholder string, so a lower limit
+# rejects them instead.
+MAX_VALUE_DEPTH = 100
 
 JSON_TYPES_TEXT = "str, int, float, bool, None, list, or dict with str keys"
 
@@ -53,40 +57,93 @@ def _type_name(value: object) -> str:
     return value.name if isinstance(value, MontyClassProxy) else type(value).__name__
 
 
-def json_value(value: object, what: str, path: str = "") -> JsonValue:
-    """A copy of `value` as strict JSON data; raises TypeError for anything else.
+def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
+    """A copy of `value` as strict JSON data of at most `max_bytes` as compact JSON.
 
-    `what` names the value in error messages. Tuples become lists; NaN, infinity
-    and dict keys that are not str are rejected.
+    Every sandbox value that the host keeps or passes on goes through this copy.
+    `what` names the value in error messages. Tuples become lists. Raises
+    TypeError for data that is not JSON (also NaN, infinity and dict keys that
+    are not str), and ValueError when the copy would exceed `max_bytes` or nest
+    deeper than MAX_VALUE_DEPTH; both reach the program as exceptions.
+
+    Sandbox values can share references, so `x = [x, x]` doubles the JSON size
+    with each step at no cost to the program. The copy walks with an explicit
+    stack and counts bytes as it copies, so it stops after at most `max_bytes`
+    of work and memory.
     """
-    where = f" at {path}" if path else ""
-    if value is None or isinstance(value, (str, bool, int)):
-        return value
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise TypeError(
-                f"{what} must be JSON data; {value} is not a JSON number{where}."
+    size = 0
+    # The containers being copied, from the root down, with their remaining
+    # items; `keys` holds the key of the item that each one is copying.
+    open_items: list[
+        tuple[list[JsonValue] | dict[str, JsonValue], Iterator[tuple[object, object]]]
+    ] = []
+    keys: list[object] = []
+
+    def where() -> str:
+        path = "".join(f"[{key!r}]" for key in keys)
+        return f" at {path}" if path else ""
+
+    def count(more: int) -> None:
+        nonlocal size
+        size += more
+        if size > max_bytes:
+            raise ValueError(
+                f"{what} exceeds the limit of {max_bytes} bytes as JSON{where()}."
             )
-        return value
-    if isinstance(value, (list, tuple)):
-        return [
-            json_value(item, what, f"{path}[{index}]")
-            for index, item in enumerate(value)
-        ]
-    if isinstance(value, dict):
-        copied: dict[str, JsonValue] = {}
-        for item_key, item in value.items():
-            if not isinstance(item_key, str):
+
+    def copy(item: object) -> JsonValue:
+        """`item` if it is a JSON scalar; else an empty copy that the walk fills."""
+        if item is None or isinstance(item, (str, bool, int, float)):
+            if isinstance(item, float) and not math.isfinite(item):
                 raise TypeError(
-                    f"{what} must be JSON data; dict keys must be str, found "
-                    f"{type(item_key).__name__} key {item_key!r}{where}."
+                    f"{what} must be JSON data; {item} is not a JSON number{where()}."
                 )
-            copied[item_key] = json_value(item, what, f"{path}[{item_key!r}]")
+            # A str has at least one byte per character; skip encoding a long one.
+            too_long = isinstance(item, str) and len(item) > max_bytes
+            count(max_bytes + 1 if too_long else len(json_text(item).encode("utf-8")))
+            return item
+        if not isinstance(item, (list, tuple, dict)):
+            raise TypeError(
+                f"{what} must be JSON data ({JSON_TYPES_TEXT}); found "
+                f"{_type_name(item)}{where()}. Convert it first, for example to a dict."
+            )
+        if len(open_items) >= MAX_VALUE_DEPTH:
+            raise ValueError(
+                f"{what} nests more than {MAX_VALUE_DEPTH} levels deep{where()}."
+            )
+        # Brackets and commas; a dict also has a colon per item.
+        count(1 + max(len(item), 1) + (len(item) if isinstance(item, dict) else 0))
+        copied: list[JsonValue] | dict[str, JsonValue]
+        if isinstance(item, dict):
+            copied = {}
+            open_items.append((copied, iter(item.items())))
+        else:
+            copied = []
+            open_items.append((copied, enumerate(item)))
+        keys.append(None)
         return copied
-    raise TypeError(
-        f"{what} must be JSON data ({JSON_TYPES_TEXT}); found "
-        f"{_type_name(value)}{where}. Convert it first, for example to a dict."
-    )
+
+    root = copy(value)
+    while open_items:
+        container, items = open_items[-1]
+        entry = next(items, None)
+        if entry is None:
+            open_items.pop()
+            keys.pop()
+            continue
+        key, item = entry
+        keys[-1] = key
+        if isinstance(container, list):
+            container.append(copy(item))
+            continue
+        if not isinstance(key, str):
+            raise TypeError(
+                f"{what} must be JSON data; dict keys must be str, found "
+                f"{type(key).__name__} key {key!r}{where()}."
+            )
+        count(len(json_text(key).encode("utf-8")))
+        container[key] = copy(item)
+    return root
 
 
 def _commits(messages: Iterable[Message]) -> list[StoreCommit]:
@@ -187,14 +244,10 @@ class ProgramStore:
 
     def store(self, key: object, value: object) -> None:
         valid_key = _valid_key(key)
-        stored = json_value(value, f'Cannot store "{valid_key}": the value')
+        stored = json_value(
+            value, f'Cannot store "{valid_key}": the value', MAX_STORED_VALUE_BYTES
+        )
         write_bytes = entry_bytes(valid_key, stored)
-        value_bytes = write_bytes - len(valid_key.encode("utf-8"))
-        if value_bytes > MAX_STORED_VALUE_BYTES:
-            raise ValueError(
-                f'Cannot store "{valid_key}": the value is {value_bytes} bytes as '
-                f"JSON; the limit is {MAX_STORED_VALUE_BYTES} bytes per value."
-            )
         size = 0 if stored is None else write_bytes
         total = self._total - self._sizes.get(valid_key, 0) + size
         if total > MAX_STORE_BYTES and total > self._total:

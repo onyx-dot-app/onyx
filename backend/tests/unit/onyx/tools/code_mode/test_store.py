@@ -8,9 +8,11 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeStatus,
     StoreCommit,
     StoreSnapshot,
+    json_text,
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     MAX_COMMITTED_BYTES,
+    MAX_VALUE_DEPTH,
     ProgramStore,
     changed_writes,
     json_value,
@@ -91,9 +93,43 @@ def test_stored_values_folds_commits_in_completion_order() -> None:
 
 def test_json_value_copies_and_converts_tuples() -> None:
     value = {"list": [1, (2, 3)], "nested": {"x": None, "y": 1.5, "z": True}}
-    copied = json_value(value, "k")
+    copied = json_value(value, "k", 1024)
     assert copied == {"list": [1, [2, 3]], "nested": {"x": None, "y": 1.5, "z": True}}
     assert copied is not value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"k": [1, "é", None, {"a": [], "b": {}}], "t": True, "f": -1.5e-7},
+        [],
+        "x",
+        [[[]], (1, 2)],
+    ],
+)
+def test_json_value_limit_is_the_compact_json_size(value: JsonValue) -> None:
+    size = len(json_text(json_value(value, "v", 10_000)).encode("utf-8"))
+    assert json_value(value, "v", size) is not None
+    with pytest.raises(ValueError, match=f"v exceeds the limit of {size - 1} bytes"):
+        json_value(value, "v", size - 1)
+
+
+def test_json_value_stops_at_its_limit_for_shared_references() -> None:
+    value: list[object] = [1]
+    for _ in range(64):
+        value = [value, value]
+    # 2**64 leaves as JSON; the copy stops once it passes 1 KB.
+    with pytest.raises(ValueError, match="exceeds the limit of 1024 bytes"):
+        json_value(value, "v", 1024)
+
+
+def test_json_value_rejects_deep_nesting() -> None:
+    value: list[object] = []
+    for _ in range(MAX_VALUE_DEPTH - 1):
+        value = [value]
+    assert json_value(value, "v", 10_000) == value
+    with pytest.raises(ValueError, match=f"nests more than {MAX_VALUE_DEPTH} levels"):
+        json_value([value], "v", 10_000)
 
 
 def test_program_store_buffers_writes_over_a_snapshot() -> None:

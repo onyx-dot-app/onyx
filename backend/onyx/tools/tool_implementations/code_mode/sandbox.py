@@ -52,9 +52,10 @@ from onyx.tools.tool_implementations.code_mode.models import (
     SandboxStatus,
     TypeDiagnostic,
 )
+from onyx.tools.tool_implementations.code_mode.store import json_value
 from onyx.tools.tool_implementations.utils import truncate_output, truncation_marker
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import start_thread_future
+from onyx.utils.threadpool_concurrency import call_later, start_thread_future
 
 logger = setup_logger()
 
@@ -93,11 +94,11 @@ BUSY_MESSAGE = "The code sandbox is busy. Try again, or answer without code."
 # Tool calls of one program that run at the same time, each on its own thread.
 # Later calls wait in order for a free slot.
 MAX_CONCURRENT_TOOL_CALLS = 16
-# Threads of tool calls of all programs in the server process
-# (cells.MAX_RUNNING_CELLS bounds the programs). Programs that want threads share
-# them equally. A call that finds no
-# thread within its program's share waits in its program's queue. A call that
-# ignores cancellation keeps its thread until it returns.
+# Threads of tool calls of all programs in the server process. Programs that
+# want threads share them equally. A call that finds no thread within its
+# program's share waits in its program's queue. A call that ignores cancellation
+# keeps its thread until it returns. A tool that runs its own parallel work, such
+# as a search that runs its queries in parallel, adds its threads to its call's.
 MAX_TOOL_CALL_THREADS = 192
 # A call that returns this long after its program ended held its thread while
 # ignoring cancellation; it is logged.
@@ -926,20 +927,17 @@ def _watched(run: _Run, pid: int | None) -> Iterator[None]:
                 computing = None
 
     remaining = run.deadline - time.monotonic()
-    timer = (
-        threading.Timer(max(0.0, remaining), kill)
+    cancel_timer = (
+        call_later(max(0.0, remaining), kill)
         if remaining < run.limits.max_cpu_seconds
         else None
     )
-    if timer is not None:
-        timer.daemon = True
-        timer.start()
     try:
         with run.cancellation.on_cancel(kill):
             yield
     finally:
-        if timer is not None:
-            timer.cancel()
+        if cancel_timer is not None:
+            cancel_timer()
         # Under the lock, so the worker is never killed after it is returned.
         with lock:
             computing = None
@@ -953,20 +951,20 @@ def _start(
     Invalid syntax and type errors in calls stop it; other diagnostics become
     notes.
     """
-    try:
-        with metrics.PROGRAM_START_DURATION.time():
+    with metrics.PROGRAM_START_DURATION.time():
+        try:
             return session.feed_start(code, print_callback=run.print_callback)
-    except MontyTypingError as error:
-        diagnostics = parse_type_diagnostics(error.display())
-        text = "\n".join(d.line for d in diagnostics) or error.display()
-        if any(is_fatal_diagnostic(d, run.callable_names) for d in diagnostics):
-            return ProgramStopped(
-                status="failed",
-                error="Type check failed; the program did not run.\n" + text,
+        except MontyTypingError as error:
+            diagnostics = parse_type_diagnostics(error.display())
+            text = "\n".join(d.line for d in diagnostics) or error.display()
+            if any(is_fatal_diagnostic(d, run.callable_names) for d in diagnostics):
+                return ProgramStopped(
+                    status="failed",
+                    error="Type check failed; the program did not run.\n" + text,
+                )
+            return session.feed_start(
+                code, print_callback=run.print_callback, skip_type_check=True
             )
-        return session.feed_start(
-            code, print_callback=run.print_callback, skip_type_check=True
-        )
 
 
 def _load(
@@ -1217,6 +1215,12 @@ def execute_program(
             )
         if suspended is not None:
             _suspended_bytes.release(len(suspended.snapshot))
-    return finish(
-        "completed", result=None if ended.output is None else repr(ended.output)
-    )
+    if ended.output is None:
+        return finish("completed")
+    try:
+        output = json_value(
+            ended.output, "The value of the last expression", limits.max_output_chars
+        )
+    except (TypeError, ValueError) as error:
+        return finish("completed", error=str(error))
+    return finish("completed", result=repr(output))

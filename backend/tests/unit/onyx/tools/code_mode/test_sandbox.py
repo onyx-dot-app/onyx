@@ -1,5 +1,6 @@
 import threading
 import time
+import tracemalloc
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -7,12 +8,13 @@ from typing import cast
 
 import pytest
 from prometheus_client import REGISTRY
-from pydantic import JsonValue
+from pydantic import JsonValue, ValidationError
 from pydantic_monty import FunctionSnapshot, Monty
 
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.tools.tool_implementations.code_mode import sandbox
 from onyx.tools.tool_implementations.code_mode.models import (
+    MAX_CPU_SECONDS,
     ExternalCall,
     ProgramSuspended,
     ProgramWaiting,
@@ -370,7 +372,7 @@ def test_invalid_store_value_can_be_caught() -> None:
 def test_store_size_limits() -> None:
     value_limit = run("store('k', 'x' * (300 * 1024))\n")
     assert value_limit.status == "failed"
-    assert "262144 bytes per value" in (value_limit.error or "")
+    assert "exceeds the limit of 262144 bytes as JSON" in (value_limit.error or "")
 
     full = {f"k{i}": "x" * (200 * 1024) for i in range(5)}
     total_limit = run(
@@ -384,6 +386,72 @@ def test_store_size_limits() -> None:
         "store('k0', 'small')\nstore('k1', None)\n", store=StoreSnapshot(values=full)
     )
     assert shrink.status == "completed", shrink
+
+
+def test_shared_references_are_rejected_inside_the_program() -> None:
+    # Each step doubles the JSON size of `x` at no cost to the program: 2**25
+    # leaves. The host copies stop at their byte limits.
+    tracemalloc.start()
+    started = time.monotonic()
+    try:
+        result = run(
+            "x = [1]\n"
+            "for _ in range(25):\n"
+            "    x = [x, x]\n"
+            "try:\n"
+            "    store('k', x)\n"
+            "except ValueError as error:\n"
+            "    print(error)\n"
+            "x\n"
+        )
+        _, peak_bytes = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert time.monotonic() - started < 5
+    assert peak_bytes < 64 * 1024 * 1024
+    assert result.status == "completed", result
+    assert result.stdout.startswith(
+        'Cannot store "k": the value exceeds the limit of 262144 bytes as JSON'
+    )
+    assert result.result is None
+    assert result.error is not None
+    assert result.error.startswith(
+        "The value of the last expression exceeds the limit of 500 bytes as JSON"
+    )
+    assert result.store_writes == {}
+
+
+def test_deep_values_are_rejected_inside_the_program() -> None:
+    result = run(
+        "y = []\n"
+        "for _ in range(1200):\n"
+        "    y = [y, y]\n"
+        "try:\n"
+        "    store('k', y)\n"
+        "except ValueError as error:\n"
+        "    print(error)\n"
+        "y\n"
+    )
+    assert result.status == "completed", result
+    assert result.stdout.startswith(
+        'Cannot store "k": the value nests more than 100 levels deep at [0][0]'
+    )
+    assert "nests more than 100 levels deep" in (result.error or "")
+
+
+def test_a_result_that_is_not_json_data_is_reported() -> None:
+    result = run("({1, 2}, 'kept')\n")
+    assert result.status == "completed", result
+    assert result.result is None
+    assert "found set at [0]" in (result.error or "")
+    assert run("(1, 'a', None)\n").result == "[1, 'a', None]"
+
+
+def test_limits_must_be_positive_and_within_the_compute_cap() -> None:
+    with pytest.raises(ValidationError):
+        SandboxLimits(max_cpu_seconds=MAX_CPU_SECONDS + 1)
+    with pytest.raises(ValidationError):
+        SandboxLimits(max_tool_calls=0)
 
 
 def test_writes_commit_when_the_program_ends_by_itself() -> None:

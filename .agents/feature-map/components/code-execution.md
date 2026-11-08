@@ -1,8 +1,8 @@
 # Code Execution
 
-> Runs code for the user: `run_python` runs Python, and the coding agent's
-> `bash` runs shell commands in a repository. Both are HTTP clients of an
-> external Code Interpreter service, so no user code runs in an Onyx process.
+> Runs code for the user: `run_python` and the coding agent's `bash` send code
+> to an external Code Interpreter service, and code mode runs Python programs
+> in local Monty sandbox workers.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
@@ -31,8 +31,9 @@
 ## Scope
 
 This component owns `PythonTool`, `BashTool`, the Code Interpreter client and
-its version gates, the one-row settings table with its admin API and page, and
-the meaning of `BASH_TOOL_SENTINEL_ID`.
+its version gates, the one-row settings table with its admin API and page, the
+meaning of `BASH_TOOL_SENTINEL_ID`, and the code mode sandbox driver and
+program store.
 
 It does not own:
 - The Code Interpreter service. It is a separate deployment with its own
@@ -104,8 +105,9 @@ health calls are not retried.
 
 ## Contracts and traps
 
-1. `isolation-is-service-job` **Isolation is the service's job, not Onyx's.**
-   Nothing in `backend/onyx` sandboxes code or checks that the service does.
+1. `isolation-is-service-job` **Isolation of `run_python` and `bash` is the
+   service's job, not Onyx's.** Nothing in `backend/onyx` sandboxes the code
+   that they send or checks that the service does.
    Onyx trusts the URL in `CODE_INTERPRETER_BASE_URL`. The "no network access"
    rule for bash sessions exists only as text. The model reads it in
    `coding_agent/tool_definitions.py:BASH_TOOL_DESCRIPTION` and the coding-agent
@@ -193,7 +195,22 @@ health calls are not retried.
     and check it with `CodeInterpreterClient.supports` in `is_available`. Otherwise an older service makes the tool appear and then
     fail on every call. `execute_streaming` shows the other pattern: it falls
     back to `/v1/execute` when the service answers 404.
-13. `single-settings-row` **The settings table has exactly one row.**
+13. `code-mode-sandbox-is-language-level` **The code mode sandbox is Monty,
+    not a container.** `pydantic-monty` runs programs in its own worker
+    processes (`tools/tool_implementations/code_mode/sandbox.py:sandbox_pool`,
+    `MAX_SANDBOX_PROCESSES` per server process), which run as the API server's
+    user with an empty environment. Monty has no file, network or subprocess
+    access, so the tool functions are the only way out. `SandboxLimits` bounds
+    each program's lifetime, compute time, memory, tool calls and output.
+    Each value that the host keeps from a program goes through
+    `tools/tool_implementations/code_mode/store.py:json_value`. It copies the
+    value as JSON within a byte and depth limit and raises inside the program
+    otherwise. Sandbox values can share references (`x = [x, x]`), so an
+    unbounded host walk would use host memory outside the sandbox limits. The
+    store has no table: a program's commit is saved with its result, and the
+    store is the fold of the commits in the chat history
+    (`tools/tool_implementations/code_mode/store.py:store_snapshot`).
+14. `single-settings-row` **The settings table has exactly one row.**
     `db/code_interpreter.py:fetch_code_interpreter_server` uses `.one()`. A
     migration seeds the row with `server_enabled=true`. Without the row,
     `is_available` raises and both tools are hidden.

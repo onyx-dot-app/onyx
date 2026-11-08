@@ -166,16 +166,16 @@ class SandboxLimits(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Wall clock for one program, including the time its tool calls take.
-    lifetime_seconds: float = 900.0
-    max_tool_calls: int = 100
+    lifetime_seconds: float = Field(default=900.0, gt=0)
+    max_tool_calls: int = Field(default=100, gt=0)
     # Characters of printed text, the result and the error collected for one
     # observation, cut in the middle; bounds host memory and the text that the
     # output budget tokenizes. About 16 times the default output budget.
-    max_output_chars: int = 640_000
-    max_memory_bytes: int = 128 * 1024 * 1024
+    max_output_chars: int = Field(default=640_000, gt=0)
+    max_memory_bytes: int = Field(default=128 * 1024 * 1024, gt=0)
     # Compute time inside the sandbox; time spent waiting for tools does not count.
     # At most MAX_CPU_SECONDS, which the shared pool's request timeout backstops.
-    max_cpu_seconds: float = MAX_CPU_SECONDS
+    max_cpu_seconds: float = Field(default=MAX_CPU_SECONDS, gt=0, le=MAX_CPU_SECONDS)
 
 
 class ExternalCall(BaseModel):
@@ -194,7 +194,8 @@ class SandboxResult(BaseModel):
 
     # result and error each hold at most `max_output_chars`, cut in the middle.
     status: SandboxStatus
-    # repr() of the final expression, when it is not None.
+    # repr() of the JSON copy of the final expression, when it is not None. A
+    # value that is not JSON data or is too large gives `error` instead.
     result: str | None = None
     error: str | None = None
     duration_seconds: float = 0.0
