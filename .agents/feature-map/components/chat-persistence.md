@@ -411,9 +411,9 @@ Community downgrade clears it ([[billing]]).
     (`tools/tool_implementations/code_mode/prompt.py:format_content`). An
     observation that reports a program that did not complete lists every call
     of the cell, those of earlier observations included, with their states,
-    because those calls may have had effects (`calls_note`). A running
-    observation lists no calls; the cell's last observation or its closing
-    record does. Each observation gives the `file_id` and revised prompt of
+    because those calls may have had effects (`calls_note`). A running or
+    completed observation lists no calls; when a cell ends without completing,
+    its last observation or its closing record lists them. Each observation gives the `file_id` and revised prompt of
     each image that its calls generated (`images_note`), so a later message
     can edit it. When the response ends or the run pauses after a cell's last
     observation, the saved content adds the cell's closing record, formatted

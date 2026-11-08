@@ -235,8 +235,10 @@ Their control functions, such as `think_tool`, `generate_report` and
    (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
    `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
    `tool_renderer` picks by tool name. A result that a run release hook sets
-   streams through `ToolRenderer.amend`; what the amendment added follows the
-   call's section end, live and on replay. Saved responses replay through the same renderer
+   streams through `ToolRenderer.amend`. Only a code mode card renders what
+   the amendment added (the cell's closing record), after the call's section
+   end, live and on replay. The generic display adds nothing live; replay
+   shows the saved, amended result. Saved responses replay through the same renderer
    (`chat/presentation.py:replay_response`), so a change here changes reload too.
 8. `durable-details-registered` **A new `details` type must be registered
    once.** `db/models.py:SavedToolResultDetails` is the one union of saved
