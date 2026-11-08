@@ -433,14 +433,16 @@ class ChatTurnExecution:
             tool_ids = {tool.name: tool.id for tool in chat_agent.application_tools}
             persistence.tool_ids = dict(tool_ids)
             # Restored and child agents build their own tools from these.
-            configured_tools = chat_agent.configured_tools
             if isinstance(chat_agent, DeepResearchAgent):
+                # Deep research offers its tools unchanged.
+                configured_tools = chat_agent.application_tools
                 if self.setup.research_tool_id is None:
                     raise ValueError("Deep research tool configuration is missing")
                 persistence.tool_ids[RESEARCH_AGENT_TOOL_NAME] = (
                     self.setup.research_tool_id
                 )
             else:
+                configured_tools = chat_agent.configured_tools
                 persistence.initial_citations = dict(chat_agent.initial_citations)
             branch = load_chat_branch(persistence.message_id)
             if branch.chat_session_id != self.setup.chat_session_id:
