@@ -30,11 +30,15 @@ class FakeTool(Tool):
         self._name = name
         self._exposure = exposure
         self._run_function = run
-        self._parameters: dict[str, JsonValue] = parameters or {
-            "type": "object",
-            "properties": {"value": {"type": "string", "description": "A value."}},
-            "required": ["value"],
-        }
+        self._parameters: dict[str, JsonValue] = (
+            parameters
+            if parameters is not None
+            else {
+                "type": "object",
+                "properties": {"value": {"type": "string", "description": "A value."}},
+                "required": ["value"],
+            }
+        )
         self._description = description
         self._execution_mode = execution_mode
 

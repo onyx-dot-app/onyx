@@ -334,7 +334,9 @@ def _clip(text: str, limit: int) -> str:
 
 
 def _docstring_text(text: str) -> str:
-    return text.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+    """`text` escaped to sit between triple quotes: backslashes, and each quote
+    that starts a run of three or ends the text."""
+    return re.sub(r'"(?=""|\Z)', r'\\"', text.replace("\\", "\\\\"))
 
 
 def _object_keys_summary(schema: JsonValue) -> str:
@@ -528,6 +530,9 @@ def _model_result_type(spec: CodeModeResultSpec) -> StubResultType:
 def _type_name(function_name: str, taken: set[str]) -> str:
     """A unique result type name for a function, such as `ListTicketsResult`."""
     base = "".join(part[:1].upper() + part[1:] for part in function_name.split("_"))
+    if not base.isidentifier():
+        # Parts after leading underscores can start with a digit.
+        base = f"Tool{base}"
     candidate = f"{base}Result"
     number = 2
     while candidate in taken:
@@ -547,7 +552,14 @@ def _schema_result_type(
         schema.get("type", "object") != "object"
         or not isinstance(properties, dict)
         or not properties
-        or any(not name.isidentifier() or name in _SYNTAX_NAMES for name in properties)
+        # Python reads a field name in NFKC form, so a name that NFKC changes
+        # would not match its JSON key.
+        or any(
+            not name.isidentifier()
+            or unicodedata.normalize("NFKC", name) != name
+            or name in _SYNTAX_NAMES
+            for name in properties
+        )
     ):
         return StubResultType(
             annotation=schema_type(schema, schema).annotation, declarations=()

@@ -3,7 +3,7 @@ import json
 from uuid import uuid4
 
 import pytest
-from pydantic import JsonValue
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.llm.models import ToolResult
 from onyx.tools.models import (
@@ -15,10 +15,12 @@ from onyx.tools.tool_implementations.code_mode.stubs import (
     MAX_STUB_CHARS,
     build_tool_stubs,
     function_name,
+    model_declarations,
     program_value,
     schema_type,
     tool_arguments,
 )
+from onyx.tools.tool_implementations.code_mode.tool_search import MAX_TOOL_SEARCH_LIMIT
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -371,7 +373,19 @@ def test_docstring_text_cannot_end_the_docstring() -> None:
         [_QuotedTool('a"""b\\', _unused, description='Ends with """')]
     )
     ast.parse(stubs.text)
-    assert 'Tool name: a\\"\\"\\"b\\\\' in stubs.text
+    assert 'Tool name: a\\"""b\\\\' in stubs.text
+
+    class _Quoted(BaseModel):
+        name: str = Field(description='Ends with "a quote"')
+
+    [declaration] = model_declarations(_Quoted)
+    [class_def] = ast.parse(declaration).body
+    assert isinstance(class_def, ast.ClassDef)
+    assert [
+        node.value.value
+        for node in class_def.body
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+    ] == ['Ends with "a quote"']
 
 
 def test_an_invalid_schema_type_renders_as_any_without_failing_other_tools() -> None:
@@ -460,6 +474,17 @@ def test_tool_search_ranks_name_matches_first_and_bounds_the_count() -> None:
     assert index.tool_search("weather") == []
     with pytest.raises(TypeError):
         index.tool_search(1)
+    with pytest.raises(ValueError):
+        index.tool_search("tickets", limit=0)
+
+    many = build_tool_stubs(
+        [
+            FakeTool(f"ticket_{n}", _unused, exposure=CodeModeExposure.DEFERRED)
+            for n in range(MAX_TOOL_SEARCH_LIMIT + 5)
+        ]
+    ).tool_index
+    assert many is not None
+    assert len(many.tool_search("ticket", limit=100)) == MAX_TOOL_SEARCH_LIMIT
 
 
 def test_tool_search_matches_words_in_any_script() -> None:
@@ -501,3 +526,32 @@ def test_mcp_output_schema_types_the_result() -> None:
     assert "class AcmeListTicketsResult(TypedDict):" in declarations
     assert "next_page: NotRequired[str]" in declarations
     assert "-> AcmeListTicketsResult:" in function.stub
+
+
+def test_mcp_result_types_are_python_names_that_match_their_keys() -> None:
+    def tool(output_schema: dict[str, JsonValue]) -> FakeMCPTool:
+        return FakeMCPTool(
+            "list_items",
+            _unused,
+            {"type": "object", "properties": {}},
+            server="_3d",
+            output_schema=output_schema,
+        )
+
+    items: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"items": {"type": "array"}},
+    }
+    stubs = build_tool_stubs([tool(items)])
+    [function] = stubs.functions.values()
+    assert "class Tool3dListItemsResult(TypedDict):" in function.declarations[0]
+    ast.parse(stubs.text)
+
+    # Python reads the field `ﬁle` as `file`, which is not the JSON key.
+    compatibility: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"ﬁle": {"type": "string"}},
+    }
+    [function] = build_tool_stubs([tool(compatibility)]).functions.values()
+    assert function.declarations == ()
+    assert ") -> dict[str, Any]:" in function.stub
