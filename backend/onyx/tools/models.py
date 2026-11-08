@@ -149,6 +149,9 @@ class CustomToolCallSummary(BaseModel):
         union_mode="left_to_right"
     )
     error: CustomToolErrorInfo | None = None
+    # The server's structured content, which code mode programs receive in
+    # place of `tool_result`. Live only: not saved or streamed.
+    structured_result: dict[str, JsonValue] | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def restore_file_references(self) -> Self:

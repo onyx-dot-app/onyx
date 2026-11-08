@@ -293,3 +293,45 @@ class StoreSnapshot(BaseModel):
     last_ordinal: int = 0
     # The ordinal of the last commit that `values` include; 0 for none.
     last_applied: int = 0
+
+
+class StubParameter(BaseModel):
+    """One argument of a tool function stub."""
+
+    model_config = ConfigDict(frozen=True)
+
+    python_name: str
+    annotation: str
+    required: bool
+    # Required by the schema but nullable: optional in the stub, sent as null.
+    null_default: bool = False
+    description: str
+
+
+class StubResultType(BaseModel):
+    """The return annotation of a tool function stub and the declarations of
+    the types it names."""
+
+    model_config = ConfigDict(frozen=True)
+
+    annotation: str
+    declarations: tuple[str, ...]
+
+
+class SchemaRefBudget(BaseModel):
+    """`$ref` resolutions spent while one stub types a JSON Schema."""
+
+    total: int = 0
+
+
+class SearchableFunction(BaseModel):
+    """A deferred function as tool_search() matches and returns it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    description: str
+    # The function's stub with the declarations of its result types.
+    stub: str
+    # Text that the search matches: the name (weighted), namespace and description.
+    text: str
