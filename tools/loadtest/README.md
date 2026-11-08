@@ -296,8 +296,11 @@ same way as in direct mode. The answer phase does not change.
 | `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode, plus one for each `wait_code` |
 | `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, one for each `wait_code`, then the answer |
 
-Search helper calls, such as query expansion and document selection, are the
-same in both modes and are not counted here.
+Search helper calls, such as query expansion and document selection, are not
+counted here. They match direct mode in the per-round arm. In direct mode only
+the turn's first search step runs query expansion; the batched arm runs every
+search in its first step, so each search runs it. The mock's `/metrics` counts
+these calls in its `helper` phase.
 
 When a program runs longer than its yield time, the result says that the cell is
 running. The mock then calls `wait_code` for that cell until the program ends.
