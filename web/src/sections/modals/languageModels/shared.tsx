@@ -492,7 +492,33 @@ const FOLDED_MAX_MODELS = 10;
 
 // ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
 
-/** Models that ship extra picker metadata (e.g. Nebius TokenFactory). */
+function formatContextSize(tokens: number | null | undefined): string {
+  if (!tokens || tokens <= 0) return "";
+  if (tokens >= 1_000_000) {
+    const m = tokens / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+  }
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+  return String(tokens);
+}
+
+// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
+// whose regional-indicator sequence actually has a flag glyph.
+const COUNTRY_CODE_ALIASES: Record<string, string> = {
+  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
+};
+
+function countryCodeToFlag(code: string | null | undefined): string {
+  if (!code || code.length !== 2) return "";
+  const upper = code.toUpperCase();
+  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
+  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
+  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
+  return String.fromCodePoint(first, second);
+}
+
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
+ *  providers do not, and the row description then has no metadata. */
 function hasModelMetadata(model: ModelConfiguration): boolean {
   return (
     model.quantization != null ||
@@ -533,6 +559,28 @@ function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
   };
 }
 
+/** Row description. Several ids can share one title, so the model id comes
+ *  first when the title is not the id. Metadata such as
+ *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
+
+function buildModelDescription(
+  model: ModelConfiguration,
+  displayName: string
+): string | undefined {
+  const id = displayName === model.name ? undefined : model.name;
+  if (!hasModelMetadata(model)) return id;
+  const parts: string[] = id ? [id] : [];
+  const context = formatContextSize(model.max_input_tokens);
+  if (context) parts.push(context);
+  const flag = countryCodeToFlag(model.country_code);
+  if (flag) parts.push(flag);
+  if (model.quantization) parts.push(model.quantization);
+  if (model.supported_features?.length) {
+    parts.push(model.supported_features.join(", "));
+  }
+  return parts.length > 0 ? parts.join("  ·  ") : undefined;
+}
+
 interface ModelRowProps {
   model: ModelConfiguration;
   isDefaultModel: boolean;
@@ -568,6 +616,7 @@ function ModelRow({
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const displayName = modelDisplayName(model);
+  const description = buildModelDescription(model, displayName);
   const decisionBadge = useModelTypeBadge("decision");
   const visionBadge = useModelTypeBadge("vision");
   const modelTypeBadges: BadgeProps[] = [
@@ -639,6 +688,7 @@ function ModelRow({
               center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
+              description={description}
               badge={modelTypeBadges}
               rightChildren={
                 <OpalSection
