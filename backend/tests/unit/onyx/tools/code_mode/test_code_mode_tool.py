@@ -31,6 +31,9 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_implementations.code_mode import cells
+from onyx.tools.tool_implementations.code_mode import (
+    code_mode_tool as code_mode_tool_module,
+)
 from onyx.tools.tool_implementations.code_mode.cells import (
     CELL_SPAN_NAME,
     MAX_SAVED_CALL_CHARS,
@@ -341,6 +344,18 @@ def test_output_is_cut_to_the_token_budget_in_the_middle() -> None:
     assert "Execution completed" in content
     assert content.rstrip().endswith("line 499")
     assert count_tokens(content) < 260
+
+
+def test_a_requested_budget_over_the_maximum_is_capped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(code_mode_tool_module, "MAX_OUTPUT_TOKENS", 200)
+    invocation = Invocation("for i in range(500):\n    print('line', i)\n")
+    invocation.invocation.arguments["max_output_tokens"] = 1_000_000
+    result = _make_tool().run(invocation.invocation, ToolContext())
+    assert isinstance(result, ToolResult)
+    assert result.content.startswith("Warning: truncated output")
+    assert count_tokens(result.content) < 260
 
 
 def test_output_and_result_over_the_budget_are_cut_once_with_the_true_count() -> None:

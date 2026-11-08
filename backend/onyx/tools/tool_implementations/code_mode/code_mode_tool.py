@@ -30,6 +30,8 @@ MAX_EXECUTE_YIELD_MS = 120_000
 DEFAULT_WAIT_YIELD_MS = 15_000
 MAX_WAIT_YIELD_MS = 300_000
 MIN_YIELD_MS = 1_000
+# Tokens of output that one observation can return to the model.
+MAX_OUTPUT_TOKENS = 40_000
 
 RESTORED_RUNNING_MESSAGE = (
     "Execution was interrupted before it finished and was not run again. Its tool "
@@ -61,10 +63,12 @@ def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
 
 
 def output_tokens(requested: int) -> int:
-    return max(requested, 1)
+    return min(max(requested, 1), MAX_OUTPUT_TOKENS)
 
 
-_MAX_TOKENS_TEXT = f"Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens."
+_MAX_TOKENS_TEXT = (
+    f"Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most {MAX_OUTPUT_TOKENS}."
+)
 
 
 # The saved result of an `execute_code` call that stopped before it returned. A
