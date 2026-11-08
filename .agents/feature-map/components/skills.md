@@ -238,7 +238,8 @@ The library preview of an external-app skill calls the same renderer
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.
     Access and preference writes acquire the membership lock before resource/user locks.
     Content and metadata preparation holds no Skill row or membership lock.
-    The final write takes membership then Skill, refreshes the user, and checks access again.
+    The final write takes membership then Skill and checks a freshly loaded request-session user.
+    Authentication uses a separate session; later access writes must use the fresh actor.
     Derived edits compare their observed content; a changed snapshot returns a retryable conflict.
     Full replacements append on stale observations without reusing unverified content.
     Metadata repair stages every read before locking and retries changed snapshots.

@@ -265,15 +265,19 @@ def _lock_skill_after_storage(
     user: User,
     db_session: Session,
     expected_content: SkillContentSnapshot | None = None,
-) -> Skill:
+) -> tuple[Skill, User]:
     lock_group_membership(db_session)
-    db_session.refresh(user)
-    if not user.is_active or not has_global_permission(user, Permission.BASIC_ACCESS):
+    actor = fetch_user_by_id(db_session, user.id, refresh=True)
+    if (
+        actor is None
+        or not actor.is_active
+        or not has_global_permission(actor, Permission.BASIC_ACCESS)
+    ):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
-        user=user,
+        user=actor,
         db_session=db_session,
         lock_for_update=True,
     )
@@ -286,7 +290,7 @@ def _lock_skill_after_storage(
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "Skill content changed. Retry this request."
         )
-    return skill
+    return skill, actor
 
 
 def _replace_skill_bundle_from_editor(
@@ -307,7 +311,9 @@ def _replace_skill_bundle_from_editor(
         expected_name=skill.name,
     ) as ingested:
         prepared = prepare_skill_version_write(skill, ingested, db_session)
-        skill = _lock_skill_after_storage(skill.id, user, db_session, expected_content)
+        skill, user = _lock_skill_after_storage(
+            skill.id, user, db_session, expected_content
+        )
         if restored_version is not None:
             version = fetch_skill_version(skill, restored_version[0], db_session)
             db_session.refresh(version)
@@ -857,7 +863,7 @@ def replace_current_user_skill_bundle(
         expected_name=skill.name,
     ) as ingested:
         prepared = prepare_skill_version_write(skill, ingested, db_session)
-        skill = _lock_skill_after_storage(skill.id, user, db_session)
+        skill, user = _lock_skill_after_storage(skill.id, user, db_session)
         stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
@@ -995,7 +1001,7 @@ def patch_current_user_skill(
             )
             new_bundle_file_id = ingested.bundle_file_id
             prepared = prepare_skill_version_write(skill, ingested, db_session)
-            skill = _lock_skill_after_storage(
+            skill, user = _lock_skill_after_storage(
                 skill.id, user, db_session, expected_content
             )
             stale_file_ids = replace_skill_bundle(
@@ -1006,7 +1012,7 @@ def patch_current_user_skill(
                 prepared=prepared,
             )
         else:
-            skill = _lock_skill_after_storage(skill.id, user, db_session)
+            skill, user = _lock_skill_after_storage(skill.id, user, db_session)
 
         old_public_permission = skill.public_permission
         before_affected = affected_user_ids_for_skill(skill, db_session)

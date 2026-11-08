@@ -9,13 +9,20 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import Engine, func, select, text
+from sqlalchemy import Engine, func, select, text, true
 from sqlalchemy import delete as sql_delete
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill, Skill__User, Skill__UserGroup, User, User__UserGroup
+from onyx.db.models import (
+    Skill,
+    Skill__User,
+    Skill__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.skill import set_skill_enabled_for_user
 from onyx.db.users import lock_group_membership
@@ -45,7 +52,8 @@ pytestmark = pytest.mark.usefixtures(
 
 
 @pytest.mark.parametrize(
-    "operation", ["patch", "bundle", "upload", "remove", "restore", "batch"]
+    "operation",
+    ["patch", "visibility", "bundle", "upload", "remove", "restore", "batch"],
 )
 def test_content_storage_does_not_hold_membership(
     db_session: Session, operation: str
@@ -116,17 +124,22 @@ def test_content_storage_does_not_hold_membership(
 
     try:
         with (
+            get_session_with_current_tenant() as auth_session,
             patch.object(store, "read_file", side_effect=read),
             patch.object(api, "ingest_skill_bundle", side_effect=ingest),
             patch("onyx.skills.ingest.ingest_skill_bundle", side_effect=ingest),
             patch.object(api, "delete_bundle_blob", side_effect=delete),
         ):
-            client = client_for(user, db_session)
+            auth_user = auth_session.get(User, user.id)
+            assert auth_user is not None and auth_user is not user
+            client = client_for(auth_user, db_session)
             path = f"/skills/custom/{skill.id}"
             if operation == "patch":
                 result = client.patch(
                     path, json={"description": "Changed", "public_permission": "VIEWER"}
                 )
+            elif operation == "visibility":
+                result = client.patch(path, json={"public_permission": "VIEWER"})
             elif operation == "bundle":
                 result = client.put(
                     f"{path}/bundle",
@@ -170,7 +183,7 @@ def test_content_storage_does_not_hold_membership(
                     UUID(item["skill"]["id"]) for item in result.json()["imported"]
                 )
             assert result.status_code == 200, result.text
-            assert checked > 0 and not blocked
+            assert (checked > 0 or operation == "visibility") and not blocked
         db_session.refresh(skill)
         if operation == "patch":
             assert skill.description == "Changed"
@@ -181,12 +194,14 @@ def test_content_storage_does_not_hold_membership(
             api.delete_current_user_skill(skill_id, user, db_session)
 
 
-@pytest.mark.parametrize("race", ["content", "direct", "group", "manager"])
+@pytest.mark.parametrize("race", ["content", "direct", "group", "manager", "publish"])
 def test_staged_patch_rechecks_content_and_access(
     db_session: Session, race: str
 ) -> None:
     owner = make_user(db_session, is_admin=True)
-    actor = make_user(db_session, standard_account=True, is_admin=race == "manager")
+    actor = make_user(
+        db_session, standard_account=True, is_admin=race in {"manager", "publish"}
+    )
     db_session.commit()
     response = api.create_custom_skill(
         upload(bundle(f"race-{uuid4().hex}")), False, owner, db_session
@@ -232,10 +247,17 @@ def test_staged_patch_rechecks_content_and_access(
                                 Skill__UserGroup.skill_id == skill.id
                             )
                         )
-                    elif race == "manager":
+                    elif race in {"manager", "publish"}:
                         other.execute(
                             sql_delete(User__UserGroup).where(
-                                User__UserGroup.user_id == actor.id
+                                User__UserGroup.user_id == actor.id,
+                                User__UserGroup.user_group_id.in_(
+                                    select(UserGroup.id).where(
+                                        UserGroup.name == "Admin"
+                                    )
+                                )
+                                if race == "publish"
+                                else true(),
                             )
                         )
                         recompute_user_permissions__no_commit(actor.id, other)
@@ -250,12 +272,20 @@ def test_staged_patch_rechecks_content_and_access(
         return ingest(content, filename, file_store, expected_name=expected_name)
 
     try:
-        with patch.object(api, "ingest_skill_bundle", side_effect=concurrent_write):
-            result = client_for(actor, db_session).patch(
-                f"/skills/custom/{skill.id}", json={"description": "Must not commit"}
+        with (
+            get_session_with_current_tenant() as auth_session,
+            patch.object(api, "ingest_skill_bundle", side_effect=concurrent_write),
+        ):
+            auth_user = auth_session.get(User, actor.id)
+            assert auth_user is not None and auth_user is not actor
+            result = client_for(auth_user, db_session).patch(
+                f"/skills/custom/{skill.id}",
+                json={"description": "Must not commit", "public_permission": "VIEWER"}
+                if race == "publish"
+                else {"description": "Must not commit"},
             )
         assert result.status_code == (
-            409 if race == "content" else 403 if race == "manager" else 404
+            409 if race == "content" else 403 if race in {"manager", "publish"} else 404
         ), result.text
         db_session.refresh(skill)
         assert skill.description == (
