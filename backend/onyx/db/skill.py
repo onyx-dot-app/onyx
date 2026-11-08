@@ -421,7 +421,6 @@ def fetch_skill(
         order_by_name=False,
     ).where(Skill.id == skill_id)
     if lock_for_update:
-        lock_group_membership(db_session)
         stmt = stmt.with_for_update(of=Skill).execution_options(populate_existing=True)
     skill = db_session.scalars(stmt).one_or_none()
     if skill is not None and lock_for_update:

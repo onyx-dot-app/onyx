@@ -88,9 +88,6 @@ def mutate_resource_access[Resource](
                         and change.public_permission != current.public_permission
                     )
                     or change.installation_policy is not None
-                    or (
-                        change.user_shares is not None and current.owner_user_id is None
-                    )
                 ) and not has_global_permission(user, adapter.permission):
                     raise OnyxError(
                         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -133,6 +130,16 @@ def mutate_resource_access[Resource](
                         users = dict(current.user_shares) | users
                     if current.owner_user_id is not None:
                         users.pop(current.owner_user_id, None)
+                if (
+                    users is not None
+                    and users != current.user_shares
+                    and current.owner_user_id is None
+                    and not has_global_permission(user, adapter.permission)
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                        "Company user grants require global manage-skills permission.",
+                    )
                 adapter.write(
                     resource,
                     replace(

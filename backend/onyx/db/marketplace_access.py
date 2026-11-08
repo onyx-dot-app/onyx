@@ -23,7 +23,9 @@ from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import Tier
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.variable_functionality import is_ee_available
+
+IS_ENTERPRISE_BUILD = is_ee_available()
 
 
 def _lock_marketplace(marketplace_id: UUID, db_session: Session) -> Marketplace:
@@ -49,7 +51,7 @@ def _copy_access(
 ) -> set[UUID]:
     if marketplace.owner_user_id is not None:
         return set()
-    community = not global_version.is_ee_version()
+    community = not IS_ENTERPRISE_BUILD
     shares = [] if community else marketplace.group_shares
     groups = {share.user_group_id: share.permission for share in shares}
     policies = {share.user_group_id: share.installation_policy for share in shares}

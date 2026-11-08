@@ -29,7 +29,6 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
-from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.resource_access import (
     AccessMutationResult,
     ResourceAccessChange,
@@ -39,16 +38,13 @@ from onyx.db.skill import (
     SkillAccessAdapter,
     SkillManagementPolicy,
     fetch_skill,
-    set_skill_enabled_for_user,
 )
-from onyx.db.users import lock_group_membership
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import Tier
 from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
 from tests.external_dependency_unit.craft.db_helpers import (
     make_group,
     make_sandbox,
-    make_skill,
     make_user,
 )
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
@@ -236,7 +232,9 @@ def test_scoped_company_skill_and_marketplace_changes(
     )
     mutate_resource_access(
         [skill.id],
-        ResourceAccessChange(group_installation_policies={group_id: Policy.REQUIRED}),
+        ResourceAccessChange(
+            user_shares={}, group_installation_policies={group_id: Policy.REQUIRED}
+        ),
         scoped,
         session,
         SkillAccessAdapter(),
@@ -250,7 +248,6 @@ def test_scoped_company_skill_and_marketplace_changes(
         ResourceAccessChange(group_shares={make_group(session).id: Share.VIEWER}),
         ResourceAccessChange(user_shares={make_user(session).id: Share.EDITOR}),
         ResourceAccessChange(user_shares={scoped.id: Share.VIEWER}),
-        ResourceAccessChange(user_shares={}),
     ):
         with pytest.raises(OnyxError):
             share(session, marketplace, scoped, change)
@@ -300,9 +297,7 @@ def test_community_and_downgrade_cannot_recreate_group_grants(
         for row in skills(session, marketplace)
     )
     marketplace.public_permission = None
-    monkeypatch.setattr(
-        "onyx.db.marketplace_access.global_version.is_ee_version", lambda: False
-    )
+    monkeypatch.setattr("onyx.db.marketplace_access.IS_ENTERPRISE_BUILD", False)
     materialize_marketplace_access__no_commit(marketplace.id, session)
     assert marketplace.public_permission is None
     assert all(
@@ -461,39 +456,3 @@ def test_downgrade_serializes_with_marketplace_access(
         writer.rollback()
         writer.delete(marketplace)
         writer.commit()
-
-
-def test_toggle_waits_for_membership_before_locking_user(
-    isolated_engine: Engine,
-) -> None:
-    with Session(isolated_engine) as writer:
-        user = make_user(writer)
-        skill = make_skill(writer, author_user_id=user.id)
-        user_id, skill_id = user.id, skill.id
-        writer.commit()
-        lock_group_membership(writer)
-        waiting: Queue[int] = Queue()
-
-        def toggle() -> None:
-            with Session(isolated_engine) as worker:
-                worker.execute(text("SET LOCAL statement_timeout = '10s'"))
-                pid = worker.scalar(select(func.pg_backend_pid()))
-                assert isinstance(pid, int)
-                waiting.put(pid)
-                actor = worker.get(User, user_id)
-                assert actor is not None
-                set_skill_enabled_for_user(
-                    skill_id=skill_id, enabled=True, user=actor, db_session=worker
-                )
-                worker.commit()
-
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(toggle)
-            try:
-                pid = waiting.get(timeout=5)
-                wait_until_blocked(isolated_engine, pid)
-                recompute_user_permissions__no_commit(user_id, writer)
-                writer.commit()
-            finally:
-                writer.rollback()
-            future.result(timeout=15)

@@ -255,7 +255,7 @@ The library preview of an external-app skill calls the same renderer
     receive defaults; personal shares and company overrides survive sync. Reset clears
     individual grants and restores following. Membership locks precede resource locks,
     including reset's marketplace-before-skill order and preference user locks.
-    Scoped managers cannot edit direct-user grants on company skills. MIT-only company
+    Scoped managers may preserve but cannot change direct-user grants on company skills. MIT-only company
     followers are public. Licensed builds copy stored defaults even during license
     failures. Explicit downgrade persists public defaults and removes marketplace
     group grants so sync cannot recreate them.
