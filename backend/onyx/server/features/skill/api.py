@@ -1120,7 +1120,7 @@ def share_current_user_skill(
 @user_router.post("/custom/{skill_id}/reset-marketplace-access")
 def reset_current_skill_marketplace_access(
     skill_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.MANAGE_SKILLS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     affected = reset_marketplace_skill_access__no_commit(skill_id, user, db_session)
