@@ -482,6 +482,8 @@ export default function CostOverridesPanel() {
         font="main-content-emphasis"
         title={t("panel.title")}
         description={markdown(t("panel.description"))}
+        padding={0}
+        center
         rightChildren={
           <Button
             icon={SvgPlus}
