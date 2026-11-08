@@ -78,15 +78,21 @@ class CodeModeCall(BaseModel):
     def is_error(self) -> bool:
         return self.state in ("error", "unfinished")
 
-    def unfinished(self) -> "CodeModeCall":
-        """This call, recorded as still running when its program ended. The error
-        details make clients show it as failed."""
+    def failed(self, message: str) -> "CodeModeCall":
+        """This call, ended with an error; the error details make clients show it
+        as failed."""
         return self.model_copy(
             update={
-                "state": "unfinished",
-                "content": UNFINISHED_CALL_MESSAGE,
-                "details": ToolExecutionError(message=UNFINISHED_CALL_MESSAGE),
+                "state": "error",
+                "content": message,
+                "details": ToolExecutionError(message=message),
             }
+        )
+
+    def unfinished(self) -> "CodeModeCall":
+        """This call, recorded as still running when its program ended."""
+        return self.failed(UNFINISHED_CALL_MESSAGE).model_copy(
+            update={"state": "unfinished"}
         )
 
 

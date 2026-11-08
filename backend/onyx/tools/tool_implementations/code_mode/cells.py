@@ -1046,14 +1046,7 @@ class CodeCell:
             raise RuntimeError(CANCELLED_CALL_MESSAGE) from error
         except Exception as error:
             # The call ended with an exception, which the program sees.
-            message = str(error) or type(error).__name__
-            failed = started.model_copy(
-                update={
-                    "state": "error",
-                    "content": message,
-                    "details": ToolExecutionError(message=message),
-                }
-            )
+            failed = started.failed(str(error) or type(error).__name__)
             with self._lock:
                 if self._calls[external.index].ended_in is None:
                     self._record(_bounded_call(failed, MAX_SAVED_CALL_CHARS))
