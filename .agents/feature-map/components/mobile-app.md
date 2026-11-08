@@ -29,7 +29,8 @@ source selection stay on the device.
 The user cannot regenerate or edit a message, give feedback, compare models,
 use voice, or take a photo with the camera. Tool activity (search, code,
 image generation, deep research, memory) shows as an empty step in the
-timeline. Answer text and reasoning render. Generated images from all steps
+timeline. A code mode program has no step; each tool call it makes shows as its
+own step. Answer text and reasoning render. Generated images from all steps
 appear once above the answer, with their full contents visible.
 
 After an answer ends, Send stays disabled until the server confirms that the
