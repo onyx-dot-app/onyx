@@ -1,6 +1,5 @@
 import time
 from collections.abc import Callable, Generator
-from concurrent.futures import Future
 from contextlib import contextmanager
 from typing import Any
 
@@ -8,8 +7,8 @@ from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.session import SessionTransaction
 
-from onyx.chat.models import ChatFullResponse, ChatResponseOutcome
-from onyx.chat.process_message import gather_stream_full, handle_stream_message_objects
+from onyx.chat.models import ChatFullResponse
+from onyx.chat.process_message import run_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
@@ -87,7 +86,7 @@ def _chat_full_response_to_eval_result(
     full: ChatFullResponse,
     stream_start_time: float,
 ) -> ChatFullEvalResult:
-    """Map ChatFullResponse from gather_stream_full to eval result components."""
+    """Map ChatFullResponse from run_chat_turn to eval result components."""
     tools_called = [tc.tool_name for tc in full.tool_calls]
     tool_call_details: list[dict[str, Any]] = [
         {"tool_name": tc.tool_name, "tool_arguments": tc.tool_arguments}
@@ -229,13 +228,7 @@ def _get_answer_with_tools(
             )
 
             stream_start_time = time.time()
-            response_future: Future[ChatResponseOutcome] = Future()
-            packets = handle_stream_message_objects(
-                new_msg_req=request,
-                user=user,
-                response_future=response_future,
-            )
-            full = gather_stream_full(packets, response_future)
+            full = run_chat_turn(new_msg_req=request, user=user)
 
             result = _chat_full_response_to_eval_result(full, stream_start_time)
 
@@ -359,7 +352,7 @@ def _get_multi_turn_answer_with_tools(
                         ),
                     )
 
-                # Create request for this turn using SendMessageRequest (same API as handle_stream_message_objects)
+                # Create request for this turn using SendMessageRequest (same API as run_chat_turn)
                 # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
                 preferred_tool_id = _preferred_tool_id(db_session, msg.preferred_tool)
                 request = SendMessageRequest(
@@ -371,15 +364,8 @@ def _get_multi_turn_answer_with_tools(
                     preferred_tool_id=preferred_tool_id,
                 )
 
-                # Stream and gather results for this turn via handle_stream_message_objects + gather_stream_full
                 stream_start_time = time.time()
-                response_future: Future[ChatResponseOutcome] = Future()
-                packets = handle_stream_message_objects(
-                    new_msg_req=request,
-                    user=user,
-                    response_future=response_future,
-                )
-                full = gather_stream_full(packets, response_future)
+                full = run_chat_turn(new_msg_req=request, user=user)
 
                 result = _chat_full_response_to_eval_result(full, stream_start_time)
 

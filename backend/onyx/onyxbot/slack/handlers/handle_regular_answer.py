@@ -1,14 +1,13 @@
 import functools
 from collections.abc import Callable
-from concurrent.futures import Future
 from typing import Any, Optional, TypeVar
 
 from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import get_anonymous_user
-from onyx.chat.models import ChatFullResponse, ChatResponseOutcome
-from onyx.chat.process_message import gather_stream_full, handle_stream_message_objects
+from onyx.chat.models import ChatFullResponse
+from onyx.chat.process_message import run_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.configs.onyxbot_configs import (
     ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER,
@@ -314,15 +313,12 @@ def handle_regular_answer(
     ) -> ChatFullResponse:
         token = CURRENT_USER_ID_CONTEXTVAR.set(str(usage_user.id))
         try:
-            response_future: Future[ChatResponseOutcome] = Future()
-            packets = handle_stream_message_objects(
+            answer = run_chat_turn(
                 new_msg_req=new_message_request,
-                response_future=response_future,
                 user=onyx_user,
                 additional_context=slack_context_str,
                 slack_context=message_info.slack_context,
             )
-            answer = gather_stream_full(packets, response_future)
         finally:
             CURRENT_USER_ID_CONTEXTVAR.reset(token)
 

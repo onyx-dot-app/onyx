@@ -836,3 +836,27 @@ def gather_stream_full(
         incognito=incognito,
         error_msg=outcome.error or (error.error if error else None),
     )
+
+
+def run_chat_turn(
+    new_msg_req: SendMessageRequest,
+    user: User,
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
+    additional_context: str | None = None,
+    slack_context: SlackContext | None = None,
+) -> ChatFullResponse:
+    """Run one chat turn to completion for in-process, non-streaming callers."""
+    response_future = Future[ChatResponseOutcome]()
+    packets = handle_stream_message_objects(
+        new_msg_req=new_msg_req,
+        user=user,
+        litellm_additional_headers=litellm_additional_headers,
+        custom_tool_additional_headers=custom_tool_additional_headers,
+        mcp_headers=mcp_headers,
+        additional_context=additional_context,
+        slack_context=slack_context,
+        response_future=response_future,
+    )
+    return gather_stream_full(packets, response_future)

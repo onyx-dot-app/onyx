@@ -139,9 +139,7 @@ def _assert_access_denied_response(
         ) as mock_get_persona_by_id,
         patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel") as mock_respond,
         patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react") as mock_update_react,
-        patch(
-            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects"
-        ) as mock_handle_stream_message_objects,
+        patch(f"{_HANDLE_REGULAR_ANSWER}.run_chat_turn") as mock_run_chat_turn,
     ):
         result = handle_regular_answer(
             message_info=message_info,
@@ -174,7 +172,7 @@ def _assert_access_denied_response(
         assert mock_update_react.call_args.kwargs["remove"] is True
     else:
         mock_update_react.assert_not_called()
-    mock_handle_stream_message_objects.assert_not_called()
+    mock_run_chat_turn.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +470,7 @@ def test_persona_access_denied_cancels_feedback_reminder() -> None:
         ),
         patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel"),
         patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react"),
-        patch(f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects"),
+        patch(f"{_HANDLE_REGULAR_ANSWER}.run_chat_turn"),
     ):
         result = handle_regular_answer(
             message_info=_make_slack_message_info(ChannelType.PUBLIC_CHANNEL),
@@ -509,7 +507,7 @@ def test_private_channel_non_ephemeral_attributes_usage(
     logger = _mock_logger()
     observed_user_ids: list[str | None] = []
 
-    def _gather_stream(_: object, _future: object) -> ChatFullResponse:
+    def _run_chat_turn(**_kwargs: object) -> ChatFullResponse:
         observed_user_ids.append(get_current_user_id())
         return ChatFullResponse(
             answer="answer",
@@ -542,17 +540,12 @@ def test_private_channel_non_ephemeral_attributes_usage(
             return_value=("private-channel", False),
         ),
         patch(
-            f"{_HANDLE_REGULAR_ANSWER}.gather_stream_full",
-            side_effect=_gather_stream,
-        ),
-        patch(
             f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks",
             return_value=[],
         ),
         patch(
-            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
-            return_value=iter(()),
-        ) as mock_handle_stream_message_objects,
+            f"{_HANDLE_REGULAR_ANSWER}.run_chat_turn", side_effect=_run_chat_turn
+        ) as mock_run_chat_turn,
         patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel") as mock_respond,
         patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react") as mock_update_react,
     ):
@@ -579,7 +572,7 @@ def test_private_channel_non_ephemeral_attributes_usage(
     else:
         mock_get_service_account.assert_called_once_with(db_session)
 
-    stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
+    stream_call_kwargs = mock_run_chat_turn.call_args.kwargs
     assert stream_call_kwargs["user"] is anonymous_user
     assert stream_call_kwargs["new_msg_req"].chat_session_info.persona_id == 123
     assert observed_user_ids == [str(usage_user.id)]
@@ -637,7 +630,7 @@ def test_search_tool_preferred_only_when_usable(
     user = MagicMock()
     user.id = uuid4()
 
-    def _gather_stream(_: object, _future: object) -> ChatFullResponse:
+    def _run_chat_turn(**_kwargs: object) -> ChatFullResponse:
         return ChatFullResponse(
             answer="answer",
             answer_citationless="answer",
@@ -670,9 +663,6 @@ def test_search_tool_preferred_only_when_usable(
             return_value=("channel", False),
         ),
         patch(
-            f"{_HANDLE_REGULAR_ANSWER}.gather_stream_full", side_effect=_gather_stream
-        ),
-        patch(
             f"{_HANDLE_REGULAR_ANSWER}.build_slack_response_blocks", return_value=[]
         ) as build_blocks,
         patch(
@@ -680,9 +670,8 @@ def test_search_tool_preferred_only_when_usable(
             return_value=("Question", [Tag(tag_key="Channel", tag_value="eng")]),
         ),
         patch(
-            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
-            return_value=iter(()),
-        ) as mock_handle_stream_message_objects,
+            f"{_HANDLE_REGULAR_ANSWER}.run_chat_turn", side_effect=_run_chat_turn
+        ) as mock_run_chat_turn,
         patch(f"{_HANDLE_REGULAR_ANSWER}.SearchTool") as mock_search_tool_cls,
         patch(f"{_HANDLE_REGULAR_ANSWER}.respond_in_thread_or_channel"),
         patch(f"{_HANDLE_REGULAR_ANSWER}.update_emote_react"),
@@ -700,7 +689,7 @@ def test_search_tool_preferred_only_when_usable(
             feedback_reminder_id=None,
         )
 
-    stream_call_kwargs = mock_handle_stream_message_objects.call_args.kwargs
+    stream_call_kwargs = mock_run_chat_turn.call_args.kwargs
     assert stream_call_kwargs["new_msg_req"].preferred_tool_id == expected_preferred_id
 
     answer = build_blocks.call_args.kwargs["answer"]

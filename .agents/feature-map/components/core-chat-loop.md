@@ -366,8 +366,10 @@ termination grace period is much shorter, so it ends running turns first
   to `ChatAgent.capture_state` and `restore_state`. Decide what each incognito
   mode stores ([[chat-persistence#incognito-decision-per-field]]).
 - `in-process-caller` **A new in-process caller.** Copy the Slack bot: it calls
-  `handle_stream_message_objects` and consumes it with `gather_stream`. List the
-  callers with `git grep -n "handle_stream_message_objects(" backend`. Do not
+  `chat/process_message.py:run_chat_turn`, which drains
+  `handle_stream_message_objects` into a `ChatFullResponse` with
+  `gather_stream_full`. List the callers with
+  `git grep -n "run_chat_turn(\|handle_stream_message_objects(" backend`. Do not
   start a `ChatAgent` directly: admission, delivery and saving live in
   `start_chat_turn`.
 - `investigate-stuck-turn` **Investigate a turn that does not end, a stop that
