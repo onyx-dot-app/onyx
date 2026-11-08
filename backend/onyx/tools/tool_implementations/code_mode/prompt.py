@@ -78,7 +78,7 @@ def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
 - Each program is limited to {_limits_text(limits)}.
 - A program that runs longer than `yield_time_ms`, or that calls `yield_control()`, returns its output so far and keeps running as cell N. Call `wait_code` with the cell id to get more output or to stop the cell. Do other work while a cell runs. Open cells stop when you give your final answer, so wait for each cell whose result you need first. A cell stops after {limits.lifetime_seconds / 60:g} minutes.
 - Supported Python: functions, closures, lambdas, comprehensions, f-strings, `try`/`except`/`finally`, `match`, `@dataclass`, and classes without base classes. Not supported: class inheritance, custom exception classes (catch `Exception`), generators (`yield`), `del`, and `async with`.
-- Modules you can import: {", ".join(IMPORTABLE_MODULES)}. Other imports fail.
+- These modules are already imported in every program: {", ".join(IMPORTABLE_MODULES)}. Other modules are not available.
 - The program is type-checked before it runs. A wrong argument name or type in a tool call stops the program before any tool runs.
 - Search results have a `document` number. To cite a result in your answer, print its `document` number and write [n] in the answer, where n is that number.{deferred_note}
 
