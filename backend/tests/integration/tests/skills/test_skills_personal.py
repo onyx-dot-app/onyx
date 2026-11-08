@@ -301,16 +301,27 @@ def test_admin_can_hard_delete_personal_skill(
     assert name not in admin_names
 
 
-def test_owner_can_share_org_wide_and_retain_edit_permissions(
+def test_admin_shares_org_wide_and_owner_retains_edit_permissions(
+    admin_user: DATestUser,
     basic_user: DATestUser,
     other_basic_user: DATestUser,
 ) -> None:
     name = f"personal-promote-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, name=name)
 
+    # Company access needs global manage-skills, which the owner lacks.
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.patch_personal(
+            skill,
+            basic_user,
+            SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
+        )
+    assert exc_info.value.response.status_code == 403
+    assert name not in _user_custom_names(other_basic_user)
+
     promoted = SkillManager.patch_personal(
         skill,
-        basic_user,
+        admin_user,
         SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
     assert promoted.public_permission is not None
@@ -369,7 +380,7 @@ def test_user_enablement_is_independent(
     skill = SkillManager.create_personal(basic_user, name=name)
     SkillManager.patch_personal(
         skill,
-        basic_user,
+        admin_user,
         SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
     )
 
