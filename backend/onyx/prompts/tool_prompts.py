@@ -37,7 +37,8 @@ CODE_MODE_SEARCH_USAGE = (
     "expensive. Pass all queries for one information need in one call, for example "
     '`await internal_search(queries=["first phrasing", "second phrasing"])`. Do not '
     "split them into one call per query, and do not `asyncio.gather` single-query "
-    "calls. Search again only for a follow-up that depends on earlier results."
+    "calls. Search again when earlier results are insufficient or when a follow-up "
+    "depends on them."
 )
 
 

@@ -1,10 +1,13 @@
-import inspect
 import json
-from typing import NotRequired, TypedDict
 
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import sandbox_filename_for_document
-from onyx.tools.models import CodeModeResultKind, CodeModeResultSpec
+from onyx.tools.models import (
+    CodeModeResultKind,
+    CodeModeResultSpec,
+    SearchResult,
+    SearchResults,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -29,38 +32,8 @@ FILE_ASSOCIATED_GUIDANCE = (
 )
 
 
-# Search-like tool results as the model and code mode programs read them
-# (convert_inference_sections_to_llm_string). The code mode stubs declare these
-# classes from their source.
-class SearchResult(TypedDict):
-    document: int
-    """Citation number. Cite it in the answer as [n]."""
-    title: str
-    content: str
-    url: NotRequired[str]
-    updated_at: NotRequired[str]
-    authors: NotRequired[list[str]]
-    source_type: NotRequired[str]
-    file_name: NotRequired[str]
-    document_identifier: NotRequired[str]
-    metadata: NotRequired[str]
-    """JSON-encoded metadata of the document."""
-
-
-class SearchResults(TypedDict):
-    results: list[SearchResult]
-    note: NotRequired[str]
-    message: NotRequired[str]
-
-
 SEARCH_RESULTS_CODE_MODE_RESULT = CodeModeResultSpec(
-    kind=CodeModeResultKind.JSON_OBJECT,
-    annotation=SearchResults.__name__,
-    declaration="\n\n\n".join(
-        inspect.getsource(typed_dict).strip()
-        for typed_dict in (SearchResult, SearchResults)
-    ),
-    cites=True,
+    kind=CodeModeResultKind.JSON_OBJECT, model=SearchResults, cites=True
 )
 
 
@@ -95,69 +68,41 @@ def convert_inference_sections_to_llm_string(
             current_citation_id += 1
 
     # Second pass: build results with citation_ids assigned per document
-    results = []
-
+    results: list[SearchResult] = []
     for section in top_sections:
         chunk = section.center_chunk
-        document_id = chunk.document_id
-        citation_id = document_id_to_citation_id[document_id]
-
-        # Combine primary and secondary owners for authors
-        authors = None
-        if chunk.primary_owners or chunk.secondary_owners:
-            authors = []
-            if chunk.primary_owners:
-                authors.extend(chunk.primary_owners)
-            if chunk.secondary_owners:
-                authors.extend(chunk.secondary_owners)
-
-        # Format updated_at as ISO string if available
-        updated_at_str = None
-        if chunk.updated_at:
-            updated_at_str = chunk.updated_at.isoformat()
-
-        # Build result dictionary in desired order, only including non-None/empty fields
-        result = {
-            "document": citation_id,
-            "title": chunk.semantic_identifier,
-        }
-        if updated_at_str is not None:
-            result["updated_at"] = updated_at_str
-        if authors is not None:
-            result["authors"] = authors
-        if include_source_type:
-            result["source_type"] = chunk.source_type.value
-        if include_link:
-            # Get the first link from the center chunk's source_links dict
-            link = None
-            if chunk.source_links:
-                # source_links is dict[int, str], get the first value
-                link = next(iter(chunk.source_links.values()), None)
-            if link:
-                result["url"] = link
-        if include_document_id:
-            result["document_identifier"] = chunk.document_id
-        if chunk.file_id is not None:
-            filename = sandbox_filename_for_document(
-                chunk.semantic_identifier, chunk.file_id
+        link = (
+            next(iter(chunk.source_links.values()), None)
+            if include_link and chunk.source_links
+            else None
+        )
+        filename = (
+            sandbox_filename_for_document(chunk.semantic_identifier, chunk.file_id)
+            if chunk.file_id is not None
+            else None
+        )
+        results.append(
+            SearchResult(
+                document=document_id_to_citation_id[chunk.document_id],
+                title=chunk.semantic_identifier,
+                updated_at=chunk.updated_at.isoformat() if chunk.updated_at else None,
+                authors=[*(chunk.primary_owners or []), *(chunk.secondary_owners or [])]
+                or None,
+                source_type=chunk.source_type.value if include_source_type else None,
+                url=link or None,
+                document_identifier=chunk.document_id if include_document_id else None,
+                file_name=filename,
+                content=FILE_ASSOCIATED_GUIDANCE.format(
+                    filename=filename, content=chunk.content
+                )
+                if filename is not None
+                else section.combined_content,
+                metadata=json.dumps(chunk.metadata, ensure_ascii=False)
+                if chunk.metadata
+                else None,
             )
-            result["file_name"] = filename
-
-            result["content"] = FILE_ASSOCIATED_GUIDANCE.format(
-                filename=filename, content=chunk.content
-            )
-        else:
-            result["content"] = section.combined_content
-        if chunk.metadata:
-            result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
-        results.append(result)
-
-    payload: dict[str, object] = {}
-    payload["results"] = results
-    if note:
-        payload["note"] = note
-
+        )
     return (
-        json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
+        SearchResults(results=results, note=note or None).model_dump_json(),
         citation_mapping,
     )

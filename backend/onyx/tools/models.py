@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Callable, Literal, Self
+from typing import Annotated, Any, Callable, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -343,6 +343,40 @@ class LlmBashExecutionResult(BaseModel):
     error: str | None = None
 
 
+def _is_none(value: object) -> bool:
+    return value is None
+
+
+# A key that the JSON leaves out when it has no value.
+_OMITTED_WHEN_NONE = Field(exclude_if=_is_none)
+
+
+class SearchResult(BaseModel):
+    """One document of a search-like tool result, as the model and code mode
+    programs read it."""
+
+    document: int = Field(description="Citation number. Cite it in the answer as [n].")
+    title: str
+    updated_at: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    authors: Annotated[list[str] | None, _OMITTED_WHEN_NONE] = None
+    source_type: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    document_identifier: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    content: str
+    metadata: Annotated[str | None, _OMITTED_WHEN_NONE] = Field(
+        default=None, description="JSON-encoded metadata of the document."
+    )
+
+
+class SearchResults(BaseModel):
+    """The content of internal search, web search, and open URL results."""
+
+    results: list[SearchResult]
+    note: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    message: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+
+
 class CodeModeExposure(str, Enum):
     """How code mode offers a tool to the model."""
 
@@ -392,9 +426,6 @@ class CodeModeResultSpec(BaseModel):
     kind: CodeModeResultKind
     # The stub's return annotation; the model's name when unset, else Any.
     annotation: str | None = None
-    # Python declarations of the types that the annotation names, for content
-    # that no model describes.
-    declaration: str | None = None
     # The model whose JSON the content is. The stub module declares it, and the
     # models of its fields, as TypedDicts of the same names.
     model: type[BaseModel] | None = None

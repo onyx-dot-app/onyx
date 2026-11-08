@@ -15,6 +15,7 @@ from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
 from onyx.tools.models import (
     CodeModeExposure,
     CodeModeResultSpec,
+    SearchResults,
     ToolCallException,
     ToolContext,
 )
@@ -324,12 +325,10 @@ class WebSearchTool(Tool):
 
         # Format for LLM
         if not all_search_results:
-            docs_str = json.dumps(
-                {
-                    "results": [],
-                    "message": "The web search completed but returned no results for any of the queries. Do not search again.",
-                }
-            )
+            docs_str = SearchResults(
+                results=[],
+                message="The web search completed but returned no results for any of the queries. Do not search again.",
+            ).model_dump_json()
             citation_mapping: dict[int, str] = {}
         else:
             docs_str, citation_mapping = convert_inference_sections_to_llm_string(
