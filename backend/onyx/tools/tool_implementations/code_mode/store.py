@@ -294,14 +294,13 @@ def commit_limit_error(
             if value is not None
         )
     )
-    error = store_limit_error(
+    return store_limit_error(
         before=before,
         after=after,
         committed=current.committed_bytes
         + sum(entry_bytes(key, value) for key, value in writes.items()),
         stores_values=any(value is not None for value in writes.values()),
     )
-    return None if error is None else f"with the writes of other programs, {error}"
 
 
 def store_summary(writes: Mapping[str, JsonValue]) -> str | None:

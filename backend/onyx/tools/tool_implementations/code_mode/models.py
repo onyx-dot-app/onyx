@@ -50,6 +50,7 @@ CodeModeStatus = Literal[ClosedStatus, "running"]
 # How a call ended: `running` calls had not ended when the observation ended;
 # `unfinished` calls were still running when the program ended.
 CodeModeCallState = Literal["running", "ok", "error", "unfinished"]
+UNFINISHED_CALL_MESSAGE = "The call did not finish before the program ended."
 
 
 class CodeModeCall(BaseModel):
@@ -76,6 +77,17 @@ class CodeModeCall(BaseModel):
     @property
     def is_error(self) -> bool:
         return self.state in ("error", "unfinished")
+
+    def unfinished(self) -> "CodeModeCall":
+        """This call, recorded as still running when its program ended. The error
+        details make clients show it as failed."""
+        return self.model_copy(
+            update={
+                "state": "unfinished",
+                "content": UNFINISHED_CALL_MESSAGE,
+                "details": ToolExecutionError(message=UNFINISHED_CALL_MESSAGE),
+            }
+        )
 
 
 def json_text(value: JsonValue) -> str:

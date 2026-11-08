@@ -99,7 +99,6 @@ from onyx.utils.threadpool_concurrency import start_thread_future
 
 logger = setup_logger()
 
-UNFINISHED_CALL_MESSAGE = "The call did not finish before the program ended."
 CANCELLED_CALL_MESSAGE = "The tool call was cancelled."
 TERMINATED_MESSAGE = "The cell was terminated."
 # Text kept for each call in saved and streamed results. The program receives the
@@ -395,11 +394,7 @@ def _interrupted_amendments(
             details,
             CellClosing(reason="interrupted", status="cancelled"),
             cell_calls=[
-                call
-                if call.state != "running"
-                else call.model_copy(
-                    update={"state": "unfinished", "content": UNFINISHED_CALL_MESSAGE}
-                )
+                call if call.state != "running" else call.unfinished()
                 for _, call in sorted(calls[cell_id].items())
             ],
         )
@@ -766,14 +761,9 @@ class CodeCell:
         """Every call of the cell in index order. A call still running is
         unfinished when nothing reports it later; the caller holds the lock."""
         return [
-            record.call
-            if record.ended_in is not None
-            else record.call.model_copy(
-                update={
-                    "state": "unfinished" if final else "running",
-                    "content": UNFINISHED_CALL_MESSAGE if final else "",
-                }
-            )
+            record.call.unfinished()
+            if record.ended_in is None and final
+            else record.call
             for _, record in sorted(self._calls.items())
         ]
 
@@ -996,14 +986,7 @@ class CodeCell:
                 )
                 for record in self._calls.values():
                     if record.ended_in is None:
-                        self._record(
-                            record.call.model_copy(
-                                update={
-                                    "content": UNFINISHED_CALL_MESSAGE,
-                                    "state": "unfinished",
-                                }
-                            )
-                        )
+                        self._record(record.call.unfinished())
                 self._ended_as = (
                     "terminated"
                     if end.status == "cancelled" and self._stop == "terminated"

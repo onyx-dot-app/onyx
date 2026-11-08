@@ -29,6 +29,7 @@ from onyx.tools.models import (
     CodeModeExposure,
     CustomToolCallSummary,
     ToolContext,
+    ToolExecutionError,
 )
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.code_mode import (
@@ -37,12 +38,12 @@ from onyx.tools.tool_implementations.code_mode import (
 from onyx.tools.tool_implementations.code_mode.cells import (
     CELL_SPAN_NAME,
     MAX_SAVED_CALL_CHARS,
-    UNFINISHED_CALL_MESSAGE,
     CodeCells,
     durable_details,
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.code_mode.models import (
+    UNFINISHED_CALL_MESSAGE,
     CodeModeCallFinished,
     CodeModeCallProgress,
     CodeModeCallStarted,
@@ -328,6 +329,12 @@ def test_cancellation_stops_calls_and_raises() -> None:
     finished = [e for e in invocation.events if isinstance(e, CodeModeCallFinished)]
     assert {event.call.state for event in finished} == {"unfinished"}
     assert {event.call.content for event in finished} == {UNFINISHED_CALL_MESSAGE}
+    # Clients show an unfinished call as failed.
+    assert {
+        event.call.details.message
+        for event in finished
+        if isinstance(event.call.details, ToolExecutionError)
+    } == {UNFINISHED_CALL_MESSAGE}
     # Nothing is sent once the execution has closed.
     assert isinstance(invocation.events[-1], CodeModeCallFinished)
 
