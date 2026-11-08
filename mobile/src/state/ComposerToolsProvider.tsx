@@ -34,7 +34,7 @@ import {
 import { useAgentPreferences } from "@/hooks/useAgentPreferences";
 import { useConnectorSources } from "@/hooks/useConnectorSources";
 import { useDeepResearchToggle } from "@/hooks/useDeepResearchToggle";
-import { useForcedTools } from "@/hooks/useForcedTools";
+import { usePreferredTools } from "@/hooks/usePreferredTools";
 import { useSelectedModel } from "@/hooks/useSelectedModel";
 import { useSourceSelection } from "@/hooks/useSourceSelection";
 
@@ -50,8 +50,8 @@ export interface ComposerTools {
   // A row in actionTools whose backend integration isn't configured right now (e.g. no image
   // provider set up) — still assigned to the agent, but not usable until an admin configures it.
   unavailableToolIds: number[];
-  forcedToolId: number | null;
-  toggleForcedTool: (toolId: number) => void;
+  preferredToolId: number | null;
+  togglePreferredTool: (toolId: number) => void;
   disabledToolIds: number[];
   toggleToolEnabled: (toolId: number) => void;
   modelOptions: ModelOption[];
@@ -80,7 +80,7 @@ interface ComposerToolsInputs {
    * landing composer is detectable: a chat opened from a project has no project id on the wire.
    */
   isProjectWorkflow: boolean;
-  // Crossing this boundary releases a forced tool.
+  // Crossing this boundary releases a preferred tool.
   projectId: number | null;
 }
 
@@ -95,16 +95,30 @@ export function useComposerToolsState({
     useAvailableTools();
   const agentId = agent?.id;
 
-  const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
-    chatSessionId,
-    agentId,
-  });
-  const { forcedToolId, toggleForcedTool, forceTool, clearForcedTool } =
-    useForcedTools({
+  const { deepResearchEnabled, toggleDeepResearch: toggleResearchMode } =
+    useDeepResearchToggle({
       chatSessionId,
       agentId,
-      projectId,
     });
+  const {
+    preferredToolId,
+    togglePreferredTool,
+    preferTool,
+    clearPreferredTool,
+  } = usePreferredTools({
+    chatSessionId,
+    agentId,
+    projectId,
+  });
+  useEffect(() => {
+    if (preferredToolId !== null && deepResearchEnabled) toggleResearchMode();
+  }, [preferredToolId, deepResearchEnabled, toggleResearchMode]);
+
+  const toggleDeepResearch = useCallback(() => {
+    if (!deepResearchEnabled) clearPreferredTool();
+    toggleResearchMode();
+  }, [deepResearchEnabled, clearPreferredTool, toggleResearchMode]);
+
   const {
     isLoaded: preferencesLoaded,
     disabledToolIdsFor,
@@ -227,11 +241,11 @@ export function useComposerToolsState({
     (toolId: number, disabled: boolean): Promise<void> => {
       const currentAgentId = effectiveAgentId;
       if (currentAgentId == null) return Promise.resolve();
-      // The backend fails the turn when the forced tool isn't among the constructed ones.
-      if (disabled && forcedToolId === toolId) clearForcedTool();
+      // The backend fails the turn when the preferred tool isn't among the constructed ones.
+      if (disabled && preferredToolId === toolId) clearPreferredTool();
       return setToolDisabled(currentAgentId, toolId, disabled);
     },
-    [clearForcedTool, effectiveAgentId, forcedToolId, setToolDisabled],
+    [clearPreferredTool, effectiveAgentId, preferredToolId, setToolDisabled],
   );
 
   /*
@@ -346,16 +360,16 @@ export function useComposerToolsState({
       toggleSourceSelection(source);
       if (sourceToolId == null) return;
       if (!wasEnabled) {
-        forceTool(sourceToolId);
-      } else if (enabledSourceCount <= 1 && forcedToolId === sourceToolId) {
-        clearForcedTool();
+        preferTool(sourceToolId);
+      } else if (enabledSourceCount <= 1 && preferredToolId === sourceToolId) {
+        clearPreferredTool();
       }
     },
     [
-      clearForcedTool,
+      clearPreferredTool,
       enabledSourceCount,
-      forceTool,
-      forcedToolId,
+      preferTool,
+      preferredToolId,
       isSourceEnabled,
       sourceToolId,
       toggleSourceSelection,
@@ -364,15 +378,20 @@ export function useComposerToolsState({
 
   const enableAllSources = useCallback(() => {
     enableAllSourceSelection();
-    if (sourceToolId != null) forceTool(sourceToolId);
-  }, [enableAllSourceSelection, forceTool, sourceToolId]);
+    if (sourceToolId != null) preferTool(sourceToolId);
+  }, [enableAllSourceSelection, preferTool, sourceToolId]);
 
   const disableAllSources = useCallback(() => {
     disableAllSourceSelection();
-    if (sourceToolId != null && forcedToolId === sourceToolId) {
-      clearForcedTool();
+    if (sourceToolId != null && preferredToolId === sourceToolId) {
+      clearPreferredTool();
     }
-  }, [clearForcedTool, disableAllSourceSelection, forcedToolId, sourceToolId]);
+  }, [
+    clearPreferredTool,
+    disableAllSourceSelection,
+    preferredToolId,
+    sourceToolId,
+  ]);
 
   const notePendingSend = useCallback(
     (agentForSend: MinimalAgent | null) =>
@@ -387,12 +406,12 @@ export function useComposerToolsState({
       toggleDeepResearch,
       actionTools,
       unavailableToolIds,
-      forcedToolId,
+      preferredToolId,
       /*
        * Unwrapped: the effect already keeps "search on" and "some source on" equivalent. Web
        * re-enables every source here instead, which discards a partial selection.
        */
-      toggleForcedTool,
+      togglePreferredTool,
       disabledToolIds,
       toggleToolEnabled,
       modelOptions,
@@ -415,17 +434,21 @@ export function useComposerToolsState({
         const allowedToolIds = effectiveAgent
           ? computeAllowedToolIds(effectiveAgent.tools, disabledToolIds)
           : null;
-        // A forced id that's filtered out, or belongs to another agent, fails the turn mid-stream.
-        const forcedIsSendable =
-          forcedToolId != null &&
-          !disabledToolIds.includes(forcedToolId) &&
-          (effectiveAgent?.tools.some((tool) => tool.id === forcedToolId) ??
+        // A preferred id that's filtered out, or belongs to another agent, fails the turn mid-stream.
+        const preferenceIsSendable =
+          preferredToolId != null &&
+          !unavailableToolIds.includes(preferredToolId) &&
+          !disabledToolIds.includes(preferredToolId) &&
+          (effectiveAgent?.tools.some((tool) => tool.id === preferredToolId) ??
             false);
 
         return {
           deepResearch: showDeepResearch && deepResearchEnabled,
           allowedToolIds,
-          forcedToolId: forcedIsSendable ? forcedToolId : null,
+          preferredToolId:
+            preferenceIsSendable && !(showDeepResearch && deepResearchEnabled)
+              ? preferredToolId
+              : null,
           /*
            * Only the sources still on the menu: a stale pick from a wider agent would narrow the
            * search to something this one can't reach.
@@ -447,8 +470,8 @@ export function useComposerToolsState({
       toggleDeepResearch,
       actionTools,
       unavailableToolIds,
-      forcedToolId,
-      toggleForcedTool,
+      preferredToolId,
+      togglePreferredTool,
       disabledToolIds,
       toggleToolEnabled,
       modelOptions,

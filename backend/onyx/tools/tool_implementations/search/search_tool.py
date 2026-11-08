@@ -717,8 +717,10 @@ class SearchTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     QUERIES_FIELD: {
                         "type": "array",
@@ -901,6 +903,7 @@ class SearchTool(Tool):
                         (
                             section,
                             self.document_index,
+                            self.user,
                             self.retrieval_context_chunks,
                         ),
                     )
@@ -923,8 +926,8 @@ class SearchTool(Tool):
     ) -> ToolResult:
         """Retrieve documents using the original question and optional query variants."""
         # An explicitly empty source selection is a statement, not an absent
-        # filter: the tool still runs (it may be forced), and it honestly
-        # finds nothing. `None` keeps its meaning of "no source filter".
+        # filter: if the model calls the tool, it finds nothing.
+        # `None` means "no source filter".
         # Project-only searches ignore user filters, so the guard must too.
         if (
             self.user_selected_filters is not None
@@ -1449,6 +1452,7 @@ class SearchTool(Tool):
                     user_query=user_query,
                     llm=llm,
                     document_index=document_index,
+                    user=self.user,
                     expand_override=expand_override,
                     enforce_llm_input_budget=enforce_selection_input_budget,
                     decision_client=expansion_decision_client,
@@ -1479,6 +1483,7 @@ class SearchTool(Tool):
                     user_query=secondary_flows_user_query,
                     llm=selection_llm,
                     document_index=self.document_index,
+                    user=self.user,
                     enforce_llm_input_budget=enforce_selection_input_budget,
                     decision_client=rerank_client,
                     llm_fallback=False,

@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Suchquellen auswählen"
+      },
+      "preference": {
+        "tooltip": "{description}\nDieses Tool für diesen Chat bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
       }
     },
     "addMcpModal": {
@@ -6304,13 +6307,6 @@
           "title": "Gruppenberechtigungen"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} verwendet jetzt gruppenbasierte Berechtigungen. Der Zugriff wird pro Gruppe konfiguriert, sodass sich die Berechtigungen eines Benutzers aus allen Gruppen ergeben, denen er angehört.",
-        "learnMore": {
-          "label": "Mehr erfahren"
-        },
-        "title": "Die Berechtigungen haben sich geändert."
-      },
       "sharedResources": {
         "agent": {
           "description": "Agent"
@@ -10247,13 +10243,6 @@
           "label": "Benutzer einladen"
         },
         "title": "Benutzer & Anfragen"
-      },
-      "permissionsNotice": {
-        "description": "{appName} verwendet jetzt gruppenbasierte Berechtigungen. Die Rollen Curator und Global Curator wurden durch konfigurierbare Gruppenberechtigungen ersetzt, mit Managern pro Gruppe für eine eingegrenzte Verwaltung.",
-        "learnMoreButton": {
-          "label": "Mehr erfahren"
-        },
-        "title": "Die Berechtigungen haben sich geändert"
       },
       "resetPasswordModal": {
         "copyButton": {

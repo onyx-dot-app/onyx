@@ -220,14 +220,12 @@ class ResearchAgent(Agent, RestorableFeature):
             else RESEARCH_STEP_OUTPUT_TOKENS
         )
         options.reasoning_effort = self.reasoning_effort
-        tools = []
         if is_final_step:
             system_prompt = with_language_section(
                 RESEARCH_REPORT_PROMPT, self.language_section
             )
             reminder = USER_REPORT_QUERY.format(research_topic=research_topic)
         else:
-            tools = list(self.tools)
             tool_names = {tool.name for tool in self.application_tools}
             has_open_url = OpenURLTool.NAME in tool_names
             template = (
@@ -265,7 +263,7 @@ class ResearchAgent(Agent, RestorableFeature):
             sources=dict(self.citation_processor.citation_to_doc),
         )
         return PreparedStep(
-            tools=tools,
+            allowed_tool_names=frozenset() if is_final_step else None,
             options=options,
             stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S if is_final_step else None,
             output_metadata=output_metadata,

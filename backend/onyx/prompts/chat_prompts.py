@@ -115,6 +115,20 @@ Here is some additional context which may be relevant to the user query:
 """.strip()
 
 
+TOOL_PREFERENCE_REMINDER = (
+    "The user selected these operations for this request: {operations}. "
+    "{guidance} "
+    "If the selected operations are unsuitable or unavailable, explain why."
+)
+TOOL_PREFERENCE_GUIDANCE = (
+    "Prefer them when they help answer the request. "
+    "You may use other available tools or answer without tools."
+)
+TOOL_PREFERENCE_LAST_STEP_GUIDANCE = (
+    "No more tools can run. Answer from the available evidence."
+)
+
+
 TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
 This tool call completed but the results are no longer accessible.
 """.strip()

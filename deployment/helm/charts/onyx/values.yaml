@@ -35,7 +35,8 @@ global:
 #   - The Craft sandbox proxy runs non-root on a read-only root filesystem. An
 #     init container builds an additive bundle in its writable confdir and
 #     configures mitmproxy through SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
-#     to use that bundle for upstream TLS verification.
+#     to use that bundle for upstream TLS verification. SSL_CERT_FILE points
+#     HTTPX OAuth requests at the same bundle.
 # Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
 # and can't run older ones — the model servers now run nonroot (1001, see their
 # securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and

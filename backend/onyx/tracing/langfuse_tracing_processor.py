@@ -356,7 +356,6 @@ class LangfuseTracingProcessor(TracingProcessor):
                     generation_metadata["tools"] = data.tools
                 if data.model_config is not None:
                     for key in [
-                        "prompt_cache_chat_history",
                         "cacheable_prefix_msgs",
                         "cacheable_prefix_tokens",
                         "history_msgs",

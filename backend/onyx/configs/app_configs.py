@@ -1768,10 +1768,6 @@ LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
 
-PROMPT_CACHE_CHAT_HISTORY = (
-    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
-)
-
 # Opt-in cap on outgoing image-count for Azure providers (any model_provider
 # starting with "azure"). When enabled, requests are capped at 50 images each
 # (matching the documented Azure OpenAI ceiling) to avoid raw 400s from the

@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Select Search Sources"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
     "addMcpModal": {
@@ -6304,13 +6307,6 @@
           "title": "Group Permissions"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} now uses group-based permissions. Access is configured per group, so a user's permissions are the combination of every group they belong to.",
-        "learnMore": {
-          "label": "Learn more"
-        },
-        "title": "Permissions have changed."
-      },
       "sharedResources": {
         "agent": {
           "description": "agent"
@@ -10247,13 +10243,6 @@
           "label": "Invite Users"
         },
         "title": "Users & Requests"
-      },
-      "permissionsNotice": {
-        "description": "{appName} now uses group-based permissions. The Curator and Global Curator roles have been replaced by configurable group permissions, with per-group managers for scoped administration.",
-        "learnMoreButton": {
-          "label": "Learn more"
-        },
-        "title": "Permissions have changed"
       },
       "resetPasswordModal": {
         "copyButton": {

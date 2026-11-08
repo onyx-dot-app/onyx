@@ -77,8 +77,10 @@ class CodingAgentTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     CODING_AGENT_QUERY_KEY: {
                         "type": "string",

@@ -237,7 +237,7 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
         chat_session_id=chat_session.id,
         message="What is ticket 12 about?",
         user_performing_action=admin_user,
-        forced_tool_ids=[tool_id],
+        preferred_tool_id=tool_id,
     )
 
     tool_result = mock_llm.requests_in("chat")[-1].tool_result("call_ticket")

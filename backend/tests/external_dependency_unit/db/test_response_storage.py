@@ -128,7 +128,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.server.query_and_chat.session_loading import (
     load_session_tools,
     translate_assistant_message_to_packets,
@@ -683,6 +682,7 @@ def test_suspended_search_result_restores_after_database_round_trip(
             )
         ],
         progress=RunProgress(
+            tool_configuration_digest="test-tool-configuration",
             step_limit=3,
             action=RunAction.TOOLS,
             options=GenerationOptions(),
@@ -1182,9 +1182,6 @@ def test_old_rows_keep_the_legacy_reader(
     history = convert_chat_history(
         chat_history=capture_chat_history([response], {}, len),
         files=[],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=len,
     ).messages
     assert [message.text for message in history] == ["Existing answer"]
 
@@ -1518,13 +1515,14 @@ def test_child_multimodal_input_is_rejected_before_child_storage(
     assert db_session.get(ChatSession, child_id) is None
 
 
+@pytest.mark.parametrize("summary", ["Summary", ""])
 def test_compaction_saves_only_new_output_on_selected_ancestry(
-    db_session: Session, conversation: ChatSession
+    db_session: Session, conversation: ChatSession, summary: str
 ) -> None:
     first = _response(db_session, conversation)
     record = _record(first)
     checkpoint = CompactionCheckpoint(
-        summary="Summary",
+        summary=summary,
         covered_through_message_id=f"chat:{first.parent_message_id}",
     )
     record.checkpoint = checkpoint
@@ -1542,6 +1540,8 @@ def test_compaction_saves_only_new_output_on_selected_ancestry(
         )
     )
     assert len(summaries) == 1
+    assert summaries[0].message_type == MessageType.SUMMARY
+    assert summaries[0].message == summary
     assert summaries[0].parent_message_id == first.id
     selected = find_summary_for_ancestry(
         db_session, conversation.id, visible_message_ids(db_session, continued)
@@ -1558,8 +1558,11 @@ def test_compaction_saves_only_new_output_on_selected_ancestry(
     assert history.checkpoint == checkpoint
     assert history.messages[0].id == checkpoint.covered_through_message_id
     compacted = working_messages(history.messages, history.checkpoint)
-    assert compacted[0].text == "Conversation summary:\nSummary"
-    assert compacted[1:] == history.messages[1:]
+    if summary:
+        assert compacted[0].text == f"Conversation summary:\n{summary}"
+        assert compacted[1:] == history.messages[1:]
+    else:
+        assert compacted == history.messages[1:]
     alternate = _response(db_session, conversation)
     assert (
         find_summary_for_ancestry(
@@ -1875,24 +1878,6 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
             if isinstance(packet.obj, CodingAgentFinal)
         ]
         assert live_answers[-1] == saved_answers[-1] == "coding answer"
-
-
-def test_truncation_without_summary_does_not_create_summary_message(
-    db_session: Session, conversation: ChatSession
-) -> None:
-    response = _response(db_session, conversation)
-    record = _record(response)
-    record.checkpoint = CompactionCheckpoint(
-        summary="",
-        covered_through_message_id=f"chat:{response.parent_message_id}",
-    )
-    _save(db_session, response, record)
-    assert (
-        find_summary_for_ancestry(
-            db_session, conversation.id, visible_message_ids(db_session, response)
-        )
-        is None
-    )
 
 
 def test_new_summary_replaces_previous_summary_on_selected_branch(
@@ -2845,7 +2830,7 @@ def test_mixed_legacy_and_canonical_history_preserves_each_saved_format(
     new_results = [
         m for m in history[1].response_messages if isinstance(m, ToolResultMessage)
     ]
-    assert [m.text for m in old_results] == [TOOL_CALL_RESPONSE_CROSS_MESSAGE]
+    assert [m.text for m in old_results] == ["Old actual tool output"]
     assert [m.text for m in new_results] == ["New actual tool output"]
     assert legacy_call.result is None
     assert legacy_call.tool_call_response == "Old actual tool output"

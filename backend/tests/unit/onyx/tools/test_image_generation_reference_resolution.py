@@ -15,6 +15,8 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from jsonschema import Draft202012Validator
+from pydantic import JsonValue
 
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
@@ -233,3 +235,59 @@ def test_image_workers_inherit_independent_request_contexts() -> None:
         assert tenant.get() == "request-tenant"
     finally:
         tenant.reset(token)
+
+
+@pytest.mark.parametrize(
+    "arguments,expected_shape",
+    [
+        ({"prompt": "test"}, ImageShape.SQUARE),
+        (
+            {"prompt": "test", "shape": None, "reference_image_file_ids": None},
+            ImageShape.SQUARE,
+        ),
+        ({"prompt": "test", "shape": "portrait"}, ImageShape.PORTRAIT),
+    ],
+)
+def test_image_defaults_at_execution(
+    arguments: dict[str, JsonValue], expected_shape: ImageShape
+) -> None:
+    tool = _make_tool()
+    tool.num_imgs = 1
+    with (
+        patch.object(
+            tool,
+            "_generate_image",
+            return_value=ImageGenerationResponse(
+                revised_prompt="test", image_data="YWJj"
+            ),
+        ) as generate,
+        patch(
+            "onyx.tools.tool_implementations.images.image_generation_tool.save_files",
+            return_value=["image"],
+        ),
+    ):
+        tool._run(
+            ToolInvocation(
+                call_id="image",
+                arguments=arguments,
+                cancellation=CancellationSignal(),
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+    generate.assert_called_once_with("test", expected_shape, None)
+
+
+def test_image_schema_accepts_null_defaults_and_rejects_invalid_shape() -> None:
+    definition = _make_tool().tool_definition()
+    assert definition.strict
+    assert definition.parameters["additionalProperties"] is False
+    assert definition.parameters["required"] == [
+        "prompt",
+        "shape",
+        REFERENCE_IMAGE_FILE_IDS_FIELD,
+    ]
+    validator = Draft202012Validator(definition.parameters)
+    arguments = {"prompt": "test", "shape": None, REFERENCE_IMAGE_FILE_IDS_FIELD: None}
+    validator.validate(arguments)
+    assert not validator.is_valid({**arguments, "shape": "unsupported"})

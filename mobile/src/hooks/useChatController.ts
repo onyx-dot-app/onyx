@@ -247,7 +247,7 @@ export interface ChatController {
   messages: ReturnType<typeof getLatestMessageChain>;
   chatState: ChatState;
   // Clear the draft only after the server acknowledges the request.
-  // `toolOptions` carries the toolbar controls (deep research / forced + allowed tools / sources);
+  // `toolOptions` carries the toolbar controls (deep research / preferred + allowed tools / sources);
   // absent = backend defaults.
   submit: (
     text: string,
@@ -401,7 +401,7 @@ export function useChatController(
           deep_research: toolOptions?.deepResearch ?? false,
           origin: "mobile",
           allowed_tool_ids: toolOptions?.allowedToolIds ?? null,
-          forced_tool_id: toolOptions?.forcedToolId ?? null,
+          preferred_tool_id: toolOptions?.preferredToolId ?? null,
           internal_search_filters: toolOptions?.internalSearchFilters ?? null,
           llm_override: toolOptions?.llmOverride ?? null,
         };

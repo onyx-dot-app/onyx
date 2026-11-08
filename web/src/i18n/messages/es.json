@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Seleccionar fuentes de búsqueda"
+      },
+      "preference": {
+        "tooltip": "{description}\nPreferir esta herramienta para este chat. El agente puede responder sin usarla."
       }
     },
     "addMcpModal": {
@@ -6304,13 +6307,6 @@
           "title": "Permisos del grupo"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} ahora usa permisos por grupo. El acceso se configura en cada grupo, así que los permisos de un usuario son la combinación de todos los grupos a los que pertenece.",
-        "learnMore": {
-          "label": "Más información"
-        },
-        "title": "Los permisos han cambiado."
-      },
       "sharedResources": {
         "agent": {
           "description": "agente"
@@ -10247,13 +10243,6 @@
           "label": "Invitar usuarios"
         },
         "title": "Usuarios y solicitudes"
-      },
-      "permissionsNotice": {
-        "description": "{appName} ahora usa permisos por grupo. Los roles de Curador y Curador global se han sustituido por permisos de grupo configurables, con responsables por grupo para una administración acotada.",
-        "learnMoreButton": {
-          "label": "Más información"
-        },
-        "title": "Los permisos han cambiado"
       },
       "resetPasswordModal": {
         "copyButton": {

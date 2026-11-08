@@ -195,7 +195,6 @@ class CodingAgent(Agent):
         )
         if is_final_step:
             system_prompt = CODING_AGENT_FINAL_ANSWER_PROMPT
-            tools = []
             options.tool_choice = ToolChoiceOptions.NONE
         else:
             template = (
@@ -207,7 +206,6 @@ class CodingAgent(Agent):
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
             )
-            tools = list(self.tools)
             options.tool_choice = ToolChoiceOptions.REQUIRED
         options.max_tokens = (
             MAX_FINAL_ANSWER_TOKENS if is_final_step else MAX_INVESTIGATION_TOKENS
@@ -220,7 +218,7 @@ class CodingAgent(Agent):
             else None
         )
         return PreparedStep(
-            tools=tools,
+            allowed_tool_names=frozenset() if is_final_step else None,
             options=options,
             output_metadata=MessageRendering(
                 mode=PresentationMode.CODING_ANSWER

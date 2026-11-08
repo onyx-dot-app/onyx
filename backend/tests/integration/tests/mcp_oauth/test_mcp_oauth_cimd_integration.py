@@ -294,7 +294,8 @@ def test_mcp_oauth_cimd_only_flow(
                     )
                 ],
                 conditions=RequestConditions(
-                    offers=[MCP_TOOL_NAME], tool_choice="required"
+                    offers=[MCP_TOOL_NAME],
+                    tool_choice="auto",
                 ),
             ),
             Reply(
@@ -310,7 +311,7 @@ def test_mcp_oauth_cimd_only_flow(
             chat_session_id=chat_session.id,
             message="Invoke the CIMD MCP tool.",
             user_performing_action=admin_user,
-            forced_tool_ids=[tool_id],
+            preferred_tool_id=tool_id,
         )
         assert chat_response.error is None
         assert any(

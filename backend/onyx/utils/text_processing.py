@@ -2,6 +2,8 @@ import codecs
 import json
 import re
 import string
+from collections.abc import Iterator
+from typing import Any
 from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger
@@ -149,24 +151,14 @@ def _balanced_brace_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
-def find_all_json_objects(text: str) -> list[dict]:
-    """Find all JSON objects in text using balanced brace matching.
+def iter_json_objects_with_spans(
+    text: str,
+) -> Iterator[tuple[int, int, dict[str, Any]]]:
+    """Yield decoded objects with source bounds, including nested candidates.
 
     Each balanced '{...}' substring (counting braces only) is validated as JSON.
-    This includes nested JSON objects within other objects. Runs in time linear
-    in the text length.
-
-    Use case: Parsing LLM output that may contain multiple JSON objects, or when
-    the LLM/serving layer outputs function calls in non-standard formats
-    (e.g. OpenAI's function.open_url style).
-
-    Args:
-        text: The text to search for JSON objects.
-
-    Returns:
-        A list of all successfully parsed JSON objects (dicts only).
+    Runs in time linear in the text length.
     """
-    json_objects: list[dict] = []
     group_end = -1
     budget = 0
 
@@ -185,9 +177,7 @@ def find_all_json_objects(text: str) -> list[dict]:
         except (json.JSONDecodeError, RecursionError):
             continue
         if isinstance(parsed, dict):
-            json_objects.append(parsed)
-
-    return json_objects
+            yield start, end, parsed
 
 
 def _find_fenced_json_span(content: str) -> tuple[int, int] | None:

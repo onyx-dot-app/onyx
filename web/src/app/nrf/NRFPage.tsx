@@ -141,6 +141,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // State

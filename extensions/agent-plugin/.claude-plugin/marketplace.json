@@ -12,7 +12,7 @@
       "version": "0.1.0",
       "source": {
         "source": "archive",
-        "url": "https://github.com/onyx-dot-app/onyx/releases/download/claude-code-plugin/v0.1.0/onyx-claude-code-plugin.zip"
+        "url": "https://github.com/onyx-dot-app/onyx/releases/download/agent-plugin/v0.1.0/onyx-agent-plugin.zip"
       }
     }
   ]
