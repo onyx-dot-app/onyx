@@ -2,9 +2,10 @@
 
 from collections.abc import Mapping, Sequence
 
-from pydantic import JsonValue, TypeAdapter, ValidationError
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
+from onyx.chat.citation_processor import cited_documents
 from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchConfiguration
@@ -17,6 +18,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.pydantic_util import as_base
 from onyx.utils.streaming_json import parse_partial_object
 
 _STRING = TypeAdapter(str)
@@ -130,6 +132,31 @@ def response_snapshot(record: ResponseRecord) -> RunState:
     )
 
 
+def _cited_documents(
+    citation_mapping: Mapping[int, str], documents: Mapping[str, SearchDoc]
+) -> list[SearchDoc]:
+    """The known documents of the citation numbers, each once, in mapping order."""
+    return list(
+        {
+            document.document_id: document
+            for document in cited_documents(citation_mapping, documents).values()
+        }.values()
+    )
+
+
+def restore_result_documents[T: BaseModel](
+    details: T, documents: Mapping[str, SearchDoc]
+) -> T:
+    """Refill the documents that saved tool results keep only as citation numbers."""
+    if isinstance(details, SearchDocsResponse):
+        return details.model_copy(
+            update={
+                "search_docs": _cited_documents(details.citation_mapping, documents)
+            }
+        )
+    return details
+
+
 def restore_response_sources(
     messages: list[Message],
     documents: Mapping[str, SearchDoc],
@@ -152,43 +179,35 @@ def restore_response_sources(
                     }
                 )
             continue
-        if not isinstance(message, ToolResultMessage) or not isinstance(
-            message.details, SearchDocsResponse
-        ):
+        if not isinstance(message, ToolResultMessage) or message.details is None:
             continue
-        details = message.details.model_copy(
-            update={
-                "search_docs": [
-                    documents[document_id]
-                    for document_id in dict.fromkeys(
-                        message.details.citation_mapping.values()
-                    )
-                    if document_id in documents
-                ]
-            }
+        details = restore_result_documents(message.details, documents)
+        if details is not message.details:
+            messages[index] = message.model_copy(update={"details": details})
+
+
+def _saved_search(
+    details: SearchDocsResponse, displayed_docs: list[SearchDoc] | None
+) -> SearchDocsResponse:
+    # Documents use their existing relation; staged files stay in execution state.
+    return as_base(details, SearchDocsResponse).model_copy(
+        update={"search_docs": [], "displayed_docs": displayed_docs}
+    )
+
+
+def _saved_details(details: BaseModel | None) -> BaseModel | None:
+    if isinstance(details, SearchDocsResponse):
+        return _saved_search(
+            details, displayed_docs=[] if details.displayed_docs == [] else None
         )
-        messages[index] = message.model_copy(update={"details": details})
+    return details
 
 
 def _saved_message[T: Message](message: T) -> T:
-    if isinstance(message, ToolResultMessage) and isinstance(
-        message.details, SearchDocsResponse
-    ):
-        details = message.details
-        # Documents use their existing relation; staged files stay in execution state.
-        saved_details = SearchDocsResponse(
-            queries=details.queries,
-            sources=details.sources,
-            time_filter_start=details.time_filter_start,
-            time_filter_end=details.time_filter_end,
-            search_docs=[],
-            citation_mapping=details.citation_mapping,
-            displayed_docs=[] if details.displayed_docs == [] else None,
-        )
-        return message.model_copy(
-            update={"metadata": None, "details": saved_details}
-        ).model_copy(deep=True)
-    return message.model_copy(update={"metadata": None}).model_copy(deep=True)
+    update: dict[str, BaseModel | None] = {"metadata": None}
+    if isinstance(message, ToolResultMessage):
+        update["details"] = _saved_details(message.details)
+    return message.model_copy(update=update).model_copy(deep=True)
 
 
 def _saved_step(step: StepRecord) -> StepRecord:

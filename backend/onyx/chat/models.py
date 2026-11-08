@@ -446,8 +446,8 @@ class SearchParams(BaseModel):
     search_usage: SearchToolUsage
 
 
-class ChatSearchResult(SearchDocsResponse):
-    """Search documents with files staged before the tool result is committed."""
+class StagedChatFiles(BaseModel):
+    """Files of a tool result's documents, staged before the result is committed."""
 
     staged_files: list[ChatFile]
 
@@ -466,6 +466,10 @@ class ChatSearchResult(SearchDocsResponse):
             else SavedChatFile.model_validate(file).restore()
             for file in value
         ]
+
+
+class ChatSearchResult(StagedChatFiles, SearchDocsResponse):
+    """Search documents with their files staged."""
 
 
 class ToolHistorySnapshot(BaseModel):
