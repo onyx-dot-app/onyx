@@ -137,6 +137,10 @@ def test_migration_round_trip_and_refusal(
             == skill.name
         )
         revision.module.upgrade()
+        assert "ix_marketplace__user_group_user_group_id" in {
+            index["name"]
+            for index in inspect(connection).get_indexes("marketplace__user_group")
+        }
         db_session.refresh(skill)
         assert skill.marketplace_id is None
         assert skill.follows_marketplace_access
@@ -156,6 +160,10 @@ def test_skill_constraints_and_group_null(
                 text("UPDATE skill SET public_permission = NULL WHERE id = :id"),
                 {"id": skill.id},
             )
+    with pytest.raises(IntegrityError, match="ck_skill_marketplace_entry_key"):
+        with db_session.begin_nested():
+            skill.marketplace_id = marketplace.id
+            db_session.flush()
     skill.marketplace_id = marketplace.id
     skill.marketplace_entry_key = "plugin/skill"
     set_skill_public_permission(

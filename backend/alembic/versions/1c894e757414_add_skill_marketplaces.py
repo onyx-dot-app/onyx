@@ -58,6 +58,11 @@ def upgrade() -> None:
         sa.Column("permission", sa.String(), nullable=False, server_default="VIEWER"),
         sa.Column("installation_policy", sa.String(), nullable=True),
     )
+    op.create_index(
+        "ix_marketplace__user_group_user_group_id",
+        "marketplace__user_group",
+        ["user_group_id"],
+    )
     op.add_column("skill", sa.Column("marketplace_id", postgresql.UUID(as_uuid=True)))
     op.create_foreign_key(
         "fk_skill_marketplace",
@@ -68,6 +73,11 @@ def upgrade() -> None:
         ondelete="CASCADE",
     )
     op.add_column("skill", sa.Column("marketplace_entry_key", sa.String()))
+    op.create_check_constraint(
+        "ck_skill_marketplace_entry_key",
+        "skill",
+        "marketplace_id IS NULL OR marketplace_entry_key IS NOT NULL",
+    )
     op.add_column(
         "skill",
         sa.Column(
@@ -108,6 +118,7 @@ def downgrade() -> None:
     op.create_check_constraint(
         "ck_private_skill_has_owner", "skill", _PRIVATE_OWNER_CHECK
     )
+    op.drop_constraint("ck_skill_marketplace_entry_key", "skill", type_="check")
     op.drop_index("uq_skill_live_marketplace_entry", table_name="skill")
     op.drop_constraint("fk_skill_marketplace", "skill", type_="foreignkey")
     for column in (

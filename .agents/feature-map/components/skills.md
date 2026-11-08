@@ -296,10 +296,12 @@ The library preview of an external-app skill calls the same renderer
     `db/users.py:delete_user_from_db__no_commit` names owned marketplaces and
     records a login error when deleting another marketplace's login user.
     A missing, inactive or disconnected login stops the adapter before fetch.
+    A missing or disabled workspace GitHub app instead asks an admin to enable it.
     Downgrade refuses every ownerless marketplace skill, including public ones,
     and every retired skill. Dropping retirement state would revive deleted entries.
     Entry keys identify the plugin entry and skill, not the folder; only live
     entries are unique, so a retired entry can return as a new skill.
+    Every marketplace skill must have an entry key; the database rejects NULL keys.
 
 ---
 

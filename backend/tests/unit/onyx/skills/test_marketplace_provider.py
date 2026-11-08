@@ -92,10 +92,17 @@ def test_invalid_provider_config(field: str, value: str) -> None:
         GitHubMarketplaceConfig.model_validate(config)
 
 
-@pytest.mark.parametrize("state", ["inactive", "disconnected", "revoked", "connected"])
+@pytest.mark.parametrize(
+    "state",
+    ["inactive", "disconnected", "revoked", "connected", "missing_app", "disabled_app"],
+)
 def test_marketplace_requires_active_personal_github_login(state: str) -> None:
     user_id = uuid4()
-    app = MagicMock(id=1, enabled=True)
+    app = (
+        None
+        if state == "missing_app"
+        else MagicMock(id=1, enabled=state != "disabled_app")
+    )
     credential = MagicMock()
     with (
         patch(
@@ -129,11 +136,16 @@ def test_marketplace_requires_active_personal_github_login(state: str) -> None:
             )
             refresh.assert_called_once_with("public", 1, user_id)
         else:
-            with pytest.raises(OnyxError, match="Replace the login"):
+            with pytest.raises(
+                OnyxError,
+                match="Enable the GitHub app"
+                if state.endswith("_app")
+                else "Replace the login",
+            ):
                 github_authorization_header(
                     "public", user_id, require_user_connection=True
                 )
-            if state in {"inactive", "disconnected"}:
+            if state in {"inactive", "disconnected", "missing_app", "disabled_app"}:
                 refresh.assert_not_called()
 
 

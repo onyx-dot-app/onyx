@@ -21,21 +21,24 @@ def github_authorization_header(
         raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, MARKETPLACE_LOGIN_ERROR)
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
+        if github_app is None or not github_app.enabled:
+            if require_user_connection:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Enable the GitHub app in workspace settings before syncing this marketplace.",
+                )
+            return None
         if require_user_connection:
             user = fetch_user_by_id(db_session, user_id)
             if (
                 user is None
                 or not user.is_active
-                or github_app is None
-                or not github_app.enabled
                 or get_external_app_user_credential(
                     db_session, external_app_id=github_app.id, user_id=user_id
                 )
                 is None
             ):
                 raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, MARKETPLACE_LOGIN_ERROR)
-        if github_app is None or not github_app.enabled:
-            return None
         github_app_id = github_app.id
 
     ensure_fresh_credentials(tenant_id, github_app_id, user_id)

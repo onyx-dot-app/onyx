@@ -5452,6 +5452,10 @@ class Marketplace__UserGroup(Base):
         Enum(SkillInstallationPolicy, native_enum=False), nullable=True
     )
 
+    __table_args__ = (
+        Index("ix_marketplace__user_group_user_group_id", "user_group_id"),
+    )
+
 
 class Skill(Base):
     """A built-in or custom skill.
@@ -5562,6 +5566,10 @@ class Skill(Base):
             "name",
             unique=True,
             postgresql_where=text("installation_policy <> 'AVAILABLE'"),
+        ),
+        CheckConstraint(
+            "marketplace_id IS NULL OR marketplace_entry_key IS NOT NULL",
+            name="ck_skill_marketplace_entry_key",
         ),
         Index(
             "uq_skill_live_marketplace_entry",
