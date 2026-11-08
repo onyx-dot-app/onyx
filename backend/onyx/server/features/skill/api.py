@@ -253,11 +253,11 @@ def _replace_skill_bundle_from_editor(
         )
         db_session.commit()
 
+    if not bundle_used:
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
-    if not bundle_used:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
     return _editable_skill_response(skill, user, db_session)
 
 
@@ -696,11 +696,11 @@ def replace_current_user_skill_bundle(
         )
         db_session.commit()
 
+    if not bundle_used:
+        delete_bundle_blob(file_store, ingested.bundle_file_id)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
-    if not bundle_used:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
     return skill_response_for_user(
         skill,
         user,
@@ -847,6 +847,9 @@ def patch_current_user_skill(
             delete_bundle_blob(file_store, new_bundle_file_id)
         raise
 
+    if file_store is not None and new_bundle_file_id is not None and not bundle_used:
+        delete_bundle_blob(file_store, new_bundle_file_id)
+
     db_session.expire(skill)
     visibility_changed = old_public_permission != skill.public_permission
     if patch_req.has_details_update or visibility_changed:
@@ -854,8 +857,6 @@ def patch_current_user_skill(
         push_skills_for_users(before_affected | after_affected, db_session)
         db_session.commit()
 
-    if file_store is not None and new_bundle_file_id is not None and not bundle_used:
-        delete_bundle_blob(file_store, new_bundle_file_id)
     return skill_response_for_user(
         skill,
         user,

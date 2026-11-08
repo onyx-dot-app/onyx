@@ -4,9 +4,11 @@ import io
 import zipfile
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from typing import Never
 from uuid import uuid4
 
 import pytest
+from botocore.exceptions import ClientError
 from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
@@ -17,7 +19,7 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Base, FileRecord, Skill, SkillVersion, User
-from onyx.db.resource_version import compute_bundle_metadata
+from onyx.db.resource_version import compute_bundle_metadata, repair_version_metadata
 from onyx.db.skill import (
     SkillValidityUpdate,
     create_skill_from_bundle__no_commit,
@@ -40,7 +42,10 @@ from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 @pytest.fixture
-def tenant(isolated_engine: Engine) -> Generator[str, None, None]:
+def tenant(
+    isolated_engine: Engine,
+    initialize_file_store: None,  # noqa: ARG001
+) -> Generator[str, None, None]:
     schema = f"skill_v2_{uuid4().hex}"
     with isolated_engine.begin() as connection:
         connection.execute(CreateSchema(schema))
@@ -80,9 +85,16 @@ def tenant(isolated_engine: Engine) -> Generator[str, None, None]:
     try:
         yield schema
     finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-        with isolated_engine.begin() as connection:
-            connection.execute(DropSchema(schema, cascade=True))
+        try:
+            with get_session_with_current_tenant() as cleanup:
+                file_ids = list(cleanup.scalars(select(FileRecord.file_id)))
+            store = get_default_file_store()
+            for file_id in file_ids:
+                store.delete_file(file_id, error_on_missing=False)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            with isolated_engine.begin() as connection:
+                connection.execute(DropSchema(schema, cascade=True))
 
 
 @pytest.fixture
@@ -392,3 +404,71 @@ def test_identical_reupload_repairs_damaged_current_bundle(
         assert compute_bundle_metadata(source.read()) == compute_bundle_metadata(
             content
         )
+
+
+@pytest.mark.parametrize("writer", ["replace", "editor", "patch"])
+def test_noop_cleans_staged_bundle_before_push_failure(
+    writer: str, session: Session, user: User
+) -> None:
+    response = api.create_custom_skill(
+        upload(bundle("noop-push")), False, user, session
+    )
+    api.upload_current_user_skill_files(
+        response.id, upload(b"notes", "notes.txt"), user, session
+    )
+    skill = session.get(Skill, response.id)
+    assert skill is not None and skill.bundle_file_id is not None
+    store = get_default_file_store()
+    with store.read_file(skill.bundle_file_id) as source:
+        original = source.read()
+    file_ids = set(session.scalars(select(FileRecord.file_id)))
+    with pytest.MonkeyPatch.context() as patch:
+
+        def fail_push(*_args: object) -> None:
+            raise RuntimeError("push failed after content commit")
+
+        patch.setattr(api, "push_skill_to_affected_sandboxes", fail_push)
+        patch.setattr(api, "push_skills_for_users", fail_push)
+        with pytest.raises(RuntimeError, match="push failed"):
+            if writer == "replace":
+                api.replace_current_user_skill_bundle(
+                    skill.id, upload(original), user, session
+                )
+            elif writer == "editor":
+                api.upload_current_user_skill_files(
+                    skill.id, upload(b"notes", "notes.txt"), user, session
+                )
+            else:
+                api.patch_current_user_skill(
+                    skill.id,
+                    SkillPatchRequest(instructions_markdown="First instructions"),
+                    user,
+                    session,
+                )
+    assert set(session.scalars(select(FileRecord.file_id))) == file_ids
+    assert len(versions(skill, session)) == 2
+
+
+@pytest.mark.parametrize(
+    "code", ["NoSuchKey", "NoSuchObject", "NotFound", "404", "AccessDenied"]
+)
+def test_metadata_repair_classifies_object_store_errors(
+    code: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    response = api.create_custom_skill(
+        upload(bundle("missing-object")), False, user, session
+    )
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    version = versions(skill, session)[0]
+    store = get_default_file_store()
+
+    def failed_read(*_args: object, **_kwargs: object) -> Never:
+        raise ClientError({"Error": {"Code": code}}, "GetObject")
+
+    monkeypatch.setattr(store, "read_file", failed_read)
+    if code == "AccessDenied":
+        with pytest.raises(ClientError):
+            repair_version_metadata(version, store, verify_bundle=True)
+    else:
+        assert not repair_version_metadata(version, store, verify_bundle=True)

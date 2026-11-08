@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import BundleVersionMixin
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, is_missing_object
 from onyx.file_store.models import BundleMetadata
 from onyx.utils.logger import setup_logger
 
@@ -91,7 +91,7 @@ def repair_version_metadata(
         logger.warning("Version bundle is missing: %s", version.id)
         return False
     except ClientError as exc:
-        if exc.response["Error"]["Code"] not in ("NoSuchKey", "404"):
+        if not is_missing_object(exc):
             raise
         logger.warning("Version bundle is missing: %s", version.id)
         return False
