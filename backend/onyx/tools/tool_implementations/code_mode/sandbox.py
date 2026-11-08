@@ -14,8 +14,9 @@ from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
-from typing import NoReturn
+from typing import NamedTuple, NoReturn
 
+import psutil
 from pydantic_monty import (
     ExternalException,
     ExternalFuture,
@@ -78,6 +79,20 @@ MAX_SANDBOX_PROCESSES = 8
 # Bytes of the dumped programs that the server process holds while they wait on
 # their tools. A waiting program whose dump does not fit keeps its worker.
 MAX_SUSPENDED_BYTES = 256 * 1024 * 1024
+# A dump needs about the program's heap plus twice the dump size inside the
+# worker, within `SandboxLimits.max_memory_bytes`, which budgets the program's
+# allocations and not the worker's own memory. A waiting program whose worker
+# grew by more than this share of that limit since checkout keeps its worker
+# instead of dumping. With the default 128 MB limit, dumps run out of memory
+# from about 34 MB of heap. In the first segment the growth also counts the type
+# checker's memory, about 20 MB, so the check is stricter there. Monty type-checks
+# and starts a program in one call, so no baseline can leave that memory out.
+# Known gap: resident memory counts only the pages a program has written. A
+# large allocation that the program never writes, such as `bytes(36_000_000)`,
+# grows the worker by about 2 MB, so the check lets its dump run out of memory;
+# the worker is then lost and the program fails with DUMP_MEMORY_MESSAGE. Monty
+# reports no heap size. The check catches written data, such as tool results.
+MAX_DUMP_MEMORY_SHARE = 1 / 4
 # Callers (users and tenants) do not trust each other, so each worker serves one
 # session and the pool then replaces it, as Monty's security model expects. A
 # dumped program resumes on a new worker too.
@@ -94,6 +109,12 @@ CRASH_MESSAGE = (
     "check before you retry."
 )
 BUSY_MESSAGE = "The code sandbox is busy. Try again, or answer without code."
+DUMP_MEMORY_MESSAGE = (
+    "The sandbox ran out of memory while pausing this program to wait for its "
+    "tool calls. This program's writes are discarded. Earlier tool calls may have "
+    "completed; check before you retry. Keep less data in memory, for example by "
+    "storing results with store() and keeping only what you need."
+)
 # Tool calls of one program that run at the same time, each on its own thread.
 # Later calls wait in order for a free slot.
 MAX_CONCURRENT_TOOL_CALLS = 16
@@ -1111,16 +1132,60 @@ def _resumed(waiting: ProgramWaiting) -> SyncSnapshot:
     return waiting.state
 
 
-def _suspend(run: _Run, waiting: ProgramWaiting) -> ProgramSuspended | None:
-    """Dump a waiting program; None when the dump does not fit MAX_SUSPENDED_BYTES.
+def _worker_memory_bytes(pid: int | None) -> int | None:
+    """Resident memory of a sandbox worker; None when it cannot be read."""
+    if pid is None:
+        return None
+    try:
+        return psutil.Process(pid).memory_info().rss
+    except psutil.Error:
+        return None
 
-    The program's last dump size estimates the next, so a dump that cannot fit is
-    skipped.
+
+class _Worker(NamedTuple):
+    """A checked-out worker and its resident memory before the program ran."""
+
+    pid: int | None
+    idle_bytes: int | None
+
+    def memory_growth(self) -> int | None:
+        """Bytes the worker grew by since checkout; None when unknown."""
+        memory = _worker_memory_bytes(self.pid)
+        if memory is None or self.idle_bytes is None:
+            return None
+        return memory - self.idle_bytes
+
+
+def _checked_out(session: MontySession) -> _Worker:
+    return _Worker(session.worker_pid, _worker_memory_bytes(session.worker_pid))
+
+
+def _suspend(
+    run: _Run, waiting: ProgramWaiting, worker: _Worker
+) -> ProgramSuspended | None:
+    """Dump a waiting program; None when it keeps its worker instead.
+
+    It keeps its worker when its dump does not fit MAX_SUSPENDED_BYTES, or when
+    the worker grew too much since checkout to dump (MAX_DUMP_MEMORY_SHARE), or
+    its memory cannot be read. The program's last dump size estimates the next,
+    so a dump that cannot fit is skipped. Raises `_Aborted` when the dump still
+    runs out of memory: the worker is gone, so the program cannot continue.
     """
     if run.last_dump_bytes > _suspended_bytes.free:
         metrics.count_suspension("over_budget")
         return None
-    snapshot = waiting.state.dump()
+    growth = worker.memory_growth()
+    if growth is None or growth > run.limits.max_memory_bytes * MAX_DUMP_MEMORY_SHARE:
+        metrics.count_suspension("over_memory")
+        return None
+    try:
+        snapshot = waiting.state.dump()
+    except MontyRuntimeError as error:
+        if not isinstance(error.exception(), MemoryError):
+            raise
+        logger.warning("Code mode sandbox worker ran out of memory in a dump")
+        metrics.count_worker_lost("out_of_memory")
+        raise _Aborted("failed", DUMP_MEMORY_MESSAGE) from error
     run.last_dump_bytes = len(snapshot)
     if not _suspended_bytes.reserve(len(snapshot)):
         metrics.count_suspension("over_budget")
@@ -1279,6 +1344,7 @@ def execute_program(
                     functions=functions,
                 ) as session:
                     run.start_clock()
+                    worker = _checked_out(session)
                     loading, suspended = suspended, None
                     step = _segment(
                         session,
@@ -1289,7 +1355,7 @@ def execute_program(
                     )
                     while isinstance(step, ProgramWaiting):
                         if not run.wait_for_any(step.call_ids, yield_worker=True):
-                            suspended = _suspend(run, step)
+                            suspended = _suspend(run, step, worker)
                             if suspended is not None:
                                 break
                             _worker_demand.kept(run.wake.set)

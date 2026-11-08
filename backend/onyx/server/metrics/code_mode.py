@@ -14,8 +14,8 @@ from prometheus_client import Counter, Gauge, Histogram
 
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
-WorkerLossReason = Literal["crashed", "killed"]
-SuspensionOutcome = Literal["dumped", "over_budget"]
+WorkerLossReason = Literal["crashed", "killed", "out_of_memory"]
+SuspensionOutcome = Literal["dumped", "over_budget", "over_memory"]
 
 SANDBOX_WORKERS_BUSY = Gauge(
     "onyx_code_mode_sandbox_workers_busy",
@@ -41,7 +41,8 @@ SANDBOX_WORKER_SECONDS = Counter(
 )
 SANDBOX_WORKERS_LOST = Counter(
     "onyx_code_mode_sandbox_workers_lost_total",
-    "Sandbox workers that the pool replaces: crashed, or killed on Stop or a deadline.",
+    "Sandbox workers that the pool replaces: crashed, killed on Stop or a "
+    "deadline, or out of memory while dumping a program.",
     ["reason"],
 )
 SUSPENDED_BYTES = Gauge(
@@ -54,7 +55,8 @@ SUSPENDED_BYTES_LIMIT = Gauge(
 )
 SUSPENSIONS = Counter(
     "onyx_code_mode_suspensions_total",
-    "Waiting programs dumped to free their worker, or kept on it over the budget.",
+    "Waiting programs dumped to free their worker, or kept on it: over the dump "
+    "byte budget, or with too much memory in the worker to dump.",
     ["outcome"],
 )
 TOOL_CALL_THREADS_IN_USE = Gauge(

@@ -90,12 +90,13 @@ async def lookup(term: str) -> list[str]:
     ...
 """
 FUNCTIONS = frozenset({"search", "slow", "fail"})
+# The default memory limit: a waiting program dumps only while its worker holds
+# less than a share of it.
 LIMITS = SandboxLimits(
     lifetime_seconds=10,
     max_tool_calls=5,
     max_output_chars=500,
     max_result_bytes=2_000,
-    max_memory_bytes=32 * 1024 * 1024,
     max_cpu_seconds=1,
 )
 
@@ -278,7 +279,7 @@ def test_program_errors_that_mention_a_time_limit_are_failures(
 
 
 def test_memory_limit() -> None:
-    result = run("data = 'x' * (64 * 1024 * 1024)\n")
+    result = run("data = 'x' * (256 * 1024 * 1024)\n")
     assert result.status == "failed"
     assert result.error is not None
     assert "MemoryError" in result.error
@@ -788,9 +789,11 @@ def test_a_waiting_program_keeps_its_worker_while_no_other_waits(
     dumps: list[int] = []
     suspend = sandbox._suspend
 
-    def counted(run: sandbox._Run, waiting: ProgramWaiting) -> ProgramSuspended | None:
+    def counted(
+        run: sandbox._Run, waiting: ProgramWaiting, worker: sandbox._Worker
+    ) -> ProgramSuspended | None:
         dumps.append(1)
-        return suspend(run, waiting)
+        return suspend(run, waiting, worker)
 
     monkeypatch.setattr(sandbox, "_suspend", counted)
     result = run(
@@ -845,10 +848,65 @@ def test_a_dump_that_cannot_fit_is_skipped(monkeypatch: pytest.MonkeyPatch) -> N
     )
     # A fake snapshot: skip the isinstance validation.
     waiting = ProgramWaiting.model_construct(state=cast(FunctionSnapshot, Snapshot()))
-    assert sandbox._suspend(run_state, waiting) is None
-    assert sandbox._suspend(run_state, waiting) is None
+    monkeypatch.setattr(sandbox, "_worker_memory_bytes", lambda _pid: 0)
+    worker = sandbox._Worker(pid=1, idle_bytes=0)
+    assert sandbox._suspend(run_state, waiting, worker) is None
+    assert sandbox._suspend(run_state, waiting, worker) is None
     # The second dump is skipped: the first did not fit.
     assert Snapshot.dumps == 1
+
+
+def test_a_program_too_large_to_dump_keeps_its_worker(
+    monkeypatch: pytest.MonkeyPatch, two_workers: Monty
+) -> None:
+    # Another program always waits, so each wait of this one gives up its worker.
+    monkeypatch.setattr(sandbox._worker_demand, "gives_up", lambda _wake: True)
+    over_memory = _suspensions("over_memory")
+    # About 39 MB of heap: its dump would exceed the default memory limit.
+    result = run(
+        "big = 'x' * (39 * 1024 * 1024)\n"
+        "store('k', 'v')\n"
+        "print(await slow(seconds=0.1), len(big))\n",
+        pool=two_workers,
+    )
+    assert (result.status, result.stdout) == (
+        "completed",
+        f"done {39 * 1024 * 1024}\n",
+    ), result
+    assert result.commits_store and result.store_writes == {"k": "v"}
+    assert _suspensions("over_memory") == over_memory + 1
+
+
+def test_the_worker_s_own_memory_does_not_count_toward_a_dump(
+    monkeypatch: pytest.MonkeyPatch, two_workers: Monty
+) -> None:
+    monkeypatch.setattr(sandbox._worker_demand, "gives_up", lambda _wake: True)
+    # A worker that holds the whole memory limit before the program runs.
+    monkeypatch.setattr(
+        sandbox, "_worker_memory_bytes", lambda _pid: LIMITS.max_memory_bytes
+    )
+    dumped = _suspensions("dumped")
+    result = run("print(await slow(seconds=0.1))\n", pool=two_workers)
+    assert (result.status, result.stdout) == ("completed", "done\n"), result
+    assert _suspensions("dumped") == dumped + 1
+
+
+def test_a_dump_that_runs_out_of_memory_fails_the_program_clearly(
+    monkeypatch: pytest.MonkeyPatch, two_workers: Monty
+) -> None:
+    monkeypatch.setattr(sandbox._worker_demand, "gives_up", lambda _wake: True)
+    # The worker's memory reads low, so the dump runs and exceeds the limit.
+    monkeypatch.setattr(sandbox, "_worker_memory_bytes", lambda _pid: 0)
+    lost = _worker_losses("out_of_memory")
+    result = run(
+        "big = 'x' * (39 * 1024 * 1024)\n"
+        "store('k', 'v')\n"
+        "print(await slow(seconds=0.1), len(big))\n",
+        pool=two_workers,
+    )
+    assert (result.status, result.error) == ("failed", sandbox.DUMP_MEMORY_MESSAGE)
+    assert not result.commits_store
+    assert _worker_losses("out_of_memory") == lost + 1
 
 
 def test_each_waiting_program_claims_one_holder() -> None:
@@ -968,11 +1026,11 @@ def _slow_counted_dumps(monkeypatch: pytest.MonkeyPatch, seconds: float) -> list
     suspend = sandbox._suspend
 
     def slow_dump(
-        run: sandbox._Run, waiting: ProgramWaiting
+        run: sandbox._Run, waiting: ProgramWaiting, worker: sandbox._Worker
     ) -> ProgramSuspended | None:
         dumps.append(1)
         time.sleep(seconds)
-        return suspend(run, waiting)
+        return suspend(run, waiting, worker)
 
     monkeypatch.setattr(sandbox, "_suspend", slow_dump)
     return dumps
