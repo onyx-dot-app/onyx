@@ -298,7 +298,8 @@ Their control functions, such as `think_tool`, `generate_report` and
     calls to the same tool when the tool sets `merge_list_argument` and all
     other arguments match (`tools/interface.py:merge_tool_arguments`). Both
     lists must be non-empty string lists, and the merged list must stay within
-    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`). No merge happens
+    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`, search
+    `MAX_QUERIES_PER_CALL`). No merge happens
     when the run has `before_tool_call`, or when arguments are truncated or
     invalid. A parallel tool can merge calls that are not next to each other;
     a `SEQUENTIAL` tool merges only up to its first call that cannot merge. One

@@ -311,7 +311,7 @@ def test_nested_artifacts_belong_to_the_code_mode_call() -> None:
     assert history.tool_calls[0].generated_files == [file]
 
 
-def test_direct_search_prompt_has_the_query_limit_and_no_code_mode_guidance() -> None:
+def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     # Code mode guidance is checked through a real chat in
     # external_dependency_unit/answer/test_code_mode_citations.py.
     search = MagicMock(spec=SearchTool)

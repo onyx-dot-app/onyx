@@ -20,7 +20,6 @@ from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
     CODE_MODE_SEARCH_USAGE,
     INTERNAL_SEARCH_GUIDANCE,
-    INTERNAL_SEARCH_USES,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
 )
 from onyx.server.query_and_chat.chat_backend import get_chat_session
@@ -30,6 +29,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     SearchToolDocumentsDelta,
 )
+from onyx.tools.tool_implementations.search.search_tool import MAX_QUERIES_PER_CALL
 from tests.external_dependency_unit.answer.stream_test_utils import (
     create_chat_session,
     final_answer,
@@ -155,16 +155,14 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         )
         parts = send(session.id, user, first, "How did Q2 revenue change?")
     assert final_answer(parts).startswith("Revenue grew")
-    # The prompt keeps the guidance of the tools inside programs, without the
-    # query limit of a direct search call.
+    # The prompt keeps the guidance of the tools inside programs.
     system = "\n".join(
         message.content
         for message in first.requests[0]["prompt"]
         if isinstance(message, SystemMessage)
     )
     assert CODE_MODE_GUIDANCE in system
-    assert INTERNAL_SEARCH_USES in system
-    assert INTERNAL_SEARCH_GUIDANCE not in system
+    assert INTERNAL_SEARCH_GUIDANCE in system
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in system
     # The real search tool's stub asks for one call per information need.
     [description] = [
@@ -173,6 +171,8 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         if tool["function"]["name"] == "execute_code"
     ]
     assert CODE_MODE_SEARCH_USAGE in description
+    # The tool's own query limit reaches its stub.
+    assert f"List of up to {MAX_QUERIES_PER_CALL} search queries" in description
     assert "Output:\n1 Q2 revenue" in tool_text(first.requests[1]["prompt"], "search")
     # The searched document's file reaches the next program's Python tool.
     assert f"Q2 revenue_{file_id}" in tool_text(first.requests[2]["prompt"], "python")
@@ -200,9 +200,14 @@ def test_code_mode_citations_stream_save_reload_and_continue(
         for packet in replayed
         if isinstance(packet.obj, CodeModeDelta) and packet.obj.status is not None
     ]
-    assert [(final.stdout, final.stored_keys) for final in finals[:1]] == [
-        ("1 Q2 revenue\n", ["k"])
-    ]
+    [search_program, python_program] = finals
+    assert (search_program.stdout, search_program.stored_keys) == (
+        "1 Q2 revenue\n",
+        ["k"],
+    )
+    assert python_program.status == "completed"
+    assert python_program.stored_keys is None
+    assert f"Q2 revenue_{file_id}" in (python_program.stdout or "")
 
     # Turn 2: a new search gets numbers after the saved ones, and the answer can
     # cite both turns.

@@ -183,6 +183,7 @@ logger = setup_logger()
 SEARCH_DECISION_RERANK_EXPANSION_FLAG = "onyx-search-decision-rerank-expansion"
 
 QUERIES_FIELD = "queries"
+MAX_QUERIES_PER_CALL = 3
 _CODE_MODE_RESULT = SEARCH_RESULTS_CODE_MODE_RESULT.model_copy(
     update={"usage": CODE_MODE_SEARCH_USAGE}
 )
@@ -346,6 +347,7 @@ def _trim_sections_by_tokens(
 
 class SearchTool(Tool):
     merge_list_argument = QUERIES_FIELD
+    merge_list_limit = MAX_QUERIES_PER_CALL
 
     NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
@@ -741,7 +743,9 @@ class SearchTool(Tool):
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "List of search queries to execute, typically a single query. "
+                            f"List of up to {MAX_QUERIES_PER_CALL} search queries to "
+                            "execute, typically a single query. Later queries are "
+                            "ignored. "
                             "Query expansion and filter extraction steps will be run "
                             "automatically downstream, do not include time or source type "
                             "scoping details in your query."
@@ -859,6 +863,13 @@ class SearchTool(Tool):
         llm_queries = parse_tool_arguments(
             SearchArguments, invocation.arguments
         ).queries
+        if len(llm_queries) > MAX_QUERIES_PER_CALL:
+            logger.warning(
+                "Search tool received %s queries, but the max is %s.",
+                len(llm_queries),
+                MAX_QUERIES_PER_CALL,
+            )
+            llm_queries = llm_queries[:MAX_QUERIES_PER_CALL]
 
         return self.search(
             llm_queries,

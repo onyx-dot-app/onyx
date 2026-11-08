@@ -63,7 +63,6 @@ from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
     GENERATE_IMAGE_GUIDANCE,
     INTERNAL_SEARCH_GUIDANCE,
-    INTERNAL_SEARCH_USES,
     MEMORY_GUIDANCE,
     OPEN_URLS_GUIDANCE,
     PYTHON_TOOL_GUIDANCE,
@@ -523,9 +522,7 @@ def build_system_prompt(
 
         # These are not included at the Tool level because the ordering may matter.
         if has_internal_search:
-            tool_guidance_sections.append(
-                INTERNAL_SEARCH_USES if code_mode else INTERNAL_SEARCH_GUIDANCE
-            )
+            tool_guidance_sections.append(INTERNAL_SEARCH_GUIDANCE)
 
         if has_web_search:
             web_search_tool = next(t for t in tools if isinstance(t, WebSearchTool))

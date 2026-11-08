@@ -95,8 +95,10 @@ sets, start date, attached documents and hierarchy nodes. Chat builds it in
 `db/tools.py:capture_persona_tool_configuration`, and the `/search` API builds
 its own.
 
-**Lanes and weights.** The rephrased semantic query, the model's own queries,
-the user's original message and the keyword queries each get a lane and an RRF
+**Lanes and weights.** A call runs at most `MAX_QUERIES_PER_CALL` (3) of the
+model's queries; `SearchTool.run` drops the rest with a log warning, and the
+tool definition states the limit. The rephrased semantic query, the model's
+own queries, the user's original message and the keyword queries each get a lane and an RRF
 weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a
 low `hybrid_alpha`. A `hybrid_alpha` of exactly 0 skips embedding and runs pure
 keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.

@@ -25,7 +25,7 @@ Call tools from Python programs with `execute_code`; its description lists the f
 """.lstrip()
 
 
-INTERNAL_SEARCH_USES = """
+INTERNAL_SEARCH_GUIDANCE = """
 ## internal_search
 Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
 - Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
@@ -34,18 +34,11 @@ Use the `internal_search` tool to search connected applications for information.
 - Ambiguity: questions about something that is not widely known or understood.
 """.lstrip()
 
-# Code mode programs call internal_search as a function; its stub carries the
-# batching note (CODE_MODE_SEARCH_USAGE), so it omits the query limit.
-INTERNAL_SEARCH_GUIDANCE = (
-    INTERNAL_SEARCH_USES
-    + "Never provide more than 3 queries at once to `internal_search`.\n"
-)
-
 # The internal_search stub's note in code mode: each call runs its own retrieval
 # pipeline.
 CODE_MODE_SEARCH_USAGE = (
     "Each call runs a full retrieval pipeline with several model calls, so it is "
-    "expensive. Pass up to 3 queries for one information need in one call, for example "
+    "expensive. Pass the queries for one information need in one call, for example "
     '`await internal_search(queries=["first phrasing", "second phrasing"])`. Do not '
     "split them into one call per query, and do not `asyncio.gather` single-query "
     "calls. Search again when earlier results are insufficient or when a follow-up "
