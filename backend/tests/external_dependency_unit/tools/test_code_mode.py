@@ -23,8 +23,10 @@ from sqlalchemy.orm import Session
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import get_processing_stream_id
 from onyx.chat.chat_utils import create_chat_session_from_request
+from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.db.enums import (
+    IncognitoRecordMode,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
@@ -344,18 +346,24 @@ def test_code_mode_program_calls_mcp_tool_in_parallel(
     _assert_code_mode_block(chat_detail.packets[0])
 
 
+@pytest.mark.parametrize("temporary", [False, True])
 def test_stored_values_reach_a_program_in_a_later_turn(
     db_session: Session,
     make_test_user: MakeTestUser,
     mcp_server_url: str,
+    temporary: bool,
 ) -> None:
-    user = make_test_user("code_mode_store_user")
+    user = make_test_user(f"code_mode_store_user_{temporary}")
     persona = _persona_with_mcp_tool(db_session, user, mcp_server_url)
     chat_session = create_chat_session_from_request(
         chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
         user=user,
         db_session=db_session,
     )
+    if temporary:
+        # A temporary chat keeps its history, and so the store, in Redis.
+        chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+        db_session.commit()
 
     first = ChatLLM(
         [
@@ -397,6 +405,8 @@ def test_stored_values_reach_a_program_in_a_later_turn(
     )
     text = last_tool_text(second, "load")
     assert "Hello, alpha!\nfresh interpreter" in text
+    if temporary:
+        teardown_incognito_session(chat_session.id)
 
 
 def _nested_hello_data(packets: Sequence[object]) -> list[str]:
