@@ -358,9 +358,6 @@ its background task end ([[#pure-asgi-middleware]]).
      non-streaming API (`chat/process_message.py:gather_stream_full`) builds
      `ChatFullResponse` from the saved response snapshot, not from packets, so
      decide whether the snapshot needs the new data.
-     `chat/process_message.py:gather_stream` ([[slack-bot]]) builds its answer
-     from root answer and citation packets and skips packets with a
-     `sub_turn_index`.
   7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
 - `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
   list every place that knows it with `git grep -n SearchStartEvent -- cli`. A
