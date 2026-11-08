@@ -183,9 +183,11 @@ receives all three as required props. `ResearchAgentRenderer` draws each entry
 of `nestedCalls` with the renderer of its tool. `CodingAgentRenderer` reads
 `streamPackets`, because its thinking and bash sections interleave in stream
 order.
-The mobile app copies these rules in `mobile/src/chat/timeline/packetHelpers.ts`
-and `mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
-`GroupedPacket.packets` also holds only the group's own packets.
+The mobile app copies the group end and step-kind rules in
+`mobile/src/chat/timeline/packetHelpers.ts` and
+`mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
+`GroupedPacket.packets` also holds only the group's own packets. Mobile has no
+`nestedCalls` or `streamPackets`.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at
