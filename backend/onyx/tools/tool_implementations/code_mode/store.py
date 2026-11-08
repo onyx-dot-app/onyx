@@ -12,6 +12,7 @@ model.
 
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import NamedTuple
 
 from pydantic import JsonValue
 from pydantic_monty import MontyClassProxy
@@ -59,21 +60,31 @@ def _type_name(value: object) -> str:
     return value.name if isinstance(value, MontyClassProxy) else type(value).__name__
 
 
-def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
+class JsonCopy(NamedTuple):
+    """A sandbox value copied as JSON data, with its compact JSON text
+    (`json_text`) and that text's UTF-8 bytes."""
+
+    value: JsonValue
+    text: str
+    size: int
+
+
+def json_value(value: object, what: str, max_bytes: int) -> JsonCopy:
     """A copy of `value` as strict JSON data of at most `max_bytes` as compact JSON.
 
     Every sandbox value that the host copies or saves goes through this copy.
     `what` names the value in error messages. Tuples become lists. Raises
     TypeError for data that is not JSON (also NaN, infinity and dict keys that
     are not str), and ValueError when the copy would exceed `max_bytes` or nest
-    deeper than MAX_VALUE_DEPTH. Both checks run before the host encodes or
-    formats a value, and error messages show at most MAX_PATH_KEY_CHARS of each
-    key.
+    deeper than MAX_VALUE_DEPTH, or holds a lone surrogate. Error messages show
+    at most MAX_PATH_KEY_CHARS of each key.
 
     Sandbox values can share references, so `x = [x, x]` doubles the JSON size
     with each step at no cost to the program. The copy walks with an explicit
-    stack and counts bytes as it copies, so it stops after at most `max_bytes`
-    of work and memory.
+    stack and counts a lower bound of the JSON bytes as it copies, so it stops
+    after at most `max_bytes` of work and memory. It then encodes the copy once
+    for the exact size; a value that only that check rejects gets a message
+    without the path.
     """
     size = 0
     # The containers being copied, from the root down, with their remaining
@@ -102,9 +113,14 @@ def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
             )
 
     def count_scalar(item: JsonValue) -> None:
-        # A str has at least one byte per character; skip encoding a long one.
-        too_long = isinstance(item, str) and len(item) > max_bytes
-        count(max_bytes + 1 if too_long else len(json_text(item).encode("utf-8")))
+        # A lower bound: a str has its quotes and at least one byte per
+        # character, a number at least one digit.
+        if isinstance(item, str):
+            count(len(item) + 2)
+        elif item is None or item is True:
+            count(4)
+        else:
+            count(5 if item is False else 1)
 
     def copy(item: object) -> JsonValue:
         """`item` if it is a JSON scalar; else an empty copy that the walk fills."""
@@ -160,7 +176,11 @@ def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
         keys[-1] = key
         count_scalar(key)
         container[key] = copy(item)
-    return root
+    text = json_text(root)
+    exact = len(text.encode("utf-8"))
+    if exact > max_bytes:
+        raise ValueError(f"{what} exceeds the limit of {max_bytes} bytes as JSON.")
+    return JsonCopy(value=root, text=text, size=exact)
 
 
 def _commits(messages: Iterable[Message]) -> list[StoreCommit]:
@@ -211,11 +231,14 @@ def store_snapshot(
     )
 
 
-def _differs(before: JsonValue, after: JsonValue) -> bool:
+def _differs(
+    before: JsonValue, after: JsonValue, after_text: str | None = None
+) -> bool:
+    """Whether `after`, whose `json_text` may be given, changes `before`."""
     if before is None or after is None:
         return before is not after
     # Serialized, so that 1, 1.0 and True stay distinct.
-    return json_text(before) != json_text(after)
+    return json_text(before) != (json_text(after) if after_text is None else after_text)
 
 
 def changed_writes(
@@ -293,14 +316,19 @@ class ProgramStore:
 
     def store(self, key: object, value: object) -> None:
         valid_key = _valid_key(key)
-        stored = json_value(
+        copied = json_value(
             value, f'Cannot store "{valid_key}": the value', MAX_STORED_VALUE_BYTES
         )
-        write_bytes = entry_bytes(valid_key, stored)
+        stored = copied.value
+        write_bytes = len(valid_key.encode("utf-8")) + (
+            0 if stored is None else copied.size
+        )
         size = 0 if stored is None else write_bytes
         total = self._total - self._sizes.get(valid_key, 0) + size
         write_size = (
-            write_bytes if _differs(self._snapshot.values.get(valid_key), stored) else 0
+            write_bytes
+            if _differs(self._snapshot.values.get(valid_key), stored, copied.text)
+            else 0
         )
         write_total = (
             self._write_total - self._write_sizes.get(valid_key, 0) + write_size

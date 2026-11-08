@@ -120,8 +120,13 @@ def test_a_commit_applies_only_after_the_commit_it_follows() -> None:
 def test_json_value_copies_and_converts_tuples() -> None:
     value = {"list": [1, (2, 3)], "nested": {"x": None, "y": 1.5, "z": True}}
     copied = json_value(value, "k", 1024)
-    assert copied == {"list": [1, [2, 3]], "nested": {"x": None, "y": 1.5, "z": True}}
-    assert copied is not value
+    assert copied.value == {
+        "list": [1, [2, 3]],
+        "nested": {"x": None, "y": 1.5, "z": True},
+    }
+    assert copied.value is not value
+    assert copied.text == json_text(copied.value)
+    assert copied.size == len(copied.text.encode("utf-8"))
 
 
 @pytest.mark.parametrize(
@@ -131,13 +136,21 @@ def test_json_value_copies_and_converts_tuples() -> None:
         [],
         "x",
         [[[]], (1, 2)],
+        # Escapes and multibyte characters make the JSON longer than the text.
+        ['quote " and \\ backslash', "control \n\x00", "é, 中文 and 😀"],
+        {"é" * 10: [10**30, 1e16, False]},
     ],
 )
 def test_json_value_limit_is_the_compact_json_size(value: JsonValue) -> None:
-    size = len(json_text(json_value(value, "v", 10_000)).encode("utf-8"))
-    assert json_value(value, "v", size) is not None
+    size = len(json_text(json_value(value, "v", 10_000).value).encode("utf-8"))
+    assert json_value(value, "v", size).size == size
     with pytest.raises(ValueError, match=f"v exceeds the limit of {size - 1} bytes"):
         json_value(value, "v", size - 1)
+
+
+def test_json_value_rejects_lone_surrogates() -> None:
+    with pytest.raises(ValueError):
+        json_value({"k": "\ud800"}, "v", 1024)
 
 
 def test_json_value_stops_at_its_limit_for_shared_references() -> None:
@@ -166,7 +179,7 @@ def test_json_value_rejects_deep_nesting() -> None:
     value: list[object] = []
     for _ in range(MAX_VALUE_DEPTH - 1):
         value = [value]
-    assert json_value(value, "v", 10_000) == value
+    assert json_value(value, "v", 10_000).value == value
     with pytest.raises(ValueError, match=f"nests more than {MAX_VALUE_DEPTH} levels"):
         json_value([value], "v", 10_000)
 

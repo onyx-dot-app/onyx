@@ -1311,7 +1311,7 @@ def execute_program(
     try:
         output = json_value(
             ended.output, "The value of the last expression", limits.max_result_bytes
-        )
+        ).value
     except (TypeError, ValueError) as error:
         return finish("completed", error=str(error))
     return finish("completed", result=repr(output))
