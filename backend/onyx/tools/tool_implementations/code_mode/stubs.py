@@ -63,14 +63,17 @@ _STUB_HEADER = (
 )
 
 _DECLARED_TYPE = re.compile(r"^class (\w+)", re.MULTILINE)
-_SYNTAX_NAMES: frozenset[str] = frozenset({*keyword.kwlist, *keyword.softkwlist})
-# Names a tool function must not shadow: Python syntax, builtins, the names
+# Argument and field names can be soft keywords such as `type`; only hard
+# keywords are invalid there.
+_KEYWORDS: frozenset[str] = frozenset(keyword.kwlist)
+# Names a tool function must not shadow: Python keywords, builtins, the names
 # the sandbox, the store and the tool search give programs, and the typing names
 # of the stub header. The result types that the tools declare are added per stub
 # module.
 _RESERVED_FUNCTION_NAMES: frozenset[str] = frozenset(
     {
-        *_SYNTAX_NAMES,
+        *keyword.kwlist,
+        *keyword.softkwlist,
         *dir(builtins),
         *_TYPING_NAMES,
         *SANDBOX_NAMES,
@@ -145,9 +148,7 @@ def function_name(tool_name: str, declared_types: frozenset[str] = frozenset()) 
 
 
 def argument_name(argument: str) -> str:
-    return python_identifier(
-        argument, fallback="arg", reserved=_SYNTAX_NAMES, suffix="_"
-    )
+    return python_identifier(argument, fallback="arg", reserved=_KEYWORDS, suffix="_")
 
 
 def unique_identifiers[T](
@@ -557,7 +558,7 @@ def _schema_result_type(
         or any(
             not name.isidentifier()
             or unicodedata.normalize("NFKC", name) != name
-            or name in _SYNTAX_NAMES
+            or name in _KEYWORDS
             for name in properties
         )
     ):

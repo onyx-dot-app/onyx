@@ -590,3 +590,21 @@ def test_result_models_with_one_name_are_rejected() -> None:
     ]
     with pytest.raises(ValueError, match="Two result models are named Item"):
         build_tool_stubs([_ModelTool("fetch", _unused)])
+
+
+def test_soft_keywords_keep_their_names_as_arguments_and_fields() -> None:
+    schema: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"type": {"type": "string"}},
+        "required": ["type"],
+    }
+    tool = FakeMCPTool("list_items", _unused, schema, output_schema=schema)
+    function = build_tool_stubs([tool]).functions["acme__list_items"]
+    assert "async def acme__list_items(*, type: str) -> AcmeListItemsResult:" in (
+        function.stub
+    )
+    assert (
+        "class AcmeListItemsResult(TypedDict):\n    type: str"
+        in (function.declarations[0])
+    )
+    assert function.argument_names == {"type": "type"}
