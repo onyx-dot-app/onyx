@@ -134,10 +134,9 @@ export default function ShareButton({
                   )}
                 >
                   <ContentAction
+                    font="main-ui-action"
                     title={opt.label}
                     description={opt.description}
-                    sizePreset="main-ui"
-                    variant="section"
                     padding={1}
                   />
                 </div>

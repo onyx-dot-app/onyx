@@ -355,8 +355,7 @@ export default function ExportLogsPage() {
         <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <ContentAction
-              sizePreset="main-ui"
-              variant="section"
+              font="main-ui-action"
               icon={SvgDownload}
               title={t("exportCard.title")}
               description={t("exportCard.description")}

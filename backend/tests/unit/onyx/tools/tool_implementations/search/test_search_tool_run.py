@@ -1,8 +1,9 @@
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from threading import Barrier
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,7 +21,7 @@ from onyx.context.search.models import (
     TimeFilter,
     UserAccessFilters,
 )
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -35,6 +36,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.search.constants import MAX_SELECTED_SECTIONS
 from onyx.tools.tool_implementations.search.models import (
     SearchContext,
     SearchPlanningResult,
@@ -42,6 +44,9 @@ from onyx.tools.tool_implementations.search.models import (
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
+)
+from onyx.tools.tool_implementations.utils import (
+    convert_inference_sections_to_llm_string,
 )
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -57,6 +62,8 @@ def _make_tool(
     auto_detect_filters: bool = True,
     selection_llm_factory: MagicMock | None = None,
     primary_llm_cost_checked: bool = True,
+    retrieval_only: bool = False,
+    retrieval_context_chunks: int = 0,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
@@ -71,6 +78,8 @@ def _make_tool(
         auto_detect_filters=auto_detect_filters,
         selection_llm_factory=selection_llm_factory,
         primary_llm_cost_checked=primary_llm_cost_checked,
+        retrieval_only=retrieval_only,
+        retrieval_context_chunks=retrieval_context_chunks,
     )
 
 
@@ -244,6 +253,107 @@ def test_search_uses_one_selection_model_per_invocation(
         selection_mode == "configured"
     )
     assert cost.call_count == (2 if with_slack or selection_mode != "configured" else 0)
+
+
+def _next_chunk(
+    chunk_requests: list[DocumentSectionRequest], **_: object
+) -> list[InferenceChunk]:
+    (request,) = chunk_requests
+    chunk = _section(request.document_id).center_chunk
+    return [
+        chunk.model_copy(
+            update={"chunk_id": 1, "content": f"next chunk of {request.document_id}"}
+        )
+    ]
+
+
+@pytest.mark.parametrize("context_chunks", [0, 2])
+def test_retrieval_only_expands_context_without_model_calls(
+    context_chunks: int,
+) -> None:
+    resolver = MagicMock()
+    decide = MagicMock(return_value=None)
+    tool = _make_tool(
+        selection_llm_factory=resolver,
+        primary_llm_cost_checked=False,
+        retrieval_only=True,
+        retrieval_context_chunks=context_chunks,
+    )
+    tool.enable_slack_search = True
+    index = cast(MagicMock, tool.document_index)
+    index.id_based_retrieval.side_effect = _next_chunk
+    sections = [_section(f"doc-{i}") for i in range(MAX_SELECTED_SECTIONS + 1)]
+    context = ToolContext()
+    with (
+        patch(f"{MODULE}.check_llm_cost_limit_for_provider") as cost,
+        patch.object(tool, "_prefetch_slack_data") as slack_prefetch,
+        patch.object(tool, "_resolve_decision_client") as decision_client,
+        patch(f"{MODULE}.populate_file_ids_on_sections") as populate_file_ids,
+        patch(f"{MODULE}.select_sections_for_expansion") as select,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            wraps=convert_inference_sections_to_llm_string,
+        ) as to_llm_string,
+    ):
+        searched = _run(
+            tool,
+            context=context,
+            connected_sources=[DocumentSource.GITHUB],
+            decide_mock=decide,
+            sections=sections,
+        )
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert [
+        section.combined_content
+        for section in to_llm_string.call_args.kwargs["top_sections"]
+    ] == [
+        f"content of doc-{i}" + (f"\nnext chunk of doc-{i}" if context_chunks else "")
+        for i in range(MAX_SELECTED_SECTIONS)
+    ]
+    # Each kept section reads only the chunks below it, up to the window.
+    assert [
+        call.kwargs["chunk_requests"][0].max_chunk_ind
+        for call in index.id_based_retrieval.call_args_list
+    ] == [context_chunks] * (MAX_SELECTED_SECTIONS if context_chunks else 0)
+    # One completed search and no expansion or time decision to carry forward.
+    assert len(context.search_context.search_cycles) == 1
+    assert context.search_context.cached_expansion is None
+    assert context.search_context.time_filter_computed is False
+    assert cast(MagicMock, tool.llm).mock_calls == []
+    for step in (
+        decide,
+        slack_prefetch,
+        decision_client,
+        resolver,
+        select,
+        cost,
+        populate_file_ids,
+    ):
+        step.assert_not_called()
+
+
+def test_retrieval_only_ignores_planning_from_earlier_steps() -> None:
+    context = ToolContext()
+    context.search_context = SearchContext(
+        cached_expansion=("rephrased query", ("cached keyword",)),
+        time_filter=TimeFilter(
+            field=DocumentTimeField.UPDATED_AT, start=datetime(2026, 1, 1, tzinfo=UTC)
+        ),
+        time_filter_computed=True,
+    )
+    tool = _make_tool(
+        user_selected_filters=BaseFilters(source_type=[DocumentSource.ASANA]),
+        retrieval_only=True,
+    )
+
+    searched = _run(tool, context=context, connected_sources=[DocumentSource.ASANA])
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert all(
+        applied.updated_at_range is None
+        for applied in _filters_passed_to_search(searched)
+    )
 
 
 def _filters_passed_to_search(mock_search_pipeline: MagicMock) -> list[Any]:

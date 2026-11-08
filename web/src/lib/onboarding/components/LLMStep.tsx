@@ -214,11 +214,10 @@ const LLMStep = memo(
           aria-label="onboarding-llm-step"
         >
           <ContentAction
+            font="main-ui-action"
             icon={SvgCpu}
             title={t("llmStep.title")}
             description={t("llmStep.description", { appName })}
-            sizePreset="main-ui"
-            variant="section"
             padding={2}
             rightChildren={
               <Button

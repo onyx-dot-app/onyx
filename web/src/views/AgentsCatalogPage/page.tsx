@@ -38,7 +38,7 @@ function AgentsSection({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Text as="p" font="heading-h3" color="text-05">
+        <Text as="p" font="heading-section" color="text-05">
           {title}
         </Text>
         <Text as="p" font="secondary-body" color="text-03">

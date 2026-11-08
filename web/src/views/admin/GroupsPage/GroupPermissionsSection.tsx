@@ -106,11 +106,10 @@ function GroupPermissionsSection({
                     <Divider paddingParallel={0} paddingPerpendicular={0} />
                   )}
                   <ContentAction
+                    font="main-ui-action"
                     icon={icon}
                     title={entry.display_name}
                     description={entry.description}
-                    sizePreset="main-ui"
-                    variant="section"
                     padding={1}
                     rightChildren={
                       <InputSwitch

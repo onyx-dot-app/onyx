@@ -76,27 +76,29 @@ class FileReaderTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.DESCRIPTION,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     FILE_ID_FIELD: {
                         "type": "string",
                         "description": "The UUID of the file to read.",
                     },
                     START_CHAR_FIELD: {
-                        "type": "integer",
+                        "anyOf": [{"type": "integer"}, {"type": "null"}],
                         "description": (
-                            "Character offset to start reading from. Defaults to 0."
+                            "Character offset to start reading from. Use null for the default of 0."
                         ),
                     },
                     NUM_CHARS_FIELD: {
-                        "type": "integer",
+                        "anyOf": [{"type": "integer"}, {"type": "null"}],
                         "description": (
-                            "Number of characters to return (max 16000). Defaults to 16000."
+                            "Number of characters to return (max 16000). Use null for the default of 16000."
                         ),
                     },
                 },
-                "required": [FILE_ID_FIELD],
+                "required": [FILE_ID_FIELD, START_CHAR_FIELD, NUM_CHARS_FIELD],
             },
         )
 

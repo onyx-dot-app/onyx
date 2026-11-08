@@ -18,7 +18,6 @@ import {
   Divider,
   InputTypeIn,
   LineItemButton,
-  OverflowText,
 } from "@opal/components";
 import {
   SvgArrowLeft,
@@ -126,7 +125,7 @@ export function KnowledgeSearchSidebar({
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-search-sidebar">
       <LineItemButton
-        sizePreset="main-ui"
+        font="main-ui-action"
         rounding={2}
         icon={SvgFiles}
         state={activeSourceFilter === null ? "selected" : "empty"}
@@ -147,7 +146,7 @@ export function KnowledgeSearchSidebar({
           const count = resultCountBySource.get(cs.source) ?? 0;
           return (
             <LineItemButton
-              sizePreset="main-ui"
+              font="main-ui-action"
               rounding={2}
               key={cs.source}
               icon={sourceMetadata.icon}
@@ -323,16 +322,20 @@ export function KnowledgeSearchResultsPanel({
                         height="auto"
                         className="min-w-0 grow"
                       >
-                        <OverflowText
+                        <Text
+                          maxLines={1}
+                          overflowTooltip
                           as="p"
                           textPosition="text-start"
                           font="main-ui-body"
                           color="text-05"
                         >
                           {node.title}
-                        </OverflowText>
+                        </Text>
                         {node.link && (
-                          <OverflowText
+                          <Text
+                            maxLines={1}
+                            overflowTooltip
                             as="p"
                             textPosition="text-start"
                             font="secondary-body"
@@ -342,7 +345,7 @@ export function KnowledgeSearchResultsPanel({
                               .replace(/^https?:\/\//i, "")
                               .replace(/^www\./i, "")
                               .replace(/\/+$/, "")}
-                          </OverflowText>
+                          </Text>
                         )}
                       </Section>
                       <Button
@@ -400,23 +403,27 @@ export function KnowledgeSearchResultsPanel({
                       height="auto"
                       className="min-w-0 grow"
                     >
-                      <OverflowText
+                      <Text
+                        maxLines={1}
+                        overflowTooltip
                         as="p"
                         textPosition="text-start"
                         font="main-ui-body"
                         color="text-05"
                       >
                         {doc.semantic_identifier}
-                      </OverflowText>
+                      </Text>
                       {doc.blurb && (
-                        <OverflowText
+                        <Text
+                          maxLines={1}
+                          overflowTooltip
                           as="p"
                           textPosition="text-start"
                           font="secondary-body"
                           color="text-03"
                         >
                           {doc.blurb}
-                        </OverflowText>
+                        </Text>
                       )}
                     </Section>
                   </Section>

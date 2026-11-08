@@ -249,3 +249,13 @@ class TestMCPToolLLMNames:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-xv"])
+
+
+def test_external_schema_keeps_open_objects_and_non_strict_default() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"metadata": {"type": "object", "properties": {}}},
+    }
+    definition = _make_tool(schema).tool_definition()
+    assert not definition.strict
+    assert definition.parameters == schema

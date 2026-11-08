@@ -185,7 +185,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           width="fit"
         >
           <SvgUsers size={24} />
-          <Text font="heading-h2" color="text-04">
+          <Text font="heading-headline" color="text-04">
             {t("checkout.plan.title")}
           </Text>
         </Section>

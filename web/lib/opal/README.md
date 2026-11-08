@@ -61,12 +61,10 @@ import SvgPlus from "@onyx-ai/opal/icons/plus";
 
 function MyComponent() {
   return (
-    <Content
+    <Content font="main-ui-action"
       icon={SvgPlus}
       title="Hello"
       description="World"
-      sizePreset="main-ui"
-      variant="section"
     />
   );
 }

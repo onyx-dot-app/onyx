@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Select Search Sources"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
     "addMcpModal": {
@@ -186,7 +189,6 @@
           "description": "Choose at least one group you manage."
         },
         "retainedUsers": "{count, plural, one {Also shared directly with # user.} other {Also shared directly with # users.}}",
-        "planTag": "Business",
         "planNote": "Group access requires a Business plan."
       },
       "defaultChat": {
@@ -2652,7 +2654,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Delete"
+          "label": "Delete Connector",
+          "description": "Permanently remove all indexed docs."
         },
         "reIndex": {
           "tooltip": {
@@ -2691,7 +2694,7 @@
         },
         "syncPermissions": {
           "label": "Sync Permissions",
-          "description": "Pull who can read each doc from the source now.",
+          "description": "Pull doc permissions from the source.",
           "tooltip": {
             "syncing": "A permission sync is already queued or running"
           }
@@ -2818,20 +2821,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} docs/min",
-        "indexingSpeedTooltip": "Documents indexed per minute since the connector was created",
         "lastIndexed": {
           "value": "Last indexed {when}"
         },
+        "deletionStarted": {
+          "value": "Started {when}"
+        },
         "documents": {
           "totalLabel": "Total documents indexed",
-          "recentLabel": "Recently processed documents",
-          "syncedPermissionsLabel": "Synced permissions",
-          "syncedMembershipsLabel": "Synced group memberships"
+          "recentLabel": "Docs processed recently",
+          "indexedLabel": "Documents indexed"
         },
         "throughput": {
           "ariaLabel": "Documents indexed over time",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "lineTooltip": "{failures, plural, one {# failure} other {# failures}}, {errors, plural, one {# error} other {# errors}}",
+          "barLabel": "{count, plural, one {# document} other {# documents}}, {range}",
           "loadError": "The chart could not load.",
           "rangeFilter": "Runs created in this slice of the chart"
         },
@@ -2847,13 +2852,33 @@
         "title": "Indexing Status",
         "sync": {
           "permissionsTitle": "Permissions Sync Status",
-          "groupsTitle": "Group Membership Sync Status",
           "last": "Last synced {when}",
           "never": "Not synced yet",
-          "neverTooltip": "Indexed docs may not be searchable until their permissions are synced.",
-          "waitingForFirstIndex": "Waiting for first index"
+          "neverTooltip": "Indexed docs won't be searchable until their permissions are synced.",
+          "waitingForFirstIndex": "Waiting for first index",
+          "docsLabel": "Docs permission-synced",
+          "groupsLabel": "Group memberships"
         },
-        "accessTitle": "Connector Documents Access"
+        "actions": {
+          "showActivities": "Show Activities",
+          "hideActivities": "Hide Activities",
+          "viewDetails": "View Details",
+          "hideDetails": "Hide Details",
+          "viewIndexingRun": "View Indexing Run",
+          "viewPruningRun": "View Pruning Run",
+          "viewChecksRun": "View Checks Run"
+        },
+        "types": {
+          "count": "{count, plural, one {Document type} other {Document types}}",
+          "header": "Document Type",
+          "indexed": "Indexed",
+          "size": "Size",
+          "other": "Other",
+          "countWithSize": "{count} ({size})",
+          "bytes": "Bytes",
+          "loadError": "Couldn't load the document types.",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",
@@ -2983,6 +3008,7 @@
           "all": "All Types",
           "indexing": "Document Index",
           "backfill": "Document Backfill",
+          "retry": "Document Index - Retry",
           "doc_permission_sync": "Permissions Sync",
           "group_sync": "Group Membership Sync",
           "pruning": "Document Pruning",
@@ -2990,9 +3016,10 @@
         },
         "detail": {
           "queued": "Queued",
+          "starting": "Starting sync",
           "running": "Running",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({duration})",
+          "runtime": "Runtime {duration}",
           "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} memberships/min",
           "membershipRateFinished": "{rate} memberships/min ({duration})"
@@ -3001,6 +3028,7 @@
           "stages": "View Stage Metrics",
           "cancel": "Cancel",
           "logs": "View Logs",
+          "noLogs": "No logs recorded",
           "checks": "View Check Results"
         },
         "warnings": {
@@ -3035,16 +3063,12 @@
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}",
           "syncedDocs": "{count, plural, one {# document synced} other {# documents synced}}"
         },
-        "search": {
-          "placeholder": "Search run errors…"
-        },
         "window": {
           "label": "Time range",
           "all": "All time",
           "h1": "Last hour",
           "h24": "Last 24 hours",
-          "d7": "Last 7 days",
-          "d30": "Last 30 days"
+          "d7": "Last 7 days"
         },
         "statusGroups": {
           "label": "Status",
@@ -3055,14 +3079,13 @@
           "canceled": "Canceled"
         },
         "loadError": {
-          "title": "Couldn't load the runs."
+          "title": "Couldn't load the runs.",
+          "retry": "Retry"
         },
         "empty": {
           "title": "No recent indexing runs",
           "filteredTitle": "No runs match these filters.",
           "pastRuns": "{count, plural, one {# Past Run} other {# Past Runs}}",
-          "view": "View",
-          "viewAria": "{count, plural, one {View # past run} other {View # past runs}}",
           "description": "Runs are scheduled in the background and may take a moment to appear."
         },
         "units": "{count, plural, one {run} other {runs}}",
@@ -3097,15 +3120,24 @@
           "all": "All Levels",
           "failures": "Failures",
           "errors": "Errors",
-          "other": "Other",
+          "running": "Running",
+          "success": "Success",
+          "canceled": "Canceled",
           "resolved": "Resolved",
-          "toggle": "Filters"
+          "connectors": "Connectors",
+          "connectorsLoading": "Loading connectors…",
+          "connectorsLoadError": "Couldn't load connectors.",
+          "connectorsRetry": "Retry",
+          "toggleShow": "Show Filters",
+          "toggleHide": "Hide Filters"
         },
         "groups": {
           "failures": "{count, plural, =0 {Failures} one {# Failure} other {# Failures}}",
           "errors": "{count, plural, =0 {Errors} one {# Error} other {# Errors}}",
-          "other": "Other",
-          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}"
+          "running": "{count, number} Running",
+          "resolved": "Resolved",
+          "success": "Success",
+          "canceled": "Canceled"
         },
         "title": {
           "indexing": {
@@ -3116,9 +3148,8 @@
             "errors": "Indexing completed with errors.",
             "resolved": "Indexing errors resolved.",
             "succeeded": "Indexing completed successfully.",
-            "queued": "Indexing queued.",
             "inProgress": "Indexing in progress.",
-            "canceled": "Indexing stopped."
+            "canceled": "Indexing canceled."
           },
           "doc_permission_sync": {
             "failed": "Permissions sync failed.",
@@ -3128,9 +3159,8 @@
             "errors": "Permissions synced with errors.",
             "resolved": "Permissions sync errors resolved.",
             "succeeded": "Permissions synced successfully.",
-            "queued": "Permissions sync queued.",
             "inProgress": "Permissions syncing.",
-            "canceled": "Permissions sync stopped."
+            "canceled": "Permissions sync canceled."
           },
           "group_sync": {
             "failed": "Group membership sync failed.",
@@ -3140,9 +3170,8 @@
             "errors": "Group membership synced with errors.",
             "resolved": "Group membership sync errors resolved.",
             "succeeded": "Group membership synced successfully.",
-            "queued": "Group membership sync queued.",
             "inProgress": "Group membership syncing.",
-            "canceled": "Group membership sync stopped."
+            "canceled": "Group membership sync canceled."
           },
           "pruning": {
             "failed": "Pruning failed.",
@@ -3152,9 +3181,8 @@
             "errors": "Pruning completed with errors.",
             "resolved": "Pruning errors resolved.",
             "succeeded": "Pruning completed successfully.",
-            "queued": "Pruning queued.",
             "inProgress": "Pruning in progress.",
-            "canceled": "Pruning stopped."
+            "canceled": "Pruning canceled."
           },
           "checks": {
             "failed": "Connector checks failed.",
@@ -3164,9 +3192,8 @@
             "errors": "Connector checks completed with errors.",
             "resolved": "Connector check errors resolved.",
             "succeeded": "Connector checks passed.",
-            "queued": "Connector checks queued.",
             "inProgress": "Connector checks running.",
-            "canceled": "Connector checks stopped."
+            "canceled": "Connector checks canceled."
           }
         },
         "description": {
@@ -3181,22 +3208,18 @@
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
           "indexingItems": "{count, plural, one {# item failed} other {# items failed}}",
-          "doc_permission_sync": "{count, plural, one {# doc failed to sync permissions} other {# docs failed to sync permissions}}",
-          "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
           "checks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "users": "{count, plural, one {# user failed to sync} other {# users failed to sync}}",
+          "groups": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
           "resolved": "Resolved",
-          "resolvedDocs": "{count, plural, one {# item resolved} other {# items resolved}}",
           "superseded": "Superseded"
         },
         "more": "Show more",
         "empty": {
           "title": "No recent activity",
-          "resolved": "No resolved runs",
-          "filtered": "Nothing matches this search.",
-          "failures": "No failures",
-          "errors": "No errors",
-          "other": "No other runs"
+          "past": "Past Activities",
+          "filtered": "Nothing matches this search."
         },
         "loadError": {
           "title": "Couldn't load the activity."
@@ -3204,19 +3227,32 @@
         "docs": {
           "title": "Failed items",
           "search": {
-            "placeholder": "Search items…"
+            "placeholder": "Search documents…"
           },
-          "resolveAll": "Retry all",
-          "resolveAllTooltip": "Re-index every failed document of this run",
-          "resolveAllUnsupported": "This connector can't re-index single documents. Re-index the connector to retry them.",
-          "resolveOne": "Retry this document",
-          "retry": "{count, plural, one {Retry # doc} other {Retry # docs}}",
+          "resolveAll": "Retry All Docs",
+          "resolveOne": "Retry Doc",
+          "resolveWithoutRetry": "Resolve without Retry",
           "more": "More",
           "less": "Less",
           "unknownDocument": "Unknown document",
-          "empty": "No open errors",
+          "empty": "No failed documents",
           "loadError": "Couldn't load the failed items.",
-          "open": "Open the document"
+          "open": "Open the document",
+          "resolvedGroup": "Resolved Errors",
+          "resolvedWithoutRetry": "Resolved without Retry",
+          "resolvedByLaterRun": "Resolved by Later Run"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Failed users",
+            "search": "Search users…",
+            "empty": "No failed users"
+          },
+          "groups": {
+            "title": "Failed groups",
+            "search": "Search groups…",
+            "empty": "No failed groups"
+          }
         },
         "trace": {
           "header": "Stack Trace • Run ID: {id}",
@@ -3224,17 +3260,18 @@
           "runId": "Run ID: {id}"
         },
         "actions": {
-          "resolve": "Resolve"
+          "resolve": "Resolve",
+          "resolveWithoutRetry": "Resolve without Retry",
+          "retryDocs": "Retry Docs"
         },
         "resolveAll": {
-          "button": "Resolve all shown",
-          "title": "Resolve all shown runs?",
-          "description": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved. They keep their status and move under resolved.",
-          "fleetDescription": "This marks {count, plural, one {# run} other {# runs}} that match the current filter resolved, on the connectors you operate. They keep their status and move under resolved.",
-          "confirm": "Resolve all"
-        },
-        "resolved": {
-          "label": "Resolved"
+          "button": "Resolve All",
+          "title": "Resolve all shown activities",
+          "body": "{count, plural, one {This resolves the # activity that matches the current filter: {failures} and {errors}. Onyx does not retry its failed items. The activity keeps its status and moves to Resolved.} other {This resolves the # activities that match the current filter: {failures} and {errors}. Onyx does not retry their failed items. The activities keep their status and move to Resolved.}}",
+          "body2": "A run that is still running can report new errors. They show as open again. You can retry a resolved document later from its failed documents list.",
+          "failures": "{count, plural, =0 {no failures} one {# failure} other {# failures}}",
+          "errors": "{count, plural, =0 {no runs with errors} one {# run with errors} other {# runs with errors}}",
+          "confirm": "Resolve All"
         }
       },
       "stageDetails": {
@@ -3246,10 +3283,22 @@
         "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
+        "noDocs": "No docs completed indexing",
+        "laterCanceled": "Later stages canceled",
+        "retry": "Retry",
         "uneven": {
           "tooltip": "Batch times vary widely for this stage"
         },
         "close": "Close stage details"
+      },
+      "tabs": {
+        "configurations": "Connector Configurations",
+        "indexing": "Indexing",
+        "indexingDisabled": "Available after the first run starts."
+      },
+      "indexingTab": {
+        "chartHeading": "Document Indexing",
+        "runsHeading": "Indexing Runs"
       }
     },
     "connectorTitle": {
@@ -6281,13 +6330,6 @@
           "title": "Group Permissions"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} now uses group-based permissions. Access is configured per group, so a user's permissions are the combination of every group they belong to.",
-        "learnMore": {
-          "label": "Learn more"
-        },
-        "title": "Permissions have changed."
-      },
       "sharedResources": {
         "agent": {
           "description": "agent"
@@ -6639,9 +6681,6 @@
       },
       "connectedModels": {
         "title": "Connected Models"
-      },
-      "defaultTag": {
-        "label": "Default"
       },
       "deselectError": {
         "message": "Failed to deselect"
@@ -7105,7 +7144,6 @@
           "tag": "GPU recommended"
         },
         "legacy": {
-          "tag": "Legacy",
           "tooltip": "You cannot select this model for a new index. It keeps working until you change the model."
         },
         "selectButton": {
@@ -7158,9 +7196,6 @@
       "multipass": {
         "description": "Index documents as chunks of varying sizes to better identify relevant sources.",
         "disabledTooltip": "Multipass Indexing is disabled temporarily and will be available in the future.",
-        "tag": {
-          "label": "temporarily unavailable"
-        },
         "title": "Multipass Indexing"
       },
       "openaiCompatible": {
@@ -7441,37 +7476,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Add Connector",
       "connectorCreated": {
         "toast": "Connector created successfully"
       },
       "overview": {
-        "connectors": {
-          "caption": "Indexing / active",
-          "label": "Connectors"
-        },
-        "documents": {
-          "caption": "In the index",
-          "label": "Documents",
-          "tooltip": "Adds up each connector's documents, so a document that two connectors hold counts twice."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "The overview could not load.",
-        "processed": {
-          "caption": "Processed in time range",
-          "label": "Documents",
-          "tooltip": "An estimate, since each run's count is spread evenly over the time it ran. A document counts each time a run processes it, failed ones included, so this can be more than the documents in the index."
-        }
+        "activeConnectors": "Active connectors",
+        "pausedConnectors": "Paused connectors",
+        "indexingConnectors": "Indexing connectors",
+        "loadError": "The overview could not load."
       },
       "activities": {
         "title": "Activities",
-        "history": "Full Activity History",
-        "viewLogs": "View Logs",
         "panel": {
-          "title": "Activity History",
+          "title": "Activities",
           "close": "Close Panel",
           "pairTitle": "{name} Activity History"
+        },
+        "panelButton": {
+          "show": "Show Activities",
+          "hide": "Hide Activities"
         }
       },
       "list": {
@@ -7480,21 +7504,22 @@
         },
         "statusFilter": {
           "label": "Status",
-          "all": "All Status"
+          "all": "All Status",
+          "running": "In Progress"
         },
         "counts": {
           "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
-          "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
+          "running": "{indexing, plural, other {# indexing}}, {syncing, plural, other {# syncing}}",
           "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
           "paused": "{count, plural, one {# connector paused} other {# connectors paused}}",
           "scheduled": "{count, plural, one {# connector scheduled} other {# connectors scheduled}}",
           "deleting": "{count, plural, one {# connector deleting} other {# connectors deleting}}"
         },
         "access": {
-          "public": "Organization",
-          "private": "Private",
-          "sync": "Auto-sync",
-          "sync_restricted": "Auto-sync, restricted"
+          "public": "Public to your organization",
+          "private": "{count, plural, =0 {Private} one {Shared with # group} other {Shared with # groups}}",
+          "sync": "Auto-sync permissions",
+          "sync_restricted": "Auto-sync permissions"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} in queue",
@@ -7503,7 +7528,7 @@
         },
         "docs": {
           "label": "docs",
-          "processed": "{count, number} processed",
+          "processed": "{count, number} recently processed",
           "processedTooltip": {
             "running": "Documents the current run has processed so far, failed ones included. A document the run processes twice counts twice, so this can be more than the connector's documents.",
             "finished": "Documents the last run processed, failed ones included. A document the run processed twice counts twice, and documents removed since then no longer count for the connector, so this can be more than the connector's documents."
@@ -7514,6 +7539,8 @@
           "manageFederated": "Manage federated connector",
           "expand": "View Details",
           "collapse": "Hide Details",
+          "viewErrors": "View Errors",
+          "viewAllRuns": "View All Runs",
           "pause": "Pause",
           "resume": "Resume"
         },
@@ -7526,7 +7553,8 @@
           "filteredTitle": "No connectors match these filters."
         },
         "loadError": "Couldn't load the connectors.",
-        "units": "{count, plural, one {connector} other {connectors}}"
+        "units": "{count, plural, one {connector} other {connectors}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "Connector Indexing Status"
     },
@@ -8039,9 +8067,6 @@
         "title": "Set up an LLM provider to start chatting."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Default"
-        },
         "deleteButton": {
           "ariaLabel": "Delete {provider}"
         },
@@ -10241,13 +10266,6 @@
           "label": "Invite Users"
         },
         "title": "Users & Requests"
-      },
-      "permissionsNotice": {
-        "description": "{appName} now uses group-based permissions. The Curator and Global Curator roles have been replaced by configurable group permissions, with per-group managers for scoped administration.",
-        "learnMoreButton": {
-          "label": "Learn more"
-        },
-        "title": "Permissions have changed"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -14296,10 +14314,7 @@
       "upgrade": {
         "label": "Upgrade Plan"
       },
-      "availableFor": "Available for {plan}",
-      "beta": {
-        "title": "beta"
-      }
+      "availableFor": "Available for {plan}"
     },
     "placeholders": {
       "email": "email@yourcompany.com",
@@ -14348,6 +14363,19 @@
     "gridSearch": {
       "itemPlaceholder": "Search {item} or press \"/\" to focus...",
       "placeholder": "Search or press \"/\" to focus..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "beta",
+        "comingSoon": "coming soon",
+        "deprecated": "deprecated",
+        "temporarilyUnavailable": "temporarily unavailable",
+        "legacy": "legacy"
+      },
+      "labels": {
+        "default": "Default"
+      }
     }
   },
   "craft": {
@@ -14884,9 +14912,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "Return Home"
       },

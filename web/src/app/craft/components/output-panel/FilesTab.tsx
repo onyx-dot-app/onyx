@@ -146,7 +146,7 @@ function WorkspaceBrowser({
         padding={8}
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
+        <Text font="heading-section" color="text-03">
           {isProvisioning ? t("preparing.title") : t("empty.title")}
         </Text>
         <Text font="secondary-body" color="text-02">

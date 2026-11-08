@@ -1,5 +1,7 @@
 """Stateful agents with one execution path and independent run records."""
 
+import hashlib
+import json
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -8,6 +10,7 @@ from contextlib import ExitStack, closing
 from contextvars import copy_context
 from datetime import datetime, timezone
 from functools import partial
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
@@ -99,8 +102,11 @@ from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
     Message,
+    NamedToolChoice,
     SystemMessage,
     ToolCall,
+    ToolChoiceOptions,
+    ToolDefinition,
     ToolResult,
     ToolResultMessage,
     UserMessage,
@@ -226,6 +232,7 @@ class Agent:
         state: AgentState | None = None,
         system_prompt: str = "",
         tools: Sequence[AgentTool] = (),
+        tool_phases: Mapping[str, Sequence[str]] | None = None,
         options: GenerationOptions | None = None,
         prepare_step: Callable[[StepInput], PreparedStep] | None = None,
         after_step: Callable[[StepResult], bool] | None = None,
@@ -245,7 +252,32 @@ class Agent:
             raise ValueError("Tool names must be unique")
         self._id = agent_id or str(uuid4())
         self.llm = llm
-        self.tools = list(tools)
+        self._tools = tuple(tool.snapshot() for tool in tools)
+        configured_names = {tool.name for tool in self._tools}
+        phases: dict[str, frozenset[str]] = {}
+        for name, names in (tool_phases or {}).items():
+            selected = frozenset(names)
+            if (
+                not name
+                or len(selected) != len(names)
+                or not selected <= configured_names
+            ):
+                raise ValueError("Tool phases require unique configured tool names")
+            phases[name] = selected
+        self._tool_phases = MappingProxyType(phases)
+        self._tool_configuration_digest = hashlib.sha256(
+            json.dumps(
+                [
+                    [tool.definition.model_dump(mode="json") for tool in self._tools],
+                    {
+                        name: [tool.name for tool in self._tools if tool.name in names]
+                        for name, names in sorted(phases.items())
+                    },
+                ],
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode()
+        ).hexdigest()
         self.system_prompt = system_prompt
         self.options = options or GenerationOptions()
         self.generation_context = generation_context
@@ -261,6 +293,11 @@ class Agent:
         self._previous_run_id = previous_run_id
         self._lock = threading.RLock()
         self._latest_run: Run | None = None
+
+    @property
+    def tools(self) -> tuple[AgentTool, ...]:
+        """Detached inspection copies; configured tools cannot change after construction."""
+        return tuple(tool.snapshot() for tool in self._tools)
 
     @property
     def id(self) -> str:
@@ -350,7 +387,9 @@ class Agent:
                     if _snapshot is not None
                     else RunState(
                         progress=RunProgress(
-                            step_limit=max_steps, deadline_at=deadline_at
+                            step_limit=max_steps,
+                            deadline_at=deadline_at,
+                            tool_configuration_digest=self._tool_configuration_digest,
                         ),
                         run_id=run_id,
                         agent_id=self.id,
@@ -479,6 +518,8 @@ class Run:
         self._watched_children: dict[str, Future[RunState]] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
+        self._configured_tools: tuple[AgentTool, ...] = ()
+        self._tool_phases: Mapping[str, frozenset[str]] = {}
         self._generation_context = GenerationContext()
         self._prepare_step: Callable[[StepInput], PreparedStep] | None = None
         self._after_step: Callable[[StepResult], bool] | None = None
@@ -872,6 +913,13 @@ class Run:
                     )
                 )
             if state.progress is not None:
+                if (
+                    state.progress.tool_configuration_digest
+                    != agent._tool_configuration_digest
+                ):
+                    raise ValueError(
+                        "Restored tool configuration does not match the saved run"
+                    )
                 feature_state = state.progress.feature_state
                 if feature_state is not None:
                     if agent._restoration is None:
@@ -882,9 +930,10 @@ class Run:
             self._llm = agent.llm
             self._defaults = PreparedStep(
                 system_prompt=agent.system_prompt,
-                tools=list(agent.tools),
                 options=agent.options.model_copy(deep=True),
             )
+            self._configured_tools = agent._tools
+            self._tool_phases = agent._tool_phases
             self._generation_context = agent.generation_context.model_copy(
                 update={
                     "cancellation": self.cancellation_signal,
@@ -1202,6 +1251,8 @@ class Run:
         self._llm = None
         self._step_tools = None
         self._defaults = PreparedStep()
+        self._configured_tools = ()
+        self._tool_phases = {}
         self._generation_context = GenerationContext()
         self._prepare_step = None
         self._after_step = None
@@ -1362,26 +1413,60 @@ def _advance_loop(
     raise RuntimeError("Run exhausted its steps without a terminal decision")
 
 
-def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -> None:
-    cancellation_signal = run.cancellation_signal
-    if len({tool.name for tool in prepared.tools}) != len(prepared.tools):
-        raise ValueError("Tool names must be unique")
-    registered_tools = {tool.name: tool for tool in run._defaults.tools}
-    for tool in prepared.tools:
-        if registered_tools.get(tool.name) is not tool:
-            raise ValueError(
-                f"Prepared tool {tool.name!r} must be registered in Agent.tools"
-            )
+def _resolve_step_tools(
+    run: Run, prepared: PreparedStep
+) -> tuple[tuple[AgentTool, ...], PreparedStep]:
+    """Resolve fixed schemas and validate step permissions before model or tool effects."""
+    phase_names = None
+    if prepared.tool_phase is not None:
+        phase_names = run._tool_phases.get(prepared.tool_phase)
+        if phase_names is None:
+            raise ValueError(f"Unknown tool phase {prepared.tool_phase!r}")
+    phase_tools = tuple(
+        tool
+        for tool in run._configured_tools
+        if phase_names is None or tool.name in phase_names
+    )
+    advertised_names = frozenset(tool.name for tool in phase_tools)
+    allowed = prepared.allowed_tool_names
+    if allowed is None:
+        allowed = advertised_names
+    elif not allowed <= advertised_names:
+        raise ValueError("Step permissions must select tools in the configured phase")
+    options = prepared.options.model_copy(deep=True)
+    if isinstance(options.tool_choice, NamedToolChoice):
+        if options.tool_choice.name not in allowed:
+            raise ValueError("Named tool choice must be allowed for this step")
+    elif not allowed:
+        if options.tool_choice == ToolChoiceOptions.REQUIRED:
+            raise ValueError("Required tool choice needs an allowed tool")
+        options.tool_choice = ToolChoiceOptions.NONE
     prepared = prepared.model_copy(
         update={
-            "tools": [tool.snapshot() for tool in prepared.tools],
-            "options": prepared.options.model_copy(deep=True),
+            "allowed_tool_names": frozenset()
+            if options.tool_choice == ToolChoiceOptions.NONE
+            else prepared.allowed_tool_names,
+            "options": options,
+        }
+    )
+    return phase_tools, prepared
+
+
+def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -> None:
+    cancellation_signal = run.cancellation_signal
+    phase_tools, prepared = _resolve_step_tools(run, prepared)
+    allowed = prepared.allowed_tool_names
+    prepared = prepared.model_copy(
+        update={
             "output_metadata": prepared.output_metadata.model_copy(deep=True)
             if prepared.output_metadata
             else None,
         }
     )
-    run._step_tools = prepared.tools
+    run._step_tools = [
+        tool for tool in phase_tools if allowed is None or tool.name in allowed
+    ]
+    definitions = tuple(tool.definition for tool in phase_tools)
     generation_context = run._generation_context.model_copy(
         update={
             "stall_timeout_s": prepared.stall_timeout_s
@@ -1389,7 +1474,10 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         }
     )
     source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
-    request = _compact_context(run, llm, source, prepared, generation_context)
+    request = _compact_context(
+        run, llm, source, prepared, generation_context, tools=definitions
+    )
+    execution_options = request.options.model_copy(deep=True)
     message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
         message_id=message_id,
@@ -1480,8 +1568,15 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         if partial.content:
             raise
         request = _compact_context(
-            run, llm, source, prepared, generation_context, force=True
+            run,
+            llm,
+            source,
+            prepared,
+            generation_context,
+            tools=definitions,
+            force=True,
         )
+        execution_options = request.options.model_copy(deep=True)
         with run.execution_lock:
             recorded_step.message = AssistantMessage(
                 id=message_id, metadata=recorded_step.message.metadata
@@ -1499,8 +1594,9 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         )
         if run.event_delivery:
             run.event_delivery.publish(ended)
-        run._progress.options = request.options.model_copy(deep=True)
-        run._progress.tools = [tool.model_copy(deep=True) for tool in request.tools]
+        run._progress.options = execution_options
+        run._progress.tools = [tool.model_copy(deep=True) for tool in definitions]
+        run._progress.allowed_tool_names = allowed
         run._progress.action = RunAction.TOOLS
         run._state.revision += 1
 
@@ -1513,6 +1609,7 @@ def _compact_context(
     generation_context: GenerationContext,
     *,
     force: bool = False,
+    tools: Sequence[ToolDefinition] = (),
 ) -> GenerationRequest:
     cancellation_signal = run.cancellation_signal
     previous = run._state.checkpoint
@@ -1526,7 +1623,7 @@ def _compact_context(
         with run.execution_lock:
             run._state.checkpoint = None
     cancellation_signal.check()
-    request = prepared.generation_request(messages)
+    request = prepared.generation_request(messages, tools=tools)
     cancellation_signal.check()
     budget = context_budget(llm)
     original_size = request_tokens(request, run._token_counts)
@@ -1559,7 +1656,8 @@ def _compact_context(
     if selected_checkpoint is not None:
         cancellation_signal.check()
         candidate_request = prepared.generation_request(
-            working_messages(source, selected_checkpoint, input_start=input_start)
+            working_messages(source, selected_checkpoint, input_start=input_start),
+            tools=tools,
         )
         cancellation_signal.check()
         candidate_size = request_tokens(candidate_request, run._token_counts)
@@ -1569,6 +1667,7 @@ def _compact_context(
             cancellation_signal,
             source,
             prepared,
+            tools=tools,
             token_counts=run._token_counts,
             input_limit=budget.input_limit,
             original_size=original_size,
@@ -1586,6 +1685,7 @@ def _truncate_context(
     source: list[Message],
     prepared: PreparedStep,
     *,
+    tools: Sequence[ToolDefinition] = (),
     token_counts: dict[str, int],
     input_limit: int,
     original_size: int,
@@ -1609,7 +1709,7 @@ def _truncate_context(
         cancellation_signal.check()
         # Each cutoff starts a user turn, so the suffix retains the current task.
         candidate_request = prepared.generation_request(
-            [*system_messages, *source[index:]]
+            [*system_messages, *source[index:]], tools=tools
         )
         cancellation_signal.check()
         candidate_size = request_tokens(candidate_request, token_counts)
@@ -1636,13 +1736,18 @@ def _limit_output(
 def _execute_tools(run: Run) -> bool:
     progress = run._progress
     if run._step_tools is None:
-        available = {tool.name: tool for tool in run._defaults.tools}
+        available = {tool.name: tool for tool in run._configured_tools}
         tools: list[AgentTool] = []
+        allowed = progress.allowed_tool_names
+        declarations = {tool.name for tool in progress.tools}
+        if allowed is not None and not allowed <= declarations:
+            raise ValueError("Restored tool permissions exceed the saved declarations")
         for declaration in progress.tools:
             tool = available.get(declaration.name)
             if tool is None or tool.definition != declaration:
                 raise ValueError("Restored tools do not match the saved step")
-            tools.append(tool)
+            if allowed is None or tool.name in allowed:
+                tools.append(tool)
         run._step_tools = tools
     batch = ToolBatch(
         run,
@@ -1709,6 +1814,7 @@ def _complete_step(run: Run) -> None:
             progress.pending_tool_calls = {}
             progress.options = None
             progress.tools = []
+            progress.allowed_tool_names = None
         run._state.revision += 1
 
 

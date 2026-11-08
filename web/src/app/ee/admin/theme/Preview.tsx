@@ -1,6 +1,6 @@
 "use client";
 
-import { OverflowText, Text } from "@opal/components";
+import { Text } from "@opal/components";
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { Components } from "react-markdown";
@@ -200,14 +200,16 @@ function PreviewStart({
             )}
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (
-              <OverflowText
+              <Text
+                maxLines={1}
+                overflowTooltip
                 as="p"
                 textPosition="text-start"
                 font="main-ui-action"
                 color="text-04"
               >
                 {applicationDisplayName || "Onyx"}
-              </OverflowText>
+              </Text>
             )}
           </div>
         </div>
@@ -226,7 +228,7 @@ function PreviewStart({
               <PreviewLogo logoSrc={logoSrc} size={18} />
               <div className="max-w-[260px]">
                 <Text
-                  font="heading-h3"
+                  font="heading-section"
                   color="text-04"
                   wordWrap="wrap-break-word"
                 >

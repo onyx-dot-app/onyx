@@ -212,10 +212,11 @@ their own ACL columns or the user's connector access.
    chat and search do not return it unless they hold `READ_DOCUMENT_SETS`.
 9. `censor-every-chunk-reader` **Every path that returns chunk content must
    call `onyx/access/access.py:censor_chunks_for_user`.** Censoring-only documents are public in the
-   index. Callers are the search pipeline, the document chunk-info and
-   size-info routes (`server/documents/document.py`), and the Open URL tool. A
-   new reader of indexed chunk text that skips it leaks Salesforce fields in
-   EE.
+   index. Callers are the search pipeline, search context expansion
+   (`tools/tool_implementations/search/search_utils.py:_retrieve_adjacent_chunks`),
+   the document chunk-info and size-info routes (`server/documents/document.py`),
+   and the Open URL tool. A new reader of indexed chunk text that skips it leaks
+   Salesforce fields in EE.
 10. `acl-clause-size-limit` **The ACL clause is a separate `bool` clause** so
     OpenSearch can cache it apart from the other filters (see the
     `_get_acl_visibility_filter` docstring). An ACL above

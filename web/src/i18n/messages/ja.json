@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "検索ソースを選択"
+      },
+      "preference": {
+        "tooltip": "{description}\nこのチャットではこのツールを優先します。エージェントは使用せずに回答する場合があります。"
       }
     },
     "addMcpModal": {
@@ -186,7 +189,6 @@
           "description": "管理しているグループを1つ以上選択してください。"
         },
         "retainedUsers": "{count, plural, other {#人のユーザーとも直接共有されています。}}",
-        "planTag": "Business",
         "planNote": "グループアクセスにはBusinessプランが必要です。"
       },
       "defaultChat": {
@@ -2652,7 +2654,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "削除"
+          "label": "コネクターを削除",
+          "description": "インデックス済みのドキュメントをすべて完全に削除します。"
         },
         "reIndex": {
           "tooltip": {
@@ -2691,7 +2694,7 @@
         },
         "syncPermissions": {
           "label": "権限を同期",
-          "description": "各ドキュメントを閲覧できるユーザーを今すぐソースから取得します。",
+          "description": "ソースからドキュメントの権限を取得します。",
           "tooltip": {
             "syncing": "権限の同期はすでに待機中または実行中です"
           }
@@ -2818,20 +2821,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} 件/分",
-        "indexingSpeedTooltip": "コネクター作成以降の1分あたりのインデックス済みドキュメント数",
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
+        "deletionStarted": {
+          "value": "開始 {when}"
+        },
         "documents": {
           "totalLabel": "インデックス済みドキュメント合計",
-          "recentLabel": "最近処理されたドキュメント",
-          "syncedPermissionsLabel": "同期済みの権限",
-          "syncedMembershipsLabel": "同期済みのグループメンバーシップ"
+          "recentLabel": "最近処理したドキュメント",
+          "indexedLabel": "インデックス済みドキュメント"
         },
         "throughput": {
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
+          "lineTooltip": "{failures, plural, one {# 件の失敗} other {# 件の失敗}}、{errors, plural, one {# 件のエラー} other {# 件のエラー}}",
+          "barLabel": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}、{range}",
           "loadError": "グラフを読み込めませんでした。",
           "rangeFilter": "グラフのこの区間に作成された実行"
         },
@@ -2847,13 +2852,33 @@
         "title": "インデックス状況",
         "sync": {
           "permissionsTitle": "権限同期の状況",
-          "groupsTitle": "グループメンバーシップ同期の状況",
           "last": "最終同期 {when}",
           "never": "まだ同期されていません",
-          "neverTooltip": "インデックス済みのドキュメントは、権限が同期されるまで検索できない場合があります。",
-          "waitingForFirstIndex": "初回インデックス待ち"
+          "neverTooltip": "インデックス済みのドキュメントは、権限が同期されるまで検索できません。",
+          "waitingForFirstIndex": "初回インデックス待ち",
+          "docsLabel": "権限を同期したドキュメント",
+          "groupsLabel": "グループメンバーシップ"
         },
-        "accessTitle": "コネクターのドキュメントアクセス"
+        "actions": {
+          "showActivities": "アクティビティを表示",
+          "hideActivities": "アクティビティを非表示",
+          "viewDetails": "詳細を表示",
+          "hideDetails": "詳細を隠す",
+          "viewIndexingRun": "インデックスの実行を表示",
+          "viewPruningRun": "プルーニングの実行を表示",
+          "viewChecksRun": "チェックの実行を表示"
+        },
+        "types": {
+          "count": "{count, plural, other {ドキュメントの種類}}",
+          "header": "ドキュメントの種類",
+          "indexed": "インデックス済み",
+          "size": "サイズ",
+          "other": "その他",
+          "countWithSize": "{count}（{size}）",
+          "bytes": "バイト",
+          "loadError": "ドキュメントの種類を読み込めませんでした。",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",
@@ -2983,6 +3008,7 @@
           "all": "すべての種類",
           "indexing": "ドキュメントインデックス",
           "backfill": "ドキュメントのバックフィル",
+          "retry": "ドキュメントインデックス - 再試行",
           "doc_permission_sync": "権限の同期",
           "group_sync": "グループメンバーシップの同期",
           "pruning": "ドキュメントのプルーニング",
@@ -2990,9 +3016,10 @@
         },
         "detail": {
           "queued": "待機中",
+          "starting": "同期を開始中",
           "running": "実行中",
           "rate": "{rate} 件/分",
-          "finished": "{time}（{duration}）",
+          "runtime": "実行時間 {duration}",
           "rateFinished": "{rate} 件/分（{duration}）",
           "membershipRate": "{rate} メンバーシップ/分",
           "membershipRateFinished": "{rate} メンバーシップ/分（{duration}）"
@@ -3001,6 +3028,7 @@
           "stages": "ステージの指標を表示",
           "cancel": "キャンセル",
           "logs": "ログを表示",
+          "noLogs": "ログは記録されていません",
           "checks": "チェック結果を表示"
         },
         "warnings": {
@@ -3035,16 +3063,12 @@
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}",
           "syncedDocs": "{count, plural, other {# 件のドキュメントを同期済み}}"
         },
-        "search": {
-          "placeholder": "実行エラーを検索…"
-        },
         "window": {
           "label": "期間",
           "all": "全期間",
           "h1": "過去 1 時間",
           "h24": "過去 24 時間",
-          "d7": "過去 7 日間",
-          "d30": "過去 30 日間"
+          "d7": "過去 7 日間"
         },
         "statusGroups": {
           "label": "ステータス",
@@ -3055,14 +3079,13 @@
           "canceled": "キャンセル済み"
         },
         "loadError": {
-          "title": "実行を読み込めませんでした。"
+          "title": "実行を読み込めませんでした。",
+          "retry": "再試行"
         },
         "empty": {
           "title": "最近のインデックス実行はありません",
           "filteredTitle": "このフィルターに一致する実行はありません。",
           "pastRuns": "{count, plural, other {過去の実行 # 件}}",
-          "view": "表示",
-          "viewAria": "{count, plural, other {過去の実行 # 件を表示}}",
           "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
         },
         "units": "{count, plural, other {件の実行}}",
@@ -3097,15 +3120,24 @@
           "all": "全レベル",
           "failures": "失敗",
           "errors": "エラー",
-          "other": "その他",
+          "running": "実行中",
+          "success": "成功",
+          "canceled": "キャンセル",
           "resolved": "解決済み",
-          "toggle": "フィルター"
+          "connectors": "コネクター",
+          "connectorsLoading": "コネクタを読み込み中…",
+          "connectorsLoadError": "コネクタを読み込めませんでした。",
+          "connectorsRetry": "再試行",
+          "toggleShow": "フィルターを表示",
+          "toggleHide": "フィルターを非表示"
         },
         "groups": {
           "failures": "{count, plural, =0 {失敗} other {失敗 # 件}}",
           "errors": "{count, plural, =0 {エラー} other {エラー # 件}}",
-          "other": "その他",
-          "resolved": "{count, plural, other {解決済み # 件}}"
+          "running": "実行中 {count, number} 件",
+          "resolved": "解決済み",
+          "success": "成功",
+          "canceled": "キャンセル"
         },
         "title": {
           "indexing": {
@@ -3116,9 +3148,8 @@
             "errors": "エラーを伴いインデックス作成が完了しました。",
             "resolved": "インデックス作成のエラーが解決されました。",
             "succeeded": "インデックスが正常に完了しました。",
-            "queued": "インデックスは待機中です。",
             "inProgress": "インデックス実行中。",
-            "canceled": "インデックスが停止しました。"
+            "canceled": "インデックスがキャンセルされました。"
           },
           "doc_permission_sync": {
             "failed": "権限の同期に失敗しました。",
@@ -3128,9 +3159,8 @@
             "errors": "エラーを伴い権限が同期されました。",
             "resolved": "権限同期のエラーが解決されました。",
             "succeeded": "権限の同期が正常に完了しました。",
-            "queued": "権限の同期は待機中です。",
             "inProgress": "権限を同期中。",
-            "canceled": "権限の同期が停止しました。"
+            "canceled": "権限の同期がキャンセルされました。"
           },
           "group_sync": {
             "failed": "グループメンバーシップの同期に失敗しました。",
@@ -3140,9 +3170,8 @@
             "errors": "エラーを伴いグループメンバーシップが同期されました。",
             "resolved": "グループメンバーシップ同期のエラーが解決されました。",
             "succeeded": "グループメンバーシップの同期が正常に完了しました。",
-            "queued": "グループメンバーシップの同期は待機中です。",
             "inProgress": "グループメンバーシップを同期中。",
-            "canceled": "グループ同期が停止しました。"
+            "canceled": "グループ同期がキャンセルされました。"
           },
           "pruning": {
             "failed": "プルーニングに失敗しました。",
@@ -3152,9 +3181,8 @@
             "errors": "プルーニングがエラーを伴って完了しました。",
             "resolved": "プルーニングのエラーが解決されました。",
             "succeeded": "プルーニングが正常に完了しました。",
-            "queued": "プルーニングは待機中です。",
             "inProgress": "プルーニングを実行中。",
-            "canceled": "プルーニングが停止しました。"
+            "canceled": "プルーニングがキャンセルされました。"
           },
           "checks": {
             "failed": "コネクタチェックに失敗しました。",
@@ -3164,9 +3192,8 @@
             "errors": "コネクタチェックがエラーを伴って完了しました。",
             "resolved": "コネクタチェックのエラーが解決されました。",
             "succeeded": "コネクタチェックに合格しました。",
-            "queued": "コネクタチェックは待機中です。",
             "inProgress": "コネクタチェックを実行中。",
-            "canceled": "コネクタチェックが停止しました。"
+            "canceled": "コネクタチェックがキャンセルされました。"
           }
         },
         "description": {
@@ -3181,22 +3208,18 @@
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
           "indexingItems": "{count, plural, other {# 件の項目が失敗}}",
-          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの権限の同期に失敗}}",
-          "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
           "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
           "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "users": "{count, plural, one {# 人のユーザーの同期に失敗} other {# 人のユーザーの同期に失敗}}",
+          "groups": "{count, plural, one {# 件のグループの同期に失敗} other {# 件のグループの同期に失敗}}",
           "resolved": "解決済み",
-          "resolvedDocs": "{count, plural, other {# 件の項目を解決}}",
           "superseded": "置き換え済み"
         },
         "more": "さらに表示",
         "empty": {
           "title": "最近のアクティビティはありません",
-          "resolved": "解決済みの実行はありません",
-          "filtered": "この検索に一致するものはありません。",
-          "failures": "失敗はありません",
-          "errors": "エラーはありません",
-          "other": "その他の実行はありません"
+          "past": "過去のアクティビティ",
+          "filtered": "この検索に一致するものはありません。"
         },
         "loadError": {
           "title": "アクティビティを読み込めませんでした。"
@@ -3204,19 +3227,32 @@
         "docs": {
           "title": "失敗した項目",
           "search": {
-            "placeholder": "項目を検索…"
+            "placeholder": "ドキュメントを検索…"
           },
-          "resolveAll": "すべて再試行",
-          "resolveAllTooltip": "この実行で失敗したすべてのドキュメントを再インデックス",
-          "resolveAllUnsupported": "このコネクタは個別のドキュメントを再インデックスできません。再試行するにはコネクタを再インデックスしてください。",
-          "resolveOne": "このドキュメントを再試行",
-          "retry": "{count, plural, other {# 件のドキュメントを再試行}}",
+          "resolveAll": "すべてのドキュメントを再試行",
+          "resolveOne": "ドキュメントを再試行",
+          "resolveWithoutRetry": "再試行せずに解決",
           "more": "さらに表示",
           "less": "折りたたむ",
           "unknownDocument": "不明なドキュメント",
-          "empty": "未解決のエラーはありません",
+          "empty": "失敗したドキュメントはありません",
           "loadError": "失敗した項目を読み込めませんでした。",
-          "open": "ドキュメントを開く"
+          "open": "ドキュメントを開く",
+          "resolvedGroup": "解決済みのエラー",
+          "resolvedWithoutRetry": "再試行せずに解決済み",
+          "resolvedByLaterRun": "後続の実行で解決済み"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "失敗したユーザー",
+            "search": "ユーザーを検索…",
+            "empty": "失敗したユーザーはいません"
+          },
+          "groups": {
+            "title": "失敗したグループ",
+            "search": "グループを検索…",
+            "empty": "失敗したグループはありません"
+          }
         },
         "trace": {
           "header": "スタックトレース • 実行 ID: {id}",
@@ -3224,17 +3260,18 @@
           "runId": "実行 ID: {id}"
         },
         "actions": {
-          "resolve": "解決"
+          "resolve": "解決",
+          "resolveWithoutRetry": "再試行せずに解決",
+          "retryDocs": "ドキュメントを再試行"
         },
         "resolveAll": {
-          "button": "表示中をすべて解決",
-          "title": "表示中の実行をすべて解決しますか？",
-          "description": "現在のフィルターに一致する{count, plural, other {# 件の実行}}を解決済みにします。ステータスはそのままで、解決済みの下に移動します。",
-          "fleetDescription": "操作権限のあるコネクターで、現在のフィルターに一致する{count, plural, other {# 件の実行}}を解決済みにします。ステータスはそのままで、解決済みの下に移動します。",
+          "button": "すべて解決",
+          "title": "表示中のアクティビティをすべて解決",
+          "body": "{count, plural, other {現在のフィルターに一致する # 件のアクティビティ（{failures}、{errors}）を解決します。Onyx は失敗した項目を再試行しません。アクティビティのステータスはそのままで、解決済みに移動します。}}",
+          "body2": "実行中の実行は新しいエラーを報告することがあり、それらは再び未解決として表示されます。解決済みのドキュメントは、後で失敗したドキュメントの一覧から再試行できます。",
+          "failures": "{count, plural, =0 {失敗なし} other {# 件の失敗}}",
+          "errors": "{count, plural, =0 {エラーのある実行なし} other {エラーのある実行 # 件}}",
           "confirm": "すべて解決"
-        },
-        "resolved": {
-          "label": "解決済み"
         }
       },
       "stageDetails": {
@@ -3246,10 +3283,22 @@
         "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
+        "noDocs": "インデックス作成が完了したドキュメントはありません",
+        "laterCanceled": "後続のステージはキャンセルされました",
+        "retry": "再試行",
         "uneven": {
           "tooltip": "このステージのバッチ時間は大きくばらついています"
         },
         "close": "ステージ詳細を閉じる"
+      },
+      "tabs": {
+        "configurations": "コネクター設定",
+        "indexing": "インデックス",
+        "indexingDisabled": "最初の実行が始まると利用できます。"
+      },
+      "indexingTab": {
+        "chartHeading": "ドキュメントのインデックス",
+        "runsHeading": "インデックス実行"
       }
     },
     "connectorTitle": {
@@ -6281,13 +6330,6 @@
           "title": "グループの権限"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} はグループ単位の権限を使用するようになりました。アクセス権はグループごとに設定するため、ユーザーの権限は所属するすべてのグループの組み合わせになります。",
-        "learnMore": {
-          "label": "詳細を見る"
-        },
-        "title": "権限の仕組みが変わりました。"
-      },
       "sharedResources": {
         "agent": {
           "description": "エージェント"
@@ -6639,9 +6681,6 @@
       },
       "connectedModels": {
         "title": "接続済みモデル"
-      },
-      "defaultTag": {
-        "label": "デフォルト"
       },
       "deselectError": {
         "message": "選択を解除できませんでした"
@@ -7105,7 +7144,6 @@
           "tag": "GPU推奨"
         },
         "legacy": {
-          "tag": "レガシー",
           "tooltip": "このモデルは新しいインデックスには選択できません。モデルを変更するまでは引き続き動作します。"
         },
         "selectButton": {
@@ -7158,9 +7196,6 @@
       "multipass": {
         "description": "ドキュメントをさまざまなサイズのチャンクとしてインデックスし、関連する情報源をより正確に特定します。",
         "disabledTooltip": "マルチパスインデックスは一時的に無効です。今後利用できるようになります。",
-        "tag": {
-          "label": "一時的に利用不可"
-        },
         "title": "マルチパスインデックス"
       },
       "openaiCompatible": {
@@ -7441,37 +7476,26 @@
       }
     },
     "indexing": {
+      "addConnector": "コネクタを追加",
       "connectorCreated": {
         "toast": "コネクターを作成しました"
       },
       "overview": {
-        "connectors": {
-          "caption": "インデックス中 / 有効",
-          "label": "コネクタ"
-        },
-        "documents": {
-          "caption": "インデックス内",
-          "label": "ドキュメント",
-          "tooltip": "各コネクタのドキュメント数を合計するため、2 つのコネクタが持つドキュメントは 2 回数えられます。"
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "概要を読み込めませんでした。",
-        "processed": {
-          "caption": "期間内に処理",
-          "label": "ドキュメント",
-          "tooltip": "推定値です。各実行の件数は実行時間全体に均等に配分されます。ドキュメントは実行が処理するたびに数えられ、失敗したものも含まれるため、インデックス内のドキュメント数を超えることがあります。"
-        }
+        "activeConnectors": "アクティブなコネクタ",
+        "pausedConnectors": "一時停止中のコネクタ",
+        "indexingConnectors": "インデックス中のコネクタ",
+        "loadError": "概要を読み込めませんでした。"
       },
       "activities": {
         "title": "アクティビティ",
-        "history": "アクティビティ履歴をすべて表示",
-        "viewLogs": "ログを表示",
         "panel": {
-          "title": "アクティビティ履歴",
+          "title": "アクティビティ",
           "close": "パネルを閉じる",
           "pairTitle": "{name} のアクティビティ履歴"
+        },
+        "panelButton": {
+          "show": "アクティビティを表示",
+          "hide": "アクティビティを非表示"
         }
       },
       "list": {
@@ -7480,21 +7504,22 @@
         },
         "statusFilter": {
           "label": "ステータス",
-          "all": "すべてのステータス"
+          "all": "すべてのステータス",
+          "running": "進行中"
         },
         "counts": {
           "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
-          "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
+          "running": "{indexing, plural, other {インデックス中 # 件}}、{syncing, plural, other {同期中 # 件}}",
           "failed": "{count, plural, other {# 件のコネクタが失敗}}",
           "paused": "{count, plural, other {# 件のコネクタが一時停止中}}",
           "scheduled": "{count, plural, other {# 件のコネクタが予定済み}}",
           "deleting": "{count, plural, other {# 件のコネクタを削除中}}"
         },
         "access": {
-          "public": "組織",
-          "private": "非公開",
-          "sync": "自動同期",
-          "sync_restricted": "自動同期（制限付き）"
+          "public": "組織全体に公開",
+          "private": "{count, plural, =0 {非公開} other {# 個のグループと共有}}",
+          "sync": "権限を自動同期",
+          "sync_restricted": "権限を自動同期"
         },
         "detail": {
           "queued": "キューの {position, selectordinal, other {#}} 番目",
@@ -7503,7 +7528,7 @@
         },
         "docs": {
           "label": "ドキュメント",
-          "processed": "{count, number} 件処理済み",
+          "processed": "最近 {count, number} 件処理済み",
           "processedTooltip": {
             "running": "現在の実行がこれまでに処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられるため、コネクタのドキュメント数を超えることがあります。",
             "finished": "前回の実行が処理したドキュメント数で、失敗したものも含みます。実行が 2 回処理したドキュメントは 2 回数えられ、その後に削除されたドキュメントはコネクタの件数から外れるため、コネクタのドキュメント数を超えることがあります。"
@@ -7514,6 +7539,8 @@
           "manageFederated": "フェデレーテッドコネクタを管理",
           "expand": "詳細を表示",
           "collapse": "詳細を隠す",
+          "viewErrors": "エラーを表示",
+          "viewAllRuns": "すべての実行を表示",
           "pause": "一時停止",
           "resume": "再開"
         },
@@ -7526,7 +7553,8 @@
           "filteredTitle": "これらのフィルターに一致するコネクタはありません。"
         },
         "loadError": "コネクタを読み込めませんでした。",
-        "units": "{count, plural, other {件のコネクタ}}"
+        "units": "{count, plural, other {件のコネクタ}}",
+        "sourceGroup": "{source}（{count, number}）"
       },
       "title": "コネクタのインデックス状況"
     },
@@ -8039,9 +8067,6 @@
         "title": "チャットを開始するには、LLM プロバイダーを設定してください。"
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "デフォルト"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} を削除"
         },
@@ -10241,13 +10266,6 @@
           "label": "ユーザーを招待"
         },
         "title": "ユーザーとリクエスト"
-      },
-      "permissionsNotice": {
-        "description": "{appName} はグループベースの権限を使用するようになりました。Curator と Global Curator のロールは、設定可能なグループ権限に置き換えられました。グループごとの管理者が、範囲を限定した管理を行います。",
-        "learnMoreButton": {
-          "label": "詳細を見る"
-        },
-        "title": "権限が変更されました"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -14296,10 +14314,7 @@
       "upgrade": {
         "label": "プランをアップグレード"
       },
-      "availableFor": "{plan}で利用可能",
-      "beta": {
-        "title": "ベータ"
-      }
+      "availableFor": "{plan}で利用可能"
     },
     "placeholders": {
       "email": "namae@kaisha-mei.com",
@@ -14348,6 +14363,19 @@
     "gridSearch": {
       "itemPlaceholder": "{item}を検索するか「/」キーでフォーカス...",
       "placeholder": "検索するか「/」キーでフォーカス..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "アルファ",
+        "beta": "ベータ",
+        "comingSoon": "近日公開",
+        "deprecated": "非推奨",
+        "temporarilyUnavailable": "一時的に利用不可",
+        "legacy": "レガシー"
+      },
+      "labels": {
+        "default": "デフォルト"
+      }
     }
   },
   "craft": {
@@ -14884,9 +14912,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "ホームに戻る"
       },

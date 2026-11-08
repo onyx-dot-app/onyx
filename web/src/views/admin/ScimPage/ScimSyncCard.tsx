@@ -38,10 +38,9 @@ export default function ScimSyncCard({
     <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit" gap={3}>
         <ContentAction
+          font="main-ui-action"
           title={t("card.title")}
           description={t("card.description")}
-          sizePreset="main-ui"
-          variant="section"
           padding={0}
           rightChildren={
             hasToken ? (

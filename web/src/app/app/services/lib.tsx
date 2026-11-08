@@ -177,8 +177,8 @@ export interface SendMessageParams {
   signal?: AbortSignal;
   deepResearch?: boolean;
   enabledToolIds?: number[];
-  // Single forced tool ID (new API uses singular, not array)
-  forcedToolId?: number | null;
+  // Preferred tool for this request; invocation is not guaranteed
+  preferredToolId?: number | null;
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
@@ -204,7 +204,7 @@ export async function* sendMessage({
   signal,
   deepResearch,
   enabledToolIds,
-  forcedToolId,
+  preferredToolId,
   modelProvider,
   modelVersion,
   modelConfigurationId,
@@ -222,7 +222,7 @@ export async function* sendMessage({
     internal_search_filters: filters,
     deep_research: deepResearch ?? false,
     allowed_tool_ids: enabledToolIds,
-    forced_tool_id: forcedToolId ?? null,
+    preferred_tool_id: preferredToolId ?? null,
     llm_override:
       temperature || modelVersion || modelConfigurationId != null
         ? {

@@ -91,8 +91,10 @@ class BashTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     CMD_FIELD: {
                         "type": "string",

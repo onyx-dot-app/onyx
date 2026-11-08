@@ -132,7 +132,8 @@ def test_coding_bash_order_history_and_final_answer() -> None:
         ("call-1", "second"),
         ("call-0", "Ready to produce the final answer."),
     ]
-    assert llm.requests[-1]["tools"] is None
+    assert llm.requests[-1]["tools"] == llm.requests[0]["tools"]
+    assert llm.requests[-1]["tool_choice"] == ToolChoiceOptions.NONE
 
 
 def test_cancel_after_coding_tools_prevents_final_model_call() -> None:
@@ -855,7 +856,8 @@ def test_coding_prepared_request_keeps_decisions_when_history_changes() -> None:
         )
     )
     assert prepared is not None
-    initial = prepared.generation_request(history)
+    definitions = [tool.definition for tool in feature.tools]
+    initial = prepared.generation_request(history, tools=definitions)
     final = feature._prepare_step(
         StepInput(
             history=[],
@@ -865,7 +867,9 @@ def test_coding_prepared_request_keeps_decisions_when_history_changes() -> None:
         )
     )
     assert final is not None
-    rebuilt = prepared.generation_request([UserMessage(content="Compacted evidence")])
+    rebuilt = prepared.generation_request(
+        [UserMessage(content="Compacted evidence")], tools=definitions
+    )
 
     assert final.options.tool_choice == ToolChoiceOptions.NONE
     assert rebuilt.options == initial.options

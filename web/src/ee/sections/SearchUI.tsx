@@ -334,6 +334,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             <Section gap={1} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItemButton
+                  font="main-ui-action"
                   key={source}
                   icon={(props) => (
                     <SourceIcon sourceType={source} iconSize={16} {...props} />
@@ -344,8 +345,6 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   }
                   title={meta.displayName}
                   selectVariant="select-heavy"
-                  sizePreset="main-ui"
-                  variant="section"
                   rightChildren={
                     <Text color="text-03">{format.number(count)}</Text>
                   }

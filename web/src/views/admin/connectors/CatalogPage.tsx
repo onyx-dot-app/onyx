@@ -234,10 +234,9 @@ export default function ConnectorsPage() {
             justifyContent="start"
           >
             <Content
+              font="main-content-emphasis"
               title={t("popular.title")}
               description={t("popular.description", { appName })}
-              sizePreset="main-content"
-              variant="section"
             />
             <Section
               gap={8}
