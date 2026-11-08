@@ -271,6 +271,37 @@ If ownership becomes vacant because the owner is inactive, an Admin can open the
 
 Do not transfer ownership to bots, service accounts, limited accounts, or inactive users.
 
+### Version history API
+
+Owners, editors, and admins can read and restore custom Skill versions through the API. Viewers cannot list, preview,
+or restore historical versions. These requests return `404` for users without edit access.
+Built-in Skills do not have version history.
+
+Use a [Personal Access Token](/developers/overview) with access to the Skill:
+
+```bash
+curl "$ONYX_URL/api/skills/custom/$SKILL_ID/versions" \
+  -H "Authorization: Bearer $ONYX_TOKEN"
+```
+
+The response lists versions from newest to oldest. Each entry contains `id`, `version_number`, `created_at`,
+`created_by`, `is_current`, and `has_bundle`. `created_by` contains the creator's `id` and `email`,
+or `null` when that information is unavailable.
+
+| Method | Path after `/api` | Result |
+| --- | --- | --- |
+| `GET` | `/skills/custom/{skill_id}/versions` | Version history, including versions whose files were removed. |
+| `GET` | `/skills/custom/{skill_id}/versions/{version_id}` | Historical name, description, instructions, and supporting-file paths and sizes. |
+| `POST` | `/skills/custom/{skill_id}/versions/{version_id}/restore` | Restored Skill details, instructions, and supporting-file list. No request body is needed. |
+
+Restore copies the selected content into a new version and updates the Skill description. It preserves ownership,
+sharing, and installation settings. Identical content does not add a version.
+Restored content must pass the current bundle validation and upload limits.
+
+Onyx keeps files for the newest ten versions, including a newly restored version. Older entries remain with `has_bundle:
+false`. Preview and restore return `404` with "The files of this version are no longer kept." if the bundle is absent.
+A version ID from another Skill also returns `404`.
+
 ## Troubleshooting
 
 <AccordionGroup>

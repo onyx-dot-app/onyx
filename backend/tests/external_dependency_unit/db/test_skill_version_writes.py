@@ -434,7 +434,7 @@ def test_identical_reupload_repairs_damaged_current_bundle(
         )
 
 
-@pytest.mark.parametrize("writer", ["replace", "editor", "patch"])
+@pytest.mark.parametrize("writer", ["replace", "editor", "patch", "restore"])
 def test_noop_cleans_staged_bundle_before_push_failure(
     writer: str, session: Session, user: User
 ) -> None:
@@ -465,6 +465,11 @@ def test_noop_cleans_staged_bundle_before_push_failure(
             elif writer == "editor":
                 api.upload_current_user_skill_files(
                     skill.id, upload(b"notes", "notes.txt"), user, session
+                )
+            elif writer == "restore":
+                assert skill.current_version_id is not None
+                api.restore_custom_skill_version(
+                    skill.id, skill.current_version_id, user, session
                 )
             else:
                 api.patch_current_user_skill(

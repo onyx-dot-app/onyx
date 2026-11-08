@@ -14,7 +14,7 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import FileRecord, Skill, SkillVersion
+from onyx.db.models import FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import (
     ResourceVersionAdapter,
     prune_resource_bundles,
@@ -80,6 +80,34 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
         self.skill.bundle_file_id = version.bundle_file_id
         self.skill.bundle_sha256 = version.bundle_sha256
         self.skill.is_valid = version.is_valid
+
+
+def list_skill_versions(
+    skill: Skill, db_session: Session
+) -> list[tuple[SkillVersion, User | None]]:
+    """List history for a skill the caller has authorized for editing."""
+    statement = (
+        SkillVersionAdapter(skill)
+        .versions()
+        .add_columns(User)
+        .outerjoin(User, SkillVersion.created_by_user_id == User.id)
+    )
+    return [
+        (version, creator)
+        for version, creator in db_session.execute(statement).unique()
+    ]
+
+
+def fetch_skill_version(
+    skill: Skill, version_id: UUID, db_session: Session
+) -> SkillVersion:
+    """Resolve a version only within the caller's authorized skill."""
+    version = db_session.scalar(
+        SkillVersionAdapter(skill).versions().where(SkillVersion.id == version_id)
+    )
+    if version is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found")
+    return version
 
 
 def repair_skill_version(skill: Skill, db_session: Session) -> SkillVersion:
