@@ -62,8 +62,9 @@ from onyx.tools.tool_implementations.code_mode.models import (
     code_mode_results,
 )
 from onyx.tools.tool_implementations.code_mode.prompt import (
-    closing_line,
+    closing_heading,
     format_content,
+    observation_heading,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import (
     BUSY_MESSAGE,
@@ -315,17 +316,33 @@ def _closing_amendment(
     result: ToolResult,
     details: CodeModeExecutionResult,
     closing: CellClosing,
-    earlier_calls: Sequence[CodeModeCall] = (),
+    *,
+    cell_calls: Sequence[CodeModeCall] = (),
+    end: SandboxResult | None = None,
+    discarded: DiscardedWrites | None = None,
+    elided_chars: int = 0,
 ) -> ToolResultAmendment:
     """The saved result of a cell's observation, with the cell's closing record.
 
-    `earlier_calls` are the cell's calls that ended before the closing record.
+    The closing record reads like an observation of what the cell did after
+    this one; `cell_calls`, `end`, `discarded` and `elided_chars` are as for
+    `format_content`.
     """
-    line = closing_line(details.cell_id, closing, earlier_calls)
+    closing_text = format_content(
+        closing,
+        heading=closing_heading(details.cell_id, closing),
+        status=closing.status,
+        cell_id=details.cell_id,
+        cell_calls=cell_calls,
+        max_tokens=DEFAULT_MAX_OUTPUT_TOKENS,
+        end=end,
+        discarded=discarded,
+        elided_chars=elided_chars,
+    )
     return ToolResultAmendment(
         call_id=call_id,
         result=ToolResult(
-            content=f"{result.content}\n\n{line}",
+            content=f"{result.content}\n\n{closing_text}",
             details=details.model_copy(update={"closing": closing}),
             is_error=result.is_error,
         ),
@@ -457,7 +474,8 @@ class CodeCell:
         # Context and messages of the latest observation, for nested calls.
         self._source = invocation
         self._context = context
-        self._yielded = False
+        # The observation that yield_control() ended, for its observer to format.
+        self._yielded: ObservationCut | None = None
         self._stop: StopReason | None = None
         # When the first stop was requested; the grace to end counts from it.
         self._stopped_at: float | None = None
@@ -597,26 +615,32 @@ class CodeCell:
         if self._last is None:
             return None
         call_id, result, details = self._last
-        after = self._window_calls(final=True)
-        after_indexes = {call.index for call in after}
+        status = self._final_status()
+        end = self._end
+        # A terminated cell's heading says that it stopped; its end adds nothing.
+        ended = end if end is not None and status != "terminated" else None
         return _closing_amendment(
             call_id,
             result,
             details,
             CellClosing(
                 reason=reason,
-                status=self._final_status(),
-                # The model reads only the closing line, not this output.
+                status=status,
                 stdout=self._stdout.cut(LIVE_OUTPUT_CHARS),
-                calls=after,
+                calls=self._window_calls(final=True),
                 commit=self._commit,
                 tool_call_count=len(self._calls),
+                result=None
+                if ended is None or ended.result is None
+                else _bounded(ended.result, LIVE_OUTPUT_CHARS),
+                error=None
+                if ended is None or ended.error is None
+                else _bounded(ended.error, LIVE_OUTPUT_CHARS),
             ),
-            earlier_calls=[
-                call
-                for call in self._cell_calls(final=True)
-                if call.index not in after_indexes
-            ],
+            cell_calls=self._cell_calls(final=True),
+            end=end,
+            discarded=self._discarded,
+            elided_chars=self._stdout.dropped,
         )
 
     # Observations
@@ -633,7 +657,7 @@ class CodeCell:
         self._observer = observer
         self._source = invocation
         self._context = context
-        self._yielded = False
+        self._yielded = None
         # Calls that were running when the previous observation ended.
         for _, record in sorted(self._calls.items()):
             if record.started_in < self._window and record.in_window(self._window):
@@ -653,7 +677,9 @@ class CodeCell:
 
         with cancellation.on_cancel(wake), self._lock:
             while not (
-                self._end is not None or self._yielded or cancellation.cancelled
+                self._end is not None
+                or self._yielded is not None
+                or cancellation.cancelled
             ):
                 now = time.monotonic()
                 if now >= deadline:
@@ -666,11 +692,14 @@ class CodeCell:
                     self._changed.wait(min(deadline, flush_at) - now)
                 else:
                     self._changed.wait(deadline - now)
-            if cancellation.cancelled:
-                # The run's cancellation also stops the cell. The observer stays
-                # attached, so `close` saves this observation at the run's end.
-                raise AgentCancelled()
-            cut = self._take(observer, final=False)
+            cut, self._yielded = self._yielded, None
+            if cut is None:
+                if cancellation.cancelled:
+                    # The run's cancellation also stops the cell. The observer
+                    # stays attached, so `close` saves this observation at the
+                    # run's end.
+                    raise AgentCancelled()
+                cut = self._take(observer, final=False)
         return self._formatted(cut)
 
     def _final_status(self) -> ClosedStatus:
@@ -770,6 +799,9 @@ class CodeCell:
             formatted = ToolResult(
                 content=format_content(
                     cut.details,
+                    heading=observation_heading(cut.details),
+                    status=status,
+                    cell_id=cut.details.cell_id,
                     cell_calls=cut.cell_calls,
                     max_tokens=cut.max_tokens,
                     end=cut.end,
@@ -945,9 +977,11 @@ class CodeCell:
                 self._emit(CodeModeStdout(text=live))
 
     def _yield_control(self) -> None:
+        """End the observation at the yield, so output after it goes to the next
+        observation, however soon the observer wakes."""
         with self._lock:
             if self._observer is not None:
-                self._yielded = True
+                self._yielded = self._take(self._observer, final=False)
                 self._changed.notify_all()
 
     def _call(self, external: ExternalCall) -> object:

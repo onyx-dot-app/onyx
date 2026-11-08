@@ -16,7 +16,10 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCall,
     CodeModeExecutionResult,
 )
-from onyx.tools.tool_implementations.code_mode.prompt import format_content
+from onyx.tools.tool_implementations.code_mode.prompt import (
+    format_content,
+    observation_heading,
+)
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from tests.unit.onyx.tools.code_mode.fakes import search_doc
 
@@ -99,6 +102,9 @@ def test_later_prompts_replay_program_observations_with_their_images() -> None:
     )
     content = format_content(
         details,
+        heading=observation_heading(details),
+        status=details.status,
+        cell_id=details.cell_id,
         cell_calls=details.calls,
         max_tokens=1_000,
         end=None,

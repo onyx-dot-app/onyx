@@ -139,6 +139,11 @@ class CellWindow(BaseModel):
     commit: StoreCommit | None = None
     # Calls the cell had started by the end of the window.
     tool_call_count: int = 0
+    # Set on the window that reports the program's end. `result` is the repr()
+    # of the JSON copy of the final expression, when it is not None; a value
+    # that is not JSON data or is too large gives `error` instead.
+    result: str | None = None
+    error: str | None = None
 
 
 # `suspended`: the run paused, for example to wait for a subagent.
@@ -168,10 +173,6 @@ class CodeModeExecutionResult(CellWindow):
     # Set on observation 0 only.
     code: str = ""
     status: CodeModeStatus
-    # repr() of the JSON copy of the final expression, when it is not None. A
-    # value that is not JSON data or is too large gives `error` instead.
-    result: str | None = None
-    error: str | None = None
     duration_seconds: float = 0.0
     # Set when the response ended after this observation reported a running cell.
     closing: CellClosing | None = None

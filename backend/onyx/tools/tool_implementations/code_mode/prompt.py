@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from onyx.agents.compaction import count_tokens, head_and_tail_tokens
 from onyx.tools.tool_implementations.code_mode.models import (
     CellClosing,
+    CellWindow,
     CodeModeCall,
     CodeModeExecutionResult,
     CodeModeStatus,
@@ -172,7 +173,7 @@ def _unawaited_note(calls: Sequence[str]) -> str | None:
     )
 
 
-def _header(details: CodeModeExecutionResult) -> str:
+def observation_heading(details: CodeModeExecutionResult) -> str:
     seconds = f"{details.duration_seconds:.1f}s"
     count = details.tool_call_count
     calls = f"{count} tool call{'' if count == 1 else 's'}"
@@ -183,6 +184,23 @@ def _header(details: CodeModeExecutionResult) -> str:
         f"Execution {_STATUS_TEXT[status]} in cell {details.cell_id} {timing} "
         f"with {calls}{so_far}."
     )
+
+
+def closing_heading(cell_id: int, closing: CellClosing) -> str:
+    """How a cell's closing record starts: what happened after the observation
+    that it amends."""
+    if closing.reason == "interrupted":
+        return (
+            f"Cell {cell_id} was interrupted when the server stopped. Calls after "
+            "this output are not known; they may have run."
+        )
+    event = "the run paused" if closing.reason == "suspended" else "the response ended"
+    if closing.status in _ENDED:
+        return (
+            f"Cell {cell_id} {_STATUS_TEXT[closing.status]} after this output, "
+            f"before {event}."
+        )
+    return f"Cell {cell_id} stopped when {event}."
 
 
 def continues_note(cell_id: int) -> str:
@@ -213,46 +231,50 @@ def token_budget(text: str, max_tokens: int, *, elided_chars: int = 0) -> str:
 
 
 def format_content(
-    details: CodeModeExecutionResult,
+    window: CellWindow,
     *,
+    heading: str,
+    status: CodeModeStatus,
+    cell_id: int,
     cell_calls: Sequence[CodeModeCall],
     max_tokens: int,
     end: SandboxResult | None,
     discarded: DiscardedWrites | None,
     elided_chars: int,
 ) -> str:
-    """The text the model reads for one observation.
+    """The text the model reads for one window of a cell: an observation, or
+    the closing record after the last one. `heading` is its first line.
 
-    `cell_calls` are every call of the cell, also those of earlier observations;
-    an observation that reports a program that did not complete lists them,
-    since they may have had effects. `end` and `discarded` (store() writes that
-    did not commit) are set when this observation reports the program's end. The output sections
-    share `max_tokens` with the notes after them and are cut once. `elided_chars`
-    were cut from the middle of the printed text before this.
+    `cell_calls` are every call of the cell, also those of earlier windows; a
+    window that reports a program that did not complete lists them, since they
+    may have had effects. `end` and `discarded` (store() writes that did not
+    commit) are set when the window reports the program's end. The output
+    sections share `max_tokens` with the notes after them and are cut once.
+    `elided_chars` were cut from the middle of the printed text before this.
     """
-    completed = details.status == "completed"
-    running = details.status == "running"
-    sections = [_header(details)]
-    if details.stdout:
-        sections.append(f"Output:\n{details.stdout.rstrip()}")
-    if details.result is not None:
-        sections.append(f"Result:\n{details.result}")
-    if details.error:
-        sections.append(f"Error:\n{details.error}")
+    completed = status == "completed"
+    running = status == "running"
+    sections = [heading]
+    if window.stdout:
+        sections.append(f"Output:\n{window.stdout.rstrip()}")
+    if window.result is not None:
+        sections.append(f"Result:\n{window.result}")
+    if window.error:
+        sections.append(f"Error:\n{window.error}")
     if end is not None and end.type_check_notes:
         sections.append(f"Type checker notes:\n{end.type_check_notes}")
-    if completed and not details.stdout and details.result is None:
+    if completed and not window.stdout and window.result is None:
         sections.append("Output: (none). Print the values you need.")
     note_text = "\n\n".join(
         note
         for note in (
             None if completed or running else calls_note(cell_calls),
-            images_note(details.calls),
+            images_note(window.calls),
             None if end is None else _unawaited_note(_call_names(end.unawaited_calls)),
             None if end is None else _unstarted_note(_call_names(end.unstarted_calls)),
             None if discarded is None else discarded.note,
-            None if details.commit is None else store_summary(details.commit.writes),
-            continues_note(details.cell_id) if running else None,
+            None if window.commit is None else store_summary(window.commit.writes),
+            continues_note(cell_id) if running else None,
         )
         if note
     )
@@ -265,48 +287,3 @@ def format_content(
         elided_chars=elided_chars,
     )
     return f"{text}\n\n{note_text}" if note_text else text
-
-
-def closing_line(
-    cell_id: int, closing: CellClosing, earlier_calls: Sequence[CodeModeCall] = ()
-) -> str:
-    """The line added to a cell's last observation when the response ended or
-    the run paused. `earlier_calls` ended before the closing record; the line
-    names them when the program did not complete, since they may have had
-    effects."""
-    if closing.reason == "interrupted":
-        return (
-            f"Cell {cell_id} was interrupted when the server stopped. Calls after "
-            "this output are not known; they may have run."
-        )
-    event = "the run paused" if closing.reason == "suspended" else "the response ended"
-    opening = (
-        f"Cell {cell_id} {_STATUS_TEXT[closing.status]} after this output, before "
-        f"{event}."
-        if closing.status in _ENDED
-        else f"Cell {cell_id} stopped when {event}."
-    )
-    earlier = (
-        f"Calls before this output: {', '.join(call_line(call) for call in earlier_calls)}."
-        if earlier_calls and closing.status != "completed"
-        else None
-    )
-    if not closing.calls:
-        return " ".join(
-            part
-            for part in (opening, earlier, "It made no calls after this output.")
-            if part
-        )
-    calls = ", ".join(call_line(call) for call in closing.calls)
-    return " ".join(
-        part
-        for part in (
-            opening,
-            earlier,
-            f"Calls after this output: {calls}.",
-            "Completed calls may have had effects.",
-            None if closing.commit is None else store_summary(closing.commit.writes),
-            images_note(closing.calls),
-        )
-        if part
-    )

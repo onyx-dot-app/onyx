@@ -3,6 +3,7 @@
 import threading
 import time
 from collections.abc import Callable, Sequence
+from typing import Any
 
 import pytest
 from prometheus_client import REGISTRY
@@ -503,9 +504,8 @@ def test_closing_record_lists_what_ran_after_the_last_observation() -> None:
     assert closing.commit is not None and closing.commit.writes == {"done": True}
     assert amended.content.startswith(first.content)
     assert amended.content.endswith(
-        "Cell 1 completed after this output, before the response ended. Calls after "
-        "this output: [0] echo: ok. Completed calls may have had effects. "
-        "Stored: done."
+        "Cell 1 completed after this output, before the response ended.\n\n"
+        "Output:\nafter\n\nStored: done."
     )
     # The closing record commits for later turns.
     later = Response(
@@ -535,9 +535,63 @@ def test_closing_record_lists_earlier_calls_of_a_stopped_program() -> None:
     response.run("await echo(value='x')\nyield_control()\nwhile True:\n    pass\n")
     amended = response.finish()["call_1"]
     assert amended.content.endswith(
-        "Cell 1 stopped when the response ended. Calls before this output: "
-        "[0] echo: ok. It made no calls after this output."
+        "Cell 1 stopped when the response ended.\n\nTool calls:\n[0] echo: ok\n"
+        "All of these calls may have had effects, also unfinished calls. Check "
+        "before you retry."
     )
+
+
+def test_closing_record_reports_output_result_and_store_without_calls() -> None:
+    response = Response()
+    response.run("yield_control()\nprint('late')\nstore('k', 1)\n{'total': 3}\n")
+    until(lambda: response.ended(1))
+    amended = response.finish()["call_1"]
+    closing = _details(amended).closing
+    assert closing is not None
+    assert closing.result == "{'total': 3}"
+    assert amended.content.endswith(
+        "Cell 1 completed after this output, before the response ended.\n\n"
+        "Output:\nlate\n\nResult:\n{'total': 3}\n\nStored: k."
+    )
+
+
+def test_output_after_a_yield_goes_to_the_next_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    printed = threading.Event()
+
+    class LateWake(threading.Condition):
+        """The observer wakes only after the program printed past its yield."""
+
+        def wait(self, timeout: float | None = None) -> bool:
+            woken = super().wait(timeout)
+            if not printed.is_set():
+                self.release()
+                try:
+                    printed.wait(10)
+                finally:
+                    self.acquire()
+            return woken
+
+    init = CodeCell.__init__
+    print_ = CodeCell._print
+
+    def late_wake_init(cell: CodeCell, *args: Any, **kwargs: Any) -> None:
+        init(cell, *args, **kwargs)
+        cell._changed = LateWake(cell._lock)
+
+    def signalled_print(cell: CodeCell, text: str) -> None:
+        print_(cell, text)
+        printed.set()
+
+    monkeypatch.setattr(CodeCell, "__init__", late_wake_init)
+    monkeypatch.setattr(CodeCell, "_print", signalled_print)
+    response = Response()
+    observed = response.run("yield_control()\nprint('late')\n")
+    assert _details(observed).stdout == ""
+    until(lambda: response.ended(1))
+    closing = _details(response.finish()["call_1"]).closing
+    assert closing is not None and closing.stdout == "late\n"
 
 
 def test_stop_kills_a_busy_loop_without_an_observer() -> None:
