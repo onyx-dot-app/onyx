@@ -19,6 +19,7 @@ from pydantic_monty import MontyClassProxy
 
 from onyx.llm.models import Message
 from onyx.tools.tool_implementations.code_mode.models import (
+    LostStoreWrites,
     StoreCommit,
     StoreSnapshot,
     code_mode_results,
@@ -46,6 +47,8 @@ MAX_STORE_BYTES = 1024 * 1024
 # what the store adds to a chat's saved messages.
 MAX_COMMITTED_BYTES = 16 * MAX_STORE_BYTES
 MAX_STORE_KEY_CHARS = 200
+# Characters of the keys that a note on dropped commits names.
+MAX_LOST_KEYS_CHARS = 400
 # Levels of nested lists and dicts in a value that leaves the sandbox. Monty
 # replaces values below 200 levels with a placeholder string, so a lower limit
 # rejects them instead.
@@ -184,18 +187,10 @@ def json_value(value: object, what: str, max_bytes: int) -> JsonCopy:
     return JsonCopy(value=root, text=text, size=exact)
 
 
-def _commits(messages: Iterable[Message]) -> list[StoreCommit]:
-    """The store commits that `messages` record."""
-    return [
-        window.commit
-        for _, details in code_mode_results(messages)
-        for window in details.windows()
-        if window.commit is not None
-    ]
-
-
 def store_snapshot(
-    messages: Iterable[Message], live: Iterable[StoreCommit] = ()
+    messages: Iterable[Message],
+    live: Iterable[StoreCommit] = (),
+    reported_through: int = 0,
 ) -> StoreSnapshot:
     """The store after the commits recorded in `messages` and the `live` commits
     not yet recorded there, folded in completion order.
@@ -205,17 +200,40 @@ def store_snapshot(
     the commit it follows, so the store is always a prefix of the commit order:
     when the server stops before it saves a commit, later commits that were
     made against it do not apply, and do not count toward `committed_bytes`.
+    The snapshot lists them in `dropped` until a saved observation reports them
+    (`CodeModeExecutionResult.lost_store_writes`) or `reported_through` covers
+    their ordinals. A report covers every dropped commit up to its highest
+    ordinal: a later commit takes a higher ordinal, so a commit that the store
+    drops later is never below a report.
     """
-    recorded = _commits(messages)
+    results = [details for _, details in code_mode_results(messages)]
+    recorded = [
+        window.commit
+        for details in results
+        for window in details.windows()
+        if window.commit is not None
+    ]
+    reported_through = max(
+        reported_through,
+        *(
+            details.lost_store_writes.through
+            for details in results
+            if details.lost_store_writes is not None
+        ),
+        0,
+    )
     known = {commit.ordinal for commit in recorded}
     pending = [commit for commit in live if commit.ordinal not in known]
     store: dict[str, JsonValue] = {}
     committed_bytes = 0
     last_ordinal = 0
     last_applied = 0
+    dropped: list[StoreCommit] = []
     for commit in sorted([*recorded, *pending], key=lambda commit: commit.ordinal):
         last_ordinal = commit.ordinal
         if commit.follows != last_applied:
+            if commit.ordinal > reported_through:
+                dropped.append(commit)
             continue
         committed_bytes += commit.size_bytes
         for key, value in commit.writes.items():
@@ -229,6 +247,28 @@ def store_snapshot(
         committed_bytes=committed_bytes,
         last_ordinal=last_ordinal,
         last_applied=last_applied,
+        dropped=tuple(dropped),
+    )
+
+
+def lost_store_writes(dropped: Iterable[StoreCommit]) -> LostStoreWrites | None:
+    """The report of `dropped` commits, naming their keys within
+    MAX_LOST_KEYS_CHARS; None when there are none."""
+    commits = list(dropped)
+    if not commits:
+        return None
+    keys = list(dict.fromkeys(key for commit in commits for key in commit.writes))
+    named: list[str] = []
+    chars = 0
+    for key in keys:
+        chars += len(key) + 2
+        if named and chars > MAX_LOST_KEYS_CHARS:
+            break
+        named.append(key)
+    return LostStoreWrites(
+        through=max(commit.ordinal for commit in commits),
+        keys=tuple(named),
+        more_keys=len(keys) - len(named),
     )
 
 

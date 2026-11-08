@@ -798,3 +798,135 @@ def test_capacity_metrics_follow_one_program() -> None:
     assert delta("onyx_code_mode_sandbox_workers_busy") == 0
     assert delta("onyx_code_mode_tool_call_threads_in_use") == 0
     assert delta("onyx_code_mode_programs_waiting_for_worker") == 0
+
+
+def test_a_crash_keeps_only_commits_whose_earlier_commits_are_saved() -> None:
+    response = Response()
+    # Cell 1 commits after its first observation; no saved record reports it yet.
+    response.run("yield_control()\nstore('a', 1)\n")
+    until(lambda: response.ended(1))
+    # Cell 2 is stuck on a call; cell 3 does not wait for it.
+    stuck = response.run("await gate(value='x')\n", yield_time_ms=100)
+    assert _details(stuck).status == "running"
+    started = time.monotonic()
+    dependent = _details(response.run("store('b', load('a') + 1)\n"))
+    assert time.monotonic() - started < 5
+    assert dependent.status == "completed" and dependent.commit is not None
+
+    # The server stops: only the recorded results are saved. Cell 3's commit
+    # depends on cell 1's, which was never saved.
+    crashed = Response(history=response.recorded)
+    assert _details(crashed.run("[load('a'), load('b')]\n")).result == "[None, None]"
+    # Commits after the restore still apply.
+    crashed.run("store('c', 3)\n")
+    restored = Response(history=crashed.recorded)
+    assert _details(restored.run("[load('b'), load('c')]\n")).result == "[None, 3]"
+
+    # Without a crash, the closing records save every commit.
+    response.gate.set()
+    finished = Response(history=response.saved())
+    assert _details(finished.run("[load('a'), load('b')]\n")).result == "[1, 2]"
+
+
+def test_the_first_program_after_a_crash_reports_the_dropped_writes_once() -> None:
+    response = Response()
+    # Cell 1 commits after its first observation; no saved record reports it.
+    response.run("yield_control()\nstore('a', 1)\n")
+    until(lambda: response.ended(1))
+    stuck = response.run("await gate(value='x')\n", yield_time_ms=100)
+    assert _details(stuck).status == "running"
+    # Cell 3's commit follows cell 1's, so the crash drops it.
+    assert _details(response.run("store('b', load('a') + 1)\n")).commit is not None
+    response.gate.set()
+
+    # The server stops: only the recorded results are saved.
+    crashed = Response(history=response.recorded)
+    note = (
+        "Store writes of an earlier program were discarded because the program "
+        "before it did not finish saving its own: b."
+    )
+    first = crashed.run("1\n")
+    assert note in first.content
+    lost = _details(first).lost_store_writes
+    assert lost is not None and lost.keys == ("b",)
+    # Later programs, in this response and after a reload, do not repeat it.
+    assert note not in crashed.run("2\n").content
+    reloaded = Response(history=crashed.recorded)
+    assert note not in reloaded.run("3\n").content
+    # Cells that start before either one's result is saved report it once too.
+    parallel = Response(history=response.recorded)
+    store = parallel.cells._store
+    snapshot = store.snapshot(parallel.recorded)
+    assert snapshot.dropped
+    store.reported(snapshot)
+    assert not store.snapshot(parallel.recorded).dropped
+
+
+def test_a_cell_rejected_as_busy_leaves_the_dropped_writes_note_to_the_next(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = Response()
+    response.run("yield_control()\nstore('a', 1)\n")
+    until(lambda: response.ended(1))
+    stuck = response.run("await gate(value='x')\n", yield_time_ms=100)
+    assert _details(stuck).status == "running"
+    assert _details(response.run("store('b', load('a') + 1)\n")).commit is not None
+    response.gate.set()
+
+    crashed = Response(history=response.recorded)
+    with monkeypatch.context() as patched:
+        # Every running-cell slot is taken.
+        patched.setattr(
+            cells_module._running_cells, "acquire", lambda _tenant_id: False
+        )
+        refused = crashed.run("1\n")
+    assert refused.content == BUSY_MESSAGE
+    accepted = crashed.run("2\n")
+    lost = _details(accepted).lost_store_writes
+    assert lost is not None and lost.keys == ("b",)
+
+
+def test_a_cell_that_ends_after_its_closing_record_commits_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cells_module, "STOP_GRACE_SECONDS", 0.1)
+    release = threading.Event()
+    execute = cells_module.execute_program
+
+    def late_end(code: str, **kwargs: Any) -> SandboxResult:
+        """Ignores the stop, then completes after its cell closed."""
+        if code != "late":
+            return execute(code, **kwargs)
+        kwargs["plain_functions"]["store"]("a", 1)
+        assert release.wait(10)
+        return SandboxResult(status="completed", commits_store=True)
+
+    monkeypatch.setattr(cells_module, "execute_program", late_end)
+    response = Response()
+    assert _details(response.run("late", yield_time_ms=100)).status == "running"
+    # The run pauses; the closing record stops waiting for cell 1 and says it
+    # stopped.
+    results = [m for m in response.recorded if isinstance(m, ToolResultMessage)]
+    closing = {
+        amendment.call_id: amendment.result
+        for amendment in response.cells.suspend(results)
+    }
+    assert closing["call_1"].content.endswith("Cell 1 stopped when the run paused.")
+    release.set()
+    until(lambda: response.ended(1))
+    # A later cell of the response does not build on a commit that no saved
+    # record reports.
+    assert _details(response.run("store('b', 2)\n")).commit is not None
+    saved = [
+        message.model_copy(
+            update={
+                "content": closing[message.tool_call_id].content,
+                "details": closing[message.tool_call_id].details,
+            }
+        )
+        if isinstance(message, ToolResultMessage) and message.tool_call_id in closing
+        else message
+        for message in response.recorded
+    ]
+    restored = Response(history=saved)
+    assert _details(restored.run("[load('a'), load('b')]\n")).result == "[None, 2]"

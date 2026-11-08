@@ -190,7 +190,7 @@ EARLIER_TURN: list[Message] = [
             cell_id=1,
             code="store('k', 'kept')",
             status="completed",
-            commit=StoreCommit(ordinal=1, writes={"k": "kept"}),
+            commit=StoreCommit(ordinal=1, follows=0, writes={"k": "kept"}),
         ),
     ),
     AssistantMessage(id="answer", content=[TextContent(text="Saved.")]),

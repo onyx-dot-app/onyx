@@ -59,6 +59,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeStdout,
     DiscardedWrites,
     ExternalCall,
+    LostStoreWrites,
     ObservationCut,
     SandboxLimits,
     SandboxResult,
@@ -82,6 +83,7 @@ from onyx.tools.tool_implementations.code_mode.store import (
     ProgramStore,
     changed_writes,
     commit_limit_error,
+    lost_store_writes,
     store_snapshot,
 )
 from onyx.tools.tool_implementations.code_mode.stubs import (
@@ -419,16 +421,36 @@ class _StoreCommits:
 
     Each commit gets the next ordinal of the branch when its cell ends, so
     the fold over saved records gives the store of the live completion order in
-    any message order.
+    any message order. A commit stays here until a saved result reports it; it
+    names the commit it follows, so a server stop before then also drops the
+    saved commits that depend on it (`store_snapshot`). No cell waits for
+    another cell's commit to be saved.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._commits: list[StoreCommit] = []
+        # The highest ordinal of the dropped commits that a started cell of
+        # this response reports; the report covers the dropped commits below it.
+        self._reported_through = 0
 
     def snapshot(self, recorded_results: Sequence[Message]) -> StoreSnapshot:
+        """The store for a new cell. The commits it lists as dropped stay listed
+        until `reported` marks them."""
         with self._lock:
-            return store_snapshot(recorded_results, self._commits)
+            return store_snapshot(
+                recorded_results,
+                self._commits,
+                reported_through=self._reported_through,
+            )
+
+    def reported(self, snapshot: StoreSnapshot) -> None:
+        """A cell started with `snapshot` and reports its dropped commits, so
+        later cells do not."""
+        with self._lock:
+            self._reported_through = max(
+                [self._reported_through, *(c.ordinal for c in snapshot.dropped)]
+            )
 
     def commit(
         self, writes: Mapping[str, JsonValue], recorded_results: Sequence[Message]
@@ -444,7 +466,11 @@ class _StoreCommits:
             error = commit_limit_error(current, writes)
             if error is not None:
                 raise StoreLimitError(error, list(writes))
-            commit = StoreCommit(ordinal=current.last_ordinal + 1, writes=writes)
+            commit = StoreCommit(
+                ordinal=current.last_ordinal + 1,
+                follows=current.last_applied,
+                writes=writes,
+            )
             self._commits.append(commit)
             return commit
 
@@ -519,6 +545,9 @@ class CodeCell:
             for function in program.stubs.functions.values()
         )
         self._staged_files: list[ChatFile] = []
+        # Commits the store dropped before the cell started; observation 0
+        # reports them.
+        self._lost_store_writes: LostStoreWrites | None = None
         # The observation that yield_control() ended, for its observer to format.
         self._yielded: ObservationCut | None = None
         self._stop: StopReason | None = None
@@ -560,6 +589,7 @@ class CodeCell:
         with self._lock:
             if self._observations:
                 raise RuntimeError(f"Cell {self.id} already started")
+            self._lost_store_writes = lost_store_writes(snapshot.dropped)
             observer = self._attach(self._source, self._context, max_tokens)
         try:
             start_thread_future(
@@ -799,6 +829,7 @@ class CodeCell:
             calls=self._window_calls(final=final),
             commit=self._commit,
             tool_call_count=len(self._calls),
+            lost_store_writes=self._lost_store_writes if observer.number == 0 else None,
         )
         # The saved observation keeps each part within about the budget.
         saved = details.model_copy(
@@ -847,6 +878,7 @@ class CodeCell:
                     end=cut.end,
                     discarded=cut.discarded,
                     elided_chars=cut.elided_chars,
+                    lost_store_writes=cut.details.lost_store_writes,
                 ),
                 details=cut.saved,
                 is_error=status in ("failed", "timed_out", "cancelled"),
@@ -968,24 +1000,29 @@ class CodeCell:
             # Calls the program never awaited stop with it.
             self._stopping.cancel()
             with self._lock:
-                source = self._source
-            # Before the end is visible, so the observation that reports it has the
-            # commit.
-            commit: StoreCommit | None = None
-            discarded = (
-                None
-                if end.commits_store
-                else DiscardedWrites(
-                    keys=tuple(store.changed_writes), reason=STOPPED_BEFORE_END
+                # Under the lock with the end, so the observation that reports the
+                # end has the commit. A cell whose closing record was already
+                # saved reported that it stopped, so it commits nothing: no saved
+                # record would hold the commit, and later commits that follow it
+                # would be dropped.
+                commit: StoreCommit | None = None
+                commits = end.commits_store and not self._closed
+                discarded = (
+                    None
+                    if commits
+                    else DiscardedWrites(
+                        keys=tuple(store.changed_writes), reason=STOPPED_BEFORE_END
+                    )
                 )
-            )
-            if end.commits_store:
-                try:
-                    commit = self._store.commit(store.writes, source.recorded_results)
-                except StoreLimitError as error:
-                    # Against the store at commit time, which other cells changed.
-                    discarded = DiscardedWrites(keys=error.keys, reason=str(error))
-            with self._lock:
+                if commits:
+                    try:
+                        commit = self._store.commit(
+                            store.writes, self._source.recorded_results
+                        )
+                    except StoreLimitError as error:
+                        # Against the store at commit time, which other cells
+                        # changed.
+                        discarded = DiscardedWrites(keys=error.keys, reason=str(error))
                 self._commit = commit
                 self._discarded = discarded
                 for record in self._calls.values():
@@ -1215,6 +1252,9 @@ class CodeCells:
                 invocation=invocation,
                 context=context,
             )
+            # Only a cell that exists reports the dropped commits; one rejected
+            # as busy leaves them for the next cell.
+            self._store.reported(snapshot)
             self._highest_id = cell_id
             self._cells[cell_id] = cell
         return cell.start(snapshot, yield_seconds=yield_seconds, max_tokens=max_tokens)

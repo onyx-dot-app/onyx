@@ -12,6 +12,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeStatus,
     DiscardedWrites,
     ExternalCall,
+    LostStoreWrites,
     SandboxLimits,
     SandboxResult,
 )
@@ -241,6 +242,7 @@ def format_content(
     end: SandboxResult | None,
     discarded: DiscardedWrites | None,
     elided_chars: int,
+    lost_store_writes: LostStoreWrites | None = None,
 ) -> str:
     """The text the model reads for one window of a cell: an observation, or
     the closing record after the last one. `heading` is its first line.
@@ -251,6 +253,7 @@ def format_content(
     commit) are set when the window reports the program's end. The output
     sections share `max_tokens` with the notes after them and are cut once.
     `elided_chars` were cut from the middle of the printed text before this.
+    `lost_store_writes` are earlier commits that the store dropped.
     """
     completed = status == "completed"
     running = status == "running"
@@ -272,6 +275,7 @@ def format_content(
             images_note(window.calls),
             None if end is None else _unawaited_note(_call_names(end.unawaited_calls)),
             None if end is None else _unstarted_note(_call_names(end.unstarted_calls)),
+            None if lost_store_writes is None else lost_store_writes.note,
             None if discarded is None else discarded.note,
             None if window.commit is None else store_summary(window.commit.writes),
             continues_note(cell_id) if running else None,

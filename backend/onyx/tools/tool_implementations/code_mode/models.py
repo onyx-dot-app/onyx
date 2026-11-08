@@ -127,6 +127,31 @@ class StoreCommit(BaseModel):
         return sum(entry_bytes(key, value) for key, value in self.writes.items())
 
 
+class LostStoreWrites(BaseModel):
+    """Commits that the store dropped because the commit each one follows was
+    never saved, as the first program after the drop reports them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The highest ordinal of the dropped commits. The report covers every
+    # dropped commit up to it, so its size does not grow with the commits.
+    through: int
+    # The keys that the dropped commits wrote, cut to a bounded length.
+    keys: tuple[str, ...]
+    # Keys left out of `keys` by the bound.
+    more_keys: int = 0
+
+    @property
+    def note(self) -> str:
+        keys = ", ".join(self.keys)
+        more = f", and {self.more_keys} more" if self.more_keys else ""
+        return (
+            "Store writes of an earlier program were discarded because the "
+            f"program before it did not finish saving its own: {keys}{more}. "
+            "load() returns the values from before those writes."
+        )
+
+
 STOPPED_BEFORE_END = "the program was stopped before it ended"
 
 
@@ -194,6 +219,8 @@ class CodeModeExecutionResult(CellWindow):
     duration_seconds: float = 0.0
     # Set when the response ended after this observation reported a running cell.
     closing: CellClosing | None = None
+    # Set on observation 0 of the first program after the store dropped commits.
+    lost_store_writes: LostStoreWrites | None = None
 
     def windows(self) -> list[CellWindow]:
         """The observation's window, then its closing record's."""
@@ -387,6 +414,9 @@ class StoreSnapshot(BaseModel):
     last_ordinal: int = 0
     # The ordinal of the last commit that `values` include; 0 for none.
     last_applied: int = 0
+    # Commits the fold dropped that no saved observation reported yet, in
+    # ordinal order.
+    dropped: tuple[StoreCommit, ...] = ()
 
 
 class StubParameter(BaseModel):
