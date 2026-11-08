@@ -127,9 +127,10 @@ the same count). Each `execute_code` and `wait_code` call is its own code
 mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
 arguments (`None` and 0 for `execute_code`, the cell id and 1 for
 `wait_code`, whose `code` is empty), so live and replay send the same start.
-The final delta carries the exact `cell_id` and `observation`. Its `status`
-adds `running` (the cell still runs; its open nested calls get only start
-packets) and `terminated`. A cell's closing record goes to the tab of its last
+The final delta of a saved observation carries the exact `cell_id` and
+`observation`; a call that failed or was cancelled before it saved one leaves
+them `None`. Its `status` adds `running` (the cell still runs; the final delta
+does not complete its open nested calls) and `terminated`. A cell's closing record goes to the tab of its last
 observation: the nested calls after the observation, a `code_mode_delta` with
 the new stdout when there is any, then a final delta with `result`, `error`, `status`,
 `tool_call_count`, `stored_keys` and `response_ended=True` (`chat/renderer.py:tool_renderer`
