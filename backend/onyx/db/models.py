@@ -5497,6 +5497,7 @@ class Skill(Base):
         PGUUID(as_uuid=True),
         ForeignKey("marketplace.id", ondelete="CASCADE", name="fk_skill_marketplace"),
         nullable=True,
+        index=True,
     )
     marketplace_entry_key: Mapped[str | None] = mapped_column(String, nullable=True)
     follows_marketplace_access: Mapped[bool] = mapped_column(

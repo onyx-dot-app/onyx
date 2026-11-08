@@ -72,6 +72,7 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
+    op.create_index("ix_skill_marketplace_id", "skill", ["marketplace_id"])
     op.add_column("skill", sa.Column("marketplace_entry_key", sa.String()))
     op.create_check_constraint(
         "ck_skill_marketplace_entry_key",
@@ -120,6 +121,7 @@ def downgrade() -> None:
     )
     op.drop_constraint("ck_skill_marketplace_entry_key", "skill", type_="check")
     op.drop_index("uq_skill_live_marketplace_entry", table_name="skill")
+    op.drop_index("ix_skill_marketplace_id", table_name="skill")
     op.drop_constraint("fk_skill_marketplace", "skill", type_="foreignkey")
     for column in (
         "retired_at",

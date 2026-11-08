@@ -65,8 +65,9 @@ def test_fetch_pins_branch_tag_and_commit(ref: str) -> None:
 def test_missing_login_stops_before_fetch() -> None:
     marketplace = Marketplace(provider=MarketplaceProvider.GITHUB, login_user_id=None)
     with patch("onyx.utils.github.ssrf_safe_get") as fetch:
-        with pytest.raises(OnyxError, match="Replace the login"):
+        with pytest.raises(OnyxError, match="Replace the login") as error:
             get_marketplace_adapter(marketplace, "public").fetch_if_changed()
+        assert error.value.status_code == 400
         fetch.assert_not_called()
 
 
@@ -141,10 +142,11 @@ def test_marketplace_requires_active_personal_github_login(state: str) -> None:
                 match="Enable the GitHub app"
                 if state.endswith("_app")
                 else "Replace the login",
-            ):
+            ) as error:
                 github_authorization_header(
                     "public", user_id, require_user_connection=True
                 )
+            assert error.value.status_code == 400
             if state in {"inactive", "disconnected", "missing_app", "disabled_app"}:
                 refresh.assert_not_called()
 

@@ -137,6 +137,9 @@ def test_migration_round_trip_and_refusal(
             == skill.name
         )
         revision.module.upgrade()
+        assert "ix_skill_marketplace_id" in {
+            index["name"] for index in inspect(connection).get_indexes("skill")
+        }
         assert "ix_marketplace__user_group_user_group_id" in {
             index["name"]
             for index in inspect(connection).get_indexes("marketplace__user_group")
