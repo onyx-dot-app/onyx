@@ -32,6 +32,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import (
     build_chat_prompt,
+    callable_tools,
     prepare_prompt,
 )
 from onyx.chat.tool_results import (
@@ -98,7 +99,6 @@ class ChatAgent(Agent, RestorableFeature):
         additional_context: str | None = None,
         code_mode: bool = False,
     ) -> None:
-        self.max_steps = CODE_MODE_MAX_LLM_CYCLES if code_mode else MAX_LLM_CYCLES
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
@@ -113,6 +113,10 @@ class ChatAgent(Agent, RestorableFeature):
             with_code_mode(self.configured_tools)
             if code_mode
             else (list(self.configured_tools), None)
+        )
+        # Programs batch tool calls, so code mode gets its own cap when it applies.
+        self.max_steps = (
+            CODE_MODE_MAX_LLM_CYCLES if self.code_cells is not None else MAX_LLM_CYCLES
         )
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
@@ -277,7 +281,9 @@ class ChatAgent(Agent, RestorableFeature):
         ]
         allowed_tool_names: frozenset[str] | None = None
         tool_choice = ToolChoiceOptions.AUTO
-        available_tool_names = {tool.name for tool in self.application_tools}
+        available_tool_names = {
+            tool.name for tool in callable_tools(self.application_tools)
+        }
         if state.step.is_last:
             tool_choice = ToolChoiceOptions.NONE
             allowed_tool_names = frozenset()

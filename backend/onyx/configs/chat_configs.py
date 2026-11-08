@@ -13,10 +13,10 @@ MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 # common search → open_url pattern; raise via env when integrating with tool-heavy
 # MCPs that need more turns.
 MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
-# The cycle cap with code mode on. Programs batch tool calls, and each wait_code
-# observation of a running cell takes a cycle, so the default is only a safety
-# cap. MAX_LLM_CYCLES, when set, applies here too.
-CODE_MODE_MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 100)
+# The cycle cap when code mode applies. Programs batch tool calls, and each
+# wait_code observation of a running cell takes a cycle, so it is only a safety
+# cap, never lower than MAX_LLM_CYCLES.
+CODE_MODE_MAX_LLM_CYCLES: int = max(MAX_LLM_CYCLES, 100)
 
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
 DOC_TIME_DECAY = float(

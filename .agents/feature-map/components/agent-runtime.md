@@ -79,7 +79,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
   (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
   passes `ChatAgent.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
-  with code mode on.
+  when code mode applies (`ChatAgent.code_cells` is set).
 - `Agent.on_finish` runs once at the end of every run, without the execution
   lock, with the run's recorded tool results.
   `backend/onyx/agents/runtime.py:Run._release_amendments` collects its

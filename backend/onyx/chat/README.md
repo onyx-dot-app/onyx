@@ -267,9 +267,9 @@ until model calls, tools, storage, and delivery drain. A disconnected browser
 only detaches its reader.
 
 `MAX_LLM_CYCLES` (default 6) caps the steps of a chat response. The last step offers
-no tools, so the model must answer. With code mode on (`CODE_MODE_ENABLED`), the cap is
-`CODE_MODE_MAX_LLM_CYCLES`: 100 by default, a safety cap, or `MAX_LLM_CYCLES` when it
-is set.
+no tools, so the model must answer. When code mode applies (`CODE_MODE_ENABLED` and at
+least one tool runs inside programs), the cap is `CODE_MODE_MAX_LLM_CYCLES`: a safety
+cap of 100, or `MAX_LLM_CYCLES` when that is higher.
 
 ## Deploying the shared runtime
 

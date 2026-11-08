@@ -14,9 +14,9 @@
 
 - **An end user** sends a message. The assistant can think, run tools (search,
   web, code, images, custom tools) for several steps, and then streams an answer
-  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6; with
-  code mode on, `CODE_MODE_MAX_LLM_CYCLES`, default 100, a safety cap) the
-  model must answer without tools.
+  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6; when
+  code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or
+  `MAX_LLM_CYCLES` when higher) the model must answer without tools.
 - **One message at a time.** While a turn runs, the session is busy. The client
   waits until the session is idle before it sends again. The backend refuses a
   second streaming send on the same session with a `StreamingError` packet whose

@@ -21,7 +21,7 @@ from onyx.chat.renderer import tool_renderer
 from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import StoredToolResult
-from onyx.file_store.models import ExtractedContextFiles
+from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -42,7 +42,7 @@ from onyx.prompts.tool_prompts import (
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
-from onyx.tools.constants import WAIT_CODE_TOOL_NAME
+from onyx.tools.constants import FILE_READER_TOOL_NAME, WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     CodeModeExposure,
@@ -464,15 +464,20 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
 
 
 @pytest.mark.parametrize(
-    ("code_mode", "step_cap"),
-    [(False, MAX_LLM_CYCLES), (True, CODE_MODE_MAX_LLM_CYCLES)],
+    ("code_mode", "tools", "step_cap"),
+    [
+        (False, [EchoTool()], MAX_LLM_CYCLES),
+        (True, [EchoTool()], CODE_MODE_MAX_LLM_CYCLES),
+        # No tool runs inside programs, so code mode does not apply.
+        (True, [_DirectOnlyTool()], MAX_LLM_CYCLES),
+    ],
 )
-def test_only_code_mode_uses_the_code_mode_step_cap(
-    code_mode: bool, step_cap: int
+def test_the_code_mode_step_cap_applies_when_code_mode_does(
+    code_mode: bool, tools: list[Tool], step_cap: int
 ) -> None:
     agent = ChatAgent(
         messages=[],
-        tools=[EchoTool()],
+        tools=tools,
         code_mode=code_mode,
         custom_agent_prompt=None,
         base_system_prompt="",
@@ -483,6 +488,40 @@ def test_only_code_mode_uses_the_code_mode_step_cap(
         token_counter=len,
     )
     assert agent.max_steps == step_cap
+    assert CODE_MODE_MAX_LLM_CYCLES >= MAX_LLM_CYCLES
+
+
+class _ReadFileTool(EchoTool):
+    @property
+    def name(self) -> str:
+        return FILE_READER_TOOL_NAME
+
+
+def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
+    llm = ScriptedLLM([Delta(content="Done.")])
+    agent = ChatAgent(
+        messages=[],
+        tools=[_ReadFileTool()],
+        code_mode=True,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=_context_files(),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+        token_counter=len,
+        all_injected_file_metadata={
+            "file-1": FileToolMetadata(
+                file_id="file-1", filename="report.pdf", approx_char_count=90_000
+            )
+        },
+    )
+    run_agent(agent, messages=[UserMessage(content="Summarize")], max_steps=3)
+
+    [request] = llm.requests
+    assert _offered(request) == [CodeModeTool.NAME, WAIT_CODE_TOOL_NAME]
+    assert "Use the read_file tool" in str(request)
+    assert 'file_id="file-1"' in str(request)
 
 
 def test_nested_custom_tools_carry_their_tool_id_live_and_on_replay() -> None:
