@@ -64,13 +64,22 @@ def head_and_tail_tokens(text: str, max_tokens: int) -> tuple[str, str, int]:
     tokens = _encoder().encode(text, disallowed_special=())
     if len(tokens) <= max_tokens:
         return text, "", len(tokens)
-    head = max_tokens // 2
-    tail = max_tokens - head
-    return (
-        _encoder().decode(tokens[:head]),
-        _encoder().decode(tokens[len(tokens) - tail :]) if tail else "",
-        len(tokens),
-    )
+    # Token boundaries can split a UTF-8 character; the parts keep whole ones.
+    head_end = max_tokens // 2
+    while (head := _strict_decode(tokens[:head_end])) is None:
+        head_end -= 1
+    tail_start = len(tokens) - (max_tokens - max_tokens // 2)
+    while (tail := _strict_decode(tokens[tail_start:])) is None:
+        tail_start += 1
+    return head, tail, len(tokens)
+
+
+def _strict_decode(tokens: list[int]) -> str | None:
+    """The text of `tokens`, or None when they start or end inside a character."""
+    try:
+        return _encoder().decode_bytes(tokens).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def message_tokens(
@@ -245,18 +254,9 @@ class _SummaryInput:
             if available <= 0:
                 break
             end = min(len(self.tokens), self.offset + available)
-            text = ""
             # A token boundary can split a UTF-8 character.
-            while end > self.offset:
-                try:
-                    text = (
-                        _encoder()
-                        .decode_bytes(self.tokens[self.offset : end])
-                        .decode("utf-8")
-                    )
-                    break
-                except UnicodeDecodeError:
-                    end -= 1
+            while (text := _strict_decode(self.tokens[self.offset : end])) is None:
+                end -= 1
             if end == self.offset and self.tokens:
                 break
             parts.append(header + text)

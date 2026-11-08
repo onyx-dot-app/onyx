@@ -16,6 +16,7 @@ from onyx.agents.compaction import (
     compact_history,
     context_budget,
     count_tokens,
+    head_and_tail_tokens,
     history_boundaries,
     request_tokens,
     working_messages,
@@ -511,6 +512,16 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
+
+
+@pytest.mark.parametrize("max_tokens", [1, 3, 4, 7])
+def test_head_and_tail_tokens_keep_whole_characters(max_tokens: int) -> None:
+    text = "お誕生日おめでとう 🎉" * 4
+    head, tail, count = head_and_tail_tokens(text, max_tokens)
+    assert count == count_tokens(text) > max_tokens
+    assert "\ufffd" not in head + tail
+    assert text.startswith(head) and text.endswith(tail)
+    assert count_tokens(head) + count_tokens(tail) <= max_tokens
 
 
 def test_amending_a_summarized_result_drops_the_summary() -> None:
