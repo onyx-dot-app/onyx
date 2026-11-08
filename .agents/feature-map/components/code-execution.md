@@ -113,9 +113,11 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         execute_code is offered; in both modes
                                         SearchTool._run, not the prompt, caps queries at 3
   stubs.py:build_tool_stubs             function names `<namespace>__<name>` from
-                                        Tool.code_mode_function_name (MCP: server); `text`
-                                        (all functions, type-checked) and `listed_text` (no
-                                        DEFERRED ones, in the description); tool_search()
+                                        Tool.code_mode_function_name (MCP: server);
+                                        `listed_text` (no DEFERRED ones, in the description);
+                                        `program_text(code)` types one program: the listed
+                                        functions, the DEFERRED ones whose names the code
+                                        uses, and the imported modules; tool_search()
                                         (tool_search.py, BM25) only when some are DEFERRED
   CodeModeTool._run -> CodeCells.start  MAX_OPEN_CELLS per response, MAX_RUNNING_CELLS per
                                         process (else BUSY_MESSAGE); cell id = 1 + the highest
@@ -126,7 +128,8 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         yield_control(), or at the end
       execute_program                   sandbox.py: checkout a new Monty worker (the wait
                                         observes Stop), feed the imports of IMPORTABLE_MODULES,
-                                        type-check tool and store/load calls, feed_start
+                                        type-check tool and store/load calls against the
+                                        program's stubs, feed_start
         FunctionSnapshot                tool call -> CodeCell._call on a thread, at most
                                         MAX_CONCURRENT_TOOL_CALLS per cell and
                                         an equal share of MAX_TOOL_CALL_THREADS per process
@@ -136,8 +139,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         an event (a call ends, a thread frees up, the cell's
                                         cancellation, a waiting program claims this worker);
                                         on the last, dump the snapshot (within
-                                        MAX_SUSPENDED_BYTES), return the worker, and later
-                                        load_snapshot on any worker
+                                        MAX_SUSPENDED_BYTES), return the worker, and
+                                        load_snapshot on a new worker once its calls end,
+                                        or RESUME_BATCH_SECONDS (0.1 s) after the first ends
         _watched                        while a worker computes, SIGKILLs it on the cell's
                                         cancellation, or by timer at the lifetime; the crash
                                         maps to cancelled / timed_out
@@ -353,8 +357,10 @@ health calls are not retried.
     up. A waiter that stops waiting passes its claim to a waiter that has
     none, or withdraws it from a holder that has not given up yet. The claimed holder's
     `tools/tool_implementations/code_mode/sandbox.py:execute_program`
-    dumps the waiting program, returns the worker, and resumes on any worker
-    when a call finishes. Dumps held by the process are bounded by
+    dumps the waiting program and returns the worker. A dumped program resumes
+    on a new worker once all of its pending calls end, or `RESUME_BATCH_SECONDS`
+    (0.1 s) after the first of them ends, with every result so far; a program
+    that kept its worker resumes on each call. Dumps held by the process are bounded by
     `MAX_SUSPENDED_BYTES` (256 MB); a program whose dump does not fit keeps its
     worker, and skips later dumps while the free budget is below its last dump
     size. A dump needs about the heap plus twice the dump size inside the
