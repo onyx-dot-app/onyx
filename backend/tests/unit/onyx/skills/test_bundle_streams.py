@@ -1,6 +1,7 @@
 import io
 import zipfile
 from functools import partial
+from pathlib import Path
 
 import pytest
 
@@ -111,4 +112,5 @@ assert not any(name.startswith(('onyx.db.', 'onyx.server.')) for name in sys.mod
 """,
         ],
         check=True,
+        cwd=Path(__file__).resolve().parents[4],
     )
