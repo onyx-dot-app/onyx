@@ -660,12 +660,12 @@ def test_empty_manifest_skills_prevent_root_fallback(provider: str) -> None:
         "plugins/hello/SKILL.md": _md(),
         f"plugins/hello/.{provider}-plugin/plugin.json": b'{"skills":[]}',
     }
-    assert _entries(files) == []
+    assert _entries(files) == ()
 
 
 def test_root_fallback_does_not_claim_repository_or_default_container() -> None:
     files = {CLAUDE: _catalog(), "SKILL.md": _md()}
-    assert _entries(files) == []
+    assert _entries(files) == ()
     files = {
         CLAUDE: _catalog(source="./plugins/hello"),
         "plugins/hello/SKILL.md": _md(),
@@ -673,7 +673,7 @@ def test_root_fallback_does_not_claim_repository_or_default_container() -> None:
     }
     assert [entry.entry_key for entry in _entries(files)] == ["tools/child"]
     files[CLAUDE] = _catalog(source="./plugins/hello", skills=[])
-    assert _entries(files) == []
+    assert _entries(files) == ()
 
 
 def test_explicit_special_skill_path_stays_blocked() -> None:
