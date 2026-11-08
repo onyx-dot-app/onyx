@@ -22,7 +22,7 @@ from onyx.db.external_app import (
 )
 from onyx.db.marketplace_access import reset_marketplace_skill_access__no_commit
 from onyx.db.models import Skill, User
-from onyx.db.resource_access import mutate_resource_access
+from onyx.db.resource_access import lock_resource_access_user, mutate_resource_access
 from onyx.db.resource_version import read_version_bundle
 from onyx.db.skill import (
     SkillAccessAdapter,
@@ -51,7 +51,7 @@ from onyx.db.skill_version import (
     prepare_skill_version_write,
     skill_content_snapshot,
 )
-from onyx.db.users import fetch_user_by_id, lock_group_membership
+from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_index import ZipIndex
@@ -160,6 +160,7 @@ def _import_skill_bundles(
                 )
                 continue
             staged.append((source, ingested))
+        user = lock_resource_access_user(user.id, db_session)
         for source, ingested in staged:
             try:
                 skill, enabled, item_affected = create_skill_from_bundle__no_commit(
@@ -267,14 +268,7 @@ def _lock_skill_after_storage(
     db_session: Session,
     expected_content: SkillContentSnapshot | None = None,
 ) -> tuple[Skill, User]:
-    lock_group_membership(db_session)
-    actor = fetch_user_by_id(db_session, user.id, refresh=True)
-    if (
-        actor is None
-        or not actor.is_active
-        or not has_global_permission(actor, Permission.BASIC_ACCESS)
-    ):
-        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+    actor = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
@@ -359,6 +353,7 @@ def bulk_update_skills(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillBulkResponse:
+    user = lock_resource_access_user(user.id, db_session)
     succeeded: list[UUID] = []
     failed: list[SkillBulkFailure] = []
     affected: set[UUID] = set()
@@ -405,6 +400,7 @@ def set_skill_enabled_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
+    user = lock_resource_access_user(user.id, db_session)
     skill = set_skill_enabled_for_user(
         skill_id=skill_id,
         enabled=request.enabled,
@@ -466,6 +462,7 @@ def create_custom_skill(
         file_store,
         db_session,
     ) as ingested:
+        user = lock_resource_access_user(user.id, db_session)
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         if auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
@@ -674,6 +671,11 @@ def create_custom_skill_from_editor(
         db_session,
         expected_name=canonical_name,
     ) as ingested:
+        user = lock_resource_access_user(user.id, db_session)
+        if external_app_id is not None and not has_global_permission(
+            user, Permission.FULL_ADMIN_PANEL_ACCESS
+        ):
+            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         if external_app_id is not None:
             associate_custom_skill_with_external_app__no_commit(
@@ -1093,7 +1095,7 @@ def share_current_user_skill(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    lock_group_membership(db_session)
+    user = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
@@ -1135,6 +1137,7 @@ def reset_current_skill_marketplace_access(
     user: User = Depends(require_permission(Permission.MANAGE_SKILLS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
+    user = lock_resource_access_user(user.id, db_session)
     affected = reset_marketplace_skill_access__no_commit(skill_id, user, db_session)
     db_session.commit()
     push_skills_for_users(affected, db_session)
@@ -1149,6 +1152,7 @@ def transfer_current_user_skill_ownership(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
+    user = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.VIEW,
@@ -1223,6 +1227,7 @@ def delete_current_user_skill(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
+    user = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
