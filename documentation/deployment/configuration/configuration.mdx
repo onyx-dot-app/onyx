@@ -276,6 +276,11 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
     `WEBHOOK_PUBLIC_URL`: The public URL where providers reach the webhook server. It defaults to `WEB_DOMAIN`.
     Set it when the API and web hosts are different, because the Helm webhook ingress is served from the API host.
     Onyx shows callback URLs built from this value, and you paste them into each provider's console.
+
+    `CODE_MODE_ENABLED`: Set to `true` to let the model call actions from a Python program instead of one at a time.
+    Defaults to `false`. It can lower LLM usage for Agents with many actions, such as large MCP servers,
+    and raise it for Agents with few actions.
+    The programs run on the API server and can use up to 1 GB more memory there.
   </Accordion>
 
   <Accordion title="Craft Configuration">

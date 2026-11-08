@@ -144,6 +144,8 @@ namespace) and `code_mode_result` (the value and stub type a program
 receives); see [[code-execution]]. A tool that must not run twice sets
 `interrupted_result`: on restore, the runtime saves it as the result of a call
 that a lost execution owner left running (`agents/tools.py:AgentTool`).
+`inner_tools` lists the tools that run inside a tool's calls, such as the
+functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error

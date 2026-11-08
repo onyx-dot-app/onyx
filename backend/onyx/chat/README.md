@@ -266,6 +266,11 @@ The internal constant `CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline to
 until model calls, tools, storage, and delivery drain. A disconnected browser
 only detaches its reader.
 
+`MAX_LLM_CYCLES` (default 6) caps the steps of a chat response. The last step offers
+no tools, so the model must answer. With code mode on (`CODE_MODE_ENABLED`), the cap is
+`CODE_MODE_MAX_LLM_CYCLES`: 100 by default, a safety cap, or `MAX_LLM_CYCLES` when it
+is set.
+
 ## Deploying the shared runtime
 
 Deploy the session status endpoint before clients require it. A failed readiness

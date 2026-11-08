@@ -209,7 +209,7 @@ calls the index directly for admin document inspection.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
    `ChatAgent._finalize_tool` stages the connector files of all `search_docs`
-   for the Python tool by `SearchDoc.file_id`, which
+   for the Python tool, when the chat offers it, by `SearchDoc.file_id`, which
    `populate_file_ids_on_sections` fills ([[code-execution]]). The saved result
    (`chat/response.py:_saved_message`) drops `search_docs` and the planning
    metadata. The `ToolCall` row keeps the selected documents, so replay and

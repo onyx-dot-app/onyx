@@ -77,7 +77,9 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 ```
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
-  (`_advance_step`).
+  (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
+  passes `ChatAgent.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
+  with code mode on.
 - `Agent.on_finish` runs once at the end of every run, without the execution
   lock, with the run's recorded tool results.
   `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
@@ -93,10 +95,14 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
   amendments before it captures state. A suspend hook that fails sets no
   results and the run still suspends. A suspend hook that stops for
-  cancellation finishes the run as cancelled.
-  `chat/presentation.py:ResponsePresenter` completes a call that has no
-  ended card with the amended result; an ended card keeps what it showed.
-  Replay renders only the saved (amended) result.
+  cancellation finishes the run as cancelled. Chat uses both hooks to close
+  code mode cells ([[code-execution#code-mode-interrupted-run]]).
+  `chat/presentation.py:ResponsePresenter` renders each amendment with
+  `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
+  completes with the amended result. An ended card renders only what the
+  amendment added (`_amendment_packets`), after its section end; the generic
+  display adds nothing. `ToolRenderer.complete` renders that part after the
+  section end too, so replay of the saved result gives the live order.
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary

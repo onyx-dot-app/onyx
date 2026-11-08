@@ -623,6 +623,7 @@ class ChatFeatureState(BaseModel):
     include_citations: bool
     inject_memories: bool
     preferred_tool_id: int | None = None
+    code_mode: bool
     base_prompt: str
     custom_prompt: str | None
     request_context: str | None = None
