@@ -2,6 +2,11 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from onyx.utils.github import (
+    normalize_github_folder,
+    validate_github_repository_component,
+)
+
 MARKETPLACE_LOGIN_ERROR = "Marketplace login is unavailable. Replace the login with an active user connected to GitHub."
 
 
@@ -12,26 +17,20 @@ class MarketplaceProvider(StrEnum):
 class GitHubMarketplaceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    owner: str = Field(pattern=r"^[A-Za-z0-9_.-]+$")
-    repo: str = Field(pattern=r"^[A-Za-z0-9_.-]+$")
+    owner: str
+    repo: str
     folder: str | None = None
     ref: str = Field(min_length=1)
 
     @field_validator("owner", "repo")
     @classmethod
     def validate_repository_component(cls, value: str) -> str:
-        if value in {".", ".."}:
-            raise ValueError("Use a repository name without dot segments.")
-        return value
+        return validate_github_repository_component(value)
 
     @field_validator("folder")
     @classmethod
     def validate_folder(cls, value: str | None) -> str | None:
-        if value is not None and (
-            "\\" in value or any(part in {"", ".", ".."} for part in value.split("/"))
-        ):
-            raise ValueError("Use a relative repository folder without dot segments.")
-        return value
+        return normalize_github_folder(value)
 
     @field_validator("ref")
     @classmethod

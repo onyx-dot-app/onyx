@@ -12,6 +12,30 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.github_auth import github_authorization_header
 from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
 from onyx.skills.marketplace.provider import get_marketplace_adapter
+from onyx.utils.github import GitHubSource, resolve_github_revision
+
+
+@pytest.mark.parametrize("folder", [None, "", "catalog", "catalog/", "a/b///"])
+def test_marketplace_and_import_normalize_the_same_folder(folder: str | None) -> None:
+    config = GitHubMarketplaceConfig(
+        owner="acme", repo="skills", ref="main", folder=folder
+    )
+    resolved = resolve_github_revision(
+        GitHubSource(owner="acme", repo="skills"), revision="a" * 40, subpath=folder
+    )
+    assert config.folder == resolved.subpath
+
+
+@pytest.mark.parametrize("folder", ["/", "/catalog", "../x", "a//b", "a/../b", "a\\b"])
+def test_marketplace_and_import_reject_the_same_folder(folder: str) -> None:
+    with pytest.raises(ValidationError):
+        GitHubMarketplaceConfig(owner="acme", repo="skills", ref="main", folder=folder)
+    with pytest.raises(OnyxError):
+        resolve_github_revision(
+            GitHubSource(owner="acme", repo="skills"),
+            revision="a" * 40,
+            subpath=folder,
+        )
 
 
 @pytest.mark.parametrize("ref", ["feature/skills", "v1.0.0", "A" * 40])

@@ -318,6 +318,9 @@ The library preview of an external-app skill calls the same renderer
     login checks, ref resolution, change checks and webhook capability. GitHub
     verifies every ref, including pinned commits, and fetches one bounded archive
     at that commit. Reconciliation receives bytes and a folder, not GitHub config.
+    Config and import share repository-name and folder validation in `utils/github.py`.
+    Empty folders become NULL; trailing slashes are removed. Absolute paths and
+    dot segments are rejected.
     Webhooks remain unsupported until the self-hosted webhook ticket ships.
 18. `marketplace-ownership` **A personal marketplace blocks owner deletion.**
     Its owner FK uses RESTRICT; the login and version creator FKs use SET NULL.

@@ -38,6 +38,23 @@ class GitHubRevision:
     subpath: str | None
 
 
+def validate_github_repository_component(value: str) -> str:
+    if value in {".", ".."} or not _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(
+        value
+    ):
+        raise ValueError("Invalid GitHub repository name.")
+    return value
+
+
+def normalize_github_folder(value: str | None) -> str | None:
+    if not value:
+        return None
+    folder = value.rstrip("/")
+    if "\\" in folder or any(part in {"", ".", ".."} for part in folder.split("/")):
+        raise ValueError("Use a relative repository folder without dot segments.")
+    return folder
+
+
 def parse_github_source(
     source: str,
     *,
@@ -94,14 +111,14 @@ def parse_github_source(
                     ),
                 )
 
-    if not all(
-        part not in {".", ".."} and _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part)
-        for part in (owner, repo)
-    ):
+    try:
+        validate_github_repository_component(owner)
+        validate_github_repository_component(repo)
+    except ValueError as exc:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Invalid GitHub repository URL.",
-        )
+        ) from exc
     return GitHubSource(owner=owner, repo=repo, tree_tail=tree_tail)
 
 
@@ -154,15 +171,13 @@ def resolve_github_revision(
     subpath: str | None = None,
 ) -> GitHubRevision:
     """Resolve a repository source to an immutable commit and optional subpath."""
-    normalized_subpath = subpath.rstrip("/") if subpath else None
-    if normalized_subpath and (
-        "\\" in normalized_subpath
-        or any(part in {"", ".", ".."} for part in normalized_subpath.split("/"))
-    ):
+    try:
+        normalized_subpath = normalize_github_folder(subpath)
+    except ValueError as exc:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Invalid repository folder.",
-        )
+        ) from exc
     if revision is not None:
         if not GITHUB_COMMIT_SHA_PATTERN.fullmatch(revision):
             raise OnyxError(
