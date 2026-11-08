@@ -408,13 +408,16 @@ health calls are not retried.
     JSON when it parses, or an MCP result unwrapped from `{"tool_result": ...}`)
     and whether the call takes a citation block. A program gets an MCP result
     as the server's `structuredContent` when it sends one, else its text
-    (parsed when it is a JSON object or array); the model reads the text in
+    (parsed when it is valid JSON); the model reads the text in
     direct tool calls (`tools/tool_implementations/mcp/mcp_tool.py:_tool_result_value`).
     `CustomToolCallSummary.structured_result` carries the server's structured
     content live, and is not saved or streamed. A server-reported tool failure
     (`isError`) is an error result. `CodeModeResultSpec.output_schema` carries the tool's
     stored `outputSchema` (`Tool.mcp_output_schema`, saved when the server's
-    tools sync), and the stub declares its top level as a TypedDict. When the content is a model's
+    tools sync). The stub declares it as a TypedDict when its top level is an
+    object whose property names are Python names that NFKC does not change;
+    otherwise the stub annotates the result from the schema
+    (`tools/tool_implementations/code_mode/stubs.py:_schema_result_type`). When the content is a model's
     JSON, the spec names the model (`CodeModeResultSpec.model`) and
     `tools/tool_implementations/code_mode/stubs.py:model_declarations` renders its TypedDicts from the model's fields,
     so the stub follows the model (`LlmPythonExecutionResult`, `ImageResult`). The search tools share
