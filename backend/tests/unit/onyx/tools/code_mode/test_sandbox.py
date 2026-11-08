@@ -4,18 +4,21 @@ import tracemalloc
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from pathlib import Path
 from typing import cast
 
 import pytest
 from prometheus_client import REGISTRY
 from pydantic import JsonValue, ValidationError
-from pydantic_monty import FunctionSnapshot, Monty
+from pydantic_monty import FunctionSnapshot, Monty, MontySession, SyncSnapshot
 
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.tools.tool_implementations.code_mode import sandbox
 from onyx.tools.tool_implementations.code_mode.models import (
     MAX_CPU_SECONDS,
     ExternalCall,
+    ProgramCompleted,
+    ProgramStopped,
     ProgramSuspended,
     ProgramWaiting,
     SandboxLimits,
@@ -655,6 +658,55 @@ def test_fatal_diagnostics_are_only_tool_call_errors() -> None:
     ]
     syntax = TypeDiagnostic(code="invalid-syntax", message="Expected `)`", line="")
     assert is_fatal_diagnostic(syntax, FUNCTIONS)
+
+
+@pytest.fixture
+def new_default_pool(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """A default pool that the test starts; it stops when the test ends."""
+    monkeypatch.setattr(sandbox, "_pool", None)
+    yield
+    if sandbox._pool is not None:
+        sandbox._pool.__exit__(None, None, None)
+
+
+@pytest.mark.usefixtures("new_default_pool")
+def test_each_program_runs_on_a_new_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    pids: list[int | None] = []
+    segment = sandbox._segment
+
+    def recorded(
+        session: MontySession,
+        run_state: sandbox._Run,
+        begin: Callable[[], SyncSnapshot | ProgramStopped],
+    ) -> ProgramWaiting | ProgramCompleted | ProgramStopped:
+        pids.append(session.worker_pid)
+        return segment(session, run_state, begin)
+
+    monkeypatch.setattr(sandbox, "_segment", recorded)
+    for _ in range(3):
+        assert run("print(1)\n").stdout == "1\n"
+    assert len(pids) == 3 and len(set(pids)) == 3, pids
+
+
+@pytest.mark.usefixtures("new_default_pool")
+def test_the_pool_runs_the_binary_of_its_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    decoy = tmp_path / "monty"
+    decoy.write_text("#!/bin/sh\nexit 1\n")
+    decoy.chmod(0o755)
+    monkeypatch.setenv("MONTY_BIN", str(decoy))
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert run("print(1)\n").stdout == "1\n"
+
+
+@pytest.mark.usefixtures("new_default_pool")
+def test_the_pool_does_not_start_without_its_binary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sandbox.sysconfig, "get_path", lambda _name: str(tmp_path))
+    with pytest.raises(FileNotFoundError, match="sandbox binary"):
+        sandbox.sandbox_pool()
 
 
 @pytest.fixture(scope="module")

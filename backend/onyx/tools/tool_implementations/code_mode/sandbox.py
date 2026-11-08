@@ -6,12 +6,14 @@ import math
 import os
 import re
 import signal
+import sysconfig
 import threading
 import time
 from collections import deque
 from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import partial
+from pathlib import Path
 from typing import NoReturn
 
 from pydantic_monty import (
@@ -76,9 +78,10 @@ MAX_SANDBOX_PROCESSES = 8
 # Bytes of the dumped programs that the server process holds while they wait on
 # their tools. A waiting program whose dump does not fit keeps its worker.
 MAX_SUSPENDED_BYTES = 256 * 1024 * 1024
-# Checkouts after which a worker is replaced; a worker that hit the memory limit
-# keeps its high-water memory until then.
-MAX_CHECKOUTS_PER_WORKER = 50
+# Callers (users and tenants) do not trust each other, so each worker serves one
+# session and the pool then replaces it, as Monty's security model expects. A
+# dumped program resumes on a new worker too.
+MAX_CHECKOUTS_PER_WORKER = 1
 MAX_RECURSION_DEPTH = 200
 # A program suspends at each external call and each await on one, so the bound
 # grows with the tool call limit; the base covers store(), load() and sleeps.
@@ -293,7 +296,16 @@ def sandbox_pool() -> Monty:
     global _pool
     with _pool_lock:
         if _pool is None:
+            # Where pydantic-monty-runtime installs it: /usr/local/bin in the
+            # Docker image, .venv/bin locally. MONTY_BIN and PATH never choose it.
+            binary = Path(sysconfig.get_path("scripts")) / "monty"
+            if not binary.is_file():
+                raise FileNotFoundError(
+                    f"The code mode sandbox binary {binary} is missing; install "
+                    "pydantic-monty-runtime in this environment."
+                )
             pool = Monty(
+                binary_path=binary,
                 min_processes=1,
                 max_processes=MAX_SANDBOX_PROCESSES,
                 checkout_timeout=CHECKOUT_POLL_SECONDS,
