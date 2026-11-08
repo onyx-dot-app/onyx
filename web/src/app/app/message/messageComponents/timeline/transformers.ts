@@ -1,5 +1,5 @@
-import { GroupedPacket } from "./hooks/packetProcessor";
-import { NestedCall } from "./packetHelpers";
+import { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import { NestedCall } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 /**
  * Transformed step data ready for rendering
