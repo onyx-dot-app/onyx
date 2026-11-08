@@ -163,10 +163,10 @@ A group closes on its own parent-level `SECTION_END` or `ERROR`
 shared by `isToolComplete` and the packet processor); a new `turn_index` or a
 stop packet adds a parent-level `SECTION_END` to each open group. Parallel
 tools share a `turn_index` and differ by `tab_index`. The child packets of a
-subagent or a coding agent (its bash calls and thinking) carry the parent's
-key plus `sub_turn_index`, so they join the parent group, and their
-`SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START` does not
-start the answer.
+subagent, a coding agent (its bash calls and thinking) or a code mode program
+carry the parent's key plus `sub_turn_index`, so they join the parent group,
+and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
+does not start the answer.
 The packet processor splits each group once
 (`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:buildGroupsFromKeys`).
 `GroupedPacket.packets` holds only the group's own packets. The step-kind checks
@@ -183,11 +183,45 @@ receives all three as required props. `ResearchAgentRenderer` draws each entry
 of `nestedCalls` with the renderer of its tool. `CodingAgentRenderer` reads
 `streamPackets`, because its thinking and bash sections interleave in stream
 order.
+After the answer starts, only a tool packet that opens a new group (the packet
+that makes the group a timeline step) is a new tool call and sets
+`finalAnswerComing` back to false. A later packet of a known group, such as a
+code mode closing record, joins that group, and the answer stays shown. The
+closing record follows the answer both live and on replay, and both give the
+same groups.
 The mobile app copies the group end and step-kind rules in
 `mobile/src/chat/timeline/packetHelpers.ts` and
 `mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
-`GroupedPacket.packets` also holds only the group's own packets. Mobile has no
-`nestedCalls` or `streamPackets`.
+`GroupedPacket.packets` also holds only the group's own packets. Mobile has
+`nestedCalls` for code mode steps, but no `streamPackets`.
+
+**Code mode steps.** Code mode runs behind the scenes: the timeline shows the
+tool calls a program makes, not the program.
+`app/app/message/messageComponents/timeline/transformers.ts:expandCodeModeSteps`
+turns each nested call of an `execute_code` or `wait_code` group into its own
+step, drawn by that tool's renderer as a direct call would be. The packet
+processor splits a group's nested calls once per packet into
+`GroupedPacket.nestedCalls` with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+It reuses the `NestedCall` object of each unchanged call, and
+`expandCodeModeSteps` reuses the step it made for that object, so memoized
+renderers of finished calls do not redraw. A cell reports a
+call in every observation until the call ends, so the latest report replaces
+the earlier ones in place; the cell id from `code_mode_start` or
+`code_mode_delta` links the observations. The program, its output, `wait_code`
+calls, yields and closing records have no step. A program without tool calls
+shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
+in one pass: a started program whose latest observation is open and whose
+cell has no running call sets it, and the timeline header reads "Working".
+The header names a step's activity from its own first packet; nested packets
+do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
+so pacing still knows restored steps. A turn group's React key is the key of
+its first step, not its position, because a cell's new call can move later
+steps into another turn group. Concurrent calls of one program show as
+sequential steps, not parallel tabs: on replay the backend emits each call's
+packets one after another, and the saved calls have no start or end order, so
+the client cannot tell which calls overlapped. Mobile uses the same functions
+in `mobile/src/chat/timeline/transformers.ts`.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at

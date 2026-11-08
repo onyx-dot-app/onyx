@@ -45,6 +45,8 @@ describe("packetUtils", () => {
       PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
       PacketType.IMAGE_GENERATION_TOOL_START,
       PacketType.IMAGE_GENERATION_TOOL_DELTA,
+      PacketType.CODE_MODE_START,
+      PacketType.CODE_MODE_DELTA,
     ];
 
     test.each(toolPacketTypes)(

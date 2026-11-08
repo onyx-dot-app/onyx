@@ -13007,6 +13007,9 @@
           },
           "updatingMemory": {
             "label": "Aktualisiert Erinnerung..."
+          },
+          "working": {
+            "label": "Wird bearbeitet"
           }
         },
         "internalSearch": {

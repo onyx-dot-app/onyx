@@ -12,9 +12,10 @@ import {
   type Placement,
 } from "@/chat/streamingModels";
 
+import { isToolComplete } from "@/chat/timeline/toolDisplay";
+
 import { makePlacedPacket } from "../../__tests__/fixtures";
 import { isCodingAgentPackets } from "../packetHelpers";
-import { isToolComplete } from "../toolDisplay";
 
 const reasoningStart = (turn: number, tab = 0): Packet =>
   makePlacedPacket(
@@ -57,6 +58,11 @@ const searchQueriesDelta = (turn: number, tab = 0): Packet =>
     { turn_index: turn, tab_index: tab },
   );
 
+const codeModeStart = (turn: number): Packet =>
+  makePlacedPacket(
+    { type: "code_mode_start", code: "await search(query='x')" },
+    { turn_index: turn },
+  );
 const imageFinal = (fileIds: string[], placement: Partial<Placement>): Packet =>
   makePlacedPacket(
     {
@@ -212,6 +218,96 @@ describe("grouping engine", () => {
     ]);
     expect(state.finalAnswerComing).toBe(false);
     expect(state.displayGroupKeys.size).toBe(0);
+  });
+
+  it("collects nested images once per file_id", () => {
+    const nested = { turn_index: 0, sub_turn_index: 0 };
+    const state = run([
+      codeModeStart(0),
+      makePlacedPacket({ type: "image_generation_start" }, nested),
+      imageFinal(["a"], nested),
+      imageFinal(["a", "b"], { turn_index: 0 }),
+    ]);
+    expect(state.generatedImages.map((i) => i.file_id)).toEqual(["a", "b"]);
+    expect(state.finalAnswerComing).toBe(false);
+  });
+
+  it("keeps a code mode step open until its parent SECTION_END", () => {
+    const nested = { turn_index: 0, sub_turn_index: 0 };
+    const open = run([
+      codeModeStart(0),
+      makePlacedPacket({ type: "search_tool_start" }, nested),
+      makePlacedPacket({ type: "section_end" }, nested),
+    ]);
+    expect(open.toolGroups.map(keyOf)).toEqual(["0-0"]);
+    expect(open.groupKeysWithSectionEnd.has("0-0")).toBe(false);
+    const openPackets = open.toolGroups[0]?.packets ?? [];
+    expect(isToolComplete(openPackets)).toBe(false);
+
+    const closed = run([
+      codeModeStart(0),
+      makePlacedPacket({ type: "search_tool_start" }, nested),
+      makePlacedPacket({ type: "section_end" }, nested),
+      sectionEnd(0),
+    ]);
+    expect(closed.groupKeysWithSectionEnd.has("0-0")).toBe(true);
+    expect(isToolComplete(closed.toolGroups[0]?.packets ?? [])).toBe(true);
+  });
+
+  describe("a code mode cell's closing record after the answer", () => {
+    const cell = { turn_index: 0 };
+    const runningObservation: Packet[] = [
+      makePlacedPacket(
+        {
+          type: "code_mode_start",
+          code: "print(1)",
+          cell_id: null,
+          observation: 0,
+        },
+        cell,
+      ),
+      makePlacedPacket(
+        {
+          type: "code_mode_delta",
+          stdout: "1\n",
+          status: "running",
+          cell_id: 1,
+          observation: 0,
+        },
+        cell,
+      ),
+      sectionEnd(0),
+    ];
+    const closingRecord: Packet[] = [
+      makePlacedPacket(
+        { type: "image_generation_start" },
+        { ...cell, sub_turn_index: 0 },
+      ),
+      makePlacedPacket(
+        {
+          type: "code_mode_delta",
+          stdout: "2\n",
+          status: "terminated",
+          response_ended: true,
+        },
+        cell,
+      ),
+    ];
+    // Live: the closing record follows the streamed answer. Replay: it follows
+    // the complete saved answer.
+    const orders: [string, Packet[]][] = [
+      ["live", [messageStart(1)]],
+      ["replay", [messageStart(1), sectionEnd(1)]],
+    ];
+
+    it.each(orders)("joins its step in %s order", (_order, answer) => {
+      const state = run([...runningObservation, ...answer, ...closingRecord]);
+      expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]);
+      expect(state.groupedPacketsMap.get("0-0")?.at(-1)?.obj).toMatchObject({
+        response_ended: true,
+      });
+      expect(state.finalAnswerComing).toBe(true);
+    });
   });
 
   it("keeps unique images across separate generation steps", () => {

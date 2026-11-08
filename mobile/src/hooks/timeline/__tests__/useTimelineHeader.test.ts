@@ -24,6 +24,23 @@ describe("useTimelineHeader — text map", () => {
     expect(result.current.hasPackets).toBe(false);
   });
 
+  it("shows Working while work without a step runs", () => {
+    const turn: TurnGroup = makeTurn(0, [
+      makeStep(0, 0, [
+        makePacket(
+          PacketType.SEARCH_TOOL_START,
+          { turn_index: 0 },
+          { is_internet_search: false },
+        ),
+        makePacket(PacketType.SECTION_END, { turn_index: 0 }),
+      ]),
+    ]);
+    const { result } = renderHook(() =>
+      useTimelineHeader([turn], undefined, true),
+    );
+    expect(result.current.headerText).toBe("Working");
+  });
+
   it("maps each activity packet type to its label", () => {
     expect(headerFor(PacketType.REASONING_START)).toBe("Thinking");
     expect(headerFor(PacketType.FETCH_TOOL_START)).toBe("Reading");

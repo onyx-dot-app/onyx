@@ -563,3 +563,22 @@ test("a stop after a retracted answer completes without a hidden renderer", () =
   expect(result.current.displayGroups).toEqual([]);
   expect(result.current.isComplete).toBe(true);
 });
+
+test("a stop ends the code mode working state", () => {
+  const packets = [
+    createPacket(
+      PacketType.CODE_MODE_START,
+      { turn_index: 0 },
+      { code: "", cell_id: 1 }
+    ),
+  ];
+  const { result, rerender } = renderHook(
+    ({ packets }) => usePacketProcessor(packets, 1),
+    { initialProps: { packets } }
+  );
+  expect(result.current.codeModeWorking).toBe(true);
+  rerender({
+    packets: [...packets, createStopPacket(StopReason.USER_CANCELLED)],
+  });
+  expect(result.current.codeModeWorking).toBe(false);
+});

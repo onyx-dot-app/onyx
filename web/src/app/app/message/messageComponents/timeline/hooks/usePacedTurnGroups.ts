@@ -208,9 +208,15 @@ export function usePacedTurnGroups(
     const state = stateRef.current;
 
     // Restored steps are already visible; retain their actual completion state.
-    for (const key of restoredGroups.keys()) state.revealedStepKeys.add(key);
+    for (const turnGroup of toolTurnGroups) {
+      for (const step of turnGroup.steps) {
+        if (restoredGroups.has(step.groupKey)) {
+          state.revealedStepKeys.add(step.key);
+        }
+      }
+    }
     state.pendingSteps = state.pendingSteps.filter(
-      (step) => !restoredGroups.has(step.key)
+      (step) => !restoredGroups.has(step.groupKey)
     );
 
     // Detect tool-after-message transition: message was showing, now tools are starting
@@ -336,7 +342,8 @@ export function usePacedTurnGroups(
     for (const turnGroup of toolTurnGroups) {
       const revealedSteps = turnGroup.steps.filter(
         (step) =>
-          state.revealedStepKeys.has(step.key) || restoredGroups.has(step.key)
+          state.revealedStepKeys.has(step.key) ||
+          restoredGroups.has(step.groupKey)
       );
       if (revealedSteps.length > 0) {
         result.push({

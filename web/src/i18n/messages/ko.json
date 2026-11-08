@@ -13007,6 +13007,9 @@
           },
           "updatingMemory": {
             "label": "메모리 업데이트 중..."
+          },
+          "working": {
+            "label": "작업 중"
           }
         },
         "internalSearch": {

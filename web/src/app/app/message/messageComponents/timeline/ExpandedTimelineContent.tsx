@@ -132,7 +132,7 @@ export const ExpandedTimelineContent = React.memo(
 
           return renderAsParallelTabs ? (
             <ParallelTimelineTabs
-              key={turnGroup.turnIndex}
+              key={turnGroup.steps[0]?.key ?? turnGroup.turnIndex}
               turnGroup={turnGroup}
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}
