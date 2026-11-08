@@ -229,8 +229,10 @@ def test_removed_group_audience_and_omitted_policy(session: Session) -> None:
 
 
 @pytest.mark.parametrize("replace_links", [False, True])
+@pytest.mark.parametrize("public_permission", [None, "VIEWER"])
+@pytest.mark.parametrize("bulk", [False, True])
 def test_company_marketplace_override_and_app_link(
-    session: Session, replace_links: bool
+    session: Session, replace_links: bool, public_permission: str | None, bulk: bool
 ) -> None:
     user, _ = manager(session, global_access=True)
     market = Marketplace(
@@ -265,13 +267,23 @@ def test_company_marketplace_override_and_app_link(
     assert skill.public_permission is None
     assert skill.follows_marketplace_access
     with client_for(user, session) as client:
-        response = client.patch(
-            f"/skills/custom/{skill.id}/share", json={"public_permission": None}
+        sharing = {"public_permission": public_permission}
+        response = (
+            client.post(
+                "/skills/bulk",
+                json={
+                    "action": "share",
+                    "skill_ids": [str(skill.id)],
+                    "sharing": sharing,
+                },
+            )
+            if bulk
+            else client.patch(f"/skills/custom/{skill.id}/share", json=sharing)
         )
     assert response.status_code == 200, response.text
     session.refresh(skill)
-    assert not skill.follows_marketplace_access
-    assert skill.public_permission is None
+    assert skill.follows_marketplace_access == (public_permission is None)
+    assert skill.public_permission == public_permission
 
 
 @pytest.mark.parametrize(

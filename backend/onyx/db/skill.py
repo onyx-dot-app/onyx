@@ -884,6 +884,7 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
     def write(
         self, resource: Skill, change: SkillSharingChange, db_session: Session
     ) -> None:
+        before = self.state(resource), resource.installation_policy
         if change.set_public_permission:
             set_skill_public_permission(
                 skill=resource,
@@ -901,7 +902,10 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
             group_installation_policies=change.group_installation_policies,
             db_session=db_session,
         )
-        if is_company_marketplace_skill(resource, db_session):
+        if before != (
+            self.state(resource),
+            resource.installation_policy,
+        ) and is_company_marketplace_skill(resource, db_session):
             resource.follows_marketplace_access = False
 
     def affected_users(

@@ -233,7 +233,8 @@ The library preview of an external-app skill calls the same renderer
     Bulk sharing adds or updates grants and preserves omitted grants. It reads
     affected users in two batch queries and pushes once after commit. Expected
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.
-    Company marketplace access changes clear `follows_marketplace_access`.
+    Company marketplace access changes clear `follows_marketplace_access`;
+    unchanged shares keep the setting.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
     deletion explicitly allows retirement. New access entry points must use the
     adapter function, not `db/skill.py:replace_skill_shares`.
