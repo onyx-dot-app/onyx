@@ -18,7 +18,8 @@ The archive reader also has independent processing safeguards:
   counts actual returned bytes, including repeated reads and manifests.
   ZIP members outside the selected marketplace need no inflation. All supported
   stream reads, including readinto, lines and iteration, use that budget.
-- One tar extension header and each JSON manifest may use at most 1 MiB.
+- TAR metadata reads share a 16 MiB budget during enumeration, including chained
+  extension headers and sparse maps. Each JSON manifest may use at most 1 MiB.
   Member data reads use the shared member budget after metadata parsing finishes.
 - Paths have at most 64 segments and 4,096 UTF-8 bytes. The stored path and
   parent-prefix index shares a 25 MiB ceiling with retained TAR PAX metadata.

@@ -107,16 +107,62 @@ def test_truncated_trailer_fails(trim: int) -> None:
         pass
 
 
-def test_extension_header_bomb_fails() -> None:
+@pytest.mark.parametrize("header_type", [tarfile.XHDTYPE, tarfile.XGLTYPE])
+@pytest.mark.parametrize("count,records", [(1, 420_000), (8, 200)])
+def test_valid_pax_metadata_is_bounded_before_member_returns(
+    header_type: bytes, count: int, records: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(archives, "TAR_METADATA_MAX_BYTES", 4096)
+    body = b"5 x=\n" * records
     info = tarfile.TarInfo("extension")
-    info.type = tarfile.XHDTYPE
-    info.size = archives.MANIFEST_MAX_BYTES * 2
-    data = gzip.compress(info.tobuf() + b"0" * info.size)
+    info.type = header_type
+    info.size = len(body)
+    extension = info.tobuf() + body + b"\0" * (-len(body) % 512)
+    member = tarfile.TarInfo("skill").tobuf()
+    data = gzip.compress(extension * count + member + b"\0" * 1024)
+    # Prove these are valid records, not an unrelated parser error.
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        assert archive.getnames() == ["skill"]
     with (
-        pytest.raises((archives.ArchiveLimitError, tarfile.ReadError)),
+        pytest.raises(archives.ArchiveLimitError, match="metadata"),
         archives.archive_files(data),
     ):
         pass
+
+
+def test_sparse_extension_blocks_share_metadata_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(archives, "TAR_METADATA_MAX_BYTES", 4096)
+    info = tarfile.TarInfo("sparse")
+    info.type = tarfile.GNUTYPE_SPARSE
+    header = bytearray(info.tobuf(format=tarfile.GNU_FORMAT))
+    header[482] = 1  # GNU sparse extension flag.
+    header[148:156] = b" " * 8
+    header[148:156] = b"%06o\0 " % sum(header)
+    entry = b"00000001000\0" * 2
+    extension = entry * 21 + b"\1" + b"\0" * 7
+    last = entry * 21 + b"\0" * 8
+    data = gzip.compress(header + extension * 10 + last + b"\0" * 1024)
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        assert archive.getnames() == ["sparse"]
+    with (
+        pytest.raises(archives.ArchiveLimitError, match="metadata"),
+        archives.archive_files(data),
+    ):
+        pass
+
+
+def test_metadata_budget_excludes_regular_member_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(archives, "TAR_METADATA_MAX_BYTES", 4096)
+    content = b"x" * (2 * 1024 * 1024)
+    with archives.archive_files(_archive({"data": content}, "tar")) as files:
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.read() == content
 
 
 @pytest.mark.parametrize("kind", ["zip", "tar"])

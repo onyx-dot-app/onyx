@@ -17,6 +17,7 @@ ARCHIVE_MAX_ENTRIES = 10_000
 ARCHIVE_PATH_MAX_BYTES = 4096
 ARCHIVE_PATH_MAX_DEPTH = 64
 ARCHIVE_INDEX_MAX_BYTES = 25 * 1024 * 1024
+TAR_METADATA_MAX_BYTES = 16 * 1024 * 1024
 MANIFEST_MAX_BYTES = 1024 * 1024
 # Independent processing ceilings, not per-skill validation limits.
 EXPANDED_MAX_BYTES = 1024 * 1024 * 1024
@@ -116,14 +117,20 @@ class _MemberReader(io.BufferedIOBase):
 
 class _TarReader(io.BufferedReader):
     metadata_reads = True
+    metadata_bytes = 0
 
     def read(self, size: int | None = -1, /) -> bytes:
-        # tarfile reads extension headers in one allocation.
-        if self.metadata_reads and (
-            size is None or size < 0 or size > MANIFEST_MAX_BYTES
-        ):
-            raise ArchiveLimitError("Archive metadata is too large")
-        return super().read(size)
+        if not self.metadata_reads:
+            return super().read(size)
+        remaining = TAR_METADATA_MAX_BYTES - self.metadata_bytes
+        requested = (
+            remaining + 1 if size is None or size < 0 else min(size, remaining + 1)
+        )
+        data = super().read(requested)
+        self.metadata_bytes += len(data)
+        if self.metadata_bytes > TAR_METADATA_MAX_BYTES:
+            raise ArchiveLimitError("Archive TAR metadata is too large")
+        return data
 
 
 def _open_member(

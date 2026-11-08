@@ -376,6 +376,8 @@ The library preview of an external-app skill calls the same renderer
     are bounded before retained path allocations can grow without limit.
     The index budget also counts each retained TAR PAX dictionary and its text;
     global headers must not multiply retained metadata without a limit.
+    TAR enumeration also charges all metadata reads before a member returns;
+    chained headers and sparse maps must not allocate past that cumulative budget.
     It inflates gzip once into a temporary spool. See `backend/onyx/skills/marketplace/README.md` for compatibility costs.
 
 ---
