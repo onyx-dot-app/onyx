@@ -798,3 +798,47 @@ def test_component_budget_combines_fields_and_plugins(
     assert isinstance(
         reader.read_marketplace_archive(_archive(files)), FailedMarketplace
     )
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("shared_root", [False, True])
+def test_unique_manifest_bytes_share_one_budget(
+    kind: str, shared_root: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roots = ["p", "p" if shared_root else "q"]
+    files = {
+        CLAUDE: json.dumps(
+            {
+                "name": "m",
+                "plugins": [
+                    {"name": str(i), "source": "./" + root}
+                    for i, root in enumerate(roots)
+                ],
+            }
+        ).encode()
+    }
+    for root in roots:
+        files[f"{root}/.claude-plugin/plugin.json"] = b'{"name":"test"}'
+        files[f"{root}/.codex-plugin/plugin.json"] = b'{"description":"test"}'
+        files[f"{root}/skills/hello/SKILL.md"] = _md()
+    limit = sum(len(data) for path, data in files.items() if path.endswith(".json"))
+    monkeypatch.setattr(reader, "MANIFEST_TOTAL_MAX_BYTES", limit, raising=False)
+    assert [e.entry_key for e in _entries(files, kind)] == ["0/hello", "1/hello"]
+    monkeypatch.setattr(reader, "MANIFEST_TOTAL_MAX_BYTES", limit - 1)
+    result = reader.read_marketplace_archive(_archive(files, kind))
+    assert isinstance(result, FailedMarketplace), result
+    assert "manifest bytes" in result.reason
+
+
+def test_deep_yaml_blocks_only_its_skill() -> None:
+    files = _files()
+    files["skills/deep/SKILL.md"] = (
+        b"---\nname: deep\ndescription: Test\nmetadata: "
+        + b"[" * 5000
+        + b"]" * 5000
+        + b"\n---\nInstructions."
+    )
+    entries = {entry.entry_key: entry for entry in _entries(files)}
+    assert isinstance(entries["tools/hello"], ReadySkill)
+    assert isinstance(entries["tools/deep"], BlockedSkill)
+    assert "not valid YAML" in entries["tools/deep"].reason

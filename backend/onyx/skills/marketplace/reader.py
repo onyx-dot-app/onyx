@@ -6,7 +6,7 @@ import re
 import tarfile
 import zipfile
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import JsonValue
 
@@ -34,11 +34,14 @@ from onyx.utils.bundle import compute_bundle_metadata
 BUNDLE_CACHE_MAX_BYTES = 256 * 1024 * 1024
 PLUGIN_MAX_COUNT = 500
 DECLARED_PATH_MAX_COUNT = 500
+MANIFEST_TOTAL_MAX_BYTES = 25 * 1024 * 1024
 
 
 @dataclass
 class _DiscoveryBudget:
     remaining: int
+    manifest_bytes: int
+    plugin_configs: dict[str, dict[str, JsonValue]] = field(default_factory=dict)
 
     def consume(self, count: int) -> None:
         self.remaining -= count
@@ -65,6 +68,7 @@ _COMPONENTS = (
     "workflows",
     "settings",
 )
+_PLUGIN_FIELDS = (*_COMPONENTS, "agents", "commands", "experimental", "skills")
 _COMPONENT_PATHS = (
     ".mcp.json",
     "mcp.json",
@@ -95,15 +99,22 @@ def _unique_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
     return result
 
 
-def _json(files: ArchiveFiles, path: str) -> dict[str, JsonValue]:
+def _json(
+    files: ArchiveFiles, path: str, budget: _DiscoveryBudget
+) -> dict[str, JsonValue]:
     require_regular_path(files, path)
     opener = files[path]
     if opener is None:
         raise ValueError(f"Unreadable manifest: {path}")
     with opener() as source:
-        data = source.read(MANIFEST_MAX_BYTES + 1)
+        data = source.read(min(MANIFEST_MAX_BYTES, budget.manifest_bytes) + 1)
     if len(data) > MANIFEST_MAX_BYTES:
         raise ValueError(f"Manifest exceeds {MANIFEST_MAX_BYTES} bytes: {path}")
+    if len(data) > budget.manifest_bytes:
+        raise ArchiveLimitError(
+            f"Marketplace exceeds {MANIFEST_TOTAL_MAX_BYTES} unique manifest bytes"
+        )
+    budget.manifest_bytes -= len(data)
     value: JsonValue = json.loads(data, object_pairs_hook=_unique_object)
     if not isinstance(value, dict):
         raise ValueError(f"Manifest must be an object: {path}")
@@ -263,7 +274,26 @@ def _plugin_skills(
     for path in _PLUGIN_MANIFESTS:
         require_regular_path(files, prefix + path)
         if path in relative:
-            config = _json(files, prefix + path)
+            config_path = prefix + path
+            if config_path not in budget.plugin_configs:
+                budget.plugin_configs[config_path] = {
+                    key: bool(value) if key in _COMPONENTS else value
+                    for key, value in _json(files, config_path, budget).items()
+                    if key in _PLUGIN_FIELDS
+                }
+                config = budget.plugin_configs[config_path]
+                experimental = config.get("experimental")
+                config["experimental"] = (
+                    {key: bool(experimental.get(key)) for key in ("monitors", "themes")}
+                    if isinstance(experimental, dict)
+                    else None
+                )
+                for component in ("agents", "commands"):
+                    if component in config and not isinstance(
+                        config[component], (str, list)
+                    ):
+                        config[component] = bool(config[component])
+            config = budget.plugin_configs[config_path]
             configs[path] = config
             manifests.append(config)
     if "plugin.json" in relative:
@@ -353,12 +383,12 @@ def read_marketplace_archive(
             )
             if manifest_path is None:
                 raise ValueError("Marketplace manifest is missing")
-            manifest = _json(files, manifest_path)
+            budget = _DiscoveryBudget(DECLARED_PATH_MAX_COUNT, MANIFEST_TOTAL_MAX_BYTES)
+            manifest = _json(files, manifest_path, budget)
             plugin_root = _plugin_root(manifest)
             if not isinstance(manifest.get("name"), str) or not manifest["name"]:
                 raise ValueError("Marketplace name is missing")
             plugins = _plugins(manifest)
-            budget = _DiscoveryBudget(DECLARED_PATH_MAX_COUNT)
             entries: list[ReadySkill | BlockedSkill | UnsupportedPlugin] = []
             skill_keys: set[str] = set()
             cache: dict[str, ReadySkill | BlockedSkill] = {}

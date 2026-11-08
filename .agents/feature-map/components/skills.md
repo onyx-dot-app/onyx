@@ -398,6 +398,8 @@ The library preview of an external-app skill calls the same renderer
     Declaring the default `skills/` directory preserves default child keys even
     when every definition is broken. Plugin entries and declared paths each
     have a 500-count processing budget; all manifests share the path budget, including agents and commands.
+    Unique manifest bytes share a 25 MiB budget, and parsed configs are reused by path.
+    Invalid YAML, including excessive nesting, blocks only the affected skill.
     See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
     This pure reader does not change the one-time GitHub import.
 

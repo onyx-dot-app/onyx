@@ -39,6 +39,9 @@ The archive reader also has independent processing safeguards:
   of each key and value. This is a conservative estimate, not exact memory use.
   Global headers count for every copy, including GitHub commit headers.
   Path limits apply before unbounded prefix allocation.
+- Unique JSON manifests share a 25 MiB budget, including the marketplace manifest.
+  Each archive path is parsed once per read. Shared plugin roots reuse parsed configs.
+  The cache retains discovery fields and component presence, not unrelated metadata.
 - A read accepts at most 500 plugin entries and 500 declared paths across
   all entries and plugin manifests, including `skills`, `agents`, and `commands`.
   Plugin counts are checked before discovery. Each explicit path list consumes
