@@ -13,14 +13,16 @@ from uuid import UUID, uuid4
 
 import pytest
 import requests
-from sqlalchemy import select
+from psycopg2 import OperationalError
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Marketplace, Skill, SkillVersion
+from onyx.db.models import FileContent, Marketplace, Skill, SkillVersion
 from onyx.db.skill_version import delete_orphan_skill_bundles
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store import postgres_file_store
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
@@ -189,12 +191,12 @@ def test_failure_preserves_rows_and_revision(
     assert [(row.id, row.current_version_id) for row in rows(session)] == original
     assert marketplace.last_synced_revision == "a" * 40
     assert len(list(session.scalars(select(SkillVersion)))) == 2
-    if failure == "cleanup":
+    if failure in {"cleanup", "commit"}:
         leftovers = stored_bundles(session) - retained
-        assert len(leftovers) == 2
+        assert len(leftovers) == (3 if failure == "commit" else 2)
         assert delete_orphan_skill_bundles() == 0
         make_old(leftovers, session)
-        assert delete_orphan_skill_bundles() == 2
+        assert delete_orphan_skill_bundles() == len(leftovers)
     assert stored_bundles(session) == retained
     result = run(marketplace, tenant)
     assert len(result.changed_skill_ids) == 3
@@ -202,7 +204,9 @@ def test_failure_preserves_rows_and_revision(
     assert marketplace.last_synced_revision == github.revision
 
 
-@pytest.mark.parametrize("damage", ["missing", "corrupt", "different", "pruned"])
+@pytest.mark.parametrize(
+    "damage", ["missing", "missing_object", "corrupt", "different", "pruned"]
+)
 @pytest.mark.parametrize("same_revision", [False, True])
 def test_equal_content_recovery(
     session: Session,
@@ -221,6 +225,21 @@ def test_equal_content_recovery(
     store = get_default_file_store()
     if damage == "missing":
         store.delete_file(old_file)
+    elif damage == "missing_object":
+        assert isinstance(store, postgres_file_store.PostgresBackedFileStore)
+        content = session.get(FileContent, old_file)
+        assert content is not None
+        assert session.scalar(select(func.lo_unlink(content.lobj_oid))) == 1
+        session.commit()
+        for use_tempfile, max_bytes in [(False, None), (True, None), (False, 4096)]:
+            with pytest.raises(FileNotFoundError):
+                store.read_file(
+                    old_file,
+                    db_session=session,
+                    use_tempfile=use_tempfile,
+                    max_bytes=max_bytes,
+                )
+            assert session.scalar(select(1)) == 1
     elif damage == "pruned":
         assert skill.current_version is not None
         skill.current_version.bundle_file_id = None
@@ -255,6 +274,11 @@ def test_equal_content_recovery(
     assert len(list(session.scalars(select(SkillVersion)))) == 3
     assert marketplace.last_synced_revision == github.revision
     assert sync.sync_marketplace(marketplace.id, tenant) is None
+
+    if damage == "missing_object":
+        store.delete_file(old_file)
+        session.expire_all()
+        assert session.get(FileContent, old_file) is None
 
 
 @pytest.mark.parametrize("limit_error", [False, True])
@@ -381,6 +405,7 @@ with patch("onyx.utils.github.ssrf_safe_get", github.get), patch(
 """
     child = subprocess.run(
         [sys.executable, "-c", worker, tenant, str(marketplace.id), str(archive)],
+        cwd=Path(__file__).resolve().parents[3],
         env=os.environ.copy(),
         capture_output=True,
         timeout=60,
@@ -456,10 +481,42 @@ def test_commit_acknowledgement_failure_keeps_referenced_uploads(
             if observer.scalar(select(SkillVersion.id).limit(1)) is not None:
                 raise OSError("commit acknowledgement lost")
 
-    with patch.object(Session, "commit", lost_ack):
+    with (
+        patch.object(Session, "commit", lost_ack),
+        patch.object(sync, "_cleanup", wraps=sync._cleanup) as cleanup,
+    ):
         with pytest.raises(OSError, match="acknowledgement"):
             run(marketplace, tenant)
+        cleanup.assert_not_called()
     assert len(rows(session)) == 2
     assert marketplace.last_synced_revision == github.revision
     assert stored_bundles(session) == {row.bundle_file_id for row in rows(session)}
     assert sync.sync_marketplace(marketplace.id, tenant) is None
+
+
+@pytest.mark.parametrize("operation", ["read", "delete"])
+def test_existing_blob_errors_are_not_treated_as_missing(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    operation: str,
+) -> None:
+    run(marketplace, tenant)
+    store = get_default_file_store()
+    files = stored_bundles(session)
+    file_id = next(iter(files))
+    with patch.object(
+        postgres_file_store,
+        f"_{operation}_large_object",
+        side_effect=OperationalError("storage unavailable"),
+    ):
+        with pytest.raises(OperationalError, match="storage unavailable"):
+            if operation == "read":
+                store.read_file(file_id)
+            else:
+                store.delete_file(file_id)
+    assert stored_bundles(session) == files
+    with store.read_file(file_id) as content:
+        assert content.read().startswith(b"PK")
+    assert marketplace.last_synced_revision == github.revision

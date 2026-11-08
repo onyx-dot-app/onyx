@@ -5,11 +5,13 @@ eliminating the need for an external S3/MinIO service.
 """
 
 import uuid
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from io import BytesIO
 from typing import IO, Any, cast
 
 import puremagic
+from psycopg2 import OperationalError
 from psycopg2.extensions import connection as Psycopg2Connection
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,7 @@ from onyx.db.file_content import (
     delete_file_content_by_file_id,
     get_file_content_by_file_id,
     get_file_content_by_file_id_optional,
+    large_object_exists,
     transfer_file_content_file_id,
     upsert_file_content,
 )
@@ -74,6 +77,22 @@ def _delete_large_object(raw_conn: Any, oid: int) -> None:
     """Unlink (delete) a Large Object by OID."""
     lobj = raw_conn.lobject(oid, "n")
     lobj.unlink()
+
+
+@contextmanager
+def _large_object_access(session: Session, oid: int, file_id: str) -> Iterator[None]:
+    try:
+        with session.begin_nested():
+            # Emit the savepoint before the raw driver bypasses SQLAlchemy.
+            session.connection()
+            yield
+    except OperationalError as exc:
+        # psycopg2's large-object API omits SQLSTATE, including for missing objects.
+        if not large_object_exists(oid, session):
+            raise FileNotFoundError(
+                f"Content for file {file_id} does not exist"
+            ) from exc
+        raise
 
 
 class PostgresBackedFileStore(FileStore):
@@ -193,14 +212,17 @@ class PostgresBackedFileStore(FileStore):
             )
             raw_conn = _get_raw_connection(session)
 
-            if use_tempfile or max_bytes is not None:
-                with closing(raw_conn.lobject(file_content.lobj_oid, "rb")) as source:
-                    return read_file_to_buffer(
-                        source.read, use_tempfile=use_tempfile, max_bytes=max_bytes
-                    )
+            with _large_object_access(session, file_content.lobj_oid, file_id):
+                if use_tempfile or max_bytes is not None:
+                    with closing(
+                        raw_conn.lobject(file_content.lobj_oid, "rb")
+                    ) as source:
+                        return read_file_to_buffer(
+                            source.read, use_tempfile=use_tempfile, max_bytes=max_bytes
+                        )
 
-            data = _read_large_object(raw_conn, file_content.lobj_oid)
-            return BytesIO(data)
+                data = _read_large_object(raw_conn, file_content.lobj_oid)
+                return BytesIO(data)
 
     def read_file_record(
         self, file_id: str, db_session: Session | None = None
@@ -251,8 +273,9 @@ class PostgresBackedFileStore(FileStore):
                 raw_conn = _get_raw_connection(session)
 
                 try:
-                    _delete_large_object(raw_conn, file_content.lobj_oid)
-                except Exception:
+                    with _large_object_access(session, file_content.lobj_oid, file_id):
+                        _delete_large_object(raw_conn, file_content.lobj_oid)
+                except FileNotFoundError:
                     logger.warning(
                         "Large object %s for file %s not found, cleaning up records only.",
                         file_content.lobj_oid,

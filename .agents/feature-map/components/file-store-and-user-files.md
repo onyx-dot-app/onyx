@@ -162,6 +162,10 @@ preview.
    `background/celery/tasks/user_file_processing/tasks.py:delete_user_file_impl` keeps the row when a blob delete fails, because the
    row is the only handle a retry has. Blob deletes use
    `error_on_missing=False`, so a retry after a partial delete is safe.
+   The Postgres store uses a savepoint for large-object reads and deletes. After a
+   driver error, it checks the object catalog: a missing object raises
+   `FileNotFoundError` on read and permits record cleanup on delete. Other storage
+   errors propagate and preserve the records for retry.
    `server/features/projects/api.py:delete_user_file` refuses while any project or agent link exists and
    returns `has_associations=True` with a 200, not an error.
 6. `file-id-write-once` **A file id is write-once.** On S3, GCS and Azure,

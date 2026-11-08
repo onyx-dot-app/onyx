@@ -431,9 +431,10 @@ The library preview of an external-app skill calls the same renderer
     Ingestion preparation runs before upload; validation failures become blocked
     entries with their original keys. Storage failures abort the entire sync.
     Each attempted upload uses a fresh tracked file id. Reconciliation commits all
-    skill, version and revision changes together. Failure cleanup checks only this
-    run's ids; success cleanup also checks pruned ids. Both preserve version and
-    legacy references, including when commit succeeded but its acknowledgement failed.
+    skill, version and revision changes together. Before a commit attempt, failure
+    cleanup checks only this run's ids. After a commit attempt fails, defer cleanup
+    to the aged orphan sweep: the server may still commit. Success cleanup also
+    checks pruned ids. Cleanup preserves version and legacy references.
     V3 retries failed cleanup and removes aged uploads left by a stopped worker.
     S5 must serialize the full read/upload/write operation and reject stale revisions.
     S8 owns the retirement confirmation override. Neither is implemented here.

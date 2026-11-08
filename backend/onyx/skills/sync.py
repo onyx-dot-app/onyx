@@ -51,7 +51,7 @@ def sync_marketplace(
     """Run in the target tenant context. Return None for a healthy unchanged source.
 
     Owns its sessions and commit. Callers must authorize access before invoking.
-    Cleanup checks references even after a failed commit: its outcome can be unknown.
+    Failed commit attempts leave uploads for the aged orphan sweep.
     A stopped worker leaves aged uploads for V3's orphan sweep.
     """
     with get_session_with_current_tenant() as db_session:
@@ -75,6 +75,7 @@ def sync_marketplace(
     read = read_marketplace_archive(archive.archive_bytes, folder=archive.folder)
     staged: dict[str, IngestedBundle] = {}
     uploaded: set[str] = set()
+    commit_attempted = False
     try:
         if isinstance(read, CompleteMarketplace):
             entries: list[ReadySkill | BlockedSkill | UnsupportedPlugin] = []
@@ -129,9 +130,11 @@ def sync_marketplace(
                 created_by_user_id=marketplace.login_user_id,
                 recovery_keys=recovery_keys,
             )
+            commit_attempted = True
             db_session.commit()
     except Exception:
-        _cleanup(uploaded)
+        if not commit_attempted:
+            _cleanup(uploaded)
         raise
     _cleanup(result.cleanup_file_ids)
     return result
