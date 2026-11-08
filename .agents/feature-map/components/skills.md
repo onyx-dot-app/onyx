@@ -236,6 +236,11 @@ The library preview of an external-app skill calls the same renderer
     Bulk sharing adds or updates grants and preserves omitted grants. It reads
     affected users in two batch queries and pushes once after commit. Expected
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.
+    Access and preference writes acquire the membership lock before resource/user locks.
+    Content-only storage holds no membership lock. Mixed content/access PATCH takes it
+    without waiting after storage; contention rolls back and returns a retryable conflict.
+    Batch imports stage all uploads before access locks and clean rejected blobs after
+    commit. Uncertain commits leave staged blobs for the orphan sweep.
     Company marketplace access changes clear `follows_marketplace_access`;
     unchanged shares keep the setting.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;

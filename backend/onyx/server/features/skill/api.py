@@ -47,7 +47,7 @@ from onyx.db.skill_version import (
     fetch_skill_version,
     list_skill_versions,
 )
-from onyx.db.users import fetch_user_by_id
+from onyx.db.users import fetch_user_by_id, lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -133,13 +133,17 @@ def _import_skill_bundles(
     user: User,
     db_session: Session,
 ) -> GitHubSkillsImportResponse:
-    """Store each bundle and create its skill in its own savepoint, commit once,
-    then push to the affected sandboxes. A rejected skill drops its blob and
-    lands in not_imported; a failed commit drops every blob."""
+    """Stage bundles before access locks; create skills with per-item savepoints.
+
+    Commit once, then clean rejected uploads and push. An uncertain commit leaves
+    staged blobs for the orphan sweep rather than risking referenced content.
+    """
     file_store = get_default_file_store()
     created: list[tuple[Skill, bool]] = []
     affected: set[UUID] = set()
-    bundle_file_ids: list[str] = []
+    staged: list[tuple[_BundleSource, IngestedBundle]] = []
+    rejected: list[str] = []
+    commit_attempted = False
     try:
         for source in sources:
             try:
@@ -151,13 +155,14 @@ def _import_skill_bundles(
                     )
                 )
                 continue
-            bundle_file_ids.append(ingested.bundle_file_id)
+            staged.append((source, ingested))
+        for source, ingested in staged:
             try:
                 skill, enabled, item_affected = create_skill_from_bundle__no_commit(
                     ingested, change, auto_enable, user, db_session
                 )
             except OnyxError as exc:
-                delete_bundle_blob(file_store, bundle_file_ids.pop())
+                rejected.append(ingested.bundle_file_id)
                 not_imported.append(
                     GitHubSkillNotImported(
                         path=source.path, name=source.name, reason=exc.detail
@@ -166,12 +171,16 @@ def _import_skill_bundles(
                 continue
             created.append((skill, enabled))
             affected |= item_affected
+        commit_attempted = True
         db_session.commit()
     except Exception:
-        # Nothing references the stored blobs once the import fails.
-        for file_id in bundle_file_ids:
-            delete_bundle_blob(file_store, file_id)
+        db_session.rollback()
+        if not commit_attempted:
+            for _, ingested in staged:
+                delete_bundle_blob(file_store, ingested.bundle_file_id)
         raise
+    for file_id in rejected:
+        delete_bundle_blob(file_store, file_id)
     if affected:
         push_skills_for_users(affected, db_session)
         db_session.commit()
@@ -882,10 +891,10 @@ def patch_current_user_skill(
         )
 
     old_public_permission = skill.public_permission
-    before_affected = affected_user_ids_for_skill(skill, db_session)
     file_store = get_default_file_store() if patch_req.has_details_update else None
     new_bundle_file_id: str | None = None
     stale_file_ids: list[str] = []
+    commit_attempted = False
 
     try:
         if file_store is not None:
@@ -920,6 +929,11 @@ def patch_current_user_skill(
                 db_session=db_session,
             )
 
+        # Content storage runs under the skill lock, never the workspace lock.
+        # Do not wait in reverse lock order if an access writer already holds it.
+        if patch_req.has_db_field_update:
+            lock_group_membership(db_session, nowait=True)
+        before_affected = affected_user_ids_for_skill(skill, db_session)
         if patch_req.has_db_field_update:
             share_skill__no_commit(
                 skill,
@@ -931,9 +945,15 @@ def patch_current_user_skill(
                 db_session,
             )
 
+        commit_attempted = True
         db_session.commit()
     except Exception:
-        if file_store is not None and new_bundle_file_id is not None:
+        db_session.rollback()
+        if (
+            not commit_attempted
+            and file_store is not None
+            and new_bundle_file_id is not None
+        ):
             delete_bundle_blob(file_store, new_bundle_file_id)
         raise
 
@@ -978,6 +998,7 @@ def share_current_user_skill(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
+    lock_group_membership(db_session)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
