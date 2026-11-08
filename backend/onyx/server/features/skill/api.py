@@ -1,6 +1,7 @@
 import io
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Annotated, NamedTuple
 from uuid import UUID
 
@@ -99,7 +100,6 @@ from onyx.skills.ingest import (
     IngestedBundle,
     delete_bundle_blob,
     ingest_skill_bundle,
-    ingested_skill_bundle,
 )
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 from onyx.skills.metadata import parse_skill_document
@@ -232,6 +232,31 @@ def _editable_skill_response(
     )
 
 
+@contextmanager
+def _commit_skill_bundle(
+    bundle_bytes: bytes,
+    filename: str | None,
+    file_store: FileStore,
+    db_session: Session,
+    *,
+    expected_name: str | None = None,
+) -> Iterator[IngestedBundle]:
+    """Commit references before cleanup; uncertain commits leave blobs for the sweep."""
+    ingested = ingest_skill_bundle(
+        bundle_bytes, filename, file_store, expected_name=expected_name
+    )
+    commit_attempted = False
+    try:
+        yield ingested
+        commit_attempted = True
+        db_session.commit()
+    except Exception:
+        db_session.rollback()
+        if not commit_attempted:
+            delete_bundle_blob(file_store, ingested.bundle_file_id)
+        raise
+
+
 def _replace_skill_bundle_from_editor(
     skill: Skill,
     bundle_bytes: bytes,
@@ -239,10 +264,11 @@ def _replace_skill_bundle_from_editor(
     db_session: Session,
 ) -> SkillEditableDetailResponse:
     file_store = get_default_file_store()
-    with ingested_skill_bundle(
+    with _commit_skill_bundle(
         bundle_bytes,
         f"{skill.name}.zip",
         file_store,
+        db_session,
         expected_name=skill.name,
     ) as ingested:
         stale_file_ids = replace_skill_bundle(
@@ -251,7 +277,6 @@ def _replace_skill_bundle_from_editor(
             creator_id=user.id,
             db_session=db_session,
         )
-        db_session.commit()
 
     delete_unreferenced_skill_bundles(stale_file_ids, db_session)
     db_session.expire(skill)
@@ -383,10 +408,11 @@ def create_custom_skill(
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     file_store = get_default_file_store()
-    with ingested_skill_bundle(
+    with _commit_skill_bundle(
         read_bundle_file(bundle.file, filename=bundle.filename),
         bundle.filename,
         file_store,
+        db_session,
     ) as ingested:
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         if auto_enable and not enable_new_skill_if_name_available__no_commit(
@@ -396,7 +422,6 @@ def create_custom_skill(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"A skill named '{skill.name}' is already enabled.",
             )
-        db_session.commit()
 
     if auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
@@ -590,10 +615,11 @@ def create_custom_skill_from_editor(
     )
     file_store = get_default_file_store()
     should_auto_enable = auto_enable and external_app_id is None
-    with ingested_skill_bundle(
+    with _commit_skill_bundle(
         bundle_bytes,
         f"{canonical_name}.zip",
         file_store,
+        db_session,
         expected_name=canonical_name,
     ) as ingested:
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
@@ -612,7 +638,6 @@ def create_custom_skill_from_editor(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"A skill named '{skill.name}' is already enabled.",
             )
-        db_session.commit()
 
     if should_auto_enable or share_request is not None:
         push_skill_to_affected_sandboxes(skill, db_session)
@@ -779,10 +804,11 @@ def replace_current_user_skill_bundle(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
     file_store = get_default_file_store()
-    with ingested_skill_bundle(
+    with _commit_skill_bundle(
         read_bundle_file(bundle.file, filename=bundle.filename),
         bundle.filename,
         file_store,
+        db_session,
         expected_name=skill.name,
     ) as ingested:
         stale_file_ids = replace_skill_bundle(
@@ -791,7 +817,6 @@ def replace_current_user_skill_bundle(
             creator_id=user.id,
             db_session=db_session,
         )
-        db_session.commit()
 
     delete_unreferenced_skill_bundles(stale_file_ids, db_session)
     db_session.expire(skill)

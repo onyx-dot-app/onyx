@@ -238,7 +238,9 @@ def test_toggle_waits_for_membership_before_locking_user(
             future.result(timeout=15)
 
 
-@pytest.mark.parametrize("operation", ["batch", "patch"])
+@pytest.mark.parametrize(
+    "operation", ["batch", "patch", "create", "editor", "bundle", "upload"]
+)
 def test_commit_ack_failure_keeps_referenced_upload(
     db_session: Session, operation: str
 ) -> None:
@@ -246,7 +248,7 @@ def test_commit_ack_failure_keeps_referenced_upload(
     db_session.commit()
     name = f"ack-{uuid4().hex}"
     initial = None
-    if operation == "patch":
+    if operation in {"patch", "bundle", "upload"}:
         initial = api.create_custom_skill(upload(bundle(name)), False, user, db_session)
     commit = db_session.commit
 
@@ -254,7 +256,11 @@ def test_commit_ack_failure_keeps_referenced_upload(
         commit()
         raise ConnectionError("Commit acknowledgement lost")
 
-    with patch.object(db_session, "commit", side_effect=lose_ack):
+    store = get_default_file_store()
+    with (
+        patch.object(db_session, "commit", side_effect=lose_ack),
+        patch.object(store, "delete_file", wraps=store.delete_file) as cleanup,
+    ):
         with pytest.raises(ConnectionError, match="acknowledgement"):
             if operation == "patch":
                 assert initial is not None
@@ -267,6 +273,30 @@ def test_commit_ack_failure_keeps_referenced_upload(
                     user,
                     db_session,
                 )
+            elif operation == "create":
+                api.create_custom_skill(upload(bundle(name)), False, user, db_session)
+            elif operation == "editor":
+                api.create_custom_skill_from_editor(
+                    name,
+                    "Created",
+                    "Instructions",
+                    upload=None,
+                    auto_enable=False,
+                    external_app_id=None,
+                    sharing=None,
+                    user=user,
+                    db_session=db_session,
+                )
+            elif operation == "bundle":
+                assert initial is not None
+                api.replace_current_user_skill_bundle(
+                    initial.id, upload(bundle(name, "Committed")), user, db_session
+                )
+            elif operation == "upload":
+                assert initial is not None
+                api.upload_current_user_skill_files(
+                    initial.id, upload(b"committed", "extra.txt"), user, db_session
+                )
             else:
                 api.create_custom_skills_batch(
                     [upload(bundle(name))],
@@ -275,6 +305,7 @@ def test_commit_ack_failure_keeps_referenced_upload(
                     user=user,
                     db_session=db_session,
                 )
+        cleanup.assert_not_called()
     skill = db_session.scalar(select(Skill).where(Skill.name == name))
     assert skill is not None and skill.bundle_file_id is not None
     try:
@@ -282,3 +313,57 @@ def test_commit_ack_failure_keeps_referenced_upload(
             assert stream.read()
     finally:
         api.delete_current_user_skill(skill.id, user, db_session)
+
+
+@pytest.mark.parametrize("operation", ["create", "editor"])
+def test_create_conflict_releases_locks_before_blob_cleanup(
+    db_session: Session, operation: str
+) -> None:
+    user = make_user(db_session, is_admin=True)
+    db_session.commit()
+    name = f"conflict-{uuid4().hex}"
+    existing = api.create_custom_skill(upload(bundle(name)), True, user, db_session)
+    before = stored_bundles(db_session)
+    db_session.commit()
+    store = get_default_file_store()
+    original_delete = store.delete_file
+    lock_free: list[bool] = []
+
+    def delete(file_id: str, *, error_on_missing: bool = True) -> None:
+        with get_session_with_current_tenant() as observer:
+            try:
+                lock_group_membership(observer, nowait=True)
+            except OnyxError:
+                lock_free.append(False)
+                return
+            lock_free.append(True)
+        original_delete(file_id, error_on_missing=error_on_missing)
+
+    try:
+        with patch.object(store, "delete_file", side_effect=delete):
+            client = client_for(user, db_session)
+            if operation == "create":
+                result = client.post(
+                    "/skills/custom", files={"bundle": ("skill.zip", bundle(name))}
+                )
+            else:
+                result = client.post(
+                    "/skills/custom/editor",
+                    data={
+                        "name": name,
+                        "description": "New",
+                        "instructions_markdown": "New",
+                    },
+                )
+            assert result.status_code == 409, result.text
+        assert lock_free == [True]
+        assert stored_bundles(db_session) == before
+        assert (
+            db_session.scalar(
+                select(func.count()).select_from(Skill).where(Skill.name == name)
+            )
+            == 1
+        )
+    finally:
+        db_session.rollback()
+        api.delete_current_user_skill(existing.id, user, db_session)
