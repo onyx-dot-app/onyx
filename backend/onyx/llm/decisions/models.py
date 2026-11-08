@@ -12,6 +12,10 @@ class DecisionProvider(StrEnum):
     VERCEL_AI_GATEWAY = "vercel_ai_gateway"
 
 
+# The OpenAI model offered as the built-in decision model.
+OPENAI_DECISIONS_MODEL_NAME = "gpt-6-luna"
+
+
 class DecisionModel(BaseModel):
     model_config = ConfigDict(strict=True, allow_inf_nan=False)
 

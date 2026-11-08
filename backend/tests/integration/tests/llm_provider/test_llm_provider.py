@@ -93,6 +93,8 @@ def assert_response_is_equivalent(
             "is_recommended_default": req.name
             == fetch_default_model_for_provider(provider_name),
             "display_name": display_name,
+            # Only the decision-model endpoint sets a display-name code.
+            "display_name_code": None,
             "provider_display_name": parsed.provider_display_name,
             "vendor": parsed.vendor,
             "region": parsed.region,
