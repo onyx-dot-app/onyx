@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn } from "@opal/utils";
+import { cn, countryCodeToFlag } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -500,21 +500,6 @@ function formatContextSize(tokens: number | null | undefined): string {
   }
   if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
   return String(tokens);
-}
-
-// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
-// whose regional-indicator sequence actually has a flag glyph.
-const COUNTRY_CODE_ALIASES: Record<string, string> = {
-  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
-};
-
-function countryCodeToFlag(code: string | null | undefined): string {
-  if (!code || code.length !== 2) return "";
-  const upper = code.toUpperCase();
-  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
-  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
-  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
-  return String.fromCodePoint(first, second);
 }
 
 /** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
