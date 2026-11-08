@@ -1,10 +1,11 @@
 """A result that a release hook sets for an ended call reaches the saved replay."""
 
 from onyx.agents.models import ToolResultAmendment
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
+from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -29,10 +30,41 @@ from tests.unit.onyx.agents.fakes import FakeModelClient
 CALL_ID = "lookup-call"
 
 
-def _reply(request: GenerationRequest, _signal: CancellationSignal) -> AssistantMessage:
-    if request.messages and isinstance(request.messages[-1], ToolResultMessage):
-        return AssistantMessage(content=[TextContent(text="done")])
-    return AssistantMessage(content=[ToolCall(id=CALL_ID, name="lookup", arguments={})])
+def _agent(tool_name: str) -> Agent:
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if request.messages and isinstance(request.messages[-1], ToolResultMessage):
+            return AssistantMessage(content=[TextContent(text="done")])
+        return AssistantMessage(
+            content=[ToolCall(id=CALL_ID, name=tool_name, arguments={})]
+        )
+
+    return Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name=tool_name, description="", parameters={}
+                ),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        on_finish=lambda _results: [
+            ToolResultAmendment(call_id=CALL_ID, result=ToolResult(content="closed"))
+        ],
+    )
+
+
+def _stream(agent: Agent) -> tuple[list[Packet], Run]:
+    live: list[Packet] = []
+    run = agent.start(
+        max_steps=3, on_event=ResponsePresenter(Emitter(live.append)).consume
+    )
+    run.result()
+    assert run.wait_for_idle(5)
+    return live, run
 
 
 def _card(
@@ -52,25 +84,7 @@ def _results(card: list[CustomToolStart | CustomToolDelta | SectionEnd]) -> list
 
 
 def test_an_ended_card_keeps_its_result_and_replay_shows_the_amended_one() -> None:
-    agent = Agent(
-        FakeModelClient(_reply),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[
-            AgentTool(
-                definition=ToolDefinition(name="lookup", description="", parameters={}),
-                execute=lambda _invocation: ToolResult(content="running"),
-            )
-        ],
-        on_finish=lambda _results: [
-            ToolResultAmendment(call_id=CALL_ID, result=ToolResult(content="closed"))
-        ],
-    )
-    live: list[Packet] = []
-    run = agent.start(
-        max_steps=3, on_event=ResponsePresenter(Emitter(live.append)).consume
-    )
-    run.result()
-    assert run.wait_for_idle(5)
+    live, run = _stream(_agent("lookup"))
 
     # The card starts and ends once with the result it completed with.
     card = _card(live)
@@ -87,3 +101,12 @@ def test_an_ended_card_keeps_its_result_and_replay_shows_the_amended_one() -> No
     assert isinstance(replayed[0], CustomToolStart)
     assert isinstance(replayed[-1], SectionEnd)
     assert set(_results(replayed)) == {"closed"}
+
+
+def test_an_amended_hidden_call_stays_hidden() -> None:
+    live, _run = _stream(_agent(THINK_TOOL_NAME))
+
+    assert not any(
+        isinstance(packet.obj, (CustomToolStart, CustomToolDelta)) for packet in live
+    )
+    assert isinstance(live[-1].obj, OverallStop)

@@ -406,6 +406,8 @@ class ResponsePresenter:
             else:
                 output = tool.complete(event.result)
         elif isinstance(event, ToolResultAmendedEvent):
+            if event.tool_call.name in HIDDEN_TOOLS:
+                return
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 # A call recorded before a restore has no card in this stream;
