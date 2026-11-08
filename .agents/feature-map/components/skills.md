@@ -242,7 +242,8 @@ The library preview of an external-app skill calls the same renderer
     Authentication uses a separate session; later access writes must use the fresh actor.
     Derived edits compare their observed content; a changed snapshot returns a retryable conflict.
     Full replacements append on stale observations without reusing unverified content.
-    Metadata repair stages every read before locking and retries changed snapshots.
+    Metadata repair refreshes each batch row before staging reads without locks.
+    It retries snapshots changed during staging; earlier completed edits do not stop the batch.
     Batch imports stage all uploads before access locks and clean rejected blobs after
     commit. Single creation and replacement roll back before failure cleanup.
     Uncertain commits leave staged blobs for the orphan sweep.

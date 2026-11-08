@@ -465,6 +465,7 @@ def repair_skill_version_metadata(
 ) -> list[str]:
     adapter = SkillVersionAdapter(skill)
     with db_session.no_autoflush:
+        db_session.refresh(skill)
         observation = skill_content_snapshot(skill)
         versions = list(db_session.scalars(adapter.versions()))
         prepared = {
