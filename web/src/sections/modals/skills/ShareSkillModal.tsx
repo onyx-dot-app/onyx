@@ -692,7 +692,6 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         height={props.mode === "edit" && view !== "transfer" ? "lg" : "fit"}
         width={view === "transfer" ? "sm" : "lg"}
         maxHeight="80dvh"
-        position="top"
       >
         <Modal.Header
           icon={view === "transfer" ? SvgArrowExchange : SvgBlocks}

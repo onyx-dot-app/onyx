@@ -164,7 +164,6 @@ test("retries app-list failure into the custom editor", async () => {
   render(<ExternalAppPluginDetail appId={7} />);
   expect(await screen.findByText("Apps could not load")).toBeVisible();
   const dialog = screen.getByRole("dialog");
-  expect(dialog).toHaveAttribute("data-position", "top");
   expect(dialog).toHaveAttribute("data-width", "lg");
   const user = setupUser();
   await user.click(screen.getByRole("button", { name: "Retry" }));

@@ -88,12 +88,6 @@ interface ModalContentProps extends WithoutStyles<
   maxHeight?: string;
 
   /**
-   * Vertical placement. `"center"` (default) centers in the viewport.
-   * `"top"` pins the modal near the top, the command-menu position.
-   */
-  position?: "center" | "top";
-
-  /**
    * Two-stage close guard: once the user has typed into any text input in
    * the modal, the first Escape/outside-click focuses the close button
    * instead of closing, and the second closes.
@@ -111,13 +105,20 @@ interface ModalContentProps extends WithoutStyles<
   bottomSlot?: React.ReactNode;
 }
 
+/** A toast sits outside the dialog, but using it must not close the modal. */
+function isToastEvent(e: Event): boolean {
+  return (
+    e.target instanceof Element &&
+    e.target.closest(".opal-toast-viewport") !== null
+  );
+}
+
 function ModalContent({
   ref,
   children,
   width = "xl",
   height = "fit",
   maxHeight,
-  position = "center",
   preventAccidentalClose = true,
   skipOverlay = false,
   background = "default",
@@ -209,29 +210,17 @@ function ModalContent({
     [ref]
   );
 
-  // Center on [data-main-container] when present (the content area beside
-  // the sidebar) instead of the viewport.
-  const { centerX, centerY, hasContainerCenter } = useContainerCenter();
+  // Center horizontally on [data-main-container] when present (the content
+  // area beside the sidebar) instead of the viewport.
+  const { centerX, hasContainerCenter } = useContainerCenter();
 
-  const isTop = position === "top";
-
-  const containerStyle: React.CSSProperties | undefined =
-    hasContainerCenter && !isTop
-      ? ({
-          left: centerX,
-          top: centerY,
-          "--tw-enter-translate-x": "-50%",
-          "--tw-exit-translate-x": "-50%",
-          "--tw-enter-translate-y": "-50%",
-          "--tw-exit-translate-y": "-50%",
-        } as React.CSSProperties)
-      : hasContainerCenter && isTop
-        ? ({
-            left: centerX,
-            "--tw-enter-translate-x": "-50%",
-            "--tw-exit-translate-x": "-50%",
-          } as React.CSSProperties)
-        : undefined;
+  const containerStyle: React.CSSProperties | undefined = hasContainerCenter
+    ? ({
+        left: centerX,
+        "--tw-enter-translate-x": "-50%",
+        "--tw-exit-translate-x": "-50%",
+      } as React.CSSProperties)
+    : undefined;
 
   const positionerStyle = maxHeight
     ? {
@@ -241,7 +230,6 @@ function ModalContent({
     : containerStyle;
 
   const positionerData = {
-    "data-position": position,
     "data-width": width,
     ...(!hasContainerCenter && { "data-viewport-centered": "" }),
   };
@@ -272,8 +260,28 @@ function ModalContent({
         >
       >[0]
     ) => {
+      if (isToastEvent(e)) {
+        e.preventDefault();
+        return;
+      }
       handleInteractOutside(e);
       props.onPointerDownOutside?.(e);
+    },
+    // Covers focus moving out too, e.g. onto a toast's close button.
+    onInteractOutside: (
+      e: Parameters<
+        NonNullable<
+          React.ComponentPropsWithoutRef<
+            typeof DialogPrimitive.Content
+          >["onInteractOutside"]
+        >
+      >[0]
+    ) => {
+      if (isToastEvent(e)) {
+        e.preventDefault();
+        return;
+      }
+      props.onInteractOutside?.(e);
     },
   };
 
