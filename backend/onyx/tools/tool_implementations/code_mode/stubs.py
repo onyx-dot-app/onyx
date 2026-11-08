@@ -7,7 +7,7 @@ import re
 import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import UnionType
-from typing import Literal, Union, cast, get_args, get_origin
+from typing import Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
@@ -33,6 +33,7 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
 from onyx.tools.tool_implementations.code_mode.store import (
     STORE_FUNCTIONS,
     STORE_STUBS,
+    JsonCopy,
     json_value,
 )
 from onyx.tools.tool_implementations.code_mode.tool_search import (
@@ -697,34 +698,28 @@ def build_tool_stubs(tools: Sequence[Tool]) -> ToolStubs:
     )
 
 
-def tool_arguments(
-    function: ToolFunction, kwargs: Mapping[str, object]
-) -> dict[str, JsonValue]:
-    """Convert program keyword arguments to tool arguments.
+def tool_arguments(function: ToolFunction, kwargs: Mapping[str, object]) -> JsonCopy:
+    """Convert program keyword arguments to tool arguments, as a JSON copy.
 
     None is sent for arguments that accept null and left out for others; a
     required argument that accepts null is sent as null when it is left out.
     Raises TypeError when a value is not JSON data and ValueError past
     MAX_TOOL_ARGUMENT_BYTES.
     """
-    # One copy for all arguments: they can share one large value.
-    copied = cast(
-        dict[str, JsonValue],
-        json_value(
-            dict(kwargs),
-            f"The argument dict of {function.function_name}()",
-            MAX_TOOL_ARGUMENT_BYTES,
-        ),
-    )
     nullable = function.nullable_arguments
-    arguments: dict[str, JsonValue] = {
+    arguments: dict[str, object] = {
         function.argument_names.get(key, key): value
-        for key, value in copied.items()
+        for key, value in kwargs.items()
         if value is not None or key in nullable
     }
     for key in function.required_arguments & nullable:
         arguments.setdefault(function.argument_names.get(key, key), None)
-    return arguments
+    # One copy for all arguments: they can share one large value.
+    return json_value(
+        arguments,
+        f"The argument dict of {function.function_name}()",
+        MAX_TOOL_ARGUMENT_BYTES,
+    )
 
 
 def program_value(function: ToolFunction, result: ToolResult) -> object:

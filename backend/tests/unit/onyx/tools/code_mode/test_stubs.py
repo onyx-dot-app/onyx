@@ -149,7 +149,7 @@ def test_mcp_like_schema_with_odd_names_and_refs() -> None:
     # An explicit None is sent for an argument that accepts null only.
     assert tool_arguments(
         function, {"repo_name": "onyx", "limit": None, "class_": None}
-    ) == {"repo-name": "onyx", "limit": None}
+    ).value == {"repo-name": "onyx", "limit": None}
     with pytest.raises(TypeError, match=r"must be JSON data.* at \['limit'\]"):
         tool_arguments(function, {"repo_name": "onyx", "limit": float("nan")})
 
@@ -202,7 +202,7 @@ def test_strict_nullable_required_arguments_are_optional_and_sent_as_null() -> N
         "async def read(*, file_id: str, mode: Literal['a', 'b'] | None = None, "
         "start_char: int | None = None) -> Any:"
     ) in function.stub
-    assert tool_arguments(function, {"file_id": "f", "start_char": 5}) == {
+    assert tool_arguments(function, {"file_id": "f", "start_char": 5}).value == {
         "file_id": "f",
         "start_char": 5,
         "mode": None,
@@ -225,7 +225,7 @@ def test_null_admitted_through_enum_const_or_ref_is_sent() -> None:
         [FakeTool("update", _unused, parameters=parameters)]
     ).functions["update"]
     assert function.nullable_arguments == {"mode", "unset", "count"}
-    assert tool_arguments(function, {"mode": None, "label": None}) == {
+    assert tool_arguments(function, {"mode": None, "label": None}).value == {
         "mode": None,
         "unset": None,
         "count": None,
@@ -278,7 +278,7 @@ def test_additional_properties_admit_other_keyword_arguments() -> None:
     assert "async def label(*, kwargs: int, **kwargs_: Any) -> Any:" in (
         functions["label"].stub
     )
-    assert tool_arguments(functions["tag"], {"team": "core"}) == {"team": "core"}
+    assert tool_arguments(functions["tag"], {"team": "core"}).value == {"team": "core"}
 
 
 def test_argument_names_are_python_identifiers_in_normal_form() -> None:
