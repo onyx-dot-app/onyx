@@ -52,11 +52,6 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
-PYTHON_CODE_MODE_RESULT = CodeModeResultSpec(
-    kind=CodeModeResultKind.JSON_OBJECT,
-    model=LlmPythonExecutionResult,
-)
-
 CODE_FIELD = "code"
 CODE_INTERPRETER_DEFAULT_FILENAME = "file"
 CODE_INTERPRETER_FILENAME_MAX_LENGTH = 200
@@ -267,7 +262,9 @@ class PythonTool(Tool):
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
-        return PYTHON_CODE_MODE_RESULT
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.JSON_OBJECT, model=LlmPythonExecutionResult
+        )
 
     @override
     @classmethod

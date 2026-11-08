@@ -56,7 +56,8 @@ Neighbours own the rest:
   the OpenAPI and MCP tool classes, and MCP credential resolution.
 - [[plugins]] owns Default Chat tool selection and the per-user tool
   preferences that construction reads.
-- [[core-chat-loop]] owns the turn and how the sub-agents enter a turn.
+- [[core-chat-loop]] owns the turn, the stopping-tool rule, and how the
+  sub-agents enter a turn.
 - [[citations]] owns the meaning of the citation number blocks.
 - [[chat-persistence]] owns how tool calls are saved and replayed, and which
   tool results reach later turns.
