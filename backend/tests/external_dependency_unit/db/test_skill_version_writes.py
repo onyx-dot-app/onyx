@@ -427,7 +427,7 @@ def test_identical_reupload_repairs_damaged_current_bundle(
             else bundle("recovered", "Corrupted instructions")
         )
         if damage in {"stored_limit", "expanded_limit"}:
-            from onyx.utils.bundle import BundleLimits
+            from onyx.file_store.models import BundleLimits
 
             monkeypatch.setattr(
                 skill_version,
@@ -1318,7 +1318,7 @@ def test_legacy_byte_limits(
     failure: str,
     background: bool,
 ) -> None:
-    from onyx.utils.bundle import BundleLimits
+    from onyx.file_store.models import BundleLimits
 
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -1369,7 +1369,7 @@ def test_legacy_byte_limits(
 def test_legacy_metadata_preserves_original_content_and_old_allowance(
     session: Session, user: User, monkeypatch: pytest.MonkeyPatch, larger_config: bool
 ) -> None:
-    from onyx.utils.bundle import BundleLimits
+    from onyx.file_store.models import BundleLimits
 
     output = io.BytesIO()
     large_size = 26 * 1024 * 1024 if larger_config else 24 * 1024 * 1024

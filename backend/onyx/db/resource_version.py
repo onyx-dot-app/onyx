@@ -18,8 +18,8 @@ from onyx.file_store.file_store import (
     FileStore,
     is_missing_object,
 )
-from onyx.file_store.models import BundleMetadata
-from onyx.utils.bundle import BundleLimits, compute_bundle_metadata
+from onyx.file_store.models import BundleLimits, BundleMetadata
+from onyx.utils.bundle import compute_bundle_metadata
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

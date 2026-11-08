@@ -107,7 +107,8 @@ def test_bundle_digest_import_has_no_database_or_server_dependencies() -> None:
             "-c",
             """
 import sys
-from onyx.utils.bundle import BundleLimits, compute_bundle_metadata
+from onyx.file_store.models import BundleLimits
+from onyx.utils.bundle import compute_bundle_metadata
 assert not any(name.startswith(('onyx.db.', 'onyx.server.')) for name in sys.modules)
 """,
         ],

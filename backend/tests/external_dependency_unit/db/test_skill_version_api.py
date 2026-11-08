@@ -135,9 +135,8 @@ def test_stored_read_boundaries(
     reader: str,
     offset: int,
 ) -> None:
-    from onyx.file_store.models import FileSizeLimitExceeded
+    from onyx.file_store.models import BundleLimits, FileSizeLimitExceeded
     from onyx.skills import content, validation
-    from onyx.utils.bundle import BundleLimits
 
     response = api.create_custom_skill(
         upload(bundle("bounded-reader")), False, user, session
@@ -181,9 +180,8 @@ def test_current_editor_rejects_expansion_before_inspection(
     user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from onyx.file_store.models import FileSizeLimitExceeded
+    from onyx.file_store.models import BundleLimits, FileSizeLimitExceeded
     from onyx.skills import content
-    from onyx.utils.bundle import BundleLimits
 
     response = api.create_custom_skill(
         upload(bundle("bounded-editor")), False, user, session

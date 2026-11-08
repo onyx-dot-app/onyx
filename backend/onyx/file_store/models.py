@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Callable, Literal, NotRequired, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict  # noreorder
 
 from onyx.configs.constants import FileOrigin
@@ -288,6 +288,14 @@ class PendingPresignedUpload(BaseModel):
     object_key: str
     size: int
     sha256: str
+
+
+class BundleLimits(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    max_stored_bytes: int = Field(ge=0)
+    max_file_bytes: int = Field(ge=0)
+    max_total_bytes: int = Field(ge=0)
 
 
 class BundleMetadata(BaseModel):

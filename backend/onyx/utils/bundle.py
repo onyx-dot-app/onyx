@@ -4,17 +4,7 @@ import hashlib
 import io
 import zipfile
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from onyx.file_store.models import BundleMetadata, FileSizeLimitExceeded
-
-
-class BundleLimits(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    max_stored_bytes: int = Field(ge=0)
-    max_file_bytes: int = Field(ge=0)
-    max_total_bytes: int = Field(ge=0)
+from onyx.file_store.models import BundleLimits, BundleMetadata, FileSizeLimitExceeded
 
 
 def compute_bundle_metadata(

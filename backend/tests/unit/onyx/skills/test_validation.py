@@ -12,10 +12,10 @@ from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill, SkillVersion
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
+from onyx.file_store.models import BundleLimits
 from onyx.skills import bundle, validation
 from onyx.skills.bundle import normalize_custom_bundle
 from onyx.skills.validation import validate_stored_custom_skill
-from onyx.utils.bundle import BundleLimits
 
 
 def test_stored_read_accepts_zip_larger_than_extracted_cap(

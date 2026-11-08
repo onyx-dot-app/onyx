@@ -16,6 +16,7 @@ from typing import IO, Final, Literal
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.models import BundleLimits
 from onyx.skills.metadata import (
     parse_skill_document,
     parse_skill_md_frontmatter,
@@ -23,7 +24,6 @@ from onyx.skills.metadata import (
     split_skill_md,
 )
 from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
-from onyx.utils.bundle import BundleLimits
 
 DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024

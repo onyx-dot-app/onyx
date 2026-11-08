@@ -14,7 +14,8 @@ from onyx.file_store import azure_blob_file_store as azure
 from onyx.file_store import file_store as storage
 from onyx.file_store import gcs_file_store as gcs
 from onyx.file_store import postgres_file_store as postgres
-from onyx.utils.bundle import BundleLimits, compute_bundle_metadata
+from onyx.file_store.models import BundleLimits
+from onyx.utils.bundle import compute_bundle_metadata
 
 
 @pytest.mark.parametrize("backend", ["s3", "postgres"])
