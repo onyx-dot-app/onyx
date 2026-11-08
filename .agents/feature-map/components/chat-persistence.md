@@ -199,9 +199,11 @@ every call of a program that did not complete, those of the cell's earlier
 observations included, with their states, because those calls may have had
 effects; and the `file_id` and revised prompt of each generated image
 (`images_note`), so a later message can edit it. When the response ended after
-a cell's last observation, the saved content adds `closing_line` ("Cell N
-stopped when the response ended" or "when the run paused", or how it ended,
-with the calls before and after that output and their images).
+a cell's last observation, the saved content adds the cell's closing record,
+formatted by `format_content` like an observation. It starts with
+`closing_heading` ("Cell N stopped when the response ended" or "when the run
+paused", or how it ended) and has the output, result and store writes after
+that observation.
 
 The runtime builds its working context from that history. `messages_for_model`
 removes incomplete tool exchanges and unsigned thinking. Context-budget compaction
