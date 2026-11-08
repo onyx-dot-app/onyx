@@ -12,6 +12,7 @@ from onyx.utils.github import (
     GitHubSource,
     download_github_archive,
     parse_github_source,
+    resolve_github_revision,
 )
 
 _SOURCE = GitHubSource(owner="onyx-dot-app", repo="onyx")
@@ -227,3 +228,24 @@ class TestDownloadGithubArchive:
                 )
 
         assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
+
+
+@pytest.mark.parametrize("tail", ["main/a//b", "main//skills"])
+def test_tree_url_keeps_invalid_empty_path_segments(tail: str) -> None:
+    with pytest.raises(OnyxError) as error:
+        parse_github_source(
+            f"https://github.com/acme/repo/tree/{tail}", allow_tree_path=True
+        )
+    assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+@pytest.mark.parametrize("folder", ["a/../b", "C:/skills", "a//b", "a\\b"])
+def test_resolved_tree_folder_uses_shared_validation(folder: str) -> None:
+    source = GitHubSource(owner="acme", repo="repo", tree_tail=("main", folder))
+    missing = _mock_response([], status_code=404)
+    found = _mock_response([])
+    found.json.return_value = {"sha": "a" * 40}
+    with patch("onyx.utils.github._github_get", side_effect=[missing, found]):
+        with pytest.raises(OnyxError) as error:
+            resolve_github_revision(source)
+    assert error.value.error_code == OnyxErrorCode.INVALID_INPUT

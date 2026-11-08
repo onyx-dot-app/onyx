@@ -26,7 +26,9 @@ def test_marketplace_and_import_normalize_the_same_folder(folder: str | None) ->
     assert config.folder == resolved.subpath
 
 
-@pytest.mark.parametrize("folder", ["/", "/catalog", "../x", "a//b", "a/../b", "a\\b"])
+@pytest.mark.parametrize(
+    "folder", ["/", "/catalog", "../x", "a//b", "a/../b", "a\\b", "C:/skills"]
+)
 def test_marketplace_and_import_reject_the_same_folder(folder: str) -> None:
     with pytest.raises(ValidationError):
         GitHubMarketplaceConfig(owner="acme", repo="skills", ref="main", folder=folder)
