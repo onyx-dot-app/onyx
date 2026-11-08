@@ -805,13 +805,22 @@ def test_program_state_and_store_survive_a_released_wait() -> None:
 
 def test_cancellation_during_a_released_wait(two_workers: Monty) -> None:
     cancellation = CancellationSignal()
+    release = threading.Event()
+
+    def handler(_call: ExternalCall) -> object:
+        release.wait(30)
+        return "done"
+
     threading.Timer(0.3, cancellation.cancel).start()
     started = time.monotonic()
     result = run(
         "store('k', 1)\nawait slow(seconds=30)\n",
+        handler,
         cancellation=cancellation,
         pool=two_workers,
     )
+    # The call ignores cancellation; let it return so it frees its thread.
+    release.set()
     assert result.status == "cancelled"
     assert time.monotonic() - started < 10
 
