@@ -446,6 +446,19 @@ class SearchParams(BaseModel):
     search_usage: SearchToolUsage
 
 
+class ResultSources(BaseModel):
+    """Documents carried by one tool result and the citation numbers it gave them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Every document the result gathered.
+    documents: list[SearchDoc]
+    # The documents to show for the call; a search can select a subset. None when
+    # the call shows no documents of its own.
+    displayed: list[SearchDoc] | None
+    citations: dict[int, SearchDoc]
+
+
 class StagedChatFiles(BaseModel):
     """Files of a tool result's documents, staged before the result is committed."""
 

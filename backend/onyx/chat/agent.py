@@ -2,7 +2,7 @@ import time
 from collections.abc import Callable, Mapping
 from functools import partial
 
-from pydantic import BaseModel, JsonValue
+from pydantic import JsonValue
 
 from onyx.agents.models import (
     AgentState,
@@ -23,7 +23,6 @@ from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
-    ChatSearchResult,
     CitationMode,
     PersonaPromptConfig,
     PromptMetadata,
@@ -33,10 +32,9 @@ from onyx.chat.prompt_utils import (
     build_chat_prompt,
     prepare_prompt,
 )
-from onyx.chat.tool_results import tool_result_sources
+from onyx.chat.tool_results import staged_result_details, tool_result_sources
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
-from onyx.context.search.models import SearchDocsResponse
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -62,43 +60,6 @@ from onyx.tools.tool_implementations.search.search_tool import (
 )
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
-from onyx.utils.pydantic_util import shallow_model_dump
-
-# Result details whose documents' files are staged, and the type that carries them.
-_STAGED_RESULT_TYPES: tuple[tuple[type[BaseModel], type[StagedChatFiles]], ...] = (
-    (SearchDocsResponse, ChatSearchResult),
-)
-
-
-def _with_staged_files(result: ToolResult, known_file_ids: set[str]) -> ToolResult:
-    """Make the files of found documents available to later Python calls.
-
-    An amended result keeps its staged files and stages those of documents it added,
-    such as the documents of a closing record. Files in `known_file_ids` are
-    already available and are not read again.
-    """
-    details = result.details
-    staged_type = next(
-        (staged for base, staged in _STAGED_RESULT_TYPES if isinstance(details, base)),
-        None,
-    )
-    if details is None or staged_type is None:
-        return result
-    sources = tool_result_sources(details)
-    staged = list(details.staged_files) if isinstance(details, StagedChatFiles) else []
-    staged_ids = {file.file_id for file in staged}
-    added = [
-        doc
-        for doc in (sources.documents if sources is not None else [])
-        if doc.file_id not in staged_ids and doc.file_id not in known_file_ids
-    ]
-    if isinstance(details, StagedChatFiles) and not added:
-        return result
-    staged.extend(build_python_chat_files_from_search_docs(added))
-    fields = shallow_model_dump(details)
-    fields.pop("staged_files", None)
-    result.details = staged_type(**fields, staged_files=staged)
-    return result
 
 
 class ChatAgent(Agent, RestorableFeature):
@@ -364,13 +325,13 @@ class ChatAgent(Agent, RestorableFeature):
     def _finalize_tool(
         self, _context: ToolCallContext, result: ToolResult
     ) -> ToolResult:
-        return self._staged(result)
-
-    def _staged(self, result: ToolResult) -> ToolResult:
         if not self.stages_files:
             return result
         known = {file.file_id for file in self.chat_files if file.file_id is not None}
-        return _with_staged_files(result, known)
+        result.details = staged_result_details(
+            result.details, known, build_python_chat_files_from_search_docs
+        )
+        return result
 
     def _validate_answer(self, result: StepResult) -> None:
         if not result.message.text and not result.message.tool_calls:
