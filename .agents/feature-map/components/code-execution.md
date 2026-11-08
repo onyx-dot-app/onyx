@@ -124,8 +124,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         code_mode_cell span (status, duration, call count,
                                         tool names); the call returns at yield_time_ms, at
                                         yield_control(), or at the end
-      execute_program                   sandbox.py: checkout a Monty worker (the wait observes
-                                        Stop), type-check tool and store/load calls, feed_start
+      execute_program                   sandbox.py: checkout a new Monty worker (the wait
+                                        observes Stop), feed the imports of IMPORTABLE_MODULES,
+                                        type-check tool and store/load calls, feed_start
         FunctionSnapshot                tool call -> CodeCell._call on a thread, at most
                                         MAX_CONCURRENT_TOOL_CALLS per cell and
                                         an equal share of MAX_TOOL_CALL_THREADS per process
@@ -346,15 +347,24 @@ health calls are not retried.
     worker while no other program waits for one. Each program that waits for
     a worker claims one such holder (`tools/tool_implementations/code_mode/sandbox.py:_WorkerDemand`). It waits at
     once when the process has checked out all `MAX_SANDBOX_PROCESSES` workers,
-    and claims again each time its checkout times out. A claim counts until its
-    holder returns or keeps its worker, and is withdrawn when the waiter gets a
-    worker before the holder gives up. The claimed holder's
+    and claims again each time its checkout times out. Before a claimed holder
+    returns its worker, the claim becomes a credit of that waiter, so no other
+    checkout can use it up; the waiter's next checkout timeout uses the credit
+    up. A waiter that stops waiting passes its claim to a waiter that has
+    none, or withdraws it from a holder that has not given up yet. The claimed holder's
     `tools/tool_implementations/code_mode/sandbox.py:execute_program`
     dumps the waiting program, returns the worker, and resumes on any worker
     when a call finishes. Dumps held by the process are bounded by
     `MAX_SUSPENDED_BYTES` (256 MB); a program whose dump does not fit keeps its
     worker, and skips later dumps while the free budget is below its last dump
-    size. The compute
+    size. A dump needs about the heap plus twice the dump size inside the
+    worker, so before a dump `tools/tool_implementations/code_mode/sandbox.py:_suspend`
+    reads how much the worker's resident memory grew since checkout; above
+    `MAX_DUMP_MEMORY_SHARE` (a quarter) of `SandboxLimits.max_memory_bytes`
+    the program keeps its worker too
+    (`onyx_code_mode_suspensions_total{outcome="over_memory"}`). A dump that
+    still runs out of memory ends the program with `DUMP_MEMORY_MESSAGE` and
+    counts a lost worker (`reason="out_of_memory"`). The compute
     limit carries across these segments. While a worker computes, the cell's
     cancellation kills it at once, and a timer kills it at the end of its
     lifetime when that falls within the segment; the pool replaces it. Waits
@@ -365,9 +375,18 @@ health calls are not retried.
     users added about 0.05 s at p50). Each program may use 128 MB
     (`SandboxLimits.max_memory_bytes`), and suspended program dumps may hold
     `MAX_SUSPENDED_BYTES` (256 MB) more, so worst-case sandbox memory stays
-    near 1.3 GB, within the default 3 Gi API server pod. All tenants share the pool. Workers
-    are replaced after `MAX_CHECKOUTS_PER_WORKER` checkouts, which frees memory
-    that a worker kept after it hit the memory limit.
+    near 1.3 GB, within the default 3 Gi API server pod. All tenants share the
+    pool; counters with a `tenant_id` label (programs, cell and worker
+    seconds, busy rejections; `server/metrics/code_mode.py`) attribute its use,
+    and no limit applies per tenant. Users and tenants do not trust each other,
+    so a worker serves one session (`MAX_CHECKOUTS_PER_WORKER` = 1) and the
+    pool then replaces it; a resumed program also gets a new worker. The pool
+    runs the `monty` binary in the server environment's scripts directory
+    (`sysconfig`), never one that `MONTY_BIN` or `PATH` names, and does not
+    start without it. Every program starts with `IMPORTABLE_MODULES` imported:
+    a feed without a type check runs the imports before the program, and the
+    type checker reads the same names from the program's stubs, so tracebacks
+    keep the program's line numbers.
 14. `code-mode-nested-calls-are-real-calls` **Nested calls go through
     `Tool.run`.** Persona gates, per-user auth, tracing spans and incognito
     checks apply as for direct calls. Each tool declares how code mode offers
@@ -394,9 +413,18 @@ health calls are not retried.
     `build_chat_prompt` asks each offered tool for `Tool.operation_names`, and
     `CodeModeTool` answers with its functions, so the reminder names a nested
     tool as a function of `execute_code` programs.
-    Nested calls skip the agent's `before_tool_call` hook. Only
-    `ChatAgent` gets code mode, and it sets no such hook; an agent that adds
-    one must keep its tools direct. Nested calls run in the program's
+    Nested calls go through the run's `before_tool_call` hook as direct calls
+    do (`ToolInvocation.before_call`,
+    `tools/tool_implementations/code_mode/cells.py:_decided_result`): a
+    `ToolResult` decision becomes the call's result, so a denial raises in the
+    program as a tool error does, and a `PendingToolInput` decision fails the
+    call, since a program cannot wait for approval. A hook that raises fails
+    the run, as for a direct call: `before_call` raises
+    `agents/tools.py:BeforeToolCallFailed`, a `BaseException` that the program
+    cannot catch; the cell stops its program, and the observation that reports
+    the end raises it out of the tool. When no observation reports it, closing
+    the cells raises `agents/models.py:ReleaseFailed` from the run's finish or
+    suspend hook, and the run fails. Nested calls run in the program's
     cancellation scope: the program's end, timeout or Stop cancels their model
     work and the HTTP work of tools that observe cancellation; `run_python` and
     `bash` do not (see Known issues). Calls to a sequential tool run one at a time, and the wait
@@ -460,7 +488,23 @@ health calls are not retried.
     another cell's later change still commits. The commit
     (`tools/tool_implementations/code_mode/models.py:StoreCommit`) gets the next
     ordinal of the branch at that moment, so commits follow completion order,
-    not the order of the calls. It is saved on the window that reports the
+    not the order of the calls. It also names the commit it was made against
+    (`StoreCommit.follows`), and the fold applies a commit only after that one.
+    A commit stays in memory until a saved result reports it, and a later
+    commit can be saved first, for example by the save when a child response
+    starts. After a server stop the restored store is still a prefix of the
+    commit order: it drops the later commit too, and a dropped commit does not
+    count toward `MAX_COMMITTED_BYTES`. The fold lists dropped commits in
+    `StoreSnapshot.dropped`, and the first program that starts after the drop
+    names their keys in its first observation
+    (`CodeModeExecutionResult.lost_store_writes`); a cell rejected with
+    `BUSY_MESSAGE` leaves the note to the next one. The report keeps one
+    ordinal, the highest dropped one, and covers every dropped commit up to
+    it; the fold then leaves out those commits, so the note shows once. No cell
+    waits for another cell's
+    commit. A cell whose closing record was saved before its program ended
+    (the response ended or the run paused after `STOP_GRACE_SECONDS`) commits
+    nothing, since no saved record would hold the commit. It is saved on the window that reports the
     completion (`CellWindow.commit`): the observation's, or its `CellClosing`
     when the cell completed after its last observation. The store has no table
     or cache: `tools/tool_implementations/code_mode/store.py:store_snapshot`
@@ -580,9 +624,19 @@ health calls are not retried.
   each run query expansion; direct calls are merged first. A checkout waits up
   to `CHECKOUT_TIMEOUT_SECONDS` (15 s) in steps of `CHECKOUT_POLL_SECONDS`
   (0.25 s), so it notices Stop; a new program that cannot get a worker fails
-  with `BUSY_MESSAGE`, and a resumed one waits up to its lifetime. Monty has no option to
-  shrink idle workers, so the pool keeps the workers it started until each
-  reaches `MAX_CHECKOUTS_PER_WORKER`.
+  with `BUSY_MESSAGE`, and a resumed one waits up to its lifetime. Each
+  checkout gets a new worker process. The pool refills `min_processes` (1) in
+  the background, so one checkout at a time takes under 1 ms, but checkouts
+  that arrive together beyond that one wait for a spawn, about 15 to 30 ms.
+  Dumps are skipped by the worker's memory growth since checkout. Before the
+  first dump that growth includes about 20 MB of type checker memory, so with
+  the default limit a program with more than about 12 MB of heap keeps its
+  worker while it waits. Resident memory counts only the pages a program has
+  written, so the check cannot see an allocation that the program never
+  writes: `bytes(36_000_000)` grows the worker by about 2 MB, and its dump
+  runs out of memory, which loses the worker and fails the program with
+  `DUMP_MEMORY_MESSAGE`. Monty reports no heap size, so no check here closes
+  this gap.
 - **The code mode store can lose old writes.** A turn that does not persist
   content (incognito) saves no tool results, so its writes last only for that
   response. Responses saved without response items replay without `details`
