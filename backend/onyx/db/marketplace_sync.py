@@ -28,7 +28,7 @@ class MarketplaceSyncLeaseLost(RuntimeError):
     pass
 
 
-def request_marketplace_sync(marketplace_id: UUID, session: Session) -> None:
+def request_marketplace_sync__no_commit(marketplace_id: UUID, session: Session) -> None:
     session.execute(
         update(Marketplace)
         .where(Marketplace.id == marketplace_id)
@@ -39,6 +39,10 @@ def request_marketplace_sync(marketplace_id: UUID, session: Session) -> None:
             sync_dispatch_after=None,
         )
     )
+
+
+def request_marketplace_sync(marketplace_id: UUID, session: Session) -> None:
+    request_marketplace_sync__no_commit(marketplace_id, session)
     session.commit()
 
 

@@ -469,6 +469,15 @@ The library preview of an external-app skill calls the same renderer
     keep their versions; `Marketplace.blocked_entries` stores reasons for the later UI.
     More than five retirements AND more than half the live marketplace sets
     `last_error` to "needs confirmation" and leaves skills and synced revision intact.
+    `Marketplace.retirement_proposal` persists the exact source revision and sorted
+    missing live skill ids. `db/marketplace.py:confirm_marketplace_retirement__no_commit`
+    refreshes the actor under the membership lock before locking the marketplace.
+    Only a personal owner or a company marketplace's global `MANAGE_SKILLS` actor
+    can approve. Confirmation compares the caller's revision and ids with the locked
+    proposal. Reconciliation bypasses the guard only for that exact approved pair.
+    A changed pair replaces the proposal without approval. Successful reconciliation
+    clears it in the content transaction; rollback preserves both approval and content.
+    Failed reads preserve the proposal. Consumed approval cannot authorize a later replay.
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.
@@ -513,7 +522,9 @@ The library preview of an external-app skill calls the same renderer
     Celery uses the heavy worker's sandbox queue. Lite dispatches
     through a bounded background thread path, outside the periodic poller thread.
     Recovery errors do not prevent the Lite file drains from running.
-    S8 owns retirement confirmation. No confirmation bypass exists here.
+    Exact retirement confirmation is persisted by the database prerequisite.
+    The confirmation helper records approval and requested work in one transaction.
+    The management endpoint must commit before dispatch.
 
 
 24. `marketplace-sync-ownership` **Bound each durable request and fence its owner.**
@@ -526,6 +537,7 @@ The library preview of an external-app skill calls the same renderer
     owner. Completion preserves a request made during the run and a deleted login's
     error. Queue reservations expire separately from retry delays.
     The background worker uses these transitions for all sync attempts.
+
 
 ---
 

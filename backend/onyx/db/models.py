@@ -155,6 +155,7 @@ from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLev
 from onyx.skills.marketplace.models import (
     GitHubMarketplaceConfig,
     MarketplaceProvider,
+    MarketplaceRetirementProposal,
     MarketplaceSyncStatus,
 )
 from onyx.tools.models import (
@@ -5478,6 +5479,9 @@ class Marketplace(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     blocked_entries: Mapped[dict[str, str]] = mapped_column(
         PGJSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    retirement_proposal: Mapped[MarketplaceRetirementProposal | None] = mapped_column(
+        PydanticType(MarketplaceRetirementProposal, none_as_null=True), nullable=True
     )
     webhook_id: Mapped[str | None] = mapped_column(String, nullable=True)
     webhook_secret: Mapped[SensitiveValue[str] | None] = mapped_column(

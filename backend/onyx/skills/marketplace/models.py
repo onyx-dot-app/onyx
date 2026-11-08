@@ -67,6 +67,14 @@ class MarketplaceArchive(BaseModel):
     folder: str | None
 
 
+class MarketplaceRetirementProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    revision: str
+    skill_ids: tuple[UUID, ...]
+    approved: bool = False
+
+
 class ReconciliationResult(BaseModel):
     status: Literal["applied", "failed", "needs_confirmation"]
     reason: str | None = None
