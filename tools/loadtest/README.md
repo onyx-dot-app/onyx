@@ -325,7 +325,8 @@ next arm overwrites the stats:
 
 ```bash
 ARM=code-mode-per-round  # direct, code-mode-per-round, or code-mode-batched
-ONYX_SEARCH_MODEL=mock-profile-search-v1 \
+MODEL=mock-profile-search-v1  # mock-profile-search-v1-codebatched for code-mode-batched
+ONYX_SEARCH_MODEL="$MODEL" \
   uv run --group loadtest locust --headless -u 50 -r 5 -t 15m \
   --host "$LOCUST_HOST" --csv "$ARM" ChatWithSearchUser
 ```
