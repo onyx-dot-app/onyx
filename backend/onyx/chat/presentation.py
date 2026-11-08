@@ -462,8 +462,6 @@ def replay_response(
     """
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
-    # Amended results render after the response's messages, as they do live.
-    amended: list[Packet] = []
     for step in response.steps:
         message = step.message
         message_id = _message_identity(message)
@@ -492,17 +490,17 @@ def replay_response(
                     update={"search_docs": record.search_docs or []}
                 )
                 result = result.model_copy(update={"details": search})
-            renderer_of_call = ToolRenderer(
+            tool_renderer = ToolRenderer(
                 call, tool_placement, record.tool_id if record is not None else None
             )
-            packets.extend(renderer_of_call.start())
+            packets.extend(tool_renderer.start())
             for child in response.child_runs:
                 if (
                     child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue
-                renderer_of_call.has_child_output = True
+                tool_renderer.has_child_output = True
                 child_mode = (
                     PresentationMode.CODING_THINKING
                     if call.name == CODING_AGENT_TOOL_NAME
@@ -519,10 +517,7 @@ def replay_response(
                         child_mode,
                     )
                 )
-            packets.extend(renderer_of_call.complete(result))
-            if result is not None:
-                amended.extend(renderer_of_call.amend(result))
-    packets.extend(amended)
+            packets.extend(tool_renderer.complete(result))
     if response.parent_run_id is None:
         packets.append(
             Packet(

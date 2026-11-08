@@ -1133,8 +1133,9 @@ class Run:
         if amendments:
             with self.execution_lock:
                 self._apply_amendments(amendments)
+        # A run cancelled while the hook ran finishes instead of suspending.
+        self.cancellation_signal.check()
         if self._restoration is not None:
-            self.cancellation_signal.check()
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")
             )
@@ -1270,6 +1271,8 @@ class Run:
         """Ask a finish or suspend hook for the final results of this run's calls.
 
         The hook runs without the execution lock, since it can wait for tool work.
+        A hook that fails or stops for cancellation sets no results, so the run
+        still ends or suspends normally.
         """
         if hook is None:
             return []
@@ -1282,6 +1285,9 @@ class Run:
             ]
         try:
             return hook(results)
+        except AgentCancelled:
+            logger.info("Run release hook stopped for cancellation: %s", self.id)
+            return []
         except Exception:
             logger.exception("Run release hook failed: %s", self.id)
             return []
@@ -1291,7 +1297,9 @@ class Run:
 
         An amendment replaces a recorded result, or gives a call that ended without
         one its result. The call keeps its execution status. An amendment that names
-        no started call of this run is logged and skipped.
+        no started call of this run is logged and skipped. A compaction summary that
+        covers an amended result describes the replaced one, so it is dropped and
+        the next request compacts again.
         """
         started = {
             call.id: (index, message_id, step.tools[call.id], call)
@@ -1300,6 +1308,7 @@ class Run:
             for call in step.message.tool_calls
             if call.id in step.tools
         }
+        amended_ids: set[str | None] = set()
         for amendment in amendments:
             located = started.get(amendment.call_id)
             if located is None:
@@ -1310,6 +1319,7 @@ class Run:
                 continue
             index, message_id, execution, call = located
             execution.result = _tool_result_message(amendment.result, call, message_id)
+            amended_ids.add(execution.result.id)
             if self.event_delivery:
                 self.event_delivery.publish(
                     ToolResultAmendedEvent(
@@ -1320,6 +1330,14 @@ class Run:
                         result=amendment.result,
                     )
                 )
+        checkpoint = self._state.checkpoint
+        if checkpoint is None or not amended_ids:
+            return
+        order = [message.id for message in self._state.messages]
+        if checkpoint.covered_through_message_id in order:
+            covered = order[: order.index(checkpoint.covered_through_message_id) + 1]
+            if amended_ids.intersection(covered):
+                self._state.checkpoint = None
 
     def _clear_execution_config(self) -> None:
         self._token_counts.clear()

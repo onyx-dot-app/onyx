@@ -57,7 +57,7 @@ During a run, the agent emits typed `AgentEvent` values to `on_event`:
 | `input_required`, `agent_suspended` | A call awaits identified input, or execution releases its workers at a supported boundary. |
 | `message_start`, `message_update`, `message_end` | An assistant message starts, receives content updates, or ends with its accepted content and outcome. |
 | `tool_start`, `tool_update`, `tool_end` | A tool call starts, reports progress, or returns a result. |
-| `tool_result_amended` | The finish hook set the final result of a call of this run. |
+| `tool_result_amended` | A finish or suspend hook set the final result of a call of this run. |
 
 Each event carries a run ID so consumers can distinguish concurrent executions.
 The run applies generation updates under its state lock before notifying listeners.
@@ -201,7 +201,8 @@ It returns `ToolResultAmendment` values: each one replaces the recorded result o
 started, or gives a call that ended without a result (such as on Stop) its result.
 The call keeps its execution status.
 The run applies them and publishes `tool_result_amended` before `agent_end` and before it saves output.
-A failed hook is logged; the run keeps its outcome and recorded results.
+A hook that fails or stops for cancellation is logged; the run keeps its outcome and recorded results.
+An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
 
 Two optional tool callbacks cover interception and enrichment:

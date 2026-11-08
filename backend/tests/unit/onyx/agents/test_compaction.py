@@ -29,6 +29,7 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
     StepInput,
+    ToolResultAmendment,
 )
 from onyx.agents.runtime import (
     Agent,
@@ -510,6 +511,50 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
+
+
+def test_amending_a_summarized_result_drops_the_summary() -> None:
+    model = ContextModel(tool_rounds=5)
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content=TASK)]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="lookup", description="Search", parameters={}
+                ),
+                execute=lambda _invocation: ToolResult(
+                    content="Evidence [1] 東京 " * 180
+                ),
+            )
+        ],
+        on_finish=lambda _results: [
+            ToolResultAmendment(
+                call_id="call-1", result=ToolResult(content="Amended evidence.")
+            )
+        ],
+    )
+    run = agent.start(max_steps=6)
+    run.result()
+    assert run.wait_for_idle(2)
+    assert model.summaries
+    assert run.snapshot().checkpoint is None
+
+    # The next turn reads the amended result, not a summary of the replaced one.
+    summaries = len(model.summaries)
+    reloaded = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(
+            messages=agent.state.messages, checkpoint=agent.state.checkpoint
+        ),
+    )
+    reloaded.start(max_steps=1, messages=[UserMessage(content="Conclude.")]).result()
+    inputs = [message.text for message in model.generations[-1].messages] + [
+        request.messages[0].text for request in model.summaries[summaries:]
+    ]
+    assert any("Amended evidence." in text for text in inputs)
 
 
 @pytest.mark.parametrize("step_timeout", [None, 37])

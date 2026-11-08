@@ -85,9 +85,15 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   sets those results and publishes `ToolResultAmendedEvent` for each,
   after the partial messages end and before `AgentEndEvent` and the save. An
   amendment can also give a call that Stop interrupted its result. An
-  amendment that names no started call is logged and skipped.
+  amendment that names no started call is logged and skipped. An amendment
+  inside the span of the compaction checkpoint drops the checkpoint, so the
+  next request summarizes the amended result. A hook that fails or stops for
+  cancellation sets no results; the run still ends.
   `Agent.on_suspend` has the same shape; `Run._suspend` applies its amendments
   before it captures state.
+  `chat/presentation.py:ResponsePresenter` renders each amendment with
+  `chat/renderer.py:ToolRenderer.amend`: an ended card gets the new result
+  after its section end. Replay renders only the saved (amended) result.
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary

@@ -52,12 +52,13 @@ class FinishHook:
     def __init__(
         self,
         *,
-        fail: bool = False,
+        error: BaseException | None = None,
         call_id: str = CALL_ID,
         wait_until: datetime | None = None,
     ) -> None:
         self.calls: list[list[ToolResultMessage]] = []
-        self.fail = fail
+        # Raised instead of returning amendments.
+        self.error = error
         self.call_id = call_id
         # The call returns only after this time passes.
         self.wait_until = wait_until
@@ -72,8 +73,8 @@ class FinishHook:
         ):
             time.sleep(0.01)
         self.spans.append((started, datetime.now(timezone.utc)))
-        if self.fail:
-            raise RuntimeError("finish hook failed")
+        if self.error is not None:
+            raise self.error
         return [
             ToolResultAmendment(
                 call_id=self.call_id, result=ToolResult(content="closed")
@@ -267,7 +268,7 @@ def test_finish_hook_amends_result_when_run_is_cancelled(stop: str) -> None:
 
 
 def test_failed_finish_hook_keeps_the_outcome_and_recorded_results() -> None:
-    hook = FinishHook(fail=True)
+    hook = FinishHook(error=RuntimeError("finish hook failed"))
     agent = _agent(
         reply=_call_then(_answer),
         execute=lambda _invocation: ToolResult(content="running"),
@@ -276,6 +277,37 @@ def test_failed_finish_hook_keeps_the_outcome_and_recorded_results() -> None:
     run, events, saved = _run(agent)
     assert run.status == RunStatus.COMPLETE
     assert not any(isinstance(event, ToolResultAmendedEvent) for event in events)
+    result = saved[0].steps[0].tools[CALL_ID].result
+    assert result is not None and result.text == "running"
+
+
+def test_finish_hook_stopped_by_cancellation_still_ends_the_run() -> None:
+    hook = FinishHook(error=AgentCancelled())
+    cancellation = CancellationSignal()
+
+    def reply(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        if request.messages and isinstance(request.messages[-1], ToolResultMessage):
+            # The user stops the run at its second step.
+            cancellation.cancel()
+            signal.check()
+        return AssistantMessage(
+            content=[ToolCall(id=CALL_ID, name="cell", arguments={})]
+        )
+
+    agent = _agent(
+        reply=reply,
+        execute=lambda _invocation: ToolResult(content="running"),
+        hook=hook,
+    )
+    run, events, saved = _run(agent, cancellation=cancellation)
+    assert run.status == RunStatus.CANCELLED
+    assert len(hook.calls) == 1
+    end = next(event for event in events if isinstance(event, AgentEndEvent))
+    assert end.outcome == RunStatus.CANCELLED
+    assert not any(isinstance(event, ToolResultAmendedEvent) for event in events)
+    assert len(saved) == 1
     result = saved[0].steps[0].tools[CALL_ID].result
     assert result is not None and result.text == "running"
 
@@ -369,5 +401,54 @@ def test_suspend_hook_amends_results_before_the_run_suspends() -> None:
         assert result is not None and result.text == "closed"
     finally:
         run.cancel()
+        assert run.wait_for_idle(3)
+        assert coordinator.close(3)
+
+
+def test_suspend_hook_stopped_by_cancellation_finishes_the_run() -> None:
+    cancellation = CancellationSignal()
+
+    def stop(_results: list[ToolResultMessage]) -> list[ToolResultAmendment]:
+        cancellation.cancel()
+        raise AgentCancelled()
+
+    finish = FinishHook()
+    events: list[AgentEvent] = []
+
+    def reply(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        return AssistantMessage(
+            content=[ToolCall(id=CALL_ID, name="cell", arguments={})]
+        )
+
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        before_tool_call=lambda _context: PendingToolInput(
+            request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+        ),
+        on_suspend=stop,
+        on_finish=finish,
+    )
+    coordinator = AgentCoordinator()
+    run = agent.start(
+        max_steps=2,
+        cancellation=cancellation,
+        coordinator=coordinator,
+        on_event=events.append,
+    )
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.CANCELLED
+        assert len(finish.calls) == 1
+        end = next(event for event in events if isinstance(event, AgentEndEvent))
+        assert end.outcome == RunStatus.CANCELLED
+    finally:
         assert run.wait_for_idle(3)
         assert coordinator.close(3)
