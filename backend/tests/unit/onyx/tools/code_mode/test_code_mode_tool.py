@@ -331,7 +331,13 @@ def test_cancellation_stops_calls_and_raises() -> None:
     canceller.result(10)
     # Both calls observe the cancellation instead of running for 10 seconds.
     assert stopped.acquire(timeout=5) and stopped.acquire(timeout=5)
-    finished = [e for e in invocation.events if isinstance(e, CodeModeCallFinished)]
+
+    def finished_calls() -> list[CodeModeCallFinished]:
+        return [e for e in invocation.events if isinstance(e, CodeModeCallFinished)]
+
+    # The cell records the calls when its program ends, after run() raised.
+    until(lambda: len(finished_calls()) == 2)
+    finished = finished_calls()
     assert {event.call.state for event in finished} == {"unfinished"}
     assert {event.call.content for event in finished} == {UNFINISHED_CALL_MESSAGE}
     # Clients show an unfinished call as failed.
