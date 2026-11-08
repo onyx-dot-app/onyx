@@ -227,6 +227,8 @@ The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history.
+- `recorded_results` — every recorded tool result before the call, with details and without
+  compaction: earlier steps, then this step's completed results in call order. Read only.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
@@ -266,6 +268,8 @@ Prompt assembly replaces exact repeated passages within a step with references t
 Tools return `ToolResult(is_error=True)` when the model can respond to a failure.
 The runtime also logs ordinary tool exceptions and converts them to error results. Cancellation propagates.
 A cancelled call returns no result; the run's finish hook can supply one (see `on_finish`).
+On restore, a call that a lost owner left running runs again, unless the tool sets
+`interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
 arguments the model truncated. The default loop stops when all results in a step set `terminate=True`.

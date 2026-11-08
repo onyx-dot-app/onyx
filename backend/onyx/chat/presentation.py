@@ -70,10 +70,14 @@ def _message_identity(message: AssistantMessage) -> str:
 
 def _collect_tool_history(
     snapshot: RunState,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
 ) -> ToolHistorySnapshot:
-    """Project completed and interrupted operations from one execution tree."""
+    """Project completed and interrupted operations from one execution tree.
+
+    `tool_ids` names the application tools to record, with their tool row ids; a
+    tool without a row maps to None. Calls of other tools are skipped.
+    """
     records: list[ToolCallInfo] = []
     documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
@@ -86,14 +90,13 @@ def _collect_tool_history(
                 message.metadata.sources, update_duplicate_keys=True
             )
         for index, call in enumerate(message.tool_calls):
-            tool_id = tool_ids.get(call.name)
-            if tool_id is None:
+            if call.name not in tool_ids:
                 continue
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
             records.append(
                 _tool_record(
-                    tool_id,
+                    tool_ids[call.name],
                     message,
                     result,
                     call,
@@ -120,7 +123,7 @@ def _collect_tool_history(
 
 
 def _tool_record(
-    tool_id: int,
+    tool_id: int | None,
     output: AssistantMessage,
     tool_response: ToolResultMessage | None,
     tool_call: ToolCall,
@@ -235,7 +238,7 @@ def message_documents(metadata: BaseModel | None) -> dict[str, SearchDoc]:
 def project_response(
     snapshot: RunState,
     *,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
     registrations: Sequence[AgentInfo] = (),
 ) -> ChatResponseSnapshot:
@@ -348,7 +351,7 @@ class ResponsePresenter:
         self,
         emitter: Emitter,
         *,
-        tool_ids: Mapping[str, int] | None = None,
+        tool_ids: Mapping[str, int | None] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
         self.emitter = emitter

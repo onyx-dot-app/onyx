@@ -117,7 +117,7 @@ def _invoke_tool[T: ToolOutcome](
 ) -> T | ToolResult:
     """Apply application tracing, error conversion, and cancellation to a callback."""
     invocation.cancellation.check()
-    with function_span(name) as span:
+    with function_span(name, metadata=invocation.trace_metadata) as span:
         span.span_data.input = str(invocation.arguments)
         try:
             result = execute()
@@ -151,12 +151,19 @@ class Tool(abc.ABC):
     """An application tool with context, tracing, and an SDK binding."""
 
     result_from_children: ToolResultFromChildren | None = None
+    # Set by tools that must not run twice: the saved result of a call that
+    # stopped before it finished. See AgentTool.
+    interrupted_result: ToolResult | None = None
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
         return ToolExecutionMode.PARALLEL
+
+    def operation_names(self, tool_id: int) -> list[str]:
+        """How the model calls the configured tool `tool_id` through this tool."""
+        return [self.name] if self.id == tool_id else []
 
     @property
     @abc.abstractmethod
@@ -176,7 +183,8 @@ class Tool(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def id(self) -> int:
+    def id(self) -> int | None:
+        """The tool row; None for a tool built per response without a row."""
         raise NotImplementedError
 
     @property
@@ -250,4 +258,5 @@ class Tool(abc.ABC):
             if self.merge_list_argument is not None
             else None,
             result_from_children=result_from_children,
+            interrupted_result=self.interrupted_result,
         )

@@ -267,6 +267,11 @@ class StdoutCollector:
         return text
 
     @property
+    def dropped(self) -> int:
+        """Characters the collector dropped from the middle."""
+        return self._dropped
+
+    @property
     def text(self) -> str:
         return self.cut(self._head_limit + self._tail_limit)
 
@@ -764,6 +769,8 @@ class _Run:
         # Bytes of the program's last dump; a dump this large that cannot fit is
         # not attempted.
         self.last_dump_bytes = 0
+        # Non-fatal type checker diagnostics of the program.
+        self.type_check_notes: str | None = None
 
     def start_clock(self) -> None:
         if self.started is None:
@@ -1092,6 +1099,7 @@ def _start(
                     status="failed",
                     error="Type check failed; the program did not run.\n" + text,
                 )
+            run.type_check_notes = text
             return session.feed_start(
                 code, print_callback=run.print_callback, skip_type_check=True
             )
@@ -1325,6 +1333,7 @@ def execute_program(
             result=bounded(result, "code mode result"),
             error=bounded(error, "code mode error"),
             duration_seconds=run.elapsed,
+            type_check_notes=run.type_check_notes if status != "completed" else None,
             # A stop can surface as an exception that the program raises.
             commits_store=status == "completed"
             or (raised and run.abort_reason() is None),

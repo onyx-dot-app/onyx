@@ -768,6 +768,7 @@ class Run:
     def record_tool_results(
         self, result: ToolResult, calls: Sequence[ToolCall]
     ) -> None:
+        """Record the result of calls; `finish_tool` later ends them."""
         # Checkpoint capture must not split a completed batch.
         with self.execution_lock:
             self.cancellation_signal.check()
@@ -1857,22 +1858,24 @@ def _execute_tools(run: Run) -> bool:
             if allowed is None or tool.name in allowed:
                 tools.append(tool)
         run._step_tools = tools
+    recorded = [
+        *run._history.messages,
+        *run._state.input_messages,
+        *messages_from_steps(run._state.steps[: progress.step_index]),
+    ]
     batch = ToolBatch(
         run,
         tools=run._step_tools,
         progress=progress,
         record=run._state.steps[progress.step_index],
         history=working_messages(
-            [
-                *run._history.messages,
-                *run._state.input_messages,
-                *messages_from_steps(run._state.steps[: progress.step_index]),
-            ],
+            recorded,
             run._state.checkpoint,
             input_start=len(run._history.messages)
             if run._state.input_messages
             else None,
         ),
+        recorded=recorded,
     )
     if not batch.execute():
         return False

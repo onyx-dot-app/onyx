@@ -124,9 +124,15 @@ renames MCP tools whose names collide.
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
 such as arguments, `call_index`, the cancellation signal and the progress
-callback, comes in `agents/tools.py:ToolInvocation`. `invocation.update` can
-raise `AgentCancelled`; do not catch it. An update sent after `_run` returns is
-dropped, and a result that arrives after the run closes is discarded.
+callback, comes in `agents/tools.py:ToolInvocation`. `invocation.messages` is
+the model's view after compaction, as owned copies without result details
+(`agents/tool_execution.py:_tool_view`); `invocation.recorded_results` holds
+every recorded tool result before the call, with details and without
+compaction: earlier steps, then this step's completed results. Tools only read
+it. Use it for state derived from the whole conversation. `invocation.update`
+can raise `AgentCancelled`; do not catch it. An update sent after `_run`
+returns is dropped, and a result that arrives after the run closes is
+discarded.
 Per-request data, such as chat files, memory and the next citation number,
 comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
 `ResearchAgent._tool_context` build it when the call starts.
@@ -135,7 +141,9 @@ Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
 `IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
 `DIRECT`), `code_mode_function_name` (MCP tools add their server as a
 namespace) and `code_mode_result` (the value and stub type a program
-receives); see [[code-execution]].
+receives); see [[code-execution]]. A tool that must not run twice sets
+`interrupted_result`: on restore, the runtime saves it as the result of a call
+that a lost execution owner left running (`agents/tools.py:AgentTool`).
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error

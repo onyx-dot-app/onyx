@@ -14,6 +14,7 @@ from onyx.chat.models import ChatSearchResult, ResultSources, StagedChatFiles
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.tools.models import ChatFile
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.utils.pydantic_util import as_base, shallow_model_dump
 
 
@@ -23,6 +24,27 @@ def _by_id(documents: Sequence[SearchDoc]) -> dict[str, SearchDoc]:
     for document in documents:
         found.setdefault(document.document_id, document)
     return found
+
+
+def _search_sources(searches: Sequence[SearchDocsResponse]) -> ResultSources:
+    """The documents and citations of search details, merged in order."""
+    documents = _by_id(
+        [
+            document
+            for search in searches
+            for document in [*search.search_docs, *(search.displayed_docs or [])]
+        ]
+    )
+    mapping = {
+        number: document_id
+        for search in searches
+        for number, document_id in search.citation_mapping.items()
+    }
+    return ResultSources(
+        documents=list(documents.values()),
+        displayed=list(documents.values()),
+        citations=cited_documents(dict(sorted(mapping.items())), documents),
+    )
 
 
 def tool_result_sources(details: BaseModel | None) -> ResultSources | None:
@@ -44,6 +66,15 @@ def tool_result_sources(details: BaseModel | None) -> ResultSources | None:
             citations=cited_documents(
                 details.citation_mapping, _by_id(details.search_docs)
             ),
+        )
+    if isinstance(details, CodeModeExecutionResult):
+        # The nested searches of every window, the closing record's included.
+        return _search_sources(
+            [
+                call.details
+                for call in details.all_calls()
+                if isinstance(call.details, SearchDocsResponse)
+            ]
         )
     return None
 
