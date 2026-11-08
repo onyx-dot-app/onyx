@@ -85,6 +85,7 @@ LIMITS = SandboxLimits(
     lifetime_seconds=10,
     max_tool_calls=5,
     max_output_chars=500,
+    max_result_bytes=2_000,
     max_memory_bytes=32 * 1024 * 1024,
     max_cpu_seconds=1,
 )
@@ -416,7 +417,7 @@ def test_shared_references_are_rejected_inside_the_program() -> None:
     assert result.result is None
     assert result.error is not None
     assert result.error.startswith(
-        "The value of the last expression exceeds the limit of 500 bytes as JSON"
+        "The value of the last expression exceeds the limit of 2000 bytes as JSON"
     )
     assert result.store_writes == {}
 
@@ -437,6 +438,15 @@ def test_deep_values_are_rejected_inside_the_program() -> None:
         'Cannot store "k": the value nests more than 100 levels deep at [0][0]'
     )
     assert "nests more than 100 levels deep" in (result.error or "")
+
+
+def test_the_result_limits_bytes_of_the_copy_and_characters_of_its_repr() -> None:
+    # 800 bytes as JSON, 402 characters as repr: within both limits.
+    assert run("'é' * 400\n").result == repr("é" * 400)
+    cut = run("'é' * 900\n")
+    assert cut.status == "completed", cut
+    assert cut.result is not None and "é" * 100 in cut.result
+    assert len(cut.result) < 1_000
 
 
 def test_a_result_that_is_not_json_data_is_reported() -> None:

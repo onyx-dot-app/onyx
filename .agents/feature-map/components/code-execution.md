@@ -199,13 +199,15 @@ health calls are not retried.
     not a container.** `pydantic-monty` runs programs in its own worker
     processes (`tools/tool_implementations/code_mode/sandbox.py:sandbox_pool`,
     `MAX_SANDBOX_PROCESSES` per server process), which run as the API server's
-    user with an empty environment. Monty has no file, network or subprocess
-    access, so the tool functions are the only way out. `SandboxLimits` bounds
-    each program's lifetime, compute time, memory, tool calls and output.
-    Each value that the host keeps from a program goes through
-    `tools/tool_implementations/code_mode/store.py:json_value`. It copies the
-    value as JSON within a byte and depth limit and raises inside the program
-    otherwise. Sandbox values can share references (`x = [x, x]`), so an
+    user. Programs have no access to the environment, files, network or
+    processes, so the tool functions are the only way out. `SandboxLimits`
+    bounds each program's lifetime, compute time, memory, tool calls and
+    output. Each value that the host copies or saves from a program goes
+    through `tools/tool_implementations/code_mode/store.py:json_value`. It
+    copies the value as JSON within a byte and depth limit. A value over a
+    limit raises inside the program for `store()`. For the value of the last
+    expression the program has ended, so the error becomes the program's
+    error. Sandbox values can share references (`x = [x, x]`), so an
     unbounded host walk would use host memory outside the sandbox limits. The
     store has no table: a program's commit is saved with its result, and the
     store is the fold of the commits in the chat history

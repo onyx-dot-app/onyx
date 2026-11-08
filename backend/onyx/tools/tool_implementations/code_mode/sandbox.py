@@ -1219,7 +1219,7 @@ def execute_program(
         return finish("completed")
     try:
         output = json_value(
-            ended.output, "The value of the last expression", limits.max_output_chars
+            ended.output, "The value of the last expression", limits.max_result_bytes
         )
     except (TypeError, ValueError) as error:
         return finish("completed", error=str(error))

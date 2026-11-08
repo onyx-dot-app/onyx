@@ -12,6 +12,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     MAX_COMMITTED_BYTES,
+    MAX_PATH_KEY_CHARS,
     MAX_VALUE_DEPTH,
     ProgramStore,
     changed_writes,
@@ -121,6 +122,19 @@ def test_json_value_stops_at_its_limit_for_shared_references() -> None:
     # 2**64 leaves as JSON; the copy stops once it passes 1 KB.
     with pytest.raises(ValueError, match="exceeds the limit of 1024 bytes"):
         json_value(value, "v", 1024)
+
+
+def test_json_value_bounds_dict_keys_and_its_messages() -> None:
+    long_key = "k" * 1_000_000
+    with pytest.raises(ValueError, match="exceeds the limit of 64 bytes") as error:
+        json_value({"a": {long_key: 1}}, "v", 64)
+    assert f"at ['a'][{'k' * MAX_PATH_KEY_CHARS!r}...]" in str(error.value)
+    # Its repr has 2**18 parts; the message names the key's type only.
+    shared: object = ()
+    for _ in range(18):
+        shared = (shared, shared)
+    with pytest.raises(TypeError, match=r"found a tuple key at \['a'\]\.$"):
+        json_value({"a": {shared: 1}}, "v", 64)
 
 
 def test_json_value_rejects_deep_nesting() -> None:

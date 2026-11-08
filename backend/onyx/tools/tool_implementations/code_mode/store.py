@@ -48,6 +48,8 @@ MAX_STORE_KEY_CHARS = 200
 # replaces values below 200 levels with a placeholder string, so a lower limit
 # rejects them instead.
 MAX_VALUE_DEPTH = 100
+# Characters of each dict key that an error message shows in a value's path.
+MAX_PATH_KEY_CHARS = 40
 
 JSON_TYPES_TEXT = "str, int, float, bool, None, list, or dict with str keys"
 
@@ -60,11 +62,13 @@ def _type_name(value: object) -> str:
 def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
     """A copy of `value` as strict JSON data of at most `max_bytes` as compact JSON.
 
-    Every sandbox value that the host keeps or passes on goes through this copy.
+    Every sandbox value that the host copies or saves goes through this copy.
     `what` names the value in error messages. Tuples become lists. Raises
     TypeError for data that is not JSON (also NaN, infinity and dict keys that
     are not str), and ValueError when the copy would exceed `max_bytes` or nest
-    deeper than MAX_VALUE_DEPTH; both reach the program as exceptions.
+    deeper than MAX_VALUE_DEPTH. Both checks run before the host encodes or
+    formats a value, and error messages show at most MAX_PATH_KEY_CHARS of each
+    key.
 
     Sandbox values can share references, so `x = [x, x]` doubles the JSON size
     with each step at no cost to the program. The copy walks with an explicit
@@ -80,7 +84,13 @@ def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
     keys: list[object] = []
 
     def where() -> str:
-        path = "".join(f"[{key!r}]" for key in keys)
+        # Long keys are cut so that the message stays small.
+        path = "".join(
+            f"[{key[:MAX_PATH_KEY_CHARS]!r}...]"
+            if isinstance(key, str) and len(key) > MAX_PATH_KEY_CHARS
+            else f"[{key!r}]"
+            for key in keys
+        )
         return f" at {path}" if path else ""
 
     def count(more: int) -> None:
@@ -91,6 +101,11 @@ def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
                 f"{what} exceeds the limit of {max_bytes} bytes as JSON{where()}."
             )
 
+    def count_scalar(item: JsonValue) -> None:
+        # A str has at least one byte per character; skip encoding a long one.
+        too_long = isinstance(item, str) and len(item) > max_bytes
+        count(max_bytes + 1 if too_long else len(json_text(item).encode("utf-8")))
+
     def copy(item: object) -> JsonValue:
         """`item` if it is a JSON scalar; else an empty copy that the walk fills."""
         if item is None or isinstance(item, (str, bool, int, float)):
@@ -98,9 +113,7 @@ def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
                 raise TypeError(
                     f"{what} must be JSON data; {item} is not a JSON number{where()}."
                 )
-            # A str has at least one byte per character; skip encoding a long one.
-            too_long = isinstance(item, str) and len(item) > max_bytes
-            count(max_bytes + 1 if too_long else len(json_text(item).encode("utf-8")))
+            count_scalar(item)
             return item
         if not isinstance(item, (list, tuple, dict)):
             raise TypeError(
@@ -132,16 +145,20 @@ def json_value(value: object, what: str, max_bytes: int) -> JsonValue:
             keys.pop()
             continue
         key, item = entry
-        keys[-1] = key
         if isinstance(container, list):
+            keys[-1] = key
             container.append(copy(item))
             continue
         if not isinstance(key, str):
+            # Names the dict and the key type only: the repr of an unchecked key
+            # is unbounded.
+            keys.pop()
             raise TypeError(
-                f"{what} must be JSON data; dict keys must be str, found "
-                f"{type(key).__name__} key {key!r}{where()}."
+                f"{what} must be JSON data; dict keys must be str, found a "
+                f"{_type_name(key)} key{where()}."
             )
-        count(len(json_text(key).encode("utf-8")))
+        keys[-1] = key
+        count_scalar(key)
         container[key] = copy(item)
     return root
 

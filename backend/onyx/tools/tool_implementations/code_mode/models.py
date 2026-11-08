@@ -172,6 +172,10 @@ class SandboxLimits(BaseModel):
     # observation, cut in the middle; bounds host memory and the text that the
     # output budget tokenizes. About 16 times the default output budget.
     max_output_chars: int = Field(default=640_000, gt=0)
+    # Bytes of compact JSON in the host copy of the last expression's value;
+    # bounds host memory before the copy's repr() is cut to max_output_chars.
+    # UTF-8 uses at most 4 bytes per character.
+    max_result_bytes: int = Field(default=4 * 640_000, gt=0)
     max_memory_bytes: int = Field(default=128 * 1024 * 1024, gt=0)
     # Compute time inside the sandbox; time spent waiting for tools does not count.
     # At most MAX_CPU_SECONDS, which the shared pool's request timeout backstops.
