@@ -335,14 +335,12 @@ def test_production_count_limits() -> None:
 
 def test_recompressed_bundle_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     files = _files()
-    files["skills/hello/data"] = random.Random(1).randbytes(64 * 1024) * 2
-    out = io.BytesIO()
-    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_LZMA) as archive:
-        for path, data in files.items():
-            archive.writestr(path, data)
-    monkeypatch.setattr(bundles, "DEFAULT_ZIP_MAX_BYTES", 100 * 1024)
-    assert len(out.getvalue()) < bundles.DEFAULT_ZIP_MAX_BYTES
-    result = reader.read_marketplace_archive(out.getvalue())
+    files["skills/hello/data"] = random.Random(1).randbytes(16 * 1024)
+    files["skills/hello/copy"] = files["skills/hello/data"]
+    content = _archive(files, "tar")
+    monkeypatch.setattr(bundles, "DEFAULT_ZIP_MAX_BYTES", 24 * 1024)
+    assert len(content) < bundles.DEFAULT_ZIP_MAX_BYTES
+    result = reader.read_marketplace_archive(content)
     assert isinstance(result, CompleteMarketplace)
     assert isinstance(result.entries[0], BlockedSkill)
     assert "zip" in result.entries[0].reason
