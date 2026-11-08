@@ -559,11 +559,47 @@ def test_wall_clock_timeout_during_computation(two_workers: Monty) -> None:
     assert run("print(2)\n", pool=two_workers).stdout == "2\n"
 
 
-def test_file_access_is_denied() -> None:
-    result = run("open('/etc/passwd').read()\n")
-    assert result.status == "failed"
-    assert result.error is not None
-    assert "PermissionError" in result.error
+_DENIED = "PermissionError"
+_UNRESOLVED_IMPORT = "Cannot resolve imported module"
+_NO_ATTRIBUTE = "AttributeError: module"
+
+
+@pytest.mark.parametrize(
+    ("code", "error", "result"),
+    [
+        # File system, environment and process functions are denied.
+        ("os.environ\n", _DENIED, None),
+        ("os.getenv('HOME')\n", _DENIED, None),
+        ("os.listdir('/')\n", _DENIED, None),
+        ("os.remove('/tmp/x')\n", _DENIED, None),
+        ("open('/etc/passwd').read()\n", _DENIED, None),
+        ("pathlib.Path('/etc/passwd').read_text()\n", _DENIED, None),
+        ("pathlib.Path('/etc/passwd').exists()\n", _DENIED, None),
+        # Other modules do not exist.
+        ("import subprocess\n", _UNRESOLVED_IMPORT, None),
+        ("import socket\n", _UNRESOLVED_IMPORT, None),
+        ("import ctypes\n", _UNRESOLVED_IMPORT, None),
+        ("__import__('os')\n", "NameError: name '__import__' is not defined", None),
+        ("exec('import subprocess')\n", "No module named 'subprocess'", None),
+        ("().__class__.__bases__[0].__subclasses__()\n", "AttributeError", None),
+        ("os.system('id')\n", _NO_ATTRIBUTE, None),
+        ("os.getpid()\n", _NO_ATTRIBUTE, None),
+        ("sys.exit(0)\n", _NO_ATTRIBUTE, None),
+        # Monty's fixed values, nothing from the host.
+        ("os.getcwd()\n", None, "'/'"),
+        ("sys.version\n", None, "'3.14.0 (Monty)'"),
+        ("sys.argv\n", None, "['main.py']"),
+    ],
+)
+def test_programs_cannot_reach_the_host(
+    code: str, error: str | None, result: str | None
+) -> None:
+    ran = run(f"import os, pathlib, sys\n{code}")
+    if error is None:
+        assert (ran.status, ran.result) == ("completed", result), ran
+    else:
+        assert ran.status == "failed", ran
+        assert error in (ran.error or ""), ran.error
 
 
 def test_fatal_diagnostics_are_only_tool_call_errors() -> None:
