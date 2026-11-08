@@ -89,8 +89,10 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   inside the span of the compaction checkpoint drops the checkpoint, so the
   next request summarizes the amended result. A hook that fails or stops for
   cancellation sets no results; the run still ends.
-  `Agent.on_suspend` has the same shape; `Run._suspend` applies its amendments
-  before it captures state.
+  `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
+  amendments before it captures state. A suspend hook that fails sets no
+  results and the run still suspends. A suspend hook that stops for
+  cancellation finishes the run as cancelled.
   `chat/presentation.py:ResponsePresenter` completes a call that has no
   ended card with the amended result; an ended card keeps what it showed.
   Replay renders only the saved (amended) result.
