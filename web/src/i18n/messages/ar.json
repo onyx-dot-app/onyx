@@ -17569,6 +17569,25 @@
     "folderValue": "المجلد: {folder}",
     "rootFolder": "جذر المستودع",
     "revision": "المراجعة المطبقة: {revision}",
-    "lastSynced": "آخر مزامنة: {date}"
+    "lastSynced": "آخر مزامنة: {date}",
+    "details": "تفاصيل السوق",
+    "loadError": "تعذر تحميل الأسواق",
+    "unauthorized": "ليس لديك حق الوصول إلى هذه الأسواق.",
+    "syncNow": "مزامنة الآن",
+    "replaceLogin": "استبدال تسجيل الدخول",
+    "replaceDescription": "استخدم اتصال GitHub الحالي للمزامنة المستقبلية. اتصل بـ GitHub أولًا إذا لزم الأمر.",
+    "configureAccess": "إعداد الوصول",
+    "remove": "إزالة",
+    "removeTitle": "إزالة السوق",
+    "removeDescription": "هل تريد إزالة {name} وكل مهاراته المتزامنة؟ لا يمكن التراجع عن ذلك.",
+    "confirmRemove": "تأكيد الإزالة",
+    "reviewRetirements": "مراجعة التقاعد",
+    "retireTitle": "تأكيد تقاعد المهارات",
+    "retireDescription": "ستتقاعد هذه المهارات عند المراجعة أدناه. لا يمكن استعادة المهارات المتقاعدة.",
+    "confirmRetire": "تأكيد التقاعد",
+    "proposalChanged": "تغيّر المقترح. راجع أحدث مقترح قبل التأكيد.",
+    "proposalUnavailable": "أسماء المهارات في المقترح غير متاحة. حدّث قبل التأكيد.",
+    "activeSkill": "{name}",
+    "retiredSkill": "{name} · متقاعدة"
   }
 }

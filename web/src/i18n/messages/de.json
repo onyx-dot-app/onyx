@@ -17569,6 +17569,25 @@
     "folderValue": "Ordner: {folder}",
     "rootFolder": "Repository-Stammverzeichnis",
     "revision": "Angewendete Revision: {revision}",
-    "lastSynced": "Zuletzt synchronisiert: {date}"
+    "lastSynced": "Zuletzt synchronisiert: {date}",
+    "details": "Marketplace-Details",
+    "loadError": "Marketplaces konnten nicht geladen werden",
+    "unauthorized": "Du hast keinen Zugriff auf diese Marketplaces.",
+    "syncNow": "Jetzt synchronisieren",
+    "replaceLogin": "Anmeldung ersetzen",
+    "replaceDescription": "Verwende deine aktuelle GitHub-Verbindung für künftige Synchronisierungen. Verbinde GitHub bei Bedarf zuerst.",
+    "configureAccess": "Zugriff konfigurieren",
+    "remove": "Entfernen",
+    "removeTitle": "Marketplace entfernen",
+    "removeDescription": "{name} und alle synchronisierten Skills entfernen? Dies kann nicht rückgängig gemacht werden.",
+    "confirmRemove": "Entfernung bestätigen",
+    "reviewRetirements": "Stilllegungen prüfen",
+    "retireTitle": "Skill-Stilllegung bestätigen",
+    "retireDescription": "Diese Skills werden mit der folgenden Revision stillgelegt. Stillgelegte Skills können nicht wiederhergestellt werden.",
+    "confirmRetire": "Stilllegung bestätigen",
+    "proposalChanged": "Der Vorschlag hat sich geändert. Prüfe den aktuellen Vorschlag vor der Bestätigung.",
+    "proposalUnavailable": "Die Skill-Namen des Vorschlags sind nicht verfügbar. Aktualisiere vor der Bestätigung.",
+    "activeSkill": "{name}",
+    "retiredSkill": "{name} · Stillgelegt"
   }
 }
