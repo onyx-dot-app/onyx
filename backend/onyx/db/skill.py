@@ -40,6 +40,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, contains_eager, selectinload
 
 from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     Permission,
@@ -420,6 +421,7 @@ def fetch_skill(
         order_by_name=False,
     ).where(Skill.id == skill_id)
     if lock_for_update:
+        lock_group_membership(db_session)
         stmt = stmt.with_for_update(of=Skill).execution_options(populate_existing=True)
     skill = db_session.scalars(stmt).one_or_none()
     if skill is not None and lock_for_update:
@@ -868,7 +870,14 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
         if skill is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         if is_company_marketplace_skill(skill, db_session):
-            ensure_can_edit_org_visibility(skill, user)
+            assert_within_scope(
+                user,
+                db_session,
+                permission=self.permission,
+                current_group_ids=[share.user_group_id for share in skill.group_shares],
+                requested_group_ids=[],
+                is_non_public=skill.public_permission is None,
+            )
         return skill
 
     def state(self, resource: Skill) -> ResourceAccessState:

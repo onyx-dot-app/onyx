@@ -250,7 +250,13 @@ The library preview of an external-app skill calls the same renderer
     Unexpected storage or credential errors during content preparation abort the save;
     only the shared metadata reader classifies missing or malformed stored content.
     Company marketplace access changes clear `follows_marketplace_access`;
-    unchanged shares keep the setting.
+    unchanged shares keep the setting. Marketplace defaults and reset use
+    `db/marketplace_access.py` and the same skill writer. Only live company followers
+    receive defaults; personal shares and company overrides survive sync. Reset clears
+    individual grants and restores following. Membership locks precede resource locks,
+    including reset's marketplace-before-skill order, to serialize with downgrade.
+    Community company followers are public. Downgrade persists public defaults and
+    removes marketplace group grants so sync cannot recreate them.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
     deletion explicitly allows retirement. New access entry points must use the
     adapter function, not `db/skill.py:replace_skill_shares`.
@@ -433,7 +439,9 @@ The library preview of an external-app skill calls the same renderer
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.
     G3 must use that same lock for manual name checks. S5 owns job
-    freshness; S6 owns retired-read/write guards; S7 owns access materialization.
+    freshness; S6 owns retired-read/write guards. Access materialization and audience
+    capture share the reconciliation transaction. Callers resolve the licensed tier
+    before entry, so reconciliation performs no cache or network I/O.
     No API or worker calls the sync service yet.
 23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**
     `skills/sync.py:sync_marketplace` owns the sessions and commit. Call it in the
@@ -450,6 +458,7 @@ The library preview of an external-app skill calls the same renderer
     cleanup checks only this run's ids. After a commit attempt fails, defer cleanup
     to the aged orphan sweep: the server may still commit. Success cleanup also
     checks pruned ids. Cleanup preserves version and legacy references.
+    After commit, one push covers users affected by content, retirement, or access changes.
     V3 retries failed cleanup and removes aged uploads left by a stopped worker.
     S5 must serialize the full read/upload/write operation and reject stale revisions.
     S8 owns the retirement confirmation override. Neither is implemented here.
@@ -472,11 +481,10 @@ The library preview of an external-app skill calls the same renderer
 
 ## Known issues
 
-- **Marketplace access reset is not connected.** Marketplace storage has group
-  grants but no company visibility or installation-policy fields. S7 must add
-  those defaults and copy them through the access mutation function, restoring
-  `follows_marketplace_access` in the same transaction. Plugin membership is not
-  modeled yet; its access guard belongs in `SkillAccessAdapter.load`.
+- **Marketplace management endpoints remain pending.** The access adapter and
+  skill reset endpoint are available. S8 must authorize marketplace changes, call the
+  adapter, commit, and push its affected users once. Plugin membership is not modeled
+  yet; its access guard belongs in `SkillAccessAdapter.load`.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing

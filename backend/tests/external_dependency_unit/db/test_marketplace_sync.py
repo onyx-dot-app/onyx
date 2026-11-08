@@ -30,10 +30,12 @@ from onyx.file_store.file_store import (
     get_default_file_store,
     is_missing_object,
 )
+from onyx.server.settings.models import Tier
 from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
 from onyx.skills.marketplace.models import ReconciliationResult
 from onyx.skills.marketplace.read_models import CompleteMarketplace, FailedMarketplace
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
     marketplace as marketplace,
 )
@@ -164,6 +166,7 @@ def test_failure_preserves_rows_and_revision(
         read: CompleteMarketplace | FailedMarketplace,
         *,
         revision: str,
+        tier: Tier,
         staged: Mapping[str, IngestedBundle],
         db_session: Session,
         created_by_user_id: UUID | None = None,
@@ -173,6 +176,7 @@ def test_failure_preserves_rows_and_revision(
             marketplace_id,
             read,
             revision=revision,
+            tier=tier,
             staged=staged,
             db_session=db_session,
             created_by_user_id=created_by_user_id,
@@ -602,3 +606,29 @@ def test_unrepairable_bundle_does_not_repeat_archive_download(
     github.revision = "b" * 40
     github.archive = catalog_bytes("alpha", "beta")
     assert run(marketplace, tenant).changed_skill_ids == [skill.id]
+
+
+def test_push_observes_committed_creation_and_retirement(
+    session: Session, marketplace: Marketplace, tenant: str, github: GitHub
+) -> None:
+    user = make_user(session)
+    make_sandbox(session, user)
+    session.commit()
+
+    def pushed(recipients: set[UUID], push_session: Session) -> None:
+        assert recipients == {user.id}
+        assert not push_session.in_transaction()
+        with sync.get_session_with_current_tenant() as observer:
+            stored = list(observer.scalars(select(Skill)))
+            assert len(stored) == 2
+            assert sum(row.retired_at is not None for row in stored) == retired
+
+    retired = 0
+    with patch.object(sync, "push_skills_for_users", side_effect=pushed) as push:
+        run(marketplace, tenant)
+        push.assert_called_once()
+        github.revision = "b" * 40
+        github.archive = catalog_bytes("alpha")
+        retired = 1
+        run(marketplace, tenant)
+        assert push.call_count == 2

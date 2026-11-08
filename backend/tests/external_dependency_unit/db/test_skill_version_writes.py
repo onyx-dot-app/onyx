@@ -97,6 +97,8 @@ def tenant(
             "user__pinned_persona",
             "skill",
             "skill_version",
+            "marketplace__user_group",
+            "license",
             "skill__user",
             "skill__user_group",
             "user_skill_preference",
