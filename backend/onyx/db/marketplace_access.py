@@ -165,10 +165,13 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
                 OnyxErrorCode.INVALID_INPUT, "Not available is not supported yet."
             )
         community = self.tier == Tier.COMMUNITY
+        current = self.state(resource)
         if community and (
-            change.group_shares
-            or change.group_installation_policies
-            != self.state(resource).group_installation_policies
+            (
+                change.group_shares is not None
+                and change.group_shares != current.group_shares
+            )
+            or change.group_installation_policies != current.group_installation_policies
         ):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT, "Group access requires a paid tier."

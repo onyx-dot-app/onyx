@@ -261,6 +261,42 @@ def test_scoped_company_skill_and_marketplace_changes(
         reset_marketplace_skill_access__no_commit(skill.id, scoped, session)
 
 
+@pytest.mark.parametrize("clear", [False, True])
+def test_community_preserves_saved_marketplace_groups(
+    session: Session, marketplace: Marketplace, clear: bool
+) -> None:
+    admin, group_id = manager(session, global_access=True)
+    share(
+        session,
+        marketplace,
+        admin,
+        ResourceAccessChange(group_shares={group_id: Share.VIEWER}),
+    )
+    apply(session, marketplace, catalog("first"))
+
+    def update() -> None:
+        mutate_resource_access(
+            [marketplace.id],
+            ResourceAccessChange(
+                group_shares={} if clear else {group_id: Share.VIEWER}
+            ),
+            admin,
+            session,
+            MarketplaceAccessAdapter(Tier.COMMUNITY),
+        )
+
+    if clear:
+        with pytest.raises(OnyxError, match="Group access requires a paid tier"):
+            update()
+    else:
+        update()
+    session.expire_all()
+    assert {share.user_group_id for share in marketplace.group_shares} == {group_id}
+    follower = skills(session, marketplace)[0]
+    assert {share.user_group_id for share in follower.group_shares} == {group_id}
+    assert follower.follows_marketplace_access
+
+
 def test_community_and_downgrade_cannot_recreate_group_grants(
     session: Session, marketplace: Marketplace, monkeypatch: pytest.MonkeyPatch
 ) -> None:

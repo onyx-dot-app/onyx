@@ -258,7 +258,8 @@ The library preview of an external-app skill calls the same renderer
     Reset checks freshly loaded authority after acquiring the membership lock.
     Scoped managers may preserve but cannot change direct-user grants on company skills. MIT-only company
     followers are public. Licensed builds copy stored defaults even during license
-    failures. Explicit downgrade persists public defaults and removes marketplace
+    failures. A Community access write may preserve existing groups but cannot
+    change or clear them. Explicit downgrade persists public defaults and removes marketplace
     group grants so sync cannot recreate them.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
     deletion explicitly allows retirement. New access entry points must use the
