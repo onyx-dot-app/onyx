@@ -389,6 +389,7 @@ def test_suspend_hook_amends_results_before_the_run_suspends() -> None:
     run = agent.start(max_steps=2, coordinator=coordinator, on_event=events.append)
     try:
         assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
         assert [[result.text for result in results] for results in hook.calls] == [
             ["running"]
         ]
@@ -446,6 +447,7 @@ def test_suspend_hook_stopped_by_cancellation_finishes_the_run() -> None:
     )
     try:
         assert run.wait_until_settled(3).status == RunStatus.CANCELLED
+        assert run.wait_for_idle(3)
         assert len(finish.calls) == 1
         end = next(event for event in events if isinstance(event, AgentEndEvent))
         assert end.outcome == RunStatus.CANCELLED
