@@ -1342,7 +1342,9 @@ def execute_program(
             result=bounded(result, "code mode result"),
             error=bounded(error, "code mode error"),
             duration_seconds=run.elapsed,
-            type_check_notes=run.type_check_notes if status != "completed" else None,
+            type_check_notes=None
+            if status == "completed"
+            else bounded(run.type_check_notes, "type checker notes"),
             # A stop can surface as an exception that the program raises.
             commits_store=status == "completed"
             or (raised and run.abort_reason() is None),

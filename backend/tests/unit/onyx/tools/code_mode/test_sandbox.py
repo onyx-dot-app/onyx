@@ -1611,3 +1611,13 @@ def test_an_async_host_function_answers_when_awaited_without_a_tool_call() -> No
     )
     assert [call.function_name for call in recorder.calls] == ["search"]
     assert result.tool_call_count == 1
+
+
+def test_type_checker_notes_stay_within_the_output_limit() -> None:
+    code = "".join(f"x{i}: int = 'a'\n" for i in range(60)) + "1 / 0\n"
+    result = run(code)
+    assert result.status == "failed"
+    assert result.type_check_notes is not None
+    # The last diagnostic is kept.
+    assert "main.py:60:" in result.type_check_notes
+    assert len(result.type_check_notes) < LIMITS.max_output_chars + 100
