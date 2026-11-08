@@ -127,16 +127,11 @@ def prepare_skill_version_write(
     with db_session.no_autoflush:
         observation = skill_content_snapshot(skill)
         previous = _legacy_version(skill)
-        try:
-            metadata = _prepare_metadata(
-                previous,
-                get_default_file_store(),
-                verify_bundle=previous.content_digest
-                == ingested.metadata.content_digest,
-            )
-        except Exception:
-            logger.warning("Could not read previous skill version: %s", previous.id)
-            metadata = None
+        metadata = _prepare_metadata(
+            previous,
+            get_default_file_store(),
+            verify_bundle=previous.content_digest == ingested.metadata.content_digest,
+        )
     return PreparedSkillVersionWrite(observation, metadata)
 
 

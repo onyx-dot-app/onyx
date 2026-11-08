@@ -246,6 +246,8 @@ The library preview of an external-app skill calls the same renderer
     Batch imports stage all uploads before access locks and clean rejected blobs after
     commit. Single creation and replacement roll back before failure cleanup.
     Uncertain commits leave staged blobs for the orphan sweep.
+    Unexpected storage or credential errors during content preparation abort the save;
+    only the shared metadata reader classifies missing or malformed stored content.
     Company marketplace access changes clear `follows_marketplace_access`;
     unchanged shares keep the setting.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
