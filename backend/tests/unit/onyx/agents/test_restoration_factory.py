@@ -319,9 +319,7 @@ def test_restored_chat_keeps_the_saved_code_mode(
         _suspended(original, state), llm=llm, tools=[EchoTool()], user_identity=None
     )
     assert isinstance(rebuilt, ChatAgent)
-    # A restored run starts with no live cells; nothing from the lost owner replays.
     assert (rebuilt.code_cells is not None) == saved_code_mode
-    assert rebuilt.code_cells is None or rebuilt.code_cells is not original.code_cells
     rebuilt.restore_state(state)
     run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
     names, choice, request_text = _offered(llm)

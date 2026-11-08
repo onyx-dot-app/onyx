@@ -365,48 +365,50 @@ def test_stored_values_reach_a_program_in_a_later_turn(
         chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
         db_session.commit()
 
-    first = ChatLLM(
-        [
-            code_step(
-                "store",
-                "greeting = await acme__hello(name='alpha')\n"
-                "store('greeting', {'text': greeting['result']})\n"
-                "store('unused', None)\n"
-                "raise ValueError('after storing')\n",
-            ),
-            Delta(content="Saved."),
-        ]
-    )
-    assert final_answer(send(chat_session.id, user, first, "Save a greeting.")) == (
-        "Saved."
-    )
-    # A program that stops at an uncaught exception still commits its writes.
-    # Deleting a missing key changes nothing, so the commit leaves it out.
-    stored = last_tool_text(first, "store")
-    assert "ValueError: after storing" in stored
-    assert stored.endswith("Stored: greeting.")
+    try:
+        first = ChatLLM(
+            [
+                code_step(
+                    "store",
+                    "greeting = await acme__hello(name='alpha')\n"
+                    "store('greeting', {'text': greeting['result']})\n"
+                    "store('unused', None)\n"
+                    "raise ValueError('after storing')\n",
+                ),
+                Delta(content="Saved."),
+            ]
+        )
+        assert final_answer(send(chat_session.id, user, first, "Save a greeting.")) == (
+            "Saved."
+        )
+        # A program that stops at an uncaught exception still commits its writes.
+        # Deleting a missing key changes nothing, so the commit leaves it out.
+        stored = last_tool_text(first, "store")
+        assert "ValueError: after storing" in stored
+        assert stored.endswith("Stored: greeting.")
 
-    # A new turn runs in a new interpreter; the store comes from the saved turn.
-    second = ChatLLM(
-        [
-            code_step(
-                "load",
-                "print(load('greeting')['text'])\n"
-                "try:\n"
-                "    greeting\n"
-                "except NameError:\n"
-                "    print('fresh interpreter')\n",
-            ),
-            Delta(content="Loaded."),
-        ]
-    )
-    assert final_answer(send(chat_session.id, user, second, "Read it back.")) == (
-        "Loaded."
-    )
-    text = last_tool_text(second, "load")
-    assert "Hello, alpha!\nfresh interpreter" in text
-    if temporary:
-        teardown_incognito_session(chat_session.id)
+        # A new turn runs in a new interpreter; the store comes from the saved turn.
+        second = ChatLLM(
+            [
+                code_step(
+                    "load",
+                    "print(load('greeting')['text'])\n"
+                    "try:\n"
+                    "    greeting\n"
+                    "except NameError:\n"
+                    "    print('fresh interpreter')\n",
+                ),
+                Delta(content="Loaded."),
+            ]
+        )
+        assert final_answer(send(chat_session.id, user, second, "Read it back.")) == (
+            "Loaded."
+        )
+        text = last_tool_text(second, "load")
+        assert "Hello, alpha!\nfresh interpreter" in text
+    finally:
+        if temporary:
+            teardown_incognito_session(chat_session.id)
 
 
 def _nested_hello_data(packets: Sequence[object]) -> list[str]:
