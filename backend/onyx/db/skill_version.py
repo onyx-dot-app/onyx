@@ -174,7 +174,12 @@ def persist_skill_version_validity(
     skill = db_session.scalar(
         select(Skill).where(Skill.id == skill_id).with_for_update(of=Skill)
     )
-    if skill is None or skill.current_version_id != version_id:
+    if skill is None:
+        return
+    db_session.refresh(
+        skill, ["current_version_id", "bundle_file_id", "current_version"]
+    )
+    if skill.current_version_id != version_id:
         return
     version = skill.current_version
     if (

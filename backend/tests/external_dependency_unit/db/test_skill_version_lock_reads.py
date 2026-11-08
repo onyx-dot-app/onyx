@@ -19,6 +19,7 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.db.skill import SkillManagementPolicy, fetch_skill
+from onyx.db.skill_version import persist_skill_version_validity
 from onyx.server.features.skill import api
 from onyx.skills.bundle import inspect_custom_bundle
 from onyx.skills.content import read_custom_skill_bundle_bytes
@@ -31,9 +32,11 @@ from tests.external_dependency_unit.db.test_skill_version_writes import tenant a
 from tests.external_dependency_unit.db.test_skill_version_writes import user as user
 
 
-@pytest.mark.parametrize("operation", ["upload", "associate", "replace-associations"])
+@pytest.mark.parametrize(
+    "operation", ["upload", "associate", "replace-associations", "validity"]
+)
 def test_waiting_edit_reads_committed_version(
-    operation: Literal["upload", "associate", "replace-associations"],
+    operation: Literal["upload", "associate", "replace-associations", "validity"],
     tenant: str,
     session: Session,
     user: User,
@@ -53,6 +56,13 @@ def test_waiting_edit_reads_committed_version(
     session.add(app)
     session.commit()
     app_id, user_id, skill_id = app.id, user.id, response.id
+    skill = session.get(Skill, skill_id)
+    assert skill is not None and skill.current_version is not None
+    version_id = skill.current_version.id
+    bundle_file_id = skill.current_version.bundle_file_id
+    if operation == "validity":
+        skill.current_version.is_valid = skill.is_valid = None
+        session.commit()
     waiting_pid: Queue[int] = Queue()
 
     def second_edit() -> None:
@@ -65,7 +75,15 @@ def test_waiting_edit_reads_committed_version(
                 pid = writer.scalar(select(func.pg_backend_pid()))
                 assert isinstance(pid, int)
                 waiting_pid.put(pid)
-                if operation == "upload":
+                if operation == "validity":
+                    persist_skill_version_validity(
+                        skill_id=skill_id,
+                        version_id=version_id,
+                        bundle_file_id=bundle_file_id,
+                        is_valid=False,
+                        db_session=writer,
+                    )
+                elif operation == "upload":
                     api.upload_current_user_skill_files(
                         skill_id, upload(b"second", "second.txt"), second_user, writer
                     )
@@ -102,9 +120,14 @@ def test_waiting_edit_reads_committed_version(
                         "second edit never waited for the skill lock"
                     )
                     time.sleep(0.01)
-            api.upload_current_user_skill_files(
-                skill_id, upload(b"first", "first.txt"), user, session
-            )
+            if operation == "validity":
+                api.replace_current_user_skill_bundle(
+                    skill_id, upload(bundle("locked-reader")), user, session
+                )
+            else:
+                api.upload_current_user_skill_files(
+                    skill_id, upload(b"first", "first.txt"), user, session
+                )
         finally:
             session.rollback()
         future.result(timeout=15)
@@ -112,6 +135,10 @@ def test_waiting_edit_reads_committed_version(
     session.expire_all()
     skill = session.get(Skill, skill_id)
     assert skill is not None
+    if operation == "validity":
+        assert skill.current_version_id == version_id
+        assert skill.current_is_valid is True and skill.is_valid is True
+        return
     paths = {
         file.path
         for file in inspect_custom_bundle(read_custom_skill_bundle_bytes(skill)).files
