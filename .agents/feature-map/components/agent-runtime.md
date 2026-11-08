@@ -87,7 +87,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   amendment can also give a call that Stop interrupted its result. An
   amendment that names no started call is logged and skipped. An amendment
   inside the span of the compaction checkpoint drops the checkpoint, so the
-  next request summarizes the amended result. A hook that fails or stops for
+  next request builds its context from the amended result, and compacts only
+  when that context is over budget. A hook that fails or stops for
   cancellation sets no results; the run still ends.
   `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
   amendments before it captures state. A suspend hook that fails sets no

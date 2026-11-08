@@ -408,13 +408,15 @@ class ResponsePresenter:
         elif isinstance(event, ToolResultAmendedEvent):
             if event.tool_call.name in HIDDEN_TOOLS:
                 return
-            tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
+            key = (event.run_id, event.message_id, event.tool_call.id)
+            tool = self.tools.get(key)
             if tool is None:
                 # A call recorded before a restore has no card in this stream;
-                # the amended result renders in a new card. An ended card keeps
-                # what it showed; replay shows the saved result.
+                # the amended result renders in a new card, which later
+                # amendments reuse. An ended card keeps what it showed; replay
+                # shows the saved result.
                 renderer = self.renderers.get(event.run_id)
-                tool = ToolRenderer(
+                tool = self.tools[key] = ToolRenderer(
                     event.tool_call,
                     renderer.tool_placement(event.tool_call.id)
                     if renderer is not None

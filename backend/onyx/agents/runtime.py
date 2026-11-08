@@ -1299,7 +1299,7 @@ class Run:
         one its result. The call keeps its execution status. An amendment that names
         no started call of this run is logged and skipped. A compaction summary that
         covers an amended result describes the replaced one, so it is dropped and
-        the next request compacts again.
+        the next request builds its context from the amended result.
         """
         started = {
             call.id: (index, message_id, step.tools[call.id], call)

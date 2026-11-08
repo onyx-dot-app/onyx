@@ -1,5 +1,6 @@
 """A result that a release hook sets for an ended call reaches the saved replay."""
 
+from onyx.agents.events import ToolResultAmendedEvent
 from onyx.agents.models import ToolResultAmendment
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool
@@ -110,3 +111,28 @@ def test_an_amended_hidden_call_stays_hidden() -> None:
         isinstance(packet.obj, (CustomToolStart, CustomToolDelta)) for packet in live
     )
     assert isinstance(live[-1].obj, OverallStop)
+
+
+def test_a_restored_call_amended_twice_renders_one_card() -> None:
+    """A suspend hook and then a finish hook amend a call from before a restore."""
+    live: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(live.append))
+    for content in ("suspended", "closed"):
+        presenter.consume(
+            ToolResultAmendedEvent(
+                run_id="restored",
+                message_id="earlier-message",
+                step_index=0,
+                tool_call=ToolCall(id=CALL_ID, name="lookup", arguments={}),
+                result=ToolResult(content=content),
+            )
+        )
+
+    # One card ends with the first amendment and keeps what it showed.
+    card = [
+        packet.obj
+        for packet in live
+        if isinstance(packet.obj, (CustomToolStart, CustomToolDelta, SectionEnd))
+    ]
+    assert [type(obj) for obj in card] == [CustomToolStart, CustomToolDelta, SectionEnd]
+    assert _results(card) == ["suspended"]
