@@ -1237,6 +1237,9 @@ class SessionManager:
     def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
         self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
 
+    def close_session_event_bus(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.close_session_event_bus(sandbox_id, session_id)
+
     # =========================================================================
     # Artifact Operations
     # =========================================================================
