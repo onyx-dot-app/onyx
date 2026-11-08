@@ -330,6 +330,19 @@ class SchemaRefBudget(BaseModel):
     total: int = 0
 
 
+class SchemaType(BaseModel):
+    """A JSON Schema as a Python type annotation, and whether it accepts null.
+
+    One walk decides both, so a stub's type and how a call sends None agree.
+    An annotation of Any can still accept null.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    annotation: str
+    nullable: bool
+
+
 class SearchableFunction(BaseModel):
     """A deferred function as tool_search() matches and returns it."""
 

@@ -16,7 +16,7 @@ from onyx.tools.tool_implementations.code_mode.stubs import (
     build_tool_stubs,
     function_name,
     program_value,
-    schema_annotation,
+    schema_type,
     tool_arguments,
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -206,11 +206,115 @@ def test_strict_nullable_required_arguments_are_optional_and_sent_as_null() -> N
     }
 
 
+def test_null_admitted_through_enum_const_or_ref_is_sent() -> None:
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "$defs": {"MaybeInt": {"anyOf": [{"type": "integer"}, {"type": "null"}]}},
+        "properties": {
+            "mode": {"enum": ["a", None]},
+            "unset": {"const": None},
+            "count": {"$ref": "#/$defs/MaybeInt"},
+            "label": {"enum": ["x", "y"]},
+        },
+        "required": ["mode", "unset", "count"],
+    }
+    function = build_tool_stubs(
+        [FakeTool("update", _unused, parameters=parameters)]
+    ).functions["update"]
+    assert function.nullable_arguments == {"mode", "unset", "count"}
+    assert tool_arguments(function, {"mode": None, "label": None}) == {
+        "mode": None,
+        "unset": None,
+        "count": None,
+    }
+
+
+def test_a_long_ref_chain_builds_and_types_nullability_with_its_annotation() -> None:
+    length = 1_200
+    defs: dict[str, JsonValue] = {
+        f"d{index}": {"$ref": f"#/$defs/d{index + 1}"} for index in range(length)
+    }
+    defs[f"d{length}"] = {"type": ["integer", "null"]}
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "$defs": defs,
+        "properties": {
+            "deep": {"$ref": "#/$defs/d0"},
+            "near": {"$ref": f"#/$defs/d{length - 1}"},
+        },
+        "required": ["deep", "near"],
+    }
+    function = build_tool_stubs(
+        [FakeTool("chain", _unused, parameters=parameters)]
+    ).functions["chain"]
+    # Past the depth bound the type is Any and null is not known to be
+    # accepted; a short chain types both.
+    assert "deep: Any" in function.stub
+    assert "near: int | None = None" in function.stub
+    assert function.nullable_arguments == {"near"}
+
+
+def test_additional_properties_admit_other_keyword_arguments() -> None:
+    open_map = FakeTool(
+        "tag",
+        _unused,
+        parameters={"type": "object", "additionalProperties": {"type": "string"}},
+    )
+    mixed = FakeTool(
+        "label",
+        _unused,
+        parameters={
+            "type": "object",
+            "properties": {"kwargs": {"type": "integer"}},
+            "required": ["kwargs"],
+            "additionalProperties": True,
+        },
+    )
+    functions = build_tool_stubs([open_map, mixed]).functions
+    assert "async def tag(**kwargs: str) -> Any:" in functions["tag"].stub
+    assert "async def label(*, kwargs: int, **kwargs_: Any) -> Any:" in (
+        functions["label"].stub
+    )
+    assert tool_arguments(functions["tag"], {"team": "core"}) == {"team": "core"}
+
+
+def test_argument_names_are_python_identifiers_in_normal_form() -> None:
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"version²": {"type": "string"}, "ﬁle": {"type": "string"}},
+    }
+    function = build_tool_stubs(
+        [FakeTool("fetch", _unused, parameters=parameters)]
+    ).functions["fetch"]
+    assert function.argument_names == {"file": "ﬁle", "version2": "version²"}
+    ast.parse(function.stub)
+
+
+def test_required_entries_that_are_not_names_are_ignored() -> None:
+    tool = FakeMCPTool(
+        "list-tickets",
+        _unused,
+        {
+            "type": "object",
+            "properties": {"filter": {"type": "object", "required": [{}]}},
+            "required": [[], "filter"],
+        },
+        output_schema={
+            "type": "object",
+            "properties": {"tickets": {"type": "array"}},
+            "required": [[]],
+        },
+    )
+    function = build_tool_stubs([tool]).functions["acme__list_tickets"]
+    assert function.required_arguments == {"filter"}
+    assert "tickets: NotRequired[list[Any]]" in "\n".join(function.declarations)
+
+
 def test_recursive_refs_are_bounded() -> None:
     root: dict[str, JsonValue] = {
         "$defs": {"Tree": {"type": "array", "items": {"$ref": "#/$defs/Tree"}}}
     }
-    annotation = schema_annotation({"$ref": "#/$defs/Tree"}, root)
+    annotation = schema_type({"$ref": "#/$defs/Tree"}, root).annotation
     assert annotation == "list[list[Any]]"
 
 
@@ -249,10 +353,10 @@ def test_result_declarations_count_toward_the_stub_limit() -> None:
 def test_multi_member_all_of_is_any() -> None:
     root: dict[str, JsonValue] = {}
     assert (
-        schema_annotation({"allOf": [{"type": "integer"}, {"minimum": 1}]}, root)
+        schema_type({"allOf": [{"type": "integer"}, {"minimum": 1}]}, root).annotation
         == "Any"
     )
-    assert schema_annotation({"allOf": [{"type": "integer"}]}, root) == "int"
+    assert schema_type({"allOf": [{"type": "integer"}]}, root).annotation == "int"
 
 
 def test_docstring_text_cannot_end_the_docstring() -> None:

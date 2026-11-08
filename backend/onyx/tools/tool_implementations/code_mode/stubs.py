@@ -4,6 +4,7 @@ import builtins
 import json
 import keyword
 import re
+import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import UnionType
 from typing import Literal, Union, cast, get_args, get_origin
@@ -20,6 +21,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import (
     SchemaRefBudget,
+    SchemaType,
     SearchableFunction,
     StubParameter,
     StubResultType,
@@ -77,8 +79,6 @@ _RESERVED_FUNCTION_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_IDENTIFIER_INVALID = re.compile(r"\W")
-
 
 class ToolFunction(BaseModel):
     """One tool as a Python function inside the sandbox. It stays here, not in
@@ -122,8 +122,14 @@ def python_identifier(
     name: str, *, fallback: str, reserved: frozenset[str], suffix: str
 ) -> str:
     """Map a name to a Python identifier; `suffix` is appended to reserved names."""
-    identifier = _IDENTIFIER_INVALID.sub("_", name.strip()) or fallback
-    if identifier[0].isdigit():
+    # Python reads identifiers in NFKC form, so a program's keyword names arrive
+    # normalized; keep only characters that are valid in that form.
+    normalized = unicodedata.normalize("NFKC", name.strip())
+    identifier = (
+        "".join(char if f"_{char}".isidentifier() else "_" for char in normalized)
+        or fallback
+    )
+    if not identifier.isidentifier():
         identifier = f"{fallback}_{identifier}"
     return f"{identifier}{suffix}" if identifier in reserved else identifier
 
@@ -229,23 +235,26 @@ _PRIMITIVES = {
 }
 
 
-def schema_annotation(
+_UNKNOWN = SchemaType(annotation=ANY, nullable=False)
+
+
+def schema_type(
     schema: JsonValue,
     root: Mapping[str, JsonValue],
     *,
     budget: SchemaRefBudget | None = None,
     ref_path: tuple[str, ...] = (),
     depth: int = 0,
-) -> str:
-    """Render a JSON Schema as a Python type annotation; unknown shapes become Any."""
+) -> SchemaType:
+    """Render a JSON Schema as a Python type annotation and whether it accepts
+    null; unknown shapes become Any. `$ref` chains end at MAX_SCHEMA_DEPTH and
+    the reference bounds, as Any that is not known to accept null."""
     budget = budget if budget is not None else SchemaRefBudget()
     if not isinstance(schema, dict) or depth > MAX_SCHEMA_DEPTH:
-        return ANY
+        return _UNKNOWN
 
-    def render(sub: JsonValue, path: tuple[str, ...] = ref_path) -> str:
-        return schema_annotation(
-            sub, root, budget=budget, ref_path=path, depth=depth + 1
-        )
+    def render(sub: JsonValue, path: tuple[str, ...] = ref_path) -> SchemaType:
+        return schema_type(sub, root, budget=budget, ref_path=path, depth=depth + 1)
 
     ref = schema.get("$ref")
     if isinstance(ref, str):
@@ -253,64 +262,70 @@ def schema_annotation(
             ref_path.count(ref) >= MAX_REF_EXPANSIONS_PER_PATH
             or budget.total >= MAX_REF_EXPANSIONS_TOTAL
         ):
-            return ANY
+            return _UNKNOWN
         target = _resolve_ref(ref, root)
         if target is None:
-            return ANY
+            return _UNKNOWN
         budget.total += 1
         return render(target, (*ref_path, ref))
 
-    nullable = schema.get("nullable") is True
+    explicit_null = schema.get("nullable") is True
 
-    def with_null(annotation: str) -> str:
-        return _union([annotation, "None"]) if nullable else annotation
+    def typed(annotation: str, nullable: bool = False) -> SchemaType:
+        nullable = nullable or explicit_null
+        return SchemaType(
+            annotation=_union([annotation, "None"]) if nullable else annotation,
+            nullable=nullable,
+        )
+
+    def union(members: Sequence[SchemaType]) -> SchemaType:
+        return typed(
+            _union([member.annotation for member in members] or [ANY]),
+            any(member.nullable for member in members),
+        )
 
     if "const" in schema:
-        literal = _literal([schema["const"]])
-        return with_null(literal) if literal else ANY
+        return typed(_literal([schema["const"]]) or ANY, schema["const"] is None)
 
     enum = schema.get("enum")
     if isinstance(enum, list):
-        literal = _literal(enum)
-        return with_null(literal) if literal else ANY
+        return typed(_literal(enum) or ANY, None in enum)
 
     for combinator in ("anyOf", "oneOf"):
         options = schema.get(combinator)
         if isinstance(options, list) and options:
-            return with_null(_union([render(option) for option in options]))
+            return union([render(option) for option in options])
 
     all_of = schema.get("allOf")
     if isinstance(all_of, list) and all_of:
         # Intersections have no Python spelling; one member renders exactly.
-        return with_null(render(all_of[0])) if len(all_of) == 1 else ANY
+        return union([render(all_of[0])]) if len(all_of) == 1 else typed(ANY)
 
-    schema_type = schema.get("type")
-    if isinstance(schema_type, list):
-        return with_null(
-            _union([render({**schema, "type": item}) for item in schema_type] or [ANY])
-        )
-    if schema_type is None:
-        schema_type = (
+    kind = schema.get("type")
+    if isinstance(kind, list):
+        return union([render({**schema, "type": item}) for item in kind])
+    if kind is None:
+        kind = (
             "object"
             if "properties" in schema
             else "array"
             if "items" in schema
             else None
         )
-    if not isinstance(schema_type, str):
-        return ANY
+    if not isinstance(kind, str):
+        return typed(ANY)
 
-    if schema_type in _PRIMITIVES:
-        return with_null(_PRIMITIVES[schema_type])
-    if schema_type == "array":
+    if kind in _PRIMITIVES:
+        return typed(_PRIMITIVES[kind], kind == "null")
+    if kind == "array":
         items = schema.get("items")
-        return with_null(f"list[{render(items) if items is not None else ANY}]")
-    if schema_type == "object":
+        return typed(f"list[{render(items).annotation if items is not None else ANY}]")
+    if kind == "object":
         additional = schema.get("additionalProperties")
         if not schema.get("properties") and isinstance(additional, dict):
-            return with_null(f"dict[str, {render(additional)}]")
-        return with_null("dict[str, Any]")
-    return ANY
+            return typed(f"dict[str, {render(additional).annotation}]")
+        return typed("dict[str, Any]")
+    return typed(ANY)
 
 
 def _clip(text: str, limit: int) -> str:
@@ -328,50 +343,49 @@ def _object_keys_summary(schema: JsonValue) -> str:
     properties = schema.get("properties")
     if not isinstance(properties, dict) or not properties:
         return ""
-    required = schema.get("required")
-    required_names = set(required) if isinstance(required, list) else set()
+    required_names = _required_names(schema)
     keys = [
         f"{name}{'' if name in required_names else '?'}" for name in sorted(properties)
     ]
     return f" Keys: {', '.join(keys)}."
 
 
-def _admits_null(schema: JsonValue) -> bool:
-    """Whether a JSON schema accepts null."""
-    if not isinstance(schema, dict):
-        return False
-    if schema.get("nullable") is True or schema.get("type") == "null":
-        return True
-    types = schema.get("type")
-    if isinstance(types, list) and "null" in types:
-        return True
-    return any(
-        isinstance(options, list) and any(_admits_null(option) for option in options)
-        for options in (schema.get("anyOf"), schema.get("oneOf"))
-    )
+def _required_names(schema: Mapping[str, JsonValue]) -> set[str]:
+    """The property names that `schema` requires; entries that are not str are
+    ignored."""
+    required = schema.get("required")
+    if not isinstance(required, list):
+        return set()
+    return {name for name in required if isinstance(name, str)}
 
 
 def _parameters(
     parameters: Mapping[str, JsonValue], *, typed: bool
-) -> tuple[list[StubParameter], dict[str, str]]:
+) -> tuple[list[StubParameter], dict[str, str], str | None]:
+    """The named arguments, their Python names mapped to the tool's names, and
+    the annotation of the other keyword arguments that the schema admits
+    through `additionalProperties`, or None when it admits none."""
+    budget = SchemaRefBudget()
+    additional = parameters.get("additionalProperties")
+    extra = (
+        (
+            schema_type(additional, parameters, budget=budget).annotation
+            if typed
+            else ANY
+        )
+        if additional is True or isinstance(additional, dict)
+        else None
+    )
     properties = parameters.get("properties")
     if not isinstance(properties, dict):
-        return [], {}
-    required_field = parameters.get("required")
+        return [], {}, extra
     # OpenAPI-derived schemas omit `required`; every argument is then optional.
-    required = (
-        {name for name in required_field if isinstance(name, str)}
-        if isinstance(required_field, list)
-        else set()
-    )
+    required = _required_names(parameters)
     names = unique_identifiers(properties, str, argument_name)
-    budget = SchemaRefBudget()
     result: list[StubParameter] = []
     for python_name, original in names.items():
         prop = properties[original]
-        annotation = (
-            schema_annotation(prop, parameters, budget=budget) if typed else ANY
-        )
+        rendered = schema_type(prop, parameters, budget=budget)
         description = ""
         if isinstance(prop, dict):
             raw = prop.get("description")
@@ -382,16 +396,16 @@ def _parameters(
         result.append(
             StubParameter(
                 python_name=python_name,
-                annotation=annotation,
+                annotation=rendered.annotation if typed else ANY,
                 required=original in required,
                 # Strict schemas list optional arguments as required and nullable.
-                nullable=_admits_null(prop),
+                nullable=rendered.nullable,
                 description=_clip(description, MAX_ARGUMENT_DESCRIPTION_CHARS),
             )
         )
     # Arguments without a default first, each group in name order.
     result.sort(key=lambda parameter: (parameter.has_default, parameter.python_name))
-    return result, names
+    return result, names, extra
 
 
 def _render_function(
@@ -403,20 +417,25 @@ def _render_function(
     tool_name: str,
     returns: str | None = None,
     usage: str | None = None,
-    open_signature: bool = False,
+    extra: str | None = None,
 ) -> str:
-    if open_signature:
-        signature = "**kwargs: Any"
-    elif parameters:
-        rendered = [
-            f"{p.python_name}: {_union([p.annotation, 'None'])} = None"
-            if p.has_default
-            else f"{p.python_name}: {p.annotation}"
-            for p in parameters
-        ]
-        signature = "*, " + ", ".join(rendered)
-    else:
-        signature = ""
+    """`extra` annotates the keyword arguments beyond `parameters`; None admits
+    none."""
+    rendered = [
+        f"{p.python_name}: {_union([p.annotation, 'None'])} = None"
+        if p.has_default
+        else f"{p.python_name}: {p.annotation}"
+        for p in parameters
+    ]
+    if rendered:
+        rendered.insert(0, "*")
+    if extra is not None:
+        taken = {p.python_name for p in parameters}
+        kwargs_name = "kwargs"
+        while kwargs_name in taken:
+            kwargs_name += "_"
+        rendered.append(f"**{kwargs_name}: {extra}")
+    signature = ", ".join(rendered)
     doc_lines = [description or "No description."]
     if tool_name != function_name:
         doc_lines.append(f"Tool name: {tool_name}")
@@ -531,15 +550,14 @@ def _schema_result_type(
         or any(not name.isidentifier() or name in _SYNTAX_NAMES for name in properties)
     ):
         return StubResultType(
-            annotation=schema_annotation(schema, schema), declarations=()
+            annotation=schema_type(schema, schema).annotation, declarations=()
         )
-    required_field = schema.get("required")
-    required = set(required_field) if isinstance(required_field, list) else set()
+    required = _required_names(schema)
     type_name = _type_name(function_name, taken)
     budget = SchemaRefBudget()
     fields = []
     for name, prop in properties.items():
-        annotation = schema_annotation(prop, schema, budget=budget)
+        annotation = schema_type(prop, schema, budget=budget).annotation
         fields.append(
             f"    {name}: {annotation if name in required else f'NotRequired[{annotation}]'}"
         )
@@ -572,7 +590,7 @@ def tool_function(
         (False, False, any_result),
         (False, True, any_result),
     ):
-        parameters, names = _parameters(definition.parameters, typed=typed)
+        parameters, names, extra = _parameters(definition.parameters, typed=typed)
         stub = _render_function(
             function_name,
             description,
@@ -581,7 +599,7 @@ def tool_function(
             tool_name=tool.name,
             returns=spec.returns,
             usage=spec.usage,
-            open_signature=open_signature,
+            extra=ANY if open_signature else extra,
         )
         if len(stub) + sum(len(text) for text in result.declarations) <= MAX_STUB_CHARS:
             break
