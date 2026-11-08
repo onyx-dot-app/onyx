@@ -14429,8 +14429,8 @@
         "associateButton": "关联现有技能",
         "create": {
           "github": {
-            "description": "如果您的技能在 GitHub 中，请先在技能页面导入，然后再将其与此应用关联。",
-            "label": "从 GitHub 导入"
+            "description": "在技能页面同步一个市场，然后将其中的技能与此应用关联。",
+            "label": "从 GitHub 同步"
           },
           "scratch": {
             "description": "编写说明并添加辅助文件。",
@@ -17166,88 +17166,11 @@
           "selected": "{count, plural, one {已选择 # 个技能包} other {已选择 # 个技能包}}",
           "result": "{imported, plural, one {已导入 # 个技能} other {已导入 # 个技能}}。{failed, plural, one {# 个失败} other {# 个失败}}。",
           "failure": "{name}：{reason}",
-          "requirement": "选择多个 ZIP 文件以批量导入技能。每个 ZIP 必须包含一个技能。"
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "取消"
-        },
-        "doneButton": {
-          "label": "完成"
-        },
-        "header": {
-          "chooseDescription": "从 {repository} 中选择技能。",
-          "completeDescription": "查看已添加到您技能中的内容。",
-          "completeTitle": "GitHub 导入完成",
-          "description": "从 GitHub 仓库导入一个或多个技能。",
-          "title": "从 GitHub 导入"
-        },
-        "importError": {
-          "message": "无法导入技能。",
-          "title": "无法导入技能"
-        },
-        "loadError": {
-          "message": "无法加载仓库。",
-          "title": "无法加载仓库"
-        },
-        "privateRepos": {
-          "askAdmin": "公开仓库可直接导入。导入私有仓库前，请联系管理员设置 GitHub。",
-          "connect": "公开仓库可直接导入。连接 GitHub 即可导入私有仓库。",
-          "connectButton": {
-            "label": "连接 GitHub"
-          },
-          "connected": "公开仓库可直接导入。私有仓库将使用您的 GitHub 连接。",
-          "needsConnection": "公开仓库可直接导入。私有仓库需要 GitHub 连接。",
-          "setUp": "公开仓库可直接导入。导入私有仓库前，请先设置 GitHub。",
-          "setUpButton": {
-            "label": "设置 GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "仓库"
-        },
-        "result": {
-          "disabledCount": "{count} 个导入后处于禁用状态，因为已有同名技能处于启用状态。",
-          "enabledCount": "{count} 个已自动启用。",
-          "failedCount": "{count} 个无法导入。",
-          "importedSection": {
-            "title": "已导入"
-          },
-          "importedTitle": "{count, plural, one {已导入 # 个技能} other {已导入 # 个技能}}",
-          "noneTitle": "未导入任何技能",
-          "notImportedSection": {
-            "title": "未导入"
-          },
-          "notSelectedCount": "{count} 个未选择。"
-        },
-        "selectAll": {
-          "ariaLabel": "选择全部可导入技能"
-        },
-        "selection": {
-          "label": "已选择 {selected} / {total, plural, one {# 个可导入技能} other {# 个可导入技能}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "选择 {name}"
-        },
-        "skillTag": {
-          "disabled": "已禁用",
-          "enabled": "已启用"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {导入技能} other {导入 # 个技能}}",
-          "importingLabel": "正在导入…",
-          "searchLabel": "搜索仓库",
-          "searchingLabel": "正在搜索…"
-        },
-        "unavailableFallback": "无法导入此技能。",
-        "unavailableTag": {
-          "label": "无法导入"
-        },
-        "sharing": {
-          "title": "导入技能的访问权限",
-          "configureButton": "配置访问权限",
-          "description": "这些访问设置适用于全部 {count, plural, one {# 个所选技能} other {# 个所选技能}}。"
+          "requirement": "选择多个 ZIP 文件以批量导入技能。每个 ZIP 必须包含一个技能。",
+          "configureAccess": "配置访问权限",
+          "done": "完成",
+          "importing": "正在导入…",
+          "submit": "{count, plural, one {导入技能} other {导入 # 个技能}}"
         }
       },
       "nameConflict": {
@@ -17638,6 +17561,19 @@
       "loadError": "无法加载市场默认设置。您的编辑将保留。",
       "companyOnly": "访问默认设置仅适用于公司市场。",
       "save": "保存默认设置"
+    },
+    "githubConnection": {
+      "askAdmin": "公开仓库可直接同步。同步私有仓库前，请联系管理员设置 GitHub。",
+      "connect": "公开仓库可直接同步。连接 GitHub 即可同步私有仓库。",
+      "connectButton": {
+        "label": "连接 GitHub"
+      },
+      "connected": "公开仓库可直接同步。私有仓库将使用您的 GitHub 连接。",
+      "needsConnection": "公开仓库可直接同步。私有仓库需要 GitHub 连接。",
+      "setUp": "公开仓库可直接同步。同步私有仓库前，请先设置 GitHub。",
+      "setUpButton": {
+        "label": "设置 GitHub"
+      }
     }
   }
 }

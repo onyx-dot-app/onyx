@@ -14429,8 +14429,8 @@
         "associateButton": "기존 스킬 연결",
         "create": {
           "github": {
-            "description": "스킬이 GitHub에 있다면 먼저 스킬 페이지에서 가져온 다음 이 앱에 연결하세요.",
-            "label": "GitHub에서 가져오기"
+            "description": "스킬 페이지에서 마켓플레이스를 동기화한 다음 해당 스킬을 이 앱에 연결하세요.",
+            "label": "GitHub에서 동기화"
           },
           "scratch": {
             "description": "지침을 작성하고 보조 파일을 추가합니다.",
@@ -17166,88 +17166,11 @@
           "selected": "{count, plural, one {스킬 번들 #개 선택됨} other {스킬 번들 #개 선택됨}}",
           "result": "{imported, plural, one {스킬 #개 가져옴} other {스킬 #개 가져옴}}. {failed, plural, one {#개 실패} other {#개 실패}}.",
           "failure": "{name}: {reason}",
-          "requirement": "여러 ZIP 파일을 선택하여 스킬을 함께 가져오세요. 각 ZIP에는 스킬 하나가 포함되어야 합니다."
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "취소"
-        },
-        "doneButton": {
-          "label": "완료"
-        },
-        "header": {
-          "chooseDescription": "{repository}에서 스킬을 선택하세요.",
-          "completeDescription": "스킬에 추가된 항목을 확인하세요.",
-          "completeTitle": "GitHub 가져오기 완료",
-          "description": "GitHub 리포지토리에서 스킬을 하나 이상 가져옵니다.",
-          "title": "GitHub에서 가져오기"
-        },
-        "importError": {
-          "message": "스킬을 가져오지 못했습니다.",
-          "title": "스킬을 가져오지 못했습니다"
-        },
-        "loadError": {
-          "message": "리포지토리를 불러오지 못했습니다.",
-          "title": "리포지토리를 불러오지 못했습니다"
-        },
-        "privateRepos": {
-          "askAdmin": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리를 가져오려면 관리자에게 GitHub 설정을 요청하세요.",
-          "connect": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리를 가져오려면 GitHub를 연결하세요.",
-          "connectButton": {
-            "label": "GitHub 연결"
-          },
-          "connected": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리는 사용자의 GitHub 연결을 사용합니다.",
-          "needsConnection": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리에는 GitHub 연결이 필요합니다.",
-          "setUp": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리를 가져오기 전에 GitHub를 설정하세요.",
-          "setUpButton": {
-            "label": "GitHub 설정"
-          }
-        },
-        "repositoryInput": {
-          "label": "리포지토리"
-        },
-        "result": {
-          "disabledCount": "이름이 같은 다른 스킬이 활성화되어 있어 {count}개를 비활성 상태로 가져왔습니다.",
-          "enabledCount": "{count}개를 자동으로 활성화했습니다.",
-          "failedCount": "{count}개를 가져오지 못했습니다.",
-          "importedSection": {
-            "title": "가져옴"
-          },
-          "importedTitle": "{count, plural, one {스킬 #개를 가져왔습니다} other {스킬 #개를 가져왔습니다}}",
-          "noneTitle": "가져온 스킬이 없습니다",
-          "notImportedSection": {
-            "title": "가져오지 않음"
-          },
-          "notSelectedCount": "{count}개를 선택하지 않았습니다."
-        },
-        "selectAll": {
-          "ariaLabel": "가져올 수 있는 스킬 모두 선택"
-        },
-        "selection": {
-          "label": "가져올 수 있는 스킬 {total, plural, one {#개} other {#개}} 중 {selected}개 선택됨"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} 선택"
-        },
-        "skillTag": {
-          "disabled": "비활성화됨",
-          "enabled": "활성화됨"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {스킬 가져오기} other {스킬 #개 가져오기}}",
-          "importingLabel": "가져오는 중…",
-          "searchLabel": "리포지토리 검색",
-          "searchingLabel": "검색 중…"
-        },
-        "unavailableFallback": "이 스킬은 가져올 수 없습니다.",
-        "unavailableTag": {
-          "label": "가져올 수 없음"
-        },
-        "sharing": {
-          "title": "가져올 스킬의 액세스",
-          "configureButton": "액세스 설정",
-          "description": "이 액세스 설정은 선택한 {count, plural, one {스킬 #개} other {스킬 #개}} 모두에 적용됩니다."
+          "requirement": "여러 ZIP 파일을 선택하여 스킬을 함께 가져오세요. 각 ZIP에는 스킬 하나가 포함되어야 합니다.",
+          "configureAccess": "액세스 설정",
+          "done": "완료",
+          "importing": "가져오는 중…",
+          "submit": "{count, plural, one {스킬 가져오기} other {스킬 #개 가져오기}}"
         }
       },
       "nameConflict": {
@@ -17638,6 +17561,19 @@
       "loadError": "마켓플레이스 기본값을 불러올 수 없습니다. 편집 내용은 유지됩니다.",
       "companyOnly": "액세스 기본값은 회사 마켓플레이스에서만 사용할 수 있습니다.",
       "save": "기본값 저장"
+    },
+    "githubConnection": {
+      "askAdmin": "공개 리포지토리는 바로 동기화됩니다. 비공개 리포지토리를 동기화하려면 관리자에게 GitHub 설정을 요청하세요.",
+      "connect": "공개 리포지토리는 바로 동기화됩니다. 비공개 리포지토리를 동기화하려면 GitHub를 연결하세요.",
+      "connectButton": {
+        "label": "GitHub 연결"
+      },
+      "connected": "공개 리포지토리는 바로 동기화됩니다. 비공개 리포지토리는 사용자의 GitHub 연결을 사용합니다.",
+      "needsConnection": "공개 리포지토리는 바로 동기화됩니다. 비공개 리포지토리에는 GitHub 연결이 필요합니다.",
+      "setUp": "공개 리포지토리는 바로 동기화됩니다. 비공개 리포지토리를 동기화하기 전에 GitHub를 설정하세요.",
+      "setUpButton": {
+        "label": "GitHub 설정"
+      }
     }
   }
 }

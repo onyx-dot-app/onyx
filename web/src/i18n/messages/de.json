@@ -14429,8 +14429,8 @@
         "associateButton": "Vorhandenen verknüpfen",
         "create": {
           "github": {
-            "description": "Wenn Ihre Skills in GitHub liegen, importieren Sie sie zuerst auf der Skills-Seite und verknüpfen Sie sie dann mit dieser App.",
-            "label": "Aus GitHub importieren"
+            "description": "Synchronisieren Sie einen Marketplace auf der Skills-Seite und verknüpfen Sie dann seine Skills mit dieser App.",
+            "label": "Mit GitHub synchronisieren"
           },
           "scratch": {
             "description": "Schreiben Sie Anweisungen und fügen Sie unterstützende Dateien hinzu.",
@@ -17166,88 +17166,11 @@
           "selected": "{count, plural, one {# Skill-Paket ausgewählt} other {# Skill-Pakete ausgewählt}}",
           "result": "{imported, plural, one {# Skill importiert} other {# Skills importiert}}. {failed, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}.",
           "failure": "{name}: {reason}",
-          "requirement": "Wählen Sie mehrere ZIP-Dateien aus, um Skills gemeinsam zu importieren. Jede ZIP-Datei muss einen Skill enthalten."
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "Abbrechen"
-        },
-        "doneButton": {
-          "label": "Fertig"
-        },
-        "header": {
-          "chooseDescription": "Wählen Sie Skills aus {repository}.",
-          "completeDescription": "Prüfen Sie, was zu Ihren Skills hinzugefügt wurde.",
-          "completeTitle": "GitHub-Import abgeschlossen",
-          "description": "Importieren Sie einen oder mehrere Skills aus einem GitHub-Repository.",
-          "title": "Aus GitHub importieren"
-        },
-        "importError": {
-          "message": "Die Skills konnten nicht importiert werden.",
-          "title": "Die Skills konnten nicht importiert werden"
-        },
-        "loadError": {
-          "message": "Das Repository konnte nicht geladen werden.",
-          "title": "Das Repository konnte nicht geladen werden"
-        },
-        "privateRepos": {
-          "askAdmin": "Öffentliche Repositorys werden direkt importiert. Bitten Sie einen Administrator, GitHub einzurichten, bevor Sie private Repositorys importieren.",
-          "connect": "Öffentliche Repositorys werden direkt importiert. Verbinden Sie GitHub, um private Repositorys zu importieren.",
-          "connectButton": {
-            "label": "GitHub verbinden"
-          },
-          "connected": "Öffentliche Repositorys werden direkt importiert. Private Repositorys verwenden Ihre GitHub-Verbindung.",
-          "needsConnection": "Öffentliche Repositorys werden direkt importiert. Private Repositorys erfordern eine GitHub-Verbindung.",
-          "setUp": "Öffentliche Repositorys werden direkt importiert. Richten Sie GitHub ein, bevor Sie private Repositorys importieren.",
-          "setUpButton": {
-            "label": "GitHub einrichten"
-          }
-        },
-        "repositoryInput": {
-          "label": "Repository"
-        },
-        "result": {
-          "disabledCount": "{count} deaktiviert importiert, weil ein anderer Skill mit demselben Namen aktiviert ist.",
-          "enabledCount": "{count} automatisch aktiviert.",
-          "failedCount": "{count} konnten nicht importiert werden.",
-          "importedSection": {
-            "title": "Importiert"
-          },
-          "importedTitle": "{count, plural, one {# Skill importiert} other {# Skills importiert}}",
-          "noneTitle": "Es wurden keine Skills importiert",
-          "notImportedSection": {
-            "title": "Nicht importiert"
-          },
-          "notSelectedCount": "{count} nicht ausgewählt."
-        },
-        "selectAll": {
-          "ariaLabel": "Alle importierbaren Skills auswählen"
-        },
-        "selection": {
-          "label": "{selected} von {total, plural, one {# importierbaren Skill} other {# importierbaren Skills}} ausgewählt"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} auswählen"
-        },
-        "skillTag": {
-          "disabled": "Deaktiviert",
-          "enabled": "Aktiviert"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {Skill importieren} other {# Skills importieren}}",
-          "importingLabel": "Wird importiert…",
-          "searchLabel": "Repository durchsuchen",
-          "searchingLabel": "Wird gesucht…"
-        },
-        "unavailableFallback": "Dieser Skill kann nicht importiert werden.",
-        "unavailableTag": {
-          "label": "Nicht importierbar"
-        },
-        "sharing": {
-          "title": "Zugriff auf importierte Skills",
-          "configureButton": "Zugriff konfigurieren",
-          "description": "Diese Zugriffseinstellungen gelten für {count, plural, one {den ausgewählten Skill} other {alle # ausgewählten Skills}}."
+          "requirement": "Wählen Sie mehrere ZIP-Dateien aus, um Skills gemeinsam zu importieren. Jede ZIP-Datei muss einen Skill enthalten.",
+          "configureAccess": "Zugriff konfigurieren",
+          "done": "Fertig",
+          "importing": "Wird importiert…",
+          "submit": "{count, plural, one {Skill importieren} other {# Skills importieren}}"
         }
       },
       "nameConflict": {
@@ -17638,6 +17561,19 @@
       "loadError": "Die Marketplace-Vorgaben konnten nicht geladen werden. Ihre Änderungen bleiben erhalten.",
       "companyOnly": "Zugriffsvorgaben sind nur für Unternehmens-Marketplaces verfügbar.",
       "save": "Vorgaben speichern"
+    },
+    "githubConnection": {
+      "askAdmin": "Öffentliche Repositorys werden direkt synchronisiert. Bitten Sie einen Administrator, GitHub einzurichten, bevor Sie private Repositorys synchronisieren.",
+      "connect": "Öffentliche Repositorys werden direkt synchronisiert. Verbinden Sie GitHub, um private Repositorys zu synchronisieren.",
+      "connectButton": {
+        "label": "GitHub verbinden"
+      },
+      "connected": "Öffentliche Repositorys werden direkt synchronisiert. Private Repositorys verwenden Ihre GitHub-Verbindung.",
+      "needsConnection": "Öffentliche Repositorys werden direkt synchronisiert. Private Repositorys erfordern eine GitHub-Verbindung.",
+      "setUp": "Öffentliche Repositorys werden direkt synchronisiert. Richten Sie GitHub ein, bevor Sie private Repositorys synchronisieren.",
+      "setUpButton": {
+        "label": "GitHub einrichten"
+      }
     }
   }
 }
