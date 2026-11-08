@@ -113,7 +113,7 @@ def _execution(stdout: str = "alpha\n") -> CodeModeExecutionResult:
         duration_seconds=1.5,
         calls=[SEARCH_CALL, CUSTOM_CALL],
         commit=StoreCommit(
-            ordinal=1, writes={"titles": ["Alpha", "Beta"], "old": None}
+            ordinal=1, follows=0, writes={"titles": ["Alpha", "Beta"], "old": None}
         ),
         tool_call_count=2,
     )
