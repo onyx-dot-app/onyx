@@ -4,10 +4,8 @@ import io
 import zipfile
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Never
-
-
 from datetime import timedelta
+from typing import Never
 from uuid import uuid4
 
 import pytest
