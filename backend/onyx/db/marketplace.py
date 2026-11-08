@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Marketplace, Skill
+from onyx.db.models import Marketplace, Skill, SkillVersion
 from onyx.db.resource_version import prune_resource_bundles, write_resource_version
 from onyx.db.skill_version import SkillVersionAdapter
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -23,6 +23,26 @@ from onyx.skills.marketplace.read_models import (
 )
 
 
+def fetch_marketplace_sync_state(
+    marketplace_id: UUID, db_session: Session
+) -> tuple[Marketplace, dict[str, SkillVersion | None]]:
+    """Internal sync snapshot; close the read session before storage/provider I/O."""
+    marketplace = db_session.get(Marketplace, marketplace_id)
+    if marketplace is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found")
+    current = {
+        skill.marketplace_entry_key: skill.current_version
+        for skill in db_session.scalars(
+            select(Skill).where(
+                Skill.marketplace_id == marketplace_id, Skill.retired_at.is_(None)
+            )
+        )
+        if skill.marketplace_entry_key is not None
+    }
+    db_session.expunge_all()
+    return marketplace, current
+
+
 def reconcile_marketplace__no_commit(
     marketplace_id: UUID,
     read: CompleteMarketplace | FailedMarketplace,
@@ -31,9 +51,12 @@ def reconcile_marketplace__no_commit(
     staged: Mapping[str, IngestedBundle],
     db_session: Session,
     created_by_user_id: UUID | None = None,
+    recovery_keys: frozenset[str] = frozenset(),
 ) -> ReconciliationResult:
     """Stage changed/new ready entries before calling. Unchanged entries need no upload.
 
+    recovery_keys forces fresh versions for unavailable current bundles, even
+    with equal digests. Each ready recovery entry needs a fresh staged bundle.
     No storage or provider I/O occurs here. On success, commit before passing
     cleanup_file_ids to delete_unreferenced_skill_bundles. On any exception or
     commit failure, S4 must clean all staged files. A savepoint rolls back this
@@ -152,7 +175,11 @@ def reconcile_marketplace__no_commit(
             if skill is not None and skill.name != name:
                 raise ValueError(f"Marketplace skill name cannot change: {key}")
             current = skill.current_version if skill is not None else None
-            if current is not None and current.content_digest == entry.content_digest:
+            if (
+                key not in recovery_keys
+                and current is not None
+                and current.content_digest == entry.content_digest
+            ):
                 if skill is not None and skill.marketplace_path != entry.path:
                     skill.marketplace_path = entry.path
                     changed.append(skill.id)
