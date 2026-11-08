@@ -17,6 +17,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.tools import (
     AgentTool,
+    BeforeToolCallFailed,
     ChildRunWait,
     InputDecision,
     InputMode,
@@ -100,6 +101,24 @@ class ToolBatch:
             options=self.options.model_copy(deep=True),
             messages=[_tool_view(item) for item in self.context_messages],
         )
+
+    def _before_tool_call(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
+        """The run's before_tool_call decision on a call of this step, or on a
+        call that one of its tools makes for the model, such as a program's."""
+        before_tool_call = self.run.before_tool_call
+        return (
+            None if before_tool_call is None else before_tool_call(self._context(call))
+        )
+
+    def _before_nested_call(
+        self, call: ToolCall
+    ) -> ToolResult | PendingToolInput | None:
+        """`_before_tool_call` for a call that a tool makes for the model; a hook
+        that raises fails the run, as for a direct call."""
+        try:
+            return self._before_tool_call(call)
+        except Exception as error:
+            raise BeforeToolCallFailed(error) from error
 
     def _recorded_before(self) -> tuple[ToolResultMessage, ...]:
         """Recorded tool results before a call: earlier steps, then this step's
@@ -336,13 +355,10 @@ class ToolBatch:
                 content=call.argument_error or "Tool arguments were truncated.",
                 is_error=True,
             )
-        context: ToolCallContext | None = None
-        before_tool_call = self.run.before_tool_call
-        if before_tool_call and not approved and children is None:
-            context = self._context(call)
-            result = before_tool_call(context)
-            if result is not None:
-                return result
+        if not approved and children is None:
+            decision = self._before_tool_call(call)
+            if decision is not None:
+                return decision
         cancellation_signal.check()
         active = threading.Event()
         active.set()
@@ -372,13 +388,13 @@ class ToolBatch:
             else call.model_copy(deep=True).arguments,
             cancellation=cancellation_signal,
             update=update,
-            messages=[
-                _tool_view(message)
-                for message in (context.messages if context else self.context_messages)
-            ],
+            messages=[_tool_view(message) for message in self.context_messages],
             recorded_results=self._recorded_before(),
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination
+            else None,
+            before_call=self._before_nested_call
+            if self.run.before_tool_call is not None
             else None,
         )
         try:
@@ -401,6 +417,9 @@ class ToolBatch:
                 return result
             try:
                 outcome = tool.execute(invocation)
+            except BeforeToolCallFailed as failed:
+                # As when the hook raises for a direct call: the run fails.
+                raise failed.error
             except Exception as error:
                 logger.exception("Tool execution failed for %s", call.name)
                 return ToolResult(

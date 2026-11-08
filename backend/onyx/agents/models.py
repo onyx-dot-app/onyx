@@ -155,6 +155,18 @@ class ToolResultAmendment(BaseModel):
     result: ToolResult
 
 
+class ReleaseFailed(Exception):
+    """Raised by a run's finish or suspend hook: the run applies `amendments`,
+    then fails with `error`."""
+
+    def __init__(
+        self, error: Exception, amendments: Sequence[ToolResultAmendment]
+    ) -> None:
+        super().__init__(str(error))
+        self.error = error
+        self.amendments = list(amendments)
+
+
 class ToolCallContext(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     step: AgentStep

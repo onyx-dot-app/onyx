@@ -8,7 +8,13 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny, model_validator
 
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.models import Message, ToolDefinition, ToolResult, ToolResultMessage
+from onyx.llm.models import (
+    Message,
+    ToolCall,
+    ToolDefinition,
+    ToolResult,
+    ToolResultMessage,
+)
 
 if TYPE_CHECKING:
     from onyx.agents.models import AgentInfo, RunResult, RunState
@@ -129,6 +135,20 @@ class ToolProgress(BaseModel):
 ToolUpdate = Callable[[ToolProgress], None]
 
 
+class BeforeToolCallFailed(BaseException):
+    """The run's before_tool_call hook raised for a call that a tool made for the
+    model, such as a program's tool call.
+
+    A BaseException, so that neither the tool's own error handling nor a program
+    can catch it and go on. The tool lets it leave `execute`, and the run fails
+    with `error`, as it does when the hook raises for a direct call.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(str(error))
+        self.error = error
+
+
 class ToolInvocation:
     """Tool inputs and runtime services.
 
@@ -148,6 +168,8 @@ class ToolInvocation:
         recorded_results: Sequence[ToolResultMessage] = (),
         agents: AgentControl | None = None,
         trace_metadata: Mapping[str, JsonValue] | None = None,
+        before_call: Callable[[ToolCall], ToolResult | PendingToolInput | None]
+        | None = None,
     ) -> None:
         self.call_id = call_id
         self.call_index = call_index
@@ -164,6 +186,10 @@ class ToolInvocation:
         self.recorded_results = recorded_results
         # Attributes of the call's tracing span.
         self.trace_metadata = trace_metadata
+        # The run's before_tool_call hook, for calls that the tool makes for the
+        # model, such as a program's tool calls; None when the run has no hook.
+        # It raises BeforeToolCallFailed when the hook raises.
+        self.before_call = before_call
         self._agents = agents
 
     @property

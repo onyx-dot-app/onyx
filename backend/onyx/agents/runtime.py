@@ -56,6 +56,7 @@ from onyx.agents.models import (
     ExecutionRequest,
     ExecutionStatus,
     PreparedStep,
+    ReleaseFailed,
     RunAction,
     RunFailure,
     RunFailureKind,
@@ -211,7 +212,8 @@ def _capture_unsettled_child(state: RunState) -> RunState:
     return snapshot
 
 
-# Called with the run's recorded tool results; returns final results of its calls.
+# Called with the run's recorded tool results; returns final results of its calls,
+# or raises ReleaseFailed to fail the run after it applies them.
 ReleaseHook = Callable[[list[ToolResultMessage]], list[ToolResultAmendment]]
 
 
@@ -1132,12 +1134,16 @@ class Run:
             completion.add_done_callback(lambda _future: self._wake_execution())
 
     def _suspend(self) -> None:
-        amendments = self._release_amendments(self._on_suspend)
+        amendments, failure = self._release_amendments(self._on_suspend)
         if amendments:
             with self.execution_lock:
                 self._apply_amendments(amendments)
-        # A run cancelled while the hook ran finishes instead of suspending.
+        # A run cancelled while the hook ran finishes instead of suspending,
+        # as cancelled even when the hook failed.
         self.cancellation_signal.check()
+        if failure is not None:
+            # The run fails instead of suspending.
+            raise failure
         if self._restoration is not None:
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")
@@ -1183,7 +1189,20 @@ class Run:
 
     def _finish(self, outcome: RunOutcome, llm: LLM) -> None:
         self._cancellation_link.close()
-        amendments = self._release_amendments(self._on_finish)
+        amendments, failure = self._release_amendments(self._on_finish)
+        if failure is not None:
+            if outcome == RunStatus.CANCELLED:
+                # A Stop or deadline wins: the run stays cancelled.
+                logger.warning(
+                    "Run %s was cancelled; its release hook also failed: %s",
+                    self.id,
+                    failure,
+                )
+            else:
+                with self.execution_lock:
+                    if self._state.failure is None:
+                        self._state.failure = _failure(failure, llm)
+                        outcome = RunStatus.ERROR
         if self.coordination and outcome in (
             RunStatus.ERROR,
             RunStatus.CANCELLED,
@@ -1270,15 +1289,16 @@ class Run:
 
     def _release_amendments(
         self, hook: ReleaseHook | None
-    ) -> list[ToolResultAmendment]:
-        """Ask a finish or suspend hook for the final results of this run's calls.
+    ) -> tuple[list[ToolResultAmendment], Exception | None]:
+        """Ask a finish or suspend hook for the final results of this run's calls,
+        and the error that fails the run, if the hook raised ReleaseFailed.
 
         The hook runs without the execution lock, since it can wait for tool work.
-        A hook that fails or stops for cancellation sets no results, so the run
-        still ends or suspends normally.
+        A hook that fails otherwise or stops for cancellation sets no results, so
+        the run still ends or suspends normally.
         """
         if hook is None:
-            return []
+            return [], None
         with self.execution_lock:
             # Not copied: the hook reads them and must not change them.
             results = [
@@ -1287,13 +1307,15 @@ class Run:
                 if isinstance(message, ToolResultMessage)
             ]
         try:
-            return hook(results)
+            return hook(results), None
+        except ReleaseFailed as failed:
+            return failed.amendments, failed.error
         except AgentCancelled:
             logger.info("Run release hook stopped for cancellation: %s", self.id)
-            return []
+            return [], None
         except Exception:
             logger.exception("Run release hook failed: %s", self.id)
-            return []
+            return [], None
 
     def _apply_amendments(self, amendments: Sequence[ToolResultAmendment]) -> None:
         """Set the final results of started calls; the caller holds the execution lock.

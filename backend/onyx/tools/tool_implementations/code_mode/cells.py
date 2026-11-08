@@ -17,15 +17,20 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
-from onyx.agents.models import ToolResultAmendment
-from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.agents.models import ReleaseFailed, ToolResultAmendment
+from onyx.agents.tools import (
+    BeforeToolCallFailed,
+    PendingToolInput,
+    ToolInvocation,
+    ToolProgress,
+)
 from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import StagedChatFiles
 from onyx.chat.tool_results import merged_chat_files, staged_result_details
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
 from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
-from onyx.llm.models import Message, ToolResult, ToolResultMessage
+from onyx.llm.models import Message, ToolCall, ToolResult, ToolResultMessage
 from onyx.server.metrics import code_mode as metrics
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
@@ -301,6 +306,31 @@ def _call_result(
     return outcome
 
 
+def _decided_result(
+    source: ToolInvocation,
+    call_id: str,
+    tool_name: str,
+    arguments: dict[str, JsonValue],
+) -> ToolResult | None:
+    """The result that the run's before_tool_call hook gives a program's call,
+    as it gives a direct call one; None to run the tool.
+
+    A program cannot wait for an answer, so a call that the hook holds for
+    input fails with the hook's prompt, as a tool error does.
+    """
+    if source.before_call is None:
+        return None
+    decision = source.before_call(
+        ToolCall(id=call_id, name=tool_name, arguments=arguments)
+    )
+    if isinstance(decision, PendingToolInput):
+        raise RuntimeError(
+            f"{tool_name} needs approval and cannot run inside a program: "
+            f"{decision.prompt}"
+        )
+    return decision
+
+
 class _RunningCells:
     """The process-wide budget of running cells (MAX_RUNNING_CELLS)."""
 
@@ -559,6 +589,10 @@ class CodeCell:
         self._ended_as: ClosedStatus | None = None
         self._discarded: DiscardedWrites | None = None
         self._commit: StoreCommit | None = None
+        # The before_tool_call hook raised for a call of the program, until it
+        # fails the run: the observation that reports the program's end raises
+        # it, or else the cell's closing does.
+        self._hook_failure: BeforeToolCallFailed | None = None
         # The final result was returned, or the response ended; events are dropped.
         self._closed = False
         # The last saved observation, with its call id, while it reports the cell
@@ -681,6 +715,12 @@ class CodeCell:
             )
         return taken
 
+    def take_hook_failure(self) -> BeforeToolCallFailed | None:
+        """The hook failure that no observation raised; it is then raised."""
+        with self._lock:
+            failure, self._hook_failure = self._hook_failure, None
+            return failure
+
     def _closing(self, reason: CellClosingReason) -> ToolResultAmendment | None:
         """Close the cell: the closing record for its last saved observation, when
         that reports it running. The caller holds the lock."""
@@ -775,7 +815,14 @@ class CodeCell:
                     # run's end.
                     raise AgentCancelled()
                 cut = self._take(observer, final=False)
-        return self._formatted(cut)
+            failure = None
+            if cut.end is not None:
+                failure, self._hook_failure = self._hook_failure, None
+        result = self._formatted(cut)
+        if failure is not None:
+            # The run fails, as when the hook raises for a direct call.
+            raise failure
+        return result
 
     def _final_status(self) -> ClosedStatus:
         """How the cell ended, or how it is stopping; the caller holds the lock."""
@@ -1085,6 +1132,17 @@ class CodeCell:
             # The program sees an error; the cell's end records the call as
             # unfinished.
             raise RuntimeError(CANCELLED_CALL_MESSAGE) from error
+        except BeforeToolCallFailed as failed:
+            # A policy failure: the program stops without seeing it, and the
+            # observation that reports its end fails the run.
+            with self._lock:
+                if self._hook_failure is None:
+                    self._hook_failure = failed
+                self._record(
+                    _bounded_call(started.failed(str(failed)), MAX_SAVED_CALL_CHARS)
+                )
+            self._stopping.cancel()
+            raise
         except Exception as error:
             # The call ended with an exception, which the program sees.
             failed = started.failed(str(error) or type(error).__name__)
@@ -1105,7 +1163,8 @@ class CodeCell:
         source: ToolInvocation,
     ) -> object:
         inner_tool = function.tool
-        cites = function.result.cites
+        decided = _decided_result(source, started.id, inner_tool.name, arguments)
+        cites = function.result.cites and decided is None
         start = (
             self._citations.reserve(context.next_citation_num)
             if cites
@@ -1113,46 +1172,12 @@ class CodeCell:
         )
         used: dict[int, str] = {}
         try:
-            inner_context = context.model_copy(
-                update={
-                    "next_citation_num": start,
-                    "citation_mapping": {
-                        **context.citation_mapping,
-                        **self._citations.mapping(),
-                    },
-                }
-            )
-            inner_invocation = ToolInvocation(
-                call_id=started.id,
-                call_index=0,
-                arguments=arguments,
-                cancellation=self._stopping,
-                update=lambda progress: self._send(
-                    CodeModeCallProgress(
-                        index=started.index,
-                        content=progress.content,
-                        details=progress.details,
-                    )
-                ),
-                messages=source.messages,
-                recorded_results=source.recorded_results,
-                agents=None,
-                trace_metadata={
-                    "code_mode.call_id": self._call_id,
-                    "code_mode.cell_id": self.id,
-                    "code_mode.index": started.index,
-                    "code_mode.function_name": started.function_name,
-                },
-            )
-            sequential = self._program.sequential_calls.get(inner_tool.name)
-            # Nested model and HTTP work stops when the cell stops or ends.
-            with (
-                sequential.turn(self._stopping)
-                if sequential is not None
-                else nullcontext(),
-                cancellation_scope(self._stopping),
-            ):
-                result = _call_result(inner_tool, inner_invocation, inner_context)
+            if decided is not None:
+                result = decided
+            else:
+                result = self._tool_result(
+                    function, started, arguments, context, source, start
+                )
             details = durable_details(result.details)
             if isinstance(details, SearchDocsResponse):
                 used = dict(details.citation_mapping)
@@ -1188,6 +1213,57 @@ class CodeCell:
             if self._calls[started.index].ended_in is None:
                 self._record(ended)
         return program_value(function, result)
+
+    def _tool_result(
+        self,
+        function: ToolFunction,
+        started: CodeModeCall,
+        arguments: dict[str, JsonValue],
+        context: ToolContext,
+        source: ToolInvocation,
+        citation_start: int,
+    ) -> ToolResult:
+        inner_tool = function.tool
+        inner_context = context.model_copy(
+            update={
+                "next_citation_num": citation_start,
+                "citation_mapping": {
+                    **context.citation_mapping,
+                    **self._citations.mapping(),
+                },
+            }
+        )
+        inner_invocation = ToolInvocation(
+            call_id=started.id,
+            call_index=0,
+            arguments=arguments,
+            cancellation=self._stopping,
+            update=lambda progress: self._send(
+                CodeModeCallProgress(
+                    index=started.index,
+                    content=progress.content,
+                    details=progress.details,
+                )
+            ),
+            messages=source.messages,
+            recorded_results=source.recorded_results,
+            agents=None,
+            trace_metadata={
+                "code_mode.call_id": self._call_id,
+                "code_mode.cell_id": self.id,
+                "code_mode.index": started.index,
+                "code_mode.function_name": started.function_name,
+            },
+        )
+        sequential = self._program.sequential_calls.get(inner_tool.name)
+        # Nested model and HTTP work stops when the cell stops or ends.
+        with (
+            sequential.turn(self._stopping)
+            if sequential is not None
+            else nullcontext(),
+            cancellation_scope(self._stopping),
+        ):
+            return _call_result(inner_tool, inner_invocation, inner_context)
 
     def _record(self, call: CodeModeCall) -> None:
         """Bound, keep and send an ended call; the caller holds the lock."""
@@ -1294,7 +1370,9 @@ class CodeCells:
 
         `results` are the recorded tool results of the run, which hold the running
         observations of a restored run. Each cell gets STOP_GRACE_SECONDS from its
-        first stop request (Stop or this call) to end.
+        first stop request (Stop or this call) to end. Raises `ReleaseFailed` with
+        the records when the before_tool_call hook raised for a program's call
+        and no observation reported it.
         """
         with self._lock:
             self._finished = True
@@ -1328,7 +1406,13 @@ class CodeCells:
                     reason,
                     ", ".join(running),
                 )
-        return [
+        amendments = [
             *amendments,
             *_interrupted_amendments(results, {cell.id for cell in cells}),
         ]
+        # A hook failure that no observation raised fails the run, as for a
+        # direct call; the first one wins.
+        failures = [failure for cell in cells if (failure := cell.take_hook_failure())]
+        if failures:
+            raise ReleaseFailed(failures[0].error, amendments)
+        return amendments

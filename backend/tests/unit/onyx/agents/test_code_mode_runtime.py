@@ -10,11 +10,12 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionStatus,
+    RunFailureKind,
     RunState,
     RunStatus,
     ToolCallContext,
 )
-from onyx.agents.runtime import Agent
+from onyx.agents.runtime import Agent, RunFailed
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
@@ -320,3 +321,168 @@ def test_a_running_cell_stops_with_a_closing_record_when_the_run_suspends() -> N
         release_child.set()
     assert run.result().output.text == "answer"
     assert coordinator.close(timeout=3)
+
+
+def test_before_tool_call_denies_direct_and_program_calls_alike() -> None:
+    ran: list[str] = []
+
+    def secret(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        ran.append(invocation.call_id)
+        return ToolResult(content="secret value")
+
+    secret_tool = FakeTool("secret", secret)
+    code_mode = CodeModeTool(
+        [secret_tool, FakeTool("echo", lambda _i, _c: ToolResult(content="echoed"))],
+        cells=CodeCells(),
+        limits=LIMITS,
+    )
+    program = ToolCall(
+        id="program",
+        name=CodeModeTool.NAME,
+        arguments={
+            "code": "print(await echo(value='x'))\n"
+            "try:\n"
+            "    await secret(value='y')\n"
+            "except RuntimeError as error:\n"
+            "    print('denied:', error)\n"
+        },
+    )
+    direct = ToolCall(id="direct", name="secret", arguments={"value": "x"})
+
+    def respond(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        results = [m for m in request.messages if isinstance(m, ToolResultMessage)]
+        if results:
+            text = "\n".join(f"{m.tool_call_id}: {m.text}" for m in results)
+            return AssistantMessage(content=[TextContent(text=text)])
+        return AssistantMessage(content=[direct, program])
+
+    def deny_secret(context: ToolCallContext) -> ToolResult | None:
+        if context.call.name != "secret":
+            return None
+        return ToolResult(content="secret is blocked by policy", is_error=True)
+
+    run = Agent(
+        FakeModelClient(respond),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id="agent",
+        tools=[code_mode.bind(ToolContext), secret_tool.bind(ToolContext)],
+        before_tool_call=deny_secret,
+    ).start(max_steps=3, messages=[UserMessage(content="Read the secret")])
+    output = run.result(timeout=10).output.text
+    assert run.wait_for_idle(5)
+    assert "direct: secret is blocked by policy" in output
+    assert "echoed\ndenied: secret is blocked by policy" in output
+    assert ran == []
+
+
+@pytest.mark.parametrize("program", [False, True], ids=["direct", "program"])
+def test_a_raising_before_tool_call_fails_direct_and_program_calls_alike(
+    program: bool,
+) -> None:
+    ran: list[str] = []
+
+    def secret(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        ran.append(invocation.call_id)
+        return ToolResult(content="secret value")
+
+    secret_tool = FakeTool("secret", secret)
+    cells = CodeCells()
+    code_mode = CodeModeTool([secret_tool], cells=cells, limits=LIMITS)
+    # The program cannot catch the policy failure and go on.
+    call = (
+        ToolCall(
+            id="call",
+            name=CodeModeTool.NAME,
+            arguments={
+                "code": "try:\n"
+                "    await secret(value='y')\n"
+                "except BaseException as error:\n"
+                "    print('caught:', error)\n"
+                "store('k', 'v')\n"
+            },
+        )
+        if program
+        else ToolCall(id="call", name="secret", arguments={"value": "x"})
+    )
+
+    def respond(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(isinstance(m, ToolResultMessage) for m in request.messages):
+            return AssistantMessage(content=[TextContent(text="went on")])
+        return AssistantMessage(content=[call])
+
+    def policy(context: ToolCallContext) -> ToolResult | None:
+        if context.call.name == "secret":
+            raise RuntimeError("the policy service is unavailable")
+        return None
+
+    run = Agent(
+        FakeModelClient(respond),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id="agent",
+        tools=[code_mode.bind(ToolContext), secret_tool.bind(ToolContext)],
+        before_tool_call=policy,
+    ).start(max_steps=3, messages=[UserMessage(content="Read the secret")])
+    with pytest.raises(RunFailed) as failed:
+        run.result(timeout=10)
+    assert failed.value.failure.kind == RunFailureKind.EXECUTION
+    assert run.wait_for_idle(5)
+    assert ran == []
+    if program:
+        cell = cells._cells[1]
+        assert cell._end is not None and cell._end.status != "completed"
+        assert cell._commit is None
+
+
+def test_a_raising_before_tool_call_fails_the_run_when_no_one_watches_the_cell() -> (
+    None
+):
+    hook_raised = threading.Event()
+    cells = CodeCells()
+    secret_tool = FakeTool("secret", lambda _i, _c: ToolResult(content="secret"))
+    code_mode = CodeModeTool([secret_tool], cells=cells, limits=LIMITS)
+    # The first observation ends at the yield; no wait_code call watches the
+    # cell after that.
+    call = ToolCall(
+        id="call",
+        name=CodeModeTool.NAME,
+        arguments={"code": "yield_control()\nawait secret(value='y')\n"},
+    )
+
+    def respond(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(isinstance(m, ToolResultMessage) for m in request.messages):
+            assert hook_raised.wait(10)
+            return AssistantMessage(content=[TextContent(text="went on")])
+        return AssistantMessage(content=[call])
+
+    def policy(context: ToolCallContext) -> ToolResult | None:
+        if context.call.name == "secret":
+            hook_raised.set()
+            raise RuntimeError("the policy service is unavailable")
+        return None
+
+    run = Agent(
+        FakeModelClient(respond),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id="agent",
+        tools=[code_mode.bind(ToolContext)],
+        before_tool_call=policy,
+        on_finish=cells.finish,
+        on_suspend=cells.suspend,
+    ).start(max_steps=3, messages=[UserMessage(content="Read the secret")])
+    with pytest.raises(RunFailed) as failed:
+        run.result(timeout=10)
+    assert failed.value.failure.kind == RunFailureKind.EXECUTION
+    assert run.wait_for_idle(5)
+    # The cell's closing record is still saved.
+    details = _saved_result(run.capture().run_state, "call").details
+    assert isinstance(details, CodeModeExecutionResult)
+    assert details.closing is not None
+    assert [(c.function_name, c.state) for c in details.closing.calls] == [
+        ("secret", "error")
+    ]

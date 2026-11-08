@@ -201,7 +201,10 @@ It returns `ToolResultAmendment` values: each one replaces the recorded result o
 started, or gives a call that ended without a result (such as on Stop) its result.
 The call keeps its execution status.
 The run applies them and publishes `tool_result_amended` before `agent_end` and before it saves output.
-A hook that fails or stops for cancellation is logged; the run keeps its outcome and recorded results.
+A hook that raises `ReleaseFailed` gives its amendments, and the run then fails with its error.
+On suspend, the run fails instead of suspending.
+A cancelled run (Stop or deadline) stays cancelled; the hook's error is only logged.
+A hook that fails otherwise or stops for cancellation is logged; the run keeps its outcome and recorded results.
 An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
 
@@ -213,6 +216,11 @@ Two optional tool callbacks cover interception and enrichment:
 | `after_tool_call` | Enrich an already accepted result. Failure preserves that result and fails the run. |
 
 Callbacks receive copies. Required transformations belong inside the tool, before it returns a valid result.
+A tool that calls other tools for the model, such as a code mode program, gets `before_tool_call` as `ToolInvocation.before_call` and applies it to each of those calls.
+Such a call cannot wait for approval, so a `PendingToolInput` decision makes it fail.
+A hook that raises fails the run, as for a direct call: `before_call` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
+A code mode program stops at the failure; the observation that reports its end raises it.
+When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
 For example, deep research normalizes a child report's citations before returning the parent tool result.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
