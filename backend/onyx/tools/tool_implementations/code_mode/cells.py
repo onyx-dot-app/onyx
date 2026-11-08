@@ -376,17 +376,32 @@ def _interrupted_amendments(
     results: Sequence[ToolResultMessage], live_cell_ids: Collection[int]
 ) -> list[ToolResultAmendment]:
     """Closing records for cells of a restored run: their last saved observation
-    reports them running, and no live cell continues them."""
-    last = {
-        details.cell_id: (message, details)
-        for message, details in code_mode_results(results)
-    }
+    reports them running, and no live cell continues them.
+
+    Each record lists the calls that the cell's saved observations hold; a call
+    saved as running is unfinished.
+    """
+    last: dict[int, tuple[ToolResultMessage, CodeModeExecutionResult]] = {}
+    calls: dict[int, dict[int, CodeModeCall]] = {}
+    for message, details in code_mode_results(results):
+        last[details.cell_id] = (message, details)
+        calls.setdefault(details.cell_id, {}).update(
+            (call.index, call) for call in details.calls
+        )
     return [
         _closing_amendment(
             message.tool_call_id,
             message,
             details,
             CellClosing(reason="interrupted", status="cancelled"),
+            cell_calls=[
+                call
+                if call.state != "running"
+                else call.model_copy(
+                    update={"state": "unfinished", "content": UNFINISHED_CALL_MESSAGE}
+                )
+                for _, call in sorted(calls[cell_id].items())
+            ],
         )
         for cell_id, (message, details) in last.items()
         if cell_id not in live_cell_ids

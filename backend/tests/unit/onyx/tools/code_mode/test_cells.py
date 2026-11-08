@@ -32,6 +32,7 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     WaitCodeTool,
 )
 from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeCall,
     CodeModeCallFinished,
     CodeModeCallStarted,
     CodeModeExecutionResult,
@@ -673,7 +674,28 @@ def test_citations_do_not_collide_across_observations() -> None:
 
 def test_restored_running_observation_is_amended_as_interrupted() -> None:
     saved = CodeModeExecutionResult(
-        cell_id=3, observation=0, code="x", status="running"
+        cell_id=3,
+        observation=0,
+        code="x",
+        status="running",
+        calls=[
+            CodeModeCall(
+                index=0,
+                id="old:0",
+                tool_name="acme",
+                function_name="acme_ok",
+                arguments={},
+                state="ok",
+            ),
+            CodeModeCall(
+                index=1,
+                id="old:1",
+                tool_name="acme",
+                function_name="acme_running",
+                arguments={},
+                state="running",
+            ),
+        ],
     )
     history: list[Message] = [
         ToolResultMessage(
@@ -692,9 +714,12 @@ def test_restored_running_observation_is_amended_as_interrupted() -> None:
     closing = _details(amended).closing
     assert closing is not None
     assert closing.reason == "interrupted"
+    # The calls that the saved observations hold may have had effects.
     assert amended.content.endswith(
         "Cell 3 was interrupted when the server stopped. Calls after this output are "
-        "not known; they may have run."
+        "not known; they may have run.\n\nTool calls:\n[0] acme_ok: ok\n"
+        "[1] acme_running: unfinished\nAll of these calls may have had effects, "
+        "also unfinished calls. Check before you retry."
     )
 
 
