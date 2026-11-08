@@ -2,6 +2,8 @@ import abc
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from pydantic import JsonValue
+
 
 class SpanData(abc.ABC):
     """
@@ -67,7 +69,7 @@ class FunctionSpanData(SpanData):
         output: Any | None,
         mcp_data: dict[str, Any] | None = None,
         *,
-        metadata: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
     ):
         self.name = name
         self.input = input

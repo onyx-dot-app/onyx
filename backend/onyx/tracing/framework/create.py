@@ -4,7 +4,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -165,7 +165,7 @@ def function_span(
     parent: Trace | Span[Any] | None = None,
     disabled: bool = False,
     *,
-    metadata: Mapping[str, Any] | None = None,
+    metadata: Mapping[str, JsonValue] | None = None,
 ) -> Span[FunctionSpanData]:
     """Create a new function span. The span will not be started automatically, you should either do
     `with function_span() ...` or call `span.start()` + `span.finish()` manually.
