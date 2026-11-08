@@ -285,16 +285,19 @@ printed output of the program. Set `CODE_MODE_ENABLED=true` on the API server to
 turn on code mode.
 
 The mock detects code mode from the offered tools. When a request offers
-`execute_code` and does not offer `internal_search`, the search profile writes
-programs instead of direct search calls. The programs use the same seeded queries
+`execute_code` with an `internal_search` function, and no direct `internal_search`
+tool, the search profile writes programs instead of direct search calls. The programs use the same seeded queries
 as direct mode. Each program prints one `[document] title` line for each result.
 The mock reads the document numbers from these lines, so the answer cites the
 same way as in direct mode. The answer phase does not change.
 
-| Model | Programs in a turn | Model calls in a turn |
+| Model | Programs in a turn | Chat model calls in a turn |
 |---|---|---|
 | `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode, plus one for each `wait_code` |
 | `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, one for each `wait_code`, then the answer |
+
+Search helper calls, such as query expansion and document selection, are the
+same in both modes and are not counted here.
 
 When a program runs longer than its yield time, the result says that the cell is
 running. The mock then calls `wait_code` for that cell until the program ends.
@@ -327,7 +330,7 @@ next arm overwrites the stats:
 ARM=code-mode-per-round  # direct, code-mode-per-round, or code-mode-batched
 MODEL=mock-profile-search-v1  # mock-profile-search-v1-codebatched for code-mode-batched
 ONYX_SEARCH_MODEL="$MODEL" \
-  uv run --group loadtest locust --headless -u 50 -r 5 -t 15m \
+  uv run --group loadtest locust --headless -u 50 -r 5 -t 15m --reset-stats \
   --host "$LOCUST_HOST" --csv "$ARM" ChatWithSearchUser
 ```
 
@@ -335,8 +338,10 @@ Make sure that each arm ran the intended path. Scrape the Locust `/metrics`
 output before the run ends, because the endpoint stops with Locust, and save it
 with the arm. `onyx_loadtest_code_programs` must be zero for the direct arm and
 nonzero for the code mode arms, and `onyx_loadtest_code_waits` gives each arm's
-`wait_code` calls. The example CSV includes the ramp and warmup. Assess each
-arm's measurement plateau with `capacity_report.py`, as
+`wait_code` calls. With `--reset-stats`, Locust resets its statistics when all
+users have started, so the stats CSV covers only the plateau. For a longer
+warmup, run the arm once to warm up, then run it again for the CSV. Assess each
+arm's CSV with `capacity_report.py`, as
 [Interpret user capacity](#interpret-user-capacity) describes.
 
 Without `wait_code` calls, the per-round arm keeps the number and order of model

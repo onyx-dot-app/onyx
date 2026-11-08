@@ -201,7 +201,7 @@ def test_search_profile_runs_no_program_without_internal_search() -> None:
         for call in calls
         if call["function"]["name"] == "execute_code"
     ]
-    assert all(searches(code) == [] for code in programs)
+    assert programs == []
 
 
 def test_running_cell_gets_wait_code_then_the_plan_continues() -> None:
