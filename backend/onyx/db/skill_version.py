@@ -83,15 +83,18 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
 
 
 def list_skill_versions(
-    skill: Skill, db_session: Session
+    skill: Skill, db_session: Session, *, before_version: int | None = None
 ) -> list[tuple[SkillVersion, User | None]]:
-    """List history for a skill the caller has authorized for editing."""
+    """List up to 50 versions of an authorized skill, newest first."""
     statement = (
         SkillVersionAdapter(skill)
         .versions()
         .add_columns(User)
         .outerjoin(User, SkillVersion.created_by_user_id == User.id)
+        .limit(50)
     )
+    if before_version is not None:
+        statement = statement.where(SkillVersion.version_number < before_version)
     return [
         (version, creator)
         for version, creator in db_session.execute(statement).unique()

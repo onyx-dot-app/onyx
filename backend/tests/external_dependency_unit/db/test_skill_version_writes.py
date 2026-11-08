@@ -86,6 +86,7 @@ def tenant(
             "skill__user_group",
             "user_skill_preference",
             "user_group",
+            "permission_grant",
             "user__user_group",
             "sandbox",
             "external_app",

@@ -50,6 +50,8 @@
 - **Version history API.** Owners, editors and admins can list custom skill
   versions with their creator and timestamp, preview retained content, and
   restore it. Viewers can preview current instructions but cannot read history.
+  History returns at most 50 rows. The positive `before_version` cursor excludes
+  that version and loads older rows without shifting when a new version is saved.
   Restore creates a new version unless its content equals the current version.
 
 When it fails:
