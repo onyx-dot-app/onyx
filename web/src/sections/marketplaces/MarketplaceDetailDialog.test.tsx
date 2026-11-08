@@ -317,3 +317,142 @@ it("requires a fresh review when a refresh changes the displayed proposal", asyn
     false
   );
 });
+
+const retiredSkill = {
+  id: "50000000-0000-4000-8000-000000000005",
+  name: "old-alpha",
+  current_version_id: null,
+  retired_at: "2026-11-08T12:00:00Z",
+  follows_marketplace_access: true,
+};
+const withRetired = {
+  ...detail,
+  marketplace: {
+    ...marketplace,
+    sync_requested: false,
+    sync_pending: false,
+    live_skill_count: 1,
+    retired_skill_count: 1,
+  },
+  skills: [...detail.skills, retiredSkill],
+};
+const withoutRetired = {
+  ...withRetired,
+  marketplace: { ...withRetired.marketplace, retired_skill_count: 0 },
+  skills: detail.skills,
+};
+const deleteUrl = `/api/skills/custom/${retiredSkill.id}`;
+
+it("offers only deletion for a retired skill and requires confirmation", async () => {
+  fetchSpy.mockResolvedValue(new Response(JSON.stringify(withRetired)));
+  const user = setupUser();
+  const onClose = jest.fn();
+  const onChanged = jest.fn();
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={onClose}
+      onChanged={onChanged}
+    />
+  );
+  expect(await screen.findByText("Retired")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Delete alpha" })
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Delete old-alpha" }));
+  expect(
+    screen.getByText(/Permanently delete old-alpha and its version history/)
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(
+    fetchSpy.mock.calls.some(([, init]) => init?.method === "DELETE")
+  ).toBe(false);
+  await user.click(screen.getByRole("button", { name: "Delete old-alpha" }));
+  const pending = Promise.withResolvers<Response>();
+  fetchSpy.mockImplementation(async (path, init) =>
+    init?.method === "DELETE"
+      ? pending.promise
+      : new Response(
+          JSON.stringify(
+            path === SWR_KEYS.marketplaces
+              ? [withoutRetired.marketplace]
+              : withoutRetired
+          )
+        )
+  );
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+  expect(screen.getByRole("button", { name: "Working…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  await user.keyboard("{Escape}{Escape}");
+  expect(onClose).not.toHaveBeenCalled();
+  expect(
+    fetchSpy.mock.calls.filter(([, init]) => init?.method === "DELETE")
+  ).toHaveLength(1);
+  expect(fetchSpy).toHaveBeenCalledWith(deleteUrl, { method: "DELETE" });
+  await act(async () => pending.resolve(new Response(null, { status: 204 })));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText("old-alpha")).not.toBeInTheDocument();
+  expect(screen.getByText("alpha")).toBeInTheDocument();
+  expect(screen.queryByText("Retired")).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+it("keeps a refused deletion visible for retry without removing the row", async () => {
+  fetchSpy.mockImplementation(async (_path, init) =>
+    init?.method === "DELETE"
+      ? new Response(
+          JSON.stringify({ detail: "You can no longer delete this skill." }),
+          { status: 403 }
+        )
+      : new Response(JSON.stringify(withRetired))
+  );
+  const user = setupUser();
+  const onChanged = jest.fn();
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={jest.fn()}
+      onChanged={onChanged}
+    />
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Delete old-alpha" })
+  );
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+  expect(
+    await screen.findByText("You can no longer delete this skill.")
+  ).toBeInTheDocument();
+  expect(screen.getByText(/Permanently delete old-alpha/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
+  expect(onChanged).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(
+    await screen.findByRole("button", { name: "Delete old-alpha" })
+  ).toBeEnabled();
+});
+
+it("disables stale deletion after a refresh removes the selected skill", async () => {
+  fetchSpy.mockResolvedValue(new Response(JSON.stringify(withRetired)));
+  const user = setupUser();
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={jest.fn()}
+    />
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Delete old-alpha" })
+  );
+  fetchSpy.mockResolvedValue(new Response(JSON.stringify(withoutRetired)));
+  await user.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled()
+  );
+  expect(
+    fetchSpy.mock.calls.some(([, init]) => init?.method === "DELETE")
+  ).toBe(false);
+});

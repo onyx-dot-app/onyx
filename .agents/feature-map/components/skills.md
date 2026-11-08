@@ -708,7 +708,10 @@ The library preview of an external-app skill calls the same renderer
     visible; polling never requests source sync. Both Skills pages mount the list
     before the library controls. Add offers Upload a skill, Create a skill, and
     Sync from GitHub. Pending and failed sources stay visible with zero Skills.
-    Opening company defaults closes source detail first.
+    Opening company defaults closes source detail first. Retired detail rows show
+    a Retired badge and confirmed deletion only. The existing Skill endpoint
+    rechecks owner/global authority. Pending deletion blocks dismissal; failures
+    keep the confirmation. Success refreshes detail, source counts and Skills.
 
 
 ---
@@ -729,11 +732,11 @@ The library preview of an external-app skill calls the same renderer
 
 ## Known issues
 
-- **Marketplace UI remains pending.** Preview, management mutations and skill reset
+- **Marketplace browser acceptance remains pending.** Preview, management mutations and skill reset
   are available through the API. Plugin membership is not modeled yet; its access
   guard belongs in `SkillAccessAdapter.load`.
   Company inheritance/reset and personal owner audience controls are wired in the
-  skill sharing dialog. Source creation/list pages are wired. Retired-skill management and live browser acceptance remain pending.
+  skill sharing dialog. Source creation/list pages are wired. Retired deletion is wired; live browser acceptance remains pending.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing

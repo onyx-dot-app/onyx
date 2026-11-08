@@ -1,6 +1,6 @@
 # Shared marketplaces
 
-Both Skills pages mount the shared list and dialog. Browser acceptance and retired-skill management remain pending.
+Both Skills pages mount the shared list and dialog. Browser acceptance remains pending.
 
 ## SyncFromGitHubDialog
 
@@ -81,8 +81,13 @@ Remove and Replace login have confirmation screens. Replacement uses the acting 
 Server errors remain visible. Personal-source management authority comes from the management API;
 company access controls also require the global permission hook.
 
+Retired rows have a badge and only a Delete action. The management API admits the owner or a global manager;
+the existing Skill delete endpoint rechecks that authority. Confirmation names the Skill and its version history.
+Deletion disables dismissal and duplicate requests. Success refreshes detail, source counts, and the host's Skills.
+A failure keeps the confirmation and server reason for retry. A refreshed missing row cannot be deleted again.
+
 ## Validation boundary
 
-All requests use `lib/marketplaces/api.ts`. The shared client validates responses with its existing schemas.
+Marketplace requests use `lib/marketplaces/api.ts`; individual retired deletion uses `lib/skills/api.ts:deleteUserSkill`. The shared client validates responses with its existing schemas.
 Its inferred `Marketplace.provider_config` is currently `unknown`; the summary reuses `marketplaceSourceSchema` to narrow it.
 The parent can remove that extra parse after strengthening the client schema inference.
