@@ -130,8 +130,8 @@ arguments (`None` and 0 for `execute_code`, the cell id and 1 for
 The final delta carries the exact `cell_id` and `observation`. Its `status`
 adds `running` (the cell still runs; its open nested calls get only start
 packets) and `terminated`. A cell's closing record goes to the tab of its last
-observation: the nested calls after the observation, one `code_mode_delta` with
-the new stdout, then a final delta with `result`, `error`, `status`,
+observation: the nested calls after the observation, a `code_mode_delta` with
+the new stdout when there is any, then a final delta with `result`, `error`, `status`,
 `tool_call_count`, `stored_keys` and `response_ended=True` (`chat/renderer.py:tool_renderer`
 picks `CodeModeRenderer` by tool name). It follows that tab's `section_end`,
 live and on replay: `ToolRenderer.complete` renders the part of a result that
