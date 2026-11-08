@@ -1418,6 +1418,11 @@ class LitellmLLM(LLM):
                 passthrough_kwargs["api_key"] = self._api_key or None
 
             messages = _prompt_to_dicts(prompt)
+            prefix_breakpoints = {
+                index
+                for index, message in enumerate(prompt)
+                if message.cache_breakpoint
+            }
 
             if not (
                 is_claude_model
@@ -1498,7 +1503,11 @@ class LitellmLLM(LLM):
             cache_messages = messages
             cache_options = None
             if is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
-                cache_messages, cache_options = explicit_cache_breakpoints(messages)
+                cache_messages, cache_options = explicit_cache_breakpoints(
+                    messages,
+                    # Indices hold while no transform above added or removed messages.
+                    prefix_breakpoints if len(messages) == len(prompt) else (),
+                )
                 if cache_options is not None:
                     optional_kwargs.setdefault("prompt_cache_options", cache_options)
 

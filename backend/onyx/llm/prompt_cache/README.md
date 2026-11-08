@@ -147,9 +147,11 @@ processed_prompt, _ = process_with_prompt_cache(
 
 ## Provider-Specific Behavior
 
-### OpenAI
-- **Caching Type**: Implicit (automatic)
-- **Behavior**: Uses implicit caching, with explicit tool-result breakpoints on supported OpenAI and Azure models and endpoints.
+### OpenAI and Azure
+- **Caching Type**: Implicit, or explicit for models and endpoints that accept `prompt_cache_breakpoint`
+- **Behavior**: Implicit caching needs no parameters. With explicit caching, every request marks each
+  user message of the cacheable prefix and every tool result. Later steps and later turns repeat those
+  markers, so they read the entries earlier requests wrote.
 - **Cache Lifetime**: Depends on the model and cache mode.
 - **Cost Savings**: Read discounts and write charges depend on the model and cache mode.
 
@@ -181,7 +183,7 @@ Each provider has its own adapter in `providers/`:
 | File | Class | Description |
 |------|-------|-------------|
 | `base.py` | `PromptCacheProvider` | Abstract base class for all providers |
-| `openai.py` | `OpenAIPromptCacheProvider` | Implicit caching (no transformation) |
+| `openai.py` | `OpenAIPromptCacheProvider` | Flags the prefix end for explicit breakpoints |
 | `anthropic.py` | `AnthropicPromptCacheProvider` | Explicit caching at shared-context and history boundaries |
 | `vertex.py` | `VertexAIPromptCacheProvider` | Implicit Gemini caching without message changes |
 | `noop.py` | `NoOpPromptCacheProvider` | Fallback for unsupported providers |
