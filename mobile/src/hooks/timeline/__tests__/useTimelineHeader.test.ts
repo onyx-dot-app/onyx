@@ -53,6 +53,24 @@ describe("useTimelineHeader — text map", () => {
     expect(headerFor(PacketType.CUSTOM_TOOL_START)).toBe("Executing tool");
   });
 
+  it("names the tool when a non-tool packet comes first", () => {
+    const turn: TurnGroup = makeTurn(0, [
+      makeStep(0, 0, [
+        makePacket(PacketType.SECTION_END),
+        makePacket(
+          PacketType.CUSTOM_TOOL_START,
+          { turn_index: 0 },
+          {
+            tool_name: "Jira",
+          },
+        ),
+      ]),
+    ]);
+    expect(
+      renderHook(() => useTimelineHeader([turn])).result.current.headerText,
+    ).toBe("Executing Jira");
+  });
+
   it("falls back to Thinking... for an unmapped first packet", () => {
     expect(headerFor(PacketType.TOP_LEVEL_BRANCHING)).toBe("Thinking...");
   });

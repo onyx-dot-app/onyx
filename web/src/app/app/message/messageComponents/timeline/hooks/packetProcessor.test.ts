@@ -890,8 +890,7 @@ describe("packetProcessor", () => {
       expect(result.finalAnswerComing).toBe(false);
     });
 
-    test("a tool whose debug packet arrives first resets finalAnswerComing", () => {
-      const state = createInitialState(1);
+    test("a tool's debug packet waits for its start to reset finalAnswerComing", () => {
       const packets = [
         createMessageStartPacket({ turn_index: 0 }),
         createPacket(
@@ -899,11 +898,15 @@ describe("packetProcessor", () => {
           { turn_index: 1 },
           { tool_call_id: "call-1", tool_name: "search", tool_args: {} }
         ),
-        createSearchToolStartPacket({ turn_index: 1 }),
       ];
-      const result = processPackets(state, packets);
+      const afterDebug = processPackets(createInitialState(1), packets);
+      expect(afterDebug.finalAnswerComing).toBe(true);
 
-      expect(result.finalAnswerComing).toBe(false);
+      const afterStart = processPackets(afterDebug, [
+        ...packets,
+        createSearchToolStartPacket({ turn_index: 1 }),
+      ]);
+      expect(afterStart.finalAnswerComing).toBe(false);
     });
 
     test("REASONING_START does NOT reset finalAnswerComing (critical fix)", () => {
