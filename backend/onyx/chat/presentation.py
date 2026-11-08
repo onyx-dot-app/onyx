@@ -11,6 +11,7 @@ from onyx.agents.events import (
     MessageStartEvent,
     MessageUpdateEvent,
     ToolEndEvent,
+    ToolResultAmendedEvent,
     ToolStartEvent,
     ToolUpdateEvent,
 )
@@ -404,6 +405,20 @@ class ResponsePresenter:
                 output = tool.update(event.progress.details, event.progress.content)
             else:
                 output = tool.complete(event.result)
+        elif isinstance(event, ToolResultAmendedEvent):
+            tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
+            if tool is None:
+                # A call recorded before a restore has no card in this stream;
+                # the amended result renders in a new card.
+                renderer = self.renderers.get(event.run_id)
+                tool = ToolRenderer(
+                    event.tool_call,
+                    renderer.tool_placement(event.tool_call.id)
+                    if renderer is not None
+                    else self.layout.next_section(parent.placement if parent else None),
+                    self.tool_ids.get(event.tool_call.name),
+                )
+            output = tool.amend(event.result)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
@@ -447,6 +462,8 @@ def replay_response(
     """
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
+    # Amended results render after the response's messages, as they do live.
+    amended: list[Packet] = []
     for step in response.steps:
         message = step.message
         message_id = _message_identity(message)
@@ -475,17 +492,17 @@ def replay_response(
                     update={"search_docs": record.search_docs or []}
                 )
                 result = result.model_copy(update={"details": search})
-            tool_renderer = ToolRenderer(
+            renderer_of_call = ToolRenderer(
                 call, tool_placement, record.tool_id if record is not None else None
             )
-            packets.extend(tool_renderer.start())
+            packets.extend(renderer_of_call.start())
             for child in response.child_runs:
                 if (
                     child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue
-                tool_renderer.has_child_output = True
+                renderer_of_call.has_child_output = True
                 child_mode = (
                     PresentationMode.CODING_THINKING
                     if call.name == CODING_AGENT_TOOL_NAME
@@ -502,7 +519,10 @@ def replay_response(
                         child_mode,
                     )
                 )
-            packets.extend(tool_renderer.complete(result))
+            packets.extend(renderer_of_call.complete(result))
+            if result is not None:
+                amended.extend(renderer_of_call.amend(result))
+    packets.extend(amended)
     if response.parent_run_id is None:
         packets.append(
             Packet(

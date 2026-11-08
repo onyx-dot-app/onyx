@@ -463,55 +463,9 @@ class ToolRenderer:
         self._started = True
         name = self.call.name
         args = tool_arguments_for_display(self.call)
-        objects: list[packets.PacketObj] = []
+        objects: list[packets.PacketObj]
         try:
-            if name in {SearchTool.NAME, WebSearchTool.NAME}:
-                objects = [
-                    packets.SearchToolStart(
-                        is_internet_search=name == WebSearchTool.NAME
-                    )
-                ]
-                queries = _STRINGS.validate_python(args.get("queries", []))
-                self._queries.update(queries)
-                objects.append(packets.SearchToolQueriesDelta(queries=queries))
-            elif name == OpenURLTool.NAME:
-                objects = [
-                    packets.OpenUrlStart(),
-                    packets.OpenUrlUrls(
-                        urls=_STRINGS.validate_python(args.get("urls", []))
-                    ),
-                ]
-            elif name == PythonTool.NAME:
-                objects = [
-                    packets.PythonToolStart(
-                        code=_STRING.validate_python(args.get("code", ""))
-                    )
-                ]
-            elif name == BASH_TOOL_NAME:
-                objects = [
-                    packets.BashToolStart(
-                        cmd=_STRING.validate_python(args.get("cmd", ""))
-                    )
-                ]
-            elif name == FileReaderTool.NAME:
-                objects = [packets.FileReaderStart()]
-            elif name == MemoryTool.NAME:
-                objects = [packets.MemoryToolStart()]
-            elif name == ImageGenerationTool.NAME:
-                objects = [packets.ImageGenerationToolStart()]
-            elif name == RESEARCH_AGENT_TOOL_NAME:
-                objects = [
-                    packets.ResearchAgentStart(
-                        research_task=_STRING.validate_python(args.get("task", ""))
-                    )
-                ]
-            elif name == CODING_AGENT_TOOL_NAME:
-                objects = [
-                    packets.CodingAgentStart(
-                        query=_STRING.validate_python(args.get("query", "")),
-                        repo=_STRING.validate_python(args.get("github_repo", "")),
-                    )
-                ]
+            objects = self._start_objects(args)
         except ValidationError:
             objects = []
             logger.debug(
@@ -539,6 +493,58 @@ class ToolRenderer:
                 ),
             )
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
+
+    def _start_objects(self, args: dict[str, JsonValue]) -> list[packets.PacketObj]:
+        """The tool's own start packets; empty for the generic tool display.
+
+        Raises ValidationError when the arguments do not fit the tool's display.
+        """
+        name = self.call.name
+        objects: list[packets.PacketObj] = []
+        if name in {SearchTool.NAME, WebSearchTool.NAME}:
+            objects = [
+                packets.SearchToolStart(is_internet_search=name == WebSearchTool.NAME)
+            ]
+            queries = _STRINGS.validate_python(args.get("queries", []))
+            self._queries.update(queries)
+            objects.append(packets.SearchToolQueriesDelta(queries=queries))
+        elif name == OpenURLTool.NAME:
+            objects = [
+                packets.OpenUrlStart(),
+                packets.OpenUrlUrls(
+                    urls=_STRINGS.validate_python(args.get("urls", []))
+                ),
+            ]
+        elif name == PythonTool.NAME:
+            objects = [
+                packets.PythonToolStart(
+                    code=_STRING.validate_python(args.get("code", ""))
+                )
+            ]
+        elif name == BASH_TOOL_NAME:
+            objects = [
+                packets.BashToolStart(cmd=_STRING.validate_python(args.get("cmd", "")))
+            ]
+        elif name == FileReaderTool.NAME:
+            objects = [packets.FileReaderStart()]
+        elif name == MemoryTool.NAME:
+            objects = [packets.MemoryToolStart()]
+        elif name == ImageGenerationTool.NAME:
+            objects = [packets.ImageGenerationToolStart()]
+        elif name == RESEARCH_AGENT_TOOL_NAME:
+            objects = [
+                packets.ResearchAgentStart(
+                    research_task=_STRING.validate_python(args.get("task", ""))
+                )
+            ]
+        elif name == CODING_AGENT_TOOL_NAME:
+            objects = [
+                packets.CodingAgentStart(
+                    query=_STRING.validate_python(args.get("query", "")),
+                    repo=_STRING.validate_python(args.get("github_repo", "")),
+                )
+            ]
+        return objects
 
     def update(
         self, details: BaseModel | None, content: str = ""
@@ -713,17 +719,7 @@ class ToolRenderer:
         if self._finished:
             return []
         output = self.start()
-        if result is not None and isinstance(result.details, CodingAgentCallResult):
-            output.append(
-                packets.Packet(
-                    placement=self.placement,
-                    obj=packets.CodingAgentFinal(answer=result.details.answer),
-                )
-            )
-        elif result is not None:
-            output.extend(
-                self.update(result.details, "" if result.is_error else result.text)
-            )
+        output.extend(self._result_packets(result))
         self._finished = True
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
@@ -738,3 +734,23 @@ class ToolRenderer:
             packets.Packet(placement=self.placement, obj=packets.SectionEnd())
         )
         return output
+
+    def _result_packets(self, result: ToolResult | None) -> list[packets.Packet]:
+        """The packets of the final result, before the section ends."""
+        if result is not None and isinstance(result.details, CodingAgentCallResult):
+            return [
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.CodingAgentFinal(answer=result.details.answer),
+                )
+            ]
+        if result is not None:
+            return self.update(result.details, "" if result.is_error else result.text)
+        return []
+
+    def amend(self, result: ToolResult) -> list[packets.Packet]:
+        """Render the final result that the run's finish hook set for the call.
+
+        A call that has not completed completes with it.
+        """
+        return self.complete(result)
