@@ -34,7 +34,7 @@ Never provide more than 3 queries at once to `internal_search`.
 # pipeline.
 CODE_MODE_SEARCH_USAGE = (
     "Each call runs a full retrieval pipeline with several model calls, so it is "
-    "expensive. Pass all queries for one information need in one call, for example "
+    "expensive. Pass up to 3 queries for one information need in one call, for example "
     '`await internal_search(queries=["first phrasing", "second phrasing"])`. Do not '
     "split them into one call per query, and do not `asyncio.gather` single-query "
     "calls. Search again when earlier results are insufficient or when a follow-up "
