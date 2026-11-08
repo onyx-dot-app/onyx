@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_global, assert_within_scope
 from onyx.db.enums import Permission, SkillInstallationPolicy, SkillSharePermission
 from onyx.db.models import Marketplace, Marketplace__UserGroup, Skill, User
@@ -18,7 +19,7 @@ from onyx.db.resource_access import (
 from onyx.db.skill import SkillAccessAdapter, affected_user_ids_for_skills
 from onyx.db.skill_mutation import assert_skill_mutable
 from onyx.db.user_group import assert_not_shared_with_default_group
-from onyx.db.users import lock_group_membership
+from onyx.db.users import fetch_user_by_id, lock_group_membership
 from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -241,8 +242,15 @@ def reset_marketplace_skill_access__no_commit(
     skill_id: UUID, user: User, db_session: Session
 ) -> set[UUID]:
     """Clear a company's per-skill overrides; caller commits and pushes recipients."""
-    assert_global(user, permission=Permission.MANAGE_SKILLS)
     lock_group_membership(db_session)
+    actor = fetch_user_by_id(db_session, user.id, refresh=True)
+    if (
+        actor is None
+        or not actor.is_active
+        or not has_global_permission(actor, Permission.BASIC_ACCESS)
+    ):
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+    assert_global(actor, permission=Permission.MANAGE_SKILLS)
     marketplace_id = db_session.scalar(
         select(Skill.marketplace_id).where(Skill.id == skill_id)
     )

@@ -12,7 +12,7 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import Engine, func, select, text
+from sqlalchemy import Engine, delete, func, select, text
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.community_downgrade import remove_custom_user_groups__no_commit
@@ -29,6 +29,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
+from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.resource_access import (
     AccessMutationResult,
     ResourceAccessChange,
@@ -39,6 +40,7 @@ from onyx.db.skill import (
     SkillManagementPolicy,
     fetch_skill,
 )
+from onyx.db.users import lock_group_membership
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import Tier
 from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
@@ -305,10 +307,11 @@ def test_community_and_downgrade_cannot_recreate_group_grants(
     )
 
 
+@pytest.mark.parametrize("revoke", [False, True])
 def test_reset_endpoint_pushes_once_after_commit_and_rejects_retired(
-    session: Session, marketplace: Marketplace
+    session: Session, marketplace: Marketplace, revoke: bool
 ) -> None:
-    admin, _ = manager(session, global_access=True)
+    admin, group_id = manager(session, global_access=True)
     make_sandbox(session, admin)
     marketplace.public_permission = Share.VIEWER
     apply(session, marketplace, catalog("first"))
@@ -323,13 +326,38 @@ def test_reset_endpoint_pushes_once_after_commit_and_rejects_retired(
         assert not db_session.in_transaction()
         assert recipients == {admin.id}
 
+    def lock_after_revocation(db_session: Session) -> None:
+        if revoke:
+            with Session(
+                db_session.connection(), join_transaction_mode="create_savepoint"
+            ) as other:
+                other.execute(
+                    delete(User__UserGroup).where(
+                        User__UserGroup.user_id == admin.id,
+                        User__UserGroup.user_group_id == group_id,
+                    )
+                )
+                recompute_user_permissions__no_commit(admin.id, other)
+                other.commit()
+        lock_group_membership(db_session)
+
     with (
+        patch(
+            "onyx.db.marketplace_access.lock_group_membership",
+            side_effect=lock_after_revocation,
+        ),
         patch(
             "onyx.server.features.skill.api.push_skills_for_users", side_effect=pushed
         ) as push,
         client_for(admin, session) as client,
     ):
         response = client.post(f"/skills/custom/{skill.id}/reset-marketplace-access")
+        if revoke:
+            assert response.status_code == 403, response.text
+            session.refresh(skill)
+            assert not skill.follows_marketplace_access and skill.user_shares
+            push.assert_not_called()
+            return
         assert response.status_code == 200, response.text
         push.assert_called_once()
         assert not skill.user_shares and skill.follows_marketplace_access
