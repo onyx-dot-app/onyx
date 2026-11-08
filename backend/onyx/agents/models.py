@@ -149,7 +149,7 @@ class PreparedStep(BaseModel):
 
 
 class ToolResultAmendment(BaseModel):
-    """A replacement for the recorded result of one tool call of the finishing run."""
+    """A replacement for the recorded result of one tool call of the releasing run."""
 
     call_id: str
     result: ToolResult

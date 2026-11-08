@@ -103,7 +103,7 @@ class ToolEndEvent(_MessageEvent):
 
 
 class ToolResultAmendedEvent(_MessageEvent):
-    """The run's finish hook replaced the recorded result of an ended call."""
+    """A finish or suspend hook replaced the recorded result of an ended call."""
 
     type: Literal[AgentEventType.TOOL_RESULT_AMENDED] = (
         AgentEventType.TOOL_RESULT_AMENDED
