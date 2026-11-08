@@ -15,7 +15,10 @@ from onyx.secondary_llm_flows.time_filter import (
     _TIME_FILTER_PAIR_RE,
     _parse_time_decision,
 )
-from onyx.utils.text_processing import find_all_json_objects, parse_llm_json_response
+from onyx.utils.text_processing import (
+    iter_json_objects_with_spans,
+    parse_llm_json_response,
+)
 
 # Each adversarial case runs at n and _GROWTH x n. Linear code grows about
 # _GROWTH times; the old quadratic and cubic scans grew 64x to 512x. Comparing
@@ -151,9 +154,9 @@ def test_time_filter_pair_regex_is_linear_without_the_length_cap() -> None:
     _assert_linear(_TIME_FILTER_PAIR_RE.search, lambda k: "(" + " " * 500 * k)
 
 
-def test_find_all_json_objects_keeps_nested_and_order() -> None:
+def test_iter_json_objects_keeps_nested_and_order() -> None:
     text = 'x {"name": "t", "arguments": {"q": 1}} y {bad} {"z": "}"} {"w": {}}'
-    assert find_all_json_objects(text) == [
+    assert [obj for _, _, obj in iter_json_objects_with_spans(text)] == [
         {"name": "t", "arguments": {"q": 1}},
         {"q": 1},
         {"w": {}},

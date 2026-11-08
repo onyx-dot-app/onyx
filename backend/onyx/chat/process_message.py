@@ -40,7 +40,6 @@ from onyx.chat.incognito import (
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
     AnswerStream,
-    ChatBasicResponse,
     ChatFullResponse,
     ChatResponseOutcome,
     ChatTurnSetup,
@@ -60,7 +59,6 @@ from onyx.configs.constants import (
     MessageType,
     MilestoneRecordType,
 )
-from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
     checkpoint_from_summary,
     create_new_chat_message,
@@ -102,10 +100,6 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AgentResponseDelta,
-    AgentResponseStart,
-    CitationInfo,
-    Packet,
     StreamingError,
 )
 from onyx.server.query_and_chat.token_limit import check_model_spend_limits
@@ -721,58 +715,6 @@ def remove_answer_citations(answer: str) -> str:
 
     stripped_parts.append(answer[cursor:])
     return "".join(stripped_parts)
-
-
-@log_function_time()
-def gather_stream(
-    packets: AnswerStream,
-) -> ChatBasicResponse:
-    answer: str | None = None
-    citations: list[CitationInfo] = []
-    error_msg: str | None = None
-    message_id: int | None = None
-    top_documents: list[SearchDoc] = []
-
-    for packet in packets:
-        if isinstance(packet, Packet):
-            if packet.placement.sub_turn_index is not None:
-                continue
-            if isinstance(packet.obj, AgentResponseStart):
-                answer = answer or ""
-                if packet.obj.final_documents:
-                    known_documents = {doc.document_id for doc in top_documents}
-                    top_documents.extend(
-                        doc
-                        for doc in packet.obj.final_documents
-                        if doc.document_id not in known_documents
-                    )
-            elif isinstance(packet.obj, AgentResponseDelta):
-                answer = (answer or "") + packet.obj.content
-            elif isinstance(packet.obj, CitationInfo):
-                citations.append(packet.obj)
-        elif isinstance(packet, StreamingError):
-            error_msg = packet.error
-        elif isinstance(packet, MessageResponseIDInfo):
-            message_id = packet.reserved_assistant_message_id
-
-    if message_id is None:
-        raise ValueError("Message ID is required")
-
-    if answer is None:
-        if error_msg is not None:
-            answer = ""
-        else:
-            # This should never be the case as these non-streamed flows do not have a stop-generation signal
-            raise RuntimeError("Answer was not generated")
-
-    return ChatBasicResponse(
-        answer=answer,
-        answer_citationless=remove_answer_citations(answer),
-        citation_info=citations,
-        message_id=message_id,
-        error_msg=error_msg,
-        top_documents=top_documents,
-    )
 
 
 @log_function_time()
