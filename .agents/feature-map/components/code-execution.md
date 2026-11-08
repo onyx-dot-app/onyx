@@ -190,7 +190,10 @@ files only), only when the chat offers the Python tool. Files already in
 `ChatAgent.chat_files` from an earlier step are not loaded again. Search documents
 and citations are retained without Python. `chat/agent.py:ChatAgent._update_tool_context` merges them into
 `chat_files` after the step and skips a filename already present, so the code in
-a later step can open a spreadsheet that search found. Staging has caps on file
+a later step can open a spreadsheet that search found. A code mode cell stages
+the files of its nested searches the same way
+(`tools/tool_implementations/code_mode/cells.py:CodeCell._run_call`), so a later
+`run_python` call in the same program can open them. Staging has caps on file
 count, total bytes and parallel uploads. When files are dropped, the model gets
 a `staging_notice` in the result.
 
@@ -492,7 +495,8 @@ health calls are not retried.
     up to `STOP_GRACE_SECONDS` from the first stop request, and returns a
     `ToolResultAmendment` for each observation that Stop interrupted and for
     each cell whose last saved observation is `running`. The amendment adds a `CellClosing` (`reason="response_ended"`)
-    with the calls, output and store commit after that observation. When the
+    with the calls, output, result and store commit after that observation;
+    its text is formatted like an observation (`format_content`). When the
     run suspends (for example on `ChildRunWait`), `Agent.on_suspend`
     (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
     the same with `reason="suspended"` before the run captures its state, so no
