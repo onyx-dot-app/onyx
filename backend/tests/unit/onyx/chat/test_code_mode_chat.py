@@ -322,6 +322,13 @@ def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in direct
 
 
+def test_the_token_reservation_counts_code_mode_guidance() -> None:
+    reserved = build_system_prompt(
+        "base", include_all_guidance=True, include_user_info=False
+    )
+    assert CODE_MODE_GUIDANCE in reserved
+
+
 class _DirectOnlyTool(EchoTool):
     """A tool that waits for a child run, which a program cannot do."""
 

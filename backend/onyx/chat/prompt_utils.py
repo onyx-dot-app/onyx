@@ -499,6 +499,7 @@ def build_system_prompt(
             PYTHON_TOOL_GUIDANCE,
             GENERATE_IMAGE_GUIDANCE,
             MEMORY_GUIDANCE,
+            CODE_MODE_GUIDANCE,
         ]
         system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
         return system_prompt

@@ -20,7 +20,8 @@
   agent downloads the repository and runs shell commands to explore it. The
   user sees its thinking and bash steps, then an answer.
 - **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets the
-  `execute_code` and `wait_code` tools instead of the tools it can nest. A
+  `execute_code` and `wait_code` tools instead of the tools it can nest, when
+  it has any. Deep research does not use code mode. A
   preferred Action that became a function is named as one in the reminder. One program can run
   several searches and MCP calls in parallel and print only what the answer
   needs. Each program runs in a cell. When the cell still runs after
@@ -333,8 +334,9 @@ health calls are not retried.
     (`server/features/mcp/client.py:call_mcp_tool` with the invocation's
     cancellation), and each MCP request times out after
     `MCP_TOOL_CALL_TIMEOUT_SECONDS`. A response has at most `MAX_OPEN_CELLS` (4)
-    open cells (`tools/tool_implementations/code_mode/cells.py`), so idle cells
-    cost only their driver threads. A server process runs at most
+    open cells (`tools/tool_implementations/code_mode/cells.py`). An idle cell
+    costs its driver thread, and also a worker while its program waits on a
+    tool and its dump does not fit in `MAX_SUSPENDED_BYTES`. A server process runs at most
     `MAX_RUNNING_CELLS` (64) cells whose program has not ended
     (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit gets `BUSY_MESSAGE`
     and does not start. A new program that finds no free worker for
@@ -396,7 +398,8 @@ health calls are not retried.
     `ChatAgent` gets code mode, and it sets no such hook; an agent that adds
     one must keep its tools direct. Nested calls run in the program's
     cancellation scope: the program's end, timeout or Stop cancels their model
-    and HTTP work. Calls to a sequential tool run one at a time, and the wait
+    work and the HTTP work of tools that observe cancellation; `run_python` and
+    `bash` do not (see Known issues). Calls to a sequential tool run one at a time, and the wait
     for that lock is cancellable. Each `CodeModeCall` has a `state` (`ok`,
     `error`, `unfinished`, or `running` for a call that had not ended when an
     observation returned); `is_error` derives from it and is False for
@@ -472,8 +475,13 @@ health calls are not retried.
     through `chat/chat_utils.py:capture_chat_history` (`read_response_steps`
     keeps `details`). Limits (`MAX_STORED_VALUE_BYTES` 256 KB per value,
     `MAX_STORE_BYTES` 1 MB in total, `MAX_COMMITTED_BYTES` 16 MB of commits per
-    chat, as JSON) raise in the program, so saved writes stay bounded; the
-    saved-call bounds do not cut them. Inside one
+    chat, as JSON) raise in the program when `store()` would exceed them, so
+    saved writes stay bounded; the saved-call bounds do not cut them. A commit
+    that would exceed `MAX_STORE_BYTES` or `MAX_COMMITTED_BYTES` with the commits
+    that other cells made meanwhile is discarded instead
+    (`tools/tool_implementations/code_mode/cells.py:_StoreCommits.commit`), and
+    the observation or closing record that reports the end lists the discarded
+    keys. Inside one
     program, a released wait keeps all program state: sandbox-defined classes
     and instances survive a resume on another worker. Host `ClassInstance`
     values would not, and code mode passes none.
@@ -649,10 +657,9 @@ health calls are not retried.
   as one direct call, with `wait_code` or at response end). Mobile:
   `mobile/src/chat/timeline/__tests__/grouping.test.ts` and
   `mobile/src/chat/timeline/__tests__/transformers.test.ts`.
-  By hand, set
-  `CODE_MODE_ENABLED=true`, attach an MCP server and internal search to an
-  agent, and ask a question that needs both; reload the chat, expand the
-  timeline, and check that each call shows once as its own step.
+- By hand, set `CODE_MODE_ENABLED=true`, attach an MCP server and internal
+  search to an agent, and ask a question that needs both; reload the chat,
+  expand the timeline, and check that each call shows once as its own step.
 - By hand, ask for a chart. The image must download, and it must still show
   after a reload. Turn the admin switch off: the next message must have no
   `run_python` call and no error.

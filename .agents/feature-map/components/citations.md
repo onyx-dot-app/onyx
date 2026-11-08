@@ -290,7 +290,9 @@ of only markers stays empty.
   `saved_result_details` and `restored_result_details` drop and refill
   documents on save and reload, and `staged_result_details` stages their files.
   The agent, the saved tool history and history restoration call these
-  functions, and the reminder reads `tool_result_sources`. It drops numbers whose document is not there.
+  functions. The reminder reads them through
+  `chat/citation_utils.py:result_cites_documents`. `tool_result_sources` drops
+  numbers whose document is not there.
   A details type that the module does not know carries no numbers, so its
   markers render as nothing. A tool that carries documents in a new
   details type changes only that module. Code mode keeps documents only in its
