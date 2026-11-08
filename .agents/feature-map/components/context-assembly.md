@@ -107,10 +107,12 @@ Caller markers in the prefix and suffix count toward the four-breakpoint limit.
 The adapter preserves them and uses remaining slots for the tail, head, then context.
 User-message continuation keeps message markers on separate content blocks so
 merging preserves the prefix and suffix cache boundaries.
-Separately, the LLM adapter marks
-every tool result with an explicit breakpoint on supported OpenAI and Azure API requests
-(`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`). Requests with no
-tool results keep implicit caching. `prepare_prompt` copies
+The OpenAI adapter flags every user
+message of the cacheable prefix. On supported OpenAI and Azure API requests
+(`llm/prompt_cache/providers/openai.py:uses_explicit_cache_breakpoints`), the LLM
+wrapper turns each flag and every tool result into an explicit breakpoint. Later steps
+and turns repeat these markers, so they read the entries earlier requests wrote.
+Requests with nothing to mark keep implicit caching. `prepare_prompt` copies
 the messages it receives and never changes recorded history. Within one step it
 replaces a search passage that repeats an earlier result's passage (same
 document and text) with a pointer to that result

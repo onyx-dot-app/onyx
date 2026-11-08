@@ -34,6 +34,10 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.llm.prompt_cache.providers.openai import (
+    CACHE_BREAKPOINT_FLAG,
+    explicit_cache_breakpoints,
+)
 
 _RESPONSE = LiteLLMModelResponse(
     id="r",
@@ -75,13 +79,14 @@ def _sent(
     messages: list[Message],
     *,
     api_base: str | None = None,
+    deployment_name: str | None = None,
     custom_config: dict[str, str] | None = None,
     model_kwargs: dict[str, JsonValue] | None = None,
 ) -> Mapping[str, Any]:
     client = get_llm(
         provider=provider,
         model=model,
-        deployment_name=None,
+        deployment_name=deployment_name,
         max_input_tokens=100_000,
         api_base=api_base,
         custom_config=custom_config,
@@ -175,6 +180,49 @@ def test_next_turn_repeats_the_marker_on_earlier_questions() -> None:
     assert _user_contents(next_turn) == [
         _MARKED_QUESTION,
         [{**_MARKED_QUESTION[0], "text": "Follow-up"}],
+    ]
+
+
+def test_markers_survive_transforms_that_add_messages() -> None:
+    """A Mistral-named deployment gets a bridge message between a tool result
+    and the next user message. The flag travels on the message, so the user
+    messages after the inserted bridge keep their markers."""
+    sent = _sent(
+        "azure",
+        "gpt-5.6-luna",
+        [
+            *_turn(_RESULTS[:1], cacheable=True)[:-1],
+            UserMessage(content="Follow-up", cacheable=True),
+        ],
+        api_base="https://test.openai.azure.com",
+        deployment_name="mistral-router",
+    )
+
+    roles = [message["role"] for message in sent["messages"]]
+    assert roles[roles.index("tool") + 1] == "assistant"
+    assert sent["prompt_cache_options"] == {"mode": "explicit"}
+    assert _user_contents(sent) == [
+        _MARKED_QUESTION,
+        [{**_MARKED_QUESTION[0], "text": "Follow-up"}],
+    ]
+    assert all("cache_breakpoint" not in message for message in sent["messages"])
+
+
+def test_marking_a_text_part_keeps_its_fields() -> None:
+    part: dict[str, JsonValue] = {
+        "type": "text",
+        "text": "Question",
+        "cache_control": {"type": "ephemeral"},
+    }
+    marked, options = explicit_cache_breakpoints(
+        [{"role": "user", "content": [part], CACHE_BREAKPOINT_FLAG: True}]
+    )
+    assert options == {"mode": "explicit"}
+    assert marked == [
+        {
+            "role": "user",
+            "content": [{**part, "prompt_cache_breakpoint": {"mode": "explicit"}}],
+        }
     ]
 
 

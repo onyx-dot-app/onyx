@@ -7,7 +7,7 @@ and on every tool result (`explicit_cache_breakpoints`, applied in
 `multi_llm.py`).
 """
 
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -51,36 +51,47 @@ def _supports_breakpoint(model_names: tuple[str, ...]) -> bool:
     return any(supports_openai_prompt_cache_breakpoint(name) for name in model_names)
 
 
-def _marked_text(text: JsonValue, part_type: str) -> dict[str, JsonValue]:
-    return {
-        "type": part_type,
-        "text": text,
-        "prompt_cache_breakpoint": dict(EXPLICIT_CACHE_MODE),
-    }
+# Serialized-message key that carries `CacheableMessage.cache_breakpoint`
+# through request transforms. Never sent to a provider.
+CACHE_BREAKPOINT_FLAG = "cache_breakpoint"
+
+
+def without_cache_breakpoint_flags(
+    messages: Sequence[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
+    """The messages without `CACHE_BREAKPOINT_FLAG`, as a provider receives them."""
+    return [
+        {key: value for key, value in message.items() if key != CACHE_BREAKPOINT_FLAG}
+        if CACHE_BREAKPOINT_FLAG in message
+        else message
+        for message in messages
+    ]
+
+
+def _marked_text(part: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return {**part, "prompt_cache_breakpoint": dict(EXPLICIT_CACHE_MODE)}
 
 
 def _marked_user_content(content: JsonValue) -> JsonValue | None:
     """The content with its last text part marked; None if it has no text."""
     if isinstance(content, str):
-        return [_marked_text(content, "text")]
+        return [_marked_text({"type": "text", "text": content})]
     if not isinstance(content, list):
         return None
     for index in range(len(content) - 1, -1, -1):
         part = content[index]
         if isinstance(part, dict) and part.get("type") == "text":
-            marked = _marked_text(part.get("text"), "text")
-            return [*content[:index], marked, *content[index + 1 :]]
+            return [*content[:index], _marked_text(part), *content[index + 1 :]]
     return None
 
 
 def explicit_cache_breakpoints(
     messages: Sequence[dict[str, JsonValue]],
-    prefix_breakpoints: Collection[int] = (),
 ) -> tuple[list[dict[str, JsonValue]], dict[str, JsonValue] | None]:
     """The messages with explicit breakpoints on every tool result and on the
-    user messages at `prefix_breakpoints`, and the request's
+    user messages that carry `CACHE_BREAKPOINT_FLAG`, and the request's
     prompt_cache_options; None when nothing is marked, so that request keeps
-    implicit caching.
+    implicit caching. The flags are removed.
 
     A breakpoint is part of the cached prefix, so an entry is reused only if
     the same message still carries the marker. Every request marks each user
@@ -93,14 +104,16 @@ def explicit_cache_breakpoints(
     (`_patch_responses_bridge_keeps_breakpoints`). System messages become
     ``instructions`` and assistant output does not accept a marker.
     """
-    result = list(messages)
+    result = without_cache_breakpoint_flags(messages)
     marked = False
-    for index, message in enumerate(result):
+    for index, (message, original) in enumerate(zip(result, messages, strict=True)):
         content = message.get("content")
         role = message.get("role")
         if role == "tool" and isinstance(content, str):
-            marked_content: JsonValue | None = [_marked_text(content, "input_text")]
-        elif role == "user" and index in prefix_breakpoints:
+            marked_content: JsonValue | None = [
+                _marked_text({"type": "input_text", "text": content})
+            ]
+        elif role == "user" and original.get(CACHE_BREAKPOINT_FLAG) is True:
             marked_content = _marked_user_content(content)
         else:
             continue

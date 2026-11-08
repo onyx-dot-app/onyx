@@ -109,8 +109,10 @@ from onyx.llm.models import (
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.prompt_cache.providers.openai import (
+    CACHE_BREAKPOINT_FLAG,
     explicit_cache_breakpoints,
     uses_explicit_cache_breakpoints,
+    without_cache_breakpoint_flags,
 )
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
@@ -468,9 +470,19 @@ def _prompt_to_dicts(prompt: list[ChatCompletionMessage]) -> list[dict[str, Json
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
     LiteLLM expects messages to be dictionaries (with .get() method),
-    not Pydantic models. This function serializes the messages.
+    not Pydantic models. This function serializes the messages. A cache
+    breakpoint travels on its message as `CACHE_BREAKPOINT_FLAG`, so it
+    survives transforms that add or remove messages.
     """
-    return [msg.model_dump(mode="json", exclude_none=True) for msg in prompt]
+    return [
+        {
+            **msg.model_dump(mode="json", exclude_none=True),
+            CACHE_BREAKPOINT_FLAG: True,
+        }
+        if msg.cache_breakpoint
+        else msg.model_dump(mode="json", exclude_none=True)
+        for msg in prompt
+    ]
 
 
 def _normalize_content(raw: JsonValue) -> str:
@@ -1418,11 +1430,6 @@ class LitellmLLM(LLM):
                 passthrough_kwargs["api_key"] = self._api_key or None
 
             messages = _prompt_to_dicts(prompt)
-            prefix_breakpoints = {
-                index
-                for index, message in enumerate(prompt)
-                if message.cache_breakpoint
-            }
 
             if not (
                 is_claude_model
@@ -1503,13 +1510,10 @@ class LitellmLLM(LLM):
             cache_messages = messages
             cache_options = None
             if is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
-                cache_messages, cache_options = explicit_cache_breakpoints(
-                    messages,
-                    # Indices hold while no transform above added or removed messages.
-                    prefix_breakpoints if len(messages) == len(prompt) else (),
-                )
-                if cache_options is not None:
-                    optional_kwargs.setdefault("prompt_cache_options", cache_options)
+                cache_messages, cache_options = explicit_cache_breakpoints(messages)
+            messages = without_cache_breakpoint_flags(messages)
+            if cache_options is not None:
+                optional_kwargs.setdefault("prompt_cache_options", cache_options)
 
             strict_disabled = False
             strict_model = (

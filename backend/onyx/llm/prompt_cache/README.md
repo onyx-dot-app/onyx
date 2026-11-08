@@ -183,7 +183,7 @@ Each provider has its own adapter in `providers/`:
 | File | Class | Description |
 |------|-------|-------------|
 | `base.py` | `PromptCacheProvider` | Abstract base class for all providers |
-| `openai.py` | `OpenAIPromptCacheProvider` | Flags the prefix end for explicit breakpoints |
+| `openai.py` | `OpenAIPromptCacheProvider` | Flags every user message of the cacheable prefix for explicit breakpoints |
 | `anthropic.py` | `AnthropicPromptCacheProvider` | Explicit caching at shared-context and history boundaries |
 | `vertex.py` | `VertexAIPromptCacheProvider` | Implicit Gemini caching without message changes |
 | `noop.py` | `NoOpPromptCacheProvider` | Fallback for unsupported providers |
