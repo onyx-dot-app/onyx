@@ -153,7 +153,12 @@ def test_cloud_range_is_bounded_before_materialization(
     for empty in [True, False]:
         if backend == "gcs":
             blob.download_as_bytes.side_effect = RequestRangeNotSatisfiable("range")
-            blob.size = 0 if empty else 1
+            blob.size = None
+
+            def reload_size(is_empty: bool = empty) -> None:
+                blob.size = 0 if is_empty else 1
+
+            blob.reload.side_effect = reload_size
         else:
             error = HttpResponseError("range")
             error.status_code = 416

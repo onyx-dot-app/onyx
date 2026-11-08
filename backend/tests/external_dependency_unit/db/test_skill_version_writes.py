@@ -1416,10 +1416,10 @@ def test_storage_bounds_actual_reads(
     allowance: int,
 ) -> None:
     from collections.abc import Callable
+    from importlib import import_module
     from typing import IO
 
     from onyx.file_store import file_store as storage
-    from onyx.file_store import postgres_file_store
 
     store = get_default_file_store()
     file_id = save_skill_bundle_bytes(
@@ -1440,8 +1440,9 @@ def test_storage_bounds_actual_reads(
 
         return copy(measured_read, use_tempfile=use_tempfile, max_bytes=max_bytes)
 
-    monkeypatch.setattr(storage, "read_file_to_buffer", measured_copy)
-    monkeypatch.setattr(postgres_file_store, "read_file_to_buffer", measured_copy)
+    monkeypatch.setattr(
+        import_module(type(store).__module__), "read_file_to_buffer", measured_copy
+    )
     if allowance < 150000:
         with pytest.raises(storage.FileSizeLimitExceeded):
             store.read_file(file_id, use_tempfile=use_tempfile, max_bytes=allowance)
@@ -1459,10 +1460,10 @@ def test_backend_stream_failure_keeps_background_progress_pending(
     tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from collections.abc import Callable
+    from importlib import import_module
     from typing import IO
 
     from onyx.file_store import file_store as storage
-    from onyx.file_store import postgres_file_store
 
     skill = legacy_skill(session, user, 1)
     copy = storage.read_file_to_buffer
@@ -1477,8 +1478,11 @@ def test_backend_stream_failure_keeps_background_progress_pending(
         return copy(failed_read, use_tempfile=use_tempfile, max_bytes=max_bytes)
 
     with monkeypatch.context() as patch:
-        patch.setattr(storage, "read_file_to_buffer", failed_copy)
-        patch.setattr(postgres_file_store, "read_file_to_buffer", failed_copy)
+        patch.setattr(
+            import_module(type(get_default_file_store()).__module__),
+            "read_file_to_buffer",
+            failed_copy,
+        )
         with pytest.raises(ConnectionError, match="storage stream disconnected"):
             repair_skill_versions.run(tenant_id=tenant)
     session.refresh(skill)
