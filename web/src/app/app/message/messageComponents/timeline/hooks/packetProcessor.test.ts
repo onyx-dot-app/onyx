@@ -1316,3 +1316,52 @@ test.each([undefined, null])(
     }
   }
 );
+
+describe("nested calls", () => {
+  const parentStart = createPacket(
+    PacketType.RESEARCH_AGENT_START,
+    { turn_index: 0 },
+    { research_task: "R" }
+  );
+  const call = (subTurnIndex: number) => ({
+    turn_index: 0,
+    sub_turn_index: subTurnIndex,
+  });
+
+  test("a group exposes its own packets and each nested call once", () => {
+    const first = [
+      parentStart,
+      createSearchToolStartPacket(call(1)),
+      createSearchToolStartPacket(call(0)),
+    ];
+    const state = processPackets(createInitialState(1), first);
+    const [group] = state.toolGroups;
+    expect(group!.packets).toEqual([parentStart]);
+    expect(group!.streamPackets).toEqual(first);
+    expect(group!.nestedCalls.map((c) => c.subTurnIndex)).toEqual([0, 1]);
+    expect(
+      group!.nestedCalls
+        .flatMap((c) => c.packets)
+        .map((p) => p.placement.sub_turn_index)
+    ).toEqual([null, null]);
+    expect(group!.nestedCalls.map((c) => c.complete)).toEqual([false, false]);
+
+    const second = [...first, createPacket(PacketType.SECTION_END, call(0))];
+    const ended = processPackets(state, second);
+    const [afterEnd] = ended.toolGroups;
+    expect(afterEnd!.nestedCalls.map((c) => c.complete)).toEqual([true, false]);
+    expect(afterEnd!.nestedCalls[1]).toBe(group!.nestedCalls[1]);
+    expect(afterEnd!.packets).toEqual([parentStart]);
+    expect(ended.groupKeysWithSectionEnd.has("0-0")).toBe(false);
+
+    const report = createPacket(
+      PacketType.INTERMEDIATE_REPORT_DELTA,
+      { turn_index: 0 },
+      { content: "Report" }
+    );
+    const reported = processPackets(ended, [...second, report]);
+    const [afterReport] = reported.toolGroups;
+    expect(afterReport!.nestedCalls).toBe(afterEnd!.nestedCalls);
+    expect(afterReport!.packets).toEqual([parentStart, report]);
+  });
+});

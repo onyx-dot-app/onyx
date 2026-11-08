@@ -25,13 +25,6 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
 export const isNestedPacket = (packet: Packet): boolean =>
   packet.placement.sub_turn_index != null;
 
-// Every step-kind check in this file reads only parent-level packets, so the nested calls of a
-// step never change the kind of the step.
-const someParentPacket = (
-  packets: Packet[],
-  predicate: (packet: Packet) => boolean,
-): boolean => packets.some((p) => !isNestedPacket(p) && predicate(p));
-
 // A parent-level SECTION_END or ERROR ends a group. A nested call ends with its own SECTION_END
 // while the parent tool keeps running.
 export const isGroupEndPacket = (packet: Packet): boolean =>
@@ -39,11 +32,10 @@ export const isGroupEndPacket = (packet: Packet): boolean =>
   (packet.obj.type === PacketType.SECTION_END ||
     packet.obj.type === PacketType.ERROR);
 
+// The step-kind checks below take a step's own packets (GroupedPacket.packets), which exclude
+// the packets of nested calls.
 export const isResearchAgentPackets = (packets: Packet[]): boolean =>
-  someParentPacket(
-    packets,
-    (p) => p.obj.type === PacketType.RESEARCH_AGENT_START,
-  );
+  packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 
 // Parent-level packet types that identify a coding agent group. The agent's bash calls and
 // thinking stream as nested sections of the same group.
@@ -53,16 +45,13 @@ export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
 ]);
 
 export const isCodingAgentPackets = (packets: Packet[]): boolean =>
-  someParentPacket(packets, (p) =>
-    CODING_AGENT_PACKET_TYPES.has(p.obj.type as PacketType),
-  );
+  packets.some((p) => CODING_AGENT_PACKET_TYPES.has(p.obj.type as PacketType));
 
 export const isSearchToolPackets = (packets: Packet[]): boolean =>
-  someParentPacket(packets, (p) => p.obj.type === PacketType.SEARCH_TOOL_START);
+  packets.some((p) => p.obj.type === PacketType.SEARCH_TOOL_START);
 
 export const isPythonToolPackets = (packets: Packet[]): boolean =>
-  someParentPacket(
-    packets,
+  packets.some(
     (p) =>
       p.obj.type === PacketType.PYTHON_TOOL_START ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
@@ -71,11 +60,10 @@ export const isPythonToolPackets = (packets: Packet[]): boolean =>
   );
 
 export const isReasoningPackets = (packets: Packet[]): boolean =>
-  someParentPacket(packets, (p) => p.obj.type === PacketType.REASONING_START);
+  packets.some((p) => p.obj.type === PacketType.REASONING_START);
 
 export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
-  someParentPacket(
-    packets,
+  packets.some(
     (p) =>
       COLLAPSED_STREAMING_PACKET_TYPES.has(p.obj.type as PacketType) ||
       (p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
@@ -88,9 +76,8 @@ export const stepSupportsCollapsedStreaming = (packets: Packet[]): boolean =>
 export const stepHasCollapsedStreamingContent = (
   packets: Packet[],
 ): boolean => {
-  const parentPackets = packets.filter((packet) => !isNestedPacket(packet));
   const packetTypes = new Set(
-    parentPackets.map((packet) => packet.obj.type as PacketType),
+    packets.map((packet) => packet.obj.type as PacketType),
   );
 
   if (packetTypes.has(PacketType.ERROR)) {
@@ -115,7 +102,7 @@ export const stepHasCollapsedStreamingContent = (
   if (
     packetTypes.has(PacketType.PYTHON_TOOL_START) ||
     packetTypes.has(PacketType.PYTHON_TOOL_DELTA) ||
-    parentPackets.some(
+    packets.some(
       (p) =>
         p.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
         (p.obj as ToolCallArgumentDelta).tool_type ===
@@ -157,14 +144,10 @@ export const stepHasCollapsedStreamingContent = (
 };
 
 export const isDeepResearchPlanPackets = (packets: Packet[]): boolean =>
-  someParentPacket(
-    packets,
-    (p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START,
-  );
+  packets.some((p) => p.obj.type === PacketType.DEEP_RESEARCH_PLAN_START);
 
 export const isMemoryToolPackets = (packets: Packet[]): boolean =>
-  someParentPacket(
-    packets,
+  packets.some(
     (p) =>
       p.obj.type === PacketType.MEMORY_TOOL_START ||
       p.obj.type === PacketType.MEMORY_TOOL_NO_ACCESS,

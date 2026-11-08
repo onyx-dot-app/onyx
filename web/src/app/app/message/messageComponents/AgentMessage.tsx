@@ -448,6 +448,8 @@ const AgentMessage = React.memo(function AgentMessage({
                   displayGroup.tab_index
                 )}
                 packets={displayGroup.packets}
+                nestedCalls={displayGroup.nestedCalls}
+                streamPackets={displayGroup.streamPackets}
                 chatState={effectiveChatState}
                 messageNodeId={nodeId}
                 hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}

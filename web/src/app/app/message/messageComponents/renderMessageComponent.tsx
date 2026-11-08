@@ -21,7 +21,7 @@ import { PythonToolRenderer } from "@/app/app/message/messageComponents/timeline
 import { CodingAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/CodingAgentRenderer";
 import {
   isCodingAgentPackets,
-  isNestedPacket,
+  NestedCall,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { ReasoningRenderer } from "@/app/app/message/messageComponents/timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/CustomToolRenderer";
@@ -118,9 +118,7 @@ function isResearchAgentPacket(packet: Packet) {
 export function findRenderer(
   groupedPackets: GroupedPackets
 ): MessageRenderer<any, any> | null {
-  // A group holds the packets of its own call and of any nested calls. Only
-  // the parent-level packets decide the renderer.
-  const packets = groupedPackets.packets.filter((p) => !isNestedPacket(p));
+  const { packets } = groupedPackets;
 
   if (packets.some(isChatPacket)) {
     return MessageTextRenderer;
@@ -169,6 +167,8 @@ export function findRenderer(
 // Props interface for RendererComponent
 interface RendererComponentProps {
   packets: Packet[];
+  nestedCalls: NestedCall[];
+  streamPackets: Packet[];
   chatState: FullChatState;
   messageNodeId?: number;
   hasTimelineThinking?: boolean;
@@ -187,6 +187,8 @@ function areRendererPropsEqual(
 ): boolean {
   return (
     prev.packets === next.packets &&
+    prev.nestedCalls === next.nestedCalls &&
+    prev.streamPackets === next.streamPackets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
@@ -200,6 +202,8 @@ function areRendererPropsEqual(
 // React component wrapper that directly uses renderer components
 export const RendererComponent = memo(function RendererComponent({
   packets,
+  nestedCalls,
+  streamPackets,
   chatState,
   messageNodeId,
   hasTimelineThinking,
@@ -219,6 +223,8 @@ export const RendererComponent = memo(function RendererComponent({
   return (
     <RendererFn
       packets={packets}
+      nestedCalls={nestedCalls}
+      streamPackets={streamPackets}
       state={chatState}
       messageNodeId={messageNodeId}
       hasTimelineThinking={hasTimelineThinking}

@@ -31,6 +31,7 @@ function group(packets: Packet[]): TurnGroup[] {
           tabIndex: 0,
           packets,
           nestedCalls: [],
+          streamPackets: packets,
         },
       ],
     },

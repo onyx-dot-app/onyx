@@ -517,21 +517,6 @@ describe("usePacketProcessor", () => {
       expect(result.current.displayGroups.length).toBe(1);
     });
 
-    test("a stopped response of only an error completes", () => {
-      const packets = [
-        createPacket(
-          PacketType.ERROR,
-          { turn_index: 0 },
-          { message: "The model failed." }
-        ),
-        createStopPacket(),
-      ];
-
-      const { result } = renderHook(() => usePacketProcessor(packets, 1));
-
-      expect(result.current.isComplete).toBe(true);
-    });
-
     test.each([
       ["a live stop", createStopPacket()],
       [

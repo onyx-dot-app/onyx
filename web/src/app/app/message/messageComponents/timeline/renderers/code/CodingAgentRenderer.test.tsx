@@ -1,6 +1,7 @@
 import { render, screen } from "@tests/setup/test-utils";
 import { CodingAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/CodingAgentRenderer";
 import { RenderType } from "@/app/app/message/messageComponents/types";
+import { isNestedPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import {
   CodingAgentPacket,
   PacketType,
@@ -9,7 +10,9 @@ import {
 function CodingOutput({ packets }: { packets: CodingAgentPacket[] }) {
   return (
     <CodingAgentRenderer
-      packets={packets}
+      packets={packets.filter((packet) => !isNestedPacket(packet))}
+      nestedCalls={[]}
+      streamPackets={packets}
       state={{}}
       onComplete={() => {}}
       renderType={RenderType.FULL}

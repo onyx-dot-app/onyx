@@ -325,6 +325,7 @@ function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
 
 export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   packets,
+  streamPackets,
   renderType,
   stopPacketSeen,
   isHover = false,
@@ -340,7 +341,12 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   const hasFinal = finalPacket !== undefined;
   const errored = packets.some((p) => p.obj.type === PacketType.ERROR);
 
-  const steps = useMemo(() => buildAgentSteps(packets), [packets]);
+  // Thinking and bash calls stream as nested sections; their order across
+  // sections comes from the stream.
+  const steps = useMemo(
+    () => buildAgentSteps(streamPackets as CodingAgentPacket[]),
+    [streamPackets]
+  );
 
   const isComplete = hasFinal || errored;
 

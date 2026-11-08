@@ -74,10 +74,6 @@ describe("packetUtils / packetHelpers", () => {
           query: "q",
           repo: null,
         }),
-        makePlacedPacket(
-          { type: "bash_tool_start", cmd: "ls" },
-          { turn_index: 0, sub_turn_index: 0 },
-        ),
       ]),
     ).toBe(true);
   });
@@ -102,33 +98,5 @@ describe("toolDisplay", () => {
     expect(isToolComplete([reasoning])).toBe(false);
     expect(hasToolError([reasoning, errorPacket])).toBe(true);
     expect(hasToolError([reasoning, sectionEnd])).toBe(false);
-  });
-
-  it("only counts a research agent complete on a parent-level SECTION_END", () => {
-    const researchStart: Packet = makePlacedPacket({
-      type: "research_agent_start",
-      research_task: "t",
-    });
-    const nestedEnd: Packet = makePlacedPacket(
-      { type: "section_end" },
-      { turn_index: 0, sub_turn_index: 1 },
-    );
-    const parentEnd: Packet = makePlacedPacket({ type: "section_end" });
-    expect(isToolComplete([researchStart, nestedEnd])).toBe(false);
-    expect(isToolComplete([researchStart, parentEnd])).toBe(true);
-  });
-
-  it("does not end a coding agent on an error from a nested bash call", () => {
-    const codingStart: Packet = makePlacedPacket({
-      type: "coding_agent_start",
-      query: "fix",
-      repo: null,
-    });
-    const nestedError: Packet = makePlacedPacket(
-      { type: "error", message: "exit 1" },
-      { turn_index: 0, sub_turn_index: 0 },
-    );
-    expect(isToolComplete([codingStart, nestedError])).toBe(false);
-    expect(isCodingAgentPackets([nestedError])).toBe(false);
   });
 });

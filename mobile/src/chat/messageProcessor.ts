@@ -64,6 +64,8 @@ export interface ProcessedMessageState {
 export interface GroupedPacket {
   turn_index: number;
   tab_index: number;
+  // The group's own packets, without the packets of nested calls. Step kind, renderer, header,
+  // and end read only these.
   packets: Packet[];
 }
 
@@ -376,8 +378,8 @@ export function processPackets(
   return state;
 }
 
-// Spread packets to force a new array ref (change detection); keep only content groups; sort by
-// turn then tab.
+// Keep each group's own packets in a new array ref (change detection); keep only content groups;
+// sort by turn then tab.
 function buildGroupsFromKeys(
   state: ProcessedMessageState,
   keys: Set<string>,
@@ -386,7 +388,13 @@ function buildGroupsFromKeys(
     .map((key) => {
       const { turn_index, tab_index } = parseToolKey(key);
       const packets = state.groupedPacketsMap.get(key);
-      return packets ? { turn_index, tab_index, packets: [...packets] } : null;
+      return packets
+        ? {
+            turn_index,
+            tab_index,
+            packets: packets.filter((packet) => !isNestedPacket(packet)),
+          }
+        : null;
     })
     .filter(
       (g): g is GroupedPacket => g !== null && hasContentPackets(g.packets),

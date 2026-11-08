@@ -9,7 +9,6 @@ import {
   PacketType,
   StopReason,
 } from "@/chat/streamingModels";
-import { isNestedPacket } from "@/chat/timeline/packetHelpers";
 import { isDisplayPacket, isToolPacket } from "@/chat/timeline/packetUtils";
 import { TurnGroup } from "@/chat/timeline/transformers";
 
@@ -41,11 +40,8 @@ export function useTimelineHeader(
       return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
-    // The step's own first packet decides the header; nested calls do not.
     const firstPacket = currentStep.packets.find(
-      (packet) =>
-        !isNestedPacket(packet) &&
-        (isToolPacket(packet, false) || isDisplayPacket(packet)),
+      (packet) => isToolPacket(packet, false) || isDisplayPacket(packet),
     );
     if (!firstPacket) {
       return { headerText: "Thinking...", hasPackets, userStopped };

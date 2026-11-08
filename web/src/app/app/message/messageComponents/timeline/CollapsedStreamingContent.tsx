@@ -46,6 +46,7 @@ export const CollapsedStreamingContent = React.memo(
             key={`${step.key}-compact`}
             packets={step.packets}
             nestedCalls={step.nestedCalls}
+            streamPackets={step.streamPackets}
             chatState={chatState}
             animate={true}
             stopPacketSeen={false}

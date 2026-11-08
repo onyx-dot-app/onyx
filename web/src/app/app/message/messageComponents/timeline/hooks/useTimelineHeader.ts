@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
 import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
-import { isNestedPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import {
   Packet,
   PacketType,
@@ -22,11 +21,8 @@ function stepHeaderText(
   t: TimelineTranslate,
   locale: string
 ): string | null {
-  // The step's own first packet decides the header; nested calls do not.
   const firstPacket = packets.find(
-    (packet) =>
-      !isNestedPacket(packet) &&
-      (isToolPacket(packet, false) || isDisplayPacket(packet))
+    (packet) => isToolPacket(packet, false) || isDisplayPacket(packet)
   );
   if (!firstPacket) return null;
 

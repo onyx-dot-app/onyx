@@ -24,7 +24,6 @@ import {
   parseToolKey,
 } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import {
-  asStandalonePacket,
   isGroupEndPacket,
   isNestedPacket,
   NestedCall,
@@ -85,9 +84,14 @@ export interface ProcessorState {
 export interface GroupedPacket {
   turn_index: number;
   tab_index: number;
+  /** The group's own packets, without the packets of nested calls. Step kind,
+   * renderer, header, and end read only these. */
   packets: Packet[];
   /** The tool calls nested under this group, ordered by sub_turn_index. */
   nestedCalls: NestedCall[];
+  /** Every packet of the group, nested calls included, in stream order. Only
+   * renderers that interleave nested sections read it (coding agent). */
+  streamPackets: Packet[];
 }
 
 // ============================================================================
@@ -339,7 +343,11 @@ function addPacketToGroup(
     state.nestedCallsMap.get(groupKey) ?? new Map<number, Packet[]>();
   state.nestedCallsMap.set(groupKey, calls);
   const call = calls.get(subTurnIndex) ?? [];
-  call.push(asStandalonePacket(packet));
+  // Placed at parent level, so the tool's own renderer reads it as a direct call
+  call.push({
+    ...packet,
+    placement: { ...packet.placement, sub_turn_index: null },
+  });
   calls.set(subTurnIndex, call);
 }
 
@@ -426,15 +434,6 @@ export function processPackets(
   return state;
 }
 
-function nestedCalls(state: ProcessorState, key: string): NestedCall[] {
-  const calls = nestedCallSnapshot(
-    state.nestedCallsMap.get(key) ?? new Map<number, Packet[]>(),
-    state.nestedCallSnapshots.get(key)
-  );
-  state.nestedCallSnapshots.set(key, calls);
-  return calls;
-}
-
 /**
  * Build GroupedPacket array from a set of group keys.
  * Filters to only include groups with meaningful content and sorts by turn/tab index.
@@ -451,7 +450,7 @@ function nestedCalls(state: ProcessorState, key: string): NestedCall[] {
  * // │ keys = Set{"0-0", "0-1", "1-0", "2-0"}             │
  * // └─────────────────────────────────────────────────────┘
  * //
- * // Step 1: Map keys → GroupedPacket (parse key, lookup packets)
+ * // Step 1: Map keys → GroupedPacket (parse key, split parent packets from nested calls)
  * // ┌─────────────────────────────────────────────────────┐
  * // │ "0-0" → { turn_index:0, tab_index:0, packets:[...] }│
  * // │ "0-1" → { turn_index:0, tab_index:1, packets:[...] }│
@@ -483,16 +482,21 @@ function buildGroupsFromKeys(
   return Array.from(keys)
     .map((key) => {
       const { turn_index, tab_index } = parseToolKey(key);
-      const packets = state.groupedPacketsMap.get(key);
-      // Spread to create new array reference - ensures React detects changes for re-renders
-      return packets
-        ? {
-            turn_index,
-            tab_index,
-            packets: [...packets],
-            nestedCalls: nestedCalls(state, key),
-          }
-        : null;
+      const streamPackets = state.groupedPacketsMap.get(key);
+      if (!streamPackets) return null;
+      const nestedCalls = nestedCallSnapshot(
+        state.nestedCallsMap.get(key) ?? new Map<number, Packet[]>(),
+        state.nestedCallSnapshots.get(key)
+      );
+      state.nestedCallSnapshots.set(key, nestedCalls);
+      // New array references let React detect changes for re-renders
+      return {
+        turn_index,
+        tab_index,
+        packets: streamPackets.filter((p) => !isNestedPacket(p)),
+        nestedCalls,
+        streamPackets: [...streamPackets],
+      };
     })
     .filter(
       (g): g is GroupedPacket => g !== null && hasContentPackets(g.packets)

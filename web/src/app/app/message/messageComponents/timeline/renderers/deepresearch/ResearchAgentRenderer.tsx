@@ -16,7 +16,6 @@ import {
 import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
 import {
   isGroupEndPacket,
-  isNestedPacket,
   NestedCall,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import {
@@ -32,7 +31,8 @@ import {
   renderMarkdown,
 } from "@/app/app/message/messageComponents/markdownUtils";
 
-const NO_NESTED_CALLS: NestedCall[] = [];
+// A nested call has no nested calls of its own.
+const CALLS_OF_A_NESTED_CALL: NestedCall[] = [];
 
 /**
  * ResearchAgentRenderer - Renders research agent steps in deep research
@@ -72,25 +72,19 @@ export const ResearchAgentRenderer: MessageRenderer<
     ? (startPacket.obj as ResearchAgentStart).research_task
     : "";
 
-  const parentPackets = useMemo(
-    () => packets.filter((packet) => !isNestedPacket(packet)),
-    [packets]
-  );
-  const nestedToolGroups = nestedCalls ?? NO_NESTED_CALLS;
-
   // Filter nested tool groups based on renderType (COMPACT and HIGHLIGHT show only latest)
   const visibleNestedToolGroups = useMemo(() => {
     if (
       (renderType !== RenderType.COMPACT &&
         renderType !== RenderType.HIGHLIGHT) ||
-      nestedToolGroups.length === 0
+      nestedCalls.length === 0
     ) {
-      return nestedToolGroups;
+      return nestedCalls;
     }
     // COMPACT/HIGHLIGHT mode: show only the latest group (last in sorted array)
-    const latestGroup = nestedToolGroups[nestedToolGroups.length - 1];
+    const latestGroup = nestedCalls[nestedCalls.length - 1];
     return latestGroup ? [latestGroup] : [];
-  }, [renderType, nestedToolGroups]);
+  }, [renderType, nestedCalls]);
 
   const isComplete = packets.some(isGroupEndPacket);
 
@@ -98,7 +92,7 @@ export const ResearchAgentRenderer: MessageRenderer<
   const isReportStreaming = !isComplete && !stopPacketSeen;
 
   // Build report content from parent packets
-  const fullReportContent = parentPackets
+  const fullReportContent = packets
     .map((packet) => {
       if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
         return (packet.obj as IntermediateReportDelta).content;
@@ -189,6 +183,8 @@ export const ResearchAgentRenderer: MessageRenderer<
               <TimelineRendererComponent
                 key={latestGroup.subTurnIndex}
                 packets={latestGroup.packets}
+                nestedCalls={CALLS_OF_A_NESTED_CALL}
+                streamPackets={latestGroup.packets}
                 chatState={state}
                 animate={!stopPacketSeen && !latestGroup.complete}
                 stopPacketSeen={stopPacketSeen}
@@ -259,7 +255,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           collapsible={true}
           isLastStep={
             !stopPacketSeen &&
-            nestedToolGroups.length === 0 &&
+            nestedCalls.length === 0 &&
             !fullReportContent &&
             !isComplete
           }
@@ -286,6 +282,8 @@ export const ResearchAgentRenderer: MessageRenderer<
             <TimelineRendererComponent
               key={group.subTurnIndex}
               packets={group.packets}
+              nestedCalls={CALLS_OF_A_NESTED_CALL}
+              streamPackets={group.packets}
               chatState={state}
               animate={!stopPacketSeen && !group.complete}
               stopPacketSeen={stopPacketSeen}
@@ -312,7 +310,7 @@ export const ResearchAgentRenderer: MessageRenderer<
           stepIcon={SvgBookOpen}
           header={t("researchAgent.report.title")}
           isLastStep={!stopPacketSeen && !isComplete}
-          isFirstStep={!researchTask && nestedToolGroups.length === 0}
+          isFirstStep={!researchTask && nestedCalls.length === 0}
           isHover={isHover}
           noPaddingRight={true}
         >

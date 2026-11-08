@@ -22,17 +22,19 @@ function createStep(
   tabIndex: number,
   packetType: PacketType = PacketType.SEARCH_TOOL_START
 ): TransformedStep {
+  const packets = [
+    {
+      placement: { turn_index: turnIndex, tab_index: tabIndex },
+      obj: { type: packetType },
+    } as Packet,
+  ];
   return {
     key: `${turnIndex}-${tabIndex}`,
     turnIndex,
     tabIndex,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: tabIndex },
-        obj: { type: packetType },
-      } as Packet,
-    ],
+    packets,
     nestedCalls: [],
+    streamPackets: packets,
   };
 }
 
@@ -52,21 +54,23 @@ function createTurnGroup(steps: TransformedStep[]): TurnGroup {
  * Create a mock display group (MESSAGE_START)
  */
 function createDisplayGroup(turnIndex: number): GroupedPacket {
+  const packets = [
+    {
+      placement: { turn_index: turnIndex, tab_index: 0 },
+      obj: {
+        type: PacketType.MESSAGE_START,
+        id: "msg-1",
+        content: "",
+        final_documents: null,
+      },
+    } as Packet,
+  ];
   return {
     turn_index: turnIndex,
     tab_index: 0,
-    packets: [
-      {
-        placement: { turn_index: turnIndex, tab_index: 0 },
-        obj: {
-          type: PacketType.MESSAGE_START,
-          id: "msg-1",
-          content: "",
-          final_documents: null,
-        },
-      } as Packet,
-    ],
+    packets,
     nestedCalls: [],
+    streamPackets: packets,
   };
 }
 
