@@ -205,6 +205,15 @@ def _open_member(
     return _MemberReader(cast(io.BufferedIOBase, source), budget)
 
 
+def _require_tar_end_marker(archive: zipfile.ZipFile | tarfile.TarFile) -> None:
+    if not isinstance(archive, tarfile.TarFile):
+        return
+    # tarfile silently stops at a damaged header after the first member.
+    archive.fileobj.seek(archive.offset)
+    if archive.fileobj.read(tarfile.BLOCKSIZE) != b"\0" * tarfile.BLOCKSIZE:
+        raise ValueError("Tar archive has no valid end marker")
+
+
 @contextmanager
 def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
     if len(data) > ARCHIVE_MAX_BYTES:
@@ -298,11 +307,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                 files[path] = partial(_open_member, archive, member, budget)
             else:
                 files[path] = None
-        if isinstance(archive, tarfile.TarFile):
-            # tarfile silently stops at a damaged header after the first member.
-            archive.fileobj.seek(archive.offset)
-            if archive.fileobj.read(tarfile.BLOCKSIZE) != b"\0" * tarfile.BLOCKSIZE:
-                raise ValueError("Tar archive has no valid end marker")
+        _require_tar_end_marker(archive)
         # Directories named like files must not silently select a fallback manifest.
         for path in directories:
             if path.endswith((".json", "/SKILL.md")):
