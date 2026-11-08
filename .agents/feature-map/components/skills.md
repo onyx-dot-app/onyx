@@ -628,7 +628,10 @@ The library preview of an external-app skill calls the same renderer
     those schemas. A queued request stays distinct from an applied revision;
     confirmation sends only the displayed revision and skill IDs, never an
     approval flag. Fetch errors retain server status and detail through the common
-    fetcher. The marketplace UI is not yet wired to this client.
+    fetcher. Shared preview and GitHub connection components live in
+    `web/src/sections/marketplaces/`. Preview distinguishes ready, blocked and
+    unsupported entries and offers a sample for a missing catalog. Connection
+    guidance uses the existing Apps flow and cache. Pages are not wired yet.
 
 
 ---
