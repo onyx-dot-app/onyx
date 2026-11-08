@@ -78,8 +78,17 @@ def test_function_names_are_unique_and_sorted() -> None:
 
 def test_built_in_like_search_tool_gets_typed_result() -> None:
     stubs = build_tool_stubs([FakeWebSearchTool(_unused)])
+    # The stub declares the JSON of the results model: keys it leaves out when
+    # empty are NotRequired, and field descriptions become docstrings.
     assert "class SearchResult(TypedDict):" in stubs.text
-    assert "    document: int" in stubs.text
+    assert (
+        '    document: int\n    """Citation number. Cite it in the answer as [n]."""'
+        in stubs.text
+    )
+    assert "    url: NotRequired[str]\n" in stubs.text
+    assert "class SearchResults(TypedDict):\n    results: list[SearchResult]" in (
+        stubs.text
+    )
     assert "async def web_search(*, queries: list[str]) -> SearchResults:" in stubs.text
     assert "Search the web for information." in stubs.text
 

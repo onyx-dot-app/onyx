@@ -463,7 +463,12 @@ def _python_type(annotation: object, nested: dict[str, type[BaseModel]]) -> str:
 
 def model_declarations(model: type[BaseModel]) -> list[str]:
     """TypedDict declarations of a model and of the models its fields name, as
-    the model's JSON has them."""
+    the model's JSON has them.
+
+    A field with `exclude_if` is left out of the JSON when it is None, so it is
+    `NotRequired` and its type has no None. A field description becomes the
+    field's docstring.
+    """
     pending = {model.__name__: model}
     rendered: dict[str, str] = {}
     while pending:
@@ -471,11 +476,18 @@ def model_declarations(model: type[BaseModel]) -> list[str]:
         if name in rendered:
             continue
         nested: dict[str, type[BaseModel]] = {}
-        fields = [
-            f"    {field}: {_python_type(info.annotation, nested)}"
-            for field, info in current.model_fields.items()
-        ]
-        rendered[name] = "\n".join([f"class {name}(TypedDict):", *fields])
+        lines = [f"class {name}(TypedDict):"]
+        for field, info in current.model_fields.items():
+            annotation = _python_type(info.annotation, nested)
+            if info.exclude_if is not None:
+                value = _union(
+                    [part for part in _split_union(annotation) if part != "None"]
+                )
+                annotation = f"NotRequired[{value}]"
+            lines.append(f"    {field}: {annotation}")
+            if info.description:
+                lines.append(f'    """{_docstring_text(info.description)}"""')
+        rendered[name] = "\n".join(lines)
         pending.update(nested)
     return [rendered[name] for name in sorted(rendered)]
 
@@ -483,10 +495,7 @@ def model_declarations(model: type[BaseModel]) -> list[str]:
 def _model_result_type(spec: CodeModeResultSpec) -> StubResultType:
     return StubResultType(
         annotation=spec.type_annotation,
-        declarations=(
-            *([spec.declaration] if spec.declaration is not None else []),
-            *(model_declarations(spec.model) if spec.model is not None else []),
-        ),
+        declarations=tuple(model_declarations(spec.model)) if spec.model else (),
     )
 
 
