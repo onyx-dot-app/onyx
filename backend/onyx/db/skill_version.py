@@ -489,7 +489,6 @@ def repair_skill_version_metadata(
             OnyxErrorCode.CONFLICT, "Skill content changed. Retry metadata repair."
         )
     current = repair_skill_version(skill, db_session)
-    stale_file_ids = prune_resource_bundles(adapter, db_session)
     for version in db_session.scalars(adapter.versions()):
         observed = prepared.get(version.id)
         if (
@@ -500,4 +499,4 @@ def repair_skill_version_metadata(
             _apply_metadata(version, observed[2])
     if current.bundle_file_id is not None and legacy_metadata is not None:
         _apply_metadata(current, legacy_metadata)
-    return stale_file_ids
+    return prune_resource_bundles(adapter, db_session)

@@ -315,7 +315,8 @@ The library preview of an external-app skill calls the same renderer
     no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
     interval is five minutes; cloud uses the standard beat multiplier (eight
-    by default). Repair prunes bundle links under the skill lock, then deletes
+    by default). Repair saves recovered metadata before pruning bundle links
+    under the skill lock, then deletes
     unreferenced files after commit, with the same retention rule as saves.
     The deadline is cooperative between skills;
     a single skill's blob reads can exceed it. Each skill commits before its
