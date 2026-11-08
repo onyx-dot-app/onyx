@@ -293,15 +293,23 @@ describe("grouping engine", () => {
         cell,
       ),
     ];
-    // Live: the closing record follows the streamed answer. Replay: it follows
-    // the complete saved answer.
+    // The closing record follows the step's section end in both. Live, it
+    // also follows the streamed answer; replay sends it before the answer.
     const orders: [string, Packet[]][] = [
-      ["live", [messageStart(1)]],
-      ["replay", [messageStart(1), sectionEnd(1)]],
+      ["live", [...runningObservation, messageStart(1), ...closingRecord]],
+      [
+        "replay",
+        [
+          ...runningObservation,
+          ...closingRecord,
+          messageStart(1),
+          sectionEnd(1),
+        ],
+      ],
     ];
 
-    it.each(orders)("joins its step in %s order", (_order, answer) => {
-      const state = run([...runningObservation, ...answer, ...closingRecord]);
+    it.each(orders)("joins its step in %s order", (_order, packets) => {
+      const state = run(packets);
       expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]);
       expect(state.groupedPacketsMap.get("0-0")?.at(-1)?.obj).toMatchObject({
         response_ended: true,

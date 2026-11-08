@@ -1423,8 +1423,8 @@ describe("packetProcessor", () => {
       });
 
       test("a replayed response gives the same steps as the live one", () => {
-        // Live: the closing record follows the streamed answer. Replay: it
-        // follows the complete saved answer, before the stop.
+        // The closing record follows the step's SECTION_END in both. Live, it
+        // also follows the streamed answer; replay sends it before the answer.
         const live = processPackets(createInitialState(1), [
           ...runningObservation(),
           createMessageStartPacket(answer),
@@ -1434,17 +1434,20 @@ describe("packetProcessor", () => {
         ]);
         const replay = processPackets(createInitialState(2), [
           ...runningObservation(),
+          ...closingRecord(),
           createPacket(PacketType.MESSAGE_START, answer, {
             id: "msg-1",
             content: "Done.",
             final_documents: null,
           }),
           createPacket(PacketType.SECTION_END, answer),
-          ...closingRecord(),
           createStopPacket(),
         ]);
 
         expect(replay.toolGroups).toEqual(live.toolGroups);
+        expect(replay.groupKeysWithSectionEnd).toEqual(
+          live.groupKeysWithSectionEnd
+        );
         expect(replay.generatedImages).toEqual(live.generatedImages);
         expect(live.finalAnswerComing).toBe(true);
         expect(replay.finalAnswerComing).toBe(true);
