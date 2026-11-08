@@ -281,7 +281,7 @@ The library preview of an external-app skill calls the same renderer
     changed or unreadable current file creates a fresh version from the upload.
     Missing, corrupt or oversized historical files retain unknown metadata.
     Repair receives `skills/bundle.py:STORED_BUNDLE_LIMITS`: stored bytes use
-    the larger configured total or ZIP allowance. Expansion counts actual
+    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. Expansion counts actual
     per-file and total bytes. No upload ZIP or file-count cap applies to history.
     Current-content reads verify expansion before inspection or editing.
     Stored-byte and expansion limits return 400 through the ValueError handler.
