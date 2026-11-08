@@ -94,23 +94,35 @@ def tool_result_sources(details: BaseModel | None) -> ResultSources | None:
     return None
 
 
-def _saved_search(
-    details: SearchDocsResponse, displayed_docs: list[SearchDoc] | None
-) -> SearchDocsResponse:
-    return as_base(details, SearchDocsResponse).model_copy(
-        update={"search_docs": [], "displayed_docs": displayed_docs}
-    )
+def saved_result_details(details: BaseModel | None) -> BaseModel | None:
+    """The form of a result that a saved response keeps.
+
+    Documents are saved through the tool call relation, so search results keep
+    only their citation numbers. Staged files stay in execution state.
+    """
+    if isinstance(details, SearchDocsResponse):
+        return as_base(details, SearchDocsResponse).model_copy(
+            update={
+                "search_docs": [],
+                "displayed_docs": [] if details.displayed_docs == [] else None,
+            }
+        )
+    if isinstance(details, CodeModeExecutionResult):
+        return as_base(details, CodeModeExecutionResult).map_calls(_saved_call)
+    return details
 
 
 def _saved_call(call: CodeModeCall) -> CodeModeCall:
-    # Planning metadata applies to the current turn, as for direct calls.
+    """A nested call in its saved form; it keeps the ids of the documents that
+    its search displayed. Planning metadata applies to the current turn, as for
+    direct calls."""
     details = call.details
-    if not isinstance(details, SearchDocsResponse):
-        return call.model_copy(update={"metadata": None})
-    displayed = details.displayed_docs
+    displayed = (
+        details.displayed_docs if isinstance(details, SearchDocsResponse) else None
+    )
     return call.model_copy(
         update={
-            "details": _saved_search(details, displayed_docs=None),
+            "details": saved_result_details(details),
             "metadata": None,
             "displayed_document_ids": None
             if displayed is None
@@ -119,61 +131,37 @@ def _saved_call(call: CodeModeCall) -> CodeModeCall:
     )
 
 
-def saved_result_details(details: BaseModel | None) -> BaseModel | None:
-    """The form of a result that a saved response keeps.
+def restored_result_details[T: BaseModel](
+    details: T, documents: Mapping[str, SearchDoc]
+) -> T:
+    """Refill the documents that a saved result keeps only as citation numbers.
 
-    Documents are saved through the tool call relation, so search results keep
-    only their citation numbers. Staged files stay in execution state.
+    Each cited document comes back once, in citation order.
     """
     if isinstance(details, SearchDocsResponse):
-        return _saved_search(
-            details, displayed_docs=[] if details.displayed_docs == [] else None
+        cited = cited_documents(details.citation_mapping, documents)
+        return details.model_copy(
+            update={"search_docs": list(_by_id(list(cited.values())).values())}
         )
     if isinstance(details, CodeModeExecutionResult):
-        return as_base(details, CodeModeExecutionResult).map_calls(_saved_call)
+        return details.map_calls(partial(_restored_call, documents=documents))
     return details
-
-
-def _cited_list(
-    citation_mapping: Mapping[int, str], documents: Mapping[str, SearchDoc]
-) -> list[SearchDoc]:
-    """The known documents of the citation numbers, each once, in citation order."""
-    cited = cited_documents(citation_mapping, documents)
-    return list(_by_id(list(cited.values())).values())
 
 
 def _restored_call(
     call: CodeModeCall, documents: Mapping[str, SearchDoc]
 ) -> CodeModeCall:
-    details = call.details
-    if not isinstance(details, SearchDocsResponse):
+    if call.details is None:
         return call
+    details = restored_result_details(call.details, documents)
     ids = call.displayed_document_ids
-    return call.model_copy(
-        update={
-            "details": details.model_copy(
-                update={
-                    "search_docs": _cited_list(details.citation_mapping, documents),
-                    "displayed_docs": None
-                    if ids is None
-                    else [documents[key] for key in ids if key in documents],
-                }
-            )
-        }
-    )
-
-
-def restored_result_details[T: BaseModel](
-    details: T, documents: Mapping[str, SearchDoc]
-) -> T:
-    """Refill the documents that a saved result keeps only as citation numbers."""
-    if isinstance(details, SearchDocsResponse):
-        return details.model_copy(
-            update={"search_docs": _cited_list(details.citation_mapping, documents)}
+    if isinstance(details, SearchDocsResponse) and ids is not None:
+        details = details.model_copy(
+            update={
+                "displayed_docs": [documents[key] for key in ids if key in documents]
+            }
         )
-    if isinstance(details, CodeModeExecutionResult):
-        return details.map_calls(partial(_restored_call, documents=documents))
-    return details
+    return call.model_copy(update={"details": details})
 
 
 def staged_result_details(
