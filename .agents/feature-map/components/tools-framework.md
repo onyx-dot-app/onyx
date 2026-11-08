@@ -246,7 +246,13 @@ Their control functions, such as `think_tool`, `generate_report` and
    through it, `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` tags each member
    `result.<type>.v1`, and temporary chats keep it
    (`chat/models.py:serialize_incognito_message`). A new `type` literal missing
-   from the union fails every save with a `ValidationError`. A subclass that keeps its parent's `type` literal saves as
+   from the union fails every save with a `ValidationError`. A tool that code
+   mode programs can call also needs its details type in
+   `tools/tool_implementations/code_mode/models.py:CodeModeCallDetails`, the
+   union of nested call details.
+   `tools/tool_implementations/code_mode/cells.py:durable_details` drops
+   details of any other type, so the nested call saves and replays without
+   them. A subclass that keeps its parent's `type` literal saves as
    the parent and drops its own fields with no error.
    `chat/agent.py:ChatAgent._finalize_tool` replaces each `SearchDocsResponse`
    with `chat/models.py:ChatSearchResult` in this way, and its `staged_files`

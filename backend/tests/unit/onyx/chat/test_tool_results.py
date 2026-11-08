@@ -1,7 +1,11 @@
 import json
 
 from onyx.chat.prompt_utils import prepare_prompt
-from onyx.chat.tool_results import tool_result_sources
+from onyx.chat.tool_results import (
+    restored_result_details,
+    saved_result_details,
+    tool_result_sources,
+)
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.llm.models import (
@@ -72,6 +76,39 @@ def test_program_results_merge_the_documents_of_their_searches() -> None:
     # Each search shows its own selection; an empty selection shows none.
     assert sources.displayed == [DOC_B]
     assert sources.citations == {1: DOC_A}
+
+
+def test_saved_program_results_restore_the_documents_their_searches_showed() -> None:
+    calls = [
+        CodeModeCall(
+            id=f"code:{index}",
+            index=index,
+            tool_name="internal_search",
+            function_name="internal_search",
+            arguments={},
+            state="ok",
+            details=SearchDocsResponse(
+                search_docs=[DOC_A, DOC_B],
+                displayed_docs=displayed,
+                citation_mapping={1: "alpha"},
+            ),
+        )
+        for index, displayed in enumerate([None, [DOC_C], []])
+    ]
+    result = CodeModeExecutionResult(cell_id=1, status="completed", calls=calls)
+    saved = saved_result_details(result)
+    assert isinstance(saved, CodeModeExecutionResult)
+
+    restored = restored_result_details(
+        saved, {doc.document_id: doc for doc in (DOC_A, DOC_B, DOC_C)}
+    )
+    # A search that selected nothing showed all its documents, cited or not.
+    assert [
+        call.details.displayed_docs
+        for call in restored.calls
+        if isinstance(call.details, SearchDocsResponse)
+    ] == [[DOC_A, DOC_B], [DOC_C], []]
+    assert tool_result_sources(restored) == tool_result_sources(result)
 
 
 def test_research_results_cite_documents_without_showing_them() -> None:

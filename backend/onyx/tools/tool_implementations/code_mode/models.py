@@ -77,7 +77,8 @@ class CodeModeCall(BaseModel):
     # Set while the turn runs: the planning decisions of a search call. Saving
     # (chat/tool_results.py) clears it.
     metadata: SearchPlanningResult | None = None
-    # Set by saving (chat/tool_results.py): ids of `details.displayed_docs`. Restoring
+    # Set by saving a search (chat/tool_results.py): ids of the documents it
+    # displayed, which are all its documents when it selected none. Restoring
     # rebuilds `details.displayed_docs` from them. None while the turn runs.
     displayed_document_ids: list[str] | None = None
 

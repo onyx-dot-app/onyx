@@ -118,7 +118,9 @@ def _saved_call(call: CodeModeCall) -> CodeModeCall:
     direct calls."""
     details = call.details
     displayed = (
-        details.displayed_docs if isinstance(details, SearchDocsResponse) else None
+        _search_sources([details]).displayed
+        if isinstance(details, SearchDocsResponse)
+        else None
     )
     return call.model_copy(
         update={

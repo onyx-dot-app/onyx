@@ -36,6 +36,7 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
 from onyx.tools.tool_implementations.code_mode.models import (
+    UNFINISHED_CALL_MESSAGE,
     CellClosing,
     CodeModeCall,
     CodeModeExecutionResult,
@@ -314,3 +315,34 @@ def test_closing_record_reports_how_the_program_ended(
         result,
         error,
     )
+
+
+def test_a_call_left_unfinished_renders_as_failed() -> None:
+    live: list[packets.Packet] = []
+    presenter = ResponsePresenter(Emitter(live.append))
+    closing = CellClosing(
+        reason="response_ended",
+        status="completed",
+        calls=[SLOW_CALL.unfinished()],
+        tool_call_count=1,
+    )
+    presenter.consume(
+        ToolResultAmendedEvent(
+            run_id="run",
+            message_id="message",
+            step_index=0,
+            tool_call=ToolCall(
+                id="wait", name=WAIT_CODE_TOOL_NAME, arguments={"cell_id": 1}
+            ),
+            result=ToolResult(
+                content="Execution running in cell 1",
+                details=OBSERVATIONS["wait"].model_copy(update={"closing": closing}),
+            ),
+        )
+    )
+    errors = [
+        (p.placement.sub_turn_index, str(p.obj.exception))
+        for p in live
+        if isinstance(p.obj, packets.PacketException)
+    ]
+    assert errors == [(0, UNFINISHED_CALL_MESSAGE)]
