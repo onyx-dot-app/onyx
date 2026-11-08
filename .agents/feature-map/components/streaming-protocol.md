@@ -132,15 +132,15 @@ adds `running` (the cell still runs; its open nested calls get only start
 packets) and `terminated`. A cell's closing record goes to the tab of its last
 observation: the nested calls after the observation, one `code_mode_delta` with
 the new stdout, then a final delta with `status`, `tool_call_count`,
-`stored_keys` and `response_ended=True` (`tool_renderer` picks
-`chat/code_mode_renderer.py:CodeModeRenderer` by tool name). Live, it comes
-from `ToolResultAmendedEvent` after that tab's `section_end` and the answer,
-before the stop (`CodeModeRenderer.amend`). On replay the saved observation
-holds it, so it renders before the tab's `section_end`
-(`CodeModeRenderer._result_packets`). The client adds packets of an ended tab
-to that tab, so both give the same steps. When the observation was recorded
+`stored_keys` and `response_ended=True` (`chat/renderer.py:tool_renderer`
+picks `CodeModeRenderer` by tool name). It follows that tab's `section_end`,
+live and on replay: `ToolRenderer.complete` renders the part of a result that
+an amendment added (`_amendment_packets`) after the section end, and
+`ToolRenderer.amend` of an ended tab renders only that part. Live, it comes from
+`ToolResultAmendedEvent` after the answer, before the stop. The client adds
+packets of an ended tab to that tab. When the observation was recorded
 before a restore, the live stream has no tab for it, so the closing record
-follows the observation's own packets in a new tab. Other tools show their
+follows the observation's packets and section end in a new tab. Other tools show their
 arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
 `ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 

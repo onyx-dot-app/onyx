@@ -222,7 +222,8 @@ def test_cell_observations_and_closing_render_in_call_order(
     # The card counts the calls the cell started.
     assert deltas[-1][1].tool_call_count == 2
 
-    # Replay renders the saved closing record once, inside the card it amends.
+    # Replay renders the saved closing record once, after the card's section
+    # end, as live does.
     projected = project_response(run.snapshot(), tool_ids={})
     assert projected.response is not None
     replayed = replay_response(projected.response, {}, {}, {})
@@ -231,9 +232,18 @@ def test_cell_observations_and_closing_render_in_call_order(
         for p in replayed
         if isinstance(p.obj, packets.CodeModeDelta) and p.obj.status is not None
     ] == finals
-    replayed_wait = _shape([p for p in replayed if p.placement.turn_index == 1])
-    assert replayed_wait[-1] == ("section_end", 1, None)
-    assert replayed_wait.count(("section_end", 1, None)) == 1
+    replayed_wait = [p for p in replayed if p.placement.turn_index == 1]
+    for card in (wait_card, replayed_wait):
+        assert [
+            p.obj.status if isinstance(p.obj, packets.CodeModeDelta) else "end"
+            for p in card
+            if p.placement.sub_turn_index is None
+            and (
+                isinstance(p.obj, packets.SectionEnd)
+                or isinstance(p.obj, packets.CodeModeDelta)
+                and p.obj.status is not None
+            )
+        ] == ["running", "end", "terminated"]
 
 
 def test_closing_of_a_call_from_before_a_restore_renders_in_a_new_card() -> None:

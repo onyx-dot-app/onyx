@@ -233,10 +233,10 @@ Their control functions, such as `think_tool`, `generate_report` and
    completion emit it. Streamed argument
    deltas go only to `run_python` and `execute_code`
    (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
-   `chat/code_mode_renderer.py:CodeModeRenderer`, a
-   `ToolRenderer` that `tool_renderer` picks by tool name. A result that a
-   run release hook sets streams through `ToolRenderer.amend`; replay renders
-   the saved result once. Saved responses replay through the same renderer
+   `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
+   `tool_renderer` picks by tool name. A result that a run release hook sets
+   streams through `ToolRenderer.amend`; what the amendment added follows the
+   call's section end, live and on replay. Saved responses replay through the same renderer
    (`chat/presentation.py:replay_response`), so a change here changes reload too.
 8. `durable-details-registered` **A new `details` type must be registered
    twice.** Chat saves `details` through the discriminated union in

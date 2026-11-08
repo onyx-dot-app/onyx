@@ -24,7 +24,6 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.code_mode_renderer import tool_renderer
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatMessageMetadata,
@@ -41,6 +40,7 @@ from onyx.chat.renderer import (
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
+    tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
 from onyx.chat.tool_results import (
@@ -61,7 +61,6 @@ from onyx.tools.models import (
     LlmPythonExecutionResult,
     ToolCallInfo,
 )
-from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.utils.logger import setup_logger
 
@@ -434,8 +433,7 @@ class ResponsePresenter:
             if tool is None:
                 # A call recorded before a restore has no card in this stream;
                 # the amended result renders in a new card, which later
-                # amendments reuse. An ended card keeps what it showed; replay
-                # shows the saved result.
+                # amendments reuse.
                 renderer = self.renderers.get(event.run_id)
                 tool = self.tools[key] = tool_renderer(
                     event.tool_call,
@@ -444,7 +442,7 @@ class ResponsePresenter:
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
                 )
-            output = tool.complete(event.result)
+            output = tool.amend(event.result)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
@@ -515,8 +513,9 @@ def replay_response(
                 # Saved document IDs support citation and source-card links.
                 search = details.model_copy(update={"search_docs": record.search_docs})
                 result = result.model_copy(update={"details": search})
-            elif result is not None and isinstance(details, CodeModeExecutionResult):
-                # Nested search calls keep citation numbers; documents come back here.
+            elif result is not None and details is not None:
+                # Nested results keep documents as citation numbers; the call's
+                # saved documents and the response's documents refill them.
                 saved_documents = record.search_docs if record is not None else []
                 restored = restored_result_details(
                     details,
