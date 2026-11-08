@@ -42,6 +42,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import BUSY_MESSAGE
 from onyx.utils.threadpool_concurrency import start_thread_future
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.onyx.tools.code_mode.fakes import (
     LIMITS,
     FakeTool,
@@ -368,8 +369,8 @@ def test_running_cell_limit_is_process_wide(monkeypatch: pytest.MonkeyPatch) -> 
     assert refused.content == BUSY_MESSAGE
     first.finish()
     # The ended cell's driver gives its place back.
-    until(lambda: cells_module._running_cells.acquire())
-    cells_module._running_cells.release()
+    until(lambda: cells_module._running_cells.acquire("unknown"))
+    cells_module._running_cells.release("unknown", 0.0)
     assert _details(Response().run("1\n")).status == "completed"
 
 
@@ -751,7 +752,6 @@ _CAPACITY_SAMPLES: tuple[tuple[str, dict[str, str]], ...] = (
     ("onyx_code_mode_sandbox_workers_busy", {}),
     ("onyx_code_mode_tool_call_threads_in_use", {}),
     ("onyx_code_mode_programs_waiting_for_worker", {}),
-    ("onyx_code_mode_programs_total", {"status": "completed"}),
     ("onyx_code_mode_program_duration_seconds_count", {}),
     ("onyx_code_mode_program_start_duration_seconds_count", {}),
 )
@@ -792,7 +792,6 @@ def test_capacity_metrics_follow_one_program() -> None:
     response.gate.set()
     assert _details(response.wait(1, yield_time_ms=30_000)).status == "completed"
     until(lambda: delta("onyx_code_mode_cells_running") == 0)
-    assert delta("onyx_code_mode_programs_total") == 1
     assert delta("onyx_code_mode_program_duration_seconds_count") == 1
     assert delta("onyx_code_mode_program_start_duration_seconds_count") == 1
     assert delta("onyx_code_mode_sandbox_workers_busy") == 0
@@ -884,6 +883,47 @@ def test_a_cell_rejected_as_busy_leaves_the_dropped_writes_note_to_the_next(
     accepted = crashed.run("2\n")
     lost = _details(accepted).lost_store_writes
     assert lost is not None and lost.keys == ("b",)
+
+
+def _tenant_sample(name: str, tenant_id: str, **labels: str) -> float:
+    return REGISTRY.get_sample_value(name, {"tenant_id": tenant_id, **labels}) or 0.0
+
+
+def test_tenant_counters_follow_one_program_and_one_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = "tenant_cell_metrics"
+    names = (
+        ("onyx_code_mode_programs_total", {"status": "completed"}),
+        ("onyx_code_mode_cell_seconds_total", {}),
+        ("onyx_code_mode_cell_busy_rejections_total", {}),
+        ("onyx_code_mode_sandbox_worker_seconds_total", {}),
+    )
+
+    def samples() -> list[float]:
+        return [_tenant_sample(name, tenant_id, **labels) for name, labels in names]
+
+    monkeypatch.setattr(cells_module, "_running_cells", cells_module._RunningCells(1))
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        before = samples()
+        response = Response()
+        running = response.run("await gate(value='x')\n", yield_time_ms=300)
+        assert _details(running).status == "running"
+        refused = Response().run("1\n")
+        response.gate.set()
+        assert _details(response.wait(1, yield_time_ms=30_000)).status == "completed"
+        until(lambda: samples()[1] > before[1])
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    assert refused.content == BUSY_MESSAGE
+    programs, cell_seconds, rejections, worker_seconds = (
+        after - start for after, start in zip(samples(), before, strict=True)
+    )
+    assert (programs, rejections) == (1, 1)
+    # The cell held its slot from its start to its program's end.
+    assert 0.3 <= cell_seconds < 10, cell_seconds
+    assert 0 < worker_seconds <= cell_seconds
 
 
 def test_a_cell_that_ends_after_its_closing_record_commits_nothing(

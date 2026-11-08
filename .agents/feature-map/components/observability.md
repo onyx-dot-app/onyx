@@ -138,7 +138,8 @@ metrics come from `server/metrics/celery_task_metrics.py`, called from each
 worker app's own signal handlers. The monitoring worker serves metrics but does
 not wire these handlers. Code mode capacity metrics (`onyx_code_mode_*`) are
 per API server process. `server/metrics/code_mode.py` defines them; each
-capacity budget has a matching `_limit` gauge.
+capacity budget has a matching `_limit` gauge, without a tenant label. The
+counters of the use of that capacity carry `tenant_id`.
 `tools/tool_implementations/code_mode/sandbox.py` and
 `tools/tool_implementations/code_mode/cells.py` update them where they own the state ([[code-execution]]).
 

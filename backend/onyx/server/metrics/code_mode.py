@@ -83,12 +83,18 @@ CELLS_LIMIT = Gauge(
 )
 CELL_BUSY_REJECTIONS = Counter(
     "onyx_code_mode_cell_busy_rejections_total",
-    "New cells refused because the process had its limit of running cells.",
+    "New cells refused because the process had its limit of running cells, by tenant.",
+    ["tenant_id"],
+)
+CELL_SECONDS = Counter(
+    "onyx_code_mode_cell_seconds_total",
+    "Seconds that programs held a running-cell slot, by tenant.",
+    ["tenant_id"],
 )
 PROGRAMS = Counter(
     "onyx_code_mode_programs_total",
-    "Programs that ended, by status.",
-    ["status"],
+    "Programs that ended, by tenant and status.",
+    ["tenant_id", "status"],
 )
 PROGRAM_DURATION = Histogram(
     "onyx_code_mode_program_duration_seconds",
@@ -134,8 +140,10 @@ def set_code_mode_limits(
     CELLS_LIMIT.set(running_cells)
 
 
-def observe_program_end(status: ClosedStatus, duration_seconds: float) -> None:
-    PROGRAMS.labels(status=status).inc()
+def observe_program_end(
+    tenant_id: str, status: ClosedStatus, duration_seconds: float
+) -> None:
+    PROGRAMS.labels(tenant_id=tenant_id, status=status).inc()
     PROGRAM_DURATION.observe(duration_seconds)
 
 

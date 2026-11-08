@@ -339,18 +339,21 @@ class _RunningCells:
         self._limit = limit
         self._running = 0
 
-    def acquire(self) -> bool:
+    def acquire(self, tenant_id: str) -> bool:
         with self._lock:
             if self._running >= self._limit:
+                metrics.CELL_BUSY_REJECTIONS.labels(tenant_id=tenant_id).inc()
                 return False
             self._running += 1
             metrics.CELLS_RUNNING.set(self._running)
             return True
 
-    def release(self) -> None:
+    def release(self, tenant_id: str, held_seconds: float) -> None:
+        """Free a slot that a cell of `tenant_id` held for `held_seconds`."""
         with self._lock:
             self._running -= 1
             metrics.CELLS_RUNNING.set(self._running)
+        metrics.CELL_SECONDS.labels(tenant_id=tenant_id).inc(held_seconds)
 
 
 _running_cells = _RunningCells(MAX_RUNNING_CELLS)
@@ -548,6 +551,7 @@ class CodeCell:
         # its program ends.
         self._stopping = CancellationSignal()
         self._started_at = time.monotonic()
+        self._tenant_id = metrics.current_tenant_id()
         self._calls: dict[int, CellCallRecord] = {}
         self._saved_chars = 0
         # The current window: its number, printed text, and events kept for the
@@ -602,8 +606,7 @@ class CodeCell:
         self._formatting = 0
         # Last, so a cell that exists holds a running-cell slot; `_end_program`
         # releases it.
-        if not _running_cells.acquire():
-            metrics.CELL_BUSY_REJECTIONS.inc()
+        if not _running_cells.acquire(self._tenant_id):
             raise _rejected(BUSY_MESSAGE)
 
     def _collector(self) -> StdoutCollector:
@@ -1081,10 +1084,12 @@ class CodeCell:
                     else end.status
                 )
                 self._end = end
-                metrics.observe_program_end(self._ended_as, end.duration_seconds)
+                metrics.observe_program_end(
+                    self._tenant_id, self._ended_as, end.duration_seconds
+                )
                 self._changed.notify_all()
         finally:
-            _running_cells.release()
+            _running_cells.release(self._tenant_id, time.monotonic() - self._started_at)
 
     def _print(self, text: str) -> None:
         with self._lock:
