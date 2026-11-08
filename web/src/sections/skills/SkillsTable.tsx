@@ -26,6 +26,7 @@ import type {
   SkillCardProps,
 } from "@/sections/cards/SkillCard";
 import { useSkillPresentation } from "@/lib/skills/hooks";
+import SkillVersionLabel from "@/sections/skills/SkillVersionLabel";
 import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
 type SkillTableItem = SkillCardProps & {
@@ -73,6 +74,7 @@ function SkillName({
       >
         {item.name}
       </Text>
+      <SkillVersionLabel version={item.skill.current_version_number} />
       {(!isMobile || showDescription || isInvalid) && (
         <Text
           font="secondary-body"

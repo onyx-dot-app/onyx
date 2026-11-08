@@ -97,6 +97,15 @@ function invalidCustom(): CustomSkillCardItem {
 }
 
 describe("SkillCard", () => {
+  it("shows the current version on personal cards and omits unknown versions", () => {
+    const { rerender } = render(
+      <SkillCard item={custom({ current_version_number: 7 })} />
+    );
+    expect(screen.getByText("Version 7")).toBeVisible();
+    rerender(<SkillCard item={custom({ current_version_number: null })} />);
+    expect(screen.queryByText(/Version/)).not.toBeInTheDocument();
+  });
+
   it.each([
     { label: "Personal", is_personal: true, public_permission: null },
     { label: "Shared", is_personal: false, public_permission: null },

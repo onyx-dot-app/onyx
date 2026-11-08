@@ -27,6 +27,7 @@ import type {
   SkillExternalAppDependency,
 } from "@/lib/skills/types";
 import { cn } from "@opal/utils";
+import SkillVersionLabel from "@/sections/skills/SkillVersionLabel";
 import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
 export type SkillCardSource = "builtin" | "custom";
@@ -253,6 +254,9 @@ export default function SkillCard({
             ) : undefined}
           </Section>
           <Section padding={2} gap={0} height="auto" alignItems="stretch">
+            {item.source === "custom" && (
+              <SkillVersionLabel version={item.skill.current_version_number} />
+            )}
             {item.source === "custom" && item.skill.marketplace && (
               <SkillMarketplaceLabel marketplace={item.skill.marketplace} />
             )}
