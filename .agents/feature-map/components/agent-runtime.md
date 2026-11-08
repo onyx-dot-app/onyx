@@ -91,9 +91,9 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   cancellation sets no results; the run still ends.
   `Agent.on_suspend` has the same shape; `Run._suspend` applies its amendments
   before it captures state.
-  `chat/presentation.py:ResponsePresenter` renders each amendment with
-  `chat/renderer.py:ToolRenderer.amend`: an ended card gets the new result
-  after its section end. Replay renders only the saved (amended) result.
+  `chat/presentation.py:ResponsePresenter` completes a call that has no
+  ended card with the amended result; an ended card keeps what it showed.
+  Replay renders only the saved (amended) result.
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary

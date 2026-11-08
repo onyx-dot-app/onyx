@@ -543,15 +543,8 @@ class ToolRenderer:
     def update(
         self, details: BaseModel | None, content: str = ""
     ) -> list[packets.Packet]:
-        """Render progress; progress after the call completes is dropped."""
         if self._finished:
             return []
-        return self._detail_packets(details, content)
-
-    def _detail_packets(
-        self, details: BaseModel | None, content: str
-    ) -> list[packets.Packet]:
-        """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
         if isinstance(details, PythonExecutionDelta):
             self._has_python_output = True
@@ -720,7 +713,17 @@ class ToolRenderer:
         if self._finished:
             return []
         output = self.start()
-        output.extend(self._result_packets(result))
+        if result is not None and isinstance(result.details, CodingAgentCallResult):
+            output.append(
+                packets.Packet(
+                    placement=self.placement,
+                    obj=packets.CodingAgentFinal(answer=result.details.answer),
+                )
+            )
+        elif result is not None:
+            output.extend(
+                self.update(result.details, "" if result.is_error else result.text)
+            )
         self._finished = True
         if result is not None and isinstance(result.details, ToolExecutionError):
             output.append(
@@ -735,28 +738,3 @@ class ToolRenderer:
             packets.Packet(placement=self.placement, obj=packets.SectionEnd())
         )
         return output
-
-    def _result_packets(self, result: ToolResult | None) -> list[packets.Packet]:
-        """The packets of a final result of the call."""
-        if result is not None and isinstance(result.details, CodingAgentCallResult):
-            return [
-                packets.Packet(
-                    placement=self.placement,
-                    obj=packets.CodingAgentFinal(answer=result.details.answer),
-                )
-            ]
-        if result is not None:
-            return self._detail_packets(
-                result.details, "" if result.is_error else result.text
-            )
-        return []
-
-    def amend(self, result: ToolResult) -> list[packets.Packet]:
-        """Render the result that a release hook set for the call.
-
-        A completed call renders it after its section end, and the client applies
-        it to the same step. Any other call completes with it.
-        """
-        if not self._finished:
-            return self.complete(result)
-        return self._result_packets(result)

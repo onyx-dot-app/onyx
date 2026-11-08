@@ -1,4 +1,4 @@
-"""A result that a release hook sets reaches the live stream and the saved replay."""
+"""A result that a release hook sets for an ended call reaches the saved replay."""
 
 from onyx.agents.models import ToolResultAmendment
 from onyx.agents.runtime import Agent
@@ -51,7 +51,7 @@ def _results(card: list[CustomToolStart | CustomToolDelta | SectionEnd]) -> list
     return [str(obj.data) for obj in card if isinstance(obj, CustomToolDelta)]
 
 
-def test_amended_result_streams_after_the_card_ends_and_replays_once() -> None:
+def test_an_ended_card_keeps_its_result_and_replay_shows_the_amended_one() -> None:
     agent = Agent(
         FakeModelClient(_reply),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -72,14 +72,12 @@ def test_amended_result_streams_after_the_card_ends_and_replays_once() -> None:
     run.result()
     assert run.wait_for_idle(5)
 
-    # The card starts and ends once; the amended result follows its section end
-    # and the answer, before the stop.
+    # The card starts and ends once with the result it completed with.
     card = _card(live)
     assert isinstance(card[0], CustomToolStart)
+    assert isinstance(card[-1], SectionEnd)
     assert [isinstance(obj, SectionEnd) for obj in card].count(True) == 1
-    end = next(i for i, obj in enumerate(card) if isinstance(obj, SectionEnd))
-    assert "closed" not in _results(card[:end])
-    assert _results(card[end:]) == ["closed"]
+    assert set(_results(card)) == {"running"}
     assert isinstance(live[-1].obj, OverallStop)
 
     # The saved response holds only the amended result, rendered once.

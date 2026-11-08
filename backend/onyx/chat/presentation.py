@@ -409,7 +409,8 @@ class ResponsePresenter:
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 # A call recorded before a restore has no card in this stream;
-                # the amended result renders in a new card.
+                # the amended result renders in a new card. An ended card keeps
+                # what it showed; replay shows the saved result.
                 renderer = self.renderers.get(event.run_id)
                 tool = ToolRenderer(
                     event.tool_call,
@@ -418,7 +419,7 @@ class ResponsePresenter:
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
                 )
-            output = tool.amend(event.result)
+            output = tool.complete(event.result)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
