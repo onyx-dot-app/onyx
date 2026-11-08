@@ -33,10 +33,17 @@ from tests.external_dependency_unit.db.test_skill_version_writes import user as 
 
 
 @pytest.mark.parametrize(
-    "operation", ["upload", "associate", "replace-associations", "validity"]
+    "operation",
+    ["upload", "associate", "replace-associations", "validity", "validity-new-version"],
 )
 def test_waiting_edit_reads_committed_version(
-    operation: Literal["upload", "associate", "replace-associations", "validity"],
+    operation: Literal[
+        "upload",
+        "associate",
+        "replace-associations",
+        "validity",
+        "validity-new-version",
+    ],
     tenant: str,
     session: Session,
     user: User,
@@ -60,7 +67,7 @@ def test_waiting_edit_reads_committed_version(
     assert skill is not None and skill.current_version is not None
     version_id = skill.current_version.id
     bundle_file_id = skill.current_version.bundle_file_id
-    if operation == "validity":
+    if operation in {"validity", "validity-new-version"}:
         skill.current_version.is_valid = skill.is_valid = None
         session.commit()
     waiting_pid: Queue[int] = Queue()
@@ -75,7 +82,7 @@ def test_waiting_edit_reads_committed_version(
                 pid = writer.scalar(select(func.pg_backend_pid()))
                 assert isinstance(pid, int)
                 waiting_pid.put(pid)
-                if operation == "validity":
+                if operation in {"validity", "validity-new-version"}:
                     persist_skill_version_validity(
                         skill_id=skill_id,
                         version_id=version_id,
@@ -120,9 +127,19 @@ def test_waiting_edit_reads_committed_version(
                         "second edit never waited for the skill lock"
                     )
                     time.sleep(0.01)
-            if operation == "validity":
+            if operation in {"validity", "validity-new-version"}:
                 api.replace_current_user_skill_bundle(
-                    skill_id, upload(bundle("locked-reader")), user, session
+                    skill_id,
+                    upload(
+                        bundle(
+                            "locked-reader",
+                            "New instructions"
+                            if operation == "validity-new-version"
+                            else "First instructions",
+                        )
+                    ),
+                    user,
+                    session,
                 )
             else:
                 api.upload_current_user_skill_files(
@@ -135,8 +152,13 @@ def test_waiting_edit_reads_committed_version(
     session.expire_all()
     skill = session.get(Skill, skill_id)
     assert skill is not None
-    if operation == "validity":
-        assert skill.current_version_id == version_id
+    if operation in {"validity", "validity-new-version"}:
+        if operation == "validity-new-version":
+            assert skill.current_version_id != version_id
+            assert skill.current_version is not None
+            assert skill.current_version.bundle_file_id != bundle_file_id
+        else:
+            assert skill.current_version_id == version_id
         assert skill.current_is_valid is True and skill.is_valid is True
         return
     paths = {

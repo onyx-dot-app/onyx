@@ -200,7 +200,7 @@ def test_completed_repair_does_not_authorize_cutover(
     skill.current_version_id = None
     session.commit()
     assert check_cutover(tenant) == 1
-    repair_skill_versions(tenant_id=tenant)
+    repair_skill_versions.run(tenant_id=tenant)
     assert check_cutover(tenant) == 0
     session.expire_all()
     assert not skill_version_repair_batch(session, None, drift_only=True)
@@ -209,5 +209,5 @@ def test_completed_repair_does_not_authorize_cutover(
     skill.is_valid = False
     session.commit()
     assert check_cutover(tenant) == 1
-    repair_skill_versions(tenant_id=tenant)
+    repair_skill_versions.run(tenant_id=tenant)
     assert check_cutover(tenant) == 0
