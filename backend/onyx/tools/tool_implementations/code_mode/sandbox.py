@@ -114,7 +114,8 @@ YIELD_CONTROL_STUB = '''def yield_control() -> None:
 # ValueError are raised inside the program.
 HostFunction = Callable[..., object]
 
-# Standard library modules that programs can import. `os`, `sys` and `pathlib`
+# Standard library modules that every program has imported, as it has its tool
+# functions; explicit imports of them also work. `os`, `sys` and `pathlib`
 # import, but their file system, environment and process functions are denied.
 IMPORTABLE_MODULES: tuple[str, ...] = (
     "asyncio",
@@ -138,6 +139,11 @@ IMPORTABLE_MODULES: tuple[str, ...] = (
     "typing",
 )
 
+# Fed without a type check before each new program in the same session, so the
+# modules are globals while the program's line numbers stay its own.
+_PRELUDE = f"import {', '.join(IMPORTABLE_MODULES)}"
+# The same names for the type checker; each program's stubs include them.
+PRELUDE_STUBS = "\n".join(f"import {name} as {name}" for name in IMPORTABLE_MODULES)
 _SYNC_SLEEP = "system.sleep"
 # The module that also holds every function of a program, so
 # `from functions import f` and `functions.f(...)` work like the globals.
@@ -946,12 +952,13 @@ def _watched(run: _Run, pid: int | None) -> Iterator[None]:
 def _start(
     session: MontySession, code: str, run: _Run
 ) -> SyncSnapshot | ProgramStopped:
-    """Type-check and start the program.
+    """Import the allowed modules, then type-check and start the program.
 
     Invalid syntax and type errors in calls stop it; other diagnostics become
     notes.
     """
     with metrics.PROGRAM_START_DURATION.time():
+        session.feed_run(_PRELUDE, skip_type_check=True)
         try:
             return session.feed_start(code, print_callback=run.print_callback)
         except MontyTypingError as error:
@@ -1105,6 +1112,7 @@ def execute_program(
 ) -> SandboxResult:
     """Run one program in a fresh interpreter. Raises the handler's BaseException.
 
+    `stubs` types the program's functions and includes PRELUDE_STUBS.
     `cancellation` stops the program at once, also while it computes or waits.
     `on_print` receives the printed text and `on_yield` each yield_control() call,
     both on the driver thread. Nothing carries over from earlier programs; plain

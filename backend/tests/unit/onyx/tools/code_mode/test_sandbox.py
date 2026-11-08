@@ -26,6 +26,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
 from onyx.tools.tool_implementations.code_mode.sandbox import (
     BUSY_MESSAGE,
     CRASH_MESSAGE,
+    PRELUDE_STUBS,
     YIELD_CONTROL_STUB,
     ExternalCallHandler,
     StdoutCollector,
@@ -53,6 +54,9 @@ def _suspensions(outcome: str) -> float:
 
 
 STUBS = f"""from typing import Any, TypedDict
+
+
+{PRELUDE_STUBS}
 
 
 {STORE_STUBS}
@@ -292,12 +296,41 @@ def test_handler_base_exception_propagates() -> None:
 
 
 def test_each_execution_starts_with_a_fresh_interpreter() -> None:
-    assert run("docs = await search(query='a')\nimport json\n").status == "completed"
+    assert run("docs = await search(query='a')\njson = 1\n").status == "completed"
     result = run("docs\n")
     assert result.status == "failed"
     assert result.error is not None
     assert "NameError" in result.error
-    assert "NameError" in (run("json.dumps(1)\n").error or "")
+    assert run("json.dumps(1)\n").result == "'1'"
+
+
+def test_allowed_modules_are_imported_in_every_program(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    diagnostics: list[str] = []
+    parse = sandbox.parse_type_diagnostics
+
+    def recorded(text: str) -> list[TypeDiagnostic]:
+        diagnostics.append(text)
+        return parse(text)
+
+    monkeypatch.setattr(sandbox, "parse_type_diagnostics", recorded)
+    code = (
+        "async def double(x):\n"
+        "    return x * 2\n"
+        "values = await asyncio.gather(double(1), double(2))\n"
+        "text = json.dumps(values)\n"
+        "print(re.sub('[0-9]', 'n', text))\n"
+    )
+    ran = run(code)
+    assert (ran.status, ran.stdout) == ("completed", "[n, n]\n"), ran
+    # The type checker knows the modules too.
+    assert diagnostics == []
+    # A traceback gives the program's own line numbers.
+    failed = run(code + "raise ValueError('stop')\n")
+    assert "line 6" in (failed.error or ""), failed.error
+    explicit = run("import json\nfrom json import dumps\n[json.dumps(1), dumps(2)]\n")
+    assert explicit.result == "['1', '2']", explicit
 
 
 def test_store_and_load() -> None:
