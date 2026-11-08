@@ -32,6 +32,24 @@ export function toTitleCase(value: string): string {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+// Common non-ISO-3166 codes → the ISO alpha-2 code whose regional-indicator
+// pair has a flag glyph ("UK" has none; the United Kingdom is "GB").
+const COUNTRY_CODE_ALIASES = new Map([["UK", "GB"]]);
+
+/**
+ * The flag emoji for a two-letter country code: `"fi"` → 🇫🇮. Returns `""`
+ * for anything that is not two letters, which would otherwise render junk.
+ */
+export function countryCodeToFlag(code: string | null | undefined): string {
+  if (!code || code.length !== 2) return "";
+  const upper = code.toUpperCase();
+  const normalized = COUNTRY_CODE_ALIASES.get(upper) ?? upper;
+  if (!/^[A-Z]{2}$/.test(normalized)) return "";
+  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
+  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
+  return String.fromCodePoint(first, second);
+}
+
 export function escapeMarkdown(value: string): string {
   return value
     .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)

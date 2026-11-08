@@ -7837,7 +7837,6 @@
           "row": {
             "defaultLabel": "النموذج الافتراضي",
             "decisionTag": {
-              "label": "قرار",
               "decisionOnly": "نموذج لاتخاذ القرارات. غير متاح في قائمة نماذج الدردشة.",
               "chatAndDecision": "يدعم مهام الدردشة واتخاذ القرارات."
             },
@@ -7846,9 +7845,6 @@
             },
             "setDefaultButton": {
               "label": "تعيين كافتراضي"
-            },
-            "visionMarker": {
-              "title": "رؤية"
             }
           },
           "selectAllButton": {
@@ -14352,6 +14348,10 @@
       },
       "labels": {
         "default": "افتراضي"
+      },
+      "modelTypes": {
+        "decision": "قرار",
+        "vision": "رؤية"
       }
     }
   },

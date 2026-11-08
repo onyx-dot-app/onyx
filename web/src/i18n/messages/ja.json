@@ -7837,7 +7837,6 @@
           "row": {
             "defaultLabel": "デフォルトモデル",
             "decisionTag": {
-              "label": "判断",
               "decisionOnly": "判断モデルです。チャットのモデル選択には表示されません。",
               "chatAndDecision": "チャットと判断の両方のタスクに対応しています。"
             },
@@ -7846,9 +7845,6 @@
             },
             "setDefaultButton": {
               "label": "デフォルトに設定"
-            },
-            "visionMarker": {
-              "title": "画像対応"
             }
           },
           "selectAllButton": {
@@ -14352,6 +14348,10 @@
       },
       "labels": {
         "default": "デフォルト"
+      },
+      "modelTypes": {
+        "decision": "判断",
+        "vision": "画像対応"
       }
     }
   },

@@ -7837,7 +7837,6 @@
           "row": {
             "defaultLabel": "Standardmodell",
             "decisionTag": {
-              "label": "Entscheidung",
               "decisionOnly": "Entscheidungsmodell. Nicht in der Chat-Modellauswahl verfügbar.",
               "chatAndDecision": "Unterstützt Chat- und Entscheidungsaufgaben."
             },
@@ -7846,9 +7845,6 @@
             },
             "setDefaultButton": {
               "label": "Als Standard festlegen"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -14352,6 +14348,10 @@
       },
       "labels": {
         "default": "Standard"
+      },
+      "modelTypes": {
+        "decision": "Entscheidung",
+        "vision": "Vision"
       }
     }
   },
