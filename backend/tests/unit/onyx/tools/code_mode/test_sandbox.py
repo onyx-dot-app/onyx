@@ -1031,6 +1031,96 @@ def test_a_program_that_finds_every_worker_busy_claims_one_at_once(
     assert dumps == [1]
 
 
+@pytest.fixture
+def always_dumped(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Each wait of a program gives up its worker, as under constant demand;
+    returns the times at which a dumped program loads on a worker."""
+    monkeypatch.setattr(sandbox._worker_demand, "gives_up", lambda _wake: True)
+    loads: list[float] = []
+    load = sandbox._load
+
+    def counted(
+        session: MontySession, run_state: sandbox._Run, suspended: ProgramSuspended
+    ) -> SyncSnapshot:
+        loads.append(time.monotonic())
+        return load(session, run_state, suspended)
+
+    monkeypatch.setattr(sandbox, "_load", counted)
+    return loads
+
+
+def test_a_dumped_program_resumes_for_a_batch_of_calls(
+    always_dumped: list[float], two_workers: Monty
+) -> None:
+    calls = 20
+    result = run(
+        "out = await asyncio.gather("
+        f"*[slow(seconds=0.2 + i * 0.02) for i in range({calls})])\n"
+        "print(len(out))\n",
+        limits=LIMITS.model_copy(update={"max_tool_calls": calls}),
+        pool=two_workers,
+    )
+    assert (result.status, result.stdout) == ("completed", f"{calls}\n"), result
+    # The calls end 20 ms apart; one load for each would be 20.
+    assert 1 <= len(always_dumped) <= calls // 3, len(always_dumped)
+
+
+def test_a_dumped_program_resumes_without_waiting_for_calls_it_does_not_await(
+    always_dumped: list[float], two_workers: Monty
+) -> None:
+    printed: list[float] = []
+    started = time.monotonic()
+    result = run(
+        "first = slow(seconds=3)\n"
+        "second = slow(seconds=0.2)\n"
+        "print(await second)\n"
+        "print(await first)\n",
+        on_stdout=lambda _text: printed.append(time.monotonic()),
+        pool=two_workers,
+    )
+    assert (result.status, result.stdout) == ("completed", "done\ndone\n"), result
+    assert always_dumped
+    # The first line comes soon after the second call, not after the first.
+    assert printed[0] - started < 1.5, printed[0] - started
+
+
+@pytest.mark.usefixtures("always_dumped")
+def test_yield_control_returns_at_once_while_a_dumped_program_waits(
+    two_workers: Monty,
+) -> None:
+    yielded: list[float] = []
+    started = time.monotonic()
+    result = run(
+        "print('before')\n"
+        "yield_control()\n"
+        "out = await asyncio.gather(slow(seconds=0.2), slow(seconds=1))\n"
+        "print(len(out))\n",
+        on_yield=lambda: yielded.append(time.monotonic()),
+        pool=two_workers,
+    )
+    assert (result.status, result.stdout) == ("completed", "before\n2\n"), result
+    assert yielded and yielded[0] - started < 0.5, yielded
+
+
+def test_stop_ends_a_dumped_program_that_batches_its_calls(
+    always_dumped: list[float], monkeypatch: pytest.MonkeyPatch, two_workers: Monty
+) -> None:
+    monkeypatch.setattr(sandbox, "RESUME_BATCH_SECONDS", 30.0)
+    cancellation = CancellationSignal()
+    # The first call ends at 0.2 s, then the batch window would last 30 s.
+    threading.Timer(0.6, cancellation.cancel).start()
+    started = time.monotonic()
+    result = run(
+        "out = await asyncio.gather(slow(seconds=0.2), slow(seconds=0.4), "
+        "slow(seconds=1.5))\n",
+        cancellation=cancellation,
+        pool=two_workers,
+    )
+    assert result.status == "cancelled", result
+    assert time.monotonic() - started < 1.5
+    assert always_dumped == []
+
+
 def test_program_state_and_store_survive_a_released_wait() -> None:
     result = run(
         "from dataclasses import dataclass\n"

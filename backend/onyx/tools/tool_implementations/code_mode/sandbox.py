@@ -106,6 +106,11 @@ MAX_TOOL_CALL_THREADS = 192
 # A call that returns this long after its program ended held its thread while
 # ignoring cancellation; it is logged.
 LATE_CALL_WARNING_SECONDS = 30.0
+# A dumped program resumes on a new worker and loads its whole heap, so once one
+# of its calls ends it waits this long for more of them, unless all end first.
+# It is short against a tool call, so a program that awaits only some of its
+# calls is barely delayed.
+RESUME_BATCH_SECONDS = 0.1
 
 YIELD_CONTROL_FUNCTION = "yield_control"
 YIELD_CONTROL_STUB = '''def yield_control() -> None:
@@ -900,26 +905,41 @@ class _Run:
         pending = self.calls.get(call_id)
         return pending is None or (pending.future is not None and pending.future.done())
 
-    def wait_for_any(self, call_ids: list[int], *, yield_worker: bool = False) -> bool:
+    def wait_for_any(
+        self,
+        call_ids: list[int],
+        *,
+        yield_worker: bool = False,
+        batch_seconds: float = 0.0,
+    ) -> bool:
         """Wait until one of the calls or sleeps ends; True once one has.
 
         With `yield_worker`, the program keeps its worker while it waits and
-        returns False as soon as another program waits for a worker.
+        returns False as soon as another program waits for a worker. With
+        `batch_seconds`, it then waits that long for the others, unless all of
+        them end first.
         """
-        wakeup = min(
-            (self.sleeps[i] for i in call_ids if i in self.sleeps), default=math.inf
-        )
+        batch_end = math.inf
         with _worker_demand.holding(self.wake.set) if yield_worker else nullcontext():
             while True:
                 # Cleared before the checks, so a wake-up during them is not lost.
                 self.wake.clear()
                 self.check()
                 self.start_queued()
-                if any(self._finished(call_id) for call_id in call_ids):
-                    return True
+                pending = [i for i in call_ids if not self._finished(i)]
+                now = time.monotonic()
+                if len(pending) < len(call_ids):
+                    batch_end = min(batch_end, now + batch_seconds)
+                    if not pending or now >= batch_end:
+                        return True
                 if yield_worker and _worker_demand.gives_up(self.wake.set):
                     return False
-                timeout = min(wakeup, self.deadline) - time.monotonic()
+                # A sleep's end sets no event.
+                wakeup = min(
+                    (self.sleeps[i] for i in pending if i in self.sleeps),
+                    default=math.inf,
+                )
+                timeout = min(wakeup, batch_end, self.deadline) - now
                 self.wake.wait(None if math.isinf(timeout) else max(0.0, timeout))
 
     def settled(self, call_ids: list[int]) -> dict[int, ExternalSettledResult]:
@@ -1203,7 +1223,8 @@ def execute_program(
     The program waits at each await on unfinished tool calls or sleeps, and at
     each synchronous sleep. It keeps its worker while it waits, until another
     program waits for one; then it is dumped, its worker returned to the pool, and
-    it resumes on any free worker once a call or sleep ends. When the program
+    it resumes on a new worker once its calls and sleeps end, or
+    RESUME_BATCH_SECONDS after the first of them ends. When the program
     ends, calls it never awaited are not waited for, and queued calls never start;
     the caller cancels the running ones.
     """
@@ -1278,7 +1299,9 @@ def execute_program(
                     ended = step
                     break
                 if suspended is not None:
-                    run.wait_for_any(suspended.call_ids)
+                    run.wait_for_any(
+                        suspended.call_ids, batch_seconds=RESUME_BATCH_SECONDS
+                    )
         if isinstance(ended, ProgramStopped):
             return finish(ended.status, error=ended.error, raised=ended.raised)
     except _Aborted as aborted:
