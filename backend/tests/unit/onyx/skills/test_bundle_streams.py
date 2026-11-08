@@ -72,3 +72,23 @@ def test_streamed_bundle_rejects_unsafe_paths(path: str) -> None:
         bundle.build_custom_bundle(
             {"SKILL.md": partial(io.BytesIO, MD), path: io.BytesIO}
         )
+
+
+def test_streamed_bundle_uses_validated_file_names() -> None:
+    result = bundle.build_custom_bundle(
+        {"SKILL.md": partial(io.BytesIO, MD), "data/": partial(io.BytesIO, b"abc")}
+    )
+    with zipfile.ZipFile(io.BytesIO(result)) as archive:
+        assert archive.namelist() == ["SKILL.md", "data"]
+        assert archive.read("data") == b"abc"
+
+
+def test_streamed_bundle_rejects_normalized_name_collisions() -> None:
+    with pytest.raises(OnyxError):
+        bundle.build_custom_bundle(
+            {
+                "SKILL.md": partial(io.BytesIO, MD),
+                "data": partial(io.BytesIO, b"a"),
+                "data/": partial(io.BytesIO, b"b"),
+            }
+        )
