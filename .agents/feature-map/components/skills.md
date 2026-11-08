@@ -521,8 +521,12 @@ The library preview of an external-app skill calls the same renderer
     Request entry points use `background/celery/tasks/marketplace_sync/tasks.py:enqueue_marketplace_sync`
     after authorization and commit. It persists intent before transport I/O. Recovery
     retries requested work, expired queue reservations and expired owners; it never
-    polls idle sources. Recovery is not tenant-work-gated. Queue messages live for
-    15 minutes; database claims reject duplicates and enforce retry delays.
+    polls idle sources. Cloud recovery skips gated tenants and uses tenant activity
+    gating. Request, claim and retry paths mark activity outside database locks;
+    reaping marks activity even when backoff postpones dispatch. Idle recovery does
+    not mark activity. The cloud scheduler stretches the recovery interval, so
+    60/120 seconds are minimum retry delays, not dispatch guarantees. Both recovery
+    and sync messages live for 15 minutes; database claims reject duplicates and enforce retry delays.
     Celery uses the heavy worker's sandbox queue. Lite dispatches
     through a bounded background thread path, outside the periodic poller thread.
     Recovery errors do not prevent the Lite file drains from running.

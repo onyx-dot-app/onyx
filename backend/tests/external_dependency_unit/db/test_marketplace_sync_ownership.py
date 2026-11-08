@@ -71,7 +71,10 @@ def test_recovery_budget_and_explicit_restart(
     for attempt in range(1, ownership.MAX_ATTEMPTS + 1):
         assert ownership.claim_marketplace_sync(marketplace.id, session) is not None
         expire(session, marketplace.id)
-        assert ownership.reserve_marketplace_dispatches(session) == []
+        assert ownership.reserve_marketplace_dispatches(session) == (
+            [],
+            attempt < ownership.MAX_ATTEMPTS,
+        )
         session.refresh(marketplace)
         assert marketplace.sync_status == MarketplaceSyncStatus.FAILED
         assert marketplace.last_error == ownership.SYNC_INTERRUPTED
@@ -81,11 +84,14 @@ def test_recovery_budget_and_explicit_restart(
             assert ownership.claim_marketplace_sync(marketplace.id, session) is None
             marketplace.sync_retry_after = func.clock_timestamp() - timedelta(seconds=1)
             session.commit()
-            assert ownership.reserve_marketplace_dispatches(session) == [marketplace.id]
+            assert ownership.reserve_marketplace_dispatches(session) == (
+                [marketplace.id],
+                True,
+            )
     assert not marketplace.sync_requested
     assert ownership.claim_marketplace_sync(marketplace.id, session) is None
     ownership.request_marketplace_sync(marketplace.id, session)
-    assert ownership.reserve_marketplace_dispatches(session) == [marketplace.id]
+    assert ownership.reserve_marketplace_dispatches(session) == ([marketplace.id], True)
     assert ownership.claim_marketplace_sync(marketplace.id, session) is not None
     session.refresh(marketplace)
     assert marketplace.sync_attempts == 1

@@ -334,8 +334,9 @@ Retired Skills reject all user changes except deletion.
 Marketplace sync runs in the background. A request made during a sync triggers another check,
 so newer commits are not lost. Interrupted or queued requests recover automatically, including on Onyx Lite.
 Onyx does not check idle marketplaces on a timer.
-Temporary source errors and interrupted runs get at most three attempts per request. Automatic retries wait one minute,
-then two minutes. After that, request a new sync.
+Temporary source errors and interrupted runs get at most three attempts per request.
+Automatic retries wait at least one minute, then at least two minutes. The background schedule can add delay;
+Onyx Cloud normally checks recovery about every four minutes. After three failed attempts, request a new sync.
 An explicit request starts a fresh attempt budget and clears the retry delay.
 
 Each sync requires an active login user with a connected GitHub account.

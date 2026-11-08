@@ -412,7 +412,11 @@ def test_recovery_wiring() -> None:
     from onyx.background import periodic_poller
     from onyx.background.celery.apps.heavy import celery_app as heavy
     from onyx.background.celery.apps.primary import celery_app as primary
-    from onyx.background.celery.tasks.beat_schedule import beat_task_templates
+    from onyx.background.celery.tasks.beat_schedule import (
+        CLOUD_BEAT_MULTIPLIER_DEFAULT,
+        beat_task_templates,
+        get_cloud_tasks_to_schedule,
+    )
     from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 
     for app in (heavy, primary):
@@ -424,7 +428,15 @@ def test_recovery_wiring() -> None:
         for t in beat_task_templates
         if t["task"] == OnyxCeleryTask.RECOVER_MARKETPLACE_SYNCS
     )
-    assert template["options"]["expires"] > 0
+    cloud = next(
+        t
+        for t in get_cloud_tasks_to_schedule(CLOUD_BEAT_MULTIPLIER_DEFAULT)
+        if t.get("kwargs", {}).get("task_name")
+        == OnyxCeleryTask.RECOVER_MARKETPLACE_SYNCS
+    )
+    assert cloud["kwargs"]["work_gated"] is True
+    assert cloud["kwargs"].get("skip_gated", True) is True
+    assert cloud["kwargs"]["expires"] >= cloud["schedule"].total_seconds()
     assert template["options"]["queue"] == OnyxCeleryQueues.PRIMARY
     with (
         patch("onyx.background.task_utils.drain_processing_loop"),

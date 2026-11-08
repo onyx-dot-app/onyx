@@ -33,6 +33,7 @@ from onyx.db.skill_version import delete_unreferenced_skill_bundles
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.ingest import (
     IngestedBundle,
@@ -246,6 +247,7 @@ def sync_marketplace(
     result: ReconciliationResult | None = None
     try:
         if request_work:
+            maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
             with get_session_with_tenant(tenant_id=tenant_id) as session:
                 request_marketplace_sync(marketplace_id, session)
         for _ in range(2):
@@ -253,6 +255,7 @@ def sync_marketplace(
                 owner = claim_marketplace_sync(marketplace_id, session)
             if owner is None:
                 break
+            maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
 
             def renew(owner: UUID = owner) -> bool:
                 with get_session_with_tenant(tenant_id=tenant_id) as session:
@@ -295,6 +298,7 @@ def sync_marketplace(
                                     OnyxErrorCode.SERVICE_UNAVAILABLE,
                                 },
                             )
+                        maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
                     except MarketplaceSyncLeaseLost:
                         logger.warning(
                             "Sync failure could not update released ownership"

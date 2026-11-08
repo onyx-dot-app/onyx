@@ -52,9 +52,8 @@ beat_task_templates: list[dict] = [
         "options": {
             "queue": OnyxCeleryQueues.PRIMARY,
             "priority": OnyxCeleryPriority.LOW,
-            "expires": 30,
-            "skip_gated": False,
-            "work_gated": False,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {

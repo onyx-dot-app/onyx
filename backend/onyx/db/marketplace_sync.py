@@ -79,6 +79,7 @@ def claim_marketplace_sync(marketplace_id: UUID, session: Session) -> UUID | Non
     row.sync_owner = owner
     row.sync_attempts += 1
     row.sync_requested = False
+    row.sync_dispatch_after = None
     row.sync_started_at = now
     row.sync_lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
     session.commit()
@@ -194,7 +195,8 @@ def finish_marketplace_sync(
 
 def reserve_marketplace_dispatches(
     session: Session, marketplace_id: UUID | None = None
-) -> list[UUID]:
+) -> tuple[list[UUID], bool]:
+    """Reserve deliveries and report remaining work after reaping expired owners."""
     now = session.execute(select(func.clock_timestamp())).scalar_one()
     query = select(Marketplace).where(
         or_(Marketplace.sync_requested, Marketplace.sync_owner.is_not(None)),
@@ -224,5 +226,6 @@ def reserve_marketplace_dispatches(
                 continue
         row.sync_dispatch_after = now + timedelta(seconds=DISPATCH_SECONDS)
         ids.append(row.id)
+    active = any(row.sync_requested for row in rows)
     session.commit()
-    return ids
+    return ids, active

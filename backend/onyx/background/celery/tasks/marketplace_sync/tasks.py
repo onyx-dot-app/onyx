@@ -14,6 +14,7 @@ from onyx.db.marketplace_sync import (
     request_marketplace_sync,
     reserve_marketplace_dispatches,
 )
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.skills.sync import sync_marketplace
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_future
@@ -24,6 +25,7 @@ _LITE_SLOTS = BoundedSemaphore(4)
 
 def enqueue_marketplace_sync(marketplace_id: UUID, *, tenant_id: str) -> None:
     """Call after authorization and commit. Persist intent before broker I/O."""
+    maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
     with get_session_with_tenant(tenant_id=tenant_id) as session:
         request_marketplace_sync(marketplace_id, session)
     _dispatch(tenant_id, marketplace_id)
@@ -31,7 +33,9 @@ def enqueue_marketplace_sync(marketplace_id: UUID, *, tenant_id: str) -> None:
 
 def _dispatch(tenant_id: str, marketplace_id: UUID | None = None) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as session:
-        ids = reserve_marketplace_dispatches(session, marketplace_id)
+        ids, active = reserve_marketplace_dispatches(session, marketplace_id)
+    if active:
+        maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
     for identifier in ids:
         try:
             if DISABLE_VECTOR_DB:

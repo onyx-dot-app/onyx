@@ -183,3 +183,59 @@ def test_lite_recovery_failure_does_not_skip_file_drains() -> None:
         periodic_poller._run_drain_loops("public")
     for drain in (process, delete, projects):
         drain.assert_called_once_with("public")
+
+
+@pytest.mark.usefixtures("github", "broker")
+def test_activity_marks_only_requested_or_recovering_work(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+) -> None:
+    with (
+        patch.object(tasks, "maybe_mark_tenant_active") as dispatch_mark,
+        patch.object(sync, "maybe_mark_tenant_active") as worker_mark,
+    ):
+        tasks.recover_marketplace_syncs.run(tenant_id=tenant)
+        dispatch_mark.assert_not_called()
+        tasks.enqueue_marketplace_sync(marketplace.id, tenant_id=tenant)
+        dispatch_mark.assert_called_with(tenant, caller="marketplace_sync")
+        worker_mark.assert_not_called()
+        dispatch_mark.reset_mock()
+        with patch.object(
+            sync, "_sync_marketplace", side_effect=OnyxError(OnyxErrorCode.BAD_GATEWAY)
+        ):
+            run_task(marketplace.id, tenant)
+        assert worker_mark.call_count == 2  # Claim and committed retry scheduling.
+        worker_mark.assert_called_with(tenant, caller="marketplace_sync")
+        session.refresh(marketplace)
+        assert marketplace.sync_requested and marketplace.sync_retry_after is not None
+        expire(session, marketplace.id)
+        tasks.recover_marketplace_syncs.run(tenant_id=tenant)
+        dispatch_mark.assert_called_once_with(tenant, caller="marketplace_sync")
+        run_task(marketplace.id, tenant)
+        dispatch_mark.reset_mock()
+        worker_mark.reset_mock()
+        tasks.recover_marketplace_syncs.run(tenant_id=tenant)
+        run_task(marketplace.id, tenant)
+        dispatch_mark.assert_not_called()
+        worker_mark.assert_not_called()
+
+
+@pytest.mark.usefixtures("github")
+def test_reaping_marks_tenant_without_sending_before_backoff(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    broker: Mock,
+) -> None:
+    tasks.enqueue_marketplace_sync(marketplace.id, tenant_id=tenant)
+    assert ownership.claim_marketplace_sync(marketplace.id, session) is not None
+    session.refresh(marketplace)
+    assert marketplace.sync_dispatch_after is None
+    expire(session, marketplace.id)
+    with patch.object(tasks, "maybe_mark_tenant_active") as mark:
+        tasks.recover_marketplace_syncs.run(tenant_id=tenant)
+        mark.assert_called_once_with(tenant, caller="marketplace_sync")
+    session.refresh(marketplace)
+    assert marketplace.sync_requested and marketplace.sync_retry_after is not None
+    assert broker.call_count == 1
