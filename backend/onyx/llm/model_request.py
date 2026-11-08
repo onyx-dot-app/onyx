@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
@@ -42,6 +42,10 @@ class ToolCall(BaseModel):
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
     cache_control: dict[str, JsonValue] | None = None
+    # Where a provider that places its own markers (OpenAI's
+    # prompt_cache_breakpoint) ends a cached prefix. Excluded from model_dump;
+    # the LiteLLM wrapper carries it on the serialized message.
+    cache_breakpoint: bool = Field(default=False, exclude=True)
 
 
 class SystemMessage(CacheableMessage):
