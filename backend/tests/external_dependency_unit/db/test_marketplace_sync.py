@@ -656,8 +656,16 @@ def test_publication_and_completion_survive_post_commit_failure(
     make_sandbox(session, user)
     marketplace.public_permission = SkillSharePermission.VIEWER
     session.commit()
+    stopped = False
+    stop_heartbeat = sync.LeaseHeartbeat.stop
+
+    def record_stop(heartbeat: sync.LeaseHeartbeat) -> None:
+        nonlocal stopped
+        stop_heartbeat(heartbeat)
+        stopped = True
 
     def fail_push(_recipients: set[UUID], _push_session: Session) -> None:
+        assert stopped
         with sync.get_session_with_current_tenant() as observer:
             published = observer.get(Marketplace, marketplace.id)
             assert published is not None
@@ -668,7 +676,10 @@ def test_publication_and_completion_survive_post_commit_failure(
             raise SystemExit("worker stopped after publication")
         raise RuntimeError("push unavailable")
 
-    with patch.object(sync, "push_skills_for_users", side_effect=fail_push):
+    with (
+        patch.object(sync, "push_skills_for_users", side_effect=fail_push),
+        patch.object(sync.LeaseHeartbeat, "stop", record_stop),
+    ):
         if stop:
             with pytest.raises(SystemExit, match="worker stopped"):
                 run(marketplace, tenant)

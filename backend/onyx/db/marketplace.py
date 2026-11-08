@@ -82,12 +82,16 @@ def confirm_marketplace_retirement__no_commit(
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     proposal = marketplace.retirement_proposal
     if (
-        marketplace.sync_status != MarketplaceSyncStatus.NEEDS_CONFIRMATION
-        or proposal is None
+        proposal is None
         or proposal.revision != expected_revision
         or proposal.skill_ids != tuple(sorted(expected_skill_ids))
     ):
         raise OnyxError(OnyxErrorCode.CONFLICT, "Retirement proposal has changed")
+    if marketplace.sync_status != MarketplaceSyncStatus.NEEDS_CONFIRMATION:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Sync the marketplace again before confirming retirement",
+        )
     marketplace.retirement_proposal = proposal.model_copy(update={"approved": True})
     db_session.flush()
     request_marketplace_sync__no_commit(marketplace_id, db_session)

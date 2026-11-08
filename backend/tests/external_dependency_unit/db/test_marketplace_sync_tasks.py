@@ -120,9 +120,9 @@ def test_request_at_final_release(
     perform = sync._sync_marketplace
 
     def pause_after_release(
-        identifier: UUID, tenant_id: str, owner: UUID
+        identifier: UUID, tenant_id: str, owner: UUID, heartbeat: sync.LeaseHeartbeat
     ) -> tuple[ReconciliationResult | None, bool]:
-        result = perform(identifier, tenant_id, owner)
+        result = perform(identifier, tenant_id, owner, heartbeat)
         released.set()
         assert resume.wait(10)
         return result

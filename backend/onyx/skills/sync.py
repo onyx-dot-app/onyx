@@ -85,7 +85,7 @@ def _bundle_available(version: SkillVersion, file_store: FileStore) -> bool:
 
 
 def _sync_marketplace(
-    marketplace_id: UUID, tenant_id: str, owner: UUID
+    marketplace_id: UUID, tenant_id: str, owner: UUID, heartbeat: LeaseHeartbeat
 ) -> tuple[ReconciliationResult | None, bool]:
     """Return the result and pending work after committing completion with publication.
 
@@ -121,6 +121,7 @@ def _sync_marketplace(
                 resolved_revision=marketplace.last_synced_revision,
             )
             db_session.commit()
+        heartbeat.stop()
         return None, pending
     if archive.revision != marketplace.last_synced_revision:
         recovery_keys |= frozenset(
@@ -215,6 +216,7 @@ def _sync_marketplace(
         if not commit_attempted:
             _cleanup(uploaded)
         raise
+    heartbeat.stop()
     _cleanup(result.cleanup_file_ids)
     if result.affected_user_ids:
         try:
@@ -267,10 +269,10 @@ def sync_marketplace(
                 interval=10,
                 max_silence=LEASE_SECONDS / 2,
                 max_duration=MAX_RUN_SECONDS,
-            ):
+            ) as heartbeat:
                 try:
                     result, pending = _sync_marketplace(
-                        marketplace_id, tenant_id, owner
+                        marketplace_id, tenant_id, owner, heartbeat
                     )
                 except MarketplaceSyncLeaseLost:
                     raise

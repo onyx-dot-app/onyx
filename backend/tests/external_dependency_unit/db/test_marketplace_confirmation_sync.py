@@ -156,3 +156,6 @@ def test_confirmation_requires_pending_status(
         )
     assert error.value.error_code == OnyxErrorCode.CONFLICT
     assert not marketplace.sync_requested
+    assert error.value.detail == (
+        "Sync the marketplace again before confirming retirement"
+    )

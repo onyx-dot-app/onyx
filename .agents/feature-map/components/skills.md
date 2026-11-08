@@ -477,7 +477,8 @@ The library preview of an external-app skill calls the same renderer
     with the locked proposal. Reconciliation bypasses the guard only for that exact approved pair.
     A changed pair replaces the proposal without approval. Successful reconciliation
     clears it in the content transaction; rollback preserves both approval and content.
-    Failed reads at the same revision preserve the proposal. A fenced sync that
+    Failed reads at the same revision preserve the proposal, but confirmation
+    requires a new sync to restore NEEDS_CONFIRMATION status. A fenced sync that
     resolves a different revision clears it, including a no-op revert to the last
     synced revision. Consumed approval cannot authorize a later replay.
     New names conflict only within a library. Synced skills use marketplace ownership;
@@ -504,7 +505,8 @@ The library preview of an external-app skill calls the same renderer
     cleanup checks only this run's ids. After a commit attempt fails, defer cleanup
     to the aged orphan sweep: the server may still commit. Success cleanup also
     checks pruned ids. Cleanup preserves version and legacy references.
-    After commit, one push covers users affected by content, retirement, or access changes.
+    After commit, lease renewal stops before cleanup and sandbox I/O.
+    One push covers users affected by content, retirement, or access changes.
     A failed push is logged; it cannot change the committed sync result.
     V3 retries failed cleanup and removes aged uploads left by a stopped worker.
     `db/marketplace_sync.py` owns durable requests and per-marketplace leases.
@@ -524,7 +526,8 @@ The library preview of an external-app skill calls the same renderer
     polls idle sources. Cloud recovery skips gated tenants and uses tenant activity
     gating. Request, claim and retry paths mark activity outside database locks;
     reaping marks activity even when backoff postpones dispatch. Idle recovery does
-    not mark activity. The cloud scheduler stretches the recovery interval, so
+    not mark activity. Single-tenant deployments skip activity flag reads and writes,
+    so Lite does not need Redis for sync. The cloud scheduler stretches the recovery interval, so
     60/120 seconds are minimum retry delays, not dispatch guarantees. Both recovery
     and sync messages live for 15 minutes; database claims reject duplicates and enforce retry delays.
     Celery uses the heavy worker's sandbox queue. Lite dispatches
