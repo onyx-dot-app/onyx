@@ -66,7 +66,9 @@ def test_streamed_bundle_enforces_each_limit(
     assert error.value.status_code == 413
 
 
-@pytest.mark.parametrize("path", ["../bad", "data.template", "data/file/../bad"])
+@pytest.mark.parametrize(
+    "path", ["../bad", "data.template", "data/file/../bad", "data\x00other"]
+)
 def test_streamed_bundle_rejects_unsafe_paths(path: str) -> None:
     with pytest.raises(OnyxError):
         bundle.build_custom_bundle(

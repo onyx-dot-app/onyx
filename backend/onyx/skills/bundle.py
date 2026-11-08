@@ -767,6 +767,10 @@ def build_custom_bundle(files: Mapping[str, Callable[[], IO[bytes]]]) -> bytes:
     total = 0
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as target_zip:
         for path, open_file in sorted(files.items()):
+            if "\x00" in path:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "Bundle entry contains a null byte."
+                )
             path = _validated_bundle_path(zipfile.ZipInfo(path))
             if _is_ignored_bundle_path(path):
                 continue
