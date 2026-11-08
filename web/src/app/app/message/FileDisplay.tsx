@@ -2,6 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import { cn } from "@opal/utils";
+import { useCreateModal } from "@opal/components";
 import { ChatFileType, FileDescriptor } from "@/app/app/types";
 import Attachment from "@/refresh-components/Attachment";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
@@ -36,6 +37,7 @@ export default function FileDisplay({ files }: FileDisplayProps) {
   const [previewingFile, setPreviewingFile] = useState<FileDescriptor | null>(
     null
   );
+  const previewModal = useCreateModal();
   const textFiles = files.filter(
     (file) =>
       file.type === ChatFileType.PLAIN_TEXT ||
@@ -53,12 +55,14 @@ export default function FileDisplay({ files }: FileDisplayProps) {
 
   return (
     <>
-      {previewingFile && (
-        <PreviewModal
-          presentingDocument={presentingDocument}
-          onClose={() => setPreviewingFile(null)}
-        />
-      )}
+      <previewModal.Provider>
+        {previewingFile && (
+          <PreviewModal
+            presentingDocument={presentingDocument}
+            onClose={() => previewModal.toggle(false)}
+          />
+        )}
+      </previewModal.Provider>
 
       {textFiles.length > 0 && (
         <FileContainer id="onyx-file">
@@ -66,7 +70,10 @@ export default function FileDisplay({ files }: FileDisplayProps) {
             <Attachment
               key={file.id}
               fileName={file.name || file.id}
-              open={() => setPreviewingFile(file)}
+              open={() => {
+                setPreviewingFile(file);
+                previewModal.toggle(true);
+              }}
             />
           ))}
         </FileContainer>

@@ -14,6 +14,7 @@ import {
   ShadowDiv,
   Badge,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
 import {
@@ -482,6 +483,7 @@ export default function ActivityPanel({
     failures: number;
     errors: number;
   } | null>(null);
+  const confirmModal = useCreateModal();
   const {
     resolving,
     resolve,
@@ -840,15 +842,16 @@ export default function ActivityPanel({
                       tooltip={t("resolveAll.button")}
                       aria-label={t("resolveAll.button")}
                       disabled={!resolveAllEnabled}
-                      onClick={() =>
+                      onClick={() => {
                         setConfirming({
                           level: resolveLevel ?? null,
                           statusGroups: errorStatusGroups,
                           narrowing,
                           failures: failuresToResolve,
                           errors: errorsToResolve,
-                        })
-                      }
+                        });
+                        confirmModal.toggle(true);
+                      }}
                     />
                   )}
                   {onClose !== undefined && (
@@ -1021,42 +1024,44 @@ export default function ActivityPanel({
           </Section>
         </Card>
       </Section>
-      {confirming !== null && (
-        <ConfirmationModalLayout
-          icon={SvgCheckAll}
-          title={t("resolveAll.title")}
-          onClose={() => setConfirming(null)}
-          submit={
-            <Button
-              disabled={resolving}
-              onClick={async () => {
-                await resolveMatching(scope, confirming.narrowing, {
-                  level: confirming.level,
-                  statusGroups: confirming.statusGroups,
-                });
-                setConfirming(null);
-              }}
-            >
-              {t("resolveAll.confirm")}
-            </Button>
-          }
-        >
-          <Section alignItems="stretch" gap={2} height="fit">
-            <Text as="p" font="main-ui-body" color="text-03">
-              {t("resolveAll.body", {
-                count: confirming.failures + confirming.errors,
-                failures: t("resolveAll.failures", {
-                  count: confirming.failures,
-                }),
-                errors: t("resolveAll.errors", { count: confirming.errors }),
-              })}
-            </Text>
-            <Text as="p" font="main-ui-body" color="text-03">
-              {t("resolveAll.body2")}
-            </Text>
-          </Section>
-        </ConfirmationModalLayout>
-      )}
+      <confirmModal.Provider>
+        {confirming !== null && (
+          <ConfirmationModalLayout
+            icon={SvgCheckAll}
+            title={t("resolveAll.title")}
+            onClose={() => confirmModal.toggle(false)}
+            submit={
+              <Button
+                disabled={resolving}
+                onClick={async () => {
+                  await resolveMatching(scope, confirming.narrowing, {
+                    level: confirming.level,
+                    statusGroups: confirming.statusGroups,
+                  });
+                  confirmModal.toggle(false);
+                }}
+              >
+                {t("resolveAll.confirm")}
+              </Button>
+            }
+          >
+            <Section alignItems="stretch" gap={2} height="fit">
+              <Text as="p" font="main-ui-body" color="text-03">
+                {t("resolveAll.body", {
+                  count: confirming.failures + confirming.errors,
+                  failures: t("resolveAll.failures", {
+                    count: confirming.failures,
+                  }),
+                  errors: t("resolveAll.errors", { count: confirming.errors }),
+                })}
+              </Text>
+              <Text as="p" font="main-ui-body" color="text-03">
+                {t("resolveAll.body2")}
+              </Text>
+            </Section>
+          </ConfirmationModalLayout>
+        )}
+      </confirmModal.Provider>
     </Section>
   );
 }

@@ -39,7 +39,7 @@ import {
   humanReadableFormatShort,
   humanReadableFormatWithTime,
 } from "@opal/time";
-import { Modal } from "@opal/components";
+import { Modal, useCreateModal } from "@opal/components";
 import { Button, Divider, Text } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -276,7 +276,7 @@ export function QueryHistoryTable({
   setFilters,
 }: QueryHistoryTableProps) {
   const t = useTranslations("admin.queryHistory");
-  const [showModal, setShowModal] = useState(false);
+  const exportsModal = useCreateModal();
 
   const {
     currentPageData: chatSessionData,
@@ -323,7 +323,10 @@ export function QueryHistoryTable({
           </div>
           <div className="flex flex-row w-full items-center gap-x-2">
             <KickoffCSVExport dateRange={dateRange} />
-            <Button prominence="secondary" onClick={() => setShowModal(true)}>
+            <Button
+              prominence="secondary"
+              onClick={() => exportsModal.toggle(true)}
+            >
               {t("previousExports.label")}
             </Button>
           </div>
@@ -375,9 +378,11 @@ export function QueryHistoryTable({
         </Section>
       </CardSection>
 
-      {showModal && (
-        <PreviousQueryHistoryExportsModal setShowModal={setShowModal} />
-      )}
+      <exportsModal.Provider>
+        <PreviousQueryHistoryExportsModal
+          setShowModal={() => exportsModal.toggle(false)}
+        />
+      </exportsModal.Provider>
     </>
   );
 }

@@ -474,6 +474,8 @@ export default function HooksPage() {
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
   const [editHook, setEditHook] = useState<HookResponse | null>(null);
+  const createModal = useCreateModal();
+  const editModal = useCreateModal();
 
   const { specs, isLoading: specsLoading, error: specsError } = useHookSpecs();
   const {
@@ -569,8 +571,9 @@ export default function HooksPage() {
     );
   }
 
+  // The create spec stays set while its modal animates out; ignore it then.
   const connectSpec_ =
-    connectSpec ??
+    (createModal.isOpen ? connectSpec : null) ??
     (editHook
       ? specs?.find((s: HookPointMeta) => s.hook_point === editHook.hook_point)
       : undefined);
@@ -578,29 +581,33 @@ export default function HooksPage() {
   return (
     <>
       {/* Create modal */}
-      {!!connectSpec && (
-        <HookFormModal
-          key={connectSpec?.hook_point ?? "create"}
-          onOpenChange={(open: boolean) => {
-            if (!open) setConnectSpec(null);
-          }}
-          spec={connectSpec ?? undefined}
-          onSuccess={handleHookSuccess}
-        />
-      )}
+      <createModal.Provider>
+        {!!connectSpec && (
+          <HookFormModal
+            key={connectSpec?.hook_point ?? "create"}
+            onOpenChange={(open: boolean) => {
+              if (!open) createModal.toggle(false);
+            }}
+            spec={connectSpec ?? undefined}
+            onSuccess={handleHookSuccess}
+          />
+        )}
+      </createModal.Provider>
 
       {/* Edit modal */}
-      {!!editHook && (
-        <HookFormModal
-          key={editHook?.id ?? "edit"}
-          onOpenChange={(open: boolean) => {
-            if (!open) setEditHook(null);
-          }}
-          hook={editHook ?? undefined}
-          spec={connectSpec_ ?? undefined}
-          onSuccess={handleHookSuccess}
-        />
-      )}
+      <editModal.Provider>
+        {!!editHook && (
+          <HookFormModal
+            key={editHook?.id ?? "edit"}
+            onOpenChange={(open: boolean) => {
+              if (!open) editModal.toggle(false);
+            }}
+            hook={editHook ?? undefined}
+            spec={connectSpec_ ?? undefined}
+            onSuccess={handleHookSuccess}
+          />
+        )}
+      </editModal.Provider>
 
       <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
@@ -653,7 +660,10 @@ export default function HooksPage() {
                         key={hook.id}
                         hook={hook}
                         spec={spec}
-                        onEdit={() => setEditHook(hook)}
+                        onEdit={() => {
+                          setEditHook(hook);
+                          editModal.toggle(true);
+                        }}
                         onDeleted={() => handleHookDeleted(hook.id)}
                         onToggled={handleHookSuccess}
                       />
@@ -664,7 +674,10 @@ export default function HooksPage() {
                     <UnconnectedHookCard
                       key={spec.hook_point}
                       spec={spec}
-                      onConnect={() => setConnectSpec(spec)}
+                      onConnect={() => {
+                        setConnectSpec(spec);
+                        createModal.toggle(true);
+                      }}
                     />
                   ))}
                 </div>

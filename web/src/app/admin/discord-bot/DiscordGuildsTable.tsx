@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/DeleteButton";
-import { Button } from "@opal/components";
+import { Button, useCreateModal } from "@opal/components";
 import { InputSwitch } from "@opal/components";
 import { SvgEdit, SvgServer } from "@opal/icons";
 import { EmptyMessageCard } from "@opal/components";
@@ -37,6 +37,7 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
   const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
     null
   );
+  const deleteModal = useCreateModal();
   const [updatingGuildIds, setUpdatingGuildIds] = useState<Set<number>>(
     new Set()
   );
@@ -51,7 +52,7 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
         err instanceof Error ? err.message : t("guilds.deleteError.toast")
       );
     } finally {
-      setGuildToDelete(null);
+      deleteModal.toggle(false);
     }
   };
 
@@ -94,19 +95,21 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
 
   return (
     <>
-      {guildToDelete && (
-        <ConfirmEntityModal
-          danger
-          entityType={t("guilds.deleteModal.entityType")}
-          entityName={
-            guildToDelete.guild_name ||
-            t("guilds.fallbackName", { id: guildToDelete.id })
-          }
-          onClose={() => setGuildToDelete(null)}
-          onSubmit={() => handleDelete(guildToDelete.id)}
-          additionalDetails={t("guilds.deleteModal.additionalDetails")}
-        />
-      )}
+      <deleteModal.Provider>
+        {guildToDelete && (
+          <ConfirmEntityModal
+            danger
+            entityType={t("guilds.deleteModal.entityType")}
+            entityName={
+              guildToDelete.guild_name ||
+              t("guilds.fallbackName", { id: guildToDelete.id })
+            }
+            onClose={() => deleteModal.toggle(false)}
+            onSubmit={() => handleDelete(guildToDelete.id)}
+            additionalDetails={t("guilds.deleteModal.additionalDetails")}
+          />
+        )}
+      </deleteModal.Provider>
       <Table>
         <TableHeader>
           <TableRow>
@@ -159,7 +162,12 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
                 )}
               </TableCell>
               <TableCell>
-                <DeleteButton onClick={() => setGuildToDelete(guild)} />
+                <DeleteButton
+                  onClick={() => {
+                    setGuildToDelete(guild);
+                    deleteModal.toggle(true);
+                  }}
+                />
               </TableCell>
             </TableRow>
           ))}
