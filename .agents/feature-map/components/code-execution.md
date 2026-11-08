@@ -199,8 +199,10 @@ health calls are not retried.
     not a container.** `pydantic-monty` runs programs in its own worker
     processes (`tools/tool_implementations/code_mode/sandbox.py:sandbox_pool`,
     `MAX_SANDBOX_PROCESSES` per server process), which run as the API server's
-    user. Programs have no access to the environment, files, network or
-    processes, so the tool functions are the only way out. `SandboxLimits`
+    user. The server process also holds up to `MAX_SUSPENDED_BYTES` of dumped
+    programs that wait on their tools, besides the workers' memory. Programs
+    have no access to the environment, files, network or processes, so the
+    tool functions are the only way out. `SandboxLimits`
     bounds each program's lifetime, compute time, memory, tool calls and
     output. Each value that the host copies or saves from a program goes
     through `tools/tool_implementations/code_mode/store.py:json_value`. It

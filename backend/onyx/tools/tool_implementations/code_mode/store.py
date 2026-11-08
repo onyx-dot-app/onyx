@@ -217,6 +217,27 @@ def changed_writes(
     }
 
 
+def store_limit_error(
+    *, before: int, after: int, committed: int, stores_values: bool
+) -> str | None:
+    """Why the store cannot change from `before` to `after` bytes while the
+    chat's saved writes reach `committed` bytes, or None if it can.
+
+    A change that does not grow the store passes the store limit, and writes
+    that only delete keys pass the chat limit.
+    """
+    if after > MAX_STORE_BYTES and after > before:
+        return (
+            f"the store would hold {after} bytes; the limit is {MAX_STORE_BYTES} bytes"
+        )
+    if stores_values and committed > MAX_COMMITTED_BYTES:
+        return (
+            f"this chat would save {committed} bytes of store writes; the limit "
+            f"is {MAX_COMMITTED_BYTES} bytes per chat"
+        )
+    return None
+
+
 def _valid_key(key: object) -> str:
     if not isinstance(key, str):
         raise TypeError(f"Store keys must be str, not {type(key).__name__}.")
@@ -242,8 +263,9 @@ class ProgramStore:
         }
         self._total = sum(self._sizes.values())
         self._writes: dict[str, JsonValue] = {}
-        # Bytes that each changed key adds to the commit.
+        # Bytes that each changed key adds to the commit, and their sum.
         self._write_sizes: dict[str, int] = {}
+        self._write_total = 0
 
     @property
     def writes(self) -> dict[str, JsonValue]:
@@ -267,29 +289,26 @@ class ProgramStore:
         write_bytes = entry_bytes(valid_key, stored)
         size = 0 if stored is None else write_bytes
         total = self._total - self._sizes.get(valid_key, 0) + size
-        if total > MAX_STORE_BYTES and total > self._total:
-            raise ValueError(
-                f'Cannot store "{valid_key}": the store would hold {total} bytes; '
-                f"the limit is {MAX_STORE_BYTES} bytes. Store less, or delete keys "
-                "with store(key, None)."
-            )
         write_size = (
             write_bytes if _differs(self._snapshot.values.get(valid_key), stored) else 0
         )
-        committed = (
-            self._snapshot.committed_bytes
-            + sum(self._write_sizes.values())
-            - self._write_sizes.get(valid_key, 0)
-            + write_size
+        write_total = (
+            self._write_total - self._write_sizes.get(valid_key, 0) + write_size
         )
-        if stored is not None and committed > MAX_COMMITTED_BYTES:
+        error = store_limit_error(
+            before=self._total,
+            after=total,
+            committed=self._snapshot.committed_bytes + write_total,
+            stores_values=stored is not None,
+        )
+        if error is not None:
             raise ValueError(
-                f'Cannot store "{valid_key}": this chat has saved '
-                f"{self._snapshot.committed_bytes} bytes of store writes; the limit "
-                f"is {MAX_COMMITTED_BYTES} bytes per chat. Values stored earlier "
-                "stay available with load(); start a new chat to store more."
+                f'Cannot store "{valid_key}": {error}. Store less, delete keys with '
+                "store(key, None), or start a new chat; values stored earlier stay "
+                "available with load()."
             )
         self._total = total
+        self._write_total = write_total
         if write_size:
             self._write_sizes[valid_key] = write_size
         else:

@@ -88,8 +88,10 @@ class StoreCommit(BaseModel):
     at an uncaught exception), None deleting the key, and the commit's place in
     the completion order of the conversation branch."""
 
+    model_config = ConfigDict(frozen=True)
+
     ordinal: int
-    writes: dict[str, JsonValue]
+    writes: Mapping[str, JsonValue]
 
     @cached_property
     def size_bytes(self) -> int:

@@ -1043,6 +1043,7 @@ def test_a_resumed_program_waits_for_a_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(sandbox, "CHECKOUT_TIMEOUT_SECONDS", 0.3)
+    holders: list[threading.Thread] = []
     with Monty(min_processes=1, max_processes=1, checkout_timeout=0.1) as pool:
         held = threading.Event()
 
@@ -1061,11 +1062,15 @@ def test_a_resumed_program_waits_for_a_worker(
 
         def handler(_call: ExternalCall) -> object:
             # The only worker is busy for longer than a new program would wait.
-            threading.Thread(target=hold_the_worker).start()
+            holder = threading.Thread(target=hold_the_worker)
+            holders.append(holder)
+            holder.start()
             assert held.wait(5)
             return "done"
 
         result = run("print(await slow(seconds=0))\n", handler, pool=pool)
+        for holder in holders:
+            holder.join(5)
     assert result.status == "completed", result
     assert result.stdout == "done\n"
 
@@ -1120,7 +1125,12 @@ def test_a_call_that_outlives_its_program_keeps_its_thread_until_it_returns(
     assert not threads.acquire(lambda: None)
     assert _held_after_end() == 1
     release.set()
-    until(lambda: threads.acquire(lambda: None))
+
+    def probe() -> None:
+        pass
+
+    until(lambda: threads.acquire(probe))
+    threads.release(probe)
     assert _held_after_end() == 0
 
 
@@ -1166,6 +1176,8 @@ def test_programs_waiting_for_threads_share_them_equally() -> None:
     # which already holds more than its share.
     assert not threads.acquire(first)
     assert threads.acquire(second)
+    for program in (first, first, first, second):
+        threads.release(program)
 
 
 def test_an_async_host_function_answers_when_awaited_without_a_tool_call() -> None:
