@@ -347,6 +347,9 @@ The library preview of an external-app skill calls the same renderer
     at that commit. The reader receives bytes and a folder. Reconciliation receives
     its result and staged bundle metadata.
     Config and import share repository-name and folder validation in `utils/github.py`.
+    Repository, ref and folder are fixed at creation; no API edits them.
+    A future source edit must clear the synced revision and invalidate active sync
+    ownership and retirement approval before allowing publication from the new source.
     Empty folders become NULL; trailing slashes are removed. Absolute paths and
     dot segments are rejected.
     Webhooks remain unsupported until the self-hosted webhook ticket ships.
