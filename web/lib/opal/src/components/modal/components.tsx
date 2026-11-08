@@ -16,13 +16,36 @@ import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import useContainerCenter from "@opal/hooks/useContainerCenter";
+import { useModalOwner } from "@opal/components/modal/context";
 import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Root + Overlay
 // ---------------------------------------------------------------------------
 
-const ModalRoot = DialogPrimitive.Root;
+type ModalRootProps = React.ComponentProps<typeof DialogPrimitive.Root>;
+
+/**
+ * Radix's root. Under a `useCreateModal` owner that is closing, it closes
+ * too, so the modal animates out before the owner unmounts it.
+ */
+function ModalRoot({ open, ...props }: ModalRootProps) {
+  const owner = useModalOwner();
+  return (
+    <DialogPrimitive.Root
+      open={owner && !owner.isOpen ? false : open}
+      {...props}
+    />
+  );
+}
+
+/** Registers the card with its owner, which unmounts once no card is left. */
+function ModalExitSignal() {
+  // A stable store method, so this runs only on mount and unmount.
+  const registerCard = useModalOwner()?.registerCard;
+  React.useEffect(() => registerCard?.(), [registerCard]);
+  return null;
+}
 
 interface ModalOverlayProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -313,6 +336,7 @@ function ModalContent({
                 {children}
               </div>
               <div className="opal-modal-bottom-slot">{bottomSlot}</div>
+              <ModalExitSignal />
             </div>
           </DialogPrimitive.Content>
         ) : (
@@ -326,6 +350,7 @@ function ModalContent({
             {...dialogEventHandlers}
           >
             {children}
+            <ModalExitSignal />
           </DialogPrimitive.Content>
         )}
       </DialogPrimitive.Portal>

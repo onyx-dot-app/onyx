@@ -4,12 +4,11 @@
    Modal
 
    Three layers share the chrome:
-   - .opal-modal-overlay: the scrim behind the card; the only animated layer
-     (fade in/out on open/close).
-   - .opal-modal-positioner: the fixed, centered (or top-pinned) frame that
-     carries width and the viewport clamp. The card appears in place, no
-     entrance animation. When a [data-main-container] center is in effect, the
-     owner supplies left/top inline and omits [data-viewport-centered].
+   - .opal-modal-overlay: the scrim behind the card (fade in/out).
+   - .opal-modal-positioner: the fixed, top-aligned frame that carries width
+     and the viewport clamp. It animates in and out (see Motion below). When a
+     [data-main-container] center is in effect, the owner supplies left inline
+     and omits [data-viewport-centered].
    - .opal-modal-card: the bordered card that carries background and height.
 
    Without a bottom slot, one element wears positioner + card. With one, the
@@ -44,6 +43,37 @@
 }
 .opal-modal-positioner[data-viewport-centered] {
   @apply left-1/2;
+}
+
+/* Motion. The card fades and scales in from its top edge, and fades out on
+   close; Radix keeps it mounted until the exit animation ends. Only
+   transform and opacity move, so the `translate` that centres the card
+   stays put. */
+.opal-modal-positioner {
+  transform-origin: top center;
+}
+.opal-modal-positioner[data-state="open"] {
+  animation: opal-modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.opal-modal-positioner[data-state="closed"] {
+  animation: opal-modal-out 120ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@keyframes opal-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.97);
+  }
+}
+@keyframes opal-modal-out {
+  to {
+    opacity: 0;
+    transform: translateY(-0.25rem) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .opal-modal-positioner[data-state] {
+    animation: none;
+  }
 }
 
 .opal-modal-positioner[data-width="sm"] {
