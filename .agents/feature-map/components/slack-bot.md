@@ -91,7 +91,7 @@ process_slack_event                                  per event
       handle_standard_answers -> True: stop
       handle_regular_answer                          handlers/handle_regular_answer.py
         persona access check, check_token_rate_limits
-        handle_stream_message_objects + gather_stream_full   in-process, origin SLACKBOT
+        run_chat_turn                                in-process, origin SLACKBOT
         build_slack_response_blocks, respond_in_thread_or_channel
 ```
 
@@ -137,7 +137,7 @@ prefix. Deleting the channel config marks that persona deleted.
 1. `chat-route-depends-skipped` **Checks that are a `Depends` on the HTTP chat
    route do not run here.**
    `onyxbot/slack/handlers/handle_regular_answer.py:handle_regular_answer` calls
-   `chat/process_message.py:handle_stream_message_objects` directly, so it
+   `chat/process_message.py:run_chat_turn` directly, so it
    skips the dependency chain on
    `server/query_and_chat/chat_backend.py:handle_send_chat_message`. It calls
    `check_token_rate_limits(usage_user)` inline for that reason.
@@ -213,7 +213,7 @@ prefix. Deleting the channel config marks that persona deleted.
 12. `answer-retry-reruns-turn` **Each retry is a new chat turn in a new
     session.** `_get_slack_answer` in `handle_regular_answer` retries on any
     exception, up to `ONYX_BOT_NUM_RETRIES` (5) times. It raises whenever
-    `gather_stream_full` returns an `error_msg`, including execution and
+    `run_chat_turn` returns an `error_msg`, including execution and
     persistence failures. Exceptions raised while consuming the stream also
     reach this retry. Every attempt sends `chat_session_info`, so the prepare
     step creates a new `ChatSession` and runs the LLM and tools again. A
@@ -265,7 +265,7 @@ prefix. Deleting the channel config marks that persona deleted.
 
 ## Dependencies
 
-- [[core-chat-loop]]: a change to `handle_stream_message_objects` or `chat/process_message.py:gather_stream_full` reaches the bot with no change here. `gather_stream_full` drains the stream, then builds the answer, tool calls, sources, and citations from the final response outcome.
+- [[core-chat-loop]]: a change to `chat/process_message.py:run_chat_turn`, `handle_stream_message_objects` or `gather_stream_full` reaches the bot with no change here. `run_chat_turn` drains the stream with `gather_stream_full`, then builds the answer, tool calls, sources, and citations from the final response outcome.
 - [[standard-answers]]: runs before the regular answer and can end the turn.
 - [[agents-personas]]: the channel's persona sets the prompt, tools and document sets.
 - [[access-control]]: the anonymous user's scope bounds public-channel answers.
