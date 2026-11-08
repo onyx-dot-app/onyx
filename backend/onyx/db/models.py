@@ -152,7 +152,11 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
-from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
+from onyx.skills.marketplace.models import (
+    GitHubMarketplaceConfig,
+    MarketplaceProvider,
+    MarketplaceSyncStatus,
+)
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
@@ -5441,6 +5445,31 @@ class Marketplace(Base):
         server_default=SkillInstallationPolicy.AVAILABLE.value,
     )
     group_shares: Mapped[list["Marketplace__UserGroup"]] = relationship(viewonly=True)
+
+    sync_requested: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    sync_owner: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    sync_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sync_retry_after: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_lease_expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_dispatch_after: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_status: Mapped[MarketplaceSyncStatus | None] = mapped_column(
+        Enum(
+            MarketplaceSyncStatus,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        )
+    )
 
     last_synced_revision: Mapped[str | None] = mapped_column(String, nullable=True)
     last_synced_at: Mapped[datetime.datetime | None] = mapped_column(

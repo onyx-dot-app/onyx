@@ -12,6 +12,12 @@ from onyx.utils.github import (
 MARKETPLACE_LOGIN_ERROR = "Marketplace login is unavailable. Replace the login with an active user connected to GitHub."
 
 
+class MarketplaceSyncStatus(StrEnum):
+    APPLIED = "applied"
+    FAILED = "failed"
+    NEEDS_CONFIRMATION = "needs_confirmation"
+
+
 class MarketplaceProvider(StrEnum):
     GITHUB = "github"
 

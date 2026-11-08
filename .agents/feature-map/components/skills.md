@@ -497,6 +497,18 @@ The library preview of an external-app skill calls the same renderer
     S5 must serialize the full read/upload/write operation and reject stale revisions.
     S8 owns the retirement confirmation override. Neither is implemented here.
 
+
+24. `marketplace-sync-ownership` **Bound each durable request and fence its owner.**
+    `db/marketplace_sync.py` stores requested work and per-marketplace leases.
+    Claim, renewal, completion and recovery lock the marketplace row. Publication
+    fences take membership first, then the marketplace lock. Expired owners cannot
+    publish or complete. A lease lasts at most five minutes from its claim.
+    Temporary failures and expired owners share three attempts with 60/120-second
+    backoff. Explicit requests reset the budget and delay without replacing a live
+    owner. Completion preserves a request made during the run and a deleted login's
+    error. Queue reservations expire separately from retry delays.
+    Worker dispatch is not connected yet.
+
 ---
 
 ## Decisions
