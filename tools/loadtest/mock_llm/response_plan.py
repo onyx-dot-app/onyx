@@ -6,6 +6,7 @@ import json
 import os
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
 from typing import Any, Literal
@@ -357,72 +358,49 @@ def _new_call(name: str, arguments: str) -> ToolCall:
 
 
 def _search_profile_calls(
-    messages: list[ChatMessage],
+    turn: list[ChatMessage],
     by_name: dict[str, ToolDefinition],
     knobs: Knobs,
     profile: TurnProfile,
     snippet: str,
 ) -> list[ToolCall] | None:
-    """The next step of the seeded search plan; None without a search tool."""
-    turn = messages[_last_user_index(messages) + 1 :]
+    """The next step of the seeded search plan; None without a search tool.
+
+    In code mode each round is one program, or one program runs every round
+    in parallel when `knobs.code_batched` is set."""
     if "internal_search" in by_name:
         completed_rounds = _rounds_called(turn, "internal_search")
         if completed_rounds >= profile.search_rounds:
             return []
         queries = _round_queries(snippet, completed_rounds, profile)
         return [_new_call("internal_search", json.dumps({"queries": queries}))]
-    if code_mode.EXECUTE_CODE in by_name:
-        return _code_mode_search(turn, by_name, knobs, profile, snippet)
-    return None
+    if code_mode.EXECUTE_CODE not in by_name:
+        return None
+
+    def program(ran: int) -> str | None:
+        if ran >= (1 if knobs.code_batched else profile.search_rounds):
+            return None
+        rounds = range(profile.search_rounds) if knobs.code_batched else [ran]
+        return code_mode.search_program(
+            [("internal_search", _round_queries(snippet, i, profile)) for i in rounds]
+        )
+
+    return _code_mode_step(turn, program)
 
 
-def _code_mode_search(
-    turn: list[ChatMessage],
-    by_name: dict[str, ToolDefinition],
-    knobs: Knobs,
-    profile: TurnProfile,
-    snippet: str,
+def _code_mode_step(
+    turn: list[ChatMessage], program: Callable[[int], str | None]
 ) -> list[ToolCall]:
-    """The search plan as execute_code programs: one per round, or one program
-    that runs every round in parallel when `knobs.code_batched` is set."""
+    """The next code mode step of the current turn: wait for a cell that the
+    latest result left running, else run `program(n)`, where n counts the
+    programs the turn already ran. A None program ends the turn's tool calls."""
     cell = code_mode.running_cell(turn)
-    if cell is not None and code_mode.WAIT_CODE in by_name:
+    if cell is not None:
         return [_new_call(code_mode.WAIT_CODE, json.dumps({"cell_id": cell}))]
-    completed = _rounds_called(turn, code_mode.EXECUTE_CODE)
-    if knobs.code_batched:
-        if completed:
-            return []
-        rounds = range(profile.search_rounds)
-    else:
-        if completed >= profile.search_rounds:
-            return []
-        rounds = range(completed, completed + 1)
-    program = code_mode.search_program(
-        [("internal_search", _round_queries(snippet, i, profile)) for i in rounds]
-    )
-    return [_new_call(code_mode.EXECUTE_CODE, json.dumps({"code": program}))]
-
-
-def _code_mode_retrieval(
-    messages: list[ChatMessage],
-    by_name: dict[str, ToolDefinition],
-    limit: int,
-    snippet: str,
-) -> list[ToolCall]:
-    """One program that calls up to `limit` query-taking retrieval functions in
-    parallel. Empty without execute_code, after a program ran, or when the
-    program offers no such function."""
-    execute_code = by_name.get(code_mode.EXECUTE_CODE)
-    if execute_code is None or _assistant_called(messages, (code_mode.EXECUTE_CODE,)):
+    code = program(_rounds_called(turn, code_mode.EXECUTE_CODE))
+    if code is None:
         return []
-    functions = code_mode.code_functions(execute_code)
-    chosen = [name for name in code_mode.QUERY_FUNCTIONS if name in functions][
-        : max(1, limit)
-    ]
-    if not chosen:
-        return []
-    program = code_mode.search_program([(name, [snippet]) for name in chosen])
-    return [_new_call(code_mode.EXECUTE_CODE, json.dumps({"code": program}))]
+    return [_new_call(code_mode.EXECUTE_CODE, json.dumps({"code": code}))]
 
 
 def _pick_tool(
@@ -436,7 +414,8 @@ def _pick_tool(
     by_name = {t.function.name: t for t in tools}
     messages = request.messages
     snippet = question if profile else _last_user_snippet(messages)
-    has_tool_result = any(m.role == "tool" for m in messages)
+    turn = messages[_last_user_index(messages) + 1 :]
+    has_tool_result = any(m.role == "tool" for m in turn)
 
     def make(tool: ToolDefinition, task: str | None = None) -> ToolCall:
         return _new_call(
@@ -469,7 +448,7 @@ def _pick_tool(
         and choice == "auto"
         and _GENERATE_PLAN not in by_name
     ):
-        calls = _search_profile_calls(messages, by_name, knobs, profile, snippet)
+        calls = _search_profile_calls(turn, by_name, knobs, profile, snippet)
         if calls is not None:
             return calls
 
@@ -490,10 +469,6 @@ def _pick_tool(
         retrieval_tool = next((n for n in _RETRIEVAL_TOOLS if n in by_name), None)
         if retrieval_tool and not _assistant_called(messages, _RETRIEVAL_TOOLS):
             return [make(by_name[retrieval_tool])]
-        if retrieval_tool is None and (
-            calls := _code_mode_retrieval(messages, by_name, 1, snippet)
-        ):
-            return calls
         if _GENERATE_REPORT in by_name:
             return [make(by_name[_GENERATE_REPORT])]
         return [make(tools[0])]
@@ -502,15 +477,21 @@ def _pick_tool(
     # DR clarification: always proceed to the plan, never ask to clarify.
     if _GENERATE_PLAN in by_name:
         return [make(by_name[_GENERATE_PLAN])]
+    retrieval = [by_name[n] for n in _RETRIEVAL_TOOLS if n in by_name]
+    execute_code = by_name.get(code_mode.EXECUTE_CODE)
+    if knobs.n_auto_tools > 0 and not retrieval and execute_code is not None:
+        # One program calls up to n_auto_tools query-taking functions in
+        # parallel; then the turn answers.
+        offered = code_mode.code_functions(execute_code)
+        functions = [n for n in code_mode.QUERY_FUNCTIONS if n in offered]
+        searches = [(n, [snippet]) for n in functions[: knobs.n_auto_tools]]
+
+        def program(ran: int) -> str | None:
+            return code_mode.search_program(searches) if ran == 0 and searches else None
+
+        return _code_mode_step(turn, program)
     if knobs.n_auto_tools > 0 and not has_tool_result:
         # Up to n_auto_tools retrieval tools in parallel; else the first tool.
-        retrieval = [by_name[n] for n in _RETRIEVAL_TOOLS if n in by_name]
-        if not retrieval and (
-            calls := _code_mode_retrieval(
-                messages, by_name, knobs.n_auto_tools, snippet
-            )
-        ):
-            return calls
         chosen = retrieval[: knobs.n_auto_tools]
         if not chosen and tools:
             chosen = [tools[0]]

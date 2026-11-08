@@ -54,17 +54,13 @@ def search_program(searches: Sequence[tuple[str, Sequence[str]]]) -> str:
     )
 
 
-def is_observation(content: str) -> bool:
-    return _ENVELOPE_RE.search(content) is not None
-
-
 def citation_ids(content: str) -> set[int]:
     """Document numbers from the printed output of one code mode observation.
 
     Only `[n] ` at the start of an output line counts, so document prose in a
     title never adds a number.
     """
-    if not is_observation(content):
+    if _ENVELOPE_RE.search(content) is None:
         return set()
     match = _OUTPUT_RE.search(content)
     if match is None:

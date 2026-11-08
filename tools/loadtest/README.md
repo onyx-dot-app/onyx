@@ -293,16 +293,19 @@ same way as in direct mode. The answer phase does not change.
 
 | Model | Programs in a turn | Model calls in a turn |
 |---|---|---|
-| `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode |
-| `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, then the answer |
+| `mock-profile-search-v1` | One program for each search round, with that round's queries | Same as direct mode, plus one for each `wait_code` |
+| `mock-profile-search-v1-codebatched` | One program that runs all rounds in parallel with `asyncio.gather` | One tool call, one for each `wait_code`, then the answer |
 
 When a program runs longer than its yield time, the result says that the cell is
 running. The mock then calls `wait_code` for that cell until the program ends.
-The `-codebatched` suffix has no effect in direct mode.
+Each `wait_code` call is one more model call, so check `onyx_loadtest_code_waits`
+and report it with each arm. The `-codebatched` suffix applies only to the search
+profile and has no effect in direct mode.
 
 In code mode, `MultiToolUser` (`mock-tools<n>`) runs one program that calls up to
-`n` of `internal_search` and `web_search` in parallel. The deep-research agent loop
-runs one program with one search. Other profiles do not change.
+`n` of `internal_search` and `web_search` in parallel, and waits for it the same
+way. Deep research does not use code mode, so its calls stay direct. Other
+profiles do not change.
 
 ### Run the arms
 
@@ -317,21 +320,24 @@ and resources. Change only the API setting and, for the batched arm, the model:
 
 Register `mock-profile-search-v1-codebatched` with the mock provider before the
 batched arm. Restart the API server after you change `CODE_MODE_ENABLED`. Then run
-`ChatWithSearchUser` for each arm:
+`ChatWithSearchUser` for each arm. Give each arm its own `--csv` prefix, or the
+next arm overwrites the stats:
 
 ```bash
+ARM=code-mode-per-round  # direct, code-mode-per-round, or code-mode-batched
 ONYX_SEARCH_MODEL=mock-profile-search-v1 \
   uv run --group loadtest locust --headless -u 50 -r 5 -t 15m \
-  --host "$LOCUST_HOST" --csv code-mode-per-round ChatWithSearchUser
+  --host "$LOCUST_HOST" --csv "$ARM" ChatWithSearchUser
 ```
 
 Make sure that each arm ran the intended path. In the Locust `/metrics` output,
 `onyx_loadtest_code_programs` must be zero for the direct arm and nonzero for the
 code mode arms. Assess each arm's stats CSV separately with `capacity_report.py`.
 
-The per-round arm keeps the number and order of model calls of direct mode. Its
-difference from direct mode shows the cost of the sandbox. The batched arm also
-changes the model calls and runs the searches in parallel. Its difference shows
+Without `wait_code` calls, the per-round arm keeps the number and order of model
+calls of direct mode. Its difference from direct mode then shows the cost of the
+sandbox. The batched arm also changes the model calls and runs the searches in
+parallel. Its difference shows
 the combined effect of the sandbox and fewer model calls. `search_calls` counts
 searches in both modes, so the arms report comparable search counts.
 
@@ -353,7 +359,7 @@ ONYX_MESSAGES_FILE=/path/to/questions.jsonl \
 Use the same file hash, model, mock seed, generator seed, worker count, and user
 count for each comparison. The manifest lists the expected one-pass mix without
 question text. It accepts base profile names, including the research agent count
-and the `-codebatched` suffix,
+and the `-codebatched` suffix of the search profile,
 but rejects stress and fault overrides. Small corpora can sample the buckets unevenly. Check the manifest
 instead of assuming the bucket percentages occurred in your run.
 
@@ -370,8 +376,8 @@ reset when the mock restarts. They measure model calls, not whole application tu
 Locust `/metrics` adds `onyx_loadtest_active`, `started`, `finished`, `answer_chars`,
 `packets`, `search_calls`, `reasoning_packets`, and `citations`, labelled by scenario.
 Code mode adds `code_programs` (`execute_code` calls), `code_waits` (`wait_code`
-calls), `nested_search_calls` (searches that programs made, also in `search_calls`),
-and `code_failures`.
+calls), `nested_search_calls` (searches that programs made, also in `search_calls`;
+a search that several observations report counts once), and `code_failures`.
 Finished counts include failed setup and interrupted turns; success rates come from Locust request statistics.
 Counts reset at test start and survive a Locust statistics reset. Compare interval
 deltas when excluding warmup. Missing workers retain their last cumulative counts

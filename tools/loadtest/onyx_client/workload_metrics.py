@@ -22,10 +22,6 @@ class Counts:
 
 
 METRIC_NAMES = tuple(field.name for field in fields(Counts))
-# Counts that each turn adds from its StreamSummary field of the same name.
-STREAM_METRIC_NAMES = tuple(
-    name for name in METRIC_NAMES if name not in ("active", "started", "finished")
-)
 
 local: dict[str, Counts] = {}
 workers: dict[str, dict[str, dict[str, int]]] = {}

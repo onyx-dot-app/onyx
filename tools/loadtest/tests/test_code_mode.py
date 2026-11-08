@@ -1,5 +1,5 @@
 """Code mode contracts: the mock's execute_code plans and the parser's code
-mode packets (backend code_mode/renderer.py and streaming_models.py)."""
+mode packets (backend/onyx/chat/renderer.py and streaming_models.py)."""
 
 from __future__ import annotations
 
@@ -59,10 +59,13 @@ def searches(code: str) -> list[list[str]]:
 
 
 def run_turn(
-    model: str, tools: list[dict[str, Any]], question: str
+    model: str,
+    tools: list[dict[str, Any]],
+    question: str,
+    history: list[dict[str, Any]] | None = None,
 ) -> tuple[list[list[dict[str, Any]]], str]:
     """Drive one turn to its answer: the tool calls of each step, and the answer."""
-    messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
+    messages = [*(history or []), {"role": "user", "content": question}]
     steps: list[list[dict[str, Any]]] = []
     for step in range(10):
         plan = prepare_response(
@@ -134,54 +137,63 @@ def test_direct_mode_ignores_the_batched_suffix() -> None:
 
 
 @pytest.mark.parametrize("model", [MODEL, BATCHED])
-def test_code_plans_are_seeded(model: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    def programs(seed: int) -> list[str]:
+def test_code_mode_searches_match_direct_mode_for_each_seed(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    question = question_for(2)
+    plans: set[str] = set()
+    for seed in (0, 1, 2, 3):
         monkeypatch.setenv("MOCK_WORKLOAD_SEED", str(seed))
-        return [
-            json.loads(call["function"]["arguments"])["code"]
-            for calls in run_turn(model, CODE_TOOLS, question_for(2, seed))[0]
-            for call in calls
+        direct = direct_queries(question)
+        code = [
+            queries
+            for calls in run_turn(model, CODE_TOOLS, question)[0]
+            for queries in searches(
+                json.loads(calls[0]["function"]["arguments"])["code"]
+            )
         ]
+        assert code == direct
+        plans.add(json.dumps(direct))
+    # The seed changes the plan, so equal plans show that code mode reads it.
+    assert len(plans) > 1
 
-    assert programs(0) == programs(0)
-    assert programs(7) == programs(7)
-    monkeypatch.setenv("MOCK_WORKLOAD_SEED", "7")
-    assert len(run_turn(model, CODE_TOOLS, question_for(2, 7))[0]) == (
-        1 if model == BATCHED else 2
+
+RUNNING = (
+    "Execution running in cell 3 after 30.0s with 1 tool call so far.\n\n"
+    "Cell 3 continues. Call wait_code(cell_id=3) for more output, or "
+    "wait_code(cell_id=3, terminate=true) to stop it."
+)
+MULTI_TOOL = "mock-tools3-ttft0-itl0-len5"
+
+
+def next_calls(model: str, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    plan = prepare_response(
+        ChatCompletionRequest.model_validate(
+            {"model": model, "messages": messages, "tools": CODE_TOOLS}
+        ),
+        Knobs(model),
+    )
+    return [call.model_dump() for call in plan.calls]
+
+
+def reply(
+    messages: list[dict[str, Any]], calls: list[dict[str, Any]], content: str
+) -> None:
+    messages.append({"role": "assistant", "content": None, "tool_calls": calls})
+    messages.append(
+        {"role": "tool", "tool_call_id": calls[0]["id"], "content": content}
     )
 
 
 def test_running_cell_gets_wait_code_then_the_plan_continues() -> None:
     question = question_for(2)
     messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
-
-    def next_calls() -> list[dict[str, Any]]:
-        plan = prepare_response(
-            ChatCompletionRequest.model_validate(
-                {"model": MODEL, "messages": messages, "tools": CODE_TOOLS}
-            ),
-            Knobs(MODEL),
-        )
-        return [call.model_dump() for call in plan.calls]
-
-    def reply(calls: list[dict[str, Any]], content: str) -> None:
-        messages.append({"role": "assistant", "content": None, "tool_calls": calls})
-        messages.append(
-            {"role": "tool", "tool_call_id": calls[0]["id"], "content": content}
-        )
-
-    first = next_calls()
-    reply(
-        first,
-        "Execution running in cell 3 after 30.0s with 1 tool call so far.\n\n"
-        "Cell 3 continues. Call wait_code(cell_id=3) for more output, or "
-        "wait_code(cell_id=3, terminate=true) to stop it.",
-    )
-    wait = next_calls()
+    reply(messages, next_calls(MODEL, messages), RUNNING)
+    wait = next_calls(MODEL, messages)
     assert wait[0]["function"]["name"] == "wait_code"
     assert json.loads(wait[0]["function"]["arguments"]) == {"cell_id": 3}
-    reply(wait, observation(3, [4]))
-    second = next_calls()
+    reply(messages, wait, observation(3, [4]))
+    second = next_calls(MODEL, messages)
     assert second[0]["function"]["name"] == "execute_code"
     assert searches(json.loads(second[0]["function"]["arguments"])["code"]) == [
         [question + " implementation"]
@@ -189,10 +201,32 @@ def test_running_cell_gets_wait_code_then_the_plan_continues() -> None:
 
 
 def test_code_mode_multi_tool_runs_retrieval_functions_in_one_program() -> None:
-    steps, _ = run_turn("mock-tools3-ttft0-itl0-len5", CODE_TOOLS, "Find the policy")
+    steps, _ = run_turn(MULTI_TOOL, CODE_TOOLS, "Find the policy")
     assert len(steps) == 1
     code = json.loads(steps[0][0]["function"]["arguments"])["code"]
     assert "internal_search(queries=" in code and "web_search(queries=" in code
+
+
+def test_multi_tool_program_waits_for_its_running_cell_then_answers() -> None:
+    messages: list[dict[str, Any]] = [{"role": "user", "content": "Find the policy"}]
+    reply(messages, next_calls(MULTI_TOOL, messages), RUNNING)
+    wait = next_calls(MULTI_TOOL, messages)
+    assert [call["function"]["name"] for call in wait] == ["wait_code"]
+    reply(messages, wait, observation(3, [4]))
+    assert next_calls(MULTI_TOOL, messages) == []
+
+
+@pytest.mark.parametrize("model", [MODEL, MULTI_TOOL])
+def test_a_later_turn_runs_its_own_program(model: str) -> None:
+    question = question_for(1)
+    steps, answer = run_turn(model, CODE_TOOLS, question)
+    history: list[dict[str, Any]] = [{"role": "user", "content": question}]
+    for calls in steps:
+        reply(history, calls, observation(1, [1]))
+    history.append({"role": "assistant", "content": answer})
+
+    later, _ = run_turn(model, CODE_TOOLS, question, history)
+    assert later[0][0]["function"]["name"] == "execute_code"
 
 
 def test_streamed_program_arguments_reassemble() -> None:
@@ -237,8 +271,8 @@ def test_search_program_quotes_queries_as_python_literals() -> None:
     assert searches(search_program([("internal_search", queries)])) == [queries]
 
 
-def packet(obj: dict[str, Any], sub_turn: int | None = None) -> str:
-    placement = {"turn_index": 1, "tab_index": 0, "sub_turn_index": sub_turn}
+def packet(obj: dict[str, Any], sub_turn: int | None = None, turn: int = 1) -> str:
+    placement = {"turn_index": turn, "tab_index": 0, "sub_turn_index": sub_turn}
     return json.dumps({"placement": placement, "obj": obj})
 
 
@@ -344,6 +378,7 @@ def test_running_program_finished_by_wait_code_succeeds() -> None:
             code_delta("terminated", response_ended=True),
             "code program terminated",
         ),
+        (code_delta("cancelled", tool_call_count=0), "code program cancelled"),
     ],
 )
 def test_unfinished_programs_fail_the_turn(final: dict[str, Any], reason: str) -> None:
@@ -366,3 +401,34 @@ def test_direct_search_is_not_nested() -> None:
         0,
     )
     assert analyzer.summary.code_programs == 0
+
+
+def test_a_search_that_two_observations_report_counts_once() -> None:
+    search_start = {"type": "search_tool_start", "is_internet_search": False}
+    yielded = [
+        packet({"type": "code_mode_start", "code": "...", "observation": 0}),
+        packet(search_start, 0),
+        packet(code_delta("running")),
+    ]
+    waited = [
+        packet(
+            {"type": "code_mode_start", "code": "", "cell_id": 1, "observation": 1},
+            turn=2,
+        ),
+        packet(search_start, 0, turn=2),
+        packet({"type": "section_end"}, 0, turn=2),
+        packet(code_delta("completed", observation=1), turn=2),
+    ]
+    summary = analyze(yielded + waited + answer_packets()).summary
+    assert (summary.search_calls, summary.nested_search_calls) == (1, 1)
+
+
+def test_a_research_agent_search_is_not_a_program_search() -> None:
+    summary = analyze(
+        [
+            packet({"type": "research_agent_start", "research_task": "policy"}),
+            packet({"type": "search_tool_start", "is_internet_search": False}, 0),
+            *answer_packets(),
+        ]
+    ).summary
+    assert (summary.search_calls, summary.nested_search_calls) == (1, 0)

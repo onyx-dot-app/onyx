@@ -55,7 +55,7 @@ WAIT_CODE_TOOL = {
             "properties": {
                 "cell_id": {"type": "integer"},
                 "yield_time_ms": {"type": "integer"},
-                "max_tokens": {"type": "integer"},
+                "max_output_tokens": {"type": "integer"},
                 "terminate": {"type": "boolean"},
             },
             "required": ["cell_id"],

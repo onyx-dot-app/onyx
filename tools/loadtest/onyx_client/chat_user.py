@@ -18,6 +18,7 @@ see README.md.
 
 from __future__ import annotations
 
+import copy
 import os
 import time
 import uuid
@@ -254,20 +255,23 @@ class OnyxChatUser(HttpUser):
                     return
 
                 for line in response.iter_lines(decode_unicode=True):
-                    before = {
-                        name: getattr(analyzer.summary, name)
-                        for name in workload_metrics.STREAM_METRIC_NAMES
-                    }
+                    before = copy.copy(analyzer.summary)
                     milestones = analyzer.feed(line)
+                    after = analyzer.summary
                     counts = workload_metrics.local[self.scenario_prefix]
-                    for name, value in before.items():
-                        setattr(
-                            counts,
-                            name,
-                            getattr(counts, name)
-                            + getattr(analyzer.summary, name)
-                            - value,
-                        )
+                    counts.packets += after.packets - before.packets
+                    counts.answer_chars += after.answer_chars - before.answer_chars
+                    counts.search_calls += after.search_calls - before.search_calls
+                    counts.reasoning_packets += (
+                        after.reasoning_packets - before.reasoning_packets
+                    )
+                    counts.citations += after.citations - before.citations
+                    counts.code_programs += after.code_programs - before.code_programs
+                    counts.code_waits += after.code_waits - before.code_waits
+                    counts.nested_search_calls += (
+                        after.nested_search_calls - before.nested_search_calls
+                    )
+                    counts.code_failures += after.code_failures - before.code_failures
                     for milestone in milestones:
                         self._fire(milestone, start)
                         if disconnect_target and milestone == disconnect_target:

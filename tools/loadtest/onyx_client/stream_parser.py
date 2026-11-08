@@ -42,6 +42,9 @@ CODE_FAILED_STATUSES = frozenset({"failed", "timed_out", "cancelled", "terminate
 # BUSY_MESSAGE in backend/onyx/tools/tool_implementations/code_mode/sandbox.py.
 CODE_SANDBOX_BUSY = "The code sandbox is busy"
 
+# A packet group: the turn and tab of its placement.
+Group = tuple[object, object]
+
 
 @dataclass
 class StreamSummary:
@@ -53,7 +56,8 @@ class StreamSummary:
     reasoning_packets: int = 0
     citations: int = 0
     # Code mode: execute_code programs, wait_code observations, searches that
-    # programs made (also counted in search_calls), and failed observations.
+    # programs made, each once (also counted in search_calls), and failed
+    # observations.
     code_programs: int = 0
     code_waits: int = 0
     nested_search_calls: int = 0
@@ -79,6 +83,13 @@ class ChatStreamAnalyzer:
 
     def __init__(self) -> None:
         self.summary = StreamSummary()
+        # Code mode call identity, as CodeModeRenderer in
+        # backend/onyx/chat/renderer.py states it: a call is its cell and its
+        # sub_turn_index, and each observation of the cell reports it again
+        # until it ends. A cell is keyed by the placement of its first group.
+        self._code_mode_groups: dict[Group, Group] = {}
+        self._cells: dict[int, Group] = {}
+        self._program_searches: set[tuple[Group, object]] = set()
 
     def feed(self, line: str) -> list[str]:
         if not line:
@@ -112,7 +123,6 @@ class ChatStreamAnalyzer:
             return hit
 
         packet_type = obj.get("type")
-        self.summary.search_calls += packet_type == SEARCH_TOOL_START
         self.summary.reasoning_packets += packet_type == "reasoning_delta"
         self.summary.citations += packet_type == "citation_info"
         if self._tool_work(packet_type, obj, data.get("placement")):
@@ -146,24 +156,45 @@ class ChatStreamAnalyzer:
 
         return hit
 
+    def _count_search(self, placement: dict[str, Any]) -> None:
+        """Count each search once, also one that several observations report."""
+        sub_turn_index = placement.get("sub_turn_index")
+        cell = self._code_mode_groups.get(_group(placement))
+        if sub_turn_index is not None and cell is not None:
+            call = (cell, sub_turn_index)
+            if call in self._program_searches:
+                return
+            self._program_searches.add(call)
+            self.summary.nested_search_calls += 1
+        self.summary.search_calls += 1
+
     def _tool_work(
         self, packet_type: object, obj: dict[str, Any], placement: object
     ) -> bool:
-        """Count code mode work; True when the packet is a code mode packet.
-
-        Searches inside a program carry `placement.sub_turn_index`.
-        """
-        if packet_type == SEARCH_TOOL_START and isinstance(placement, dict):
-            self.summary.nested_search_calls += (
-                placement.get("sub_turn_index") is not None
-            )
+        """Count searches and code mode work; True when the packet is a code
+        mode packet."""
+        if not isinstance(placement, dict):
+            placement = {}
+        if packet_type == SEARCH_TOOL_START:
+            self._count_search(placement)
+            return False
+        group = _group(placement)
+        cell_id = obj.get("cell_id")
         if packet_type == CODE_MODE_START:
+            # A wait_code observation names its cell; execute_code starts one.
+            cell = self._cells.get(cell_id) if isinstance(cell_id, int) else None
+            self._code_mode_groups[group] = cell or group
             if obj.get("observation") or 0:
                 self.summary.code_waits += 1
             else:
                 self.summary.code_programs += 1
             return True
         if packet_type == CODE_MODE_DELTA:
+            # The final delta of execute_code names the cell it started.
+            if isinstance(cell_id, int):
+                self._cells.setdefault(
+                    cell_id, self._code_mode_groups.get(group, group)
+                )
             # Its `error` is the program's, judged by status, not a stream error.
             self._code_status(obj)
             return True
@@ -213,3 +244,7 @@ class ChatStreamAnalyzer:
                 f"answer_chars={self.summary.answer_chars})"
             )
         return "unknown failure"
+
+
+def _group(placement: dict[str, Any]) -> Group:
+    return placement.get("turn_index"), placement.get("tab_index") or 0
