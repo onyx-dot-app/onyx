@@ -419,7 +419,8 @@ Community downgrade clears it ([[billing]]).
     observation, the saved content adds the cell's closing record, formatted
     like an observation. It starts with `closing_heading` ("Cell N stopped when
     the response ended" or "when the run paused", or how it ended) and has the
-    output, result, store writes and calls after that observation. A restored
+    output, result and store writes after that observation; it lists the calls
+    only when the cell did not complete. A restored
     run closes a cell that its saved observation reports running as
     interrupted: the heading says that calls after the saved output are not
     known, and the record lists the calls that the saved observations hold.
