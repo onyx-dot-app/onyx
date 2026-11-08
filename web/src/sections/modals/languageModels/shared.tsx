@@ -688,6 +688,7 @@ function ModelRow({
                   {isDefaultModel && (
                     <span className="px-1.5">
                       <Text
+                        as="p"
                         font="secondary-action"
                         wordWrap="whitespace-nowrap"
                         color="action-selection-05"
