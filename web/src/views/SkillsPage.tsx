@@ -516,9 +516,8 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       aria-label={t("page.browse.title")}
       flexDirection="row"
       justifyContent="between"
-      height={2.25}
+      height={admin ? 1.75 : 2.25}
       gap={2}
-      className={admin ? "sm:w-72 shrink-0" : undefined}
     >
       <Section
         flexDirection="row"
@@ -526,10 +525,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         width="auto"
         height="auto"
         gap={2}
-        className={cn(
-          "shrink-0",
-          admin && selectedItems.length === 0 && "order-2"
-        )}
+        className="shrink-0"
       >
         {!admin && (
           <InputCheckbox
@@ -565,6 +561,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                 : t("page.browse.title")}
           </Text>
         )}
+        <Section width={1} height={1}>
+          {bulkBusy && <IconLoader />}
+        </Section>
       </Section>
       {(admin || selectedItems.length > 0) && (
         <Section
@@ -580,8 +579,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           )}
         >
           <Button
+            size={admin ? "sm" : "md"}
             prominence="secondary"
-            icon={bulkBusy ? IconLoader : SvgShare}
+            icon={SvgShare}
             disabled={bulkLocked || !canManageSelected}
             onClick={() => setBulkSharingOpen(true)}
           >
@@ -590,6 +590,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           <Dropdown align="end" disabled={bulkLocked}>
             <Dropdown.Trigger asChild>
               <Button
+                size={admin ? "sm" : "md"}
                 prominence="tertiary"
                 icon={SvgMoreHorizontal}
                 aria-label={bulkCopy("moreActions")}
@@ -651,11 +652,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
               <Button
                 icon={SvgPlus}
                 aria-label={t("page.createMenu.trigger.label")}
-                tooltip={
-                  admin && isMobile
-                    ? t("page.createMenu.trigger.label")
-                    : undefined
-                }
               >
                 {admin && isMobile
                   ? undefined
@@ -696,19 +692,16 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           </Dropdown>,
         ]}
       >
-        {admin ? (
-          <Section height="auto" gap={3} className="sm:flex-row">
-            <Section height="auto" className="min-w-0">
-              {searchInput}
-            </Section>
-            {selectionControls}
-          </Section>
-        ) : (
-          searchInput
-        )}
+        {!admin && searchInput}
       </SettingsLayouts.Header>
 
-      <SettingsLayouts.Body>
+      <SettingsLayouts.Body gap={admin ? 1 : 8}>
+        {admin && (
+          <Section height="auto" gap={1}>
+            {searchInput}
+            {selectionControls}
+          </Section>
+        )}
         {bulkFailures.length > 0 && (
           <MessageCard
             variant="error"

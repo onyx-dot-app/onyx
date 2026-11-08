@@ -422,6 +422,15 @@ describe("SkillsPage preference toggles", () => {
       expect(checkbox).toBeChecked();
     }
     expect(screen.getByRole("button", { name: "More actions" })).toBeDisabled();
+    const controls = screen.getByRole("group", { name: "Select skills" });
+    expect(within(controls).getByRole("status")).toHaveAccessibleName(
+      "Loading"
+    );
+    expect(
+      within(screen.getByRole("button", { name: "Share" })).queryByRole(
+        "status"
+      )
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("switch", { name: "Enable first-skill" })
     ).toHaveAttribute("aria-disabled", "true");
@@ -441,6 +450,7 @@ describe("SkillsPage preference toggles", () => {
       screen.getByRole("checkbox", { name: "Select first-skill" })
     ).not.toBeChecked();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(within(controls).queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("locks the pending admin switch and bulk actions without opening a preview", async () => {
