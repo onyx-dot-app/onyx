@@ -815,7 +815,16 @@ def _stored_keys(window: CellWindow) -> list[str] | None:
 
 class CodeModeRenderer(ToolRenderer):
     """One observation of a cell. Each nested call renders with its tool's own
-    renderer, at `sub_turn_index = call.index` of the card's placement."""
+    renderer, at `sub_turn_index = call.index` of the card's placement.
+
+    Nested call identity: a cell reports each call in every observation until
+    the call ends, so one call can stream its start packet several times, under
+    the placement of each observation. Clients identify a call by its cell and
+    its `sub_turn_index`, and show the latest report. The cell id is on
+    `CodeModeStart.cell_id` (wait_code) or on the final `CodeModeDelta.cell_id`
+    (execute_code). The cell's closing record follows the section end of its
+    last observation, under the same placement.
+    """
 
     def __init__(
         self, call: ToolCall, placement: Placement, tool_id: int | None = None
