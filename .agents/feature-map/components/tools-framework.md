@@ -239,18 +239,18 @@ Their control functions, such as `think_tool`, `generate_report` and
    call's section end, live and on replay. Saved responses replay through the same renderer
    (`chat/presentation.py:replay_response`), so a change here changes reload too.
 8. `durable-details-registered` **A new `details` type must be registered
-   twice.** Chat saves `details` through the discriminated union in
-   `db/models.py:StoredToolResult`, keyed by the model's `type` literal, and
-   checkpoints it through `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES`. A new
-   `type` literal missing from the union fails every save with a
-   `ValidationError`. A subclass that keeps its parent's `type` literal saves as
+   once.** `db/models.py:SavedToolResultDetails` is the one union of saved
+   details, keyed by the model's `type` literal. `StoredToolResult` saves
+   through it, `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` tags each member
+   `result.<type>.v1`, and temporary chats keep it
+   (`chat/models.py:serialize_incognito_message`). A new `type` literal missing
+   from the union fails every save with a `ValidationError`. A subclass that keeps its parent's `type` literal saves as
    the parent and drops its own fields with no error.
    `chat/agent.py:ChatAgent._finalize_tool` replaces each `SearchDocsResponse`
    with `chat/models.py:ChatSearchResult` in this way, and its `staged_files`
    are not saved. Only the unwired checkpoint handoff path reads the registry
    ([[agent-runtime]]), so a missing registration fails only that path and its
-   tests. Saved rows and checkpoints keep the `type` value and the tag, so
-   never rename them.
+   tests. Saved rows and checkpoints keep the `type` value, so never rename it.
 9. `parallel-by-default` **Calls in one step run in parallel and share one
    `ToolContext`.** `agents/tool_execution.py:ToolBatch` starts every call of a
    step together. `ChatAgent._tool_context` advances only after the step, so

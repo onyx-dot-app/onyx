@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Annotated, Any, Literal, NotRequired
+from typing import Annotated, Any, Literal, NotRequired, get_args
 from uuid import UUID, uuid4
 
 from fastapi_users_db_sqlalchemy import (
@@ -3784,26 +3784,31 @@ class ChatResponseItem(Base):
     )
 
 
+# Tool result details that saved responses, checkpoints and temporary chats keep,
+# told apart by their `type` literal.
+SavedToolResultDetails = Annotated[
+    SearchDocsResponse
+    | ResearchAgentCallResult
+    | CodingAgentCallResult
+    | CustomToolCallSummary
+    | FileReadResult
+    | LlmBashExecutionResult
+    | LlmPythonExecutionResult
+    | MemoryUpdated
+    | ToolExecutionError
+    | FinalImageGenerationResponse
+    | CodeModeExecutionResult,
+    Field(discriminator="type"),
+]
+SAVED_TOOL_RESULT_TYPES: tuple[type[BaseModel], ...] = get_args(
+    get_args(SavedToolResultDetails)[0]
+)
+
+
 class StoredToolResult(ToolResultMessage):
     """Tool output with durable application details that can be restored from JSON."""
 
-    details: (
-        Annotated[
-            SearchDocsResponse
-            | ResearchAgentCallResult
-            | CodingAgentCallResult
-            | CustomToolCallSummary
-            | FileReadResult
-            | LlmBashExecutionResult
-            | LlmPythonExecutionResult
-            | MemoryUpdated
-            | ToolExecutionError
-            | FinalImageGenerationResponse
-            | CodeModeExecutionResult,
-            Field(discriminator="type"),
-        ]
-        | None
-    ) = None
+    details: SavedToolResultDetails | None = None
 
 
 class ToolCall(Base):

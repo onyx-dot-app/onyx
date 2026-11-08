@@ -28,21 +28,10 @@ from onyx.chat.models import (
     ResponseRecord,
 )
 from onyx.chat.response import response_snapshot
-from onyx.coding_agent.models import CodingAgentCallResult
-from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES
+from onyx.deep_research.models import ResearchMessageMetadata
 from onyx.llm.models import Message, ToolResult
 from onyx.tools.file_snapshot import SavedLoadedFile
-from onyx.tools.models import (
-    CustomToolCallSummary,
-    FileReadResult,
-    LlmBashExecutionResult,
-    LlmPythonExecutionResult,
-    MemoryUpdated,
-    ToolExecutionError,
-)
-from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
-from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -54,20 +43,13 @@ CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "chat.metadata.v1": ChatMessageMetadata,
     "chat.rendering.v1": MessageRendering,
     "chat.search.v1": ChatSearchResult,
-    "search.results.v1": SearchDocsResponse,
+    "chat.code_mode.v1": ChatCodeModeResult,
     "search.planning.v1": SearchPlanningResult,
     "research.metadata.v1": ResearchMessageMetadata,
-    "research.result.v1": ResearchAgentCallResult,
-    "coding.result.v1": CodingAgentCallResult,
-    "tool.custom.v1": CustomToolCallSummary,
-    "tool.file_read.v1": FileReadResult,
-    "tool.bash.v1": LlmBashExecutionResult,
-    "tool.python.v1": LlmPythonExecutionResult,
-    "tool.memory.v1": MemoryUpdated,
-    "tool.error.v1": ToolExecutionError,
-    "tool.image.v1": FinalImageGenerationResponse,
-    "tool.code_mode.v1": CodeModeExecutionResult,
-    "chat.code_mode.v1": ChatCodeModeResult,
+    **{
+        f"result.{kind.model_fields['type'].default}.v1": kind
+        for kind in SAVED_TOOL_RESULT_TYPES
+    },
 }
 
 

@@ -31,7 +31,8 @@ from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
-from onyx.deep_research.models import ResearchAgentCallResult, ResearchConfiguration
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
     ExtractedContextFiles,
@@ -71,9 +72,7 @@ from onyx.tools.tool_implementations.search.models import SearchContext
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
 _INCOGNITO_IMAGES = TypeAdapter(list[SavedLoadedFile])
-_INCOGNITO_SOURCE_DETAILS = TypeAdapter(
-    Annotated[SearchDocsResponse | ResearchAgentCallResult, Field(discriminator="type")]
-)
+_INCOGNITO_DETAILS = TypeAdapter(SavedToolResultDetails)
 
 
 class PromptMetadata(CompactionMetadata):
@@ -257,12 +256,13 @@ def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
     message = _MESSAGE_ADAPTER.validate_python(data)
     message.metadata = metadata
     if details is not None and isinstance(message, ToolResultMessage):
-        message.details = _INCOGNITO_SOURCE_DETAILS.validate_python(details)
+        message.details = _INCOGNITO_DETAILS.validate_python(details)
     return message
 
 
 def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
-    """Retain replay text and citation sources, excluding execution files and state."""
+    """Retain replay text, citation sources and saved tool result details, excluding
+    execution files and state."""
     metadata = (
         message.metadata
         if isinstance(message.metadata, PromptMetadata)
@@ -284,13 +284,11 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
             else None,
         }
     )
-    if isinstance(message, ToolResultMessage):
-        if isinstance(message.details, SearchDocsResponse):
-            data["details"] = message.details.model_dump(
-                mode="json", include={"type", "search_docs", "citation_mapping"}
-            )
-        elif isinstance(message.details, ResearchAgentCallResult):
-            data["details"] = message.details.model_dump(mode="json")
+    if isinstance(message, ToolResultMessage) and isinstance(
+        message.details, SAVED_TOOL_RESULT_TYPES
+    ):
+        # Dumped as the saved type: staged files stay in execution state.
+        data["details"] = _INCOGNITO_DETAILS.dump_python(message.details, mode="json")
     return data
 
 
