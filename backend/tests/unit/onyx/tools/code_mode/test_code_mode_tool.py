@@ -44,6 +44,7 @@ from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 from onyx.tracing.framework import set_trace_processors
 from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.span_data import FunctionSpanData
+from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.unit.onyx.tools.code_mode.fakes import (
     LIMITS,
     FakeMCPTool,
@@ -249,7 +250,13 @@ def test_a_tool_that_waits_for_child_runs_fails_inside_the_program() -> None:
     assert "returned no result inside a program" in details.stdout
 
 
-def test_sequential_tools_do_not_overlap() -> None:
+@pytest.mark.parametrize(
+    ("mode", "overlaps"),
+    [(ToolExecutionMode.SEQUENTIAL, False), (ToolExecutionMode.PARALLEL, True)],
+)
+def test_only_sequential_tools_do_not_overlap(
+    mode: ToolExecutionMode, overlaps: bool
+) -> None:
     active = 0
     overlap = False
     lock = threading.Lock()
@@ -265,13 +272,7 @@ def test_sequential_tools_do_not_overlap() -> None:
         return ToolResult(content=str(invocation.arguments["value"]))
 
     tool = CodeModeTool(
-        [
-            FakeTool(
-                "add_memory",
-                remember,
-                execution_mode=ToolExecutionMode.SEQUENTIAL,
-            )
-        ],
+        [FakeTool("add_memory", remember, execution_mode=mode)],
         cells=CodeCells(),
         limits=LIMITS,
     )
@@ -281,7 +282,7 @@ def test_sequential_tools_do_not_overlap() -> None:
         "await asyncio.gather(*[add_memory(value=str(i)) for i in range(3)])\n",
     )
     assert details.status == "completed"
-    assert not overlap
+    assert overlap is overlaps
 
 
 def test_cancellation_stops_calls_and_raises() -> None:
@@ -307,9 +308,10 @@ def test_cancellation_stops_calls_and_raises() -> None:
         assert started.acquire(timeout=10) and started.acquire(timeout=10)
         invocation.cancellation.cancel()
 
-    threading.Thread(target=cancel_once_both_run).start()
+    canceller = start_thread_future(cancel_once_both_run, name="test-cancel")
     with pytest.raises(AgentCancelled):
         tool.run(invocation.invocation, ToolContext())
+    canceller.result(10)
     # Both calls observe the cancellation instead of running for 10 seconds.
     assert stopped.acquire(timeout=5) and stopped.acquire(timeout=5)
     finished = [e for e in invocation.events if isinstance(e, CodeModeCallFinished)]
@@ -661,8 +663,8 @@ def test_arguments_that_are_not_json_fail_before_the_tool_runs() -> None:
         tool, "def call(f, **kw):\n    return f(**kw)\nawait call(echo, value={1, 2})\n"
     )
     assert details.status == "failed"
-    assert "Argument `value` of echo() must be JSON data" in result.content
-    assert "found set" in result.content
+    assert "The argument dict of echo() must be JSON data" in result.content
+    assert "found set at ['value']" in result.content
     assert received == []
     assert details.calls == []
 

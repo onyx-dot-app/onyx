@@ -122,11 +122,16 @@ PROGRAM_START_DURATION = Histogram(
 
 
 def set_code_mode_limits(
-    *, sandbox_workers: int, suspended_bytes: int, tool_call_threads: int
+    *,
+    sandbox_workers: int,
+    suspended_bytes: int,
+    tool_call_threads: int,
+    running_cells: int,
 ) -> None:
     SANDBOX_WORKERS_LIMIT.set(sandbox_workers)
     SUSPENDED_BYTES_LIMIT.set(suspended_bytes)
     TOOL_CALL_THREADS_LIMIT.set(tool_call_threads)
+    CELLS_LIMIT.set(running_cells)
 
 
 def observe_program_end(status: ClosedStatus, duration_seconds: float) -> None:

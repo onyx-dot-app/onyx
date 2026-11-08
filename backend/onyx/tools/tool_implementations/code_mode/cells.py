@@ -67,6 +67,7 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import (
     BUSY_MESSAGE,
+    MAX_RUNNING_CELLS,
     StdoutCollector,
     execute_program,
 )
@@ -101,12 +102,6 @@ MIN_SAVED_CALL_CHARS = 500
 MAX_SAVED_EXECUTION_CHARS = 200_000
 # Open cells per response.
 MAX_OPEN_CELLS = 4
-# Cells whose program has not ended, in the server process; each holds a driver
-# thread. At this limit, sandbox.MAX_TOOL_CALL_THREADS still gives every program
-# a share of 3 tool call threads. Programs give up their sandbox worker
-# (sandbox.MAX_SANDBOX_PROCESSES) while they wait on tools, so most of these
-# cells wait on tools, not on a worker.
-MAX_RUNNING_CELLS = 64
 # Progress events kept for an observer while none is attached; call starts and
 # ends are always kept.
 MAX_BUFFERED_PROGRESS_EVENTS = 1_000
@@ -304,7 +299,6 @@ class _RunningCells:
 
 
 _running_cells = _RunningCells(MAX_RUNNING_CELLS)
-metrics.CELLS_LIMIT.set(MAX_RUNNING_CELLS)
 
 
 def _rejected(text: str) -> ToolCallException:
@@ -480,6 +474,11 @@ class CodeCell:
         self._last: tuple[str, ToolResult, CodeModeExecutionResult] | None = None
         # Observations taken but not yet formatted; `close` waits for them.
         self._formatting = 0
+        # Last, so a cell that exists holds a running-cell slot; `_end_program`
+        # releases it.
+        if not _running_cells.acquire():
+            metrics.CELL_BUSY_REJECTIONS.inc()
+            raise _rejected(BUSY_MESSAGE)
 
     def _collector(self) -> StdoutCollector:
         return StdoutCollector(
@@ -504,9 +503,15 @@ class CodeCell:
                 partial(self._drive, snapshot, observer.invocation.cancellation),
                 name=f"code-mode-cell-{self.id}",
             )
-        except BaseException:
-            _running_cells.release()
-            raise
+        except Exception as error:
+            logger.exception("Code mode cell %s could not start", self.id)
+            self._end_program(
+                SandboxResult(
+                    status="failed",
+                    error=f"The cell could not start: {type(error).__name__}: {error}",
+                ),
+                ProgramStore(snapshot),
+            )
         return self._observe(observer, yield_seconds)
 
     def observe(
@@ -843,26 +848,22 @@ class CodeCell:
         self, snapshot: StoreSnapshot, run_cancellation: CancellationSignal
     ) -> None:
         # The cell's span is the parent of its nested tool spans.
-        try:
-            with function_span(CELL_SPAN_NAME, input=self._program.code) as span:
-                store = ProgramStore(snapshot)
-                end = self._execute(store, run_cancellation)
-                self._end_program(end, store)
-                with self._lock:
-                    status = self._final_status()
-                    metrics.observe_program_end(status, end.duration_seconds)
-                    span.span_data.output = status
-                    span.span_data.metadata = {
-                        "code_mode.cell_id": self.id,
-                        "code_mode.status": status,
-                        "code_mode.duration_seconds": end.duration_seconds,
-                        "code_mode.tool_call_count": len(self._calls),
-                        "code_mode.tool_names": sorted(
-                            {record.call.tool_name for record in self._calls.values()}
-                        ),
-                    }
-        finally:
-            _running_cells.release()
+        with function_span(CELL_SPAN_NAME, input=self._program.code) as span:
+            store = ProgramStore(snapshot)
+            end = self._execute(store, run_cancellation)
+            self._end_program(end, store)
+            with self._lock:
+                status = self._final_status()
+                span.span_data.output = status
+                span.span_data.metadata = {
+                    "code_mode.cell_id": self.id,
+                    "code_mode.status": status,
+                    "code_mode.duration_seconds": end.duration_seconds,
+                    "code_mode.tool_call_count": len(self._calls),
+                    "code_mode.tool_names": sorted(
+                        {record.call.tool_name for record in self._calls.values()}
+                    ),
+                }
 
     def _execute(
         self, store: ProgramStore, run_cancellation: CancellationSignal
@@ -889,46 +890,53 @@ class CodeCell:
             )
 
     def _end_program(self, end: SandboxResult, store: ProgramStore) -> None:
-        """Commit the program's store writes, and make its end visible."""
-        # Calls the program never awaited stop with it.
-        self._stopping.cancel()
-        with self._lock:
-            source = self._source
-        # Before the end is visible, so the observation that reports it has the
-        # commit.
-        commit: StoreCommit | None = None
-        discard_reason: str | None = None if end.commits_store else STOPPED_BEFORE_END
-        if end.commits_store:
-            try:
-                commit = self._store.commit(store.writes, source.recorded_results)
-            except StoreLimitError as error:
-                discard_reason = str(error)
-        with self._lock:
-            self._commit = commit
-            self._discarded = (
-                None
-                if discard_reason is None
-                else DiscardedWrites(
-                    keys=tuple(store.changed_writes), reason=discard_reason
-                )
+        """Commit the program's store writes, make its end visible, and release
+        the cell's running-cell slot."""
+        try:
+            # Calls the program never awaited stop with it.
+            self._stopping.cancel()
+            with self._lock:
+                source = self._source
+            # Before the end is visible, so the observation that reports it has the
+            # commit.
+            commit: StoreCommit | None = None
+            discard_reason: str | None = (
+                None if end.commits_store else STOPPED_BEFORE_END
             )
-            for record in self._calls.values():
-                if record.ended_in is None:
-                    self._record(
-                        record.call.model_copy(
-                            update={
-                                "content": UNFINISHED_CALL_MESSAGE,
-                                "state": "unfinished",
-                            }
-                        )
+            if end.commits_store:
+                try:
+                    commit = self._store.commit(store.writes, source.recorded_results)
+                except StoreLimitError as error:
+                    discard_reason = str(error)
+            with self._lock:
+                self._commit = commit
+                self._discarded = (
+                    None
+                    if discard_reason is None
+                    else DiscardedWrites(
+                        keys=tuple(store.changed_writes), reason=discard_reason
                     )
-            self._ended_as = (
-                "terminated"
-                if end.status == "cancelled" and self._stop == "terminated"
-                else end.status
-            )
-            self._end = end
-            self._changed.notify_all()
+                )
+                for record in self._calls.values():
+                    if record.ended_in is None:
+                        self._record(
+                            record.call.model_copy(
+                                update={
+                                    "content": UNFINISHED_CALL_MESSAGE,
+                                    "state": "unfinished",
+                                }
+                            )
+                        )
+                self._ended_as = (
+                    "terminated"
+                    if end.status == "cancelled" and self._stop == "terminated"
+                    else end.status
+                )
+                self._end = end
+                metrics.observe_program_end(self._ended_as, end.duration_seconds)
+                self._changed.notify_all()
+        finally:
+            _running_cells.release()
 
     def _print(self, text: str) -> None:
         with self._lock:
@@ -1105,27 +1113,19 @@ class CodeCells:
                     f"Open cells: {names}. Get their results with wait_code, or stop "
                     "one with wait_code(cell_id=N, terminate=true)."
                 )
-            if not _running_cells.acquire():
-                metrics.CELL_BUSY_REJECTIONS.inc()
-                raise _rejected(BUSY_MESSAGE)
-            try:
-                history = _recorded_cell_ids(invocation.recorded_results)
-                cell_id = max(self._highest_id, *history, 0) + 1
-                self._highest_id = cell_id
-                snapshot = self._store.snapshot(invocation.recorded_results)
-                cell = CodeCell(
-                    cell_id=cell_id,
-                    program=program,
-                    citations=self._citations,
-                    store=self._store,
-                    invocation=invocation,
-                    context=context,
-                )
-                self._cells[cell_id] = cell
-            except BaseException:
-                _running_cells.release()
-                raise
-        # The cell's driver releases the running cell.
+            history = _recorded_cell_ids(invocation.recorded_results)
+            cell_id = max(self._highest_id, *history, 0) + 1
+            snapshot = self._store.snapshot(invocation.recorded_results)
+            cell = CodeCell(
+                cell_id=cell_id,
+                program=program,
+                citations=self._citations,
+                store=self._store,
+                invocation=invocation,
+                context=context,
+            )
+            self._highest_id = cell_id
+            self._cells[cell_id] = cell
         return cell.start(snapshot, yield_seconds=yield_seconds, max_tokens=max_tokens)
 
     def wait(

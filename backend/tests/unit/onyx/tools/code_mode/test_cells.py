@@ -299,13 +299,14 @@ def test_printed_text_streams_while_the_program_runs() -> None:
 def test_one_active_wait_per_cell() -> None:
     response = Response()
     response.run("import asyncio\nyield_control()\nawait asyncio.sleep(30)\n")
-    waiting = threading.Thread(target=lambda: response.wait(1, yield_time_ms=1_000))
-    waiting.start()
+    waiting = start_thread_future(
+        lambda: response.wait(1, yield_time_ms=1_000), name="test-wait"
+    )
     until(lambda: response.cell(1)._observer is not None)
     busy = response.wait(1)
     assert busy.is_error
     assert busy.content == "Cell 1 already has an active wait_code call."
-    waiting.join()
+    assert _details(waiting.result(10)).status == "running"
     assert _details(response.wait(1, terminate=True)).status == "terminated"
 
 
@@ -367,6 +368,27 @@ def test_running_cell_limit_is_process_wide(monkeypatch: pytest.MonkeyPatch) -> 
     # The ended cell's driver gives its place back.
     until(lambda: cells_module._running_cells.acquire())
     cells_module._running_cells.release()
+    assert _details(Response().run("1\n")).status == "completed"
+
+
+def test_a_cell_whose_driver_cannot_start_ends_and_frees_its_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cells_module, "_running_cells", cells_module._RunningCells(1))
+
+    def no_thread(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("can't start new thread")
+
+    response = Response()
+    with monkeypatch.context() as patched:
+        patched.setattr(cells_module, "start_thread_future", no_thread)
+        failed = response.run("1\n")
+    assert _details(failed).status == "failed"
+    assert "can't start new thread" in (_details(failed).error or "")
+    started = time.monotonic()
+    assert response.finish() == {}
+    assert time.monotonic() - started < 1
+    # The failed cell gave its slot back.
     assert _details(Response().run("1\n")).status == "completed"
 
 

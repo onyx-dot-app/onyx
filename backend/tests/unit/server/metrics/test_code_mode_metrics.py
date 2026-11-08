@@ -6,7 +6,7 @@ import pytest
 from prometheus_client import REGISTRY
 
 from onyx.server.metrics import code_mode as metrics
-from onyx.tools.tool_implementations.code_mode import cells, sandbox
+from onyx.tools.tool_implementations.code_mode import sandbox
 
 
 def _value(name: str) -> float:
@@ -18,6 +18,7 @@ def test_the_pool_sets_every_limit_gauge(monkeypatch: pytest.MonkeyPatch) -> Non
         metrics.SANDBOX_WORKERS_LIMIT,
         metrics.SUSPENDED_BYTES_LIMIT,
         metrics.TOOL_CALL_THREADS_LIMIT,
+        metrics.CELLS_LIMIT,
     ):
         gauge.set(0)
     monkeypatch.setattr(sandbox, "_pool", None)
@@ -32,10 +33,7 @@ def test_the_pool_sets_every_limit_gauge(monkeypatch: pytest.MonkeyPatch) -> Non
     assert _value("onyx_code_mode_tool_call_threads_limit") == (
         sandbox.MAX_TOOL_CALL_THREADS
     )
-
-
-def test_the_running_cell_limit_gauge_is_set() -> None:
-    assert _value("onyx_code_mode_cells_limit") == cells.MAX_RUNNING_CELLS
+    assert _value("onyx_code_mode_cells_limit") == sandbox.MAX_RUNNING_CELLS
 
 
 def test_program_duration_buckets_resolve_seconds_near_the_typical_p95() -> None:

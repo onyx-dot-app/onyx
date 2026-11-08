@@ -118,12 +118,20 @@ DUMP_MEMORY_MESSAGE = (
 # Tool calls of one program that run at the same time, each on its own thread.
 # Later calls wait in order for a free slot.
 MAX_CONCURRENT_TOOL_CALLS = 16
-# Threads of tool calls of all programs in the server process. Programs that
-# want threads share them equally. A call that finds no thread within its
-# program's share waits in its program's queue. A call that ignores cancellation
-# keeps its thread until it returns. A tool that runs its own parallel work, such
-# as a search that runs its queries in parallel, adds its threads to its call's.
-MAX_TOOL_CALL_THREADS = 192
+# Cells whose program has not ended, in the server process
+# (cells._RunningCells); each holds a driver thread. Programs give up their
+# sandbox worker while they wait on tools, so most of these cells wait on
+# tools, not on a worker.
+MAX_RUNNING_CELLS = 64
+# Threads of tool calls of all programs in the server process: a share of 3 for
+# each running cell. Programs that want threads share them equally. A call that
+# finds no thread within its program's share waits in its program's queue. A
+# call that ignores cancellation keeps its thread until it returns.
+MAX_TOOL_CALL_THREADS = MAX_RUNNING_CELLS * 3
+# So at its limits a server process runs MAX_RUNNING_CELLS driver threads and
+# MAX_TOOL_CALL_THREADS call threads for code mode, plus the threads of tools
+# that run their own parallel work, such as a search that runs its queries in
+# parallel.
 # A call that returns this long after its program ended held its thread while
 # ignoring cancellation; it is logged.
 LATE_CALL_WARNING_SECONDS = 30.0
@@ -354,6 +362,7 @@ def sandbox_pool() -> Monty:
                 sandbox_workers=MAX_SANDBOX_PROCESSES,
                 suspended_bytes=MAX_SUSPENDED_BYTES,
                 tool_call_threads=MAX_TOOL_CALL_THREADS,
+                running_cells=MAX_RUNNING_CELLS,
             )
         return _pool
 
