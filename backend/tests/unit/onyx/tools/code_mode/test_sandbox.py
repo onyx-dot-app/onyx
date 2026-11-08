@@ -3,7 +3,8 @@ import time
 import tracemalloc
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
+from functools import partial
 from pathlib import Path
 from typing import cast
 
@@ -41,6 +42,7 @@ from onyx.tools.tool_implementations.code_mode.store import (
     STORE_STUBS,
     ProgramStore,
 )
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.onyx.tools.code_mode.fakes import until
 
 
@@ -709,6 +711,43 @@ def test_the_pool_does_not_start_without_its_binary(
         sandbox.sandbox_pool()
 
 
+def _tenant_count(name: str, tenant_id: str) -> float:
+    return _count(name, {"tenant_id": tenant_id})
+
+
+def test_tenant_counters_follow_worker_time_and_busy_rejections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = "tenant_sandbox_metrics"
+    monkeypatch.setattr(sandbox, "CHECKOUT_TIMEOUT_SECONDS", 0.5)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        seconds = _tenant_count(
+            "onyx_code_mode_sandbox_worker_seconds_total", tenant_id
+        )
+        rejections = _tenant_count(
+            "onyx_code_mode_sandbox_busy_rejections_total", tenant_id
+        )
+        with Monty(min_processes=1, max_processes=1, checkout_timeout=0.1) as pool:
+            ran = run("print(await slow(seconds=0.5))\n", pool=pool)
+            with pool.checkout():
+                rejected = run("print(1)\n", pool=pool)
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    assert ran.stdout == "done\n"
+    assert rejected.error == BUSY_MESSAGE
+    # The program kept its worker while its call ran: no other program waited.
+    held = (
+        _tenant_count("onyx_code_mode_sandbox_worker_seconds_total", tenant_id)
+        - seconds
+    )
+    assert 0.5 <= held < 5, held
+    assert (
+        _tenant_count("onyx_code_mode_sandbox_busy_rejections_total", tenant_id)
+        == rejections + 1
+    )
+
+
 @pytest.fixture(scope="module")
 def two_workers() -> Iterator[Monty]:
     with Monty(
@@ -815,24 +854,113 @@ def test_a_dump_that_cannot_fit_is_skipped(monkeypatch: pytest.MonkeyPatch) -> N
 def test_each_waiting_program_claims_one_holder() -> None:
     demand = sandbox._WorkerDemand(2)
     woken: list[str] = []
-
-    def first() -> None:
-        woken.append("first")
-
-    def second() -> None:
-        woken.append("second")
+    first, second = _wakes(woken, "first", "second")
+    waiters = _wakes([], "a", "b", "c")
 
     with demand.holding(first), demand.holding(second):
-        with demand.waiting():
+        with demand.waiting(waiters[0]):
             assert woken == ["first"]
             # A repeated claim adds none while the claim stands.
-            demand.claim()
+            demand.claim(waiters[0])
             assert woken == ["first"]
         # The waiter left before the holder gave up: the claim is withdrawn.
         assert not demand.gives_up(first)
-        with demand.waiting(), demand.waiting():
+        with demand.waiting(waiters[1]), demand.waiting(waiters[2]):
             assert woken == ["first", "first", "second"]
             assert demand.gives_up(first) and demand.gives_up(second)
+
+
+def test_a_worker_freed_for_a_waiter_stands_in_for_its_claim() -> None:
+    demand = sandbox._WorkerDemand(2)
+    woken: list[str] = []
+    first, second = _wakes(woken, "first", "second")
+    waiter = partial(woken.append, "waiter")
+
+    session = cast(MontySession, nullcontext())
+    with ExitStack() as first_worker, demand.worker(session, second, "tenant"):
+        first_worker.enter_context(demand.worker(session, first, "tenant"))
+        with demand.holding(first), demand.holding(second), demand.waiting(waiter):
+            assert woken == ["first"] and demand.gives_up(first)
+            first_worker.close()
+            # The waiter's checkout timed out as the first holder's worker
+            # returned: that worker is free for its next checkout.
+            demand.claim(waiter)
+            assert woken == ["first"]
+            # The next timeout means another program took the worker, so the
+            # waiter claims again.
+            demand.claim(waiter)
+            assert woken == ["first", "second"]
+
+
+class _ReturningSession:
+    """A session whose worker return runs `on_return` first, as a checkout that
+    another thread completes at that moment."""
+
+    def __init__(self, on_return: Callable[[], None]) -> None:
+        self._on_return = on_return
+
+    def __enter__(self) -> "_ReturningSession":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self._on_return()
+
+
+def _wakes(woken: list[str], *names: str) -> list[Callable[[], None]]:
+    return [partial(woken.append, name) for name in names]
+
+
+def test_a_worker_taken_as_it_returns_leaves_no_credit_behind() -> None:
+    demand = sandbox._WorkerDemand(2)
+    woken: list[str] = []
+    first, second, third = _wakes(woken, "first", "second", "third")
+    waiter, late = _wakes([], "waiter", "late")
+    with ExitStack() as stack:
+        for holder in (first, second, third):
+            stack.enter_context(demand.holding(holder))
+        late_waiter = ExitStack()
+        stack.enter_context(demand.waiting(waiter))
+        late_waiter.enter_context(demand.waiting(late))
+        assert woken == ["first", "second"]
+        assert demand.gives_up(first) and demand.gives_up(second)
+
+        def taken_by_the_late_waiter() -> None:
+            stack.enter_context(
+                demand.worker(cast(MontySession, nullcontext()), late, "tenant")
+            )
+            late_waiter.close()
+
+        session = cast(MontySession, _ReturningSession(taken_by_the_late_waiter))
+        with demand.worker(session, first, "tenant"):
+            pass
+        # The second holder's dump does not fit, so it keeps its worker.
+        demand.kept(second)
+        # The first holder's worker went to the late waiter, so the earlier
+        # waiter claims the third holder.
+        for _ in range(2):
+            demand.claim(waiter)
+        assert woken == ["first", "second", "third"]
+
+
+def test_a_waiter_stopped_with_a_credit_leaves_no_credit_behind() -> None:
+    demand = sandbox._WorkerDemand(2)
+    woken: list[str] = []
+    first, second, third = _wakes(woken, "first", "second", "third")
+    stopped_waiter, waiter = _wakes([], "stopped", "waiter")
+    with ExitStack() as stack:
+        for holder in (first, second, third):
+            stack.enter_context(demand.holding(holder))
+        stopped = ExitStack()
+        stopped.enter_context(demand.waiting(stopped_waiter))
+        stack.enter_context(demand.waiting(waiter))
+        assert demand.gives_up(first) and demand.gives_up(second)
+        with demand.worker(cast(MontySession, nullcontext()), first, "tenant"):
+            pass
+        # The first waiter stops before it takes the worker freed for it.
+        stopped.close()
+        demand.kept(second)
+        demand.claim(waiter)
+        assert woken == ["first", "second", "third"]
 
 
 def _slow_counted_dumps(monkeypatch: pytest.MonkeyPatch, seconds: float) -> list[int]:
@@ -1180,7 +1308,7 @@ def test_a_resumed_program_waits_for_a_worker(
         def hold_the_worker() -> None:
             # Waits for the worker as programs do, so the waiting program gives
             # it up.
-            with sandbox._worker_demand.waiting():
+            with sandbox._worker_demand.waiting(held.set):
                 while True:
                     try:
                         with pool.checkout():

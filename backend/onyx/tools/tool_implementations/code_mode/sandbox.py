@@ -455,107 +455,172 @@ class _ToolCallThreads:
 _tool_call_threads = _ToolCallThreads(MAX_TOOL_CALL_THREADS)
 
 
+# A program's wake-up; it names the program as a holder and as a waiter.
+_Wake = Callable[[], None]
+
+
 class _WorkerDemand:
     """The sandbox workers this process has checked out, the programs that wait
     for one, and holders: programs that keep their worker while they wait on
     their tool calls.
 
     Each waiting program claims one holder, which gives up its worker; the other
-    holders keep theirs. A claim counts until its holder has returned its worker,
-    or kept it because its dump does not fit. A waiting program claims again each
-    time its checkout times out, so a claim that freed no worker for it is
-    replaced. When a program stops waiting, claims beyond the programs still
-    waiting are withdrawn from holders that have not given up yet.
+    holders keep theirs. Before a claimed holder returns its worker, the claim
+    becomes a credit of the waiter that made it, so the credit exists whenever
+    that worker is free. A waiter with a claim or a credit claims no other
+    holder. At the waiter's next checkout timeout the credit stands in for the
+    claim, since the pool can still be replacing the worker, and is used up: if
+    another program took the worker, the waiter claims again at the timeout
+    after that. When a waiter stops waiting, its claim passes to the oldest
+    waiter with neither a claim nor a credit. Without one, the claim is
+    withdrawn from a holder that has not given up yet; a holder that has gives
+    the credit to such a waiter when it returns its worker.
     """
 
     def __init__(self, workers: int) -> None:
         self._lock = threading.Lock()
         self._workers = workers
         self._busy = 0
-        self._waiting = 0
-        # Wake-ups of the holders that keep their worker, oldest first.
-        self._holders: dict[Callable[[], None], None] = {}
-        # Claimed holders, also those that gave up and still have the worker.
-        self._claimed: set[Callable[[], None]] = set()
+        # Waiting programs, oldest first, and whether each has a credit.
+        self._waiters: dict[_Wake, bool] = {}
+        # Holders that keep their worker, oldest first.
+        self._holders: dict[_Wake, None] = {}
+        # Claimed holders, also those that gave up and still have the worker,
+        # and the waiter each one frees a worker for; None when that waiter
+        # stopped waiting and no other waiter needed the claim.
+        self._claims: dict[_Wake, _Wake | None] = {}
 
     @property
     def all_busy(self) -> bool:
         with self._lock:
             return self._busy >= self._workers
 
+    def _unserved(self) -> _Wake | None:
+        """The oldest waiter with neither a claim nor a credit; the caller holds
+        the lock."""
+        served = set(self._claims.values())
+        return next(
+            (
+                w
+                for w, credit in self._waiters.items()
+                if not credit and w not in served
+            ),
+            None,
+        )
+
+    def _pair(self) -> list[_Wake]:
+        """Claim an unclaimed holder for each waiter with neither a claim nor a
+        credit, oldest first; returns the holders to wake. The caller holds the
+        lock and wakes them after it releases the lock."""
+        served = set(self._claims.values())
+        unclaimed = [h for h in self._holders if h not in self._claims]
+        woken: list[_Wake] = []
+        for waiter, credit in self._waiters.items():
+            if len(woken) == len(unclaimed):
+                break
+            if credit or waiter in served:
+                continue
+            holder = unclaimed[len(woken)]
+            self._claims[holder] = waiter
+            woken.append(holder)
+        return woken
+
+    def _paired(self) -> None:
+        with self._lock:
+            woken = self._pair()
+        for holder in woken:
+            holder()
+
     @contextmanager
     def worker(
-        self, session: MontySession, wake: Callable[[], None]
+        self, session: MontySession, wake: _Wake, tenant_id: str
     ) -> Iterator[MontySession]:
         """Check out the session's worker; raises TimeoutError when none is free.
 
-        The claim on the program ends once its worker is back in the pool.
+        A claim on the program becomes its waiter's credit before the worker is
+        back in the pool; the time it held the worker counts for its tenant.
         """
-        checked_out = False
-        try:
-            with session:
-                with self._lock:
-                    self._busy += 1
-                checked_out = True
+        with session:
+            with self._lock:
+                self._busy += 1
+            checked_out = time.monotonic()
+            try:
                 yield session
-        finally:
-            if checked_out:
+            finally:
                 with self._lock:
                     self._busy -= 1
-                    self._claimed.discard(wake)
+                    if wake in self._claims:
+                        waiter = self._claims.pop(wake)
+                        if waiter is None:
+                            waiter = self._unserved()
+                        if waiter is not None:
+                            self._waiters[waiter] = True
+                metrics.SANDBOX_WORKER_SECONDS.labels(tenant_id=tenant_id).inc(
+                    time.monotonic() - checked_out
+                )
 
     @contextmanager
-    def waiting(self) -> Iterator[None]:
+    def waiting(self, wake: _Wake) -> Iterator[None]:
         with self._lock:
-            self._waiting += 1
-        self.claim()
+            self._waiters[wake] = False
+        self._paired()
         try:
             yield
         finally:
             with self._lock:
-                self._waiting -= 1
-                withdrawable = [h for h in self._claimed if h in self._holders]
-                excess = len(self._claimed) - self._waiting
-                self._claimed.difference_update(withdrawable[: max(0, excess)])
+                del self._waiters[wake]
+                claimed = next((h for h, w in self._claims.items() if w == wake), None)
+                if claimed is not None:
+                    heir = self._unserved()
+                    if heir is not None:
+                        self._claims[claimed] = heir
+                    elif claimed in self._holders:
+                        del self._claims[claimed]
+                    else:
+                        self._claims[claimed] = None
 
-    def claim(self) -> None:
-        """Claim an unclaimed holder while fewer are claimed than programs wait."""
+    def claim(self, wake: _Wake) -> None:
+        """At a checkout timeout of the waiter `wake`: use up its credit, or
+        claim a holder for it when it has neither a credit nor a claim."""
         with self._lock:
-            if len(self._claimed) >= self._waiting:
+            if self._waiters.get(wake):
+                self._waiters[wake] = False
                 return
-            holder = next((h for h in self._holders if h not in self._claimed), None)
-            if holder is None:
-                return
-            self._claimed.add(holder)
-        holder()
+        self._paired()
 
-    def gives_up(self, wake: Callable[[], None]) -> bool:
+    def gives_up(self, wake: _Wake) -> bool:
         """Whether the holder of `wake` is claimed. A claimed holder stops
         holding; its claim counts until it returns or keeps its worker."""
         with self._lock:
-            if wake not in self._claimed:
+            if wake not in self._claims:
                 return False
             self._holders.pop(wake, None)
             return True
 
-    def kept(self, wake: Callable[[], None]) -> None:
-        """The program that gave up its worker keeps it: its dump does not fit."""
+    def kept(self, wake: _Wake) -> None:
+        """The program that gave up its worker keeps it: its dump does not fit.
+        Its waiter claims another holder."""
         with self._lock:
-            self._claimed.discard(wake)
+            self._claims.pop(wake, None)
+        self._paired()
 
     @contextmanager
-    def holding(self, wake: Callable[[], None]) -> Iterator[None]:
+    def holding(self, wake: _Wake) -> Iterator[None]:
         with self._lock:
             self._holders[wake] = None
-        self.claim()
+        self._paired()
         try:
             yield
         finally:
             with self._lock:
-                # A holder that did not give up drops a claim it had not seen.
-                if wake in self._holders:
+                # A holder that did not give up drops a claim it had not seen;
+                # its waiter claims another holder.
+                dropped = wake in self._holders
+                if dropped:
                     del self._holders[wake]
-                    self._claimed.discard(wake)
+                    self._claims.pop(wake, None)
+            if dropped:
+                self._paired()
 
 
 class _SuspendedBytes:
@@ -622,6 +687,7 @@ class _Run:
     ) -> None:
         self.limits = limits
         self.function_names = frozenset(function_names)
+        self.tenant_id = metrics.current_tenant_id()
 
         def yield_control() -> None:
             on_yield()
@@ -1075,7 +1141,7 @@ def _checkout(
 
             def wait() -> None:
                 nonlocal waiting
-                demand.enter_context(_worker_demand.waiting())
+                demand.enter_context(_worker_demand.waiting(run.wake.set))
                 demand.enter_context(
                     metrics.PROGRAMS_WAITING_FOR_WORKER.track_inprogress()
                 )
@@ -1095,14 +1161,16 @@ def _checkout(
                     external_modules={FUNCTIONS_MODULE: functions},
                 )
                 try:
-                    stack.enter_context(_worker_demand.worker(session, run.wake.set))
+                    stack.enter_context(
+                        _worker_demand.worker(session, run.wake.set, run.tenant_id)
+                    )
                     stack.enter_context(metrics.SANDBOX_WORKERS_BUSY.track_inprogress())
                     break
                 except TimeoutError:
                     if time.monotonic() >= give_up:
                         raise
                     if waiting:
-                        _worker_demand.claim()
+                        _worker_demand.claim(run.wake.set)
                     else:
                         wait()
         yield session
@@ -1224,7 +1292,7 @@ def execute_program(
         logger.warning("Code mode sandbox failed: %s", error)
         return finish("failed", error=f"{type(error).__name__}: {error}")
     except TimeoutError:
-        metrics.SANDBOX_BUSY_REJECTIONS.inc()
+        metrics.SANDBOX_BUSY_REJECTIONS.labels(tenant_id=run.tenant_id).inc()
         return finish("failed", error=BUSY_MESSAGE)
     finally:
         run.ended = time.monotonic()

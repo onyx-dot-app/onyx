@@ -2,13 +2,17 @@
 
 The sandbox worker pool, the dumped-program budget and the tool call thread
 budget are per process. The gauges of these budgets each have a matching
-`_limit` gauge to compare against. Labels are closed enums; no tenant or user
+`_limit` gauge to compare against; they describe the pod and have no tenant
+label. Counters of the use of this capacity carry a `tenant_id` label, so that
+`rate()` gives each tenant's share. Other labels are closed enums; no user
 labels.
 """
 
 from typing import Literal
 
 from prometheus_client import Counter, Gauge, Histogram
+
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 WorkerLossReason = Literal["crashed", "killed"]
 SuspensionOutcome = Literal["dumped", "over_budget"]
@@ -27,7 +31,13 @@ PROGRAMS_WAITING_FOR_WORKER = Gauge(
 )
 SANDBOX_BUSY_REJECTIONS = Counter(
     "onyx_code_mode_sandbox_busy_rejections_total",
-    "New programs that got no sandbox worker in time and did not run.",
+    "New programs that got no sandbox worker in time and did not run, by tenant.",
+    ["tenant_id"],
+)
+SANDBOX_WORKER_SECONDS = Counter(
+    "onyx_code_mode_sandbox_worker_seconds_total",
+    "Seconds that programs held a sandbox worker, by tenant.",
+    ["tenant_id"],
 )
 SANDBOX_WORKERS_LOST = Counter(
     "onyx_code_mode_sandbox_workers_lost_total",
@@ -81,3 +91,8 @@ def count_worker_lost(reason: WorkerLossReason) -> None:
 
 def count_suspension(outcome: SuspensionOutcome) -> None:
     SUSPENSIONS.labels(outcome=outcome).inc()
+
+
+def current_tenant_id() -> str:
+    """The `tenant_id` label of the current request."""
+    return CURRENT_TENANT_ID_CONTEXTVAR.get() or "unknown"
