@@ -44,7 +44,7 @@ class _DiscoveryBudget:
         self.remaining -= count
         if self.remaining < 0:
             raise ArchiveLimitError(
-                f"Marketplace exceeds {DECLARED_PATH_MAX_COUNT} declared skill paths"
+                f"Marketplace exceeds {DECLARED_PATH_MAX_COUNT} declared component paths"
             )
 
 
@@ -165,6 +165,7 @@ def _has_components(
     root: str,
     relative: set[str],
     manifests: list[dict[str, JsonValue]],
+    budget: _DiscoveryBudget,
 ) -> bool:
     for component_path in _COMPONENT_PATHS:
         require_regular_path(files, _join(root, component_path))
@@ -180,6 +181,8 @@ def _has_components(
             declared = manifest.get(component, "./" + component)
             paths = [declared] if isinstance(declared, str) else declared
             if isinstance(paths, list):
+                if component in manifest:
+                    budget.consume(len(paths))
                 for path in paths:
                     if not isinstance(path, str):
                         raise ValueError(f"Invalid {component} path: {root}")
@@ -267,7 +270,7 @@ def _plugin_skills(
         return UnsupportedPlugin(
             entry_key=name, reason="Root plugin.json format is not supported"
         )
-    mixed = _has_components(files, root, relative, manifests)
+    mixed = _has_components(files, root, relative, manifests, budget)
     if mixed:
         return UnsupportedPlugin(
             entry_key=name, reason="Plugin contains components other than skills"

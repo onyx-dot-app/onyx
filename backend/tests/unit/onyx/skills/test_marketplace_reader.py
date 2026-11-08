@@ -732,7 +732,7 @@ def test_declared_path_limit_applies_before_expansion(
         files[f".{source}-plugin/plugin.json"] = json.dumps({"skills": paths}).encode()
     result = reader.read_marketplace_archive(_archive(files))
     assert isinstance(result, FailedMarketplace), result
-    assert "declared skill paths" in result.reason
+    assert "declared component paths" in result.reason
 
 
 def test_declared_path_budget_shared_across_plugins(
@@ -752,4 +752,49 @@ def test_declared_path_budget_shared_across_plugins(
     files[".codex-plugin/plugin.json"] = b'{"skills":"./skills"}'
     result = reader.read_marketplace_archive(_archive(files))
     assert isinstance(result, FailedMarketplace), result
-    assert "declared skill paths" in result.reason
+    assert "declared component paths" in result.reason
+
+
+@pytest.mark.parametrize("component", ["agents", "commands"])
+@pytest.mark.parametrize("source", ["entry", "claude", "codex"])
+def test_component_declarations_share_discovery_budget(
+    component: str, source: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 2)
+    fields = {component: ["./absent"] * 3}
+    files = _files()
+    if source == "entry":
+        catalog = json.loads(files[CLAUDE])
+        catalog["plugins"][0].update(fields)
+        files[CLAUDE] = json.dumps(catalog).encode()
+    else:
+        files[f".{source}-plugin/plugin.json"] = json.dumps(fields).encode()
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "declared" in result.reason
+
+
+def test_component_budget_combines_fields_and_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 4)
+    files = _files()
+    files[CLAUDE] = json.dumps(
+        {
+            "name": "m",
+            "plugins": [
+                {
+                    "name": str(i),
+                    "source": "./",
+                    "agents": ["./absent"],
+                    "commands": ["./absent"],
+                }
+                for i in range(2)
+            ],
+        }
+    ).encode()
+    assert len(_entries(files)) == 2
+    files[".codex-plugin/plugin.json"] = b'{"skills":"./skills"}'
+    assert isinstance(
+        reader.read_marketplace_archive(_archive(files)), FailedMarketplace
+    )

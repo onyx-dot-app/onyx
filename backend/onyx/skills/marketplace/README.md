@@ -39,9 +39,10 @@ The archive reader also has independent processing safeguards:
   of each key and value. This is a conservative estimate, not exact memory use.
   Global headers count for every copy, including GitHub commit headers.
   Path limits apply before unbounded prefix allocation.
-- A read accepts at most 500 plugin entries and 500 declared skill paths across
-  all entries and plugin manifests. These counts are checked before discovery
-  or path expansion. Repeated declarations consume the same budget.
+- A read accepts at most 500 plugin entries and 500 declared paths across
+  all entries and plugin manifests, including `skills`, `agents`, and `commands`.
+  Plugin counts are checked before discovery. Each explicit path list consumes
+  the shared budget before it is scanned or expanded. Repeated paths count again.
 
 The 1 GiB ceiling permits ten full 100 MiB skills plus tar overhead.
 It bounds temporary disk and decompression work for highly compressed inputs.
