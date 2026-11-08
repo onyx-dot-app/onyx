@@ -255,7 +255,7 @@ The library preview of an external-app skill calls the same renderer
     unpacked size and file count stay unknown until an application backfill.
     Do not use these snapshots as runtime content during this rollout.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
-    `skills/push.py:_assemble_fileset` replaces each `${CLAUDE_SKILL_DIR}` in
+    `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
     placeholder. The sent bytes feed the runtime hash. OpenCode adds the base
