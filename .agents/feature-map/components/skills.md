@@ -631,7 +631,10 @@ The library preview of an external-app skill calls the same renderer
     fetcher. Shared preview and GitHub connection components live in
     `web/src/sections/marketplaces/`. Preview distinguishes ready, blocked and
     unsupported entries and offers a sample for a missing catalog. Connection
-    guidance uses the existing Apps flow and cache. Pages are not wired yet.
+    guidance uses the existing Apps flow and cache. The sync dialog requires an
+    explicit ref and invalidates preview on edits and close. Company creation
+    requires global authority and a host callback that saves access atomically.
+    Acceptance means sync requested. Pages are not wired yet.
 
 
 ---
