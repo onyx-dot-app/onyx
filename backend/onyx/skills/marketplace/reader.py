@@ -10,7 +10,7 @@ import zlib
 from pydantic import JsonValue
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.bundle import SKILL_MD_NAME, build_custom_bundle
+from onyx.skills.bundle import SKILL_MD_NAME, STORED_BUNDLE_LIMITS, build_custom_bundle
 from onyx.skills.marketplace.archive import (
     MANIFEST_MAX_BYTES,
     ArchiveFiles,
@@ -117,7 +117,9 @@ def _skill(files: ArchiveFiles, path: str, key: str) -> ReadySkill | BlockedSkil
             entry_key=key,
             path=path,
             bundle_bytes=bundle,
-            content_digest=compute_bundle_metadata(bundle).content_digest,
+            content_digest=compute_bundle_metadata(
+                bundle, limits=STORED_BUNDLE_LIMITS
+            ).content_digest,
         )
     except ArchiveLimitError:
         raise
