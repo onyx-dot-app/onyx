@@ -119,6 +119,9 @@ tool streams as reasoning packets instead
 (`chat/renderer.py:MessageRenderer.consume`). Code mode (`code_mode_start`,
 `code_mode_delta`) renders each tool call its program makes with that tool's
 own packets at `sub_turn_index` = call index, inside the code mode tab. A
+call that runs across observations keeps its `sub_turn_index` in each tab, so
+clients identify it by `cell_id` and `sub_turn_index` and show its latest
+report. A
 final `code_mode_delta` with `replace_stdout` replaces live output that stopped
 at the output limit, so live output matches replay. The final delta also
 lists `stored_keys`, the keys the program saved with `store()`, and
