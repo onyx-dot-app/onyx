@@ -1522,6 +1522,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "jiraServiceManagement": {
+          "description": "Atlassian Service Desk & ITSM"
         }
       }
     },
@@ -3304,6 +3307,7 @@
         "excludedChannels": "Ausgeschlossene Kanäle",
         "includeBotMessages": "Bot-Nachrichten einschließen",
         "jiraProjectUrl": "Jira-Projekt-URL",
+        "jiraSiteUrl": "Jira-Website-URL",
         "multipleRepos": "mehrere Repositories",
         "pageId": "Seiten-ID",
         "realm": "Realm",
@@ -4928,6 +4932,14 @@
             "mailboxes": {
               "label": "Postfächer",
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Konnektor konfigurieren",
+          "fields": {
+            "everything": {
+              "description": "Onyx indiziert alle Vorgänge in jedem Jira Service Management-Projekt (Service Desk), das das ausgewählte Konto lesen kann. Um weniger zu indizieren, wählen Sie einen anderen Tab."
             }
           }
         }
