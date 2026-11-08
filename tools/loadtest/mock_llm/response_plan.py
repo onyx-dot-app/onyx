@@ -374,7 +374,10 @@ def _search_profile_calls(
             return []
         queries = _round_queries(snippet, completed_rounds, profile)
         return [_new_call("internal_search", json.dumps({"queries": queries}))]
-    if code_mode.EXECUTE_CODE not in by_name:
+    execute_code = by_name.get(code_mode.EXECUTE_CODE)
+    if execute_code is None or "internal_search" not in code_mode.code_functions(
+        execute_code
+    ):
         return None
 
     def program(ran: int) -> str | None:

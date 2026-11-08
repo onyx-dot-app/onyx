@@ -331,16 +331,21 @@ ONYX_SEARCH_MODEL="$MODEL" \
   --host "$LOCUST_HOST" --csv "$ARM" ChatWithSearchUser
 ```
 
-Make sure that each arm ran the intended path. In the Locust `/metrics` output,
-`onyx_loadtest_code_programs` must be zero for the direct arm and nonzero for the
-code mode arms. Assess each arm's stats CSV separately with `capacity_report.py`.
+Make sure that each arm ran the intended path. Scrape the Locust `/metrics`
+output before the run ends, because the endpoint stops with Locust, and save it
+with the arm. `onyx_loadtest_code_programs` must be zero for the direct arm and
+nonzero for the code mode arms, and `onyx_loadtest_code_waits` gives each arm's
+`wait_code` calls. The example CSV includes the ramp and warmup. Assess each
+arm's measurement plateau with `capacity_report.py`, as
+[Interpret user capacity](#interpret-user-capacity) describes.
 
 Without `wait_code` calls, the per-round arm keeps the number and order of model
-calls of direct mode. Its difference from direct mode then shows the cost of the
-sandbox. The batched arm also changes the model calls and runs the searches in
-parallel. Its difference shows
-the combined effect of the sandbox and fewer model calls. `search_calls` counts
-searches in both modes, so the arms report comparable search counts.
+calls of direct mode. Its difference from direct mode then shows the combined
+cost of the code mode path: the sandbox, the `execute_code` schema and
+arguments, and the printed program output that replaces the JSON search results.
+The batched arm also makes fewer model calls and runs the searches in parallel.
+`search_calls` counts searches in both modes, so the arms report comparable
+search counts.
 
 ## Reproduce the input mix
 

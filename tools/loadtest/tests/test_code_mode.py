@@ -185,6 +185,25 @@ def reply(
     )
 
 
+def test_search_profile_runs_no_program_without_internal_search() -> None:
+    description = EXECUTE_CODE_TOOL["function"]["description"]
+    web_only = {
+        **EXECUTE_CODE_TOOL,
+        "function": {
+            **EXECUTE_CODE_TOOL["function"],
+            "description": description.replace("internal_search", "other_search"),
+        },
+    }
+    steps, _ = run_turn(MODEL, [web_only, WAIT_CODE_TOOL], question_for(2))
+    programs = [
+        json.loads(call["function"]["arguments"])["code"]
+        for calls in steps
+        for call in calls
+        if call["function"]["name"] == "execute_code"
+    ]
+    assert all(searches(code) == [] for code in programs)
+
+
 def test_running_cell_gets_wait_code_then_the_plan_continues() -> None:
     question = question_for(2)
     messages: list[dict[str, Any]] = [{"role": "user", "content": question}]
