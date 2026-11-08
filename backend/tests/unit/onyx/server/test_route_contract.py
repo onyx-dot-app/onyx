@@ -353,6 +353,8 @@ def test_skill_history_requires_edit_access(app: FastAPI, route: str) -> None:
                 kwargs["version_id"] = MagicMock()
             handler(**kwargs)
     assert fetch.call_args.kwargs["policy"] == SkillManagementPolicy.EDIT
+    if route.endswith("/restore"):
+        assert fetch.call_args.kwargs["lock_for_update"] is True
 
 
 def test_gate2_helpers_exist() -> None:
