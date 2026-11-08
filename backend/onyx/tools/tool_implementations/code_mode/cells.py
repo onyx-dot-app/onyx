@@ -406,7 +406,12 @@ def _interrupted_amendments(
 
 
 class StoreLimitError(Exception):
-    """A commit that would exceed a store limit."""
+    """A commit that would exceed a store limit, with the keys of the writes that
+    would change the store at commit time."""
+
+    def __init__(self, reason: str, keys: Sequence[str]) -> None:
+        super().__init__(reason)
+        self.keys = tuple(keys)
 
 
 class _StoreCommits:
@@ -438,7 +443,7 @@ class _StoreCommits:
                 return None
             error = commit_limit_error(current, writes)
             if error is not None:
-                raise StoreLimitError(error)
+                raise StoreLimitError(error, list(writes))
             commit = StoreCommit(ordinal=current.last_ordinal + 1, writes=writes)
             self._commits.append(commit)
             return commit
@@ -967,23 +972,22 @@ class CodeCell:
             # Before the end is visible, so the observation that reports it has the
             # commit.
             commit: StoreCommit | None = None
-            discard_reason: str | None = (
-                None if end.commits_store else STOPPED_BEFORE_END
+            discarded = (
+                None
+                if end.commits_store
+                else DiscardedWrites(
+                    keys=tuple(store.changed_writes), reason=STOPPED_BEFORE_END
+                )
             )
             if end.commits_store:
                 try:
                     commit = self._store.commit(store.writes, source.recorded_results)
                 except StoreLimitError as error:
-                    discard_reason = str(error)
+                    # Against the store at commit time, which other cells changed.
+                    discarded = DiscardedWrites(keys=error.keys, reason=str(error))
             with self._lock:
                 self._commit = commit
-                self._discarded = (
-                    None
-                    if discard_reason is None
-                    else DiscardedWrites(
-                        keys=tuple(store.changed_writes), reason=discard_reason
-                    )
-                )
+                self._discarded = discarded
                 for record in self._calls.values():
                     if record.ended_in is None:
                         self._record(record.call.unfinished())

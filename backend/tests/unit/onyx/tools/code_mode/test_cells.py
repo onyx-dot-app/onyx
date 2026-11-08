@@ -484,6 +484,26 @@ def test_concurrent_commits_together_stay_within_the_store_limits(
     )
 
 
+def test_a_write_equal_to_the_start_store_reports_its_discard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(store_module, "MAX_COMMITTED_BYTES", 70)
+    response = Response()
+    response.run("store('k', 'v')\n")
+    # A writes the value it started with; B then replaces it and nears the limit.
+    response.run("yield_control()\nawait gate(value='g')\nstore('k', 'v')\n")
+    assert _details(response.run("store('k', 'y' * 60)\n")).commit is not None
+    response.gate.set()
+    waited = response.wait(2)
+    assert _details(waited).commit is None
+    assert (
+        "Store writes discarded because other programs committed first, so this "
+        "chat would save"
+    ) in waited.content
+    assert waited.content.rstrip().endswith(": k.")
+    assert _details(response.run("load('k')\n")).result == repr("y" * 60)
+
+
 def test_closing_record_lists_what_ran_after_the_last_observation() -> None:
     response = Response()
     first = response.run(
