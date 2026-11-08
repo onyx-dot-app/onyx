@@ -64,6 +64,7 @@ from onyx.tools.models import (
     SearchToolUsage,
     ToolCallInfo,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
 
@@ -484,6 +485,10 @@ class StagedChatFiles(BaseModel):
 
 class ChatSearchResult(StagedChatFiles, SearchDocsResponse):
     """Search documents with their files staged."""
+
+
+class ChatCodeModeResult(StagedChatFiles, CodeModeExecutionResult):
+    """A code mode result with the files of its nested searches staged."""
 
 
 class ToolHistorySnapshot(BaseModel):

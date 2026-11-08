@@ -35,6 +35,7 @@ from onyx.chat.prompt_utils import (
 from onyx.chat.tool_results import (
     merged_chat_files,
     staged_result_details,
+    tool_result_parts,
     tool_result_sources,
 )
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
@@ -205,7 +206,10 @@ class ChatAgent(Agent, RestorableFeature):
         """Apply accepted tool results to the next request's context policy."""
         for response in responses:
             data = response.details
-            if response.tool_name == SearchTool.NAME:
+            if any(
+                part.tool_name == SearchTool.NAME
+                for part in tool_result_parts(response)
+            ):
                 self.has_called_search_tool = True
             sources = tool_result_sources(data)
             if sources is not None:
@@ -314,7 +318,8 @@ class ChatAgent(Agent, RestorableFeature):
 
     def _after_step(self, result: StepResult) -> bool:
         self.search_context = update_search_context(
-            self.search_context, result.tool_results
+            self.search_context,
+            [part for item in result.tool_results for part in tool_result_parts(item)],
         )
         self._update_tool_context(result.tool_results)
         if not result.message.tool_calls or result.step.is_last:

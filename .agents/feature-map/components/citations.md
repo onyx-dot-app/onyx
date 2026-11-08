@@ -290,8 +290,13 @@ of only markers stays empty.
   functions. `tool_result_sources` drops numbers whose document is not there.
   A details type that the module does not know carries no numbers, so its
   markers render as nothing. A tool that carries documents in a new
-  details type changes only that module. If the tool sets
-  `merge_list_argument`, expect merged calls to share one number block.
+  details type changes only that module. Code mode keeps documents only in its
+  calls' search details; the module derives the result's documents and numbers
+  from the calls of every window (`CodeModeExecutionResult.all_calls`), so
+  calls in the cell's closing record add theirs to that observation, and save
+  and restore rewrite the calls with `CodeModeExecutionResult.map_calls`. If
+  the tool sets `merge_list_argument`, expect merged calls to share one number
+  block.
 - `save-path` **A new save path.** Copy the call in
   `db/chat_response.py:save_chat_response_to_db`; list the
   callers with `git grep -n 'save_chat_turn(' backend/onyx`. Pass both

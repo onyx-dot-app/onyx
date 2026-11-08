@@ -6,15 +6,25 @@ files. Callers do not branch on result types; a new type changes only this modul
 """
 
 from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 
 from pydantic import BaseModel
 
 from onyx.chat.citation_processor import cited_documents
-from onyx.chat.models import ChatSearchResult, ResultSources, StagedChatFiles
+from onyx.chat.models import (
+    ChatCodeModeResult,
+    ChatSearchResult,
+    ResultSources,
+    StagedChatFiles,
+)
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.llm.models import ToolResultMessage
 from onyx.tools.models import ChatFile
-from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeCall,
+    CodeModeExecutionResult,
+)
 from onyx.utils.pydantic_util import as_base, shallow_model_dump
 
 
@@ -84,6 +94,31 @@ def tool_result_sources(details: BaseModel | None) -> ResultSources | None:
     return None
 
 
+def _saved_search(
+    details: SearchDocsResponse, displayed_docs: list[SearchDoc] | None
+) -> SearchDocsResponse:
+    return as_base(details, SearchDocsResponse).model_copy(
+        update={"search_docs": [], "displayed_docs": displayed_docs}
+    )
+
+
+def _saved_call(call: CodeModeCall) -> CodeModeCall:
+    # Planning metadata applies to the current turn, as for direct calls.
+    details = call.details
+    if not isinstance(details, SearchDocsResponse):
+        return call.model_copy(update={"metadata": None})
+    displayed = details.displayed_docs
+    return call.model_copy(
+        update={
+            "details": _saved_search(details, displayed_docs=None),
+            "metadata": None,
+            "displayed_document_ids": None
+            if displayed is None
+            else [doc.document_id for doc in displayed],
+        }
+    )
+
+
 def saved_result_details(details: BaseModel | None) -> BaseModel | None:
     """The form of a result that a saved response keeps.
 
@@ -91,27 +126,53 @@ def saved_result_details(details: BaseModel | None) -> BaseModel | None:
     only their citation numbers. Staged files stay in execution state.
     """
     if isinstance(details, SearchDocsResponse):
-        return as_base(details, SearchDocsResponse).model_copy(
-            update={
-                "search_docs": [],
-                "displayed_docs": [] if details.displayed_docs == [] else None,
-            }
+        return _saved_search(
+            details, displayed_docs=[] if details.displayed_docs == [] else None
         )
+    if isinstance(details, CodeModeExecutionResult):
+        return as_base(details, CodeModeExecutionResult).map_calls(_saved_call)
     return details
+
+
+def _cited_list(
+    citation_mapping: Mapping[int, str], documents: Mapping[str, SearchDoc]
+) -> list[SearchDoc]:
+    """The known documents of the citation numbers, each once, in citation order."""
+    cited = cited_documents(citation_mapping, documents)
+    return list(_by_id(list(cited.values())).values())
+
+
+def _restored_call(
+    call: CodeModeCall, documents: Mapping[str, SearchDoc]
+) -> CodeModeCall:
+    details = call.details
+    if not isinstance(details, SearchDocsResponse):
+        return call
+    ids = call.displayed_document_ids
+    return call.model_copy(
+        update={
+            "details": details.model_copy(
+                update={
+                    "search_docs": _cited_list(details.citation_mapping, documents),
+                    "displayed_docs": None
+                    if ids is None
+                    else [documents[key] for key in ids if key in documents],
+                }
+            )
+        }
+    )
 
 
 def restored_result_details[T: BaseModel](
     details: T, documents: Mapping[str, SearchDoc]
 ) -> T:
-    """Refill the documents that a saved result keeps only as citation numbers.
-
-    Each cited document comes back once, in citation order.
-    """
+    """Refill the documents that a saved result keeps only as citation numbers."""
     if isinstance(details, SearchDocsResponse):
-        cited = cited_documents(details.citation_mapping, documents)
         return details.model_copy(
-            update={"search_docs": list(_by_id(list(cited.values())).values())}
+            update={"search_docs": _cited_list(details.citation_mapping, documents)}
         )
+    if isinstance(details, CodeModeExecutionResult):
+        return details.map_calls(partial(_restored_call, documents=documents))
     return details
 
 
@@ -128,6 +189,8 @@ def staged_result_details(
     staged_type: type[StagedChatFiles]
     if isinstance(details, SearchDocsResponse):
         staged_type = ChatSearchResult
+    elif isinstance(details, CodeModeExecutionResult):
+        staged_type = ChatCodeModeResult
     else:
         return details
     sources = tool_result_sources(details)
@@ -152,3 +215,14 @@ def merged_chat_files(
     """`chat_files`, then the `added` files with a filename not yet present."""
     names = {file.filename for file in chat_files}
     return [*chat_files, *(file for file in added if file.filename not in names)]
+
+
+def tool_result_parts(result: ToolResultMessage) -> list[ToolResultMessage]:
+    """The result, then a result for each tool call that it made."""
+    details = result.details
+    if not isinstance(details, CodeModeExecutionResult):
+        return [result]
+    return [
+        result,
+        *(call.as_result() for call in details.all_calls()),
+    ]

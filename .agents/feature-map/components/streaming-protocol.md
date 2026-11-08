@@ -112,9 +112,35 @@ sub-turn indexes.
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
 citations, one family per tool, deep research, and the coding agent with the
-bash tool. `ToolCallArgumentDelta` streams the Python tool's code while the
-model writes it; the configured reasoning tool streams as reasoning packets
-instead (`chat/renderer.py:MessageRenderer.consume`). Other tools show their
+bash tool. `ToolCallArgumentDelta` streams the code of the tools in
+`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
+model writes it, with the tool name as `tool_type`; the configured reasoning
+tool streams as reasoning packets instead
+(`chat/renderer.py:MessageRenderer.consume`). Code mode (`code_mode_start`,
+`code_mode_delta`) renders each tool call its program makes with that tool's
+own packets at `sub_turn_index` = call index, inside the code mode tab. A
+final `code_mode_delta` with `replace_stdout` replaces live output that stopped
+at the output limit, so live output matches replay. The final delta also
+lists `stored_keys`, the keys the program saved with `store()`, and
+`tool_call_count`, the calls the cell started so far (the model's text reports
+the same count). Each `execute_code` and `wait_code` call is its own code
+mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
+arguments (`None` and 0 for `execute_code`, the cell id and 1 for
+`wait_code`, whose `code` is empty), so live and replay send the same start.
+The final delta carries the exact `cell_id` and `observation`. Its `status`
+adds `running` (the cell still runs; its open nested calls get only start
+packets) and `terminated`. A cell's closing record goes to the tab of its last
+observation: the nested calls after the observation, one `code_mode_delta` with
+the new stdout, then a final delta with `status`, `tool_call_count`,
+`stored_keys` and `response_ended=True` (`tool_renderer` picks
+`chat/code_mode_renderer.py:CodeModeRenderer` by tool name). Live, it comes
+from `ToolResultAmendedEvent` after that tab's `section_end` and the answer,
+before the stop (`CodeModeRenderer.amend`). On replay the saved observation
+holds it, so it renders before the tab's `section_end`
+(`CodeModeRenderer._result_packets`). The client adds packets of an ended tab
+to that tab, so both give the same steps. When the observation was recorded
+before a restore, the live stream has no tab for it, so the closing record
+follows the observation's own packets in a new tab. Other tools show their
 arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
 `ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 
