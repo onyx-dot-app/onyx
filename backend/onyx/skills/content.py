@@ -62,9 +62,17 @@ def read_custom_skill_bundle_bytes(
 ) -> bytes:
     if skill.current_version is None:
         raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
+            OnyxErrorCode.INTERNAL_ERROR,
             f"Custom skill '{skill.name}' has no current version.",
         )
-    return read_version_bundle(
-        skill.current_version, file_store or get_default_file_store()
-    )
+    try:
+        return read_version_bundle(
+            skill.current_version, file_store or get_default_file_store()
+        )
+    except OnyxError:
+        raise
+    except Exception as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"Failed to read bundle for skill '{skill.name}'.",
+        ) from exc

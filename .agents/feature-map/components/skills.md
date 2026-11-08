@@ -427,12 +427,12 @@ The library preview of an external-app skill calls the same renderer
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log
   for `Skill push failed` for a failed push.
-- `cut-over-version-readers` **Gate V4 deployment after V2 writers drain.**
-  First deploy V2 writers and V2b repair everywhere. Stop and drain every API,
+- `cut-over-version-readers` **Gate version readers after legacy writers drain.**
+  First deploy version writers and the version repair task everywhere. Stop and drain every API,
   worker, Lite poller and script that can still write only legacy columns.
-  Keep V4 readers off until the following check passes for every tenant and shard.
+  Keep current-version readers off until the following check passes for every tenant and shard.
   Run the existing repair task until a fresh drift query returns no rows.
-  The V2b completed marker does not authorize cutover. Old writers can create
+  The repair completed marker does not authorize cutover. Old writers can create
   drift after that marker is set.
 
   Use the target shard's database configuration and the application's backend path:
@@ -447,8 +447,8 @@ The library preview of an external-app skill calls the same renderer
   process. Do not replace missing blobs with empty bundles. Recover their source
   and upload again when repair cannot recover them. The query checks database
   drift, not blob availability. Retain the command output, tenant, shard and
-  deployed writer revision. Deploy V4 only after every check exits 0 and legacy
-  writers remain stopped. Keep V2 dual writes and V2b repair through this release.
+  deployed writer revision. Deploy current-version readers only after every check exits 0 and legacy
+  writers remain stopped. Keep legacy dual writes and version repair through this release.
 - `test-skill-setup` **Set up skills for a test.** Use the integration manager
   `backend/tests/integration/common_utils/managers/skill.py`. A real push
   needs the Kubernetes harness in `backend/tests/integration/tests/craft/k8s/`.
