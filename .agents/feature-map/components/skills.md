@@ -22,9 +22,9 @@
   or a single SKILL.md, or imports skills from a GitHub repository after a
   preview of every SKILL.md found. A private repository needs the user's
   GitHub connection in Craft; without it the import is anonymous. The owner
-  shares with users or groups as viewer or editor, publishes to the
-  organization, or transfers ownership.
-- **Admins** set the installation policy of a custom skill: available (the user
+  shares with users or groups as viewer or editor, subject to group scope,
+  or transfers ownership. Publishing requires global `MANAGE_SKILLS`.
+- **Global skill managers** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
   and the user cannot turn it off). Global manage-skills permission is required to delete a required skill.
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
@@ -225,6 +225,9 @@ The library preview of an external-app skill calls the same renderer
     `db/skill.py:SkillAccessAdapter` supplies skill grants with real foreign keys,
     locked EDIT authorization and eligibility checks. Company visibility and
     installation settings require global `MANAGE_SKILLS`, even for owners.
+    Client company controls use `usePermissionAuthority` with that permission,
+    not ownership or scoped admin capabilities. `web/src/lib/skills/sharing.ts:serializeSkillSharing`
+    omits company fields without global authority, preserving existing public access.
     Changed group grants and explicit group settings use `assert_within_scope`
     against stored groups and visibility. Group managers cannot change another
     group's settings or company settings. An omitted group setting preserves

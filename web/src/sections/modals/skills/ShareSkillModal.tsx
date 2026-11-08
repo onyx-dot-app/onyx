@@ -12,6 +12,8 @@ import useShareableGroups, {
 import useShareableUsers from "@/hooks/useShareableUsers";
 import { Content, Section, toast } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { Modal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
@@ -110,7 +112,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     includeApiKeys: false,
   });
   const { data: shareableGroupsData } = useShareableGroups();
-  const { isAdmin, user: currentUser } = useUser();
+  const { user: currentUser } = useUser();
+  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
+    Permission.MANAGE_SKILLS
+  );
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
     null
@@ -178,13 +183,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
   const canEditOrgVisibility =
-    !skill?.external_app &&
-    (skill?.user_permission === "OWNER" ||
-      (isAdmin && skill?.user_permission === "EDITOR"));
+    !skill?.external_app && canEditShares && canManageCompanySkills;
   const canTransfer =
     props.mode === "edit" &&
     !!skill &&
-    (skill.user_permission === "OWNER" || (isAdmin && skill.ownership_vacant));
+    (skill.user_permission === "OWNER" ||
+      (canManageCompanySkills && skill.ownership_vacant));
   const isDirty =
     !!effectiveState &&
     !!initialState &&
@@ -338,7 +342,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(nextDraft, isAdmin);
+      const payload = serializeSkillSharing(nextDraft, canManageCompanySkills);
       await updateSkillShares(props.skillId, payload);
       void refreshSkill();
       toast.success(t("share.savedToast.message"));
@@ -437,7 +441,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           )}
         </Section>
 
-        {isAdmin && (
+        {canManageCompanySkills && (
           <Section gap={3} height="auto" alignItems="stretch">
             <Content
               font="main-ui-action"
