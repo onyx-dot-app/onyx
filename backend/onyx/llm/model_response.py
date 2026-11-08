@@ -408,14 +408,23 @@ def _taken_call_ids(request: GenerationRequest) -> set[str]:
     }
 
 
-def _unique_call_id(provider_id: str | None, taken: set[str]) -> str:
-    """The provider's tool call ID, or a new one when it is missing or `taken`.
+def _unique_call_id(
+    provider_id: str | None, request: GenerationRequest, taken: set[str]
+) -> str:
+    """The provider's tool call ID, or a new one when it is missing, `taken` or
+    reserved by the request.
 
     Some providers repeat IDs across responses. Results, amendments and nested
     code mode calls find a call by its ID, so IDs stay unique within a
     conversation. The returned ID joins `taken`.
     """
-    call_id = provider_id if provider_id and provider_id not in taken else str(uuid4())
+    call_id = (
+        provider_id
+        if provider_id
+        and provider_id not in taken
+        and provider_id not in request.reserved_tool_call_ids
+        else str(uuid4())
+    )
     taken.add(call_id)
     return call_id
 
@@ -450,7 +459,7 @@ def to_assistant_message(
             continue
         arguments = source_call.function.arguments or ""
         call = ToolCall(
-            id=_unique_call_id(source_call.id, taken),
+            id=_unique_call_id(source_call.id, request, taken),
             name=source_call.function.name,
             arguments={},
             raw_arguments=arguments,
@@ -616,7 +625,7 @@ class MessageAccumulator:
             chunk = chunk.model_copy(deep=True)
             for call in chunk.choice.delta.tool_calls:
                 if call.index not in ids:
-                    ids[call.index] = _unique_call_id(call.id, taken)
+                    ids[call.index] = _unique_call_id(call.id, request, taken)
                 call.id = ids[call.index]
             if content_filter is not None and chunk.choice.delta.content:
                 chunk.choice.delta.content = content_filter.process(

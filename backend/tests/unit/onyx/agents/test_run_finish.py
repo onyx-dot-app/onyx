@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -16,6 +16,7 @@ from onyx.agents.events import (
 )
 from onyx.agents.models import (
     ExecutionStatus,
+    PreparedStep,
     RunFailureKind,
     RunState,
     RunStatus,
@@ -39,11 +40,13 @@ from onyx.llm.model_response import (
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
+    Message,
     TextContent,
     ToolCall,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
+    UserMessage,
 )
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore, ScriptedLLM
@@ -330,7 +333,15 @@ def test_amendment_of_unknown_call_is_skipped() -> None:
     assert result is not None and result.text == "running"
 
 
-def test_an_amendment_reaches_its_call_when_the_provider_repeats_call_ids() -> None:
+def _without_tool_steps(messages: Sequence[Message]) -> list[Message]:
+    """The request as compaction leaves it: earlier steps' calls are gone."""
+    return [message for message in messages if isinstance(message, UserMessage)]
+
+
+@pytest.mark.parametrize("compacted", [False, True])
+def test_an_amendment_reaches_its_call_when_the_provider_repeats_call_ids(
+    compacted: bool,
+) -> None:
     repeated = Delta(
         tool_calls=[
             ChatCompletionDeltaToolCall(
@@ -360,9 +371,20 @@ def test_an_amendment_reaches_its_call_when_the_provider_repeats_call_ids() -> N
             )
         ],
         on_finish=close_first,
+        prepare_step=(
+            lambda _input: PreparedStep(assemble_messages=_without_tool_steps)
+        )
+        if compacted
+        else None,
     )
     run, _events, saved = _run(agent)
     assert run.status == RunStatus.COMPLETE
+    if compacted:
+        assert all(
+            message.role != "assistant"
+            for request in llm.requests
+            for message in request["prompt"]
+        )
     calls = [step.message.tool_calls[0] for step in saved[0].steps[:2]]
     assert calls[0].id != calls[1].id
     results = [

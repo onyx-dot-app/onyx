@@ -513,6 +513,8 @@ class Run:
         self._state = state
         self._history = history if history is not None else AgentState()
         self._token_counts: dict[str, int] = {}
+        # Tool call IDs of the conversation and this run; built on the first step.
+        self._tool_call_ids: set[str] | None = None
         self.cancellation_signal = cancellation_signal
         self._completed: Future[None] = Future()
         self._idle: Future[None] = Future()
@@ -1569,9 +1571,19 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         }
     )
     source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
+    call_ids = run._tool_call_ids
+    if call_ids is None:
+        call_ids = run._tool_call_ids = {
+            call.id
+            for message in source
+            if isinstance(message, AssistantMessage)
+            for call in message.tool_calls
+        }
+    # Compaction can leave calls out of the request; new calls must not reuse them.
+    reserved = frozenset(call_ids)
     request = _compact_context(
         run, llm, source, prepared, generation_context, tools=definitions
-    )
+    ).model_copy(update={"reserved_tool_call_ids": reserved})
     execution_options = request.options.model_copy(deep=True)
     message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
@@ -1670,7 +1682,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             generation_context,
             tools=definitions,
             force=True,
-        )
+        ).model_copy(update={"reserved_tool_call_ids": reserved})
         execution_options = request.options.model_copy(deep=True)
         with run.execution_lock:
             recorded_step.message = AssistantMessage(
@@ -1680,6 +1692,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
     with run.execution_lock:
         cancellation_signal.check()
         recorded_step.generation_status = ExecutionStatus.COMPLETE
+        call_ids.update(call.id for call in recorded_step.message.tool_calls)
         ended = MessageEndEvent(
             **run.event_context,
             message_id=message_id,
