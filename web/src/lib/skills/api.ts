@@ -1,3 +1,6 @@
+import * as yup from "yup";
+import { skillVersionSchema } from "@/lib/skills/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 /**
  * Thin client wrappers around the skills API.
  *
@@ -287,4 +290,34 @@ export async function deleteUserSkill(skillId: string): Promise<void> {
     method: "DELETE",
   });
   await handle<void>(res);
+}
+
+export async function listSkillVersions(skillId: string) {
+  const data = await handle<unknown>(
+    await fetch(SWR_KEYS.skillVersions(skillId))
+  );
+  return yup
+    .array(skillVersionSchema)
+    .defined()
+    .validateSync(data, { strict: true });
+}
+
+export async function previewSkillVersion(
+  skillId: string,
+  versionId: string
+): Promise<SkillBundleContents> {
+  return handle<SkillBundleContents>(
+    await fetch(SWR_KEYS.skillVersion(skillId, versionId))
+  );
+}
+
+export async function restoreSkillVersion(
+  skillId: string,
+  versionId: string
+): Promise<SkillEditableDetail> {
+  return handle<SkillEditableDetail>(
+    await fetch(`${SWR_KEYS.skillVersion(skillId, versionId)}/restore`, {
+      method: "POST",
+    })
+  );
 }

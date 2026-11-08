@@ -3,6 +3,8 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
+import * as yup from "yup";
+
 export type SkillInstallationPolicy = "AVAILABLE" | "DEFAULT" | "REQUIRED";
 
 export type SkillSource = "builtin" | "custom";
@@ -70,6 +72,7 @@ export interface Skill {
   external_app: SkillExternalAppDependency | null;
   marketplace: SkillMarketplace | null;
   retired_at: string | null;
+  current_version_number: number | null;
 }
 
 export type BuiltinSkill = Skill & {
@@ -142,3 +145,21 @@ export interface GitHubSkillsImportResult {
   imported: GitHubImportedSkill[];
   not_imported: GitHubSkillNotImported[];
 }
+
+export const skillVersionSchema = yup.object({
+  id: yup.string().defined(),
+  version_number: yup.number().integer().min(1).defined(),
+  created_at: yup.string().defined(),
+  created_by: yup
+    .object({
+      id: yup.string().defined(),
+      email: yup.string().defined(),
+    })
+    .nullable()
+    .defined(),
+  is_current: yup.boolean().defined(),
+  has_bundle: yup.boolean().defined(),
+  marketplace_revision: yup.string().nullable().defined(),
+});
+
+export type SkillVersion = yup.InferType<typeof skillVersionSchema>;

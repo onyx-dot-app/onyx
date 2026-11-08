@@ -266,6 +266,9 @@ export const SWR_KEYS = {
   marketplace: (id: string) => `/api/marketplaces/${encodeURIComponent(id)}`,
   userSkills: "/api/skills",
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
+  skillVersion: (skillId: string, versionId: string) =>
+    `/api/skills/custom/${skillId}/versions/${versionId}`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
 
