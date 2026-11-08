@@ -209,7 +209,9 @@ health calls are not retried.
 
 1. `isolation-is-service-job` **Isolation of `run_python` and `bash` is the
    service's job, not Onyx's.** Nothing in `backend/onyx` sandboxes the code
-   that they send or checks that the service does.
+   that they send or checks that the service does. Code mode programs are
+   different: Onyx runs them in its own sandbox
+   ([[#code-mode-sandbox-is-language-level]]).
    Onyx trusts the URL in `CODE_INTERPRETER_BASE_URL`. The "no network access"
    rule for bash sessions exists only as text. The model reads it in
    `coding_agent/tool_definitions.py:BASH_TOOL_DESCRIPTION` and the coding-agent
@@ -311,8 +313,8 @@ health calls are not retried.
     last expression the program has ended, so the error becomes the program's
     error. Sandbox values can share references (`x = [x, x]`), so an
     unbounded host walk would use host memory outside the sandbox limits.
-    `tools/tool_implementations/code_mode/sandbox.py:SandboxLimits` (constants)
-    bounds each cell: lifetime (`lifetime_seconds`, 900 s of wall
+    `tools/tool_implementations/code_mode/models.py:SandboxLimits` bounds each
+    cell: lifetime (`lifetime_seconds`, 900 s of wall
     clock, tool calls included), compute time, memory, tool calls
     (`max_tool_calls`, 100 per cell) and output. Compute time excludes time
     spent in tools, so the lifetime is the outer bound. The lifetime and the
@@ -409,7 +411,7 @@ health calls are not retried.
     direct tool calls (`tools/tool_implementations/mcp/mcp_tool.py:_tool_result_value`).
     `CustomToolCallSummary.structured_result` carries the server's structured
     content live, and is not saved or streamed. A server-reported tool failure
-    (`isError`) is an error result. `CodeModeResultSpec.schema` carries the tool's
+    (`isError`) is an error result. `CodeModeResultSpec.output_schema` carries the tool's
     stored `outputSchema` (`Tool.mcp_output_schema`, saved when the server's
     tools sync), and the stub declares its top level as a TypedDict. When the content is a model's
     JSON, the spec names the model (`CodeModeResultSpec.model`) and
