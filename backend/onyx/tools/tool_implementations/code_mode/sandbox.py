@@ -1110,7 +1110,10 @@ def _suspend(run: _Run, waiting: ProgramWaiting) -> ProgramSuspended | None:
 
 
 def _functions_module(run: _Run, stubs: str) -> ExternalModule:
-    """The `functions` module: every function of the program, typed by its stubs."""
+    """The `functions` module: every function of the program, typed by its stubs.
+
+    The pool builds it only in a session whose program imports it.
+    """
     return ExternalModule(
         {name: _function_reference(name) for name in run.callable_names},
         stubs=stubs,
@@ -1125,7 +1128,7 @@ def _checkout(
     resumed: bool,
     stubs: str,
     limits: ResourceLimits,
-    functions: ExternalModule,
+    functions: Callable[[], ExternalModule],
 ) -> Iterator[MontySession]:
     """Check out a worker; stop waiting once the run is cancelled or late.
 
@@ -1240,7 +1243,7 @@ def execute_program(
         )
 
     resource_limits = _resource_limits(limits)
-    functions = _functions_module(run, stubs)
+    functions = partial(_functions_module, run, stubs)
     # A dumped program that waits for its calls without a worker.
     suspended: ProgramSuspended | None = None
     try:
