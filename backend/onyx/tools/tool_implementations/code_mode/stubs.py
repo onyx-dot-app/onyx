@@ -464,12 +464,12 @@ def _render_function(
 _SCALAR_TYPES: dict[type, str] = {str: "str", int: "int", float: "float", bool: "bool"}
 
 
-def _python_type(annotation: object, nested: dict[str, type[BaseModel]]) -> str:
+def _python_type(annotation: object, nested: list[type[BaseModel]]) -> str:
     """A field's type as a stub annotation; models it names are added to `nested`."""
     if annotation is None or annotation is type(None):
         return "None"
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-        nested[annotation.__name__] = annotation
+        nested.append(annotation)
         return annotation.__name__
     if isinstance(annotation, type) and annotation in _SCALAR_TYPES:
         return _SCALAR_TYPES[annotation]
@@ -497,14 +497,14 @@ def model_declarations(model: type[BaseModel]) -> list[str]:
     `NotRequired` and its type has no None. A field description becomes the
     field's docstring.
     """
-    pending = {model.__name__: model}
-    rendered: dict[str, str] = {}
+    pending = [model]
+    rendered: dict[type[BaseModel], str] = {}
     while pending:
-        name, current = pending.popitem()
-        if name in rendered:
+        current = pending.pop()
+        if current in rendered:
             continue
-        nested: dict[str, type[BaseModel]] = {}
-        lines = [f"class {name}(TypedDict):"]
+        nested: list[type[BaseModel]] = []
+        lines = [f"class {current.__name__}(TypedDict):"]
         for field, info in current.model_fields.items():
             annotation = _python_type(info.annotation, nested)
             if info.exclude_if is not None:
@@ -515,9 +515,9 @@ def model_declarations(model: type[BaseModel]) -> list[str]:
             lines.append(f"    {field}: {annotation}")
             if info.description:
                 lines.append(f'    """{_docstring_text(info.description)}"""')
-        rendered[name] = "\n".join(lines)
-        pending.update(nested)
-    return [rendered[name] for name in sorted(rendered)]
+        rendered[current] = "\n".join(lines)
+        pending.extend(nested)
+    return sorted(rendered.values())
 
 
 def _model_result_type(spec: CodeModeResultSpec) -> StubResultType:
@@ -655,12 +655,16 @@ def build_tool_stubs(tools: Sequence[Tool]) -> ToolStubs:
     model_types = {
         id(tool): _model_result_type(tool.code_mode_result) for tool in tools
     }
-    declared_types = frozenset(
-        name
-        for result_type in model_types.values()
-        for declaration in result_type.declarations
-        for name in _DECLARED_TYPE.findall(declaration)
-    )
+    declarations: dict[str, str] = {}
+    for result_type in model_types.values():
+        for declaration in result_type.declarations:
+            for name in _DECLARED_TYPE.findall(declaration):
+                if declarations.setdefault(name, declaration) != declaration:
+                    raise ValueError(
+                        f"Two result models are named {name}; the stub module "
+                        "declares one TypedDict per name."
+                    )
+    declared_types = frozenset(declarations)
     named = unique_identifiers(
         tools,
         lambda tool: tool.code_mode_function_name.qualified,

@@ -3,11 +3,12 @@ import json
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, create_model
 
 from onyx.llm.models import ToolResult
 from onyx.tools.models import (
     CodeModeExposure,
+    CodeModeResultKind,
     CodeModeResultSpec,
     LlmPythonExecutionResult,
 )
@@ -555,3 +556,37 @@ def test_mcp_result_types_are_python_names_that_match_their_keys() -> None:
     [function] = build_tool_stubs([tool(compatibility)]).functions.values()
     assert function.declarations == ()
     assert ") -> dict[str, Any]:" in function.stub
+
+
+def _titled_item() -> type[BaseModel]:
+    class Item(BaseModel):
+        title: str
+
+    return Item
+
+
+def _linked_item() -> type[BaseModel]:
+    class Item(BaseModel):
+        url: str
+
+    return Item
+
+
+def test_result_models_with_one_name_are_rejected() -> None:
+    result = create_model(
+        "Result", first=(_titled_item(), ...), second=(_linked_item(), ...)
+    )
+
+    class _ModelTool(FakeTool):
+        @property
+        def code_mode_result(self) -> CodeModeResultSpec:
+            return CodeModeResultSpec(kind=CodeModeResultKind.JSON_OBJECT, model=result)
+
+    # Both Item models are declared, so neither is dropped without notice.
+    assert [d.splitlines()[0] for d in model_declarations(result)] == [
+        "class Item(TypedDict):",
+        "class Item(TypedDict):",
+        "class Result(TypedDict):",
+    ]
+    with pytest.raises(ValueError, match="Two result models are named Item"):
+        build_tool_stubs([_ModelTool("fetch", _unused)])
