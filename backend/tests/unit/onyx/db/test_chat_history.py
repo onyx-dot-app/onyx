@@ -172,7 +172,7 @@ class TestConvertChatHistory:
 
         assistant_msg = self._make_chat_message("final answer", MessageType.ASSISTANT)
         # A code mode call has no tool row; order comes from the saved tabs.
-        assistant_msg.tool_calls = [call(2, 1, 7), call(1, 0, None)]
+        assistant_msg.tool_calls = [call(1, 1, None), call(2, 0, 7)]
         history = capture_chat_history(
             cast(list[ChatMessage], [assistant_msg]),
             {7: "internal_search"},
@@ -184,8 +184,8 @@ class TestConvertChatHistory:
             if isinstance(message, ToolResultMessage)
         ]
         assert [(m.tool_call_id, m.tool_name) for m in results] == [
-            ("call-1", "unknown"),
             ("call-2", "internal_search"),
+            ("call-1", "unknown"),
         ]
 
 

@@ -419,12 +419,12 @@ def test_commits_follow_completion_order_and_saved_records_fold_to_the_same_stor
     assert c is not None and c.ordinal == b.ordinal + 1
 
 
-def test_parallel_execute_and_wait_fold_to_the_live_store() -> None:
+def test_same_step_execute_and_wait_fold_to_the_live_store() -> None:
     response = Response()
     response.run("yield_control()\nawait gate(value='x')\nstore('k', 'a')\n")
     # One step calls execute_code and wait_code; both see the same history. The
-    # wait reports A's commit, which completes before B's, but the model's order
-    # saves B's result first.
+    # calls run one after the other so that A's commit lands before B's, but the
+    # model's order saves B's result first.
     wait_invocation = response.invocation({"cell_id": 1, "yield_time_ms": 30_000})
     execute_invocation = response.invocation({"code": "store('k', 'b')\n"})
     response.gate.set()
