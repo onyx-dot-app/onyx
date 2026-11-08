@@ -451,7 +451,8 @@ class ResultSources(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # Every document the result gathered.
+    # The documents the result carries: every search result, or only the cited
+    # documents of a research result.
     documents: list[SearchDoc]
     # The documents to show for the call; a search can select a subset. None when
     # the call shows no documents of its own.
