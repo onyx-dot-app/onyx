@@ -34,6 +34,7 @@ function GroupCard({ group }: GroupCardProps) {
   const canManageMembers = can(group, "manage_members");
 
   async function handleRename(newName: string) {
+    if (!newName) return;
     try {
       await renameGroup(group.id, newName);
       await refreshGroupLists(mutate);

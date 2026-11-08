@@ -14,6 +14,9 @@ export type ReasoningEffortOverride =
   | "high"
   | "xhigh";
 
+/** A model name whose text the frontend owns, because it is translated. */
+export type ModelDisplayNameCode = "openai_decisions";
+
 export interface ModelConfiguration {
   id?: number;
   name: string;
@@ -46,14 +49,18 @@ export interface ModelConfiguration {
   is_router?: boolean;
   display_name?: string;
   /** Admin-set override that takes precedence over display_name everywhere in the UI. */
-  custom_display_name?: string;
+  custom_display_name?: string | null;
+  /** Set by the API for a model with a translated name, such as the OpenAI
+   *  decision model. Wins over display_name, not over custom_display_name. */
+  display_name_code?: ModelDisplayNameCode | null;
   provider_display_name?: string;
   vendor?: string;
   version?: string;
   region?: string;
   /**
    * Frontend-derived. Always populated by the SWR hooks before data reaches
-   * any consumer. Resolution order: custom_display_name → display_name → name.
+   * any consumer. Resolution order: custom_display_name → display_name_code
+   * label → display_name → name (`resolveModelDisplayName`).
    * Use this field everywhere a model name is rendered — never read
    * custom_display_name / display_name / name directly for display purposes.
    */
