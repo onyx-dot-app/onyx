@@ -1,4 +1,5 @@
 import { GroupedPacket } from "./hooks/packetProcessor";
+import { NestedCall } from "./packetHelpers";
 
 /**
  * Transformed step data ready for rendering
@@ -12,6 +13,8 @@ export interface TransformedStep {
   tabIndex: number;
   /** Raw packets for content rendering */
   packets: GroupedPacket["packets"];
+  /** Tool calls nested under the step, ordered by sub_turn_index */
+  nestedCalls: NestedCall[];
 }
 
 /**
@@ -33,6 +36,7 @@ export function transformPacketGroup(group: GroupedPacket): TransformedStep {
     turnIndex: group.turn_index,
     tabIndex: group.tab_index,
     packets: group.packets,
+    nestedCalls: group.nestedCalls,
   };
 }
 

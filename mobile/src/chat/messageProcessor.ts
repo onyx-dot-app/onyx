@@ -48,6 +48,7 @@ export interface ProcessedMessageState {
   toolGroupKeys: Set<string>;
   displayGroupKeys: Set<string>;
 
+  // Images from every image generation call, nested calls included, unique by file_id
   generatedImages: GeneratedImage[];
 
   finalAnswerComing: boolean;
@@ -315,10 +316,13 @@ function processPacket(state: ProcessedMessageState, packet: Packet): void {
     state.groupKeysWithSectionEnd.add(groupKey);
   }
 
-  const isFirstPacket = !state.groupedPacketsMap.get(groupKey);
   addPacketToGroup(state, packet, groupKey);
 
-  if (isFirstPacket) {
+  // Debug and control packets can precede the first rendered packet.
+  if (
+    !state.toolGroupKeys.has(groupKey) &&
+    !state.displayGroupKeys.has(groupKey)
+  ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
     }

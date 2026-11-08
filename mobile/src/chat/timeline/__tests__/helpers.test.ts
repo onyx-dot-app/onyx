@@ -53,6 +53,9 @@ describe("packetUtils / packetHelpers", () => {
   it("identifies display packets", () => {
     expect(isDisplayPacket(message)).toBe(true);
     expect(isDisplayPacket(reasoning)).toBe(false);
+    expect(
+      isDisplayPacket(makePlacedPacket({ type: "image_generation_start" })),
+    ).toBe(false);
   });
 
   it("has per-family predicates", () => {
@@ -66,7 +69,15 @@ describe("packetUtils / packetHelpers", () => {
     ).toBe(true);
     expect(
       isCodingAgentPackets([
-        makePlacedPacket({ type: "bash_tool_start", cmd: "ls" }),
+        makePlacedPacket({
+          type: "coding_agent_start",
+          query: "q",
+          repo: null,
+        }),
+        makePlacedPacket(
+          { type: "bash_tool_start", cmd: "ls" },
+          { turn_index: 0, sub_turn_index: 0 },
+        ),
       ]),
     ).toBe(true);
   });
@@ -105,5 +116,19 @@ describe("toolDisplay", () => {
     const parentEnd: Packet = makePlacedPacket({ type: "section_end" });
     expect(isToolComplete([researchStart, nestedEnd])).toBe(false);
     expect(isToolComplete([researchStart, parentEnd])).toBe(true);
+  });
+
+  it("does not end a coding agent on an error from a nested bash call", () => {
+    const codingStart: Packet = makePlacedPacket({
+      type: "coding_agent_start",
+      query: "fix",
+      repo: null,
+    });
+    const nestedError: Packet = makePlacedPacket(
+      { type: "error", message: "exit 1" },
+      { turn_index: 0, sub_turn_index: 0 },
+    );
+    expect(isToolComplete([codingStart, nestedError])).toBe(false);
+    expect(isCodingAgentPackets([nestedError])).toBe(false);
   });
 });

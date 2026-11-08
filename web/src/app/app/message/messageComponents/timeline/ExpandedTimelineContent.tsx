@@ -77,6 +77,7 @@ const TimelineStep = React.memo(function TimelineStep({
   return (
     <TimelineRendererComponent
       packets={step.packets}
+      nestedCalls={step.nestedCalls}
       chatState={chatState}
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}

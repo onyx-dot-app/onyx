@@ -24,7 +24,15 @@ function group(packets: Packet[]): TurnGroup[] {
     {
       turnIndex: 0,
       isParallel: false,
-      steps: [{ key: "0-0", turnIndex: 0, tabIndex: 0, packets }],
+      steps: [
+        {
+          key: "0-0",
+          turnIndex: 0,
+          tabIndex: 0,
+          packets,
+          nestedCalls: [],
+        },
+      ],
     },
   ];
 }
@@ -50,5 +58,19 @@ describe("useTimelineHeader", () => {
   it("keeps the pending header until a rendered packet arrives", () => {
     const { result } = renderHook(() => useTimelineHeader(group([debug])));
     expect(result.current.headerText).toBe("header.thinkingEllipsis.label");
+  });
+
+  it("shows image generation as an ordinary step", () => {
+    const { result } = renderHook(() =>
+      useTimelineHeader(
+        group([
+          {
+            placement: { turn_index: 0 },
+            obj: { type: PacketType.IMAGE_GENERATION_TOOL_START },
+          },
+        ])
+      )
+    );
+    expect(result.current.headerText).toBe("header.generatingImages.label");
   });
 });

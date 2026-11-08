@@ -129,16 +129,14 @@ function renderComplete(): boolean | undefined {
     ?.latestMessageRenderComplete;
 }
 
+afterEach(() => {
+  useChatSessionStore.setState({ currentSessionId: null, sessions: new Map() });
+  jest.useRealTimers();
+});
+
 describe("AgentMessage queue gate", () => {
   beforeEach(() => {
     seedSessionAwaitingAnswer();
-  });
-
-  afterEach(() => {
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
-    });
   });
 
   test("releases the gate when the latest answer arrives complete", async () => {
@@ -233,10 +231,6 @@ test("parallel search tabs complete independently", async () => {
     });
   } finally {
     view.unmount();
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
-    });
   }
 });
 
@@ -459,33 +453,6 @@ test("a timed out answer explains its deadline without claiming the user stopped
   await waitFor(() => expect(renderComplete()).toBe(true));
 });
 
-test.each([
-  StopReason.TIMED_OUT,
-  StopReason.USER_CANCELLED,
-  StopReason.FINISHED,
-])(
-  "a stopped response without an answer releases the render gate (%s)",
-  async (stopReason) => {
-    seedSessionAwaitingAnswer();
-    render(
-      <AgentMessage
-        rawPackets={[
-          {
-            placement,
-            obj: { type: PacketType.STOP, stop_reason: stopReason },
-          },
-        ]}
-        chatState={chatState}
-        nodeId={NEW_ANSWER_NODE_ID}
-        llmManager={null}
-        hideFooter
-        disableTTS
-      />
-    );
-    await waitFor(() => expect(renderComplete()).toBe(true));
-  }
-);
-
 test("generated images from earlier tool steps lead the answer once", async () => {
   seedSessionAwaitingAnswer();
   const image = {
@@ -537,10 +504,6 @@ test("generated images from earlier tool steps lead the answer once", async () =
     await waitFor(() => expect(renderComplete()).toBe(true));
   } finally {
     view.unmount();
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
-    });
   }
 });
 
@@ -652,11 +615,34 @@ test.each([
       await waitFor(() => expect(renderComplete()).toBe(true));
     } finally {
       view.unmount();
-      useChatSessionStore.setState({
-        currentSessionId: null,
-        sessions: new Map(),
-      });
     }
+  }
+);
+
+test.each([
+  StopReason.TIMED_OUT,
+  StopReason.USER_CANCELLED,
+  StopReason.FINISHED,
+])(
+  "a stopped response without an answer releases the render gate (%s)",
+  async (stopReason) => {
+    seedSessionAwaitingAnswer();
+    render(
+      <AgentMessage
+        rawPackets={[
+          {
+            placement,
+            obj: { type: PacketType.STOP, stop_reason: stopReason },
+          },
+        ]}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    await waitFor(() => expect(renderComplete()).toBe(true));
   }
 );
 
@@ -705,9 +691,5 @@ test("generated images remain visible when another tool follows answer text", as
     expect(renderComplete()).toBe(false);
   } finally {
     view.unmount();
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
-    });
   }
 });

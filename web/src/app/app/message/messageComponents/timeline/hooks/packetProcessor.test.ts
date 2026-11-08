@@ -890,6 +890,22 @@ describe("packetProcessor", () => {
       expect(result.finalAnswerComing).toBe(false);
     });
 
+    test("a tool whose debug packet arrives first resets finalAnswerComing", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createMessageStartPacket({ turn_index: 0 }),
+        createPacket(
+          PacketType.TOOL_CALL_DEBUG,
+          { turn_index: 1 },
+          { tool_call_id: "call-1", tool_name: "search", tool_args: {} }
+        ),
+        createSearchToolStartPacket({ turn_index: 1 }),
+      ];
+      const result = processPackets(state, packets);
+
+      expect(result.finalAnswerComing).toBe(false);
+    });
+
     test("REASONING_START does NOT reset finalAnswerComing (critical fix)", () => {
       const state = createInitialState(1);
       const packets = [
@@ -1224,21 +1240,27 @@ describe("packetProcessor", () => {
   });
 });
 
-describe("nested research packet ownership", () => {
-  test.each([PacketType.SECTION_END, PacketType.ERROR])(
-    "nested %s leaves the parent open until next turn or Stop",
-    (endType) => {
+describe("nested packet ownership", () => {
+  const parents = [
+    ["research agent", PacketType.RESEARCH_AGENT_START, { research_task: "R" }],
+    ["coding agent", PacketType.CODING_AGENT_START, { query: "q", repo: "r" }],
+  ] as const;
+  test.each(
+    parents.flatMap(([name, type, fields]) =>
+      [PacketType.SECTION_END, PacketType.ERROR].map(
+        (endType) => [name, endType, type, fields] as const
+      )
+    )
+  )(
+    "%s: nested %s leaves the parent open until next turn or Stop",
+    (_name, endType, parentType, parentFields) => {
       for (const closing of [
         createMessageStartPacket({ turn_index: 1 }),
         createStopPacket(),
       ]) {
         const nested = { turn_index: 0, sub_turn_index: 0 };
         const packets = [
-          createPacket(
-            PacketType.RESEARCH_AGENT_START,
-            { turn_index: 0 },
-            { research_task: "Research" }
-          ),
+          createPacket(parentType, { turn_index: 0 }, parentFields),
           createSearchToolStartPacket(nested),
           createPacket(endType, nested),
           createMessageStartPacket({ turn_index: 0, sub_turn_index: 1 }, 99),
