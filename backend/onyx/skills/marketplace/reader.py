@@ -152,6 +152,9 @@ def _has_components(
     for component_path in _COMPONENT_PATHS:
         require_regular_path(files, _join(root, component_path))
     mixed = any(m.get(c) for m in manifests for c in _COMPONENTS)
+    mixed |= any(
+        p.endswith(".md") and p.startswith(("agents/", "commands/")) for p in relative
+    )
     for manifest in manifests:
         experimental = manifest.get("experimental")
         if isinstance(experimental, dict):
@@ -242,6 +245,16 @@ def _plugin_skills(
     return _children(files, target)
 
 
+def _plugin_root(manifest: dict[str, JsonValue]) -> str:
+    metadata = manifest.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("Marketplace metadata must be an object")
+    plugin_root = metadata.get("pluginRoot", "")
+    if not isinstance(plugin_root, str):
+        raise ValueError("Invalid metadata.pluginRoot")
+    return archive_path(plugin_root)
+
+
 def read_marketplace_archive(
     data: bytes, folder: str | None = None
 ) -> CompleteMarketplace | FailedMarketplace:
@@ -267,13 +280,7 @@ def read_marketplace_archive(
             if manifest_path is None:
                 raise ValueError("Marketplace manifest is missing")
             manifest = _json(files, manifest_path)
-            metadata = manifest.get("metadata")
-            plugin_root = (
-                metadata.get("pluginRoot", "") if isinstance(metadata, dict) else ""
-            )
-            if not isinstance(plugin_root, str):
-                raise ValueError("Invalid metadata.pluginRoot")
-            plugin_root = archive_path(plugin_root)
+            plugin_root = _plugin_root(manifest)
             if not isinstance(manifest.get("name"), str) or not manifest["name"]:
                 raise ValueError("Marketplace name is missing")
             plugins = manifest.get("plugins")
@@ -318,7 +325,7 @@ def read_marketplace_archive(
                                 )
                         cache[path] = cached
                     entries.append(cache[path].model_copy(update={"entry_key": key}))
-            return CompleteMarketplace(entries=entries)
+            return CompleteMarketplace(entries=tuple(entries))
     except (
         ValueError,
         KeyError,

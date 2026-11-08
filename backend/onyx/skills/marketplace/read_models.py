@@ -31,7 +31,7 @@ class UnsupportedPlugin(_Result):
 
 class CompleteMarketplace(_Result):
     status: Literal["complete"] = "complete"
-    entries: list[ReadySkill | BlockedSkill | UnsupportedPlugin]
+    entries: tuple[ReadySkill | BlockedSkill | UnsupportedPlugin, ...]
 
 
 class FailedMarketplace(_Result):

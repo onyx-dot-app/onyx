@@ -35,7 +35,7 @@ from tests.unit.onyx.skills.marketplace_fixtures import (
 
 def _entries(
     files: dict[str, bytes], kind: str = "zip"
-) -> list[ReadySkill | BlockedSkill | UnsupportedPlugin]:
+) -> tuple[ReadySkill | BlockedSkill | UnsupportedPlugin, ...]:
     result = reader.read_marketplace_archive(_archive(files, kind))
     assert isinstance(result, CompleteMarketplace), result
     return result.entries
@@ -55,6 +55,7 @@ def test_formats_and_folder_scope(kind: str, manifest: str, wrapper: str) -> Non
     }
     result = reader.read_marketplace_archive(_archive(files, kind, wrapper), "team")
     assert isinstance(result, CompleteMarketplace)
+    assert isinstance(result.entries, tuple)
     assert [e.entry_key for e in result.entries] == ["tools/hello"]
     assert isinstance(result.entries[0], ReadySkill)
     assert result.entries[0].path == "team/skills/hello"
@@ -72,6 +73,11 @@ def test_formats_and_folder_scope(kind: str, manifest: str, wrapper: str) -> Non
         b"{}",
         b'{"name":"m","plugins":null}',
         b'{"name":"m","plugins":[],"plugins":[]}',
+        b'{"name":"m","plugins":[],"metadata":null}',
+        b'{"name":"m","plugins":[],"metadata":[]}',
+        b'{"name":"m","plugins":[],"metadata":"plugins"}',
+        b'{"name":"m","plugins":[],"metadata":false}',
+        b'{"name":"m","plugins":[],"metadata":0}',
     ],
 )
 def test_bad_manifest_never_falls_back(manifest: bytes) -> None:
@@ -90,7 +96,7 @@ def test_absent_manifest_and_precedence() -> None:
     )
     files = _files(skills=[])
     files[CODEX] = _catalog()
-    assert _entries(files) == []
+    assert _entries(files) == ()
     del files[CLAUDE]
     assert isinstance(_entries(files)[0], ReadySkill)
 
@@ -454,8 +460,11 @@ def test_experimental_components(fields: dict[str, JsonValue]) -> None:
 
 
 @pytest.mark.parametrize("folder", ["agents", "commands"])
-def test_metadata_without_markdown_is_not_a_component(folder: str) -> None:
-    files = _files()
+@pytest.mark.parametrize("declaration", [None, [], ""])
+def test_metadata_without_markdown_is_not_a_component(
+    folder: str, declaration: JsonValue
+) -> None:
+    files = _files(**({folder: declaration} if declaration is not None else {}))
     files[f"{folder}/openai.yaml"] = b"interface: {}"
     assert isinstance(_entries(files)[0], ReadySkill)
     files[f"{folder}/nested/run.md"] = b"Definition"

@@ -388,6 +388,8 @@ The library preview of an external-app skill calls the same renderer
     declared marketplace. Blocked keys retain their current version; a failed
     read cannot retire anything. Shared paths reuse bundle bytes. Unique output
     has a separate ceiling, including nested paths. Mixed plugins are unsupported.
+    Completed entries form an immutable snapshot. Present catalog metadata must
+    be an object. Empty declarations cannot hide agent or command Markdown files.
     See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
     This pure reader does not change the one-time GitHub import.
 
