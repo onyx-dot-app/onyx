@@ -17557,6 +17557,18 @@
     "cancel": "إلغاء",
     "working": "جارٍ العمل…",
     "requestSync": "طلب المزامنة",
-    "preview": "معاينة"
+    "preview": "معاينة",
+    "pending": "المزامنة معلقة",
+    "applied": "تم التطبيق",
+    "failed": "فشل",
+    "needs_confirmation": "يتطلب التأكيد",
+    "idle": "لم تتم المزامنة",
+    "personalScope": "شخصي",
+    "skillCounts": "المهارات النشطة: {live, number} · المتقاعدة: {retired, number}",
+    "source": "GitHub · {owner}/{repo} · {ref}",
+    "folderValue": "المجلد: {folder}",
+    "rootFolder": "جذر المستودع",
+    "revision": "المراجعة المطبقة: {revision}",
+    "lastSynced": "آخر مزامنة: {date}"
   }
 }

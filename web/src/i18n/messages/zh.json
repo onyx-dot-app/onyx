@@ -17557,6 +17557,18 @@
     "cancel": "取消",
     "working": "处理中…",
     "requestSync": "请求同步",
-    "preview": "预览"
+    "preview": "预览",
+    "pending": "等待同步",
+    "applied": "已应用",
+    "failed": "失败",
+    "needs_confirmation": "需要确认",
+    "idle": "未同步",
+    "personalScope": "个人",
+    "skillCounts": "{live, number} 个有效技能 · {retired, number} 个已停用",
+    "source": "GitHub · {owner}/{repo} · {ref}",
+    "folderValue": "文件夹：{folder}",
+    "rootFolder": "仓库根目录",
+    "revision": "已应用的修订：{revision}",
+    "lastSynced": "上次同步：{date}"
   }
 }

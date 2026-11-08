@@ -17557,6 +17557,18 @@
     "cancel": "Cancel",
     "working": "Working…",
     "requestSync": "Request sync",
-    "preview": "Preview"
+    "preview": "Preview",
+    "pending": "Sync pending",
+    "applied": "Applied",
+    "failed": "Failed",
+    "needs_confirmation": "Needs confirmation",
+    "idle": "Not synced",
+    "personalScope": "Personal",
+    "skillCounts": "{live, number} active skills · {retired, number} retired",
+    "source": "GitHub · {owner}/{repo} · {ref}",
+    "folderValue": "Folder: {folder}",
+    "rootFolder": "Repository root",
+    "revision": "Applied revision: {revision}",
+    "lastSynced": "Last synced: {date}"
   }
 }

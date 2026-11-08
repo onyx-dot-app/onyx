@@ -17557,6 +17557,18 @@
     "cancel": "キャンセル",
     "working": "処理中…",
     "requestSync": "同期をリクエスト",
-    "preview": "プレビュー"
+    "preview": "プレビュー",
+    "pending": "同期保留中",
+    "applied": "適用済み",
+    "failed": "失敗",
+    "needs_confirmation": "確認が必要",
+    "idle": "未同期",
+    "personalScope": "個人",
+    "skillCounts": "有効なスキル {live, number} · 廃止済み {retired, number}",
+    "source": "GitHub · {owner}/{repo} · {ref}",
+    "folderValue": "フォルダー: {folder}",
+    "rootFolder": "リポジトリのルート",
+    "revision": "適用済みリビジョン: {revision}",
+    "lastSynced": "最終同期: {date}"
   }
 }

@@ -17557,6 +17557,18 @@
     "cancel": "Abbrechen",
     "working": "Wird verarbeitet…",
     "requestSync": "Synchronisierung anfordern",
-    "preview": "Vorschau"
+    "preview": "Vorschau",
+    "pending": "Synchronisierung ausstehend",
+    "applied": "Angewendet",
+    "failed": "Fehlgeschlagen",
+    "needs_confirmation": "Bestätigung erforderlich",
+    "idle": "Nicht synchronisiert",
+    "personalScope": "Persönlich",
+    "skillCounts": "{live, number} aktive Skills · {retired, number} stillgelegt",
+    "source": "GitHub · {owner}/{repo} · {ref}",
+    "folderValue": "Ordner: {folder}",
+    "rootFolder": "Repository-Stammverzeichnis",
+    "revision": "Angewendete Revision: {revision}",
+    "lastSynced": "Zuletzt synchronisiert: {date}"
   }
 }

@@ -17557,6 +17557,18 @@
     "cancel": "Cancelar",
     "working": "Processando…",
     "requestSync": "Solicitar sincronização",
-    "preview": "Prévia"
+    "preview": "Prévia",
+    "pending": "Sincronização pendente",
+    "applied": "Aplicado",
+    "failed": "Falhou",
+    "needs_confirmation": "Requer confirmação",
+    "idle": "Não sincronizado",
+    "personalScope": "Pessoal",
+    "skillCounts": "{live, number} habilidades ativas · {retired, number} retiradas",
+    "source": "GitHub · {owner}/{repo} · {ref}",
+    "folderValue": "Pasta: {folder}",
+    "rootFolder": "Raiz do repositório",
+    "revision": "Revisão aplicada: {revision}",
+    "lastSynced": "Última sincronização: {date}"
   }
 }
