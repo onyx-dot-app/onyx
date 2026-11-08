@@ -38,7 +38,7 @@
   custom skills. It uses Opal multi-selection, disabled during bulk requests. Row activation
   opens the preview; checkbox activation changes selection without opening it.
   Admin search, count and bulk actions share a stable control region. It stacks on mobile.
-  The count changes from the filtered total to the selection count. Hidden action slots keep
+  The count appears only after a successful load and changes from the filtered total to the selection count. Hidden action slots keep
   search and table coordinates fixed when selection starts or clears. The personal toolbar stays separate.
   Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can

@@ -542,22 +542,24 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             }
           />
         )}
-        <Text
-          font={
-            admin && selectedItems.length > 0
-              ? "secondary-action"
-              : "secondary-body"
-          }
-          color={admin && selectedItems.length > 0 ? "text-05" : "text-03"}
-        >
-          {selectedItems.length > 0
-            ? bulkCopy("selected", {
-                count: selectedItems.length,
-              })
-            : admin
-              ? bulkCopy("total", { count: selectableItems.length })
-              : t("page.browse.title")}
-        </Text>
+        {!isLoading && !error && (
+          <Text
+            font={
+              admin && selectedItems.length > 0
+                ? "secondary-action"
+                : "secondary-body"
+            }
+            color={admin && selectedItems.length > 0 ? "text-05" : "text-03"}
+          >
+            {selectedItems.length > 0
+              ? bulkCopy("selected", {
+                  count: selectedItems.length,
+                })
+              : admin
+                ? bulkCopy("total", { count: selectableItems.length })
+                : t("page.browse.title")}
+          </Text>
+        )}
       </Section>
       {(admin || selectedItems.length > 0) && (
         <Section

@@ -517,6 +517,7 @@ describe("SkillsPage preference toggles", () => {
         screen.queryByText("No custom skills yet")
       ).not.toBeInTheDocument();
       expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      expect(screen.queryByText("0 skills")).not.toBeInTheDocument();
       if (error)
         expect(screen.getByText("Failed to load skills")).toBeVisible();
     }
