@@ -474,7 +474,10 @@ def test_concurrent_commits_together_stay_within_the_store_limits(
     waited = response.wait(1)
     assert _details(waited).status == "completed"
     assert _details(waited).commit is None
-    assert f"Store writes discarded because {reason}" in waited.content
+    assert (
+        f"Store writes discarded because other programs committed first, so {reason}"
+        in waited.content
+    )
     assert waited.content.rstrip().endswith(": a.")
     assert _details(response.run("[load('a'), load('b')]\n")).result == (
         f"[None, '{'y' * 60}']"

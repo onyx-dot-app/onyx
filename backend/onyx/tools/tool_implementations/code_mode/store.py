@@ -294,13 +294,15 @@ def commit_limit_error(
             if value is not None
         )
     )
-    return store_limit_error(
+    error = store_limit_error(
         before=before,
         after=after,
         committed=current.committed_bytes
         + sum(entry_bytes(key, value) for key, value in writes.items()),
         stores_values=any(value is not None for value in writes.values()),
     )
+    # Each store() call passed, so the cause is what other programs committed.
+    return None if error is None else f"other programs committed first, so {error}"
 
 
 def store_summary(writes: Mapping[str, JsonValue]) -> str | None:
