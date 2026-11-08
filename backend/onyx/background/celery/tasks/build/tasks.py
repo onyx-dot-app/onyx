@@ -11,9 +11,17 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.sandbox import any_sandbox_exists
+from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    ENABLE_CRAFT,
+    SANDBOX_BACKEND,
+    SANDBOX_IDLE_TIMEOUT_SECONDS,
+    SandboxBackend,
+)
 from onyx.server.features.build.db.sandbox import (
     get_latest_snapshot_for_session,
     get_running_sandboxes,
@@ -42,6 +50,32 @@ def _check_cleanup_lease(lock: CacheLock, deadline: float) -> None:
     if not lock.owned():
         raise CacheLockLostError("Sandbox cleanup lease lost")
     lock.extend(SESSION_FLOW_LOCK_LEASE_SECONDS)
+
+
+def _no_reachable_sandbox_backend() -> bool:
+    """Craft can't be on, the Kubernetes backend has no config, and no sandbox exists.
+
+    Building the sandbox manager there fails on every tick (#16580). Nothing is
+    lost by skipping: without a kube-config no cluster resource can be listed or
+    deleted, and the sweep (including orphan-resource reconciliation) runs again
+    as soon as a config is present. The Docker backend is never skipped.
+    """
+    if (
+        ENABLE_CRAFT
+        or SANDBOX_BACKEND != SandboxBackend.KUBERNETES
+        or not isinstance(get_default_feature_flag_provider(), NoOpFeatureFlagProvider)
+    ):
+        return False
+    from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
+        kube_config_available,
+    )
+
+    if kube_config_available():
+        return False
+    # A deployment that has sandbox rows used Craft, so a missing kube-config
+    # there is a real misconfiguration and should keep surfacing.
+    with get_session_with_current_tenant() as db_session:
+        return not any_sandbox_exists(db_session)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -79,9 +113,12 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         timeout=SESSION_FLOW_LOCK_LEASE_SECONDS,
     )
 
-    # Prevent overlapping runs of this task
-    if not lock.acquire(blocking=False):
-        task_logger.info("cleanup_idle_sandboxes_task - lock not acquired, skipping")
+    # Skip when there is no sandbox backend to sweep, and prevent overlapping
+    # runs of this task.
+    if _no_reachable_sandbox_backend() or not lock.acquire(blocking=False):
+        task_logger.info(
+            "cleanup_idle_sandboxes_task - no sandbox backend or lock not acquired, skipping"
+        )
         return
 
     try:
