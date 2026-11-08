@@ -63,7 +63,7 @@ prompt holds and the compaction prompt text.
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
        before_tool_call / after_tool_call / on_finish / on_suspend hooks)
-  start() -> Run (one request, optional step budget, own cancellation signal)
+  start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
           ToolBatch only waits on ChildRunWait
@@ -77,11 +77,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 ```
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
-  (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
-  passes `MAX_LLM_CYCLES`. `Agent.start(deadline_at=...)` arms a timer that
-  cancels the run with the `deadline` reason
-  (`llm/cancellation.py:CancellationSignal.cancel`); the first reason wins, so
-  `Run._finish` records a `DEADLINE` failure only for a run the timer stopped.
+  (`_advance_step`).
 - `Agent.on_finish` runs once at the end of every run, without the execution
   lock, with the run's recorded tool results.
   `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
