@@ -3,6 +3,7 @@
 import gzip
 import io
 import stat
+import sys
 import tarfile
 import zipfile
 from collections.abc import Buffer, Callable, Iterator
@@ -15,7 +16,7 @@ ARCHIVE_MAX_BYTES = 25 * 1024 * 1024
 ARCHIVE_MAX_ENTRIES = 10_000
 ARCHIVE_PATH_MAX_BYTES = 4096
 ARCHIVE_PATH_MAX_DEPTH = 64
-ARCHIVE_PATHS_MAX_BYTES = 25 * 1024 * 1024
+ARCHIVE_INDEX_MAX_BYTES = 25 * 1024 * 1024
 MANIFEST_MAX_BYTES = 1024 * 1024
 # Independent processing ceilings, not per-skill validation limits.
 EXPANDED_MAX_BYTES = 1024 * 1024 * 1024
@@ -172,7 +173,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
             archive = stack.enter_context(tarfile.open(fileobj=buffered, mode="r:"))
         files: ArchiveFiles = {}
         paths: set[str] = set()
-        path_bytes = 0
+        index_bytes = 0
         directories: set[str] = set()
         budget = _ReadBudget()
         members = (
@@ -184,25 +185,30 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                     f"Archive exceeds {ARCHIVE_MAX_ENTRIES} entries"
                 )
             if isinstance(member, zipfile.ZipInfo):
-                name, is_dir = member.orig_filename, member.is_dir()
+                name = member.orig_filename
                 mode = stat.S_IFMT(member.external_attr >> 16)
                 regular = mode in (0, stat.S_IFREG, stat.S_IFDIR)
+                is_dir = member.is_dir() and regular
             else:
                 name, is_dir = member.name, member.isdir()
                 regular = member.isfile() and not member.issparse() or is_dir
+                index_bytes += sys.getsizeof(member.pax_headers) + sum(
+                    len(key.encode()) + len(value.encode())
+                    for key, value in member.pax_headers.items()
+                )
             path = archive_path(name)
+            if path in paths or (not is_dir and path in directories):
+                raise ValueError(f"Duplicate or conflicting archive path: {path}")
+            parents = {path.rsplit("/", i)[0] for i in range(1, path.count("/") + 1)}
+            index_bytes += len(path.encode()) + sum(
+                len(parent.encode()) for parent in parents - directories
+            )
+            if index_bytes > ARCHIVE_INDEX_MAX_BYTES:
+                raise ArchiveLimitError("Archive index is too large")
             if not path:
                 if is_dir:
                     continue
                 raise ValueError(f"Empty archive member: {name!r}")
-            if path in paths or (not is_dir and path in directories):
-                raise ValueError(f"Duplicate or conflicting archive path: {path}")
-            parents = {path.rsplit("/", i)[0] for i in range(1, path.count("/") + 1)}
-            path_bytes += len(path.encode()) + sum(
-                len(parent.encode()) for parent in parents - directories
-            )
-            if path_bytes > ARCHIVE_PATHS_MAX_BYTES:
-                raise ArchiveLimitError("Archive path index is too large")
             if parents.intersection(files):
                 raise ValueError(f"Conflicting archive path: {path}")
             paths.add(path)

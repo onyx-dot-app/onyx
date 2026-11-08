@@ -1,6 +1,7 @@
 import gzip
 import io
 import stat
+import sys
 import tarfile
 import zipfile
 from contextlib import nullcontext
@@ -245,9 +246,65 @@ def test_path_index_budget_and_path_boundaries(
     ):
         pass
     data = _archive({"alpha/x": b"x", "alpha/y": b"y"}, kind)
-    monkeypatch.setattr(archives, "ARCHIVE_PATHS_MAX_BYTES", 19)
+    overhead = 2 * sys.getsizeof({}) if kind == "tar" else 0
+    monkeypatch.setattr(archives, "ARCHIVE_INDEX_MAX_BYTES", 19 + overhead)
     with archives.archive_files(data) as files:
         assert len(files) == 2
-    monkeypatch.setattr(archives, "ARCHIVE_PATHS_MAX_BYTES", 18)
+    monkeypatch.setattr(archives, "ARCHIVE_INDEX_MAX_BYTES", 18 + overhead)
     with pytest.raises(archives.ArchiveLimitError), archives.archive_files(data):
+        pass
+
+
+@pytest.mark.parametrize("root_directory", [False, True])
+def test_global_pax_metadata_is_bounded_per_retained_member(
+    root_directory: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = io.BytesIO()
+    with tarfile.open(
+        fileobj=out, mode="w:gz", pax_headers={"comment": "x" * 100}
+    ) as archive:
+        for name in ("a", "b", "c"):
+            member = tarfile.TarInfo("." if root_directory else name)
+            if root_directory:
+                member.type = tarfile.DIRTYPE
+            archive.addfile(member)
+    monkeypatch.setattr(archives, "ARCHIVE_INDEX_MAX_BYTES", 700)
+    with (
+        pytest.raises(archives.ArchiveLimitError),
+        archives.archive_files(out.getvalue()),
+    ):
+        pass
+
+
+def test_github_global_pax_commit_is_supported() -> None:
+    out = io.BytesIO()
+    with tarfile.open(
+        fileobj=out, mode="w:gz", pax_headers={"comment": "a" * 40}
+    ) as archive:
+        member = tarfile.TarInfo("repo/SKILL.md")
+        member.size = 5
+        archive.addfile(member, io.BytesIO(b"skill"))
+    with archives.archive_files(out.getvalue()) as files:
+        opener = files["repo/SKILL.md"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.read() == b"skill"
+
+
+@pytest.mark.parametrize("children_first", [True, False])
+def test_zip_symlink_with_directory_suffix_cannot_contain_files(
+    children_first: bool,
+) -> None:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        link = zipfile.ZipInfo("skills/")
+        link.create_system = 3
+        link.external_attr = stat.S_IFLNK << 16
+        if children_first:
+            archive.writestr("skills/hello/SKILL.md", b"skill")
+        archive.writestr(link, "elsewhere")
+        if not children_first:
+            archive.writestr("skills/hello/SKILL.md", b"skill")
+    with pytest.raises(ValueError), archives.archive_files(out.getvalue()):
         pass

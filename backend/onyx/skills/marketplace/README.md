@@ -6,7 +6,7 @@ one-time GitHub import or expose a marketplace API.
 ## Resource limits
 
 Repository input keeps the 25 MiB compressed limit and 10,000 entry limit.
-Each skill separately keeps the upload limits: 25 MiB ZIP, 500 files,
+Each skill separately keeps the default upload limits: 25 MiB ZIP, 500 files,
 25 MiB per file, and 100 MiB unpacked.
 
 The archive reader also has independent processing safeguards:
@@ -21,8 +21,10 @@ The archive reader also has independent processing safeguards:
 - One tar extension header and each JSON manifest may use at most 1 MiB.
   Member data reads use the shared member budget after metadata parsing finishes.
 - Paths have at most 64 segments and 4,096 UTF-8 bytes. The stored path and
-  parent-prefix index has a 25 MiB byte ceiling. These limits apply before
-  unbounded prefix allocation.
+  parent-prefix index shares a 25 MiB ceiling with retained TAR PAX metadata.
+  Each member charges its metadata dictionary size and UTF-8 keys and values.
+  Global headers count for every copy, including GitHub commit headers.
+  Path limits apply before unbounded prefix allocation.
 
 The 1 GiB ceiling permits ten full 100 MiB skills plus tar overhead.
 It bounds temporary disk and decompression work for highly compressed inputs.
