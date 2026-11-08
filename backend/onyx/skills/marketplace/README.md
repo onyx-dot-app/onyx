@@ -11,6 +11,9 @@ Each skill separately keeps the default upload limits: 25 MiB ZIP, 500 files,
 
 The archive reader also has independent processing safeguards:
 
+- ZIP directory metadata reads are capped at 1 MiB before parsing. Larger
+  directories fail even within the entry limit. Only stored and deflated ZIP
+  members are supported; other compression methods fail before member reads.
 - A gzip stream may expand to at most 1 GiB, including tar headers, padding,
   and unrelated files. The reader inflates it once into a temporary spool.
   Only the first 1 MiB stays in memory; larger spools use temporary disk.
@@ -19,7 +22,7 @@ The archive reader also has independent processing safeguards:
   ZIP members outside the selected marketplace need no inflation. All supported
   stream reads, including readinto, lines and iteration, use that budget.
 - One stream call returns at most 4 MiB. An unsized read, a larger sized read,
-  one line, or unsized `readlines` fails if the member data is longer. It does
+  one line, or `readlines` fails if its result would be longer. It does
   not truncate the result. Callers must read larger members in chunks.
   `read1` may return less, and `readinto` fills larger buffers in steps.
 - TAR metadata reads share a 16 MiB budget during enumeration, including chained

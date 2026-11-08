@@ -409,6 +409,46 @@ def _extension(header_type: bytes, body: bytes) -> bytes:
     return info.tobuf() + body + b"\0" * (-len(body) % 512)
 
 
+def test_zip_metadata_is_bounded_before_entry_parsing() -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        for index in range(24_000):
+            archive.writestr(str(index), b"")
+    with pytest.raises(archives.ArchiveLimitError, match="ZIP metadata"):
+        with archives.archive_files(output.getvalue()):
+            pass
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_LZMA, zipfile.ZIP_BZIP2])
+def test_zip_compression_with_extra_allocation_is_rejected(compression: int) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=compression) as archive:
+        archive.writestr("a", b"content")
+    with pytest.raises(archives.ArchiveLimitError, match="ZIP compression"):
+        with archives.archive_files(output.getvalue()):
+            pass
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+def test_readlines_preserves_binary_lines_and_bounds_hints(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(archives, "MEMBER_CALL_MAX_BYTES", 8)
+    content = b"a\rb\r\nc\nd"
+    with archives.archive_files(
+        _archive({"a": content, "b": b"1234567\n" * 2}, kind)
+    ) as files:
+        small, large = files["a"], files["b"]
+        assert small is not None and large is not None
+        with small() as stream:
+            assert stream.readlines() == io.BytesIO(content).readlines()
+        with large() as stream:
+            assert stream.readlines(1) == [b"1234567\n"]
+            assert stream.read() == b"1234567\n"
+        with large() as stream, pytest.raises(archives.ArchiveLimitError):
+            stream.readlines(8)
+
+
 @pytest.mark.parametrize(
     "header_type", [tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.GNUTYPE_LONGNAME]
 )

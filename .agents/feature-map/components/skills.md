@@ -372,7 +372,9 @@ The library preview of an external-app skill calls the same renderer
 21. `marketplace-processing-limits` **Archive processing has separate read and index limits.**
     `skills/marketplace/archive.py:archive_files` bounds gzip expansion and member
     reads separately from skill limits. Every supported stream read charges the
-    shared byte budget. Path depth, path bytes and the aggregate parent index
+    shared byte budget. ZIP metadata reads are bounded before directory parsing;
+    only stored and deflated members are supported. Path depth, path bytes and
+    the aggregate parent index
     are bounded before retained path allocations can grow without limit.
     The index budget also counts each retained TAR PAX dictionary and its text
     objects; global headers must not multiply retained metadata without a limit.

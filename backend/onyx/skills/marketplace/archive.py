@@ -17,6 +17,7 @@ ARCHIVE_MAX_ENTRIES = 10_000
 ARCHIVE_PATH_MAX_BYTES = 4096
 ARCHIVE_PATH_MAX_DEPTH = 64
 ARCHIVE_INDEX_MAX_BYTES = 25 * 1024 * 1024
+ZIP_METADATA_MAX_BYTES = 1024 * 1024
 TAR_METADATA_MAX_BYTES = 16 * 1024 * 1024
 # Bounds header chains, parser recursion and parsed metadata per TAR member.
 TAR_MEMBER_METADATA_MAX_BYTES = 32 * 1024
@@ -110,7 +111,8 @@ class _MemberReader(io.BufferedIOBase):
     def readline(self, size: int | None = -1, /) -> bytes:
         if size is None or size < 0 or size > MEMBER_CALL_MAX_BYTES:
             size = MEMBER_CALL_MAX_BYTES + 1
-        line = super().readline(size)
+        line = self.source.readline(min(size, self.budget.remaining + 1))
+        self.budget.consume(len(line))
         if len(line) > MEMBER_CALL_MAX_BYTES:
             raise ArchiveLimitError(
                 f"Archive member read exceeds {MEMBER_CALL_MAX_BYTES} bytes per call"
@@ -118,9 +120,16 @@ class _MemberReader(io.BufferedIOBase):
         return line
 
     def readlines(self, hint: int | None = -1, /) -> list[bytes]:
-        if hint is not None and 0 < hint <= MEMBER_CALL_MAX_BYTES:
-            return super().readlines(hint)
-        return self.read().splitlines(keepends=True)
+        lines: list[bytes] = []
+        size = 0
+        while line := self.readline(MEMBER_CALL_MAX_BYTES - size + 1):
+            size += len(line)
+            if size > MEMBER_CALL_MAX_BYTES:
+                raise ArchiveLimitError("Archive member lines exceed the call limit")
+            lines.append(line)
+            if hint is not None and 0 < hint < size:
+                break
+        return lines
 
     def readable(self) -> bool:
         return self.source.readable()
@@ -139,6 +148,20 @@ class _MemberReader(io.BufferedIOBase):
             self.source.close()
         finally:
             super().close()
+
+
+class _ZipReader(io.BytesIO):
+    metadata_reads = True
+
+    def read(self, size: int | None = -1, /) -> bytes:
+        if self.metadata_reads:
+            with self.getbuffer() as view:
+                requested = (
+                    view.nbytes - self.tell() if size is None or size < 0 else size
+                )
+            if requested > ZIP_METADATA_MAX_BYTES:
+                raise ArchiveLimitError("Archive ZIP metadata is too large")
+        return super().read(size)
 
 
 class _TarReader(io.BufferedReader):
@@ -187,12 +210,14 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
     if len(data) > ARCHIVE_MAX_BYTES:
         raise ArchiveLimitError(f"Archive exceeds {ARCHIVE_MAX_BYTES} bytes")
     with ExitStack() as stack:
-        source = stack.enter_context(io.BytesIO(data))
+        source = stack.enter_context(_ZipReader(data))
         archive: zipfile.ZipFile | tarfile.TarFile
         buffered: _TarReader | None = None
         if zipfile.is_zipfile(source):
             archive = stack.enter_context(zipfile.ZipFile(source))
+            source.metadata_reads = False
         else:
+            source.metadata_reads = False
             source.seek(0)
             expanded = stack.enter_context(
                 SpooledTemporaryFile(max_size=SPOOL_MEMORY_BYTES)
@@ -228,6 +253,11 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                     f"Archive exceeds {ARCHIVE_MAX_ENTRIES} entries"
                 )
             if isinstance(member, zipfile.ZipInfo):
+                if member.compress_type not in (
+                    zipfile.ZIP_STORED,
+                    zipfile.ZIP_DEFLATED,
+                ):
+                    raise ArchiveLimitError("Archive ZIP compression is not supported")
                 name = member.orig_filename
                 mode = stat.S_IFMT(member.external_attr >> 16)
                 regular = mode in (0, stat.S_IFREG, stat.S_IFDIR)
@@ -244,9 +274,13 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                     for key, value in member.pax_headers.items()
                 )
             path = archive_path(name)
-            if path in paths or (not is_dir and path in directories):
-                raise ValueError(f"Duplicate or conflicting archive path: {path}")
             parents = {path.rsplit("/", i)[0] for i in range(1, path.count("/") + 1)}
+            if (
+                path in paths
+                or (not is_dir and path in directories)
+                or parents.intersection(files)
+            ):
+                raise ValueError(f"Duplicate or conflicting archive path: {path}")
             index_bytes += len(path.encode()) + sum(
                 len(parent.encode()) for parent in parents - directories
             )
@@ -256,8 +290,6 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                 if is_dir:
                     continue
                 raise ValueError(f"Empty archive member: {name!r}")
-            if parents.intersection(files):
-                raise ValueError(f"Conflicting archive path: {path}")
             paths.add(path)
             directories.update(parents)
             if is_dir:
