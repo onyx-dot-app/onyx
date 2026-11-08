@@ -61,6 +61,9 @@ interface DisconnectTarget {
   image_provider_id: string;
   title: string;
   llmProviderOwned: boolean;
+  /** Whether it was the default when the confirm opened. Fixed, so the copy
+   *  does not change when the refetch lands while the card fades out. */
+  isDefault: boolean;
 }
 
 function linkedModelTitle(model: ImageGenerationProviderModel): string {
@@ -376,9 +379,7 @@ export default function ImageGenerationContent() {
   };
 
   // Compute replacement options when disconnecting an active provider
-  const isDisconnectingDefault =
-    disconnectProvider &&
-    defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
+  const isDisconnectingDefault = disconnectProvider?.isDefault;
 
   const replacementGroups = useMemo(() => {
     if (!disconnectProvider) return [];
@@ -509,6 +510,8 @@ export default function ImageGenerationContent() {
                         image_provider_id: imageProviderId,
                         title,
                         llmProviderOwned: config.llm_provider_owned,
+                        isDefault:
+                          defaultConfig?.image_provider_id === imageProviderId,
                       });
                       setReplacementProviderId(null);
                       disconnectModal.toggle(true);

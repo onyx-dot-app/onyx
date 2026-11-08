@@ -145,9 +145,9 @@ function ExportBadge({ status }: { status: TaskStatus }) {
 }
 
 function PreviousQueryHistoryExportsModal({
-  setShowModal,
+  onClose,
 }: {
-  setShowModal: Dispatch<SetStateAction<boolean>>;
+  onClose: () => void;
 }) {
   const t = useTranslations("admin.queryHistory");
   const locale = useLocale();
@@ -182,12 +182,12 @@ function PreviousQueryHistoryExportsModal({
   );
 
   return (
-    <Modal open onOpenChange={() => setShowModal(false)}>
+    <Modal open onOpenChange={onClose}>
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgFileText}
           title={t("exportsModal.header.title")}
-          onClose={() => setShowModal(false)}
+          onClose={onClose}
         />
         <Modal.Body>
           <Table>
@@ -380,7 +380,7 @@ export function QueryHistoryTable({
 
       <exportsModal.Provider>
         <PreviousQueryHistoryExportsModal
-          setShowModal={() => exportsModal.toggle(false)}
+          onClose={() => exportsModal.toggle(false)}
         />
       </exportsModal.Provider>
     </>

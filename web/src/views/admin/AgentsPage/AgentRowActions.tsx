@@ -73,6 +73,9 @@ export default function AgentRowActions({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const deleteModal = useCreateModal();
   const featuredModal = useCreateModal();
+  // The featured state the confirm was opened for. The list refetches before
+  // the card finishes fading out, which would flip its copy mid-exit.
+  const [wasFeatured, setWasFeatured] = useState(agent.is_featured);
   const unlistModal = useCreateModal();
 
   async function handleAction(action: () => Promise<void>, close: () => void) {
@@ -223,6 +226,7 @@ export default function AgentRowActions({
                   }
                   onClick={() => {
                     setMenuOpen(false);
+                    setWasFeatured(agent.is_featured);
                     featuredModal.toggle(true);
                   }}
                 />
@@ -291,9 +295,9 @@ export default function AgentRowActions({
 
       <featuredModal.Provider>
         <ConfirmationModalLayout
-          icon={agent.is_featured ? SvgStarOff : SvgStar}
+          icon={wasFeatured ? SvgStarOff : SvgStar}
           title={
-            agent.is_featured
+            wasFeatured
               ? t("featuredModal.removeHeader.title", { name: agent.name })
               : t("featuredModal.addHeader.title", { name: agent.name })
           }
@@ -303,12 +307,12 @@ export default function AgentRowActions({
               disabled={isSubmitting}
               onClick={() => {
                 handleAction(
-                  () => toggleAgentFeatured(agent.id, agent.is_featured),
+                  () => toggleAgentFeatured(agent.id, wasFeatured),
                   () => featuredModal.toggle(false)
                 );
               }}
             >
-              {agent.is_featured
+              {wasFeatured
                 ? t("featuredModal.unfeatureButton.label")
                 : t("featuredModal.featureButton.label")}
             </Button>
@@ -316,7 +320,7 @@ export default function AgentRowActions({
         >
           <div className="flex flex-col gap-2">
             <Text as="p" color="text-03">
-              {agent.is_featured
+              {wasFeatured
                 ? t("featuredModal.removeBody.description", {
                     name: agent.name,
                   })

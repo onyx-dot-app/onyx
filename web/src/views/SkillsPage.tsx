@@ -375,6 +375,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const selectedItems = selectableItems.filter((item) =>
     selectedIds.has(item.id)
   );
+  // The skills the bulk-delete confirm lists. Snapshotted on open: the
+  // selection clears when the delete lands, while the card still fades out.
+  const [bulkDeleteTargets, setBulkDeleteTargets] = useState(selectedItems);
   const canManageSelected =
     selectedItems.length > 0 &&
     selectedItems.every(
@@ -687,8 +690,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                                                   .installation_policy ===
                                                 "REQUIRED"
                                             )),
-                                        onSelect: () =>
-                                          bulkDeleteModal.toggle(true),
+                                        onSelect: () => {
+                                          setBulkDeleteTargets(selectedItems);
+                                          bulkDeleteModal.toggle(true);
+                                        },
                                       },
                                     ],
                                   },
@@ -799,9 +804,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       <bulkDeleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgAlertTriangle}
-          title={bulkCopy("deleteTitle", { count: selectedItems.length })}
+          title={bulkCopy("deleteTitle", { count: bulkDeleteTargets.length })}
           description={bulkCopy("deleteDescription", {
-            count: selectedItems.length,
+            count: bulkDeleteTargets.length,
           })}
           onClose={() => {
             if (!bulkBusy) bulkDeleteModal.toggle(false);
@@ -823,7 +828,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             gap={2}
             className="max-h-60 overflow-y-auto"
           >
-            {selectedItems.map((item) => (
+            {bulkDeleteTargets.map((item) => (
               <Section
                 key={item.id}
                 role="listitem"

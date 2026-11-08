@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { cn } from "@opal/utils";
 import { useCreateModal } from "@opal/components";
 import { ChatFileType, FileDescriptor } from "@/app/app/types";
@@ -48,10 +48,15 @@ export default function FileDisplay({ files }: FileDisplayProps) {
     (file) => file.type === ChatFileType.TABULAR
   );
 
-  const presentingDocument: MinimalOnyxDocument = {
-    document_id: previewingFile?.id ?? "",
-    semantic_identifier: previewingFile?.name ?? "",
-  };
+  // Stable per file: PreviewModal refetches when this object changes, which
+  // would reload the closing card on every rerender.
+  const presentingDocument = useMemo<MinimalOnyxDocument>(
+    () => ({
+      document_id: previewingFile?.id ?? "",
+      semantic_identifier: previewingFile?.name ?? "",
+    }),
+    [previewingFile]
+  );
 
   return (
     <>

@@ -82,34 +82,43 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
     }
   };
 
+  // Rendered first in both branches, so deleting the last guild keeps the
+  // confirm mounted while it animates out.
+  const deleteConfirm = (
+    <deleteModal.Provider>
+      {guildToDelete && (
+        <ConfirmEntityModal
+          danger
+          entityType={t("guilds.deleteModal.entityType")}
+          entityName={
+            guildToDelete.guild_name ||
+            t("guilds.fallbackName", { id: guildToDelete.id })
+          }
+          onClose={() => deleteModal.toggle(false)}
+          onSubmit={() => handleDelete(guildToDelete.id)}
+          additionalDetails={t("guilds.deleteModal.additionalDetails")}
+        />
+      )}
+    </deleteModal.Provider>
+  );
+
   if (guilds.length === 0) {
     return (
-      <EmptyMessageCard
-        sizePreset="main-ui"
-        icon={SvgServer}
-        title={t("guilds.empty.title")}
-        description={t("guilds.empty.description")}
-      />
+      <>
+        {deleteConfirm}
+        <EmptyMessageCard
+          sizePreset="main-ui"
+          icon={SvgServer}
+          title={t("guilds.empty.title")}
+          description={t("guilds.empty.description")}
+        />
+      </>
     );
   }
 
   return (
     <>
-      <deleteModal.Provider>
-        {guildToDelete && (
-          <ConfirmEntityModal
-            danger
-            entityType={t("guilds.deleteModal.entityType")}
-            entityName={
-              guildToDelete.guild_name ||
-              t("guilds.fallbackName", { id: guildToDelete.id })
-            }
-            onClose={() => deleteModal.toggle(false)}
-            onSubmit={() => handleDelete(guildToDelete.id)}
-            additionalDetails={t("guilds.deleteModal.additionalDetails")}
-          />
-        )}
-      </deleteModal.Provider>
+      {deleteConfirm}
       <Table>
         <TableHeader>
           <TableRow>
