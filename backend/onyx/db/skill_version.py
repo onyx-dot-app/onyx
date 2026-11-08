@@ -23,7 +23,7 @@ from onyx.db.resource_version import (
     repair_version_metadata,
     write_resource_version,
 )
-from onyx.db.skill_mutation import assert_skill_mutable
+from onyx.db.skill_mutation import assert_skill_content_editable
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -250,12 +250,13 @@ def save_skill_version(
 ) -> list[str]:
     """Returns the bundle files to delete after commit: pruned bundles and the
     staged upload when the current version is reused."""
+    assert_skill_content_editable(skill)
     if not initial and prepared is None:
         prepared = prepare_skill_version_write(skill, ingested, db_session)
     adapter = SkillVersionAdapter(skill)
     adapter.lock(db_session)
     db_session.refresh(skill, ["current_version"])
-    assert_skill_mutable(skill)
+    assert_skill_content_editable(skill)
     reuse_current = False
     if not initial:
         matches = (

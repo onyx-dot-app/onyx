@@ -173,7 +173,7 @@ def get_skills_for_external_app(
     db_session: Session,
     external_app_id: int,
 ) -> list[Skill]:
-    """Return every skill associated with an external app in stable order."""
+    """Return live skills associated with an external app in stable order."""
     return list(
         db_session.scalars(
             select(Skill)
@@ -181,7 +181,10 @@ def get_skills_for_external_app(
                 ExternalApp__Skill,
                 ExternalApp__Skill.skill_id == Skill.id,
             )
-            .where(ExternalApp__Skill.external_app_id == external_app_id)
+            .where(
+                ExternalApp__Skill.external_app_id == external_app_id,
+                Skill.retired_at.is_(None),
+            )
             .order_by(Skill.name, Skill.id)
         )
     )
@@ -212,6 +215,8 @@ def get_skill_external_app_dependencies(
     """Return dependency state for all or selected associated skills."""
     stmt = (
         select(ExternalApp__Skill.skill_id, ExternalApp, ExternalAppUserCredential)
+        .join(Skill, Skill.id == ExternalApp__Skill.skill_id)
+        .where(Skill.retired_at.is_(None))
         .join(
             ExternalApp,
             ExternalApp.id == ExternalApp__Skill.external_app_id,
@@ -419,10 +424,14 @@ def associate_custom_skill_with_external_app__no_commit(
         )
 
     skill = db_session.scalar(
-        select(Skill).where(Skill.id == skill_id).with_for_update(of=Skill)
+        select(Skill)
+        .where(Skill.id == skill_id)
+        .with_for_update(of=Skill)
+        .execution_options(populate_existing=True)
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found.")
+    assert_skill_mutable(skill)
     db_session.refresh(skill, ["current_version"])
     if not skill.is_custom:
         raise OnyxError(
@@ -454,6 +463,7 @@ def associate_custom_skill_with_external_app__no_commit(
         .where(
             ExternalApp__Skill.external_app_id == app.id,
             Skill.name == skill.name,
+            Skill.retired_at.is_(None),
             Skill.id != skill.id,
         )
         .limit(1)
@@ -464,7 +474,6 @@ def associate_custom_skill_with_external_app__no_commit(
             (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
         )
 
-    assert_skill_mutable(skill)
     if not is_company_marketplace_skill(skill, db_session):
         skill.public_permission = SkillSharePermission.VIEWER
     db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
@@ -501,21 +510,27 @@ def replace_custom_skill_associations__no_commit(
             f"External app with id {external_app_id} not found.",
         )
 
-    target_skills = (
-        list(
-            db_session.scalars(
-                select(Skill)
-                .where(Skill.id.in_(target_ids))
-                .order_by(Skill.id)
-                .with_for_update(of=Skill)
+    associated_ids = set(
+        db_session.scalars(
+            select(ExternalApp__Skill.skill_id).where(
+                ExternalApp__Skill.external_app_id == app.id
             )
         )
-        if target_ids
-        else []
     )
+    locked_skills = list(
+        db_session.scalars(
+            select(Skill)
+            .where(Skill.id.in_(target_ids | associated_ids))
+            .order_by(Skill.id)
+            .with_for_update(of=Skill)
+            .execution_options(populate_existing=True)
+        )
+    )
+    target_skills = [skill for skill in locked_skills if skill.id in target_ids]
     if len(target_skills) != len(target_ids):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "One or more skills were not found.")
     for skill in target_skills:
+        assert_skill_mutable(skill)
         db_session.refresh(skill, ["current_version"])
     if any(not skill.is_custom for skill in target_skills):
         raise OnyxError(
@@ -532,7 +547,11 @@ def replace_custom_skill_associations__no_commit(
             f"Invalid skill '{invalid_skill.name}' cannot be associated with an app.",
         )
 
-    associated_skills = get_skills_for_external_app(db_session, app.id)
+    associated_skills = [
+        skill
+        for skill in locked_skills
+        if skill.id in associated_ids and skill.retired_at is None
+    ]
     provider_skills = [skill for skill in associated_skills if not skill.is_custom]
     current_custom_skills = [skill for skill in associated_skills if skill.is_custom]
     seen_names: set[str] = set()
@@ -581,7 +600,6 @@ def replace_custom_skill_associations__no_commit(
         )
 
     for skill in target_skills:
-        assert_skill_mutable(skill)
         if not is_company_marketplace_skill(skill, db_session):
             skill.public_permission = SkillSharePermission.VIEWER
         if skill.id not in current_ids:
