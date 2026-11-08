@@ -100,6 +100,11 @@ A public URL without its `/api` prefix fails at sandbox provisioning. The error 
 For MCP servers or OAuth endpoints with private certificates, mount a PEM CA bundle into the `sandbox-proxy` container.
 Include both public roots and your organization's private CA certificates in the bundle.
 
+Before configuring the proxy, ensure `api_server` also trusts the private CA.
+MCP setup and OAuth discovery make outbound requests from `api_server`, independently of the sandbox proxy.
+Mount the bundle into `api_server`, set its `SSL_CERT_FILE` to that path, and recreate the service if needed.
+The proxy configuration below does not change API server trust.
+
 Create `docker-compose.craft-ca.yml` in your deployment directory:
 
 ```yaml
