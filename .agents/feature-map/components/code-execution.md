@@ -108,9 +108,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         that became a function (prompt.py:
                                         program_function_operation)
   chat/prompt_utils.py:callable_tools   offered tools, then each tool's inner_tools; the
-                                        prompt reads both and adds CODE_MODE_GUIDANCE (and
-                                        drops the 3-query cap) only when a tool has inner
-                                        tools
+                                        prompt reads both and adds CODE_MODE_GUIDANCE when
+                                        execute_code is offered; in both modes
+                                        SearchTool._run, not the prompt, caps queries at 3
   stubs.py:build_tool_stubs             function names `<namespace>__<name>` from
                                         Tool.code_mode_function_name (MCP: server); `text`
                                         (all functions, type-checked) and `listed_text` (no
@@ -361,8 +361,9 @@ health calls are not retried.
     So `MAX_SANDBOX_PROCESSES` (8 per server process) bounds CPU, not users:
     8 workers serve dozens of concurrent users (a benchmark with 64 concurrent
     users added about 0.05 s at p50). Each program may use 128 MB
-    (`SandboxLimits.max_memory_bytes`), so worst-case sandbox memory stays near
-    1 GB, within the default 3 Gi API server pod. All tenants share the pool. Workers
+    (`SandboxLimits.max_memory_bytes`), and suspended program dumps may hold
+    `MAX_SUSPENDED_BYTES` (256 MB) more, so worst-case sandbox memory stays
+    near 1.3 GB, within the default 3 Gi API server pod. All tenants share the pool. Workers
     are replaced after `MAX_CHECKOUTS_PER_WORKER` checkouts, which frees memory
     that a worker kept after it hit the memory limit.
 14. `code-mode-nested-calls-are-real-calls` **Nested calls go through

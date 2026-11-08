@@ -291,7 +291,8 @@ termination grace period is much shorter, so it ends running turns first
     Definitions remain where providers support this choice. Qwen, GLM, and
     Bedrock omit definitions; Bedrock converts prior tool exchanges to text.
     Image generation does not remove tools, even when the image call fails.
-    The default cap is six cycles, including the final answer cycle.
+    The default cap is six cycles, including the final answer cycle; code mode
+    uses `CODE_MODE_MAX_LLM_CYCLES` instead.
 
 
 ---

@@ -96,7 +96,7 @@ sets, start date, attached documents and hierarchy nodes. Chat builds it in
 its own.
 
 **Lanes and weights.** A call runs at most `MAX_QUERIES_PER_CALL` (3) of the
-model's queries; `SearchTool.run` drops the rest with a log warning, and the
+model's queries; `SearchTool._run` drops the rest with a log warning, and the
 tool definition states the limit. The rephrased semantic query, the model's
 own queries, the user's original message and the keyword queries each get a lane and an RRF
 weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a

@@ -278,10 +278,10 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
     Onyx shows callback URLs built from this value, and you paste them into each provider's console.
 
     `CODE_MODE_ENABLED`: Set to `true` to let the model call actions from a Python program instead of one at a time.
-    Defaults to `false`. The setting applies to every chat in the deployment.
+    Defaults to `false`. The setting applies to every chat in the deployment except Deep Research.
     It can lower LLM usage for Agents with many actions, such as large MCP servers,
-    and raise it for Agents with few actions. The programs run on the API server,
-    and each API server process can use up to about 1.3 GB more memory.
+    and raise it for Agents with few actions. The programs run on the API server.
+    Plan for about 1.3 GB more memory for each API server process.
   </Accordion>
 
   <Accordion title="Craft Configuration">
