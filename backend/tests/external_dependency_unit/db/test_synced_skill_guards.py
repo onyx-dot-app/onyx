@@ -1,8 +1,10 @@
 """Synced content is source-owned; retirement hides reads and releases names."""
 
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 from alembic.migration import MigrationContext
@@ -19,9 +21,16 @@ from onyx.db.external_app import (
     get_skills_for_external_app,
     replace_custom_skill_associations__no_commit,
 )
-from onyx.db.models import ExternalApp__Skill, Marketplace, Skill, UserSkillPreference
+from onyx.db.models import (
+    ExternalApp__Skill,
+    Marketplace,
+    Skill,
+    User,
+    UserSkillPreference,
+)
 from onyx.db.skill import (
     SkillManagementPolicy,
+    SkillUserState,
     affected_user_ids_for_skill,
     list_runtime_skills_for_user,
     list_skills,
@@ -33,7 +42,7 @@ from onyx.db.skill import (
 from onyx.db.skill_version import save_skill_version
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.external_apps.api import _to_admin_response
-from onyx.server.features.skill import api
+from onyx.server.features.skill import api, response_helpers
 from tests.external_dependency_unit.craft.db_helpers import (
     make_external_app,
     make_sandbox,
@@ -348,3 +357,32 @@ def test_app_replacement_preserves_retired_association(session: Session) -> None
     )
     assert session.get(ExternalApp__Skill, (app.id, target.id)) is not None
     assert get_skills_for_external_app(session, app.id) == []
+
+
+@pytest.mark.parametrize("single", [False, True])
+def test_retirement_between_load_and_response(session: Session, single: bool) -> None:
+    owner = make_user(session, standard_account=True)
+    skill = make_skill(session, author_user_id=owner.id)
+    read_states = response_helpers.skill_user_states
+
+    def retire_then_read(
+        user: User, skill_ids: Iterable[UUID], db_session: Session
+    ) -> dict[UUID, SkillUserState]:
+        session.execute(
+            update(Skill)
+            .where(Skill.id == skill.id)
+            .values(retired_at=datetime.now(timezone.utc)),
+            execution_options={"synchronize_session": False},
+        )
+        return read_states(user, skill_ids, db_session)
+
+    with (
+        client_for(owner, session) as client,
+        patch.object(
+            response_helpers, "skill_user_states", side_effect=retire_then_read
+        ),
+    ):
+        response = client.get(f"/skills/{skill.id}" if single else "/skills")
+    assert response.status_code == (404 if single else 200), response.text
+    if not single:
+        assert response.json()["customs"] == []
