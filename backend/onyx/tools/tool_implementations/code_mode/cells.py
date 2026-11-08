@@ -222,11 +222,11 @@ def _bounded_details(
 
 
 def _bounded_arguments(
-    arguments: dict[str, JsonValue], max_chars: int
+    arguments: dict[str, JsonValue], max_chars: int, text: str | None = None
 ) -> dict[str, JsonValue]:
-    """`arguments` within about `max_chars` of JSON: a value over an equal share
-    becomes its text, cut in the middle."""
-    if len(json_text(arguments)) <= max_chars:
+    """`arguments`, whose `json_text` may be given, within about `max_chars` of
+    JSON: a value over an equal share becomes its text, cut in the middle."""
+    if len(json_text(arguments) if text is None else text) <= max_chars:
         return arguments
     share = max(1, max_chars // len(arguments))
     bounded: dict[str, JsonValue] = {}
@@ -1027,7 +1027,7 @@ class CodeCell:
             with run_cancellation.on_cancel(lambda: self.stop("cancelled")):
                 return execute_program(
                     program.code,
-                    stubs=program.stubs.text,
+                    stubs=program.stubs.program_text(program.code),
                     function_names=frozenset(program.stubs.functions),
                     plain_functions=store.functions,
                     async_functions=program.stubs.async_functions,
@@ -1108,14 +1108,16 @@ class CodeCell:
     def _call(self, external: ExternalCall) -> object:
         function = self._program.stubs.functions[external.function_name]
         # The tool gets all of the arguments; the cell keeps a bounded copy.
-        arguments = tool_arguments(function, external.kwargs)
+        copied = tool_arguments(function, external.kwargs)
+        # A dict: tool_arguments copies one.
+        arguments = cast(dict[str, JsonValue], copied.value)
         started = CodeModeCall(
             index=external.index,
             id=f"{self._call_id}:{external.index}",
             tool_name=function.tool.name,
             tool_id=function.tool.id,
             function_name=function.function_name,
-            arguments=_bounded_arguments(arguments, MAX_SAVED_CALL_CHARS),
+            arguments=_bounded_arguments(arguments, MAX_SAVED_CALL_CHARS, copied.text),
             state="running",
         )
         with self._lock:

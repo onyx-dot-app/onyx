@@ -524,6 +524,20 @@ def test_without_deferred_functions_there_is_no_tool_search() -> None:
     assert result.is_error
 
 
+def test_a_deferred_function_found_with_tool_search_is_type_checked() -> None:
+    tool = _make_tool(FakeMCPTool("list-tickets", _list_tickets, _TICKET_PARAMETERS))
+    _, found, _ = _run(tool, "print((await tool_search('tickets'))[0]['name'])\n")
+    assert found.stdout == "acme__list_tickets\n", found
+    _, wrong, _ = _run(tool, "await acme__list_tickets(servise='a')\n")
+    assert wrong.status == "failed"
+    assert "Type check failed" in (wrong.error or ""), wrong.error
+    assert wrong.calls == []
+    _, right, _ = _run(
+        tool, "print((await acme__list_tickets(service='a'))['tickets'][0])\n"
+    )
+    assert right.stdout == "{'id': 1, 'service': 'a'}\n", right
+
+
 def test_non_citing_calls_do_not_reserve_citation_numbers() -> None:
     tool = _make_tool(FakeMCPTool("list-tickets", _list_tickets, _TICKET_PARAMETERS))
     _, details, _ = _run(
