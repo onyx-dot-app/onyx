@@ -394,7 +394,7 @@ termination grace period is much shorter, so it ends running turns first
 ## Verification
 
 - Unit: `backend/tests/unit/onyx/chat/` covers the chat agent, preparation,
-  cancellation, multi-model streaming, the stream buffer and `gather_stream`.
+  cancellation, multi-model streaming, the stream buffer and response projection.
 - External dependency: `backend/tests/external_dependency_unit/answer/` runs
   turns through preparation and storage, including compaction.
   `backend/tests/external_dependency_unit/chat/` covers the run store and
