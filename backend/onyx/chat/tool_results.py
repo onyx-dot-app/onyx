@@ -27,12 +27,27 @@ def _by_id(documents: Sequence[SearchDoc]) -> dict[str, SearchDoc]:
 
 
 def _search_sources(searches: Sequence[SearchDocsResponse]) -> ResultSources:
-    """The documents and citations of search details, merged in order."""
+    """The documents and citations of one or more searches, merged in order.
+
+    Each search shows its `displayed_docs`, or all its documents when it has no
+    selection; an empty selection shows none.
+    """
     documents = _by_id(
         [
             document
             for search in searches
             for document in [*search.search_docs, *(search.displayed_docs or [])]
+        ]
+    )
+    displayed = _by_id(
+        [
+            document
+            for search in searches
+            for document in (
+                search.displayed_docs
+                if search.displayed_docs is not None
+                else search.search_docs
+            )
         ]
     )
     mapping = {
@@ -42,7 +57,7 @@ def _search_sources(searches: Sequence[SearchDocsResponse]) -> ResultSources:
     }
     return ResultSources(
         documents=list(documents.values()),
-        displayed=list(documents.values()),
+        displayed=list(displayed.values()),
         citations=cited_documents(dict(sorted(mapping.items())), documents),
     )
 
@@ -56,17 +71,7 @@ def tool_result_sources(details: BaseModel | None) -> ResultSources | None:
             citations=dict(details.citation_mapping),
         )
     if isinstance(details, SearchDocsResponse):
-        return ResultSources(
-            documents=list(details.search_docs),
-            displayed=list(
-                details.displayed_docs
-                if details.displayed_docs is not None
-                else details.search_docs
-            ),
-            citations=cited_documents(
-                details.citation_mapping, _by_id(details.search_docs)
-            ),
-        )
+        return _search_sources([details])
     if isinstance(details, CodeModeExecutionResult):
         # The nested searches of every window, the closing record's included.
         return _search_sources(
@@ -139,3 +144,11 @@ def staged_result_details(
     fields = shallow_model_dump(details)
     fields.pop("staged_files", None)
     return staged_type(**fields, staged_files=staged)
+
+
+def merged_chat_files(
+    chat_files: Sequence[ChatFile], added: Sequence[ChatFile]
+) -> list[ChatFile]:
+    """`chat_files`, then the `added` files with a filename not yet present."""
+    names = {file.filename for file in chat_files}
+    return [*chat_files, *(file for file in added if file.filename not in names)]

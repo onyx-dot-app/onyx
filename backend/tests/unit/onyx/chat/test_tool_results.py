@@ -25,6 +25,7 @@ from tests.unit.onyx.tools.code_mode.fakes import search_doc
 
 DOC_A = search_doc("alpha")
 DOC_B = search_doc("beta")
+DOC_C = search_doc("gamma")
 
 
 def test_search_results_show_their_displayed_documents_and_resolve_citations() -> None:
@@ -53,11 +54,23 @@ def test_program_results_merge_the_documents_of_their_searches() -> None:
             search_docs=[DOC_A], displayed_docs=[DOC_B], citation_mapping={1: "alpha"}
         ),
     )
+    unselected = search.model_copy(
+        update={
+            "index": 1,
+            "details": SearchDocsResponse(
+                search_docs=[DOC_C], displayed_docs=[], citation_mapping={}
+            ),
+        }
+    )
     sources = tool_result_sources(
-        CodeModeExecutionResult(cell_id=1, status="completed", calls=[search])
+        CodeModeExecutionResult(
+            cell_id=1, status="completed", calls=[search, unselected]
+        )
     )
     assert sources is not None
-    assert sources.documents == [DOC_A, DOC_B]
+    assert sources.documents == [DOC_A, DOC_B, DOC_C]
+    # Each search shows its own selection; an empty selection shows none.
+    assert sources.displayed == [DOC_B]
     assert sources.citations == {1: DOC_A}
 
 

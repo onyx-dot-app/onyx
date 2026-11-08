@@ -15,18 +15,25 @@ from onyx.agents.tools import (
     ToolProgress,
 )
 from onyx.chat.tool_results import ResultSources, tool_result_sources
-from onyx.context.search.models import SearchDocsResponse
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
     current_cancellation,
 )
 from onyx.llm.models import ToolResult
+from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL
-from onyx.tools.models import CodeModeExposure, CustomToolCallSummary, ToolContext
+from onyx.tools.models import (
+    ChatFile,
+    CodeModeExposure,
+    CustomToolCallSummary,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.code_mode.cells import (
     CELL_SPAN_NAME,
+    MAX_SAVED_CALL_CHARS,
     UNFINISHED_CALL_MESSAGE,
     CodeCells,
     durable_details,
@@ -39,6 +46,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
     CodeModeStdout,
     SandboxLimits,
+    json_text,
 )
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 from onyx.tracing.framework import set_trace_processors
@@ -667,6 +675,81 @@ def test_arguments_that_are_not_json_fail_before_the_tool_runs() -> None:
     assert "found set at ['value']" in result.content
     assert received == []
     assert details.calls == []
+
+
+def test_the_tool_gets_whole_arguments_and_the_saved_call_a_bounded_copy() -> None:
+    received: list[JsonValue] = []
+
+    def record(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        received.append(invocation.arguments["value"])
+        return ToolResult(content="{}")
+
+    tool = CodeModeTool([FakeTool("echo", record)], cells=CodeCells(), limits=LIMITS)
+    _, details, _ = _run(
+        tool,
+        "big = 'x' * 100_000\n"
+        "await echo(value=big)\n"
+        "try:\n"
+        "    await echo(value=big * 3)\n"
+        "except ValueError as error:\n"
+        "    print(error)\n",
+    )
+    assert details.status == "completed", details
+    assert received == ["x" * 100_000]
+    [call] = details.calls
+    assert len(json_text(call.arguments)) < 2 * MAX_SAVED_CALL_CHARS
+    assert details.stdout.startswith(
+        "The argument dict of echo() exceeds the limit of 262144 bytes as JSON"
+    )
+
+
+def test_files_that_a_search_finds_reach_a_later_python_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[list[str]] = []
+
+    def python(_invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
+        seen.append([file.filename for file in context.chat_files])
+        return ToolResult(content="{}")
+
+    def search_with_files(
+        invocation: ToolInvocation, context: ToolContext
+    ) -> ToolOutcome:
+        result = search(invocation, context)
+        assert isinstance(result, ToolResult)
+        assert isinstance(result.details, SearchDocsResponse)
+        documents = [
+            document.model_copy(update={"file_id": f"file-{document.document_id}"})
+            for document in result.details.search_docs
+        ]
+        result.details = result.details.model_copy(update={"search_docs": documents})
+        return result
+
+    def read_files(documents: list[SearchDoc]) -> list[ChatFile]:
+        return [
+            ChatFile(
+                filename=f"{document.document_id}.csv",
+                content=b"",
+                file_id=document.file_id,
+            )
+            for document in documents
+        ]
+
+    monkeypatch.setattr(cells, "build_python_chat_files_from_search_docs", read_files)
+    tool = CodeModeTool(
+        [FakeWebSearchTool(search_with_files), FakeTool(PYTHON_TOOL_NAME, python)],
+        cells=CodeCells(),
+        limits=LIMITS,
+    )
+    _, details, _ = _run(
+        tool,
+        "await run_python(value='before')\n"
+        "await web_search(queries=['q'])\n"
+        "await run_python(value='after')\n",
+        ToolContext(chat_files=[ChatFile(filename="upload.txt", content=b"")]),
+    )
+    assert details.status == "completed", details
+    assert seen == [["upload.txt"], ["upload.txt", "q-0.csv", "q-1.csv"]]
 
 
 class _StagedSearch(SearchDocsResponse):

@@ -32,7 +32,11 @@ from onyx.chat.prompt_utils import (
     build_chat_prompt,
     prepare_prompt,
 )
-from onyx.chat.tool_results import staged_result_details, tool_result_sources
+from onyx.chat.tool_results import (
+    merged_chat_files,
+    staged_result_details,
+    tool_result_sources,
+)
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
@@ -207,10 +211,7 @@ class ChatAgent(Agent, RestorableFeature):
             if sources is not None:
                 self.gathered_documents.extend(sources.documents)
             if isinstance(data, StagedChatFiles):
-                existing = {file.filename for file in self.chat_files}
-                self.chat_files.extend(
-                    file for file in data.staged_files if file.filename not in existing
-                )
+                self.chat_files = merged_chat_files(self.chat_files, data.staged_files)
             if sources is None:
                 continue
             self.citation_processor.update_citation_mapping(sources.citations)

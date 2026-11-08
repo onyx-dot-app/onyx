@@ -19,13 +19,18 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from onyx.agents.models import ToolResultAmendment
 from onyx.agents.tools import ToolInvocation, ToolProgress
+from onyx.chat.files import build_python_chat_files_from_search_docs
+from onyx.chat.models import StagedChatFiles
+from onyx.chat.tool_results import merged_chat_files, staged_result_details
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
 from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import Message, ToolResult, ToolResultMessage
 from onyx.server.metrics import code_mode as metrics
+from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
 from onyx.tools.models import (
+    ChatFile,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     FileReadResult,
@@ -60,6 +65,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     StoreCommit,
     StoreSnapshot,
     code_mode_results,
+    json_text,
 )
 from onyx.tools.tool_implementations.code_mode.prompt import (
     closing_heading,
@@ -209,10 +215,27 @@ def _bounded_details(
     return details
 
 
+def _bounded_arguments(
+    arguments: dict[str, JsonValue], max_chars: int
+) -> dict[str, JsonValue]:
+    """`arguments` within about `max_chars` of JSON: a value over an equal share
+    becomes its text, cut in the middle."""
+    if len(json_text(arguments)) <= max_chars:
+        return arguments
+    share = max(1, max_chars // len(arguments))
+    bounded: dict[str, JsonValue] = {}
+    for key, value in arguments.items():
+        text = value if isinstance(value, str) else json_text(value)
+        bounded[key] = value if len(text) <= share else _bounded(text, share)
+    return bounded
+
+
 def _bounded_call(call: CodeModeCall, max_chars: int) -> CodeModeCall:
-    """The call with its content and large detail text cut to about `max_chars` each."""
+    """The call with its arguments, content and large detail text cut to about
+    `max_chars` each."""
     return call.model_copy(
         update={
+            "arguments": _bounded_arguments(call.arguments, max_chars),
             "content": _bounded(call.content, max_chars),
             "details": _bounded_details(call.details, max_chars),
         }
@@ -227,7 +250,7 @@ def _saved_call_chars(call: CodeModeCall) -> int:
         if details is None or isinstance(details, SearchDocsResponse)
         else len(details.model_dump_json())
     )
-    return len(call.content) + detail_chars
+    return len(json_text(call.arguments)) + len(call.content) + detail_chars
 
 
 class CitationAllocator:
@@ -474,6 +497,13 @@ class CodeCell:
         # Context and messages of the latest observation, for nested calls.
         self._source = invocation
         self._context = context
+        # Files of documents that nested calls found, for later Python calls of
+        # the program, as the chat stages them for direct calls.
+        self._stages_files = any(
+            function.tool.name == PYTHON_TOOL_NAME
+            for function in program.stubs.functions.values()
+        )
+        self._staged_files: list[ChatFile] = []
         # The observation that yield_control() ended, for its observer to format.
         self._yielded: ObservationCut | None = None
         self._stop: StopReason | None = None
@@ -986,24 +1016,32 @@ class CodeCell:
 
     def _call(self, external: ExternalCall) -> object:
         function = self._program.stubs.functions[external.function_name]
+        # The tool gets all of the arguments; the cell keeps a bounded copy.
+        arguments = tool_arguments(function, external.kwargs)
         started = CodeModeCall(
             index=external.index,
             id=f"{self._call_id}:{external.index}",
             tool_name=function.tool.name,
             tool_id=function.tool.id,
             function_name=function.function_name,
-            arguments=tool_arguments(function, external.kwargs),
+            arguments=_bounded_arguments(arguments, MAX_SAVED_CALL_CHARS),
             state="running",
         )
         with self._lock:
             self._calls[external.index] = CellCallRecord(
                 call=started, started_in=self._window
             )
-            context = self._context
+            context = self._context.model_copy(
+                update={
+                    "chat_files": merged_chat_files(
+                        self._context.chat_files, self._staged_files
+                    )
+                }
+            )
             source = self._source
             self._emit(CodeModeCallStarted(call=started))
         try:
-            return self._run_call(function, started, context, source)
+            return self._run_call(function, started, arguments, context, source)
         finally:
             with self._lock:
                 self._calls[external.index].thread_alive = False
@@ -1012,6 +1050,7 @@ class CodeCell:
         self,
         function: ToolFunction,
         started: CodeModeCall,
+        arguments: dict[str, JsonValue],
         context: ToolContext,
         source: ToolInvocation,
     ) -> object:
@@ -1036,7 +1075,7 @@ class CodeCell:
             inner_invocation = ToolInvocation(
                 call_id=started.id,
                 call_index=0,
-                arguments=started.arguments,
+                arguments=arguments,
                 cancellation=self._stopping,
                 update=lambda progress: self._send(
                     CodeModeCallProgress(
@@ -1075,6 +1114,16 @@ class CodeCell:
         finally:
             if cites:
                 self._citations.release(used)
+        if self._stages_files:
+            known = {file.file_id for file in context.chat_files if file.file_id}
+            staged = staged_result_details(
+                result.details, known, build_python_chat_files_from_search_docs
+            )
+            if isinstance(staged, StagedChatFiles):
+                with self._lock:
+                    self._staged_files = merged_chat_files(
+                        self._staged_files, staged.staged_files
+                    )
         # Bounded before the lock; `_record` cuts it further once the cell's
         # budget is spent.
         ended = _bounded_call(
