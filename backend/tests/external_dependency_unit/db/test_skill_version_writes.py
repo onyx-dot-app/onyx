@@ -1016,7 +1016,7 @@ def test_lock_contention_and_tenant_cleanup(
     session.refresh(skill)
     assert skill.current_version_id is None
     with pytest.raises(KvKeyNotFoundError):
-        get_kv_store().load(PROGRESS_KEY)
+        get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
     repair_skill_versions.run(tenant_id=tenant)
     assert len(versions(skill, session)) == 1
 
@@ -1055,7 +1055,7 @@ def test_lost_lock_rolls_back_before_progress(
     session.refresh(skill)
     assert skill.current_version_id is None
     with pytest.raises(KvKeyNotFoundError):
-        get_kv_store().load(PROGRESS_KEY)
+        get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
     repair_skill_versions.run(tenant_id=tenant)
     assert len(versions(skill, session)) == 1
 
@@ -1087,7 +1087,7 @@ def test_transient_read_keeps_repair_pending(
         assert get_kv_store().load(PROGRESS_KEY) == "completed"
     else:
         with pytest.raises(KvKeyNotFoundError):
-            get_kv_store().load(PROGRESS_KEY)
+            get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
     assert not get_cache_backend().lock(PROGRESS_KEY, timeout=300).owned()
     repair_skill_versions.run(tenant_id=tenant)
     assert versions(skill, session)[0].content_digest is not None
