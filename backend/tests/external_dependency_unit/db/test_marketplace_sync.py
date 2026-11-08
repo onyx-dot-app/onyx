@@ -6,13 +6,14 @@ import os
 import subprocess
 import sys
 from collections.abc import Mapping
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 import requests
+from botocore.exceptions import ClientError
 from psycopg2 import OperationalError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +24,11 @@ from onyx.db.skill_version import delete_orphan_skill_bundles
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store import postgres_file_store
-from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.file_store.file_store import (
+    FileStore,
+    S3BackedFileStore,
+    get_default_file_store,
+)
 from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
 from onyx.skills.marketplace.models import ReconciliationResult
@@ -517,16 +522,40 @@ def test_existing_blob_errors_are_not_treated_as_missing(
     store = get_default_file_store()
     files = stored_bundles(session)
     file_id = next(iter(files))
-    with patch.object(
-        postgres_file_store,
-        f"_{operation}_large_object",
-        side_effect=OperationalError("storage unavailable"),
-    ):
-        with pytest.raises(OperationalError, match="storage unavailable"):
+    with ExitStack() as faults:
+        error: OperationalError | ClientError
+        if isinstance(store, postgres_file_store.PostgresBackedFileStore):
+            error = OperationalError("storage unavailable")
+            faults.enter_context(
+                patch.object(
+                    postgres_file_store,
+                    f"_{operation}_large_object",
+                    side_effect=error,
+                )
+            )
+        else:
+            assert isinstance(store, S3BackedFileStore)
+            method = "get_object" if operation == "read" else "delete_object"
+            error = ClientError(
+                {
+                    "Error": {
+                        "Code": "ServiceUnavailable",
+                        "Message": "storage unavailable",
+                    }
+                },
+                method,
+            )
+            for client in (store._get_s3_client(), store._get_legacy_s3_client()):
+                if client is not None:
+                    faults.enter_context(
+                        patch.object(client, method, side_effect=error)
+                    )
+        with pytest.raises(type(error), match="storage unavailable") as raised:
             if operation == "read":
                 store.read_file(file_id)
             else:
                 store.delete_file(file_id)
+        assert raised.value is error
     assert stored_bundles(session) == files
     with store.read_file(file_id) as content:
         assert content.read().startswith(b"PK")
