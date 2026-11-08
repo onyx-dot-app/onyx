@@ -66,11 +66,11 @@ function ColumnVisibilityPopover<TData extends RowData>({
 
             return (
               <LineItemButton
+                font="main-ui-action"
                 key={column.id}
                 selectVariant="select-heavy"
                 state={isVisible ? "selected" : "empty"}
                 title={label}
-                sizePreset="main-ui"
                 rightChildren={
                   !canHide ? (
                     <div className="flex items-center">

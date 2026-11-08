@@ -256,13 +256,13 @@ describe("IndexSettingsPage embedding model picker", () => {
       .map((r) => r.body.model_name);
   }
 
-  it("shows a legacy current model as current, with a Legacy tag and an upgrade hint", async () => {
+  it("shows a legacy current model as current, with a legacy badge and an upgrade hint", async () => {
     setCurrentModel("nomic-ai/nomic-embed-text-v1", null, 768);
     const user = setupUser();
     render(<IndexSettingsPage />);
 
     const summary = await screen.findByTestId("current-embedding-model");
-    expect(within(summary).getByText("Legacy")).toBeInTheDocument();
+    expect(within(summary).getByText("legacy")).toBeInTheDocument();
     expect(
       within(summary).getByText(/This is a legacy model/)
     ).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe("IndexSettingsPage embedding model picker", () => {
     expect(
       within(card).getByRole("button", { name: "Current Model" })
     ).toBeInTheDocument();
-    expect(within(card).getByText("Legacy")).toBeInTheDocument();
+    expect(within(card).getByText("legacy")).toBeInTheDocument();
     // Other legacy models stay hidden; the new ones are selectable.
     expect(
       queryModelCard(EmbeddingProviderName.MICROSOFT, "intfloat/e5-base-v2")

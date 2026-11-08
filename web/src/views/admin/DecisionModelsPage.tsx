@@ -162,13 +162,12 @@ function DecisionProviderCard({
           onClick={() => setOpen(true)}
         >
           <ContentAction
+            font="main-ui-action"
             icon={icon}
             title={displayName}
             description={modelNames || productName}
             titleMaxLines={1}
             descriptionMaxLines={1}
-            sizePreset="main-ui"
-            variant="section"
             padding={2}
             rightChildren={
               provider ? (
@@ -260,10 +259,9 @@ function DecisionModelsContent() {
       </Card>
       <Section gap={3} alignItems="stretch">
         <Content
+          font="main-content-emphasis"
           title={t("providers.title")}
           description={t("providers.description")}
-          sizePreset="main-content"
-          variant="section"
         />
         <CardGrid>
           {supportedProviders.map((providerName) => {

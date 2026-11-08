@@ -24,15 +24,6 @@ interface TaskStatusBadgeProps {
   status: ScheduledTaskStatus;
 }
 
-export function taskStatusTag(status: ScheduledTaskStatus): BadgeProps {
-  const isActive = status === "ACTIVE";
-  return {
-    icon: isActive ? SvgPlayCircle : SvgPauseCircle,
-    title: isActive ? "Active" : "Paused",
-    color: isActive ? "success" : "default",
-  };
-}
-
 export function TaskStatusBadge({ status }: TaskStatusBadgeProps) {
   const isActive = status === "ACTIVE";
   const Icon = isActive ? SvgPlayCircle : SvgPauseCircle;

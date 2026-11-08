@@ -122,8 +122,7 @@ export default function ProviderCard({
         }
       >
         <ContentAction
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           icon={icon}
           title={title}
           description={description}

@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Sélectionner les sources de recherche"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrivilégier cet outil pour cette conversation. L’agent peut répondre sans l’utiliser."
       }
     },
     "addMcpModal": {
@@ -186,7 +189,6 @@
           "description": "Choisissez au moins un groupe que vous gérez."
         },
         "retainedUsers": "{count, plural, one {Également partagé directement avec # utilisateur.} other {Également partagé directement avec # utilisateurs.}}",
-        "planTag": "Business",
         "planNote": "L’accès par groupe nécessite un forfait Business."
       },
       "defaultChat": {
@@ -2649,7 +2651,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "Supprimer"
+          "label": "Supprimer le connecteur",
+          "description": "Supprimer définitivement tous les documents indexés."
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2691,7 @@
         },
         "syncPermissions": {
           "label": "Synchroniser les autorisations",
-          "description": "Récupérer maintenant depuis la source qui peut lire chaque document.",
+          "description": "Récupérer les autorisations des documents depuis la source.",
           "tooltip": {
             "syncing": "Une synchronisation des autorisations est déjà en file d'attente ou en cours"
           }
@@ -2815,20 +2818,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} docs/min",
-        "indexingSpeedTooltip": "Documents indexés par minute depuis la création du connecteur",
         "lastIndexed": {
           "value": "Dernière indexation {when}"
         },
+        "deletionStarted": {
+          "value": "Démarré {when}"
+        },
         "documents": {
           "totalLabel": "Total des documents dans l'index",
-          "recentLabel": "Documents traités récemment",
-          "syncedPermissionsLabel": "Autorisations synchronisées",
-          "syncedMembershipsLabel": "Adhésions aux groupes synchronisées"
+          "recentLabel": "Documents traités dernièrement",
+          "indexedLabel": "Documents indexés"
         },
         "throughput": {
           "ariaLabel": "Documents indexés au fil du temps",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "lineTooltip": "{failures, plural, one {# échec} other {# échecs}}, {errors, plural, one {# erreur} other {# erreurs}}",
+          "barLabel": "{count, plural, one {# document} other {# documents}}, {range}",
           "loadError": "Le graphique n'a pas pu être chargé.",
           "rangeFilter": "Exécutions créées dans cette tranche du graphique"
         },
@@ -2844,13 +2849,33 @@
         "title": "État de l'indexation",
         "sync": {
           "permissionsTitle": "État de la synchronisation des autorisations",
-          "groupsTitle": "État de la synchronisation des adhésions aux groupes",
           "last": "Dernière synchronisation {when}",
           "never": "Pas encore synchronisé",
-          "neverTooltip": "Les documents indexés peuvent ne pas être consultables tant que leurs autorisations ne sont pas synchronisées.",
-          "waitingForFirstIndex": "En attente de la première indexation"
+          "neverTooltip": "Les documents indexés ne seront pas consultables tant que leurs autorisations ne seront pas synchronisées.",
+          "waitingForFirstIndex": "En attente de la première indexation",
+          "docsLabel": "Documents aux autorisations synchronisées",
+          "groupsLabel": "Adhésions aux groupes"
         },
-        "accessTitle": "Accès aux documents du connecteur"
+        "actions": {
+          "showActivities": "Afficher les activités",
+          "hideActivities": "Masquer les activités",
+          "viewDetails": "Voir les détails",
+          "hideDetails": "Masquer les détails",
+          "viewIndexingRun": "Voir l'exécution d'indexation",
+          "viewPruningRun": "Voir l'exécution d'élagage",
+          "viewChecksRun": "Voir l'exécution des vérifications"
+        },
+        "types": {
+          "count": "{count, plural, one {Type de document} other {Types de document}}",
+          "header": "Type de document",
+          "indexed": "Indexés",
+          "size": "Taille",
+          "other": "Autres",
+          "countWithSize": "{count} ({size})",
+          "bytes": "octets",
+          "loadError": "Impossible de charger les types de document.",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",
@@ -2980,6 +3005,7 @@
           "all": "Tous les types",
           "indexing": "Index des documents",
           "backfill": "Rattrapage des documents",
+          "retry": "Index des documents - Nouvelle tentative",
           "doc_permission_sync": "Synchronisation des autorisations",
           "group_sync": "Synchronisation des membres des groupes",
           "pruning": "Élagage des documents",
@@ -2987,9 +3013,10 @@
         },
         "detail": {
           "queued": "En file d'attente",
+          "starting": "Démarrage de la synchronisation",
           "running": "En cours",
           "rate": "{rate} docs/min",
-          "finished": "{time} ({duration})",
+          "runtime": "Durée d'exécution {duration}",
           "rateFinished": "{rate} docs/min ({duration})",
           "membershipRate": "{rate} adhésions/min",
           "membershipRateFinished": "{rate} adhésions/min ({duration})"
@@ -2998,6 +3025,7 @@
           "stages": "Voir les métriques par étape",
           "cancel": "Annuler",
           "logs": "Voir les journaux",
+          "noLogs": "Aucun journal enregistré",
           "checks": "Voir les résultats des vérifications"
         },
         "warnings": {
@@ -3032,16 +3060,12 @@
           "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}",
           "syncedDocs": "{count, plural, one {# document synchronisé} other {# documents synchronisés}}"
         },
-        "search": {
-          "placeholder": "Rechercher dans les erreurs d'exécution…"
-        },
         "window": {
           "label": "Période",
           "all": "Toute la période",
           "h1": "Dernière heure",
           "h24": "24 dernières heures",
-          "d7": "7 derniers jours",
-          "d30": "30 derniers jours"
+          "d7": "7 derniers jours"
         },
         "statusGroups": {
           "label": "Statut",
@@ -3052,14 +3076,13 @@
           "canceled": "Annulées"
         },
         "loadError": {
-          "title": "Impossible de charger les exécutions."
+          "title": "Impossible de charger les exécutions.",
+          "retry": "Réessayer"
         },
         "empty": {
           "title": "Aucune exécution d'indexation récente",
           "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
           "pastRuns": "{count, plural, one {# exécution passée} other {# exécutions passées}}",
-          "view": "Afficher",
-          "viewAria": "{count, plural, one {Afficher # exécution passée} other {Afficher # exécutions passées}}",
           "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
         },
         "units": "{count, plural, one {exécution} other {exécutions}}",
@@ -3094,15 +3117,24 @@
           "all": "Tous niveaux",
           "failures": "Échecs",
           "errors": "Erreurs",
-          "other": "Autres",
+          "running": "En cours",
+          "success": "Réussies",
+          "canceled": "Annulées",
           "resolved": "Résolu",
-          "toggle": "Filtres"
+          "connectors": "Connecteurs",
+          "connectorsLoading": "Chargement des connecteurs…",
+          "connectorsLoadError": "Impossible de charger les connecteurs.",
+          "connectorsRetry": "Réessayer",
+          "toggleShow": "Afficher les filtres",
+          "toggleHide": "Masquer les filtres"
         },
         "groups": {
           "failures": "{count, plural, =0 {Échecs} one {# échec} other {# échecs}}",
           "errors": "{count, plural, =0 {Erreurs} one {# erreur} other {# erreurs}}",
-          "other": "Autres",
-          "resolved": "{count, plural, one {# résolue} other {# résolues}}"
+          "running": "{count, number} en cours",
+          "resolved": "Résolues",
+          "success": "Réussies",
+          "canceled": "Annulées"
         },
         "title": {
           "indexing": {
@@ -3113,9 +3145,8 @@
             "errors": "Indexation terminée avec des erreurs.",
             "resolved": "Erreurs d'indexation résolues.",
             "succeeded": "Indexation terminée avec succès.",
-            "queued": "Indexation en file d'attente.",
             "inProgress": "Indexation en cours.",
-            "canceled": "Indexation arrêtée."
+            "canceled": "Indexation annulée."
           },
           "doc_permission_sync": {
             "failed": "La synchronisation des autorisations a échoué.",
@@ -3125,9 +3156,8 @@
             "errors": "Autorisations synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des autorisations résolues.",
             "succeeded": "Permissions synchronisées avec succès.",
-            "queued": "Synchronisation des permissions en file d'attente.",
             "inProgress": "Synchronisation des permissions en cours.",
-            "canceled": "Synchronisation des permissions arrêtée."
+            "canceled": "Synchronisation des permissions annulée."
           },
           "group_sync": {
             "failed": "La synchronisation des appartenances aux groupes a échoué.",
@@ -3137,9 +3167,8 @@
             "errors": "Appartenances aux groupes synchronisées avec des erreurs.",
             "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues.",
             "succeeded": "Appartenances aux groupes synchronisées avec succès.",
-            "queued": "Synchronisation des appartenances aux groupes en file d'attente.",
             "inProgress": "Synchronisation des appartenances aux groupes.",
-            "canceled": "Synchronisation des groupes arrêtée."
+            "canceled": "Synchronisation des groupes annulée."
           },
           "pruning": {
             "failed": "L'élagage a échoué.",
@@ -3149,9 +3178,8 @@
             "errors": "Élagage terminé avec des erreurs.",
             "resolved": "Erreurs d'élagage résolues.",
             "succeeded": "Élagage terminé avec succès.",
-            "queued": "Élagage en file d'attente.",
             "inProgress": "Élagage en cours.",
-            "canceled": "Élagage arrêté."
+            "canceled": "Élagage annulé."
           },
           "checks": {
             "failed": "Les vérifications du connecteur ont échoué.",
@@ -3161,9 +3189,8 @@
             "errors": "Vérifications du connecteur terminées avec des erreurs.",
             "resolved": "Erreurs des vérifications du connecteur résolues.",
             "succeeded": "Vérifications du connecteur réussies.",
-            "queued": "Vérifications du connecteur en file d'attente.",
             "inProgress": "Vérifications du connecteur en cours.",
-            "canceled": "Vérifications du connecteur arrêtées."
+            "canceled": "Vérifications du connecteur annulées."
           }
         },
         "description": {
@@ -3178,22 +3205,18 @@
           "stackTrace": "Trace de la pile",
           "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "indexingItems": "{count, plural, one {# élément en échec} other {# éléments en échec}}",
-          "doc_permission_sync": "{count, plural, one {Permissions de # document non synchronisées} other {Permissions de # documents non synchronisées}}",
-          "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "pruning": "{count, plural, one {# document en échec} other {# documents en échec}}",
           "checks": "{count, plural, one {# vérification échouée} other {# vérifications échouées}}",
+          "users": "{count, plural, one {# utilisateur non synchronisé} other {# utilisateurs non synchronisés}}",
+          "groups": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
           "resolved": "Résolu",
-          "resolvedDocs": "{count, plural, one {# élément résolu} other {# éléments résolus}}",
           "superseded": "Remplacé"
         },
         "more": "Afficher plus",
         "empty": {
           "title": "Aucune activité récente",
-          "resolved": "Aucune exécution résolue",
-          "filtered": "Rien ne correspond à cette recherche.",
-          "failures": "Aucun échec",
-          "errors": "Aucune erreur",
-          "other": "Aucune autre exécution"
+          "past": "Activités passées",
+          "filtered": "Rien ne correspond à cette recherche."
         },
         "loadError": {
           "title": "Impossible de charger l'activité."
@@ -3201,19 +3224,32 @@
         "docs": {
           "title": "Éléments en échec",
           "search": {
-            "placeholder": "Rechercher des éléments…"
+            "placeholder": "Rechercher des documents…"
           },
-          "resolveAll": "Tout réessayer",
-          "resolveAllTooltip": "Réindexer tous les documents en échec de cette exécution",
-          "resolveAllUnsupported": "Ce connecteur ne peut pas réindexer des documents individuels. Réindexez le connecteur pour les réessayer.",
-          "resolveOne": "Réessayer ce document",
-          "retry": "{count, plural, one {Réessayer # document} other {Réessayer # documents}}",
+          "resolveAll": "Relancer tous les documents",
+          "resolveOne": "Relancer le document",
+          "resolveWithoutRetry": "Résoudre sans relancer",
           "more": "Plus",
           "less": "Moins",
           "unknownDocument": "Document inconnu",
-          "empty": "Aucune erreur ouverte",
+          "empty": "Aucun document en échec",
           "loadError": "Impossible de charger les éléments en échec.",
-          "open": "Ouvrir le document"
+          "open": "Ouvrir le document",
+          "resolvedGroup": "Erreurs résolues",
+          "resolvedWithoutRetry": "Résolu sans relance",
+          "resolvedByLaterRun": "Résolu par une exécution ultérieure"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "Utilisateurs en échec",
+            "search": "Rechercher des utilisateurs…",
+            "empty": "Aucun utilisateur en échec"
+          },
+          "groups": {
+            "title": "Groupes en échec",
+            "search": "Rechercher des groupes…",
+            "empty": "Aucun groupe en échec"
+          }
         },
         "trace": {
           "header": "Trace de la pile • ID d'exécution : {id}",
@@ -3221,17 +3257,18 @@
           "runId": "ID d'exécution : {id}"
         },
         "actions": {
-          "resolve": "Résoudre"
+          "resolve": "Résoudre",
+          "resolveWithoutRetry": "Résoudre sans relancer",
+          "retryDocs": "Relancer les documents"
         },
         "resolveAll": {
-          "button": "Résoudre tout l’affichage",
-          "title": "Résoudre toutes les exécutions affichées ?",
-          "description": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel. Elles conservent leur statut et passent dans les éléments résolus.",
-          "fleetDescription": "Cette action marque comme {count, plural, one {résolue # exécution} other {résolues # exécutions}} correspondant au filtre actuel, sur les connecteurs que vous gérez. Elles conservent leur statut et passent dans les éléments résolus.",
+          "button": "Tout résoudre",
+          "title": "Résoudre toutes les activités affichées",
+          "body": "{count, plural, one {Cette action résout # activité correspondant au filtre actuel : {failures} et {errors}. Onyx ne relance pas ses éléments en échec. L’activité conserve son statut et passe dans Résolues.} other {Cette action résout # activités correspondant au filtre actuel : {failures} et {errors}. Onyx ne relance pas leurs éléments en échec. Les activités conservent leur statut et passent dans Résolues.}}",
+          "body2": "Une exécution encore en cours peut signaler de nouvelles erreurs. Elles réapparaissent comme ouvertes. Vous pourrez relancer plus tard un document résolu depuis sa liste de documents en échec.",
+          "failures": "{count, plural, =0 {aucun échec} one {# échec} other {# échecs}}",
+          "errors": "{count, plural, =0 {aucune exécution avec erreurs} one {# exécution avec erreurs} other {# exécutions avec erreurs}}",
           "confirm": "Tout résoudre"
-        },
-        "resolved": {
-          "label": "Résolues"
         }
       },
       "stageDetails": {
@@ -3243,10 +3280,22 @@
         "calls": "Lots",
         "averageTime": "Temps moyen",
         "maxTime": "Temps max",
+        "noDocs": "Aucun document n'a terminé l'indexation",
+        "laterCanceled": "Étapes suivantes annulées",
+        "retry": "Réessayer",
         "uneven": {
           "tooltip": "Les temps par lot varient fortement pour cette étape"
         },
         "close": "Fermer les détails des étapes"
+      },
+      "tabs": {
+        "configurations": "Configurations du connecteur",
+        "indexing": "Indexation",
+        "indexingDisabled": "Disponible dès le début de la première exécution."
+      },
+      "indexingTab": {
+        "chartHeading": "Indexation des documents",
+        "runsHeading": "Exécutions d'indexation"
       }
     },
     "connectorTitle": {
@@ -6258,13 +6307,6 @@
           "title": "Autorisations du groupe"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. L'accès se configure par groupe : les autorisations d'un utilisateur sont donc la somme de celles de tous ses groupes.",
-        "learnMore": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé."
-      },
       "sharedResources": {
         "agent": {
           "description": "agent"
@@ -6616,9 +6658,6 @@
       },
       "connectedModels": {
         "title": "Modèles connectés"
-      },
-      "defaultTag": {
-        "label": "Par défaut"
       },
       "deselectError": {
         "message": "Échec de la désélection"
@@ -7082,7 +7121,6 @@
           "tag": "GPU recommandé"
         },
         "legacy": {
-          "tag": "Ancien",
           "tooltip": "Vous ne pouvez pas sélectionner ce modèle pour un nouvel index. Il continue de fonctionner jusqu'à ce que vous changiez de modèle."
         },
         "selectButton": {
@@ -7135,9 +7173,6 @@
       "multipass": {
         "description": "Indexez les documents en segments de tailles variables pour mieux identifier les sources pertinentes.",
         "disabledTooltip": "L'indexation multi-passes est désactivée temporairement et sera disponible plus tard.",
-        "tag": {
-          "label": "temporairement indisponible"
-        },
         "title": "Indexation multi-passes"
       },
       "openaiCompatible": {
@@ -7418,37 +7453,26 @@
       }
     },
     "indexing": {
+      "addConnector": "Ajouter un connecteur",
       "connectorCreated": {
         "toast": "Connecteur créé avec succès"
       },
       "overview": {
-        "connectors": {
-          "caption": "En cours d'indexation / actifs",
-          "label": "Connecteurs"
-        },
-        "documents": {
-          "caption": "Dans l'index",
-          "label": "Documents",
-          "tooltip": "Additionne les documents de chaque connecteur : un document présent dans deux connecteurs compte deux fois."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "Impossible de charger la vue d'ensemble.",
-        "processed": {
-          "caption": "Traités sur la période",
-          "label": "Documents",
-          "tooltip": "Une estimation, car le total de chaque exécution est réparti uniformément sur sa durée. Un document compte à chaque fois qu'une exécution le traite, échecs compris, ce chiffre peut donc dépasser le nombre de documents de l'index."
-        }
+        "activeConnectors": "Connecteurs actifs",
+        "pausedConnectors": "Connecteurs en pause",
+        "indexingConnectors": "Connecteurs en cours d'indexation",
+        "loadError": "Impossible de charger la vue d'ensemble."
       },
       "activities": {
         "title": "Activités",
-        "history": "Historique complet de l'activité",
-        "viewLogs": "Afficher les journaux",
         "panel": {
-          "title": "Historique de l'activité",
+          "title": "Activités",
           "close": "Fermer le panneau",
           "pairTitle": "Historique de l'activité de {name}"
+        },
+        "panelButton": {
+          "show": "Afficher les activités",
+          "hide": "Masquer les activités"
         }
       },
       "list": {
@@ -7457,21 +7481,22 @@
         },
         "statusFilter": {
           "label": "Statut",
-          "all": "Tous les statuts"
+          "all": "Tous les statuts",
+          "running": "En cours"
         },
         "counts": {
           "indexed": "{count, plural, one {# connecteur indexé} other {# connecteurs indexés}}",
-          "indexing": "{count, plural, one {# connecteur en cours d'indexation} other {# connecteurs en cours d'indexation}}",
+          "running": "{indexing, plural, other {# en indexation}}, {syncing, plural, other {# en synchronisation}}",
           "failed": "{count, plural, one {# connecteur en échec} other {# connecteurs en échec}}",
           "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}",
           "scheduled": "{count, plural, one {# connecteur planifié} other {# connecteurs planifiés}}",
           "deleting": "{count, plural, one {# connecteur en cours de suppression} other {# connecteurs en cours de suppression}}"
         },
         "access": {
-          "public": "Organisation",
-          "private": "Privé",
-          "sync": "Synchronisation automatique",
-          "sync_restricted": "Synchronisation automatique, restreinte"
+          "public": "Public pour votre organisation",
+          "private": "{count, plural, =0 {Privé} one {Partagé avec # groupe} other {Partagé avec # groupes}}",
+          "sync": "Synchronisation automatique des autorisations",
+          "sync_restricted": "Synchronisation automatique des autorisations"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#er} other {#e}} dans la file d'attente",
@@ -7480,7 +7505,7 @@
         },
         "docs": {
           "label": "docs",
-          "processed": "{count, number} traités",
+          "processed": "{count, number} traités récemment",
           "processedTooltip": {
             "running": "Documents traités jusqu'ici par l'exécution en cours, échecs compris. Un document traité deux fois par l'exécution compte deux fois, ce chiffre peut donc dépasser le nombre de documents du connecteur.",
             "finished": "Documents traités par la dernière exécution, échecs compris. Un document traité deux fois compte deux fois, et les documents supprimés depuis ne comptent plus pour le connecteur, ce chiffre peut donc dépasser le nombre de documents du connecteur."
@@ -7491,6 +7516,8 @@
           "manageFederated": "Gérer le connecteur fédéré",
           "expand": "Voir les détails",
           "collapse": "Masquer les détails",
+          "viewErrors": "Voir les erreurs",
+          "viewAllRuns": "Voir toutes les exécutions",
           "pause": "Suspendre",
           "resume": "Reprendre"
         },
@@ -7503,7 +7530,8 @@
           "filteredTitle": "Aucun connecteur ne correspond à ces filtres."
         },
         "loadError": "Impossible de charger les connecteurs.",
-        "units": "{count, plural, one {connecteur} other {connecteurs}}"
+        "units": "{count, plural, one {connecteur} other {connecteurs}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "État de l'indexation des connecteurs"
     },
@@ -8016,9 +8044,6 @@
         "title": "Configurez un fournisseur LLM pour commencer à discuter."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "Par défaut"
-        },
         "deleteButton": {
           "ariaLabel": "Supprimer {provider}"
         },
@@ -10218,13 +10243,6 @@
           "label": "Inviter des utilisateurs"
         },
         "title": "Utilisateurs et demandes"
-      },
-      "permissionsNotice": {
-        "description": "{appName} utilise désormais des autorisations basées sur les groupes. Les rôles Curator et Global Curator sont remplacés par des autorisations de groupe configurables, avec des gestionnaires par groupe pour une administration limitée à leur périmètre.",
-        "learnMoreButton": {
-          "label": "En savoir plus"
-        },
-        "title": "Les autorisations ont changé"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -14273,10 +14291,7 @@
       "upgrade": {
         "label": "Mettre à niveau l'offre"
       },
-      "availableFor": "Disponible avec l’{plan}",
-      "beta": {
-        "title": "bêta"
-      }
+      "availableFor": "Disponible avec l’{plan}"
     },
     "placeholders": {
       "email": "e-mail@votreentreprise.com",
@@ -14325,6 +14340,19 @@
     "gridSearch": {
       "itemPlaceholder": "Rechercher des {item} ou appuyer sur « / » pour activer...",
       "placeholder": "Rechercher ou appuyer sur « / » pour activer..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "alpha",
+        "beta": "bêta",
+        "comingSoon": "bientôt disponible",
+        "deprecated": "obsolète",
+        "temporarilyUnavailable": "temporairement indisponible",
+        "legacy": "ancien"
+      },
+      "labels": {
+        "default": "Par défaut"
+      }
     }
   },
   "craft": {
@@ -14861,9 +14889,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BÊTA"
-      },
       "returnHome": {
         "button": "Retour à l'accueil"
       },

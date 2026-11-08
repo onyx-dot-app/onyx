@@ -1,0 +1,19 @@
+{
+  "name": "onyx",
+  "description": "Onyx plugins for Claude Code",
+  "owner": {
+    "name": "Onyx",
+    "url": "https://onyx.app"
+  },
+  "plugins": [
+    {
+      "name": "onyx",
+      "description": "Grounds every prompt in your Onyx knowledge base and puts Onyx first for context retrieval",
+      "version": "0.1.0",
+      "source": {
+        "source": "archive",
+        "url": "https://github.com/onyx-dot-app/onyx/releases/download/agent-plugin/v0.1.0/onyx-agent-plugin.zip"
+      }
+    }
+  ]
+}

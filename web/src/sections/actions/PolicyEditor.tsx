@@ -199,10 +199,9 @@ export function UserManagementSwitch({
   const t = useTranslations("craft.actionPolicies");
   return (
     <ContentAction
+      font="main-ui-action"
       title={t("userManagement")}
       description={t("userManagementDescription")}
-      sizePreset="main-ui"
-      variant="section"
       padding={0}
       rightChildren={
         <InputSwitch

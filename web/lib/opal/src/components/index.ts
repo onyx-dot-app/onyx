@@ -131,8 +131,16 @@ export {
 export {
   Badge,
   BADGE_COLORS,
+  badgeTextClass,
   type BadgeProps,
+  type BadgeSize,
 } from "@opal/components/badge/components";
+
+/* BadgeButton */
+export {
+  BadgeButton,
+  type BadgeButtonProps,
+} from "@opal/components/badge-button/components";
 
 /* Tag */
 export {
@@ -160,12 +168,6 @@ export {
   type IconTooltipProps,
   type IconTooltipStatus,
 } from "@opal/components/icon-tooltip/components";
-
-/* OverflowText */
-export {
-  OverflowText,
-  type OverflowTextProps,
-} from "@opal/components/overflow-text/components";
 
 /* Log */
 export {

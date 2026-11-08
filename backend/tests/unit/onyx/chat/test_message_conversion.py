@@ -730,3 +730,53 @@ def test_unknown_image_capability_uses_existing_lookup(
     assert looked_up == [
         (model.model_name, model.model_provider, model.deployment_name)
     ]
+
+
+def test_model_formatting_drops_application_payloads_without_copying_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import BaseModel
+
+    from onyx.context.search.models import SearchDocsResponse
+    from onyx.llm.models import SystemMessage
+
+    metadata = PromptMetadata(token_count=10, should_cache=True)
+    details = SearchDocsResponse(search_docs=[], citation_mapping={1: "source"})
+    assistant = CanonicalAssistantMessage(
+        content=[
+            AgentToolCall(id="call", name="search", arguments={"query": "original"})
+        ],
+        metadata=metadata,
+    )
+    result = ToolResultMessage(
+        tool_call_id="call",
+        tool_name="search",
+        content="Evidence",
+        metadata=metadata,
+        details=details,
+    )
+
+    def unexpected_copy(
+        _self: BaseModel, _memo: dict[int, object] | None = None
+    ) -> BaseModel:
+        raise AssertionError("Application payloads must not be copied into model input")
+
+    monkeypatch.setattr(PromptMetadata, "__deepcopy__", unexpected_copy)
+    monkeypatch.setattr(SearchDocsResponse, "__deepcopy__", unexpected_copy)
+    prepared = prepare_model_messages(
+        [SystemMessage(content="Instructions", metadata=metadata), assistant, result],
+        _make_llm_config(OPENAI_PROVIDER_NAME),
+    )
+    assert all(message.metadata is None for message in prepared)
+    assert all(message.cacheable for message in prepared)
+    assert all(message.estimated_tokens == 10 for message in prepared)
+    prepared_assistant, prepared_result = prepared[1:]
+    assert isinstance(prepared_assistant, CanonicalAssistantMessage)
+    assert isinstance(prepared_result, ToolResultMessage)
+    assert prepared_result.details is None
+    prepared_assistant.tool_calls[0].arguments["query"] = "changed"
+    prepared_result.content = "Changed evidence"
+    assert assistant.tool_calls[0].arguments == {"query": "original"}
+    assert result.content == "Evidence"
+    assert result.details is details
+    assert result.metadata is metadata

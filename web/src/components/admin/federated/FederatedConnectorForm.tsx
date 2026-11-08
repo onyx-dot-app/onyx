@@ -878,7 +878,7 @@ export function FederatedConnectorForm({
       <Card className="px-8 py-4">
         <CardContent className="p-0">
           <form onSubmit={handleSubmit}>
-            <Text as="p" font="heading-h3" color="text-05">
+            <Text as="p" font="heading-section" color="text-05">
               {t("credentials.heading")}
             </Text>
             <Text as="p" font="main-ui-muted" color="text-05">
@@ -886,7 +886,7 @@ export function FederatedConnectorForm({
             </Text>
             <div className="space-y-4">{renderCredentialFields()}</div>
             <Divider />
-            <Text as="p" font="heading-h3" color="text-05">
+            <Text as="p" font="heading-section" color="text-05">
               {t("configuration.heading")}
             </Text>
             <div className="space-y-4">{renderConfigFields()}</div>

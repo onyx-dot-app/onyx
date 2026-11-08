@@ -519,10 +519,9 @@ export default function AgentKnowledgePane({
   return (
     <Section gap={2} alignItems="stretch" height="auto">
       <Content
+        font="main-content-emphasis"
         title={t("pane.header.title")}
         description={t("pane.header.description")}
-        sizePreset="main-content"
-        variant="section"
       />
 
       <Card border="solid" rounding={4}>

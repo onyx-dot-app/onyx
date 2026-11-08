@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, Protocol
 
 from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
-from ee.onyx.external_permissions.models import DocSyncResume
+from ee.onyx.external_permissions.models import DocSyncResume, SyncEntityFailure
 from onyx.access.models import (
     DocExternalAccess,  # noqa
     ElementExternalAccess,  # noqa
@@ -99,7 +99,7 @@ GroupSyncFuncType = Callable[
         str,  # tenant_id
         ConnectorCredentialPair,  # cc_pair
     ],
-    Generator[ExternalUserGroup, None, None],
+    Generator[ExternalUserGroup | SyncEntityFailure, None, None],
 ]
 
 # list of chunks to be censored and the user email. returns censored chunks

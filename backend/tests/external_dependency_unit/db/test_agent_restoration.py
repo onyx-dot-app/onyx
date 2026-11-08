@@ -53,7 +53,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.tracing.flows import LLMFlow
 from shared_configs.contextvars import get_current_tenant_id
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -382,7 +381,9 @@ def test_incognito_does_not_persist_child_conversations(db_session: Session) -> 
         db_session.commit()
 
 
-def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
+def test_saved_tools_survive_replay_and_request_preparation(
+    db_session: Session,
+) -> None:
     session = ChatSession(id=uuid4(), description="History context")
     db_session.add(session)
     db_session.flush()
@@ -447,9 +448,6 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
         history = convert_chat_history(
             capture_chat_history([saved_question, saved_response], {}, len),
             files=[],
-            context_image_files=[],
-            additional_context=None,
-            token_counter=len,
         ).messages
         original_messages = [message.model_dump() for message in history]
         history.append(UserMessage(content="Next question"))
@@ -462,7 +460,7 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
             token_counter=len,
         )
         assert [m.text for m in request if isinstance(m, ToolResultMessage)] == [
-            TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+            "Stored evidence",
             image_content,
         ]
         assert [m.text for m in history if isinstance(m, ToolResultMessage)] == [

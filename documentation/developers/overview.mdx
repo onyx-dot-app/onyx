@@ -19,11 +19,6 @@ Make API requests to:
   Other endpoints can change between releases without notice.
 </Note>
 
-<Info>
-  This page applies to Onyx **v4.7 and later**, which replaced API key roles with group-based permissions.
-  For older versions, see [Overview & Auth before v4.7](/developers/overview_legacy).
-</Info>
-
 ## Authentication
 
 Every request authenticates with a Bearer token in the `Authorization` header:
@@ -112,10 +107,8 @@ Every endpoint page in the [API Reference](/developers/api_reference/chat/get_ch
 states the permission it requires. Permissions come from the groups a user or service account belongs to:
 `basic` from the Basic group that every user joins, and `admin` from the Admin group, which passes every check.
 
-<Info>
-  This permission model applies to Onyx **v4.7 and later**. For how groups, group permissions, and Group Managers work,
-  see [Understanding Permissions](/admins/permissions/understanding_permissions).
-</Info>
+For how groups, group permissions, and Group Managers work,
+see [Understanding Permissions](/admins/permissions/understanding_permissions).
 
 Endpoint pages and `GET /me/permissions` identify a permission by its value.
 Each value maps to a permission an admin grants to a group in the Admin Panel:

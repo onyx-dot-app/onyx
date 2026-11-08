@@ -84,7 +84,7 @@ def _parse_request(body: dict[str, Any]) -> RecordedRequest:
             str((tool.get("function") or {}).get("name", ""))
             for tool in body.get("tools") or []
         ],
-        tool_choice=tool_choice if isinstance(tool_choice, str) else None,
+        tool_choice=tool_choice if isinstance(tool_choice, (str, dict)) else None,
         body=body,
     )
 

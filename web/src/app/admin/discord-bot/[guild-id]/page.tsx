@@ -89,10 +89,9 @@ function GuildDetailContent({
       <Card border="solid" rounding={4} disabled={disabled}>
         <Section alignItems="start" height="fit">
           <ContentAction
+            font="main-content-emphasis"
             title={t("channels.section.title")}
             description={t("channels.section.description")}
-            sizePreset="main-content"
-            variant="section"
             rightChildren={
               isRegistered && !channelsLoading && !channelsError ? (
                 <Section
@@ -355,10 +354,9 @@ export default function Page({ params }: Props) {
         <Card border="solid" rounding={4} disabled={!guild?.enabled}>
           <Section alignItems="start" height="fit">
             <ContentAction
+              font="main-content-emphasis"
               title={t("defaultAgent.section.title")}
               description={t("defaultAgent.section.description")}
-              sizePreset="main-content"
-              variant="section"
               rightChildren={
                 <InputSingleSelect
                   value={guild?.default_persona_id?.toString() ?? "default"}

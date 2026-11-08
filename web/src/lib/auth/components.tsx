@@ -243,11 +243,11 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
     <div className="flex flex-col gap-1">
       {rules.map((rule) => (
         <Content
+          font="secondary-body"
           key={rule.label}
-          sizePreset="secondary"
-          variant="body"
           icon={rule.met ? SvgCheckCircle : SvgXCircle}
-          color={rule.met ? "success" : "muted"}
+          color={rule.met ? "success" : "default"}
+          titleColor="text-03"
           title={rule.label}
         />
       ))}

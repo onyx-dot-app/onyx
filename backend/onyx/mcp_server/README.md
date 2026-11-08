@@ -129,9 +129,11 @@ The server provides three tools for searching and retrieving information:
 1. `search_indexed_documents`
 Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
 
-Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
+Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. With `retrieval_only`, the search uses the agent's knowledge scope and calls no model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
 
 `agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
+
+Pass `retrieval_only` to skip every LLM step (query expansion, filter detection, federated Slack search and document selection). The tool then calls `POST /search/raw` and returns up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. `MCP_SERVER_SEARCH_RETRIEVAL_ONLY=true` turns it on for every search.
 
 Filter values resolve on the search call, so clients do not need a lookup call first. `agent`, `source_types` and `document_set_names` are all validated: a value that does not resolve returns an error naming close matches, or the available values when there are few of them, rather than being dropped. A dropped filter would return a wider result set that looks correctly scoped, so these fail instead.
 
@@ -224,6 +226,7 @@ Expected response:
 - `MCP_SERVER_ENABLED`: Enable MCP server (set to "true" to enable, default: disabled)
 - `MCP_SERVER_PORT`: Port for MCP server (default: 8090)
 - `MCP_SERVER_CORS_ORIGINS`: Comma-separated CORS origins (optional)
+- `MCP_SERVER_SEARCH_RETRIEVAL_ONLY`: Run every document search with no LLM calls (default: false)
 
 **API Server Connection:**
 - `API_SERVER_PROTOCOL`: Protocol for API server connection (default: "http")

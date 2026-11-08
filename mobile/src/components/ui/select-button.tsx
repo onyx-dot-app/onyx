@@ -1,6 +1,6 @@
 // Pill primitive, RN port of Opal SelectButton
 // (web/lib/opal/src/components/buttons/select-button/). Shared by the deep-research toggle and the
-// forced-tool chips. Web's `foldable` collapses the label to icon-only via a CSS :hover animation;
+// preferred-tool chips. Web's `foldable` collapses the label to icon-only via a CSS :hover animation;
 // touch has no hover, so mobile folds by simply not rendering the label — which is exactly what the
 // deep-research use needs (icon-only when off, label when on: `foldable={!on}`).
 import { Pressable, View } from "react-native";

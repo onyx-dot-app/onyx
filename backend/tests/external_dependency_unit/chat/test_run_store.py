@@ -18,6 +18,7 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionCheckpoint,
+    PreparedStep,
     RunProgress,
     RunState,
     RunStatus,
@@ -196,6 +197,7 @@ def poll_run_owners(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, No
         "separate_process",
         "compaction",
         "input_group",
+        "permissions",
     ],
 )
 def test_transfer_preserves_result_budget_and_callback_boundary(
@@ -279,7 +281,26 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         ),
     ]
 
+    if scenario == "permissions":
+        tools.append(
+            AgentTool(
+                definition=ToolDefinition(
+                    name="blocked", description="", parameters={}
+                ),
+                execute=execute,
+            )
+        )
+
     def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+        if scenario == "permissions":
+            progress = checkpoint.run_state.progress
+            assert progress is not None
+            assert [tool.name for tool in progress.tools] == [
+                "search",
+                "ask",
+                "blocked",
+            ]
+            assert progress.allowed_tool_names == frozenset({"search", "ask"})
         if scenario == "slow_resume":
             threading.Event().wait(1.5)
             assert (
@@ -326,6 +347,11 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
         agent_id=str(branch[0]),
         state=context,
         tools=tools,
+        prepare_step=(
+            lambda _: PreparedStep(allowed_tool_names=frozenset({"search", "ask"}))
+        )
+        if scenario == "permissions"
+        else None,
         after_tool_call=lambda call, result: finalized.append(call.call.id) or result,
     )
     input_messages = (
@@ -670,7 +696,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 "onyx.chat.restoration.get_default_file_store", return_value=file_store
             ),
             patch(
-                "onyx.tools.file_snapshot.get_default_file_store",
+                "onyx.file_store.file_store.get_default_file_store",
                 return_value=file_store,
             ),
             patch("onyx.db.chat.get_default_file_store", return_value=file_store),
@@ -715,6 +741,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                     agent_id=str(branch[0]),
                     status=RunStatus.SUSPENDED,
                     progress=RunProgress(
+                        tool_configuration_digest="test-tool-configuration",
                         step_limit=2,
                         feature_state=feature.capture_state().model_dump(mode="json"),
                     ),
@@ -1169,6 +1196,14 @@ def test_resumed_child_keeps_its_original_response_tree(
         assert result is not None
         return ToolResult(content=result.output.text)
 
+    child_tools = [
+        ask,
+        AgentTool(
+            definition=ToolDefinition(name="delegate", description="", parameters={}),
+            execute=nested_delegate,
+        ),
+    ]
+
     def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
         replies = iter(
             [
@@ -1183,15 +1218,7 @@ def test_resumed_child_keeps_its_original_response_tree(
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id=checkpoint.run_state.agent_id,
             state=checkpoint.agent_state,
-            tools=[
-                ask,
-                AgentTool(
-                    definition=ToolDefinition(
-                        name="delegate", description="", parameters={}
-                    ),
-                    execute=nested_delegate,
-                ),
-            ],
+            tools=child_tools,
         )
 
     view = owner.bind(
@@ -1209,7 +1236,7 @@ def test_resumed_child_keeps_its_original_response_tree(
                     )
                 ),
                 generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-                tools=[ask],
+                tools=child_tools,
             ),
             name="research",
             description="Background research",

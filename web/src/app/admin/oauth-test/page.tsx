@@ -64,7 +64,7 @@ function ClaimsTable({
   const entries = Object.entries(claims);
   return (
     <div className="flex flex-col gap-2">
-      <Text font="heading-h3">{title}</Text>
+      <Text font="heading-section">{title}</Text>
       <Text font="main-ui-body" color="text-03">
         {subtitle}
       </Text>

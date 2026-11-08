@@ -46,13 +46,12 @@ function LLMProviderCardInner({
       onClick={onClick}
     >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={1}
         rightChildren={
           isConnected ? (

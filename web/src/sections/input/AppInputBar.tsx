@@ -22,7 +22,7 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatForcedToolId } from "@/lib/plugins/chat";
+import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
@@ -376,9 +376,9 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]);
 
-    const { clearForcedTool } = toolConfiguration;
-    const forcedToolId = effectiveChatForcedToolId({
-      requestedToolId: toolConfiguration.forcedToolId,
+    const { clearPreferredTool } = toolConfiguration;
+    const preferredToolId = effectiveChatPreferredToolId({
+      requestedToolId: toolConfiguration.preferredToolId,
       agent: activeAgent,
       plugins: memberPlugins ?? [],
     });
@@ -729,9 +729,9 @@ const AppInputBar = React.memo(
             )}
 
             {(() => {
-              if (!activeAgent || forcedToolId === null) return null;
+              if (!activeAgent || preferredToolId === null) return null;
               const tool = activeAgent.tools.find(
-                (tool) => tool.id === forcedToolId
+                (tool) => tool.id === preferredToolId
               );
               if (!tool) return null;
               return (
@@ -739,7 +739,7 @@ const AppInputBar = React.memo(
                   <SelectButton
                     variant="select-light"
                     icon={getIconForAction(tool)}
-                    onClick={clearForcedTool}
+                    onClick={clearPreferredTool}
                     state="selected"
                   >
                     {tool.display_name}
@@ -1045,7 +1045,7 @@ const AppInputBar = React.memo(
                     {[
                       ...sortedFilteredPrompts.map((prompt, index) => (
                         <LineItemButton
-                          sizePreset="main-ui"
+                          font="main-ui-action"
                           rounding={2}
                           key={prompt.id}
                           state={
@@ -1063,7 +1063,7 @@ const AppInputBar = React.memo(
                       )),
                       sortedFilteredPrompts.length > 0 ? null : undefined,
                       <LineItemButton
-                        sizePreset="main-ui"
+                        font="main-ui-action"
                         rounding={2}
                         key="create-new"
                         {...navigation.linkTo("/app/settings/chat-preferences")}

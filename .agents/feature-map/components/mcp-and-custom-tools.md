@@ -215,6 +215,8 @@ Policy precedence is in [[craft-external-apps]].
     preserves `CallToolResult.isError` as a failed result without marking
     credentials for reauthentication. Text content takes precedence; a result
     with only `structuredContent` is JSON-encoded, then parsed for the model.
+    `server/features/mcp/client.py:process_mcp_result` uses image/audio omission
+    notices only when neither readable content nor structured content exists.
     Transport exceptions report an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
     `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a

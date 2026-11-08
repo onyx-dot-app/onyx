@@ -58,10 +58,9 @@ export default function OAuthProviderConnections() {
   return (
     <Section gap={3} height="fit" alignItems="stretch">
       <Content
+        font="main-content-emphasis"
         title={t("connections.title")}
         description={t("connections.description")}
-        sizePreset="main-content"
-        variant="section"
         width="full"
       />
       <Card border="solid" rounding={4}>

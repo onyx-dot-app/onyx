@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 
 from onyx.agents.compaction import IMAGE_TOKEN_ESTIMATE
 from onyx.chat.models import PromptMetadata
-from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP, PROMPT_CACHE_CHAT_HISTORY
+from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import (
@@ -92,10 +92,8 @@ def _select_recent_image_indices(
     """Pick which (msg_idx, part_idx) positions to keep when the request has
     more images than the cap. Walks messages newest-to-oldest (recency wins
     across turns) but walks images within each message in attachment order
-    (earlier positions preferred). This matters in mixed messages where
-    user-attached images appear first in image_files and project-context
-    images are appended at the end — when the cap bites, we prefer to keep
-    what the user explicitly attached over project-context fill.
+    (earlier positions preferred). Project images are in the fixed preamble,
+    so newer user attachments take priority when the cap is reached.
 
     Returns the keep-set and the count of images that would be dropped. Only
     image parts on non-reminder user messages count, so cap slots aren't
@@ -238,7 +236,7 @@ def prepare_model_messages(  # noqa: C901
 
     for idx, msg in enumerate(history):
         if isinstance(msg, SystemMessage):
-            messages.append(msg.model_copy(deep=True))
+            messages.append(msg.model_copy(update={"metadata": None}))
 
         elif isinstance(msg, UserMessage) and not prompt_metadata(msg).is_reminder:
             messages.append(
@@ -257,8 +255,15 @@ def prepare_model_messages(  # noqa: C901
             )
             messages.append(reminder_msg)
 
-        elif isinstance(msg, (AssistantMessage, ToolResultMessage)):
-            messages.append(msg.model_copy(deep=True))
+        elif isinstance(msg, AssistantMessage):
+            # Model input needs content, not the saved citation/document graph.
+            messages.append(
+                msg.model_copy(update={"metadata": None}).model_copy(deep=True)
+            )
+
+        elif isinstance(msg, ToolResultMessage):
+            # All remaining fields are scalars; application tool details stay in history.
+            messages.append(msg.model_copy(update={"metadata": None, "details": None}))
 
         else:
             raise TypeError(f"Unsupported message type: {type(msg).__name__}")
@@ -269,11 +274,7 @@ def prepare_model_messages(  # noqa: C901
                 if token_counter is not None
                 else prompt_metadata(msg).token_count
             )
-        messages[-1].cacheable = (
-            msg.cacheable
-            or PROMPT_CACHE_CHAT_HISTORY
-            and prompt_metadata(msg).should_cache
-        )
+        messages[-1].cacheable = msg.cacheable or prompt_metadata(msg).should_cache
 
     # Tell the model when image limits removed content from the request.
     if image_drop_notice is not None:

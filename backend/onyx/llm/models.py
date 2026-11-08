@@ -141,6 +141,7 @@ class ImageUrlDetail(BaseModel):
 class ImageContentPart(BaseModel):
     type: Literal["image_url"] = "image_url"
     image_url: ImageUrlDetail
+    cache_control: dict[str, JsonValue] | None = None
 
 
 ContentPart = TextContentPart | ImageContentPart
@@ -297,6 +298,8 @@ class ToolDefinition(BaseModel):
     name: str
     description: str
     parameters: dict[str, JsonValue]
+    # The author supplies a strict-compatible schema and accepts nullable defaults.
+    strict: bool = False
 
 
 class GenerationOptions(BaseModel):
@@ -314,6 +317,7 @@ class GenerationRequest(BaseModel):
     messages: list[Message] = Field(default_factory=list)
     system_prompt: str = ""
     tools: list[ToolDefinition] = Field(default_factory=list)
+    allowed_tool_names: frozenset[str] | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
 
 

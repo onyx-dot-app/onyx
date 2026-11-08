@@ -25,14 +25,14 @@ export default function PendingBackfills({ backfills }: PendingBackfillsProps) {
     <Card border="solid" padding={4} rounding={3}>
       <Section gap={2} alignItems="stretch" height="fit">
         <Content
+          font="main-ui-action"
           icon={SvgHistory}
           title={t("title")}
           description={t("description")}
-          sizePreset="main-ui"
-          variant="section"
         />
         {backfills.map((backfill) => (
           <ContentAction
+            font="main-ui-action"
             key={`${backfill.window_start}-${backfill.requested_at}`}
             title={
               windowCoversAllHistory(backfill.window_start)
@@ -52,8 +52,6 @@ export default function PendingBackfills({ backfills }: PendingBackfillsProps) {
                       time: dateTime(backfill.retry_after),
                     })
             }
-            sizePreset="main-ui"
-            variant="section"
             rightChildren={
               <Section flexDirection="row" gap={1} height="fit" width="fit">
                 {backfill.scoped && <Badge title={t("scoped")} color="info" />}

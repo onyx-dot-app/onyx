@@ -82,7 +82,7 @@ export default function GroupSpendingLimitsSection({
     <Collapsible
       title={t("groupPage.title")}
       description={t("groupPage.description")}
-      tag={disabled ? { ...plans[Tier.ENTERPRISE].tag, size: 4 } : undefined}
+      tag={disabled ? plans[Tier.ENTERPRISE].tag : undefined}
     >
       <Disabled disabled={disabled} tooltip={disabledTooltip}>
         <div>{body()}</div>

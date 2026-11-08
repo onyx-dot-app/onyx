@@ -11,7 +11,7 @@ export interface ChatPlugin {
   toolIds: number[];
 }
 
-export function effectiveChatForcedToolId({
+export function effectiveChatPreferredToolId({
   requestedToolId,
   agent,
   plugins,

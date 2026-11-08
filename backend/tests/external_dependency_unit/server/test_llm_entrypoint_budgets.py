@@ -219,7 +219,7 @@ def test_slack_bot_replies_with_budget_message_instead_of_answering(
             return_value=("dm", True),
         ),
         patch(
-            f"{_HANDLE_REGULAR_ANSWER}.handle_stream_message_objects",
+            f"{_HANDLE_REGULAR_ANSWER}.run_chat_turn",
             side_effect=_fail_llm_resolution,
         ) as mock_stream,
         patch(

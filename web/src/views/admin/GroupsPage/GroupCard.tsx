@@ -59,11 +59,10 @@ function GroupCard({ group }: GroupCardProps) {
       onClick={canManageMembers ? openGroup : undefined}
     >
       <ContentAction
+        font="main-content-emphasis"
         icon={isAdmin ? SvgUserManage : isBasic ? SvgUser : SvgUsers}
         title={displayGroupName(group, t)}
         description={buildGroupDescription(group, t)}
-        sizePreset="main-content"
-        variant="section"
         padding={1}
         suffix={isBasic ? t("card.defaultSuffix.label") : undefined}
         editable={!isSyncing && canManage}

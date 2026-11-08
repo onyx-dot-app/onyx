@@ -140,8 +140,10 @@ class WebSearchTool(Tool):
         return ToolDefinition(
             name=self.name,
             description="Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     QUERIES_FIELD: {
                         "type": "array",

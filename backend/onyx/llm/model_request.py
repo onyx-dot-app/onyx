@@ -6,9 +6,8 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, Field, JsonValue
 
-from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import model_needs_formatting_reenabled
@@ -43,6 +42,10 @@ class ToolCall(BaseModel):
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
     cache_control: dict[str, JsonValue] | None = None
+    # Where a provider that places its own markers (OpenAI's
+    # prompt_cache_breakpoint) ends a cached prefix. Excluded from model_dump;
+    # the LiteLLM wrapper carries it on the serialized message.
+    cache_breakpoint: bool = Field(default=False, exclude=True)
 
 
 class SystemMessage(CacheableMessage):
@@ -169,6 +172,7 @@ def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonV
                 "name": tool.name,
                 "description": tool.description,
                 "parameters": tool.parameters,
+                "strict": tool.strict,
             },
         }
         for tool in tools
@@ -180,7 +184,6 @@ def cache_split_stats(
 ) -> dict[str, str]:
     """Describe the serialized prefix using already resolved image/token estimates."""
     stats = {
-        "prompt_cache_chat_history": "on" if PROMPT_CACHE_CHAT_HISTORY else "off",
         "cacheable_prefix_msgs": str(prefix_length),
         # Counts prepared messages, including notices added during image selection.
         "history_msgs": str(len(request.messages) + bool(request.system_prompt)),

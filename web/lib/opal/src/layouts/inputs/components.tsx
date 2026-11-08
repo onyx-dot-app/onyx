@@ -4,11 +4,11 @@ import "@opal/layouts/inputs/styles.css";
 import { useContext } from "react";
 import { useField, FormikContext } from "formik";
 import type {
-  ColorTypes,
   IconFunctionComponent,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
+import type { ContentColor } from "@opal/layouts/content/components";
 import { Text, Divider, type BadgeProps } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
@@ -119,12 +119,11 @@ function Vertical({
 
   const titleRow = rightChildren ? (
     <ContentAction
+      font="main-ui-action"
       title={title}
       description={description}
       suffix={suffix}
-      tag={tag}
-      sizePreset="main-ui"
-      variant="section"
+      badge={tag}
       width="full"
       padding={0}
       rightChildren={
@@ -140,12 +139,11 @@ function Vertical({
     />
   ) : (
     <Content
+      font="main-ui-action"
       title={title}
       description={description}
       suffix={suffix}
-      tag={tag}
-      sizePreset="main-ui"
-      variant="section"
+      badge={tag}
     />
   );
 
@@ -216,13 +214,12 @@ function Horizontal({
   const content = (
     <Section ref={ref} gap={1} alignItems="start">
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         suffix={suffix}
-        tag={tag}
-        sizePreset="main-ui"
-        variant="section"
+        badge={tag}
         width="full"
         padding={0}
         center={center}
@@ -296,16 +293,16 @@ function InputErrorText({
   ref,
 }: InputErrorTextProps) {
   const Icon = type === "error" ? SvgXOctagon : SvgAlertCircle;
-  const color: ColorTypes = type === "error" ? "danger" : "warning";
+  const color: ContentColor = type === "error" ? "error" : "warning";
 
   return (
     <div ref={ref} className="px-1">
       <Content
-        sizePreset="secondary"
-        variant="body"
+        font="secondary-body"
         icon={Icon}
         title={children}
         color={color}
+        titleColor="text-03"
         role="alert"
       />
     </div>

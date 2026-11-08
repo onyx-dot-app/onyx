@@ -8,10 +8,6 @@
     "dark": "#0050B4"
   },
   "favicon": "assets/logo/onyx_favicon.svg",
-  "banner": {
-    "content": "**Permissions update:** Onyx now uses group-based permissions. [Understand permissions](/admins/permissions/understanding_permissions) or [review migration details](/admins/permissions/whats_changing)",
-    "dismissible": true
-  },
   "navigation": {
     "tabs": [
       {
@@ -451,6 +447,7 @@
                 "icon": "magnifying-glass",
                 "pages": [
                   "developers/api_reference/search/search",
+                  "developers/api_reference/search/raw_search",
                   "developers/api_reference/search/handle_send_search_message",
                   "developers/api_reference/search/get_search_history",
                   "developers/api_reference/search/search_flow_classification",

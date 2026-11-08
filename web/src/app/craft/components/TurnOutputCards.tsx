@@ -53,12 +53,11 @@ export default function TurnOutputCards({
             onClick={output.deleted ? undefined : () => onOpen(output)}
           >
             <ContentAction
+              font="main-ui-action"
               icon={output.kind === "app" ? SvgGlobe : getFileIcon(output.name)}
               title={name}
               description={description || undefined}
               descriptionMaxLines={1}
-              sizePreset="main-ui"
-              variant="section"
               padding={0}
               center
               rightChildren={
