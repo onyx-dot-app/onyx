@@ -165,7 +165,8 @@ preview.
    The Postgres store uses a savepoint for large-object reads and deletes. After a
    driver error, it checks the object catalog: a missing object raises
    `FileNotFoundError` on read and permits record cleanup on delete. Other storage
-   errors propagate and preserve the records for retry.
+   errors propagate and preserve the records for retry. Size probes also check
+   the object catalog, so a surviving content row cannot hide a missing blob.
    `server/features/projects/api.py:delete_user_file` refuses while any project or agent link exists and
    returns `has_associations=True` with a 200, not an error.
 6. `file-id-write-once` **A file id is write-once.** On S3, GCS and Azure,

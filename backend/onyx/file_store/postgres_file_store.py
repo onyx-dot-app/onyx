@@ -238,9 +238,13 @@ class PostgresBackedFileStore(FileStore):
                 record = get_file_content_by_file_id(
                     file_id=file_id, db_session=session
                 )
+                if not large_object_exists(record.lobj_oid, session):
+                    raise FileNotFoundError(f"Object for file {file_id} does not exist")
                 return record.file_size
         except FileRecordNotFoundError as e:
             raise FileNotFoundError(f"Content for file {file_id} does not exist") from e
+        except FileNotFoundError:
+            raise
         except Exception as e:
             logger.warning("Error getting file size for %s: %s", file_id, e)
             return None

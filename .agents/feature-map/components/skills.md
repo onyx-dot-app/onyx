@@ -426,8 +426,11 @@ The library preview of an external-app skill calls the same renderer
 23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**
     `skills/sync.py:sync_marketplace` owns the sessions and commit. Call it in the
     target tenant context after authorization. A detached current-version snapshot
-    undergoes bounded blob verification. Missing or corrupt blobs force the provider
-    to fetch even an unchanged revision. Transient storage reads stop the sync.
+    uses object metadata to detect missing bundles without reading their content.
+    Source changes trigger bounded content verification; unchanged sources do not
+    detect corruption in existing blobs. Unknown size falls back to bounded verification.
+    Missing bundles force a fetch, except keys already blocked at that revision.
+    A forced fetch that changes nothing returns no work. Storage failures stop sync.
     Ingestion preparation runs before upload; validation failures become blocked
     entries with their original keys. Storage failures abort the entire sync.
     Each attempted upload uses a fresh tracked file id. Reconciliation commits all

@@ -11,10 +11,11 @@ from onyx.db.marketplace import (
     fetch_marketplace_sync_state,
     reconcile_marketplace__no_commit,
 )
+from onyx.db.models import SkillVersion
 from onyx.db.resource_version import repair_version_metadata
 from onyx.db.skill_version import delete_unreferenced_skill_bundles
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.ingest import (
     IngestedBundle,
@@ -45,10 +46,24 @@ def _cleanup(file_ids: set[str]) -> None:
         )
 
 
+def _bundle_available(version: SkillVersion, file_store: FileStore) -> bool:
+    if version.bundle_file_id is None:
+        return False
+    try:
+        size = file_store.get_file_size(version.bundle_file_id)
+    except FileNotFoundError:
+        return False
+    if size is None:
+        return repair_version_metadata(
+            version, file_store, limits=STORED_BUNDLE_LIMITS, verify_bundle=True
+        )
+    return 0 < size <= STORED_BUNDLE_LIMITS.max_stored_bytes
+
+
 def sync_marketplace(
     marketplace_id: UUID, tenant_id: str
 ) -> ReconciliationResult | None:
-    """Run in the target tenant context. Return None for a healthy unchanged source.
+    """Run in the target tenant context. Return None when an unchanged source needs no work.
 
     Owns its sessions and commit. Callers must authorize access before invoking.
     Failed commit attempts leave uploads for the aged orphan sweep.
@@ -57,21 +72,33 @@ def sync_marketplace(
     with get_session_with_current_tenant() as db_session:
         marketplace, current = fetch_marketplace_sync_state(marketplace_id, db_session)
     file_store = get_default_file_store()
-    # These versions are detached; verification cannot write during staging.
+    # Probe object metadata on unchanged runs; decode bundles on source changes.
     recovery_keys = frozenset(
         key
         for key, version in current.items()
         if version is None
         or version.content_digest is None
-        or not repair_version_metadata(
-            version, file_store, limits=STORED_BUNDLE_LIMITS, verify_bundle=True
-        )
+        or not _bundle_available(version, file_store)
     )
     archive = get_marketplace_adapter(marketplace, tenant_id).fetch_if_changed(
-        force=bool(recovery_keys)
+        force=any(
+            key not in marketplace.blocked_entries
+            and key.split("/", 1)[0] not in marketplace.blocked_entries
+            for key in recovery_keys
+        )
     )
     if archive is None:
         return None
+    if archive.revision != marketplace.last_synced_revision:
+        recovery_keys |= frozenset(
+            key
+            for key, version in current.items()
+            if key not in recovery_keys
+            and version is not None
+            and not repair_version_metadata(
+                version, file_store, limits=STORED_BUNDLE_LIMITS, verify_bundle=True
+            )
+        )
     read = read_marketplace_archive(archive.archive_bytes, folder=archive.folder)
     staged: dict[str, IngestedBundle] = {}
     uploaded: set[str] = set()
@@ -137,4 +164,11 @@ def sync_marketplace(
             _cleanup(uploaded)
         raise
     _cleanup(result.cleanup_file_ids)
+    if (
+        archive.revision == marketplace.last_synced_revision
+        and result.status == "applied"
+        and not result.changed_skill_ids
+        and not result.retired_skill_ids
+    ):
+        return None
     return result

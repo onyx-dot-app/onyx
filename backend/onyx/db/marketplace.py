@@ -58,9 +58,9 @@ def reconcile_marketplace__no_commit(
     recovery_keys forces fresh versions for unavailable current bundles, even
     with equal digests. Each ready recovery entry needs a fresh staged bundle.
     No storage or provider I/O occurs here. On success, commit before passing
-    cleanup_file_ids to delete_unreferenced_skill_bundles. On any exception or
-    commit failure, S4 must clean all staged files. A savepoint rolls back this
-    entire application even if the caller catches an exception and commits.
+    cleanup_file_ids to delete_unreferenced_skill_bundles. Before a commit attempt,
+    clean staged files on failure. After an attempt, defer to the orphan sweep.
+    A savepoint rolls back this application if the caller catches an exception.
     """
     cleanup = {bundle.bundle_file_id for bundle in staged.values()}
     if isinstance(read, FailedMarketplace):

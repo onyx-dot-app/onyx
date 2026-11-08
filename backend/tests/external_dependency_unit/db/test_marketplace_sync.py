@@ -107,7 +107,10 @@ def test_success_and_noop(
     files = stored_bundles(session)
     assert len(files) == 2
     assert marketplace.last_synced_revision == github.revision
-    assert sync.sync_marketplace(marketplace.id, tenant) is None
+    with patch.object(
+        get_default_file_store(), "read_file", side_effect=AssertionError("full read")
+    ):
+        assert sync.sync_marketplace(marketplace.id, tenant) is None
     assert len(github.urls) == 3  # The unchanged source needs only a commit lookup.
     github.revision = "b" * 40
     assert not run(marketplace, tenant).changed_skill_ids
@@ -258,6 +261,11 @@ def test_equal_content_recovery(
             record.file_type,
             file_id=old_file,
         )
+    if same_revision and damage in {"corrupt", "different"}:
+        assert sync.sync_marketplace(marketplace.id, tenant) is None
+        assert rows(session)[0].current_version_id == old_version
+        # Content corruption is checked when the source next changes.
+        github.revision = "b" * 40
     if not same_revision:
         github.revision = "b" * 40
     result = run(marketplace, tenant)
@@ -457,8 +465,11 @@ def test_transient_current_read_failure_stops_before_fetch(
 ) -> None:
     run(marketplace, tenant)
     files = stored_bundles(session)
-    with patch.object(
-        get_default_file_store(), "read_file", side_effect=OSError("offline")
+    with (
+        patch.object(get_default_file_store(), "get_file_size", return_value=None),
+        patch.object(
+            get_default_file_store(), "read_file", side_effect=OSError("offline")
+        ),
     ):
         with pytest.raises(OSError, match="offline"):
             run(marketplace, tenant)
@@ -520,3 +531,34 @@ def test_existing_blob_errors_are_not_treated_as_missing(
     with store.read_file(file_id) as content:
         assert content.read().startswith(b"PK")
     assert marketplace.last_synced_revision == github.revision
+
+
+@pytest.mark.parametrize("blocked", ["skill", "plugin"])
+def test_unrepairable_bundle_does_not_repeat_archive_download(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    blocked: str,
+) -> None:
+    run(marketplace, tenant)
+    skill = rows(session)[0]
+    assert skill.bundle_file_id is not None
+    get_default_file_store().delete_file(skill.bundle_file_id)
+    github.archive = _archive(
+        {CLAUDE: _catalog(skills=["./skills"])}
+        | {"skills/alpha/SKILL.md": b"invalid", "skills/beta/SKILL.md": _md("beta")}
+        | ({"agents/agent.md": b"unsupported"} if blocked == "plugin" else {}),
+        kind="tar",
+        wrapper="repo-commit/",
+    )
+    assert sync.sync_marketplace(marketplace.id, tenant) is None
+    assert len(github.urls) == 4
+    session.refresh(marketplace)
+    assert marketplace.blocked_entries
+    for _ in range(2):
+        assert sync.sync_marketplace(marketplace.id, tenant) is None
+    assert len(github.urls) == 6
+    github.revision = "b" * 40
+    github.archive = catalog_bytes("alpha", "beta")
+    assert run(marketplace, tenant).changed_skill_ids == [skill.id]
