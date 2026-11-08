@@ -7,50 +7,35 @@ import { ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 const origin = "http://localhost:3000";
 
 // Exercise Next's matcher rather than calling proxy() on excluded requests.
-describe("multipart upload routing", () => {
+describe("API catch-all routing", () => {
   test.each([
     "/api/skills/custom",
     "/api/user/projects/file/upload",
     "/api/manage/admin/connector/file",
     "/api/build/user-library/files",
-  ])("streams %s without cloning the body", (path) => {
+  ])("bypasses the page proxy for upload route %s", (path) => {
     expect(
       unstable_doesMiddlewareMatch({
         config,
         url: origin + path,
-        headers: { "content-type": "multipart/form-data; boundary=test" },
       })
     ).toBe(false);
   });
 
-  test.each(["multipart/form-data", "Multipart/Form-Data; boundary=test"])(
-    "recognizes %s",
-    (contentType) => {
-      expect(
-        unstable_doesMiddlewareMatch({
-          config,
-          url: origin + "/api/skills/custom",
-          headers: { "content-type": contentType },
-        })
-      ).toBe(false);
-    }
-  );
-
   test.each(["/admin/users", "/agents", "/connector", "/app", "/apiary"])(
-    "keeps the page proxy for multipart requests to %s",
+    "keeps the page proxy for %s",
     (path) => {
       expect(
         unstable_doesMiddlewareMatch({
           config,
           url: origin + path,
-          headers: { "content-type": "multipart/form-data; boundary=test" },
         })
       ).toBe(true);
     }
   );
 
   test.each(["/api/auth/login", "/api/health", "/api/chat/file/test"])(
-    "lets the catch-all own non-upload response headers for %s",
+    "bypasses the page proxy for non-upload route %s",
     (path) => {
       expect(unstable_doesMiddlewareMatch({ config, url: origin + path })).toBe(
         false
@@ -64,18 +49,14 @@ describe("multipart upload routing", () => {
     "/api/docs/oauth2-redirect",
     "/api/chat/mcp/oauth/callback",
     "/api/build/sessions/session-id/webapp/_next/hmr",
-  ])(
-    "keeps security headers on routes outside the API catch-all: %s",
-    (path) => {
-      expect(
-        unstable_doesMiddlewareMatch({
-          config,
-          url: origin + path,
-          headers: { "content-type": "multipart/form-data; boundary=test" },
-        })
-      ).toBe(true);
-    }
-  );
+  ])("keeps the page proxy on routes outside the API catch-all: %s", (path) => {
+    expect(
+      unstable_doesMiddlewareMatch({
+        config,
+        url: origin + path,
+      })
+    ).toBe(true);
+  });
 });
 
 describe("API route response policies", () => {
