@@ -27,6 +27,7 @@ from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.ingest import IngestedBundle
 from onyx.utils.logger import setup_logger
 
@@ -155,6 +156,7 @@ def save_skill_version(
             reuse_current = repair_version_metadata(
                 current,
                 get_default_file_store(),
+                limits=STORED_BUNDLE_LIMITS,
                 verify_bundle=current.content_digest
                 == ingested.metadata.content_digest,
             )
@@ -362,5 +364,5 @@ def repair_skill_version_metadata(
     adapter = SkillVersionAdapter(skill)
     stale_file_ids = prune_resource_bundles(adapter, db_session)
     for version in db_session.scalars(adapter.versions()):
-        repair_version_metadata(version, file_store)
+        repair_version_metadata(version, file_store, limits=STORED_BUNDLE_LIMITS)
     return stale_file_ids

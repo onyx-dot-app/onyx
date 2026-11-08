@@ -94,3 +94,21 @@ def test_streamed_bundle_rejects_normalized_name_collisions() -> None:
                 "data/": partial(io.BytesIO, b"b"),
             }
         )
+
+
+def test_bundle_digest_import_has_no_database_or_server_dependencies() -> None:
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import sys
+from onyx.utils.bundle import BundleLimits, compute_bundle_metadata
+assert not any(name.startswith(('onyx.db.', 'onyx.server.')) for name in sys.modules)
+""",
+        ],
+        check=True,
+    )

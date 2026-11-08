@@ -294,3 +294,7 @@ class BundleMetadata(BaseModel):
     content_digest: str
     unpacked_size_bytes: int
     file_count: int
+
+
+class FileSizeLimitExceeded(ValueError):
+    """The stored content exceeds the caller's byte allowance."""

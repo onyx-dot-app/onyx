@@ -15,12 +15,21 @@ from onyx.file_store.file_store import FileStore
 from onyx.skills import bundle, validation
 from onyx.skills.bundle import normalize_custom_bundle
 from onyx.skills.validation import validate_stored_custom_skill
+from onyx.utils.bundle import BundleLimits
 
 
 def test_stored_read_accepts_zip_larger_than_extracted_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", 4096)
+    monkeypatch.setattr(
+        validation,
+        "STORED_BUNDLE_LIMITS",
+        BundleLimits(
+            max_stored_bytes=4096,
+            max_file_bytes=1024,
+            max_total_bytes=1024,
+        ),
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w") as zf:
         zf.writestr(
@@ -50,7 +59,11 @@ def test_stored_read_accepts_zip_larger_than_extracted_cap(
 def test_stored_read_still_enforces_its_own_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(validation, "DEFAULT_STORED_ZIP_MAX_BYTES", 1024)
+    monkeypatch.setattr(
+        validation,
+        "STORED_BUNDLE_LIMITS",
+        validation.STORED_BUNDLE_LIMITS.model_copy(update={"max_stored_bytes": 1024}),
+    )
     stream = io.BytesIO(b"x" * 1025)
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = stream
@@ -58,6 +71,7 @@ def test_stored_read_still_enforces_its_own_limit(
         validation.load_stored_custom_skill_bundle("id", file_store)
     assert exc.value.extra == {"limit": "zip_bytes", "limit_value": 1024}
     assert stream.closed
+    file_store.read_file.assert_called_once_with("id", max_bytes=1024)
 
 
 def _skill(name: str = "canonical-name") -> Skill:
