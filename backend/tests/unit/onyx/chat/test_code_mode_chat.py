@@ -15,9 +15,9 @@ from onyx.agents.models import (
 )
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointSerializer
-from onyx.chat.code_mode_renderer import tool_renderer
 from onyx.chat.presentation import project_response
 from onyx.chat.prompt_utils import build_system_prompt
+from onyx.chat.renderer import tool_renderer
 from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.models import StoredToolResult

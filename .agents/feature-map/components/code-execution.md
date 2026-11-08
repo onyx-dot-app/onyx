@@ -169,8 +169,8 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends, with
                                         reason="suspended"; later calls can start cells
-  chat/code_mode_renderer.py:CodeModeRenderer one child ToolRenderer per call, sub_turn_index = n;
-                                        amend(result) renders a closing record
+  chat/renderer.py:CodeModeRenderer one child ToolRenderer per call, sub_turn_index = n;
+                                        a closing record follows the card section end
 ```
 
 **Availability.** `PythonTool.is_available` needs three things: a non-empty

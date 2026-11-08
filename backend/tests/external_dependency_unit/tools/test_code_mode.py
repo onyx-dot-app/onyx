@@ -777,8 +777,10 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
     )
     text = last_tool_text(follow_up, "start")
     assert text.endswith(
-        "Cell 1 stopped when the response ended. Calls after this output: "
-        "[0] acme__hello: ok, [1] acme__slow: unfinished. Completed calls may have had effects."
+        "Cell 1 stopped when the response ended.\n\nOutput:\nHello, alpha!\n\n"
+        "Tool calls:\n[0] acme__hello: ok\n[1] acme__slow: unfinished\n"
+        "All of these calls may have had effects, also unfinished calls. Check "
+        "before you retry."
     )
 
 
