@@ -1167,6 +1167,13 @@ def test_queued_calls_that_never_started_are_not_reported_as_started(
     assert [call.index for call in result.unawaited_calls] == [0]
     assert [call.index for call in result.unstarted_calls] == [1]
 
+    # The call returns its thread to the patched budget before the patch ends.
+    def probe() -> None:
+        pass
+
+    until(lambda: threads.acquire(probe))
+    threads.release(probe)
+
 
 def test_programs_waiting_for_threads_share_them_equally() -> None:
     threads = sandbox._ToolCallThreads(4)
