@@ -1,5 +1,3 @@
-import io
-import zipfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Annotated, NamedTuple
@@ -55,6 +53,7 @@ from onyx.db.skill_version import (
 from onyx.db.users import fetch_user_by_id, lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
@@ -744,7 +743,7 @@ def _inspect_skill_bundle(
         if stored
         else normalize_custom_bundle(bundle_bytes)
     )
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    with ZipIndex(normalized.content) as bundle_zip:
         document = parse_skill_document(
             bundle_zip.read(SKILL_MD_NAME),
             directory_name=normalized.source_directory,

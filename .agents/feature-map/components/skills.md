@@ -187,7 +187,7 @@ The library preview of an external-app skill calls the same renderer
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the observed version and bundle. The skill lock serializes
    this update with replacement; the legacy validity column is dual-written.
-   Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
+   Writes check five limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
    read cap; ZIP uploads use the ZIP cap.
@@ -196,6 +196,12 @@ The library preview of an external-app skill calls the same renderer
    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
    Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
    Stored reads retain the existing per-file and expanded-total limits.
+   New uploads and saves also cap ZIP directory metadata at 1 MiB before parsing entries.
+   Stored reads have no directory cap. `file_processing/zip_index.py` indexes entries
+   in an anonymous SQLite file, preserving native zipfile reads and digest order.
+   Its end-record and equal-offset handling match supported Python patch releases.
+   `SpooledZipWriter` keeps rewritten entry metadata on disk. Editor/history responses
+   and sandbox file maps still allocate per file; only directory parsing is bounded.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
