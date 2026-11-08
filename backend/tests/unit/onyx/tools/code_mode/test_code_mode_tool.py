@@ -260,6 +260,11 @@ def test_a_tool_that_waits_for_child_runs_fails_inside_the_program() -> None:
         "try:\n    await waits(value='x')\nexcept Exception as e:\n    print(e)\n",
     )
     assert "returned no result inside a program" in details.stdout
+    # The call ended with the exception, before the program did.
+    [call] = details.calls
+    assert call.state == "error"
+    assert isinstance(call.details, ToolExecutionError)
+    assert "returned no result inside a program" in call.details.message
 
 
 @pytest.mark.parametrize(

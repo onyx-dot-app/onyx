@@ -1040,6 +1040,24 @@ class CodeCell:
             self._emit(CodeModeCallStarted(call=started))
         try:
             return self._run_call(function, started, arguments, context, source)
+        except AgentCancelled as error:
+            # The program sees an error; the cell's end records the call as
+            # unfinished.
+            raise RuntimeError(CANCELLED_CALL_MESSAGE) from error
+        except Exception as error:
+            # The call ended with an exception, which the program sees.
+            message = str(error) or type(error).__name__
+            failed = started.model_copy(
+                update={
+                    "state": "error",
+                    "content": message,
+                    "details": ToolExecutionError(message=message),
+                }
+            )
+            with self._lock:
+                if self._calls[external.index].ended_in is None:
+                    self._record(_bounded_call(failed, MAX_SAVED_CALL_CHARS))
+            raise
         finally:
             with self._lock:
                 self._calls[external.index].thread_alive = False
@@ -1094,18 +1112,13 @@ class CodeCell:
             )
             sequential = self._program.sequential_calls.get(inner_tool.name)
             # Nested model and HTTP work stops when the cell stops or ends.
-            try:
-                with (
-                    sequential.turn(self._stopping)
-                    if sequential is not None
-                    else nullcontext(),
-                    cancellation_scope(self._stopping),
-                ):
-                    result = _call_result(inner_tool, inner_invocation, inner_context)
-            except AgentCancelled as error:
-                # The program sees an error; the cell's end records the call as
-                # unfinished.
-                raise RuntimeError(CANCELLED_CALL_MESSAGE) from error
+            with (
+                sequential.turn(self._stopping)
+                if sequential is not None
+                else nullcontext(),
+                cancellation_scope(self._stopping),
+            ):
+                result = _call_result(inner_tool, inner_invocation, inner_context)
             details = durable_details(result.details)
             if isinstance(details, SearchDocsResponse):
                 used = dict(details.citation_mapping)
