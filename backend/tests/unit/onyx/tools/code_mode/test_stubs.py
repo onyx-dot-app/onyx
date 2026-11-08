@@ -1,3 +1,4 @@
+import ast
 import json
 from uuid import uuid4
 
@@ -142,11 +143,21 @@ def test_mcp_like_schema_with_odd_names_and_refs() -> None:
     assert "(tool argument `repo-name`) Repository." in function.stub
     assert function.argument_names["repo_name"] == "repo-name"
     assert function.argument_names["class_"] == "class"
-    assert tool_arguments(function, {"repo_name": "onyx", "limit": None}) == {
-        "repo-name": "onyx"
-    }
-    with pytest.raises(TypeError, match="Argument `limit` of .* must be JSON data"):
+    # An explicit None is sent for an argument that accepts null only.
+    assert tool_arguments(
+        function, {"repo_name": "onyx", "limit": None, "class_": None}
+    ) == {"repo-name": "onyx", "limit": None}
+    with pytest.raises(TypeError, match=r"must be JSON data.* at \['limit'\]"):
         tool_arguments(function, {"repo_name": "onyx", "limit": float("nan")})
+
+
+def test_tool_arguments_stop_at_their_byte_limit() -> None:
+    function = build_tool_stubs([FakeTool("echo", _unused)]).functions["echo"]
+    shared: list[object] = ["x" * 1024]
+    for _ in range(40):
+        shared = [shared, shared]
+    with pytest.raises(ValueError, match="exceeds the limit of 262144 bytes"):
+        tool_arguments(function, {"value": shared})
 
 
 def test_openapi_like_schema_without_required_makes_every_argument_optional() -> None:
@@ -214,6 +225,60 @@ def test_oversized_stub_falls_back_to_any() -> None:
     stub = build_tool_stubs([tool]).functions["big"].stub
     assert len(stub) <= MAX_STUB_CHARS
     assert "field_0: Any = None" in stub
+
+
+def test_result_declarations_count_toward_the_stub_limit() -> None:
+    tool = FakeMCPTool(
+        "report",
+        _unused,
+        {"type": "object", "properties": {"id": {"type": "string"}}},
+        output_schema={
+            "type": "object",
+            "properties": {
+                **{f"field_{n}": {"type": "string"} for n in range(2_000)},
+                "kind": {"enum": [f"kind_{n}" for n in range(3_000)]},
+            },
+        },
+    )
+    function = build_tool_stubs([tool]).functions["acme__report"]
+    assert function.declarations == ()
+    assert "async def acme__report(*, id: str | None = None) -> Any:" in function.stub
+    assert len(function.stub) <= MAX_STUB_CHARS
+
+
+def test_multi_member_all_of_is_any() -> None:
+    root: dict[str, JsonValue] = {}
+    assert (
+        schema_annotation({"allOf": [{"type": "integer"}, {"minimum": 1}]}, root)
+        == "Any"
+    )
+    assert schema_annotation({"allOf": [{"type": "integer"}]}, root) == "int"
+
+
+def test_docstring_text_cannot_end_the_docstring() -> None:
+    class _QuotedTool(FakeTool):
+        @property
+        def code_mode_result(self) -> CodeModeResultSpec:
+            return super().code_mode_result.model_copy(
+                update={"returns": 'The """ text \\'}
+            )
+
+    stubs = build_tool_stubs(
+        [_QuotedTool('a"""b\\', _unused, description='Ends with """')]
+    )
+    ast.parse(stubs.text)
+    assert 'Tool name: a\\"\\"\\"b\\\\' in stubs.text
+
+
+def test_an_invalid_schema_type_renders_as_any_without_failing_other_tools() -> None:
+    odd = FakeTool(
+        "odd",
+        _unused,
+        parameters={"type": "object", "properties": {"value": {"type": {}}}},
+    )
+    functions = build_tool_stubs([odd, FakeTool("plain", _unused)]).functions
+    assert "async def odd(*, value: Any = None) -> Any:" in functions["odd"].stub
+    assert "plain" in functions
 
 
 def test_stub_text_is_deterministic() -> None:
@@ -291,6 +356,22 @@ def test_tool_search_ranks_name_matches_first_and_bounds_the_count() -> None:
     assert index.tool_search("weather") == []
     with pytest.raises(TypeError):
         index.tool_search(1)
+
+
+def test_tool_search_matches_words_in_any_script() -> None:
+    tools = [
+        FakeTool(
+            name, _unused, description=description, exposure=CodeModeExposure.DEFERRED
+        )
+        for name, description in [
+            ("billing_lookup", "Rechnungen und Zahlungsstatus prüfen."),
+            ("ticket_lookup", "Найти заявки в службе поддержки."),
+        ]
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+    assert [match.name for match in index.search("заявки", 8)] == ["ticket_lookup"]
+    assert [match.name for match in index.search("prüfen", 8)] == ["billing_lookup"]
 
 
 def test_mcp_output_schema_types_the_result() -> None:

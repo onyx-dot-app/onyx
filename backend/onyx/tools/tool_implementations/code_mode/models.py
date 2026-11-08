@@ -302,10 +302,16 @@ class StubParameter(BaseModel):
 
     python_name: str
     annotation: str
+    # The schema requires the argument.
     required: bool
-    # Required by the schema but nullable: optional in the stub, sent as null.
-    null_default: bool = False
+    # The schema accepts null for it. A required nullable argument is optional
+    # in the stub and sent as null when a program leaves it out.
+    nullable: bool
     description: str
+
+    @property
+    def has_default(self) -> bool:
+        return not self.required or self.nullable
 
 
 class StubResultType(BaseModel):

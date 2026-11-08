@@ -29,7 +29,8 @@ async def {TOOL_SEARCH_FUNCTION}(query: str, limit: int = {DEFAULT_TOOL_SEARCH_L
     """
     ...'''
 
-_TOKEN = re.compile(r"[a-z0-9]+")
+# Runs of letters and digits in any script; `_` and other symbols split words.
+_TOKEN = re.compile(r"[^\W_]+")
 # BM25 parameters: term frequency saturation and document length normalization.
 _K1 = 1.2
 _B = 0.75

@@ -6,7 +6,7 @@ import keyword
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import UnionType
-from typing import Literal, Union, get_args, get_origin
+from typing import Literal, Union, cast, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, JsonValue
 
@@ -47,6 +47,9 @@ MAX_ARGUMENT_DESCRIPTION_CHARS = 400
 MAX_REF_EXPANSIONS_PER_PATH = 2
 MAX_REF_EXPANSIONS_TOTAL = 32
 MAX_SCHEMA_DEPTH = 8
+# JSON bytes of the arguments of one tool call; the host keeps them for the
+# call's life.
+MAX_TOOL_ARGUMENT_BYTES = 256 * 1024
 
 ANY = "Any"
 
@@ -88,9 +91,10 @@ class ToolFunction(BaseModel):
     result: CodeModeResultSpec
     # Python keyword name -> tool argument name.
     argument_names: Mapping[str, str]
+    # Python names of the arguments that the schema requires, and of those that
+    # accept null.
     required_arguments: frozenset[str]
-    # Arguments sent as null when a program leaves them out.
-    null_default_arguments: frozenset[str] = frozenset()
+    nullable_arguments: frozenset[str]
     description: str
     stub: str
     # Declarations of the types that the stub names.
@@ -278,7 +282,7 @@ def schema_annotation(
     all_of = schema.get("allOf")
     if isinstance(all_of, list) and all_of:
         # Intersections have no Python spelling; one member renders exactly.
-        return with_null(render(all_of[0]) if len(all_of) == 1 else "dict[str, Any]")
+        return with_null(render(all_of[0])) if len(all_of) == 1 else ANY
 
     schema_type = schema.get("type")
     if isinstance(schema_type, list):
@@ -286,15 +290,18 @@ def schema_annotation(
             _union([render({**schema, "type": item}) for item in schema_type] or [ANY])
         )
     if schema_type is None:
-        if "properties" in schema:
-            schema_type = "object"
-        elif "items" in schema:
-            schema_type = "array"
-        else:
-            return ANY
+        schema_type = (
+            "object"
+            if "properties" in schema
+            else "array"
+            if "items" in schema
+            else None
+        )
+    if not isinstance(schema_type, str):
+        return ANY
 
     if schema_type in _PRIMITIVES:
-        return with_null(_PRIMITIVES[str(schema_type)])
+        return with_null(_PRIMITIVES[schema_type])
     if schema_type == "array":
         items = schema.get("items")
         return with_null(f"list[{render(items) if items is not None else ANY}]")
@@ -372,19 +379,18 @@ def _parameters(
             description += _object_keys_summary(prop)
         if python_name != original:
             description = f"(tool argument `{original}`) {description}".strip()
-        # Strict schemas list optional arguments as required and nullable.
-        null_default = original in required and _admits_null(prop)
         result.append(
             StubParameter(
                 python_name=python_name,
                 annotation=annotation,
-                required=original in required and not null_default,
-                null_default=null_default,
+                required=original in required,
+                # Strict schemas list optional arguments as required and nullable.
+                nullable=_admits_null(prop),
                 description=_clip(description, MAX_ARGUMENT_DESCRIPTION_CHARS),
             )
         )
-    # Required arguments first, each group in name order.
-    result.sort(key=lambda parameter: (not parameter.required, parameter.python_name))
+    # Arguments without a default first, each group in name order.
+    result.sort(key=lambda parameter: (parameter.has_default, parameter.python_name))
     return result, names
 
 
@@ -403,29 +409,30 @@ def _render_function(
         signature = "**kwargs: Any"
     elif parameters:
         rendered = [
-            f"{p.python_name}: {p.annotation}"
-            if p.required
-            else f"{p.python_name}: {_union([p.annotation, 'None'])} = None"
+            f"{p.python_name}: {_union([p.annotation, 'None'])} = None"
+            if p.has_default
+            else f"{p.python_name}: {p.annotation}"
             for p in parameters
         ]
         signature = "*, " + ", ".join(rendered)
     else:
         signature = ""
-    doc_lines = [_docstring_text(description) or "No description."]
+    doc_lines = [description or "No description."]
     if tool_name != function_name:
         doc_lines.append(f"Tool name: {tool_name}")
     if usage:
-        doc_lines.extend(["", _docstring_text(usage)])
+        doc_lines.extend(["", usage])
     documented = [p for p in parameters if p.description]
     if documented:
         doc_lines.append("")
         doc_lines.append("Args:")
-        doc_lines.extend(
-            f"    {p.python_name}: {_docstring_text(p.description)}" for p in documented
-        )
+        doc_lines.extend(f"    {p.python_name}: {p.description}" for p in documented)
     if returns:
         doc_lines.extend(["", "Returns:", f"    {returns}"])
-    body = "\n".join(f"    {line}" if line else "" for line in doc_lines)
+    # Escaped once here, so no part can end the docstring.
+    body = "\n".join(
+        f"    {_docstring_text(line)}" if line else "" for line in doc_lines
+    )
     return (
         f"async def {function_name}({signature}) -> {result_annotation}:\n"
         f'    """\n{body}\n    """\n'
@@ -545,28 +552,38 @@ def _schema_result_type(
 def tool_function(
     function_name: str, tool: Tool, result_type: StubResultType
 ) -> ToolFunction:
-    """Render one tool's stub; fall back to Any types when it exceeds the budget."""
+    """Render one tool's stub and result declarations within MAX_STUB_CHARS.
+
+    Past the limit the result becomes Any, then the arguments, and last the
+    signature takes any keyword arguments.
+    """
     definition = tool.tool_definition()
     description = _clip(
         definition.description or tool.description, MAX_TOOL_DESCRIPTION_CHARS
     )
     spec = tool.code_mode_result
+    any_result = StubResultType(annotation=ANY, declarations=())
     stub = ""
     names: dict[str, str] = {}
     parameters: list[StubParameter] = []
-    for typed, open_signature in ((True, False), (False, False), (False, True)):
+    for typed, open_signature, result in (
+        (True, False, result_type),
+        (True, False, any_result),
+        (False, False, any_result),
+        (False, True, any_result),
+    ):
         parameters, names = _parameters(definition.parameters, typed=typed)
         stub = _render_function(
             function_name,
             description,
             [] if open_signature else parameters,
-            result_type.annotation,
+            result.annotation,
             tool_name=tool.name,
             returns=spec.returns,
             usage=spec.usage,
             open_signature=open_signature,
         )
-        if len(stub) <= MAX_STUB_CHARS:
+        if len(stub) + sum(len(text) for text in result.declarations) <= MAX_STUB_CHARS:
             break
     return ToolFunction(
         function_name=function_name,
@@ -574,12 +591,10 @@ def tool_function(
         result=spec,
         argument_names=names,
         required_arguments=frozenset(p.python_name for p in parameters if p.required),
-        null_default_arguments=frozenset(
-            p.python_name for p in parameters if p.null_default
-        ),
+        nullable_arguments=frozenset(p.python_name for p in parameters if p.nullable),
         description=description,
         stub=stub,
-        declarations=result_type.declarations,
+        declarations=result.declarations,
     )
 
 
@@ -652,19 +667,27 @@ def tool_arguments(
 ) -> dict[str, JsonValue]:
     """Convert program keyword arguments to tool arguments.
 
-    Omits None optional arguments, and sends nullable required ones as null.
-    Raises TypeError when a value is not JSON data.
+    None is sent for arguments that accept null and left out for others; a
+    required argument that accepts null is sent as null when it is left out.
+    Raises TypeError when a value is not JSON data and ValueError past
+    MAX_TOOL_ARGUMENT_BYTES.
     """
+    # One copy for all arguments: they can share one large value.
+    copied = cast(
+        dict[str, JsonValue],
+        json_value(
+            dict(kwargs),
+            f"The argument dict of {function.function_name}()",
+            MAX_TOOL_ARGUMENT_BYTES,
+        ),
+    )
+    nullable = function.nullable_arguments
     arguments: dict[str, JsonValue] = {
-        function.argument_names.get(key, key): json_value(
-            value, f"Argument `{key}` of {function.function_name}()"
-        )
-        for key, value in kwargs.items()
-        if value is not None
-        or key in function.required_arguments
-        or key in function.null_default_arguments
+        function.argument_names.get(key, key): value
+        for key, value in copied.items()
+        if value is not None or key in nullable
     }
-    for key in function.null_default_arguments:
+    for key in function.required_arguments & nullable:
         arguments.setdefault(function.argument_names.get(key, key), None)
     return arguments
 
