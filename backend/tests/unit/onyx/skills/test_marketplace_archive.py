@@ -140,10 +140,9 @@ def test_valid_pax_metadata_is_bounded_before_member_returns(
         pass
 
 
-def test_sparse_extension_blocks_share_metadata_budget(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(archives, "TAR_METADATA_MAX_BYTES", 4096)
+# Small maps parse and then fail as sparse; long extension chains stop mid-parse.
+@pytest.mark.parametrize("blocks,error", [(10, "sparse"), (100, "member metadata")])
+def test_gnu_sparse_members_are_rejected(blocks: int, error: str) -> None:
     info = tarfile.TarInfo("sparse")
     info.type = tarfile.GNUTYPE_SPARSE
     header = bytearray(info.tobuf(format=tarfile.GNU_FORMAT))
@@ -153,11 +152,11 @@ def test_sparse_extension_blocks_share_metadata_budget(
     entry = b"00000001000\0" * 2
     extension = entry * 21 + b"\1" + b"\0" * 7
     last = entry * 21 + b"\0" * 8
-    data = gzip.compress(header + extension * 10 + last + b"\0" * 1024)
+    data = gzip.compress(header + extension * blocks + last + b"\0" * 1024)
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
         assert archive.getnames() == ["sparse"]
     with (
-        pytest.raises(archives.ArchiveLimitError, match="metadata"),
+        pytest.raises(archives.ArchiveLimitError, match=error),
         archives.archive_files(data),
     ):
         pass
@@ -364,3 +363,119 @@ def test_zip_symlink_with_directory_suffix_cannot_contain_files(
             archive.writestr("skills/hello/SKILL.md", b"skill")
     with pytest.raises(ValueError), archives.archive_files(out.getvalue()):
         pass
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+def test_member_calls_return_bounded_results_without_truncation(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(archives, "MEMBER_CALL_MAX_BYTES", 8)
+    content = b"0123456789\n"
+    with archives.archive_files(_archive({"a": content, "b": b"ok\n"}, kind)) as files:
+        small, large = files["b"], files["a"]
+        assert small is not None and large is not None
+        with small() as stream:
+            assert stream.read() == b"ok\n"
+        with small() as stream:
+            assert stream.read(100) == b"ok\n"
+        with small() as stream:
+            assert stream.readlines() == [b"ok\n"]
+        with large() as stream:
+            assert stream.read(8) + stream.read(8) == content
+        with large() as stream:
+            assert stream.read1(100) == content[:8]
+        with large() as stream:
+            target = bytearray(20)
+            assert stream.readinto(target) == len(content)
+            assert target[: len(content)] == content
+        for method in ("read", "read100", "readline", "readlines", "iterate"):
+            with large() as stream, pytest.raises(archives.ArchiveLimitError):
+                if method == "read":
+                    stream.read()
+                elif method == "read100":
+                    stream.read(100)
+                elif method == "readline":
+                    stream.readline()
+                elif method == "readlines":
+                    stream.readlines()
+                else:
+                    next(stream)
+
+
+def _extension(header_type: bytes, body: bytes) -> bytes:
+    info = tarfile.TarInfo("extension")
+    info.type = header_type
+    info.size = len(body)
+    return info.tobuf() + body + b"\0" * (-len(body) % 512)
+
+
+@pytest.mark.parametrize(
+    "header_type", [tarfile.XHDTYPE, tarfile.XGLTYPE, tarfile.GNUTYPE_LONGNAME]
+)
+def test_tar_header_chains_are_bounded_per_member(header_type: bytes) -> None:
+    member = tarfile.TarInfo("skill").tobuf() + b"\0" * 1024
+    allowed = archives.TAR_MEMBER_METADATA_MAX_BYTES // 512 - 3
+    body = b"" if header_type != tarfile.GNUTYPE_LONGNAME else b"skill\0"
+    one = _extension(header_type, body)
+    count = allowed if not body else allowed // 2
+    with archives.archive_files(gzip.compress(one * count + member)) as files:
+        assert list(files) == ["skill"]
+    # A chain far past Python's recursion limit fails as a processing limit.
+    with (
+        pytest.raises(archives.ArchiveLimitError, match="member metadata"),
+        archives.archive_files(gzip.compress(one * 2000 + member)),
+    ):
+        pass
+
+
+@pytest.mark.parametrize(
+    "records",
+    [
+        b"22 GNU.sparse.map=1,1\n",
+        b"22 GNU.sparse.major=1\n22 GNU.sparse.minor=0\n",
+    ],
+)
+def test_pax_sparse_members_are_rejected(records: bytes) -> None:
+    sparse = b"1\n0\n1\n" if b"major" in records else b""
+    info = tarfile.TarInfo("sparse")
+    info.size = len(sparse)
+    data = gzip.compress(
+        _extension(tarfile.XHDTYPE, records)
+        + info.tobuf()
+        + sparse
+        + b"\0" * (-len(sparse) % 512 + 1024)
+    )
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        assert archive.getmembers()[0].issparse()
+    with (
+        pytest.raises(archives.ArchiveLimitError, match="sparse"),
+        archives.archive_files(data),
+    ):
+        pass
+
+
+def test_long_tar_paths_and_large_members_remain_supported() -> None:
+    path = "repo/" + "/".join(["d" * 60] * 60) + "/SKILL.md"
+    content = b"x" * (archives.MEMBER_CALL_MAX_BYTES + 1)
+    for fmt in (tarfile.PAX_FORMAT, tarfile.GNU_FORMAT):
+        out = io.BytesIO()
+        with tarfile.open(
+            fileobj=out, mode="w:gz", format=fmt, pax_headers={"comment": "a" * 40}
+        ) as archive:
+            for name, body in ((path, b"skill"), ("repo/large", content)):
+                member = tarfile.TarInfo(name)
+                member.size = len(body)
+                archive.addfile(member, io.BytesIO(body))
+            link = tarfile.TarInfo("repo/link")
+            link.type, link.linkname = tarfile.SYMTYPE, path
+            archive.addfile(link)
+        with archives.archive_files(out.getvalue()) as files:
+            assert files["repo/link"] is None
+            opener, large = files[path], files["repo/large"]
+            assert opener is not None and large is not None
+            with opener() as stream:
+                assert stream.read() == b"skill"
+            with large() as stream:
+                assert sum(
+                    len(c) for c in iter(lambda: stream.read(65536), b"")
+                ) == len(content)

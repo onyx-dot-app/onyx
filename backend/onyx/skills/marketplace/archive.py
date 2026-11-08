@@ -18,10 +18,13 @@ ARCHIVE_PATH_MAX_BYTES = 4096
 ARCHIVE_PATH_MAX_DEPTH = 64
 ARCHIVE_INDEX_MAX_BYTES = 25 * 1024 * 1024
 TAR_METADATA_MAX_BYTES = 16 * 1024 * 1024
+# Bounds header chains, parser recursion and parsed metadata per TAR member.
+TAR_MEMBER_METADATA_MAX_BYTES = 32 * 1024
 MANIFEST_MAX_BYTES = 1024 * 1024
 # Independent processing ceilings, not per-skill validation limits.
 EXPANDED_MAX_BYTES = 1024 * 1024 * 1024
 MEMBER_READ_MAX_BYTES = 1024 * 1024 * 1024
+MEMBER_CALL_MAX_BYTES = 4 * 1024 * 1024
 SPOOL_MEMORY_BYTES = 1024 * 1024
 
 type ArchiveFiles = dict[str, Callable[[], io.BufferedIOBase] | None]
@@ -79,23 +82,45 @@ class _MemberReader(io.BufferedIOBase):
         self.budget = budget
 
     def read(self, size: int | None = -1, /) -> bytes:
-        requested = (
-            self.budget.remaining + 1
-            if size is None or size < 0
-            else min(size, self.budget.remaining + 1)
-        )
-        data = self.source.read(requested)
+        # One call never returns more than MEMBER_CALL_MAX_BYTES or truncates.
+        if size is None or size < 0 or size > MEMBER_CALL_MAX_BYTES:
+            size = MEMBER_CALL_MAX_BYTES + 1
+        data = self.source.read(min(size, self.budget.remaining + 1))
         self.budget.consume(len(data))
+        if len(data) > MEMBER_CALL_MAX_BYTES:
+            raise ArchiveLimitError(
+                f"Archive member read exceeds {MEMBER_CALL_MAX_BYTES} bytes per call"
+            )
         return data
 
     def read1(self, size: int = -1, /) -> bytes:
-        return self.read(size)
+        # Short read1 results are valid, unlike short read results.
+        return self.read(
+            min(size, MEMBER_CALL_MAX_BYTES) if size >= 0 else MEMBER_CALL_MAX_BYTES
+        )
 
     def readinto(self, buffer: Buffer, /) -> int:
         with memoryview(buffer).cast("B") as view:
-            data = self.read(view.nbytes)
-            view[: len(data)] = data
-            return len(data)
+            filled = 0
+            while filled < view.nbytes and (data := self.read1(view.nbytes - filled)):
+                view[filled : filled + len(data)] = data
+                filled += len(data)
+            return filled
+
+    def readline(self, size: int | None = -1, /) -> bytes:
+        if size is None or size < 0 or size > MEMBER_CALL_MAX_BYTES:
+            size = MEMBER_CALL_MAX_BYTES + 1
+        line = super().readline(size)
+        if len(line) > MEMBER_CALL_MAX_BYTES:
+            raise ArchiveLimitError(
+                f"Archive member read exceeds {MEMBER_CALL_MAX_BYTES} bytes per call"
+            )
+        return line
+
+    def readlines(self, hint: int | None = -1, /) -> list[bytes]:
+        if hint is not None and 0 < hint <= MEMBER_CALL_MAX_BYTES:
+            return super().readlines(hint)
+        return self.read().splitlines(keepends=True)
 
     def readable(self) -> bool:
         return self.source.readable()
@@ -119,18 +144,25 @@ class _MemberReader(io.BufferedIOBase):
 class _TarReader(io.BufferedReader):
     metadata_reads = True
     metadata_bytes = 0
+    member_metadata_bytes = 0
 
     def read(self, size: int | None = -1, /) -> bytes:
         if not self.metadata_reads:
             return super().read(size)
-        remaining = TAR_METADATA_MAX_BYTES - self.metadata_bytes
+        remaining = min(
+            TAR_METADATA_MAX_BYTES - self.metadata_bytes,
+            TAR_MEMBER_METADATA_MAX_BYTES - self.member_metadata_bytes,
+        )
         requested = (
             remaining + 1 if size is None or size < 0 else min(size, remaining + 1)
         )
         data = super().read(requested)
         self.metadata_bytes += len(data)
+        self.member_metadata_bytes += len(data)
         if self.metadata_bytes > TAR_METADATA_MAX_BYTES:
             raise ArchiveLimitError("Archive TAR metadata is too large")
+        if self.member_metadata_bytes > TAR_MEMBER_METADATA_MAX_BYTES:
+            raise ArchiveLimitError("Archive TAR member metadata is too large")
         return data
 
 
@@ -188,6 +220,9 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
             archive.infolist() if isinstance(archive, zipfile.ZipFile) else archive
         )
         for index, member in enumerate(members, 1):
+            # The member's headers are parsed; the next member starts a new budget.
+            if buffered is not None:
+                buffered.member_metadata_bytes = 0
             if index > ARCHIVE_MAX_ENTRIES:
                 raise ArchiveLimitError(
                     f"Archive exceeds {ARCHIVE_MAX_ENTRIES} entries"
@@ -198,10 +233,14 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                 regular = mode in (0, stat.S_IFREG, stat.S_IFDIR)
                 is_dir = member.is_dir() and regular
             else:
+                if member.issparse():
+                    raise ArchiveLimitError(
+                        "Archive TAR sparse members are not supported"
+                    )
                 name, is_dir = member.name, member.isdir()
-                regular = member.isfile() and not member.issparse() or is_dir
+                regular = member.isfile() or is_dir
                 index_bytes += sys.getsizeof(member.pax_headers) + sum(
-                    len(key.encode()) + len(value.encode())
+                    sys.getsizeof(key) + sys.getsizeof(value)
                     for key, value in member.pax_headers.items()
                 )
             path = archive_path(name)

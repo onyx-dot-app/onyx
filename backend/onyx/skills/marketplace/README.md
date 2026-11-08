@@ -18,12 +18,22 @@ The archive reader also has independent processing safeguards:
   counts actual returned bytes, including repeated reads and manifests.
   ZIP members outside the selected marketplace need no inflation. All supported
   stream reads, including readinto, lines and iteration, use that budget.
+- One stream call returns at most 4 MiB. An unsized read, a larger sized read,
+  one line, or unsized `readlines` fails if the member data is longer. It does
+  not truncate the result. Callers must read larger members in chunks.
+  `read1` may return less, and `readinto` fills larger buffers in steps.
 - TAR metadata reads share a 16 MiB budget during enumeration, including chained
-  extension headers and sparse maps. Each JSON manifest may use at most 1 MiB.
+  extension headers and sparse maps. The headers before one member may use at
+  most 32 KiB. This limits chained headers and parser recursion before
+  allocation. Each JSON manifest may use at most 1 MiB.
   Member data reads use the shared member budget after metadata parsing finishes.
+- Sparse TAR members fail the read after their bounded headers parse. `git
+  archive` does not write them. Global PAX comments, long paths and long link
+  targets stay supported when their headers fit in 32 KiB.
 - Paths have at most 64 segments and 4,096 UTF-8 bytes. The stored path and
   parent-prefix index shares a 25 MiB ceiling with retained TAR PAX metadata.
-  Each member charges its metadata dictionary size and UTF-8 keys and values.
+  Each member charges its metadata dictionary size and the Python object size
+  of each key and value. This is a conservative estimate, not exact memory use.
   Global headers count for every copy, including GitHub commit headers.
   Path limits apply before unbounded prefix allocation.
 
