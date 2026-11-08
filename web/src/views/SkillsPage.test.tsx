@@ -223,6 +223,38 @@ describe("SkillsPage preference toggles", () => {
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
   });
 
+  it("keeps mobile duplicate names and descriptions within one row", () => {
+    const originalWidth = window.innerWidth;
+    const name = "quarterly-customer-renewal-summary-review";
+    skillsData.customs = [
+      {
+        ...customSkill("duplicate-a", name),
+        description: "Customer success guidance",
+      },
+      {
+        ...customSkill("duplicate-b", name),
+        description: "Account manager guidance",
+      },
+    ];
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    try {
+      render(<SkillsPage admin />);
+      for (const title of screen.getAllByText(name)) {
+        expect(title).toHaveClass("truncate");
+      }
+      expect(screen.getByText("Customer success guidance")).toBeVisible();
+      expect(screen.getByText("Account manager guidance")).toBeVisible();
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+    }
+  });
+
   it("keeps shared skill previews available without sharing-management permission", async () => {
     skillsData.customs = [
       {

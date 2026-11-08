@@ -45,7 +45,7 @@
   be hidden, so empty arrays do not mean a skill is personal. The table shows
   groups only when supplied. Owner identity is not an access grant. The list
   currently omits share details. The Enable for me column controls personal use.
-  Narrow tables use two lines for names. Duplicate names keep their descriptions; warnings remain visible.
+  Narrow tables use two lines for names without descriptions. Duplicate names use one line and keep their descriptions; warnings remain visible.
   Mobile Create stays beside the title, and the personal-use column is labeled For me.
   Sharing settings stay in the dialog. Access badges have an outline, and keyboard focus uses a rounded neutral outline.
   The table keeps page ordering and all filtered rows without pagination.

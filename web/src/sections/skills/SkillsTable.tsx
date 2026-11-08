@@ -57,7 +57,11 @@ function SkillName({
         font="main-ui-body"
         color="text-05"
         as="p"
-        maxLines={isMobile && !isInvalid && !dependencyStatus ? 2 : 1}
+        maxLines={
+          isMobile && !showDescription && !isInvalid && !dependencyStatus
+            ? 2
+            : 1
+        }
         overflowTooltip
       >
         {item.name}
