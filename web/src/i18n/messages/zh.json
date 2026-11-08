@@ -12905,6 +12905,9 @@
           "bashExit": {
             "header": "Bash · 退出码 {exitCode}"
           },
+          "bashFailed": {
+            "header": "Bash · 失败"
+          },
           "bashRequest": {
             "label": "请求"
           },
