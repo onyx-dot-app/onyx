@@ -330,18 +330,23 @@ next arm overwrites the stats:
 ARM=code-mode-per-round  # direct, code-mode-per-round, or code-mode-batched
 MODEL=mock-profile-search-v1  # mock-profile-search-v1-codebatched for code-mode-batched
 ONYX_SEARCH_MODEL="$MODEL" \
-  uv run --group loadtest locust --headless -u 50 -r 5 -t 15m --reset-stats \
-  --host "$LOCUST_HOST" --csv "$ARM" ChatWithSearchUser
+  uv run --group loadtest locust --autostart --autoquit 10 -u 50 -r 5 -t 15m \
+  --stop-timeout 120 --host "$LOCUST_HOST" --csv "$ARM" ChatWithSearchUser
 ```
 
 Make sure that each arm ran the intended path. Scrape the Locust `/metrics`
 output before the run ends, because the endpoint stops with Locust, and save it
 with the arm. `onyx_loadtest_code_programs` must be zero for the direct arm and
 nonzero for the code mode arms, and `onyx_loadtest_code_waits` gives each arm's
-`wait_code` calls. With `--reset-stats`, Locust resets its statistics when all
-users have started, so the stats CSV covers only the plateau. For a longer
-warmup, run the arm once to warm up, then run it again for the CSV. Assess each
-arm's CSV with `capacity_report.py`, as
+`wait_code` calls.
+
+Reset the statistics after the warmup, in the same run. Wait until all users have
+started and `ONYX_START_STAGGER_SECONDS` has passed, plus any cache warmup, then
+run `curl -s http://localhost:8089/stats/reset` or select **Reset Stats** in the
+web UI. The stats CSV then covers only the time after the reset; turns that
+started before the reset can finish after it. `--stop-timeout 120` lets running
+turns finish when the time limit ends, because Locust does not report a turn
+that it stops. Assess each arm's CSV with `capacity_report.py`, as
 [Interpret user capacity](#interpret-user-capacity) describes.
 
 Without `wait_code` calls, the per-round arm keeps the number and order of model
