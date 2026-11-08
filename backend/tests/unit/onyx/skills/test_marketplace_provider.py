@@ -15,15 +15,26 @@ from onyx.skills.marketplace.provider import get_marketplace_adapter
 from onyx.utils.github import GitHubSource, resolve_github_revision
 
 
-@pytest.mark.parametrize("folder", [None, "", "catalog", "catalog/", "a/b///"])
-def test_marketplace_and_import_normalize_the_same_folder(folder: str | None) -> None:
+@pytest.mark.parametrize(
+    "folder, expected",
+    [
+        (None, None),
+        ("", None),
+        ("catalog", "catalog"),
+        ("catalog/", "catalog"),
+        ("a/b///", "a/b"),
+    ],
+)
+def test_marketplace_and_import_normalize_the_same_folder(
+    folder: str | None, expected: str | None
+) -> None:
     config = GitHubMarketplaceConfig(
         owner="acme", repo="skills", ref="main", folder=folder
     )
     resolved = resolve_github_revision(
         GitHubSource(owner="acme", repo="skills"), revision="a" * 40, subpath=folder
     )
-    assert config.folder == resolved.subpath
+    assert config.folder == resolved.subpath == expected
 
 
 @pytest.mark.parametrize(

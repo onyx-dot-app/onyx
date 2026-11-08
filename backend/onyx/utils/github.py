@@ -96,7 +96,8 @@ def parse_github_source(
                 "Enter an HTTPS github.com repository URL.",
             )
         source_parts = tuple(
-            unquote(part) for part in parsed.path.removeprefix("/").split("/")
+            unquote(part)
+            for part in parsed.path.removeprefix("/").rstrip("/").split("/")
         )
         if len(source_parts) < 2 or any(not part for part in source_parts):
             raise OnyxError(
