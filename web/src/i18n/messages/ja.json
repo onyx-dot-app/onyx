@@ -17499,6 +17499,7 @@
       "total": "{count, plural, other {# 件のスキル}}",
       "share": "共有",
       "enable": "自分用に有効化",
+      "personalSetting": "自分用",
       "disable": "自分用に無効化",
       "delete": "削除",
       "selectSkill": "{name} を選択",

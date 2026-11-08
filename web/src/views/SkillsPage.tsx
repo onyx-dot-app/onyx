@@ -3,6 +3,7 @@
 import { cn } from "@opal/utils";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
+import useScreenSize from "@opal/hooks/useScreenSize";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -78,6 +79,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
     Permission.MANAGE_SKILLS
   );
+  const { isMobile } = useScreenSize();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
@@ -524,7 +526,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         width="auto"
         height="auto"
         gap={2}
-        className="shrink-0"
+        className={cn(
+          "shrink-0",
+          admin && selectedItems.length === 0 && "order-2"
+        )}
       >
         {!admin && (
           <InputCheckbox
@@ -576,7 +581,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         >
           <Button
             prominence="secondary"
-            icon={SvgShare}
+            icon={bulkBusy ? IconLoader : SvgShare}
             disabled={bulkLocked || !canManageSelected}
             onClick={() => setBulkSharingOpen(true)}
           >
@@ -631,8 +636,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       data-testid="SkillsPage/container"
     >
       <SettingsLayouts.Header
-        stackActionsOnMobile={admin}
-        icon={SvgBlocks}
+        icon={admin && isMobile ? undefined : SvgBlocks}
         title={t("page.header.title")}
         description={
           admin ? bulkCopy("adminDescription") : t("page.header.description")
@@ -644,8 +648,18 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             onOpenChange={setCreateMenuOpen}
           >
             <Dropdown.Trigger asChild>
-              <Button icon={SvgPlus}>
-                {t("page.createMenu.trigger.label")}
+              <Button
+                icon={SvgPlus}
+                aria-label={t("page.createMenu.trigger.label")}
+                tooltip={
+                  admin && isMobile
+                    ? t("page.createMenu.trigger.label")
+                    : undefined
+                }
+              >
+                {admin && isMobile
+                  ? undefined
+                  : t("page.createMenu.trigger.label")}
               </Button>
             </Dropdown.Trigger>
             <Dropdown.Data

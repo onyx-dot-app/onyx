@@ -17499,6 +17499,7 @@
       "total": "{count, plural, other {# 个技能}}",
       "share": "分享",
       "enable": "为我启用",
+      "personalSetting": "供我使用",
       "disable": "为我禁用",
       "delete": "删除",
       "selectSkill": "选择 {name}",

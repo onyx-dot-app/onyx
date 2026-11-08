@@ -21,7 +21,10 @@ import type {
 } from "@/sections/cards/SkillCard";
 import { useSkillPresentation } from "@/lib/skills/hooks";
 
-type SkillTableItem = SkillCardProps & { item: CustomSkillCardItem };
+type SkillTableItem = SkillCardProps & {
+  item: CustomSkillCardItem;
+  showDescription: boolean;
+};
 
 interface SkillsTableProps {
   items: CustomSkillCardItem[];
@@ -31,7 +34,11 @@ interface SkillsTableProps {
   getItemProps: (item: CustomSkillCardItem) => SkillCardProps;
 }
 
-function SkillName({ item, hasEnabledNameConflict }: SkillCardProps) {
+function SkillName({
+  item,
+  hasEnabledNameConflict,
+  showDescription,
+}: SkillTableItem) {
   const t = useTranslations("cards");
   const { isMobile } = useScreenSize();
   const { isInvalid, dependencyStatus, tooltip } = useSkillPresentation(
@@ -55,7 +62,7 @@ function SkillName({ item, hasEnabledNameConflict }: SkillCardProps) {
       >
         {item.name}
       </Text>
-      {(!isMobile || isInvalid || dependencyStatus) && (
+      {(!isMobile || showDescription || isInvalid || dependencyStatus) && (
         <Text
           font="secondary-body"
           color={isInvalid ? "status-warning-05" : "text-03"}
@@ -170,6 +177,15 @@ export default function SkillsTable({
   const t = useTranslations("skills");
   const cards = useTranslations("cards");
   const { isMobile } = useScreenSize();
+  const duplicateNames = useMemo(() => {
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+    for (const item of items) {
+      if (seen.has(item.name)) duplicates.add(item.name);
+      seen.add(item.name);
+    }
+    return duplicates;
+  }, [items]);
   const columns = useMemo<TableColumn<SkillTableItem>[]>(
     () => [
       { kind: "qualifier", content: "checkbox" },
@@ -195,17 +211,23 @@ export default function SkillsTable({
             width={0}
             className="min-w-full"
           >
-            <Badge
-              size={5}
-              titleColor="text-04"
-              title={cards(
-                skill.public_permission !== null
-                  ? "skill.tags.organization.label"
-                  : skill.is_personal
-                    ? "skill.tags.personal.label"
-                    : "skill.tags.shared.label"
-              )}
-            />
+            <Section
+              width="auto"
+              height="auto"
+              className="rounded-04 border border-border-02"
+            >
+              <Badge
+                size={5}
+                titleColor="text-04"
+                title={cards(
+                  skill.public_permission !== null
+                    ? "skill.tags.organization.label"
+                    : skill.is_personal
+                      ? "skill.tags.personal.label"
+                      : "skill.tags.shared.label"
+                )}
+              />
+            </Section>
             {skill.group_shares.length > 0 && (
               <Text
                 font="secondary-body"
@@ -246,7 +268,7 @@ export default function SkillsTable({
       {
         kind: "display",
         id: "actions",
-        title: t("bulk.enable"),
+        title: t(isMobile ? "bulk.personalSetting" : "bulk.enable"),
         width: { fixed: isMobile ? 80 : 104 },
         hideable: false,
         alignment: "right",
@@ -269,7 +291,11 @@ export default function SkillsTable({
   return (
     <Table
       label={t("page.header.title")}
-      items={items.map((item) => ({ ...getItemProps(item), item }))}
+      items={items.map((item) => ({
+        ...getItemProps(item),
+        item,
+        showDescription: duplicateNames.has(item.name),
+      }))}
       columns={visibleColumns}
       getRowId={({ item }) => item.id}
       values={selectedIds}

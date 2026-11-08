@@ -17499,6 +17499,7 @@
       "total": "{count, plural, other {스킬 #개}}",
       "share": "공유",
       "enable": "내 스킬 활성화",
+      "personalSetting": "나에게",
       "disable": "내 스킬 비활성화",
       "delete": "삭제",
       "selectSkill": "{name} 선택",

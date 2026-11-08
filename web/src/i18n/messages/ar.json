@@ -17499,6 +17499,7 @@
       "total": "{count, plural, zero {# مهارة} one {# مهارة} two {# مهارتان} few {# مهارات} many {# مهارة} other {# مهارة}}",
       "share": "مشاركة",
       "enable": "تفعيل لي",
+      "personalSetting": "لي",
       "disable": "تعطيل لي",
       "delete": "حذف",
       "selectSkill": "تحديد {name}",

@@ -17499,6 +17499,7 @@
       "total": "{count, plural, one {# habilidade} other {# habilidades}}",
       "share": "Compartilhar",
       "enable": "Ativar para mim",
+      "personalSetting": "Para mim",
       "disable": "Desativar para mim",
       "delete": "Excluir",
       "selectSkill": "Selecionar {name}",

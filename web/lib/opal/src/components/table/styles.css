@@ -79,7 +79,8 @@
   [data-disabled],
   [data-opal-nav-mode="pointer"] *
 ) {
-  outline: 2px solid var(--border-03);
+  border-radius: var(--radius-12);
+  outline: 2px solid var(--border-04);
   outline-offset: -4px;
 }
 
