@@ -371,8 +371,10 @@ The library preview of an external-app skill calls the same renderer
     Cleanup stays after the content commit and before the sandbox push.
 21. `marketplace-processing-limits` **Archive processing failures must prevent retirement.**
     `skills/marketplace/archive.py:archive_files` bounds gzip expansion and member
-    reads separately from skill limits. It inflates gzip once into a temporary
-    spool. See `backend/onyx/skills/marketplace/README.md` for compatibility costs.
+    reads separately from skill limits. Every supported stream read charges the
+    shared byte budget. Path depth, path bytes and the aggregate parent index
+    are bounded before retained path allocations can grow without limit.
+    It inflates gzip once into a temporary spool. See `backend/onyx/skills/marketplace/README.md` for compatibility costs.
 
 ---
 

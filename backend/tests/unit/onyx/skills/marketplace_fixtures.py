@@ -35,8 +35,10 @@ def _archive(files: dict[str, bytes], kind: str = "zip", wrapper: str = "") -> b
                 info = tarfile.TarInfo(wrapper + path)
                 info.size = len(data)
                 archive.addfile(info, io.BytesIO(data))
-    else:
+    elif kind == "zip":
         with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for path, data in files.items():
                 archive.writestr(wrapper + path, data)
+    else:
+        raise ValueError(f"Unsupported archive format: {kind}")
     return out.getvalue()

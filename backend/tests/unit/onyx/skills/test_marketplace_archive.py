@@ -175,3 +175,79 @@ def test_special_members_are_not_opened(kind: str) -> None:
         assert files == {"CLAUDE.md": None}
         with pytest.raises(ValueError, match="Unreadable"):
             archives.require_regular_path(files, "CLAUDE.md")
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("path", ["a/" * 128 + "x", "a" * 4097])
+def test_path_allocation_is_bounded(kind: str, path: str) -> None:
+    with (
+        pytest.raises(archives.ArchiveLimitError),
+        archives.archive_files(_archive({path: b"x"}, kind)),
+    ):
+        pass
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+def test_large_member_reads_are_not_metadata(kind: str) -> None:
+    content = b"x" * (2 * 1024 * 1024)
+    with archives.archive_files(_archive({"large": content}, kind)) as files:
+        opener = files["large"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.read() == content
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize(
+    "method", ["readinto", "readinto1", "readline", "readlines", "iterate"]
+)
+def test_all_member_read_methods_share_budget(
+    kind: str, method: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(archives, "MEMBER_READ_MAX_BYTES", 3)
+    with archives.archive_files(_archive({"data": b"ab\ncd\n"}, kind)) as files:
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            if method in ("readinto", "readinto1"):
+                assert isinstance(stream, io.BufferedIOBase)
+                target = bytearray(3)
+                read = stream.readinto if method == "readinto" else stream.readinto1
+                assert read(target) == 3
+                assert target == b"ab\n"
+            elif method == "readline":
+                assert stream.readline() == b"ab\n"
+            elif method == "readlines":
+                with pytest.raises(archives.ArchiveLimitError):
+                    stream.readlines()
+                return
+            else:
+                assert next(stream) == b"ab\n"
+            with pytest.raises(archives.ArchiveLimitError):
+                stream.read(1)
+
+
+def test_fixture_rejects_unknown_format() -> None:
+    with pytest.raises(ValueError, match="format"):
+        _archive({}, "tarr")
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+def test_path_index_budget_and_path_boundaries(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for path in ["a/" * 63 + "x", "a" * 4096]:
+        with archives.archive_files(_archive({path: b"ok"}, kind)) as files:
+            assert path in files
+    with (
+        pytest.raises(archives.ArchiveLimitError),
+        archives.archive_files(_archive({"é" * 2049: b"x"}, kind)),
+    ):
+        pass
+    data = _archive({"alpha/x": b"x", "alpha/y": b"y"}, kind)
+    monkeypatch.setattr(archives, "ARCHIVE_PATHS_MAX_BYTES", 19)
+    with archives.archive_files(data) as files:
+        assert len(files) == 2
+    monkeypatch.setattr(archives, "ARCHIVE_PATHS_MAX_BYTES", 18)
+    with pytest.raises(archives.ArchiveLimitError), archives.archive_files(data):
+        pass

@@ -5,21 +5,24 @@ import io
 import stat
 import tarfile
 import zipfile
-from collections.abc import Callable, Iterator
+from collections.abc import Buffer, Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from functools import partial
 from tempfile import SpooledTemporaryFile
-from typing import IO, cast
+from typing import cast
 
 ARCHIVE_MAX_BYTES = 25 * 1024 * 1024
 ARCHIVE_MAX_ENTRIES = 10_000
+ARCHIVE_PATH_MAX_BYTES = 4096
+ARCHIVE_PATH_MAX_DEPTH = 64
+ARCHIVE_PATHS_MAX_BYTES = 25 * 1024 * 1024
 MANIFEST_MAX_BYTES = 1024 * 1024
 # Independent processing ceilings, not per-skill validation limits.
 EXPANDED_MAX_BYTES = 1024 * 1024 * 1024
 MEMBER_READ_MAX_BYTES = 1024 * 1024 * 1024
 SPOOL_MEMORY_BYTES = 1024 * 1024
 
-type ArchiveFiles = dict[str, Callable[[], IO[bytes]] | None]
+type ArchiveFiles = dict[str, Callable[[], io.BufferedIOBase] | None]
 
 
 class ArchiveLimitError(ValueError):
@@ -29,7 +32,14 @@ class ArchiveLimitError(ValueError):
 def archive_path(value: str) -> str:
     if value in ("", ".", "./"):
         return ""
+    if (
+        len(value) > ARCHIVE_PATH_MAX_BYTES
+        or len(value.encode()) > ARCHIVE_PATH_MAX_BYTES
+    ):
+        raise ArchiveLimitError("Archive path is too long")
     value = value.removeprefix("./").removesuffix("/")
+    if value.count("/") >= ARCHIVE_PATH_MAX_DEPTH:
+        raise ArchiveLimitError("Archive path is too deep")
     if (
         any(c in value for c in ("\\", "\x00"))
         or any(part in ("", ".", "..") for part in value.split("/"))
@@ -59,9 +69,10 @@ class _ReadBudget:
             )
 
 
-class _MemberReader(io.BufferedReader):
+class _MemberReader(io.BufferedIOBase):
     def __init__(self, source: io.BufferedIOBase, budget: _ReadBudget) -> None:
-        super().__init__(source)
+        super().__init__()
+        self.source = source
         self.budget = budget
 
     def read(self, size: int | None = -1, /) -> bytes:
@@ -70,15 +81,46 @@ class _MemberReader(io.BufferedReader):
             if size is None or size < 0
             else min(size, self.budget.remaining + 1)
         )
-        data = super().read(requested)
+        data = self.source.read(requested)
         self.budget.consume(len(data))
         return data
 
+    def read1(self, size: int = -1, /) -> bytes:
+        return self.read(size)
+
+    def readinto(self, buffer: Buffer, /) -> int:
+        with memoryview(buffer).cast("B") as view:
+            data = self.read(view.nbytes)
+            view[: len(data)] = data
+            return len(data)
+
+    def readable(self) -> bool:
+        return self.source.readable()
+
+    def seekable(self) -> bool:
+        return self.source.seekable()
+
+    def seek(self, offset: int, whence: int = io.SEEK_SET, /) -> int:
+        return self.source.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self.source.tell()
+
+    def close(self) -> None:
+        try:
+            self.source.close()
+        finally:
+            super().close()
+
 
 class _TarReader(io.BufferedReader):
+    metadata_reads = True
+
     def read(self, size: int | None = -1, /) -> bytes:
         # tarfile reads extension headers in one allocation.
-        if size is None or size < 0 or size > MANIFEST_MAX_BYTES:
+        if self.metadata_reads and (
+            size is None or size < 0 or size > MANIFEST_MAX_BYTES
+        ):
             raise ArchiveLimitError("Archive metadata is too large")
         return super().read(size)
 
@@ -87,7 +129,7 @@ def _open_member(
     archive: zipfile.ZipFile | tarfile.TarFile,
     member: zipfile.ZipInfo | tarfile.TarInfo,
     budget: _ReadBudget,
-) -> IO[bytes]:
+) -> io.BufferedIOBase:
     if isinstance(archive, zipfile.ZipFile) and isinstance(member, zipfile.ZipInfo):
         source = archive.open(member)
     elif isinstance(archive, tarfile.TarFile) and isinstance(member, tarfile.TarInfo):
@@ -106,6 +148,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
     with ExitStack() as stack:
         source = stack.enter_context(io.BytesIO(data))
         archive: zipfile.ZipFile | tarfile.TarFile
+        buffered: _TarReader | None = None
         if zipfile.is_zipfile(source):
             archive = stack.enter_context(zipfile.ZipFile(source))
         else:
@@ -129,6 +172,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
             archive = stack.enter_context(tarfile.open(fileobj=buffered, mode="r:"))
         files: ArchiveFiles = {}
         paths: set[str] = set()
+        path_bytes = 0
         directories: set[str] = set()
         budget = _ReadBudget()
         members = (
@@ -154,6 +198,11 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
             if path in paths or (not is_dir and path in directories):
                 raise ValueError(f"Duplicate or conflicting archive path: {path}")
             parents = {path.rsplit("/", i)[0] for i in range(1, path.count("/") + 1)}
+            path_bytes += len(path.encode()) + sum(
+                len(parent.encode()) for parent in parents - directories
+            )
+            if path_bytes > ARCHIVE_PATHS_MAX_BYTES:
+                raise ArchiveLimitError("Archive path index is too large")
             if parents.intersection(files):
                 raise ValueError(f"Conflicting archive path: {path}")
             paths.add(path)
@@ -168,4 +217,6 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
         for path in directories:
             if path.endswith((".json", "/SKILL.md")):
                 files[path] = None
+        if buffered is not None:
+            buffered.metadata_reads = False
         yield files

@@ -16,8 +16,13 @@ The archive reader also has independent processing safeguards:
   Only the first 1 MiB stays in memory; larger spools use temporary disk.
 - Member reads share a 1 GiB byte budget, for both ZIP and tar. The budget
   counts actual returned bytes, including repeated reads and manifests.
-  ZIP members outside the selected marketplace need no inflation.
+  ZIP members outside the selected marketplace need no inflation. All supported
+  stream reads, including readinto, lines and iteration, use that budget.
 - One tar extension header and each JSON manifest may use at most 1 MiB.
+  Member data reads use the shared member budget after metadata parsing finishes.
+- Paths have at most 64 segments and 4,096 UTF-8 bytes. The stored path and
+  parent-prefix index has a 25 MiB byte ceiling. These limits apply before
+  unbounded prefix allocation.
 
 The 1 GiB ceiling permits ten full 100 MiB skills plus tar overhead.
 It bounds temporary disk and decompression work for highly compressed inputs.
