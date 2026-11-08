@@ -10,6 +10,7 @@ import {
   transformPacketGroups,
 } from "@/chat/timeline/transformers";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
+import { ExpandedTimelineContent } from "@/components/chat/timeline/ExpandedTimelineContent";
 import type { FullChatState } from "@/components/chat/renderers/timelineContract";
 
 // StreamingMarkdown pulls a native markdown module; render its text so bodies stay assertable.
@@ -51,7 +52,7 @@ function turnGroupsFor(packets: Packet[]) {
   );
   return {
     turnGroups: groupStepsByTurn(steps),
-    codeModeWorking: codeModeWorking && !state.stopPacketSeen,
+    codeModeWorking,
     state,
   };
 }
@@ -219,8 +220,66 @@ describe("AgentTimeline", () => {
     renderTimeline([start, ...search(true)]);
     expect(screen.getByText("Working")).toBeTruthy();
 
+    // A program that yields runs on, but the model acts next.
+    renderTimeline([
+      start,
+      ...search(true),
+      makePacket({ type: "code_mode_delta", stdout: "", status: "running" }),
+    ]);
+    expect(screen.queryByText("Working")).toBeNull();
+
     renderTimeline([start, overallStop(StopReason.USER_CANCELLED)]);
     expect(screen.queryByText("Working")).toBeNull();
+  });
+
+  it("shows Working over a parallel turn while the program runs", () => {
+    renderTimeline([
+      makePlacedPacket({ type: "search_tool_start" }, { tab_index: 0 }),
+      makePlacedPacket({ type: "search_tool_start" }, { tab_index: 1 }),
+      makePlacedPacket({ type: "code_mode_start", code: "" }, { tab_index: 2 }),
+    ]);
+
+    expect(screen.getByText("Working")).toBeTruthy();
+  });
+
+  it("keeps a step's state when a code mode call is inserted before it", () => {
+    const call = (toolName: string, sub_turn_index: number) => [
+      makePlacedPacket(
+        { type: "custom_tool_start", tool_name: toolName },
+        { sub_turn_index },
+      ),
+      makePlacedPacket({ type: "section_end" }, { sub_turn_index }),
+    ];
+    const expanded = (packets: Packet[]) => (
+      <ExpandedTimelineContent
+        turnGroups={turnGroupsFor(packets).turnGroups}
+        chatState={chatState}
+        stopPacketSeen={false}
+        isSingleStep={false}
+        userStopped={false}
+        showDoneStep={false}
+        showStoppedStep={false}
+        hasDoneIndicator={false}
+      />
+    );
+    const packets = [
+      makePacket({ type: "code_mode_start", code: "" }),
+      ...call("lookup_orders", 0),
+      makePlacedPacket({ type: "reasoning_start" }, { tab_index: 1 }),
+      makePlacedPacket(
+        { type: "reasoning_delta", reasoning: "direct thinking" },
+        { tab_index: 1 },
+      ),
+      makePlacedPacket({ type: "section_end" }, { tab_index: 1 }),
+    ];
+    const view = render(expanded(packets));
+    const direct = screen.getByText("direct thinking");
+
+    // The new call takes the turn index that the direct step had.
+    view.rerender(expanded([...packets, ...call("lookup_refunds", 1)]));
+
+    // The same node: React kept the step and its state, such as expanded.
+    expect(screen.getByText("direct thinking")).toBe(direct);
   });
 
   describe("parallel turns", () => {

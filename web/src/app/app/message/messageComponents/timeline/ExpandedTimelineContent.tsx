@@ -123,7 +123,9 @@ export const ExpandedTimelineContent = React.memo(
 
     return (
       <div className="w-full">
-        {turnGroups.map((turnGroup, turnIdx) => {
+        {/* One flat list keyed by step: code mode can insert a step before
+            others, and position keys would remount the later steps. */}
+        {turnGroups.flatMap((turnGroup, turnIdx) => {
           // Coding-agent groups always render via ParallelTimelineTabs so
           // their tab-pill chrome is consistent with the multi-agent case.
           const renderAsParallelTabs =
@@ -132,7 +134,7 @@ export const ExpandedTimelineContent = React.memo(
 
           return renderAsParallelTabs ? (
             <ParallelTimelineTabs
-              key={turnGroup.steps[0]?.key ?? turnGroup.turnIndex}
+              key={turnGroup.steps[0]!.key}
               turnGroup={turnGroup}
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}

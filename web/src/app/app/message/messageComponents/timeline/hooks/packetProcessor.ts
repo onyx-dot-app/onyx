@@ -390,8 +390,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   if (isCodeModePacket(packet)) {
     const program = state.codeModePrograms.get(groupKey) ?? {
       cellId: null,
-      started: false,
-      ended: false,
+      running: false,
     };
     state.codeModePrograms.set(groupKey, nextCodeModeProgram(program, packet));
   }
@@ -511,8 +510,6 @@ function buildGroupsFromKeys(
         state.nestedCallSnapshots.get(key)
       );
       state.nestedCallSnapshots.set(key, nestedCalls);
-      const program = state.codeModePrograms.get(key);
-      const ended = state.groupKeysWithSectionEnd.has(key);
       // New array references let React detect changes for re-renders
       return {
         turn_index,
@@ -520,10 +517,7 @@ function buildGroupsFromKeys(
         packets: streamPackets.filter((p) => !isNestedPacket(p)),
         nestedCalls,
         streamPackets: [...streamPackets],
-        codeMode:
-          program && program.ended !== ended
-            ? { ...program, ended }
-            : (program ?? null),
+        codeMode: state.codeModePrograms.get(key) ?? null,
       };
     })
     .filter(

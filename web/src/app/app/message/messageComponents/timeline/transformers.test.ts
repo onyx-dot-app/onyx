@@ -13,6 +13,9 @@ import {
   PacketType,
 } from "@/app/app/services/streamingModels";
 
+// Mobile's chat/timeline/__tests__/transformers.test.ts mirrors these cases;
+// keep the two in step.
+
 function at(turn: number, tab = 0, sub?: number) {
   return { turn_index: turn, tab_index: tab, sub_turn_index: sub };
 }
@@ -158,6 +161,8 @@ test("a program works between calls until it returns", () => {
   expect(working(observation(0, 1, search(0, 0, false)))).toBe(false);
   expect(working(observation(0, 1, search(0, 0, true)))).toBe(true);
   expect(working(observation(0, 1, [], "completed"))).toBe(false);
+  // A program that yields runs on, but the model acts next.
+  expect(working(observation(0, 1, search(0, 0, true), "running"))).toBe(false);
   // A call carried from an earlier observation is still running.
   expect(
     working([

@@ -144,7 +144,7 @@ export function usePacketProcessor(
     toolGroups: state.toolGroups,
     displayGroups,
     toolTurnGroups,
-    codeModeWorking: codeModeWorking && !state.stopPacketSeen,
+    codeModeWorking,
     citations: state.citations,
     citationMap: state.citationMap,
     documentMap: state.documentMap,

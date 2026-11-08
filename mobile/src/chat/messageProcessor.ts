@@ -358,8 +358,7 @@ function processPacket(state: ProcessedMessageState, packet: Packet): void {
   if (isCodeModePacket(packet)) {
     const program = state.codeModePrograms.get(groupKey) ?? {
       cellId: null,
-      started: false,
-      ended: false,
+      running: false,
     };
     state.codeModePrograms.set(groupKey, nextCodeModeProgram(program, packet));
   }
@@ -440,17 +439,12 @@ function buildGroupsFromKeys(
         state.nestedCallSnapshots.get(key),
       );
       state.nestedCallSnapshots.set(key, nestedCalls);
-      const program = state.codeModePrograms.get(key);
-      const ended = state.groupKeysWithSectionEnd.has(key);
       return {
         turn_index,
         tab_index,
         packets: packets.filter((packet) => !isNestedPacket(packet)),
         nestedCalls,
-        codeMode:
-          program && program.ended !== ended
-            ? { ...program, ended }
-            : (program ?? null),
+        codeMode: state.codeModePrograms.get(key) ?? null,
       };
     })
     .filter(

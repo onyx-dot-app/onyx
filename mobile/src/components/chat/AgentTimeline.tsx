@@ -199,6 +199,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
+      codeModeWorking,
     }),
     [
       stopPacketSeen,
@@ -214,6 +215,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
+      codeModeWorking,
     ],
   );
 

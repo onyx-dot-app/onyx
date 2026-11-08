@@ -68,8 +68,9 @@ export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
 
 export interface CodeModeTimeline {
   steps: TransformedStep[];
-  /** A program is running between tool calls: it has started, has not returned, and none of its
-   * cell's calls is in flight. Only the timeline header shows this. */
+  /** A program runs between tool calls: an observation runs it (see CodeModeProgram.running) and
+   * none of its cell's calls is in flight. The program has no step of its own, so only the
+   * timeline header shows this. */
   codeModeWorking: boolean;
 }
 
@@ -100,8 +101,9 @@ function callStep(
 
 /**
  * Shows code mode as the tool calls it makes. Each nested call of a program becomes its own
- * step, as a direct call would; the program itself has no step. A cell reports a call in every
- * observation until the call ends, so a later report replaces an earlier one in place. A report of
+ * step, as a direct call would; the program itself has no step. A call is its cell and
+ * sub_turn_index, as CodeModeRenderer in backend/onyx/chat/renderer.py states: a later report
+ * replaces an earlier one in place. A report of
  * a running call can hold only its start, so it replaces only a report with no more packets; a
  * complete report always replaces. Steps get sequential turn indices in stream order; direct steps
  * of one turn keep a shared index.
@@ -139,7 +141,7 @@ export function expandCodeModeSteps(
     const cellKey =
       (cellId === null ? undefined : cellKeys.get(cellId)) ?? step.key;
     if (cellId !== null) cellKeys.set(cellId, cellKey);
-    if (program.started && !program.ended) {
+    if (program.running) {
       runningCells.add(cellKey);
     } else {
       runningCells.delete(cellKey);

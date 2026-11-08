@@ -71,10 +71,11 @@ export function nestedCallSnapshot(
 export interface CodeModeProgram {
   /** The cell the program runs in, once a start or output packet names it. */
   cellId: number | null;
-  /** The program has started running; before that the model is still writing it. */
-  started: boolean;
-  /** The group has ended. */
-  ended: boolean;
+  /** The program runs in this observation: it has started, and no final
+   * delta has reported its status yet. A program that yields (status
+   * "running") keeps running in its cell, but the model acts next; a later
+   * wait_code observation shows it running again. */
+  running: boolean;
 }
 
 /** The program after one more packet of its group. Call it only for code mode packets. */
@@ -83,17 +84,16 @@ export function nextCodeModeProgram(
   packet: Packet,
 ): CodeModeProgram {
   const obj = packet.obj;
-  if (
-    obj.type !== PacketType.CODE_MODE_START &&
-    obj.type !== PacketType.CODE_MODE_DELTA
-  ) {
-    return program;
+  if (obj.type === PacketType.CODE_MODE_START) {
+    return { cellId: program.cellId ?? obj.cell_id ?? null, running: true };
   }
-  return {
-    ...program,
-    cellId: program.cellId ?? obj.cell_id ?? null,
-    started: program.started || obj.type === PacketType.CODE_MODE_START,
-  };
+  if (obj.type === PacketType.CODE_MODE_DELTA) {
+    return {
+      cellId: program.cellId ?? obj.cell_id ?? null,
+      running: program.running && obj.status == null,
+    };
+  }
+  return program;
 }
 
 // The step-kind checks below take a step's own packets (GroupedPacket.packets), which exclude

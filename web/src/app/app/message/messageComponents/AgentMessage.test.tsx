@@ -568,6 +568,176 @@ test("code mode reads as the tool calls it makes", async () => {
   }
 });
 
+test("a later report of a code mode call replaces what the step shows", async () => {
+  seedSessionAwaitingAnswer();
+  const cell = { turn_index: 0, tab_index: 0 };
+  const waited = { turn_index: 1, tab_index: 0 };
+  const call = { sub_turn_index: 0 };
+  const output = (at: typeof cell, data: string): Packet => ({
+    placement: { ...at, ...call },
+    obj: {
+      type: PacketType.CUSTOM_TOOL_DELTA,
+      tool_name: "lookup_orders",
+      response_type: "text",
+      data,
+    },
+  });
+  const start = (at: typeof cell): Packet => ({
+    placement: { ...at, ...call },
+    obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "lookup_orders" },
+  });
+  // The call is running when the program yields; the wait_code observation
+  // reports it again with as many packets.
+  const yielded: Packet[] = [
+    { placement: cell, obj: { type: PacketType.CODE_MODE_START, code: "" } },
+    start(cell),
+    output(cell, "checking"),
+    output(cell, "checking more"),
+    {
+      placement: cell,
+      obj: {
+        type: PacketType.CODE_MODE_DELTA,
+        stdout: "",
+        status: "running",
+        cell_id: 1,
+      },
+    },
+    { placement: cell, obj: { type: PacketType.SECTION_END } },
+  ];
+  const completed: Packet[] = [
+    ...yielded,
+    {
+      placement: waited,
+      obj: { type: PacketType.CODE_MODE_START, code: "", cell_id: 1 },
+    },
+    start(waited),
+    output(waited, "3 orders"),
+    {
+      placement: { ...waited, ...call },
+      obj: { type: PacketType.SECTION_END },
+    },
+  ];
+  const renderMessage = (packets: Packet[]) => (
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  const view = render(renderMessage(yielded));
+  try {
+    await act(async () => {
+      (await screen.findByRole("button", { name: "Expand timeline" })).click();
+    });
+    expect(await screen.findByText("checking more")).toBeInTheDocument();
+
+    view.rerender(renderMessage(completed));
+    expect(
+      await screen.findByText("lookup_orders completed")
+    ).toBeInTheDocument();
+    expect(screen.getByText("3 orders")).toBeInTheDocument();
+    expect(screen.queryByText("checking more")).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a running program shows working over a parallel turn", async () => {
+  seedSessionAwaitingAnswer();
+  const packets: Packet[] = [0, 1].map((tab_index) => ({
+    placement: { turn_index: 0, tab_index },
+    obj: { type: PacketType.SEARCH_TOOL_START, is_internet_search: false },
+  }));
+  packets.push({
+    placement: { turn_index: 0, tab_index: 2 },
+    obj: { type: PacketType.CODE_MODE_START, code: "" },
+  });
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    expect(await screen.findByText("Working")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("an expanded step keeps its state when a call is inserted before it", async () => {
+  seedSessionAwaitingAnswer();
+  const cell = { turn_index: 0, tab_index: 0 };
+  const call = (
+    toolName: string,
+    placement: Packet["placement"],
+    data: string
+  ): Packet[] => [
+    {
+      placement,
+      obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: toolName },
+    },
+    {
+      placement,
+      obj: {
+        type: PacketType.CUSTOM_TOOL_DELTA,
+        tool_name: toolName,
+        response_type: "text",
+        data,
+      },
+    },
+    { placement, obj: { type: PacketType.SECTION_END } },
+  ];
+  const packets: Packet[] = [
+    { placement: cell, obj: { type: PacketType.CODE_MODE_START, code: "" } },
+    ...call("lookup_orders", { ...cell, sub_turn_index: 0 }, "3 orders"),
+    ...call("weather", { turn_index: 0, tab_index: 1 }, "sunny"),
+  ];
+  const renderMessage = (packets: Packet[]) => (
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      restoredPacketCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  const view = render(renderMessage(packets));
+  try {
+    await act(async () => {
+      (await screen.findByRole("button", { name: "Expand timeline" })).click();
+    });
+    const weather = await screen.findByText("sunny");
+
+    // The new call takes the turn index that the direct step had.
+    view.rerender(
+      renderMessage([
+        ...packets,
+        ...call("lookup_refunds", { ...cell, sub_turn_index: 1 }, "1 refund"),
+      ])
+    );
+
+    expect(await screen.findByText("1 refund")).toBeInTheDocument();
+    // The same node: React kept the step and its state, such as expanded.
+    expect(screen.getByText("sunny")).toBe(weather);
+  } finally {
+    view.unmount();
+  }
+});
+
 test("a program without tool calls shows only a working header", async () => {
   seedSessionAwaitingAnswer();
   const cell = { turn_index: 0, tab_index: 0 };

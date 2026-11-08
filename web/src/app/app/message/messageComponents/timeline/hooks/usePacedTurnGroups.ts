@@ -357,6 +357,9 @@ export function usePacedTurnGroups(
     // Stabilize: reuse previous TurnGroup objects when their content hasn't changed.
     // This preserves referential equality for completed groups, preventing
     // unnecessary re-renders in downstream components (e.g. SearchChipList).
+    // Packets are immutable stream objects, so a step whose last packet is the
+    // same object has the same content. A code mode call can get a new report
+    // with the same packet count, so the count alone does not tell.
     const prev = hasNodeChanged ? [] : prevPacedRef.current;
     if (prev.length === result.length) {
       let allMatch = true;
@@ -366,11 +369,15 @@ export function usePacedTurnGroups(
         if (
           oldGroup.turnIndex === newGroup.turnIndex &&
           oldGroup.steps.length === newGroup.steps.length &&
-          oldGroup.steps.every(
-            (s, j) =>
-              s.key === newGroup.steps[j]!.key &&
-              s.streamPackets.length === newGroup.steps[j]!.streamPackets.length
-          )
+          oldGroup.steps.every((s, j) => {
+            const next = newGroup.steps[j]!;
+            return (
+              s === next ||
+              (s.key === next.key &&
+                s.streamPackets.length === next.streamPackets.length &&
+                s.streamPackets.at(-1) === next.streamPackets.at(-1))
+            );
+          })
         ) {
           // Reuse old object reference for this group
           result[i] = oldGroup;
