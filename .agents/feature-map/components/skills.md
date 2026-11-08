@@ -476,10 +476,10 @@ The library preview of an external-app skill calls the same renderer
     freshness. Retirement releases enabled preferences and automatic-policy names.
     Access materialization and audience
     capture share the reconciliation transaction without tier lookups or external I/O.
-    No API or worker calls the sync service yet.
+    No management API calls the sync service yet.
 23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**
-    `skills/sync.py:sync_marketplace` owns the sessions and commit. Call it in the
-    target tenant context after authorization. A detached current-version snapshot
+    `skills/sync.py:sync_marketplace` owns the tenant context, sessions and commit.
+    Callers must authorize access first. A detached current-version snapshot
     uses object metadata to detect missing bundles without reading their content.
     Source changes trigger bounded content verification; unchanged sources do not
     detect corruption in existing blobs. Unknown size falls back to bounded verification.
@@ -494,8 +494,26 @@ The library preview of an external-app skill calls the same renderer
     checks pruned ids. Cleanup preserves version and legacy references.
     After commit, one push covers users affected by content, retirement, or access changes.
     V3 retries failed cleanup and removes aged uploads left by a stopped worker.
-    S5 must serialize the full read/upload/write operation and reject stale revisions.
-    S8 owns the retirement confirmation override. Neither is implemented here.
+    `db/marketplace_sync.py` owns durable requests and per-marketplace leases.
+    The shared heartbeat renews each lease for at most five minutes. Publication
+    checks ownership and expiry in the reconciliation transaction, with membership
+    before marketplace locks. Expired workers cannot publish or clear another owner.
+    Finalization releases ownership and reads pending work under the same row lock.
+    After two passes, recovery dispatches any remaining request. Temporary upstream
+    failures and expired workers share a three-attempt budget, with 60/120-second
+    backoff. Other exceptions, failed reads and confirmation guards are terminal.
+    Explicit requests reset the budget and delay, including during a running attempt.
+    Lost login errors survive completion; publication checks the login under the row lock.
+    An unchanged success clears the prior error. Errors contain no provider bodies.
+    Request entry points use `background/celery/tasks/marketplace_sync/tasks.py:enqueue_marketplace_sync`
+    after authorization and commit. It persists intent before transport I/O. Recovery
+    retries requested work, expired queue reservations and expired owners; it never
+    polls idle sources. Recovery is not tenant-work-gated. Queue messages live for
+    15 minutes; database claims reject duplicates and enforce retry delays.
+    Celery uses the heavy worker's sandbox queue. Lite dispatches
+    through a bounded background thread path, outside the periodic poller thread.
+    Recovery errors do not prevent the Lite file drains from running.
+    S8 owns retirement confirmation. No confirmation bypass exists here.
 
 
 24. `marketplace-sync-ownership` **Bound each durable request and fence its owner.**
@@ -507,7 +525,7 @@ The library preview of an external-app skill calls the same renderer
     backoff. Explicit requests reset the budget and delay without replacing a live
     owner. Completion preserves a request made during the run and a deleted login's
     error. Queue reservations expire separately from retry delays.
-    Worker dispatch is not connected yet.
+    The background worker uses these transitions for all sync attempts.
 
 ---
 

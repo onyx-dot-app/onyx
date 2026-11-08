@@ -666,6 +666,8 @@ CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT = 600
 
 
 class OnyxCeleryTask:
+    SYNC_MARKETPLACE = "sync_marketplace"
+    RECOVER_MARKETPLACE_SYNCS = "recover_marketplace_syncs"
     REPAIR_SKILL_VERSIONS = "repair_skill_versions"
     DEFAULT = "celery"
 

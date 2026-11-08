@@ -7,6 +7,7 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -82,7 +83,11 @@ def catalog_bytes(*names: str, body: bytes = b"") -> bytes:
 
 
 @pytest.fixture
-def github(monkeypatch: pytest.MonkeyPatch) -> GitHub:
+def github(
+    monkeypatch: pytest.MonkeyPatch, session: Session, marketplace: Marketplace
+) -> GitHub:
+    marketplace.login_user_id = make_user(session).id
+    session.commit()
     github = GitHub()
     monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", github.get)
     monkeypatch.setattr(
@@ -442,6 +447,10 @@ with patch("onyx.utils.github.ssrf_safe_get", github.get), patch(
     assert marketplace.last_synced_revision == "a" * 40
     orphaned = stored_bundles(session) - retained
     assert len(orphaned) == 2
+    marketplace.sync_lease_expires_at = session.execute(
+        select(func.clock_timestamp())
+    ).scalar_one() - timedelta(seconds=1)
+    session.commit()
     assert len(run(marketplace, tenant).changed_skill_ids) == 2
     assert orphaned.issubset(stored_bundles(session))
     assert delete_orphan_skill_bundles() == 0
@@ -468,6 +477,8 @@ def test_source_guards_keep_rows_and_clean_stages(
     )
     result = run(marketplace, tenant)
     assert result.status == source
+    session.refresh(marketplace)
+    assert marketplace.sync_status == source and marketplace.last_error
     assert [(row.id, row.current_version_id) for row in rows(session)] == original
     assert all(row.retired_at is None for row in rows(session))
     assert marketplace.last_synced_revision == "a" * 40

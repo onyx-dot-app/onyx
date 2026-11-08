@@ -329,6 +329,21 @@ Its name becomes available for another Skill. Existing sessions use the normal r
 Retirement preserves version history for internal retention and cleanup.
 Retired Skills reject all user changes except deletion.
 
+## Marketplace sync recovery
+
+Marketplace sync runs in the background. A request made during a sync triggers another check,
+so newer commits are not lost. Interrupted or queued requests recover automatically, including on Onyx Lite.
+Onyx does not check idle marketplaces on a timer.
+Temporary source errors and interrupted runs get at most three attempts per request. Automatic retries wait one minute,
+then two minutes. After that, request a new sync.
+An explicit request starts a fresh attempt budget and clears the retry delay.
+
+Each sync requires an active login user with a connected GitHub account.
+An unavailable login records an error and preserves existing Skills. A successful check clears an earlier error,
+even when the source has not changed. Missing sources, invalid input, and login failures wait for an explicit request;
+they do not retry automatically.
+A failed source read or a retirement that needs confirmation preserves the last successful content.
+
 ## Reset marketplace Skill access through the API
 
 Company marketplace Skills remain when their author or GitHub login user is deleted.
