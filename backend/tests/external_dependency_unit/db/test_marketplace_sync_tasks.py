@@ -117,26 +117,18 @@ def test_request_at_final_release(
     identifier = marketplace.id
     tasks.enqueue_marketplace_sync(identifier, tenant_id=tenant)
     released, resume = Event(), Event()
-    finish = sync.finish_marketplace_sync
+    perform = sync._sync_marketplace
 
     def pause_after_release(
-        identifier: UUID,
-        owner: UUID,
-        db_session: Session,
-        *,
-        status: MarketplaceSyncStatus,
-        error: str | None = None,
-        retry: bool = False,
-    ) -> bool:
-        pending = finish(
-            identifier, owner, db_session, status=status, error=error, retry=retry
-        )
+        identifier: UUID, tenant_id: str, owner: UUID
+    ) -> tuple[ReconciliationResult | None, bool]:
+        result = perform(identifier, tenant_id, owner)
         released.set()
         assert resume.wait(10)
-        return pending
+        return result
 
     with (
-        patch.object(sync, "finish_marketplace_sync", pause_after_release),
+        patch.object(sync, "_sync_marketplace", pause_after_release),
         ThreadPoolExecutor() as pool,
     ):
         worker = pool.submit(run_task, identifier, tenant)
@@ -266,28 +258,17 @@ def test_bounded_repeat_yields_durably(
 ) -> None:
     identifier = marketplace.id
     tasks.enqueue_marketplace_sync(identifier, tenant_id=tenant)
-    finish = sync.finish_marketplace_sync
+    get = github.get
 
-    def another_request(
-        identifier: UUID,
-        owner: UUID,
-        db_session: Session,
-        *,
-        status: MarketplaceSyncStatus,
-        error: str | None = None,
-        retry: bool = False,
-    ) -> bool:
-        with get_session_with_tenant(tenant_id=tenant) as other:
-            ownership.request_marketplace_sync(identifier, other)
-        return finish(
-            identifier, owner, db_session, status=status, error=error, retry=retry
-        )
+    def another_request(url: str, **kwargs: object) -> requests.Response:
+        response = get(url, **kwargs)
+        if "/commits/" in url:
+            with get_session_with_tenant(tenant_id=tenant) as other:
+                ownership.request_marketplace_sync(identifier, other)
+        return response
 
-    with patch.object(
-        sync, "finish_marketplace_sync", side_effect=another_request
-    ) as finalizer:
+    with patch("onyx.utils.github.ssrf_safe_get", side_effect=another_request):
         run_task(identifier, tenant)
-        assert finalizer.call_count == 2
         assert len(github.urls) == 3
     session.refresh(marketplace)
     assert marketplace.sync_requested and marketplace.sync_owner is None

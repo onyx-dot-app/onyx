@@ -148,6 +148,33 @@ def _finish(
         )
 
 
+def finish_marketplace_sync__no_commit(
+    marketplace_id: UUID,
+    owner: UUID,
+    session: Session,
+    *,
+    status: MarketplaceSyncStatus,
+    error: str | None = None,
+    retry: bool = False,
+    resolved_revision: str | None = None,
+) -> bool:
+    row = fence_marketplace_sync(marketplace_id, owner, session)
+    if (
+        resolved_revision is not None
+        and row.retirement_proposal is not None
+        and row.retirement_proposal.revision != resolved_revision
+    ):
+        row.retirement_proposal = None
+    _finish(
+        row,
+        session.execute(select(func.clock_timestamp())).scalar_one(),
+        status,
+        error,
+        retry=retry,
+    )
+    return row.sync_requested and row.sync_retry_after is None
+
+
 def finish_marketplace_sync(
     marketplace_id: UUID,
     owner: UUID,
@@ -157,15 +184,9 @@ def finish_marketplace_sync(
     error: str | None = None,
     retry: bool = False,
 ) -> bool:
-    row = fence_marketplace_sync(marketplace_id, owner, session)
-    _finish(
-        row,
-        session.execute(select(func.clock_timestamp())).scalar_one(),
-        status,
-        error,
-        retry=retry,
+    pending = finish_marketplace_sync__no_commit(
+        marketplace_id, owner, session, status=status, error=error, retry=retry
     )
-    pending = row.sync_requested and row.sync_retry_after is None
     # Request writers take this row lock too: release cannot erase a new request.
     session.commit()
     return pending

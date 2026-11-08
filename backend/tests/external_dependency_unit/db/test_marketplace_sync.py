@@ -34,7 +34,7 @@ from onyx.file_store.file_store import (
 )
 from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
-from onyx.skills.marketplace.models import ReconciliationResult
+from onyx.skills.marketplace.models import MarketplaceSyncStatus, ReconciliationResult
 from onyx.skills.marketplace.read_models import CompleteMarketplace, FailedMarketplace
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
@@ -642,3 +642,43 @@ def test_push_observes_committed_creation_and_retirement(
         retired = 1
         run(marketplace, tenant)
         assert push.call_count == 2
+
+
+@pytest.mark.parametrize("stop", [False, True])
+def test_publication_and_completion_survive_post_commit_failure(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    stop: bool,
+) -> None:
+    user = make_user(session)
+    make_sandbox(session, user)
+    marketplace.public_permission = SkillSharePermission.VIEWER
+    session.commit()
+
+    def fail_push(_recipients: set[UUID], _push_session: Session) -> None:
+        with sync.get_session_with_current_tenant() as observer:
+            published = observer.get(Marketplace, marketplace.id)
+            assert published is not None
+            assert published.last_synced_revision == github.revision
+            assert published.sync_status == MarketplaceSyncStatus.APPLIED
+            assert published.sync_owner is None
+        if stop:
+            raise SystemExit("worker stopped after publication")
+        raise RuntimeError("push unavailable")
+
+    with patch.object(sync, "push_skills_for_users", side_effect=fail_push):
+        if stop:
+            with pytest.raises(SystemExit, match="worker stopped"):
+                run(marketplace, tenant)
+        else:
+            assert run(marketplace, tenant).status == "applied"
+    session.refresh(marketplace)
+    assert marketplace.sync_status == MarketplaceSyncStatus.APPLIED
+    assert marketplace.last_error is None and marketplace.sync_owner is None
+    assert not marketplace.sync_requested
+    assert len(rows(session)) == 2
+    count = len(github.urls)
+    assert sync.sync_marketplace(marketplace.id, tenant, request_work=False) is None
+    assert len(github.urls) == count

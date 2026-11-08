@@ -22,6 +22,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.ingest import IngestedBundle
 from onyx.skills.marketplace.models import (
     MarketplaceRetirementProposal,
+    MarketplaceSyncStatus,
     ReconciliationResult,
 )
 from onyx.skills.marketplace.read_models import (
@@ -75,15 +76,14 @@ def confirm_marketplace_retirement__no_commit(
     )
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found")
-    if (
-        marketplace.owner_user_id != actor.id
-        if marketplace.owner_user_id is not None
-        else not has_global_permission(actor, Permission.MANAGE_SKILLS)
+    if marketplace.owner_user_id != actor.id and not has_global_permission(
+        actor, Permission.MANAGE_SKILLS
     ):
         raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
     proposal = marketplace.retirement_proposal
     if (
-        proposal is None
+        marketplace.sync_status != MarketplaceSyncStatus.NEEDS_CONFIRMATION
+        or proposal is None
         or proposal.revision != expected_revision
         or proposal.skill_ids != tuple(sorted(expected_skill_ids))
     ):
@@ -188,6 +188,7 @@ def reconcile_marketplace__no_commit(
             and marketplace.retirement_proposal != approved
         ):
             marketplace.retirement_proposal = proposal
+            marketplace.sync_status = MarketplaceSyncStatus.NEEDS_CONFIRMATION
             marketplace.last_error = "needs confirmation"
             db_session.flush()
             return ReconciliationResult(

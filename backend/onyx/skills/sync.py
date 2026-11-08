@@ -23,6 +23,7 @@ from onyx.db.marketplace_sync import (
     claim_marketplace_sync,
     fence_marketplace_sync,
     finish_marketplace_sync,
+    finish_marketplace_sync__no_commit,
     renew_marketplace_sync,
     request_marketplace_sync,
 )
@@ -84,8 +85,8 @@ def _bundle_available(version: SkillVersion, file_store: FileStore) -> bool:
 
 def _sync_marketplace(
     marketplace_id: UUID, tenant_id: str, owner: UUID
-) -> ReconciliationResult | None:
-    """Run in the target tenant context. Return None when an unchanged source needs no work.
+) -> tuple[ReconciliationResult | None, bool]:
+    """Return the result and pending work after committing completion with publication.
 
     Owns its sessions and commit. Callers must authorize access before invoking.
     Failed commit attempts leave uploads for the aged orphan sweep.
@@ -110,7 +111,16 @@ def _sync_marketplace(
         )
     )
     if archive is None:
-        return None
+        with get_session_with_current_tenant() as db_session:
+            pending = finish_marketplace_sync__no_commit(
+                marketplace_id,
+                owner,
+                db_session,
+                status=MarketplaceSyncStatus.APPLIED,
+                resolved_revision=marketplace.last_synced_revision,
+            )
+            db_session.commit()
+        return None, pending
     if archive.revision != marketplace.last_synced_revision:
         recovery_keys |= frozenset(
             key
@@ -185,7 +195,19 @@ def _sync_marketplace(
                 created_by_user_id=marketplace.login_user_id,
                 recovery_keys=recovery_keys,
             )
-            fence_marketplace_sync(marketplace_id, owner, db_session)
+            status = MarketplaceSyncStatus(result.status)
+            pending = finish_marketplace_sync__no_commit(
+                marketplace_id,
+                owner,
+                db_session,
+                status=status,
+                error="needs confirmation"
+                if status == MarketplaceSyncStatus.NEEDS_CONFIRMATION
+                else SYNC_FAILED
+                if status == MarketplaceSyncStatus.FAILED
+                else None,
+                resolved_revision=archive.revision,
+            )
             commit_attempted = True
             db_session.commit()
     except Exception:
@@ -194,17 +216,22 @@ def _sync_marketplace(
         raise
     _cleanup(result.cleanup_file_ids)
     if result.affected_user_ids:
-        with get_session_with_current_tenant() as db_session:
-            push_skills_for_users(result.affected_user_ids, db_session)
-            db_session.commit()
+        try:
+            with get_session_with_current_tenant() as db_session:
+                push_skills_for_users(result.affected_user_ids, db_session)
+                db_session.commit()
+        except Exception:
+            logger.warning(
+                "Marketplace sandbox push failed after publication", exc_info=True
+            )
     if (
         archive.revision == marketplace.last_synced_revision
         and result.status == "applied"
         and not result.changed_skill_ids
         and not result.retired_skill_ids
     ):
-        return None
-    return result
+        return None, pending
+    return result, pending
 
 
 def sync_marketplace(
@@ -239,7 +266,9 @@ def sync_marketplace(
                 max_duration=MAX_RUN_SECONDS,
             ):
                 try:
-                    result = _sync_marketplace(marketplace_id, tenant_id, owner)
+                    result, pending = _sync_marketplace(
+                        marketplace_id, tenant_id, owner
+                    )
                 except MarketplaceSyncLeaseLost:
                     raise
                 except Exception as exc:
@@ -249,43 +278,28 @@ def sync_marketplace(
                         and exc.detail == MARKETPLACE_LOGIN_ERROR
                         else SYNC_FAILED
                     )
-                    with get_session_with_tenant(tenant_id=tenant_id) as session:
-                        finish_marketplace_sync(
-                            marketplace_id,
-                            owner,
-                            session,
-                            status=MarketplaceSyncStatus.FAILED,
-                            error=error,
-                            retry=isinstance(exc, OnyxError)
-                            and exc.error_code
-                            in {
-                                OnyxErrorCode.BAD_GATEWAY,
-                                OnyxErrorCode.GATEWAY_TIMEOUT,
-                                OnyxErrorCode.RATE_LIMITED,
-                                OnyxErrorCode.SERVICE_UNAVAILABLE,
-                            },
+                    try:
+                        with get_session_with_tenant(tenant_id=tenant_id) as session:
+                            finish_marketplace_sync(
+                                marketplace_id,
+                                owner,
+                                session,
+                                status=MarketplaceSyncStatus.FAILED,
+                                error=error,
+                                retry=isinstance(exc, OnyxError)
+                                and exc.error_code
+                                in {
+                                    OnyxErrorCode.BAD_GATEWAY,
+                                    OnyxErrorCode.GATEWAY_TIMEOUT,
+                                    OnyxErrorCode.RATE_LIMITED,
+                                    OnyxErrorCode.SERVICE_UNAVAILABLE,
+                                },
+                            )
+                    except MarketplaceSyncLeaseLost:
+                        logger.warning(
+                            "Sync failure could not update released ownership"
                         )
                     raise
-                status = (
-                    MarketplaceSyncStatus(result.status)
-                    if result
-                    else MarketplaceSyncStatus.APPLIED
-                )
-                error = (
-                    "needs confirmation"
-                    if status == MarketplaceSyncStatus.NEEDS_CONFIRMATION
-                    else SYNC_FAILED
-                    if status == MarketplaceSyncStatus.FAILED
-                    else None
-                )
-                with get_session_with_tenant(tenant_id=tenant_id) as session:
-                    pending = finish_marketplace_sync(
-                        marketplace_id,
-                        owner,
-                        session,
-                        status=status,
-                        error=error,
-                    )
                 if not pending:
                     break
         return result

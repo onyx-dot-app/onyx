@@ -472,12 +472,14 @@ The library preview of an external-app skill calls the same renderer
     `Marketplace.retirement_proposal` persists the exact source revision and sorted
     missing live skill ids. `db/marketplace.py:confirm_marketplace_retirement__no_commit`
     refreshes the actor under the membership lock before locking the marketplace.
-    Only a personal owner or a company marketplace's global `MANAGE_SKILLS` actor
-    can approve. Confirmation compares the caller's revision and ids with the locked
-    proposal. Reconciliation bypasses the guard only for that exact approved pair.
+    A personal owner or global `MANAGE_SKILLS` actor can approve. Confirmation
+    requires NEEDS_CONFIRMATION status and compares the caller's revision and ids
+    with the locked proposal. Reconciliation bypasses the guard only for that exact approved pair.
     A changed pair replaces the proposal without approval. Successful reconciliation
     clears it in the content transaction; rollback preserves both approval and content.
-    Failed reads preserve the proposal. Consumed approval cannot authorize a later replay.
+    Failed reads at the same revision preserve the proposal. A fenced sync that
+    resolves a different revision clears it, including a no-op revert to the last
+    synced revision. Consumed approval cannot authorize a later replay.
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.
@@ -497,11 +499,13 @@ The library preview of an external-app skill calls the same renderer
     Ingestion preparation runs before upload; validation failures become blocked
     entries with their original keys. Storage failures abort the entire sync.
     Each attempted upload uses a fresh tracked file id. Reconciliation commits all
-    skill, version and revision changes together. Before a commit attempt, failure
+    skill, version, revision and completion status together. Ownership release and
+    pending-request reads share that transaction. Before a commit attempt, failure
     cleanup checks only this run's ids. After a commit attempt fails, defer cleanup
     to the aged orphan sweep: the server may still commit. Success cleanup also
     checks pruned ids. Cleanup preserves version and legacy references.
     After commit, one push covers users affected by content, retirement, or access changes.
+    A failed push is logged; it cannot change the committed sync result.
     V3 retries failed cleanup and removes aged uploads left by a stopped worker.
     `db/marketplace_sync.py` owns durable requests and per-marketplace leases.
     The shared heartbeat renews each lease for at most five minutes. Publication

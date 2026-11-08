@@ -24,6 +24,7 @@ from onyx.skills.marketplace.models import (
     GitHubMarketplaceConfig,
     MarketplaceProvider,
     MarketplaceRetirementProposal,
+    MarketplaceSyncStatus,
 )
 from onyx.skills.marketplace.read_models import (
     BlockedSkill,
@@ -110,9 +111,7 @@ def test_confirmation_authority(
             else make_user(session, standard_account=True)
         )
     session.commit()
-    allowed = (personal and actor_kind == "owner") or (
-        not personal and actor_kind == "global"
-    )
+    allowed = (personal and actor_kind == "owner") or actor_kind == "global"
     if allowed:
         confirm(session, marketplace, actor, proposal)
         session.commit()
@@ -365,6 +364,7 @@ def test_confirmation_refreshes_separate_auth_session_actor(
         owner_user_id=actor_id if personal else None,
     )
     proposal = MarketplaceRetirementProposal(revision="next", skill_ids=(uuid4(),))
+    row.sync_status = MarketplaceSyncStatus.NEEDS_CONFIRMATION
     row.retirement_proposal = proposal
     db_session.add(row)
     db_session.commit()
@@ -414,6 +414,7 @@ def test_confirmation_refreshes_cached_marketplace(
         provider_config=GitHubMarketplaceConfig(owner="acme", repo="tools", ref="main"),
         owner_user_id=actor.id,
         retirement_proposal=proposal,
+        sync_status=MarketplaceSyncStatus.NEEDS_CONFIRMATION,
     )
     db_session.add(row)
     db_session.commit()
