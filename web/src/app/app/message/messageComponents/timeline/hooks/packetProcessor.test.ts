@@ -876,6 +876,23 @@ describe("packetProcessor", () => {
       // First stop reason should be preserved
       expect(result.stopReason).toBe(StopReason.FINISHED);
     });
+
+    test("ends each open nested call, which gets no packets after Stop", () => {
+      const nested = { turn_index: 0, sub_turn_index: 0 };
+      const result = processPackets(createInitialState(1), [
+        createPacket(
+          PacketType.CODE_MODE_START,
+          { turn_index: 0 },
+          { code: "" }
+        ),
+        createPacket(PacketType.CUSTOM_TOOL_START, nested, {
+          tool_name: "lookup",
+        }),
+        createStopPacket(StopReason.USER_CANCELLED),
+      ]);
+
+      expect(result.toolGroups[0]!.nestedCalls[0]!.complete).toBe(true);
+    });
   });
 
   describe("handleToolAfterMessagePacket", () => {
@@ -947,6 +964,25 @@ describe("packetProcessor", () => {
 
       // Stop already seen, so finalAnswerComing should remain true
       expect(result.finalAnswerComing).toBe(true);
+    });
+
+    test("a tool whose arguments streamed before the message resets it when it starts", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createPacket(
+          PacketType.TOOL_CALL_ARGUMENT_DELTA,
+          { turn_index: 0 },
+          { tool_type: "python", argument_deltas: { code: "print(1)" } }
+        ),
+        createMessageStartPacket({ turn_index: 1 }),
+      ];
+      expect(processPackets(state, packets).finalAnswerComing).toBe(true);
+
+      const result = processPackets(state, [
+        ...packets,
+        createPythonToolStartPacket("print(1)", { turn_index: 0 }),
+      ]);
+      expect(result.finalAnswerComing).toBe(false);
     });
   });
 

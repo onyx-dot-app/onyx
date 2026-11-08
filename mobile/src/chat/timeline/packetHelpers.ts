@@ -41,30 +41,17 @@ export interface NestedCall {
   complete: boolean;
 }
 
-/** Nested calls ordered by sub_turn_index, from packets already placed at parent level. A call
- * whose packet count did not change keeps its previous object, and an unchanged list keeps its
- * previous array, so memoized renderers skip calls that have not changed. */
+/** Nested calls ordered by sub_turn_index, from packets already placed at parent level. */
 export function nestedCallSnapshot(
   bySubTurn: ReadonlyMap<number, Packet[]>,
-  previous: NestedCall[] = [],
 ): NestedCall[] {
-  const previousByIndex = new Map(
-    previous.map((call) => [call.subTurnIndex, call]),
-  );
-  let changed = previous.length !== bySubTurn.size;
-  const calls = Array.from(bySubTurn.entries())
+  return Array.from(bySubTurn.entries())
     .sort(([a], [b]) => a - b)
-    .map(([subTurnIndex, callPackets]): NestedCall => {
-      const prior = previousByIndex.get(subTurnIndex);
-      if (prior && prior.packets.length === callPackets.length) return prior;
-      changed = true;
-      return {
-        subTurnIndex,
-        packets: [...callPackets],
-        complete: callPackets.some(isGroupEndPacket),
-      };
-    });
-  return changed ? calls : previous;
+    .map(([subTurnIndex, callPackets]) => ({
+      subTurnIndex,
+      packets: [...callPackets],
+      complete: callPackets.some(isGroupEndPacket),
+    }));
 }
 
 /** What the parent-level packets of a code mode group say about its program. */

@@ -62,6 +62,9 @@ export interface ProcessorState {
   nestedCallSnapshots: Map<string, NestedCall[]>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
+  // Groups whose tool has started: a tool packet other than a streamed
+  // argument arrived
+  startedToolGroupKeys: Set<string>;
   // The program of each code mode group, updated once per packet
   codeModePrograms: Map<string, CodeModeProgram>;
 
@@ -118,6 +121,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     nestedCallSnapshots: new Map(),
     seenGroupKeys: new Set(),
     groupKeysWithSectionEnd: new Set(),
+    startedToolGroupKeys: new Set(),
     codeModePrograms: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
@@ -315,24 +319,40 @@ function handleStopPacket(state: ProcessorState, packet: Packet): void {
       injectSectionEnd(state, groupKey);
     }
   });
+
+  // Nothing follows Stop, so each open nested call ends with the response.
+  state.nestedCallsMap.forEach((calls) =>
+    calls.forEach((call) => {
+      if (!call.some(isGroupEndPacket)) {
+        call.push({
+          placement: call[0]!.placement,
+          obj: { type: PacketType.SECTION_END },
+        });
+      }
+    })
+  );
 }
 
 function handleToolAfterMessagePacket(
   state: ProcessorState,
   packet: Packet,
-  opensToolGroup: boolean
+  groupKey: string
 ): void {
   // The model can write a message and then call a tool, so the answer is not
-  // final yet. Only a tool packet that opens a new group is a new call: later
-  // packets of a known group (such as a code mode cell's closing record) are
-  // not. Reasoning is not a tool call.
+  // final yet. Every tool packet up to the tool's start is part of a new call,
+  // even when the call's arguments streamed before the message. Packets after
+  // the start (such as a code mode cell's closing record) are not. Reasoning is
+  // not a tool call.
+  if (!isActualToolCallPacket(packet)) return;
   if (
     state.finalAnswerComing &&
     !state.stopPacketSeen &&
-    opensToolGroup &&
-    isActualToolCallPacket(packet)
+    !state.startedToolGroupKeys.has(groupKey)
   ) {
     state.finalAnswerComing = false;
+  }
+  if (packet.obj.type !== PacketType.TOOL_CALL_ARGUMENT_DELTA) {
+    state.startedToolGroupKeys.add(groupKey);
   }
 }
 
@@ -396,14 +416,12 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   }
 
   // Debug and control packets can precede the first rendered packet.
-  let opensToolGroup = false;
   if (
     !state.toolGroupKeys.has(groupKey) &&
     !state.displayGroupKeys.has(groupKey)
   ) {
     if (isToolPacket(packet, false)) {
       state.toolGroupKeys.add(groupKey);
-      opensToolGroup = true;
     }
     if (isDisplayPacket(packet)) {
       state.displayGroupKeys.add(groupKey);
@@ -416,7 +434,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   handleDocumentPacket(state, packet);
   handleStreamingStatusPacket(state, packet);
   handleStopPacket(state, packet);
-  handleToolAfterMessagePacket(state, packet, opensToolGroup);
+  handleToolAfterMessagePacket(state, packet, groupKey);
 }
 
 export function processPackets(

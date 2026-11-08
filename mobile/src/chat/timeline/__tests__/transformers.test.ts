@@ -210,7 +210,7 @@ describe("transformers", () => {
       ).toBe(true);
     });
 
-    it("steps keep their keys and objects when an earlier cell gains a call", () => {
+    it("steps keep their keys when an earlier cell gains a call", () => {
       const first = [
         ...observation(0, 1, search(0, 0, true)),
         ...direct(search(0, 0, true), 1),
@@ -227,8 +227,6 @@ describe("transformers", () => {
       expect(before.map((s) => s.key)).toEqual(["0-0-0", "0-1"]);
       // The new call sits with its cell, so the direct step moves; its key does not.
       expect(after.map((s) => s.key)).toEqual(["0-0-0", "0-0-1", "0-1"]);
-      // The unchanged call keeps its step object, so memoized renderers skip it.
-      expect(after[0]).toBe(before[0]);
     });
 
     it("direct parallel calls keep their shared turn", () => {

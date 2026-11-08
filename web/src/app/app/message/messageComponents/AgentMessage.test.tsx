@@ -751,10 +751,10 @@ test("a program without tool calls shows only a working header", async () => {
       obj: { type: PacketType.CODE_MODE_DELTA, stdout: "36\n" },
     },
   ];
-  const view = render(
+  const renderMessage = (packets: Packet[]) => (
     <AgentMessage
-      rawPackets={running}
-      packetCount={running.length}
+      rawPackets={packets}
+      packetCount={packets.length}
       chatState={chatState}
       nodeId={NEW_ANSWER_NODE_ID}
       llmManager={null}
@@ -762,9 +762,24 @@ test("a program without tool calls shows only a working header", async () => {
       disableTTS
     />
   );
+  const view = render(renderMessage(running));
   try {
     expect(await screen.findByText("Working")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/36|sum\(range|step/i);
+
+    // A finished response is no longer working, even with no final delta.
+    view.rerender(
+      renderMessage([
+        ...running,
+        {
+          placement: cell,
+          obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
+        },
+      ])
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Working")).not.toBeInTheDocument()
+    );
   } finally {
     view.unmount();
   }

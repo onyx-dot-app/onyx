@@ -173,6 +173,42 @@ describe("grouping engine", () => {
     expect(state.finalAnswerComing).toBe(false);
   });
 
+  it("resets finalAnswerComing when a tool whose arguments streamed before the message starts", () => {
+    const argsFirst = [
+      makePlacedPacket(
+        {
+          type: "tool_call_argument_delta",
+          tool_id: "call-1",
+          tool_type: "python",
+          argument_deltas: { code: "print(1)" },
+        },
+        { turn_index: 0 },
+      ),
+      messageStart(1),
+    ];
+    expect(run(argsFirst).finalAnswerComing).toBe(true);
+    const started = run([
+      ...argsFirst,
+      makePlacedPacket(
+        { type: "python_tool_start", code: "print(1)" },
+        { turn_index: 0 },
+      ),
+    ]);
+    expect(started.finalAnswerComing).toBe(false);
+  });
+
+  it("ends each open nested call on Stop, since nothing follows it", () => {
+    const state = run([
+      codeModeStart(0),
+      makePlacedPacket(
+        { type: "custom_tool_start", tool_name: "lookup" },
+        { turn_index: 0, sub_turn_index: 0 },
+      ),
+      stopAt(1),
+    ]);
+    expect(state.toolGroups[0]?.nestedCalls[0]?.complete).toBe(true);
+  });
+
   it("does NOT reset finalAnswerComing for reasoning after the message", () => {
     const state = run([messageStart(0), reasoningStart(1)]);
     expect(state.finalAnswerComing).toBe(true);

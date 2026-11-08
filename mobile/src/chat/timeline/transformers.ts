@@ -74,20 +74,12 @@ export interface CodeModeTimeline {
   codeModeWorking: boolean;
 }
 
-// Steps built for nested calls, reused while the call object, key and position are unchanged, so
-// memoized step renderers skip them.
-const callSteps = new WeakMap<NestedCall, TransformedStep>();
-
 function callStep(
   call: NestedCall,
   key: string,
   turnIndex: number,
 ): TransformedStep {
-  const cached = callSteps.get(call);
-  if (cached && cached.key === key && cached.turnIndex === turnIndex) {
-    return cached;
-  }
-  const step: TransformedStep = {
+  return {
     key,
     turnIndex,
     tabIndex: 0,
@@ -95,8 +87,6 @@ function callStep(
     nestedCalls: [],
     codeMode: null,
   };
-  callSteps.set(call, step);
-  return step;
 }
 
 /**

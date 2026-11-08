@@ -117,8 +117,9 @@ processor of the web app. Packets group by `getGroupKey` (`turn_index` and
 `section_end`, also on Stop. `injectSectionEnd` closes groups that are still
 open when a new turn starts or on `stop`, for a stream that ends on a root
 error or a dropped connection. As on web ([[chat-frontend]]), after the answer
-starts only a tool packet that opens a new group takes the answer back; a late
-packet of a known group, such as a code mode closing record, does not. Code
+starts only a tool packet of a tool that has not started takes the answer
+back; a late packet of a started tool, such as a code mode closing record, does
+not. Code
 mode steps, `codeModeWorking` and the turn group keys follow the web rules. Two hooks
 differ from web because the mobile
 lint forbids reading refs during render: `usePacketProcessor` regroups in a
