@@ -23,6 +23,7 @@ from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import Tier
+from onyx.utils.variable_functionality import global_version
 
 
 def _lock_marketplace(marketplace_id: UUID, db_session: Session) -> Marketplace:
@@ -44,30 +45,15 @@ def _copy_access(
     skills: Collection[Skill],
     db_session: Session,
     *,
-    tier: Tier,
     reset: bool = False,
 ) -> set[UUID]:
     if marketplace.owner_user_id is not None:
         return set()
-    community = tier == Tier.COMMUNITY
-    groups = (
-        {}
-        if community
-        else {
-            share.user_group_id: share.permission for share in marketplace.group_shares
-        }
-    )
-    policies = (
-        {}
-        if community
-        else {
-            share.user_group_id: share.installation_policy
-            for share in marketplace.group_shares
-        }
-    )
-    if community:
-        marketplace.public_permission = SkillSharePermission.VIEWER
-    public = marketplace.public_permission
+    community = not global_version.is_ee_version()
+    shares = [] if community else marketplace.group_shares
+    groups = {share.user_group_id: share.permission for share in shares}
+    policies = {share.user_group_id: share.installation_policy for share in shares}
+    public = SkillSharePermission.VIEWER if community else marketplace.public_permission
     adapter = SkillAccessAdapter()
     changed: set[UUID] = set()
     for skill in skills:
@@ -98,7 +84,7 @@ def _copy_access(
 
 
 def materialize_marketplace_access__no_commit(
-    marketplace_id: UUID, db_session: Session, *, tier: Tier
+    marketplace_id: UUID, db_session: Session
 ) -> set[UUID]:
     """Copy stored defaults to live company followers; return changed skill ids."""
     marketplace = _lock_marketplace(marketplace_id, db_session)
@@ -118,7 +104,7 @@ def materialize_marketplace_access__no_commit(
             .execution_options(populate_existing=True)
         )
     )
-    return _copy_access(marketplace, skills, db_session, tier=tier)
+    return _copy_access(marketplace, skills, db_session)
 
 
 class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
@@ -176,18 +162,25 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
                 OnyxErrorCode.INVALID_INPUT, "Not available is not supported yet."
             )
         community = self.tier == Tier.COMMUNITY
-        if community and change.group_shares:
+        if community and (
+            change.group_shares
+            or change.group_installation_policies
+            != self.state(resource).group_installation_policies
+        ):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT, "Group access requires a paid tier."
             )
         if change.set_public_permission:
+            if community and change.public_permission != SkillSharePermission.VIEWER:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Private company access requires a paid tier.",
+                )
             resource.public_permission = change.public_permission
-        if community:
-            resource.public_permission = SkillSharePermission.VIEWER
         if change.installation_policy is not None:
             resource.installation_policy = change.installation_policy
-        if change.group_shares is not None or community:
-            groups = {} if community else change.group_shares or {}
+        if change.group_shares is not None:
+            groups = change.group_shares
             assert_not_shared_with_default_group(db_session, list(groups))
             db_session.execute(
                 delete(Marketplace__UserGroup).where(
@@ -216,9 +209,7 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
                 raise
             db_session.expire(resource, ["group_shares"])
         db_session.flush()
-        materialize_marketplace_access__no_commit(
-            resource.id, db_session, tier=self.tier
-        )
+        materialize_marketplace_access__no_commit(resource.id, db_session)
 
     def affected_users(
         self, resource_ids: Collection[UUID], db_session: Session
@@ -245,7 +236,7 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
 
 
 def reset_marketplace_skill_access__no_commit(
-    skill_id: UUID, user: User, db_session: Session, *, tier: Tier
+    skill_id: UUID, user: User, db_session: Session
 ) -> set[UUID]:
     """Clear a company's per-skill overrides; caller commits and pushes recipients."""
     assert_global(user, permission=Permission.MANAGE_SKILLS)
@@ -279,7 +270,7 @@ def reset_marketplace_skill_access__no_commit(
         before = affected_user_ids_for_skills([skill_id], db_session).get(
             skill_id, set()
         )
-        _copy_access(marketplace, [skill], db_session, tier=tier, reset=True)
+        _copy_access(marketplace, [skill], db_session, reset=True)
         return before | affected_user_ids_for_skills([skill_id], db_session).get(
             skill_id, set()
         )

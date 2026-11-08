@@ -16,7 +16,6 @@ from onyx.db.resource_version import repair_version_metadata
 from onyx.db.skill_version import delete_unreferenced_skill_bundles
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
-from onyx.server.settings.tier_order import get_current_tier
 from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.ingest import (
     IngestedBundle,
@@ -71,7 +70,6 @@ def sync_marketplace(
     Failed commit attempts leave uploads for the aged orphan sweep.
     A stopped worker leaves aged uploads for V3's orphan sweep.
     """
-    tier = get_current_tier()
     with get_session_with_current_tenant() as db_session:
         marketplace, current = fetch_marketplace_sync_state(marketplace_id, db_session)
     file_store = get_default_file_store()
@@ -155,7 +153,6 @@ def sync_marketplace(
                 marketplace_id,
                 read,
                 revision=archive.revision,
-                tier=tier,
                 staged=staged,
                 db_session=db_session,
                 created_by_user_id=marketplace.login_user_id,

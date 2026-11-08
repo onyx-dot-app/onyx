@@ -23,12 +23,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from onyx.db.enums import SkillSharePermission
 from onyx.db.marketplace import reconcile_marketplace__no_commit
 from onyx.db.models import Base, Marketplace, Skill
 from onyx.db.resource_version import write_resource_version
 from onyx.db.skill_version import SkillVersionAdapter
-from onyx.server.settings.models import Tier
 from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.ingest import IngestedBundle
 from onyx.skills.marketplace.models import (
@@ -133,7 +131,6 @@ def apply(
     marketplace: Marketplace,
     read: CompleteMarketplace | FailedMarketplace,
     *,
-    tier: Tier = Tier.COMMUNITY,
     revision: str = "revision-1",
     staged: dict[str, IngestedBundle] | None = None,
 ) -> ReconciliationResult:
@@ -168,7 +165,6 @@ def apply(
             marketplace.id,
             read,
             revision=revision,
-            tier=tier,
             staged=bundles,
             db_session=session,
             created_by_user_id=marketplace.login_user_id,
@@ -205,10 +201,7 @@ def test_create_update_move_and_unchanged(
         "A test skill",
         "skills/hello",
     )
-    assert (
-        skill.author_user_id is None
-        and skill.public_permission == SkillSharePermission.VIEWER
-    )
+    assert skill.author_user_id is None and skill.public_permission is None
     assert skill.follows_marketplace_access
     assert skill.current_version is not None
     assert skill.current_version.created_by_user_id == creator.id

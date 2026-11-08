@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import FileContent, Marketplace, Skill, SkillVersion
 from onyx.db.skill_version import delete_orphan_skill_bundles
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -30,7 +31,6 @@ from onyx.file_store.file_store import (
     get_default_file_store,
     is_missing_object,
 )
-from onyx.server.settings.models import Tier
 from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
 from onyx.skills.marketplace.models import ReconciliationResult
@@ -166,7 +166,6 @@ def test_failure_preserves_rows_and_revision(
         read: CompleteMarketplace | FailedMarketplace,
         *,
         revision: str,
-        tier: Tier,
         staged: Mapping[str, IngestedBundle],
         db_session: Session,
         created_by_user_id: UUID | None = None,
@@ -176,7 +175,6 @@ def test_failure_preserves_rows_and_revision(
             marketplace_id,
             read,
             revision=revision,
-            tier=tier,
             staged=staged,
             db_session=db_session,
             created_by_user_id=created_by_user_id,
@@ -613,6 +611,7 @@ def test_push_observes_committed_creation_and_retirement(
 ) -> None:
     user = make_user(session)
     make_sandbox(session, user)
+    marketplace.public_permission = SkillSharePermission.VIEWER
     session.commit()
 
     def pushed(recipients: set[UUID], push_session: Session) -> None:

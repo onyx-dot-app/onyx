@@ -15,7 +15,6 @@ from onyx.db.skill_version import SkillVersionAdapter
 from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.settings.models import Tier
 from onyx.skills.ingest import IngestedBundle
 from onyx.skills.marketplace.models import ReconciliationResult
 from onyx.skills.marketplace.read_models import (
@@ -52,7 +51,6 @@ def reconcile_marketplace__no_commit(
     read: CompleteMarketplace | FailedMarketplace,
     *,
     revision: str,
-    tier: Tier,
     staged: Mapping[str, IngestedBundle],
     db_session: Session,
     created_by_user_id: UUID | None = None,
@@ -228,7 +226,7 @@ def reconcile_marketplace__no_commit(
             used.add(bundle.bundle_file_id)
             changed.append(skill.id)
         access_changed = materialize_marketplace_access__no_commit(
-            marketplace_id, db_session, tier=tier
+            marketplace_id, db_session
         )
         affected_skills = (
             set(changed) | access_changed | {skill.id for skill in missing}

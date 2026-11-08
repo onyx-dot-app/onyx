@@ -254,9 +254,11 @@ The library preview of an external-app skill calls the same renderer
     `db/marketplace_access.py` and the same skill writer. Only live company followers
     receive defaults; personal shares and company overrides survive sync. Reset clears
     individual grants and restores following. Membership locks precede resource locks,
-    including reset's marketplace-before-skill order, to serialize with downgrade.
-    Community company followers are public. Downgrade persists public defaults and
-    removes marketplace group grants so sync cannot recreate them.
+    including reset's marketplace-before-skill order and preference user locks.
+    Scoped managers cannot edit direct-user grants on company skills. MIT-only company
+    followers are public. Licensed builds copy stored defaults even during license
+    failures. Explicit downgrade persists public defaults and removes marketplace
+    group grants so sync cannot recreate them.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
     deletion explicitly allows retirement. New access entry points must use the
     adapter function, not `db/skill.py:replace_skill_shares`.
@@ -440,8 +442,7 @@ The library preview of an external-app skill calls the same renderer
     Reconciliation serializes each tenant/library with a transaction advisory lock.
     G3 must use that same lock for manual name checks. S5 owns job
     freshness; S6 owns retired-read/write guards. Access materialization and audience
-    capture share the reconciliation transaction. Callers resolve the licensed tier
-    before entry, so reconciliation performs no cache or network I/O.
+    capture share the reconciliation transaction without tier lookups or external I/O.
     No API or worker calls the sync service yet.
 23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**
     `skills/sync.py:sync_marketplace` owns the sessions and commit. Call it in the

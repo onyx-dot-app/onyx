@@ -88,6 +88,9 @@ def mutate_resource_access[Resource](
                         and change.public_permission != current.public_permission
                     )
                     or change.installation_policy is not None
+                    or (
+                        change.user_shares is not None and current.owner_user_id is None
+                    )
                 ) and not has_global_permission(user, adapter.permission):
                     raise OnyxError(
                         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

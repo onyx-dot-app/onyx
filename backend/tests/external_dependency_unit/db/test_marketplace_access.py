@@ -3,7 +3,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from functools import partial
 from pathlib import Path
 from queue import Queue
 from unittest.mock import patch
@@ -30,18 +29,26 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
+from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.resource_access import (
     AccessMutationResult,
     ResourceAccessChange,
     mutate_resource_access,
 )
-from onyx.db.skill import SkillAccessAdapter, SkillManagementPolicy, fetch_skill
+from onyx.db.skill import (
+    SkillAccessAdapter,
+    SkillManagementPolicy,
+    fetch_skill,
+    set_skill_enabled_for_user,
+)
+from onyx.db.users import lock_group_membership
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import Tier
 from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
 from tests.external_dependency_unit.craft.db_helpers import (
     make_group,
     make_sandbox,
+    make_skill,
     make_user,
 )
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
@@ -62,16 +69,9 @@ from tests.external_dependency_unit.db.test_skill_access_mutations import (
     session as session,
 )
 
-apply = partial(reconcile, tier=Tier.BUSINESS)
+apply = reconcile
 
 pytestmark = pytest.mark.usefixtures("tenant_context", "enable_ee")
-
-
-@pytest.fixture(autouse=True)
-def business_tier(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.get_current_tier", lambda: Tier.BUSINESS
-    )
 
 
 def share(
@@ -108,25 +108,22 @@ def test_inheritance_removes_access_and_captures_both_audiences(
     )
     created = apply(session, marketplace, catalog("first", "second"))
     assert created.affected_user_ids == {member.id}
-    for skill in skills(session, marketplace):
-        assert (
-            fetch_skill(
+
+    def visible(user: User) -> set[UUID]:
+        return {
+            skill.id
+            for skill in skills(session, marketplace)
+            if fetch_skill(
                 skill.id,
                 policy=SkillManagementPolicy.VIEW,
-                user=member,
+                user=user,
                 db_session=session,
             )
             is not None
-        )
-        assert (
-            fetch_skill(
-                skill.id,
-                policy=SkillManagementPolicy.VIEW,
-                user=outsider,
-                db_session=session,
-            )
-            is None
-        )
+        }
+
+    assert visible(member) == set(created.changed_skill_ids)
+    assert not visible(outsider)
     result = share(
         session,
         marketplace,
@@ -136,27 +133,11 @@ def test_inheritance_removes_access_and_captures_both_audiences(
     assert result.affected == {member.id, outsider.id}
     for skill in skills(session, marketplace):
         assert skill.follows_marketplace_access
-        assert (
-            fetch_skill(
-                skill.id,
-                policy=SkillManagementPolicy.VIEW,
-                user=member,
-                db_session=session,
-            )
-            is None
-        )
-        assert (
-            fetch_skill(
-                skill.id,
-                policy=SkillManagementPolicy.VIEW,
-                user=outsider,
-                db_session=session,
-            )
-            is not None
-        )
         assert SkillAccessAdapter().state(skill).group_installation_policies == {
             new_group.id: None
         }
+    assert not visible(member)
+    assert visible(outsider) == set(created.changed_skill_ids)
 
 
 def test_policy_null_override_and_reset(
@@ -194,9 +175,7 @@ def test_policy_null_override_and_reset(
     assert first.user_shares[0].user_id == admin.id
     assert second.group_shares[0].installation_policy is None
     assert not first.follows_marketplace_access
-    reset_marketplace_skill_access__no_commit(
-        first.id, admin, session, tier=Tier.BUSINESS
-    )
+    reset_marketplace_skill_access__no_commit(first.id, admin, session)
     assert first.follows_marketplace_access and not first.user_shares
     assert SkillAccessAdapter().state(first) == SkillAccessAdapter().state(second)
     mutate_resource_access(
@@ -233,9 +212,7 @@ def test_personal_sync_preserves_owner_shares(
     assert all(row.author_user_id == owner.id for row in skills(session, marketplace))
     admin, _ = manager(session, global_access=True)
     with pytest.raises(OnyxError, match="Personal marketplace"):
-        reset_marketplace_skill_access__no_commit(
-            skill.id, admin, session, tier=Tier.BUSINESS
-        )
+        reset_marketplace_skill_access__no_commit(skill.id, admin, session)
 
 
 def test_scoped_company_skill_and_marketplace_changes(
@@ -271,17 +248,22 @@ def test_scoped_company_skill_and_marketplace_changes(
         ),
         ResourceAccessChange(installation_policy=Policy.REQUIRED),
         ResourceAccessChange(group_shares={make_group(session).id: Share.VIEWER}),
+        ResourceAccessChange(user_shares={make_user(session).id: Share.EDITOR}),
+        ResourceAccessChange(user_shares={scoped.id: Share.VIEWER}),
+        ResourceAccessChange(user_shares={}),
     ):
         with pytest.raises(OnyxError):
             share(session, marketplace, scoped, change)
+        with pytest.raises(OnyxError):
+            mutate_resource_access(
+                [skill.id], change, scoped, session, SkillAccessAdapter()
+            )
     with pytest.raises(OnyxError):
-        reset_marketplace_skill_access__no_commit(
-            skill.id, scoped, session, tier=Tier.BUSINESS
-        )
+        reset_marketplace_skill_access__no_commit(skill.id, scoped, session)
 
 
 def test_community_and_downgrade_cannot_recreate_group_grants(
-    session: Session, marketplace: Marketplace
+    session: Session, marketplace: Marketplace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     admin, group_id = manager(session, global_access=True)
     share(
@@ -291,6 +273,19 @@ def test_community_and_downgrade_cannot_recreate_group_grants(
         ResourceAccessChange(group_shares={group_id: Share.VIEWER}),
     )
     apply(session, marketplace, catalog("first"))
+    # An expired license or failed tier read cannot erase stored access.
+    for tier in (Tier.COMMUNITY, Tier.BUSINESS):
+        mutate_resource_access(
+            [marketplace.id],
+            ResourceAccessChange(),
+            admin,
+            session,
+            MarketplaceAccessAdapter(tier),
+        )
+        materialize_marketplace_access__no_commit(marketplace.id, session)
+        assert marketplace.public_permission is None
+        assert skills(session, marketplace)[0].public_permission is None
+        assert skills(session, marketplace)[0].group_shares[0].user_group_id == group_id
     remove_custom_user_groups__no_commit(session)
     session.expire_all()
     assert (
@@ -305,10 +300,11 @@ def test_community_and_downgrade_cannot_recreate_group_grants(
         for row in skills(session, marketplace)
     )
     marketplace.public_permission = None
-    materialize_marketplace_access__no_commit(
-        marketplace.id, session, tier=Tier.COMMUNITY
+    monkeypatch.setattr(
+        "onyx.db.marketplace_access.global_version.is_ee_version", lambda: False
     )
-    assert marketplace.public_permission == Share.VIEWER
+    materialize_marketplace_access__no_commit(marketplace.id, session)
+    assert marketplace.public_permission is None
     assert all(
         row.public_permission == Share.VIEWER for row in skills(session, marketplace)
     )
@@ -388,6 +384,14 @@ def test_access_defaults_migration_round_trip(
     assert marketplace.installation_policy == Policy.AVAILABLE
 
 
+def wait_until_blocked(engine: Engine, pid: int) -> None:
+    with engine.connect() as observer:
+        deadline = time.monotonic() + 5
+        while not observer.scalar(select(func.cardinality(func.pg_blocking_pids(pid)))):
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+
+
 @pytest.mark.parametrize("reset_first", [False, True])
 def test_downgrade_serializes_with_marketplace_access(
     isolated_engine: Engine, reset_first: bool
@@ -415,9 +419,7 @@ def test_downgrade_serializes_with_marketplace_access(
         if reset_first:
             skill.follows_marketplace_access = False
             writer.commit()
-            reset_marketplace_skill_access__no_commit(
-                skill.id, admin, writer, tier=Tier.BUSINESS
-            )
+            reset_marketplace_skill_access__no_commit(skill.id, admin, writer)
         else:
             share(
                 writer,
@@ -442,13 +444,7 @@ def test_downgrade_serializes_with_marketplace_access(
             future = pool.submit(downgrade)
             try:
                 pid = waiting.get(timeout=5)
-                with isolated_engine.connect() as observer:
-                    deadline = time.monotonic() + 5
-                    while not observer.scalar(
-                        select(func.cardinality(func.pg_blocking_pids(pid)))
-                    ):
-                        assert time.monotonic() < deadline
-                        time.sleep(0.01)
+                wait_until_blocked(isolated_engine, pid)
                 writer.commit()
             finally:
                 writer.rollback()
@@ -465,3 +461,39 @@ def test_downgrade_serializes_with_marketplace_access(
         writer.rollback()
         writer.delete(marketplace)
         writer.commit()
+
+
+def test_toggle_waits_for_membership_before_locking_user(
+    isolated_engine: Engine,
+) -> None:
+    with Session(isolated_engine) as writer:
+        user = make_user(writer)
+        skill = make_skill(writer, author_user_id=user.id)
+        user_id, skill_id = user.id, skill.id
+        writer.commit()
+        lock_group_membership(writer)
+        waiting: Queue[int] = Queue()
+
+        def toggle() -> None:
+            with Session(isolated_engine) as worker:
+                worker.execute(text("SET LOCAL statement_timeout = '10s'"))
+                pid = worker.scalar(select(func.pg_backend_pid()))
+                assert isinstance(pid, int)
+                waiting.put(pid)
+                actor = worker.get(User, user_id)
+                assert actor is not None
+                set_skill_enabled_for_user(
+                    skill_id=skill_id, enabled=True, user=actor, db_session=worker
+                )
+                worker.commit()
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(toggle)
+            try:
+                pid = waiting.get(timeout=5)
+                wait_until_blocked(isolated_engine, pid)
+                recompute_user_permissions__no_commit(user_id, writer)
+                writer.commit()
+            finally:
+                writer.rollback()
+            future.result(timeout=15)

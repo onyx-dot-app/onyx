@@ -86,7 +86,6 @@ from onyx.server.features.skill.response_helpers import (
     skills_list_response_for_user,
 )
 from onyx.server.models import MinimalUserSnapshot
-from onyx.server.settings.tier_order import get_current_tier
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     STORED_BUNDLE_LIMITS,
@@ -1124,9 +1123,7 @@ def reset_current_skill_marketplace_access(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    affected = reset_marketplace_skill_access__no_commit(
-        skill_id, user, db_session, tier=get_current_tier()
-    )
+    affected = reset_marketplace_skill_access__no_commit(skill_id, user, db_session)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
