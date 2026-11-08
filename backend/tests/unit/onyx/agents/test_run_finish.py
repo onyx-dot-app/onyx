@@ -31,6 +31,11 @@ from onyx.agents.tools import (
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -41,7 +46,7 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.tracing.flows import LLMFlow
-from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore
+from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunStore, ScriptedLLM
 
 CALL_ID = "cell"
 
@@ -323,6 +328,51 @@ def test_amendment_of_unknown_call_is_skipped() -> None:
     assert not any(isinstance(event, ToolResultAmendedEvent) for event in events)
     result = saved[0].steps[0].tools[CALL_ID].result
     assert result is not None and result.text == "running"
+
+
+def test_an_amendment_reaches_its_call_when_the_provider_repeats_call_ids() -> None:
+    repeated = Delta(
+        tool_calls=[
+            ChatCompletionDeltaToolCall(
+                index=0,
+                id="call_0",
+                function=ResponseFunctionCall(name="cell", arguments="{}"),
+            )
+        ]
+    )
+    llm = ScriptedLLM([repeated, repeated, Delta(content="done")])
+    step = iter(["first", "second"])
+
+    def close_first(results: list[ToolResultMessage]) -> list[ToolResultAmendment]:
+        return [
+            ToolResultAmendment(
+                call_id=results[0].tool_call_id, result=ToolResult(content="closed")
+            )
+        ]
+
+    agent = Agent(
+        llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content=next(step)),
+            )
+        ],
+        on_finish=close_first,
+    )
+    run, _events, saved = _run(agent)
+    assert run.status == RunStatus.COMPLETE
+    calls = [step.message.tool_calls[0] for step in saved[0].steps[:2]]
+    assert calls[0].id != calls[1].id
+    results = [
+        step.tools[call.id].result
+        for step, call in zip(saved[0].steps[:2], calls, strict=True)
+    ]
+    assert [result.text if result else None for result in results] == [
+        "closed",
+        "second",
+    ]
 
 
 def test_finish_hook_sets_the_result_of_a_call_that_stop_interrupted() -> None:
