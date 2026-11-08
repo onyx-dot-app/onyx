@@ -174,8 +174,9 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    names.** The web enum calls the finished-image packet
    `IMAGE_GENERATION_TOOL_DELTA`, but its value is `"image_generation_final"`
    (`web/src/app/app/services/streamingModels.ts`). The renderer treats "start
-   with no end" as running, and a call that ends or stops with no image and no
-   error as stopped. Match packets by their string value.
+   with no end" as running. An empty final packet shows "No images
+   generated"; a call that ends with no final packet (Stop, or an interrupted
+   code mode program) shows as stopped. Match packets by their string value.
 9. `one-image-per-chat-call` **The chat tool makes one image per call.**
    `ImageGenerationTool._generate_image` passes `n=1`. Only the standalone
    endpoint accepts `n`, up to `server/features/image_generation/api.py:_MAX_IMAGES`.

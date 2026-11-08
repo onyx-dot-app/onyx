@@ -61,8 +61,8 @@ export const ImageToolRenderer: MessageRenderer<
   const failed = packets.some((p) => p.obj.type === PacketType.ERROR);
   const isRunning = !isComplete && !stopPacketSeen;
 
-  // A call that ends without images or an error was stopped before any image
-  // arrived, such as by Stop or an interrupted code mode program.
+  // A final result can be empty. A call with no result packet was stopped, by
+  // Stop or by an interrupted code mode program.
   const status = failed
     ? t("imageTool.failedStatus.text")
     : isRunning
