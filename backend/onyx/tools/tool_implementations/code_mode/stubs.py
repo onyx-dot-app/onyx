@@ -27,6 +27,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     StubResultType,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import (
+    PRELUDE_STUBS,
     SANDBOX_NAMES,
     YIELD_CONTROL_STUB,
 )
@@ -64,6 +65,7 @@ _STUB_HEADER = (
 )
 
 _DECLARED_TYPE = re.compile(r"^class (\w+)", re.MULTILINE)
+_NAME = re.compile(r"\w+")
 # Argument and field names can be soft keywords such as `type`; only hard
 # keywords are invalid there.
 _KEYWORDS: frozenset[str] = frozenset(keyword.kwlist)
@@ -113,13 +115,34 @@ class ToolStubs(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     functions: Mapping[str, ToolFunction]
-    # Complete stub module that the type checker reads: every function.
-    text: str
+    # The imports, store()/load(), yield_control() and, with deferred
+    # functions, tool_search() of every stub module.
+    header: str
     # The stub module that the `execute_code` description lists: no deferred
     # functions.
     listed_text: str
     # tool_search() over the deferred functions; None when there are none.
     tool_index: ToolIndex | None
+
+    def program_text(self, code: str) -> str:
+        """The stub module that types one program: the listed functions, the
+        deferred functions whose names `code` uses, and the names of the
+        modules that every program imports.
+
+        So the module does not grow with the deferred functions that a
+        program does not name. Every function stays callable; one that the
+        code reaches without its name runs without types.
+        """
+        # Python reads identifiers in NFKC form.
+        names = set(_NAME.findall(unicodedata.normalize("NFKC", code)))
+        return _module(
+            f"{self.header}\n\n\n{PRELUDE_STUBS}",
+            (
+                function
+                for name, function in self.functions.items()
+                if not function.deferred or name in names
+            ),
+        )
 
 
 def python_identifier(
@@ -687,7 +710,7 @@ def build_tool_stubs(tools: Sequence[Tool]) -> ToolStubs:
     header = f"{_STUB_HEADER}\n\n\n{TOOL_SEARCH_STUBS}" if deferred else _STUB_HEADER
     return ToolStubs(
         functions=functions,
-        text=_module(header, functions.values()),
+        header=header,
         listed_text=_module(
             header,
             (function for function in functions.values() if not function.deferred),

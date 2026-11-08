@@ -12,8 +12,10 @@ from onyx.tools.models import (
     CodeModeResultSpec,
     LlmPythonExecutionResult,
 )
+from onyx.tools.tool_implementations.code_mode.sandbox import PRELUDE_STUBS
 from onyx.tools.tool_implementations.code_mode.stubs import (
     MAX_STUB_CHARS,
+    ToolStubs,
     build_tool_stubs,
     function_name,
     model_declarations,
@@ -35,6 +37,51 @@ from tests.unit.onyx.tools.code_mode.fakes import (
 
 def _unused(*_: object) -> ToolResult:
     return ToolResult(content="")
+
+
+def _full_text(stubs: ToolStubs) -> str:
+    """The stub module of a program that names every function."""
+    return stubs.program_text(" ".join(stubs.functions))
+
+
+def _with_deferred(count: int) -> ToolStubs:
+    """A listed tool and `count` MCP tools, each with its own result type."""
+    parameters: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": {"value": {"type": "string"}},
+    }
+    return build_tool_stubs(
+        [
+            FakeTool("listed", _unused),
+            *(
+                FakeMCPTool(
+                    f"remote_{index}",
+                    _unused,
+                    parameters,
+                    output_schema={
+                        "type": "object",
+                        "properties": {f"field_{index}": {"type": "string"}},
+                    },
+                )
+                for index in range(count)
+            ),
+        ]
+    )
+
+
+def test_a_program_type_checks_against_only_the_functions_it_names() -> None:
+    code = "print(await acme__remote_3(value='x'))\n"
+    stubs = _with_deferred(300)
+    text = stubs.program_text(code)
+    # The text does not grow with the deferred functions that the code does
+    # not name.
+    assert text == _with_deferred(10).program_text(code)
+    assert "async def listed(" in text and "async def acme__remote_3(" in text
+    assert "field_3: NotRequired[str]" in text
+    assert "remote_4" not in text and "field_4" not in text
+    assert PRELUDE_STUBS in text and PRELUDE_STUBS not in stubs.listed_text
+    # Python reads names in NFKC form.
+    assert "def acme__remote_5(" in stubs.program_text("await \uff41cme__remote_5()")
 
 
 @pytest.mark.parametrize(
@@ -84,17 +131,20 @@ def test_built_in_like_search_tool_gets_typed_result() -> None:
     stubs = build_tool_stubs([FakeWebSearchTool(_unused)])
     # The stub declares the JSON of the results model: keys it leaves out when
     # empty are NotRequired, and field descriptions become docstrings.
-    assert "class SearchResult(TypedDict):" in stubs.text
+    assert "class SearchResult(TypedDict):" in _full_text(stubs)
     assert (
         '    document: int\n    """Citation number. Cite it in the answer as [n]."""'
-        in stubs.text
+        in _full_text(stubs)
     )
-    assert "    url: NotRequired[str]\n" in stubs.text
+    assert "    url: NotRequired[str]\n" in _full_text(stubs)
     assert "class SearchResults(TypedDict):\n    results: list[SearchResult]" in (
-        stubs.text
+        _full_text(stubs)
     )
-    assert "async def web_search(*, queries: list[str]) -> SearchResults:" in stubs.text
-    assert "Search the web for information." in stubs.text
+    assert (
+        "async def web_search(*, queries: list[str]) -> SearchResults:"
+        in _full_text(stubs)
+    )
+    assert "Search the web for information." in _full_text(stubs)
 
 
 class _BatchedSearchTool(FakeWebSearchTool):
@@ -107,7 +157,9 @@ class _BatchedSearchTool(FakeWebSearchTool):
 
 def test_usage_note_reaches_the_docstring() -> None:
     stubs = build_tool_stubs([_BatchedSearchTool(_unused)])
-    assert "snippets.\n\n    Pass all queries in one call.\n\n    Args:" in stubs.text
+    assert "snippets.\n\n    Pass all queries in one call.\n\n    Args:" in _full_text(
+        stubs
+    )
 
 
 def test_mcp_like_schema_with_odd_names_and_refs() -> None:
@@ -373,8 +425,8 @@ def test_docstring_text_cannot_end_the_docstring() -> None:
     stubs = build_tool_stubs(
         [_QuotedTool('a"""b\\', _unused, description='Ends with """')]
     )
-    ast.parse(stubs.text)
-    assert 'Tool name: a\\"""b\\\\' in stubs.text
+    ast.parse(_full_text(stubs))
+    assert 'Tool name: a\\"""b\\\\' in _full_text(stubs)
 
     class _Quoted(BaseModel):
         name: str = Field(description='Ends with "a quote"')
@@ -406,8 +458,8 @@ def test_stub_text_is_deterministic() -> None:
         FakeWebSearchTool(_unused),
         FakeTool("a", _unused),
     ]
-    first = build_tool_stubs(tools).text
-    second = build_tool_stubs(list(reversed(tools))).text
+    first = _full_text(build_tool_stubs(tools))
+    second = _full_text(build_tool_stubs(list(reversed(tools))))
     assert first == second
     assert first.index("async def a(") < first.index("async def web_search(")
 
@@ -424,7 +476,7 @@ def test_image_generation_returns_typed_images() -> None:
     function = stubs.functions["generate_image"]
     assert (
         "class ImageResult(TypedDict):\n    file_id: str\n    revised_prompt: str"
-    ) in stubs.text
+    ) in _full_text(stubs)
     assert "async def generate_image(*, prompt: str, " in function.stub
     assert ") -> list[ImageResult]:" in function.stub
     assert "The images are shown to the user automatically." in function.stub
@@ -442,9 +494,9 @@ def test_python_results_declare_the_fields_of_their_model() -> None:
     stubs = build_tool_stubs([PythonTool(tool_id=4, chat_session_id=uuid4())])
     for name, field in LlmPythonExecutionResult.model_fields.items():
         if name != "generated_files":
-            assert f"    {name}: " in stubs.text, field
-    assert "    generated_files: list[PythonExecutionFile]" in stubs.text
-    assert "class PythonExecutionFile(TypedDict):" in stubs.text
+            assert f"    {name}: " in _full_text(stubs), field
+    assert "    generated_files: list[PythonExecutionFile]" in _full_text(stubs)
+    assert "class PythonExecutionFile(TypedDict):" in _full_text(stubs)
     assert ") -> LlmPythonExecutionResult:" in stubs.functions["run_python"].stub
 
 
@@ -546,7 +598,7 @@ def test_mcp_result_types_are_python_names_that_match_their_keys() -> None:
     stubs = build_tool_stubs([tool(items)])
     [function] = stubs.functions.values()
     assert "class Tool3dListItemsResult(TypedDict):" in function.declarations[0]
-    ast.parse(stubs.text)
+    ast.parse(_full_text(stubs))
 
     # Python reads the field `ﬁle` as `file`, which is not the JSON key.
     compatibility: dict[str, JsonValue] = {
