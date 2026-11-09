@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 import type ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import {
   act,
+  fireEvent,
   deferred,
   render,
   screen,
@@ -67,6 +68,8 @@ function existingSkill(
     author_email: "author@example.com",
     owner: { id: "author-id", email: "author@example.com" },
     ownership_vacant: false,
+    marketplace: null,
+    retired_at: null,
     created_at: null,
     updated_at: null,
     user_shares: [],
@@ -603,6 +606,61 @@ describe("SkillEditorPage", () => {
     expect(consoleError).toHaveBeenCalledWith(
       "Failed to save skill",
       expect.any(Error)
+    );
+  });
+  it("keeps synced content read-only while sharing remains available", async () => {
+    const user = setupUser();
+    const fetchSpy = jest.spyOn(global, "fetch");
+    const skill = existingSkill({
+      marketplace: {
+        id: "source",
+        name: "Team tools",
+        personal: false,
+        folder: "skills/report-writer",
+        follows_access: true,
+      },
+      files: [{ path: "scripts/report.py", size: 32 }],
+    });
+    mockUseSWR.mockReturnValue({
+      data: skill,
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    const { rerender } = render(<SkillEditorPage skillId={skill.id} />);
+    expect(screen.getByText("Team tools")).toBeInTheDocument();
+    expect(screen.getByText("skills/report-writer")).toBeInTheDocument();
+    expect(screen.getByText("Synced from GitHub")).toBeInTheDocument();
+    const description = screen.getByDisplayValue("Writes reports");
+    const instructions = screen.getByDisplayValue(
+      "Write the requested report."
+    );
+    expect(description).toHaveAttribute("readonly");
+    expect(instructions).toHaveAttribute("readonly");
+    await user.type(description, "Changed");
+    await user.type(instructions, "Changed");
+    expect(description).toHaveValue("Writes reports");
+    expect(instructions).toHaveValue("Write the requested report.");
+    expect(
+      screen.queryByRole("button", { name: "Save" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete skill" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /remove.*report.py/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit sharing" })).toBeEnabled();
+    fireEvent.submit(screen.getByTestId("SkillEditorPage/container"));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mockDeleteUserSkill).not.toHaveBeenCalled();
+    mockUseSWR.mockReturnValue({
+      data: { ...skill, description: "Updated by sync" },
+      isLoading: false,
+      mutate: mockRefreshSkill,
+    });
+    rerender(<SkillEditorPage skillId={skill.id} />);
+    expect(screen.getByDisplayValue("Updated by sync")).toHaveAttribute(
+      "readonly"
     );
   });
 });

@@ -17359,7 +17359,20 @@
         "peopleTitle": "الأشخاص الذين لديهم حق الوصول",
         "manageIndividualAccess": "إدارة الوصول الفردي",
         "individualAccessTitle": "الوصول الفردي",
-        "ownershipTitle": "الملكية"
+        "ownershipTitle": "الملكية",
+        "marketplace": {
+          "personal": "سوق شخصي",
+          "personalDescription": "يمكن للمالك فقط تغيير الوصول إلى هذه المهارة من {name}. ويمكن للمديرين تغيير إعدادات التثبيت.",
+          "following": "يتبع وصول السوق",
+          "followingDescription": "تتبع إعدادات الوصول والتثبيت {name}. يؤدي حفظ التغييرات هنا إلى إنشاء إعدادات مخصصة.",
+          "overridden": "وصول مخصص",
+          "overriddenDescription": "تستخدم هذه المهارة إعدادات وصول وتثبيت خاصة بها بدلاً من الإعدادات الافتراضية من {name}.",
+          "reset": "إعادة تعيين الوصول إلى إعدادات السوق",
+          "resetDescription": "يستبدل هذا إعدادات الوصول والتثبيت بالإعدادات الافتراضية من {name}. ويزيل الأذونات الفردية ويتجاهل التغييرات غير المحفوظة. ستنطبق تغييرات وصول السوق المستقبلية على هذه المهارة.",
+          "confirmReset": "إعادة تعيين الوصول",
+          "resetSuccess": "تمت استعادة وصول السوق",
+          "resetError": "تعذرت إعادة تعيين الوصول. حاول مرة أخرى."
+        }
       },
       "placeholders": {
         "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"
@@ -17526,6 +17539,12 @@
       "addAccessDescription": "أضف هؤلاء الأشخاص والمجموعات إلى كل مهارة محددة. يحصل الأشخاص والمجموعات المدرجون على الصلاحية المختارة. ويحتفظ الآخرون بصلاحيات الوصول الحالية.",
       "apply": "{count, plural, zero {تطبيق} one {تطبيق على مهارة واحدة} two {تطبيق على مهارتين} few {تطبيق على # مهارات} many {تطبيق على # مهارة} other {تطبيق على # مهارة}}",
       "moreActions": "المزيد من الإجراءات"
+    },
+    "synced": {
+      "view": "عرض المحتوى",
+      "readOnlyTitle": "تمت المزامنة من GitHub",
+      "readOnlyDescription": "عدّل هذه التعليمات والملفات في GitHub. يحدّثها Onyx عند مزامنة هذا السوق.",
+      "source": "السوق: {name}"
     }
   },
   "opensearchHealth": {

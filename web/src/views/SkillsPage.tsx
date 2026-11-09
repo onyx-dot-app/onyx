@@ -70,6 +70,7 @@ import {
   setSkillEnabled,
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
+import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -110,7 +111,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [builtinsOpen, setBuiltinsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const githubImportModal = useCreateModal();
+  const [githubImportOpen, setGitHubImportOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [skillDialog, setSkillDialog] = useState<{
     item: SkillCardItem;
@@ -434,10 +435,8 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const [bulkDeleteTargets, setBulkDeleteTargets] = useState(selectedItems);
   const canManageSelected =
     selectedItems.length > 0 &&
-    selectedItems.every(
-      (item) =>
-        item.skill.user_permission === "OWNER" ||
-        item.skill.user_permission === "EDITOR"
+    selectedItems.every((item) =>
+      canShareSkill({ skill: item.skill, canManageCompanySkills })
     );
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
   // A card toggle still in flight must settle before a bulk action may race it.
@@ -679,12 +678,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                       title: bulkCopy("delete"),
                       danger: true,
                       disabled:
-                        !canManageSelected ||
-                        (!canManageCompanySkills &&
-                          selectedItems.some(
-                            (item) =>
-                              item.skill.installation_policy === "REQUIRED"
-                          )),
+                        selectedItems.length === 0 ||
+                        selectedItems.some(
+                          ({ skill }) =>
+                            !canDeleteSkill({ skill, canManageCompanySkills })
+                        ),
                       onSelect: () => {
                         setBulkDeleteTargets(selectedItems);
                         bulkDeleteModal.toggle(true);
@@ -756,7 +754,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                   icon: SvgGitHub,
                   title: t("page.createMenu.github.title"),
                   description: t("page.createMenu.github.description"),
-                  onSelect: () => githubImportModal.toggle(true),
+                  onSelect: () => setGitHubImportOpen(true),
                 },
               ]}
             />
@@ -1014,13 +1012,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         }}
       />
 
-      <githubImportModal.Provider>
+      {githubImportOpen && (
         <ImportSkillsFromGitHubModal
           open
-          onClose={() => githubImportModal.toggle(false)}
+          onClose={() => setGitHubImportOpen(false)}
           onImported={() => void revalidateSkills()}
         />
-      </githubImportModal.Provider>
+      )}
 
       <deleteModal.Provider>
         {deleteTarget && (

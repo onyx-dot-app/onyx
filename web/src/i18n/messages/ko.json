@@ -17359,7 +17359,20 @@
         "peopleTitle": "액세스 권한이 있는 사용자",
         "manageIndividualAccess": "개별 액세스 관리",
         "individualAccessTitle": "개별 액세스",
-        "ownershipTitle": "소유권"
+        "ownershipTitle": "소유권",
+        "marketplace": {
+          "personal": "개인 마켓플레이스",
+          "personalDescription": "소유자만 {name}의 이 스킬에 대한 접근 권한을 변경할 수 있습니다. 관리자는 설치 설정을 변경할 수 있습니다.",
+          "following": "마켓플레이스 접근 설정 따름",
+          "followingDescription": "접근 및 설치 설정이 {name}을 따릅니다. 여기서 변경 사항을 저장하면 개별 설정이 적용됩니다.",
+          "overridden": "사용자 지정 접근",
+          "overriddenDescription": "이 스킬은 {name}의 기본값 대신 자체 접근 및 설치 설정을 사용합니다.",
+          "reset": "마켓플레이스 접근 설정으로 재설정",
+          "resetDescription": "접근 및 설치 설정을 {name}의 기본값으로 바꿉니다. 개별 권한과 저장하지 않은 변경 사항이 삭제됩니다. 향후 마켓플레이스 접근 변경이 이 스킬에 적용됩니다.",
+          "confirmReset": "접근 재설정",
+          "resetSuccess": "마켓플레이스 접근 설정이 복원되었습니다",
+          "resetError": "접근을 재설정하지 못했습니다. 다시 시도하세요."
+        }
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
@@ -17526,6 +17539,12 @@
       "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
       "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
       "moreActions": "추가 작업"
+    },
+    "synced": {
+      "view": "콘텐츠 보기",
+      "readOnlyTitle": "GitHub에서 동기화됨",
+      "readOnlyDescription": "GitHub에서 이 지침과 파일을 편집하세요. 이 마켓플레이스가 동기화되면 Onyx가 업데이트합니다.",
+      "source": "마켓플레이스: {name}"
     }
   },
   "opensearchHealth": {
