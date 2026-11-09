@@ -73,7 +73,7 @@ function SkillName({
       >
         {item.name}
       </Text>
-      {(!isMobile || showDescription || isInvalid || dependencyStatus) && (
+      {(!isMobile || showDescription || isInvalid) && (
         <Text
           font="secondary-body"
           color={isInvalid ? "status-warning-05" : "text-03"}
@@ -82,9 +82,19 @@ function SkillName({
           overflowTooltip
           tooltip={tooltip}
         >
-          {isInvalid
-            ? t("skill.invalid.description")
-            : (dependencyStatus ?? item.description)}
+          {isInvalid ? t("skill.invalid.description") : item.description}
+        </Text>
+      )}
+      {!isInvalid && dependencyStatus && (
+        <Text
+          font="secondary-body"
+          color="text-03"
+          as="p"
+          maxLines={1}
+          overflowTooltip
+          tooltip={tooltip}
+        >
+          {dependencyStatus}
         </Text>
       )}
       {item.skill.marketplace && (

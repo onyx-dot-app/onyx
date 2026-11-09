@@ -271,6 +271,33 @@ describe("SkillsPage preference toggles", () => {
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
   });
 
+  it.each([true, false])(
+    "keeps app Skill descriptions visible when readiness is %s",
+    (ready) => {
+      skillsData.customs = [
+        {
+          ...customSkill("app-review", "review-pull-requests"),
+          description: "Review pull requests before merging",
+          external_app: {
+            external_app_id: 7,
+            name: "GitHub",
+            enabled: true,
+            ready,
+          },
+        },
+      ];
+      render(<SkillsPage admin />);
+      expect(
+        screen.getByText("Review pull requests before merging")
+      ).toBeVisible();
+      expect(
+        screen.getByText(
+          ready ? "Uses app “GitHub”" : "Connect app “GitHub” to enable"
+        )
+      ).toBeVisible();
+    }
+  );
+
   it("keeps mobile duplicate names and descriptions within one row", () => {
     const originalWidth = window.innerWidth;
     const name = "quarterly-customer-renewal-summary-review";

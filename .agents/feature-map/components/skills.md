@@ -54,6 +54,7 @@
   Narrow tables use two lines for names without descriptions. Duplicate names use one line and keep their descriptions; warnings remain visible.
   Mobile Create stays beside the title, and the personal-use column is labeled For me.
   Sharing settings stay in the dialog. Access badges have an outline, and keyboard focus uses a rounded neutral outline.
+  App dependency status has its own line, so it does not replace desktop descriptions.
   The table keeps page ordering and all filtered rows without pagination.
   `web/src/lib/skills/hooks.ts` is shared by cards and rows for permission, dependency,
   validity and toggle presentation.
