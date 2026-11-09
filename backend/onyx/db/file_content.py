@@ -1,8 +1,20 @@
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import FileContent
+
+
+def large_object_exists(oid: int, db_session: Session) -> bool:
+    return bool(
+        db_session.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM pg_largeobject_metadata WHERE oid = :oid)"
+            ),
+            {"oid": oid},
+        )
+    )
 
 
 def get_file_content_by_file_id(

@@ -414,7 +414,8 @@ The library preview of an external-app skill calls the same renderer
     change nothing. A savepoint covers rows, versions, paths, blocked reasons,
     and the synced revision. The caller owns commit and post-commit cleanup.
     Changed entries require a staged bundle whose name and digest match the read.
-    Unchanged digests need no upload. The shared version writer and retention
+    Healthy unchanged digests need no upload. Explicit `recovery_keys` bypass digest
+    reuse; only ready recovery entries require fresh staged bundles. The shared version writer and retention
     functions maintain history and legacy columns; save-time storage repair is skipped.
     Missing keys retire permanently; reappearance creates a new id. Moves retain ids.
     Unsupported plugin keys protect all their existing child skills. Blocked keys
@@ -424,10 +425,27 @@ The library preview of an external-app skill calls the same renderer
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.
-    G3 must use that same lock for manual name checks. S4 still owns staging, failure
-    cleanup, and deletion of returned unreferenced files after commit. S5 owns job
+    G3 must use that same lock for manual name checks. S5 owns job
     freshness; S6 owns retired-read/write guards; S7 owns access materialization.
-    No API or worker calls reconciliation yet.
+    No API or worker calls the sync service yet.
+23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**
+    `skills/sync.py:sync_marketplace` owns the sessions and commit. Call it in the
+    target tenant context after authorization. A detached current-version snapshot
+    uses object metadata to detect missing bundles without reading their content.
+    Source changes trigger bounded content verification; unchanged sources do not
+    detect corruption in existing blobs. Unknown size falls back to bounded verification.
+    Missing bundles force a fetch, except keys already blocked at that revision.
+    A forced fetch that changes nothing returns no work. Storage failures stop sync.
+    Ingestion preparation runs before upload; validation failures become blocked
+    entries with their original keys. Storage failures abort the entire sync.
+    Each attempted upload uses a fresh tracked file id. The sync caller commits all
+    skill, version and revision changes together. Before a commit attempt, failure
+    cleanup checks only this run's ids. After a commit attempt fails, defer cleanup
+    to the aged orphan sweep: the server may still commit. Success cleanup also
+    checks pruned ids. Cleanup preserves version and legacy references.
+    V3 retries failed cleanup and removes aged uploads left by a stopped worker.
+    S5 must serialize the full read/upload/write operation and reject stale revisions.
+    S8 owns the retirement confirmation override. Neither is implemented here.
 
 ---
 

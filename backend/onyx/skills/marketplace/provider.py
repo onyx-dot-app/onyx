@@ -21,7 +21,7 @@ class MarketplaceProviderAdapter(Protocol):
 
     def resolve_revision(self) -> str: ...
 
-    def fetch_if_changed(self) -> MarketplaceArchive | None: ...
+    def fetch_if_changed(self, *, force: bool = False) -> MarketplaceArchive | None: ...
 
 
 class GitHubMarketplaceAdapter(MarketplaceProviderAdapter):
@@ -47,12 +47,12 @@ class GitHubMarketplaceAdapter(MarketplaceProviderAdapter):
     def resolve_revision(self) -> str:
         return resolve_github_revision(self._source(), self._authorization()).revision
 
-    def fetch_if_changed(self) -> MarketplaceArchive | None:
+    def fetch_if_changed(self, *, force: bool = False) -> MarketplaceArchive | None:
         authorization = self._authorization()
         source = self._source()
         # Resolve pinned SHAs through GitHub too; do not use the SHA shortcut.
         revision = resolve_github_revision(source, authorization).revision
-        if revision == self.marketplace.last_synced_revision:
+        if not force and revision == self.marketplace.last_synced_revision:
             return None
         return MarketplaceArchive(
             revision=revision,
