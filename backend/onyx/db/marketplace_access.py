@@ -125,7 +125,10 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
         allow_management: bool,
     ) -> Marketplace:
         if not allow_management:
-            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "API token lacks manage-skills scope.",
+            )
         marketplace = _lock_marketplace(resource_id, db_session)
         if marketplace.owner_user_id is not None:
             raise OnyxError(

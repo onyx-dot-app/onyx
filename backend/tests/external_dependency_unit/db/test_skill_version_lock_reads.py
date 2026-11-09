@@ -53,7 +53,11 @@ def test_waiting_edit_reads_committed_version(
     isolated_engine: Engine,
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("locked-reader")), False, user, session
+        upload(bundle("locked-reader")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     app = ExternalApp(
         name="Review app",

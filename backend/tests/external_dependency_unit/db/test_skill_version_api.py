@@ -44,7 +44,11 @@ def test_history_current_marker_includes_edit_after_authorization(
     session: Session, user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("history-concurrent-edit")), False, user, session
+        upload(bundle("history-concurrent-edit")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     list_versions = api.list_skill_versions
 
@@ -80,7 +84,11 @@ def test_history_without_current_pointer_has_no_current_marker(
     session: Session, user: User
 ) -> None:
     created = api.create_custom_skill(
-        upload(bundle("history-missing-pointer")), False, user, session
+        upload(bundle("history-missing-pointer")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, created.id)
     assert skill is not None
@@ -102,7 +110,11 @@ def test_unreadable_history_refuses_preview_and_restore(
     session: Session, user: User, damage: str
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("history-damage")), False, user, session
+        upload(bundle("history-damage")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     original_id = api.list_custom_skill_versions(
         skill.id,
@@ -185,7 +197,11 @@ def test_failed_restore_commit_defers_cleanup(
     session: Session, user: User, monkeypatch: pytest.MonkeyPatch, committed: bool
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("restore-rollback")), False, user, session
+        upload(bundle("restore-rollback")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     original = api.list_custom_skill_versions(
         skill.id,
@@ -269,7 +285,11 @@ def test_history_without_creator_and_builtin_refusal(
     session: Session, user: User
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("unknown-creator")), False, user, session
+        upload(bundle("unknown-creator")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     version = session.get(
         SkillVersion,
@@ -326,7 +346,11 @@ def test_stored_read_boundaries(
     from onyx.skills import content, validation
 
     response = api.create_custom_skill(
-        upload(bundle("bounded-reader")), False, user, session
+        upload(bundle("bounded-reader")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -393,7 +417,11 @@ def test_current_editor_rejects_expansion_before_inspection(
     from onyx.skills import content
 
     response = api.create_custom_skill(
-        upload(bundle("bounded-editor")), False, user, session
+        upload(bundle("bounded-editor")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     monkeypatch.setattr(
         content,
@@ -424,7 +452,11 @@ def test_legacy_current_and_preview_keep_stored_allowances(
     from onyx.skills.validation import load_stored_custom_skill_bundle
 
     response = api.create_custom_skill(
-        upload(bundle("legacy-reader")), False, user, session
+        upload(bundle("legacy-reader")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -491,6 +523,7 @@ def test_legacy_large_central_directory_stays_readable(
         False,
         user,
         session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -571,12 +604,14 @@ def test_history_pages_keep_older_rows_stable_during_new_writes(
         False,
         user,
         session,
+        http_request=Request({"type": "http"}),
     )
     other = api.create_custom_skill(
         upload(bundle("other-history")),
         False,
         user,
         session,
+        http_request=Request({"type": "http"}),
     )
     rows = [
         SkillVersion(

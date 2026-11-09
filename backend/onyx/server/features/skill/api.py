@@ -137,6 +137,8 @@ def _import_skill_bundles(
     auto_enable: bool,
     user: User,
     db_session: Session,
+    *,
+    allow_management: bool,
 ) -> GitHubSkillsImportResponse:
     """Stage bundles before access locks; create skills with per-item savepoints.
 
@@ -165,7 +167,12 @@ def _import_skill_bundles(
         for source, ingested in staged:
             try:
                 skill, enabled, item_affected = create_skill_from_bundle__no_commit(
-                    ingested, change, auto_enable, user, db_session
+                    ingested,
+                    change,
+                    auto_enable,
+                    user,
+                    db_session,
+                    allow_management=allow_management,
                 )
             except OnyxError as exc:
                 rejected.append(ingested.bundle_file_id)
@@ -190,7 +197,14 @@ def _import_skill_bundles(
     if affected:
         push_skills_for_users(affected, db_session)
         db_session.commit()
-    return _import_response(created, not_imported, auto_enable, user, db_session)
+    return _import_response(
+        created,
+        not_imported,
+        auto_enable,
+        user,
+        db_session,
+        allow_management=allow_management,
+    )
 
 
 def _import_response(
@@ -199,12 +213,18 @@ def _import_response(
     auto_enable: bool,
     user: User,
     db_session: Session,
+    *,
+    allow_management: bool,
 ) -> GitHubSkillsImportResponse:
     return GitHubSkillsImportResponse(
         imported=[
             GitHubImportedSkill(
                 skill=skill_response_for_user(
-                    skill, user, db_session, include_share_details=True
+                    skill,
+                    user,
+                    db_session,
+                    include_share_details=True,
+                    allow_management=allow_management,
                 ),
                 disabled_reason=(
                     f"Another skill named “{skill.name}” is already enabled."
@@ -510,7 +530,10 @@ def create_custom_skill(
     auto_enable: Annotated[bool, Form()] = True,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> SkillResponse:
+    allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
     file_store = get_default_file_store()
     with _commit_skill_bundle(
         read_bundle_file(bundle.file, filename=bundle.filename),
@@ -537,6 +560,7 @@ def create_custom_skill(
         user,
         db_session,
         include_share_details=True,
+        allow_management=allow_management,
     )
 
 
@@ -547,7 +571,10 @@ def create_custom_skills_batch(
     sharing: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> GitHubSkillsImportResponse:
+    allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
     if not 1 <= len(bundles) <= GITHUB_SKILL_MAX_COUNT:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -573,6 +600,7 @@ def create_custom_skills_batch(
         auto_enable,
         user,
         db_session,
+        allow_management=allow_management,
     )
 
 
@@ -606,7 +634,10 @@ def import_github_skills(
     request: GitHubSkillsImportRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> GitHubSkillsImportResponse:
+    allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
     _, discovered_skills = fetch_github_skill_bundles(
         request.repository,
         github_authorization_header(get_current_tenant_id(), user.id),
@@ -660,6 +691,7 @@ def import_github_skills(
         True,
         user,
         db_session,
+        allow_management=allow_management,
     )
 
 
@@ -674,9 +706,18 @@ def create_custom_skill_from_editor(
     sharing: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> SkillEditableDetailResponse:
+    allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
+    allow_app_management = token_allows_permission(
+        http_request, Permission.FULL_ADMIN_PANEL_ACCESS
+    )
     if external_app_id is not None:
-        if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+        if not (
+            allow_app_management
+            and has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+        ):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "Only administrators can create a skill for an external app.",
@@ -728,8 +769,9 @@ def create_custom_skill_from_editor(
         expected_name=canonical_name,
     ) as ingested:
         user = lock_resource_access_user(user.id, db_session)
-        if external_app_id is not None and not has_global_permission(
-            user, Permission.FULL_ADMIN_PANEL_ACCESS
+        if external_app_id is not None and not (
+            allow_app_management
+            and has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
         ):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -743,7 +785,13 @@ def create_custom_skill_from_editor(
                 skill_id=skill.id,
             )
         if share_request is not None:
-            share_skill__no_commit(skill, share_request.to_change(), user, db_session)
+            share_skill__no_commit(
+                skill,
+                share_request.to_change(),
+                user,
+                db_session,
+                allow_management=allow_management,
+            )
         if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
@@ -756,7 +804,12 @@ def create_custom_skill_from_editor(
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
-    return _editable_skill_response(skill, user, db_session)
+    return _editable_skill_response(
+        skill,
+        user,
+        db_session,
+        allow_management=allow_management,
+    )
 
 
 @user_router.get("/custom/{skill_id}/edit")
