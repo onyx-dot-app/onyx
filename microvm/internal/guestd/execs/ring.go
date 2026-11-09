@@ -17,6 +17,24 @@ func (r *ring) append(p []byte) {
 
 func (r *ring) total() int64 { return r.start + int64(len(r.buf)) }
 
+// size is the memory the ring holds.
+func (r *ring) size() int { return cap(r.buf) }
+
+// keep drops all but the last n bytes and frees the rest.
+func (r *ring) keep(n int) {
+	n = min(n, len(r.buf))
+	if cap(r.buf) <= n {
+		return
+	}
+	var nb []byte
+	if n > 0 {
+		nb = make([]byte, n)
+		copy(nb, r.buf[len(r.buf)-n:])
+	}
+	r.start += int64(len(r.buf) - n)
+	r.buf = nb
+}
+
 // read returns up to n bytes from off. If off is before the kept bytes,
 // gapTo is the first kept offset and the data starts there.
 func (r *ring) read(off int64, n int) (data []byte, gapTo int64, next int64) {

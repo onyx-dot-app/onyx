@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -27,11 +28,15 @@ type Config struct {
 	DefaultDeadline time.Duration // 30 min if zero
 	MaxDeadline     time.Duration // 24 h if zero
 	OutputBytes     int           // kept per stream; 4 MiB if zero
-	MaxRunning      int           // 64 if zero
-	MaxEnded        int           // ended records kept; 256 if zero
-	EndedTTL        time.Duration // 1 h if zero
-	Isolator        Isolator
-	Log             *slog.Logger
+	// OutputBudget caps the output kept by all executions; 256 MiB if zero.
+	// Over it, ended records lose their output (oldest first), then running
+	// ones keep only their latest bytes.
+	OutputBudget int64
+	MaxRunning   int           // 64 if zero
+	MaxEnded     int           // ended records kept; 256 if zero
+	EndedTTL     time.Duration // 1 h if zero
+	Isolator     Isolator
+	Log          *slog.Logger
 }
 
 // validate rejects a missing Isolator and negative limits. Zero means the
@@ -42,7 +47,7 @@ func (c *Config) validate() error {
 		return errors.New("execs: Isolator is required")
 	case c.DefaultDeadline < 0, c.MaxDeadline < 0, c.EndedTTL < 0:
 		return errors.New("execs: durations must not be negative")
-	case c.OutputBytes < 0, c.MaxRunning < 0, c.MaxEnded < 0:
+	case c.OutputBytes < 0, c.MaxRunning < 0, c.MaxEnded < 0, c.OutputBudget < 0:
 		return errors.New("execs: limits must not be negative")
 	}
 	return nil
@@ -57,6 +62,9 @@ func (c *Config) defaults() {
 	}
 	if c.OutputBytes == 0 {
 		c.OutputBytes = 4 << 20
+	}
+	if c.OutputBudget == 0 {
+		c.OutputBudget = 256 << 20
 	}
 	if c.MaxRunning == 0 {
 		c.MaxRunning = 64
@@ -100,6 +108,8 @@ type Manager struct {
 
 	mu    sync.Mutex
 	execs map[string]*Execution
+	// used is the output memory of all records.
+	used atomic.Int64
 
 	stopGC chan struct{}
 	gcOnce sync.Once
@@ -138,6 +148,9 @@ func (m *Manager) gcLoop(every time.Duration) {
 
 const readChunk = 32 << 10
 
+// afterExit is a test hook: it runs after the main process exited.
+var afterExit func(*Execution)
+
 // Start starts a command and returns its record.
 func (m *Manager) Start(spec Spec) (*Execution, error) {
 	if len(spec.Argv) == 0 || spec.Argv[0] == "" {
@@ -164,7 +177,7 @@ func (m *Manager) Start(spec Spec) (*Execution, error) {
 	id := newID()
 	e := &Execution{
 		ID: id, Argv: slices.Clone(spec.Argv), Labels: maps.Clone(spec.Labels),
-		done: make(chan struct{}), changed: make(chan struct{}),
+		done: make(chan struct{}), changed: make(chan struct{}), acct: m.account,
 	}
 	e.out[Stdout].max, e.out[Stderr].max = m.cfg.OutputBytes, m.cfg.OutputBytes
 	// Reserve the slot while the process starts.
@@ -272,6 +285,13 @@ func (m *Manager) wait(e *Execution, readers [2]*os.File, deadline time.Duration
 		}
 	})
 	_ = e.cmd.Wait()
+	// Fix the reason now: a Cancel after the exit must not turn it into
+	// CANCELED.
+	e.reason.CompareAndSwap(killNone, killExited)
+	reason := e.reason.Load()
+	if afterExit != nil {
+		afterExit(e)
+	}
 	timer.Stop()
 	// The command ends with its main process: kill what it left behind.
 	if err := e.group.Kill(); err != nil {
@@ -304,17 +324,16 @@ func (m *Manager) wait(e *Execution, readers [2]*os.File, deadline time.Duration
 	if ws, ok := e.cmd.ProcessState.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
 		res.Signal = int(ws.Signal())
 	}
-	switch e.reason.Load() {
-	case killCancel:
+	// A kill that came too late to stop a normal exit keeps the exit code.
+	switch {
+	case res.Signal != 0 && reason == killCancel:
 		res.Completion = Canceled
-	case killDeadline:
+	case res.Signal != 0 && reason == killDeadline:
 		res.Completion = DeadlineExceeded
+	case res.Signal != 0:
+		res.Completion = Signaled
 	default:
-		if res.Signal != 0 {
-			res.Completion = Signaled
-		} else {
-			res.Completion, res.ExitCode = Exited, e.cmd.ProcessState.ExitCode()
-		}
+		res.Completion, res.ExitCode = Exited, e.cmd.ProcessState.ExitCode()
 	}
 	e.mu.Lock()
 	res.Bytes = [2]int64{e.out[Stdout].total(), e.out[Stderr].total()}
@@ -427,7 +446,7 @@ func (m *Manager) runningLocked() int {
 // records above MaxEnded.
 func (m *Manager) gcLocked(now time.Time) {
 	var ended []*Execution
-	for id, e := range m.execs {
+	for _, e := range m.execs {
 		e.mu.Lock()
 		done, at := e.ended, e.endedAt
 		e.mu.Unlock()
@@ -435,7 +454,7 @@ func (m *Manager) gcLocked(now time.Time) {
 			continue
 		}
 		if now.Sub(at) > m.cfg.EndedTTL {
-			delete(m.execs, id)
+			m.drop(e)
 			continue
 		}
 		ended = append(ended, e)
@@ -443,9 +462,55 @@ func (m *Manager) gcLocked(now time.Time) {
 	if over := len(ended) - m.cfg.MaxEnded; over > 0 {
 		slices.SortFunc(ended, func(a, b *Execution) int { return a.endedAt.Compare(b.endedAt) })
 		for _, e := range ended[:over] {
-			delete(m.execs, e.ID)
+			m.drop(e)
 		}
 	}
+}
+
+// drop removes an ended record. Caller holds m.mu.
+func (m *Manager) drop(e *Execution) {
+	delete(m.execs, e.ID)
+	m.used.Add(-e.outSize())
+}
+
+func (m *Manager) account(delta int64) {
+	if m.used.Add(delta) > m.cfg.OutputBudget {
+		m.enforceBudget()
+	}
+}
+
+// enforceBudget frees output down to 3/4 of the budget: first all output of
+// ended records, oldest first, then the oldest bytes of running ones.
+func (m *Manager) enforceBudget() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.used.Load() <= m.cfg.OutputBudget {
+		return
+	}
+	target := m.cfg.OutputBudget / 4 * 3
+	var ended, running []*Execution
+	for _, e := range m.execs {
+		if _, done := e.Ended(); done {
+			ended = append(ended, e)
+		} else {
+			running = append(running, e)
+		}
+	}
+	slices.SortFunc(ended, func(a, b *Execution) int { return a.endedAt.Compare(b.endedAt) })
+	for _, e := range ended {
+		if m.used.Load() <= target {
+			return
+		}
+		m.used.Add(-e.trimOut(0))
+	}
+	if m.used.Load() <= target || len(running) == 0 {
+		return
+	}
+	share := int(target / int64(2*len(running)))
+	for _, e := range running {
+		m.used.Add(-e.trimOut(share))
+	}
+	m.cfg.Log.Warn("output budget reached: kept only the latest output", "running", len(running), "bytes_per_stream", share)
 }
 
 // lookPath resolves name with the PATH of the command's env, not the

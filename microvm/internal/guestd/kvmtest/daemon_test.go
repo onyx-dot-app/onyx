@@ -70,7 +70,7 @@ func TestDaemonKVM(t *testing.T) {
 		sid := fmt.Sprintf("sandbox-%02d", i)
 
 		t0 := time.Now()
-		ir, err := c.Init(ctx, initRequest(keys[i], sid))
+		ir, err := keyInit(ctx, c, keys[i], initRequest(sid))
 		if err != nil {
 			t.Fatalf("vm %d init: %v\nconsole: %s", i, err, v.console())
 		}
@@ -326,10 +326,10 @@ func TestRestoreKVM(t *testing.T) {
 
 		c, _ := client(t, v)
 		key := randHex(32)
-		req := initRequest(key, fmt.Sprintf("clone-%d", i))
+		req := initRequest(fmt.Sprintf("clone-%d", i))
 		s = time.Now()
 		req.HostTime = timestamppb.New(s)
-		ir, err := c.Init(ctx, req)
+		ir, err := keyInit(ctx, c, key, req)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -34,6 +34,7 @@ type fakeSys struct {
 	clock   []time.Time
 	entropy [][]byte
 	grown   []string
+	minDev  []uint64
 	order   []string
 	// If set, SetClock signals inClock and waits for clockGate.
 	inClock, clockGate chan struct{}
@@ -75,10 +76,11 @@ func (f *fakeSys) system() System {
 			f.step("relay")
 			return true, nil
 		},
-		GrowFS: func(mp string) (uint64, uint64, error) {
+		GrowFS: func(mp string, minDev uint64) (uint64, uint64, error) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			f.grown = append(f.grown, mp)
+			f.minDev = append(f.minDev, minDev)
 			f.step("grow")
 			return 1 << 30, 2 << 30, nil
 		},
@@ -136,15 +138,19 @@ func keyed(ctx context.Context) context.Context {
 func initReq() *pb.InitRequest {
 	return &pb.InitRequest{
 		HostTime: timestamppb.New(time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)),
-		Entropy:  make([]byte, 32), Key: testKey, Env: map[string]string{"FROM_INIT": "yes"},
-		SessionIds: []string{"s1", "s2"}, Generation: 7, SandboxId: "sb-1",
+		Entropy:  make([]byte, 32), Env: map[string]string{"FROM_INIT": "yes"},
+		SessionIds: []string{"s1", "s2"}, Generation: 7, SandboxId: "sb-1", ScratchBytes: 2 << 30,
 	}
 }
 
+// initialized sets the key (as the node agent does) and runs Init.
 func (h *harness) initialized() pb.SandboxdClient {
 	h.t.Helper()
 	c, _ := h.client()
-	if _, err := c.Init(context.Background(), initReq()); err != nil {
+	if _, err := c.SetKey(context.Background(), &pb.SetKeyRequest{Key: testKey}); err != nil {
+		h.t.Fatal(err)
+	}
+	if _, err := c.Init(keyed(context.Background()), initReq()); err != nil {
 		h.t.Fatal(err)
 	}
 	return c
@@ -246,20 +252,38 @@ func TestInitGateAndKey(t *testing.T) {
 	ctx := context.Background()
 
 	hr, err := c.Health(ctx, &pb.HealthRequest{})
-	if err != nil || hr.GetInitialized() {
-		t.Fatalf("health before init: %v %v", hr, err)
+	if err != nil || hr.GetInitialized() || hr.GetKeySet() {
+		t.Fatalf("health before key: %v %v", hr, err)
+	}
+	// Before SetKey nothing but Health and SetKey works, Init included.
+	if _, err := c.Init(keyed(ctx), initReq()); reason(err) != "KEY_NOT_SET" {
+		t.Fatalf("init before key: %v", err)
+	}
+	if _, err := c.Start(keyed(ctx), &pb.StartRequest{Command: sh("true")}); reason(err) != "KEY_NOT_SET" {
+		t.Fatalf("start before key: %v", err)
+	}
+	if _, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: "short"}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("short key: %v", err)
+	}
+	if r, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: testKey}); err != nil || r.GetAlreadySet() {
+		t.Fatalf("set key: %v %v", r, err)
+	}
+	if r, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: testKey}); err != nil || !r.GetAlreadySet() {
+		t.Fatalf("repeat set key: %v %v", r, err)
+	}
+	other := &pb.SetKeyRequest{Key: strings.Repeat("x", 32)}
+	if _, err := c.SetKey(ctx, other); reason(err) != "KEY_ALREADY_SET" || status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("second key: %v", err)
+	}
+	if _, err := c.Init(ctx, initReq()); reason(err) != "UNAUTHENTICATED" {
+		t.Fatalf("init without key: %v", err)
 	}
 	if _, err := c.Start(keyed(ctx), &pb.StartRequest{Command: sh("true")}); reason(err) != "NOT_INITIALIZED" {
 		t.Fatalf("start before init: %v", err)
 	}
-	bad := initReq()
-	bad.Key = "short"
-	if _, err := c.Init(ctx, bad); status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("short key: %v", err)
-	}
 
 	before := time.Now()
-	resp, err := c.Init(ctx, initReq())
+	resp, err := c.Init(keyed(ctx), initReq())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,6 +301,9 @@ func TestInitGateAndKey(t *testing.T) {
 	if len(resp.GetGrown()) != 1 || resp.GetGrown()[0].GetMountPoint() != "/mnt/scratch" || resp.GetGrown()[0].GetNewBytes() != 2<<30 {
 		t.Fatalf("grown: %v", resp.GetGrown())
 	}
+	if len(h.sys.minDev) != 1 || h.sys.minDev[0] != 2<<30 {
+		t.Fatalf("GrowFS got min device size %v, want scratch_bytes", h.sys.minDev)
+	}
 	if got := strings.Join(h.sys.order, ","); got != "clock,entropy,attach,grow,relay" || !resp.GetAttached() || !resp.GetRelayReset() {
 		t.Fatalf("init steps %q, attached %v, relay_reset %v", got, resp.GetAttached(), resp.GetRelayReset())
 	}
@@ -285,7 +312,7 @@ func TestInitGateAndKey(t *testing.T) {
 	}
 
 	hr, _ = c.Health(ctx, &pb.HealthRequest{})
-	if !hr.GetInitialized() || hr.GetGeneration() != 7 || hr.GetSandboxId() != "sb-1" {
+	if !hr.GetInitialized() || !hr.GetKeySet() || hr.GetGeneration() != 7 || hr.GetSandboxId() != "sb-1" {
 		t.Fatalf("health after init: %v", hr)
 	}
 	if _, err := c.Start(ctx, &pb.StartRequest{Command: sh("true")}); reason(err) != "UNAUTHENTICATED" {
@@ -295,56 +322,72 @@ func TestInitGateAndKey(t *testing.T) {
 	if _, err := c.Start(wrong, &pb.StartRequest{Command: sh("true")}); reason(err) != "UNAUTHENTICATED" {
 		t.Fatalf("wrong key: %v", err)
 	}
-	// A repeat Init needs the current key.
-	if _, err := c.Init(ctx, initReq()); reason(err) != "UNAUTHENTICATED" {
-		t.Fatalf("re-init without key: %v", err)
-	}
 	if _, err := c.Init(keyed(ctx), initReq()); err != nil {
 		t.Fatalf("re-init with key: %v", err)
 	}
+	if _, err := c.Start(keyed(ctx), &pb.StartRequest{Command: sh("true")}); err != nil {
+		t.Fatalf("start after init: %v", err)
+	}
 }
 
-// Two Init calls that both pass the interceptor before a key exists: the
-// second runs after the first installed its key, so it must carry that key.
-func TestOverlappingInitKeepsFirstKey(t *testing.T) {
-	sys := &fakeSys{inClock: make(chan struct{}), clockGate: make(chan struct{})}
-	h := newHarnessWith(t, execs.Config{}, Config{}, sys)
+func TestInitFailsWhenGrowFails(t *testing.T) {
+	sys := &fakeSys{}
+	h := newHarnessWith(t, execs.Config{}, Config{GrowMounts: []string{"/mnt/scratch"}}, sys)
+	h.srv.sys.GrowFS = func(string, uint64) (uint64, uint64, error) {
+		return 0, 0, errors.New("device is 1073741824 bytes, want at least 2147483648")
+	}
 	c, _ := h.client()
-	first := make(chan error, 1)
-	go func() {
-		_, err := c.Init(context.Background(), initReq())
-		first <- err
-	}()
-	<-sys.inClock // the first Init holds initMu
-	second := make(chan error, 1)
-	go func() {
-		r := initReq()
-		r.Key = strings.Repeat("x", 32)
-		// Called past the interceptor, as if it was admitted before the first
-		// Init installed its key.
-		_, err := h.srv.Init(context.Background(), r)
-		second <- err
-	}()
-	close(sys.clockGate)
-	if err := <-first; err != nil {
+	if _, err := c.SetKey(context.Background(), &pb.SetKeyRequest{Key: testKey}); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-second; reason(err) != "UNAUTHENTICATED" {
-		t.Fatalf("overlapping Init without the installed key: %v", err)
+	if _, err := c.Init(keyed(context.Background()), initReq()); reason(err) != "INIT_FAILED" {
+		t.Fatalf("init with a small device: %v", err)
 	}
-	if err := h.srv.check(metadata.NewIncomingContext(context.Background(), metadata.Pairs(KeyHeader, testKey)),
-		pb.Sandboxd_Start_FullMethodName); err != nil {
-		t.Fatalf("first key replaced: %v", err)
+	if hr, _ := c.Health(context.Background(), &pb.HealthRequest{}); hr.GetInitialized() {
+		t.Fatal("initialized after a failed Init")
 	}
 }
 
-func TestInitRejectsKeyThatMetadataCannotCarry(t *testing.T) {
+// Concurrent SetKey calls with different keys: exactly one key stays.
+func TestSetKeyFirstWins(t *testing.T) {
 	h := newHarness(t, execs.Config{}, Config{})
 	c, _ := h.client()
-	for _, key := range []string{strings.Repeat("k", 31) + " ", strings.Repeat("k", 31) + "\x01", strings.Repeat("é", 16)} {
-		r := initReq()
-		r.Key = key
-		if _, err := c.Init(context.Background(), r); reason(err) != "INVALID_ARGUMENT" {
+	const n = 16
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			_, errs[i] = c.SetKey(context.Background(), &pb.SetKeyRequest{Key: strings.Repeat(strconv.Itoa(i%10), 32) + strconv.Itoa(i)})
+		})
+	}
+	wg.Wait()
+	won := -1
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			if won >= 0 {
+				t.Fatalf("keys %d and %d both set", won, i)
+			}
+			won = i
+		case reason(err) != "KEY_ALREADY_SET":
+			t.Fatalf("key %d: %v", i, err)
+		}
+	}
+	if won < 0 {
+		t.Fatal("no key set")
+	}
+	key := strings.Repeat(strconv.Itoa(won%10), 32) + strconv.Itoa(won)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(KeyHeader, key))
+	if err := h.srv.check(ctx, pb.Sandboxd_Init_FullMethodName); err != nil {
+		t.Fatalf("winning key: %v", err)
+	}
+}
+
+func TestSetKeyRejectsKeyThatMetadataCannotCarry(t *testing.T) {
+	h := newHarness(t, execs.Config{}, Config{})
+	c, _ := h.client()
+	for _, key := range []string{strings.Repeat("k", 31) + " ", strings.Repeat("k", 31) + "\x01", strings.Repeat("é", 16), strings.Repeat("k", 513)} {
+		if _, err := c.SetKey(context.Background(), &pb.SetKeyRequest{Key: key}); reason(err) != "INVALID_ARGUMENT" {
 			t.Fatalf("key %q: %v", key, err)
 		}
 	}
@@ -376,6 +419,9 @@ func TestInitStateSurvivesRestart(t *testing.T) {
 	}
 	if err := srv.check(context.Background(), pb.Sandboxd_Start_FullMethodName); reason(err) != "UNAUTHENTICATED" {
 		t.Fatalf("restarted daemon without key: %v", err)
+	}
+	if _, err := srv.SetKey(context.Background(), &pb.SetKeyRequest{Key: strings.Repeat("x", 32)}); reason(err) != "KEY_ALREADY_SET" {
+		t.Fatalf("restarted daemon took a new key: %v", err)
 	}
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(KeyHeader, testKey))
 	if err := srv.check(ctx, pb.Sandboxd_Start_FullMethodName); err != nil {

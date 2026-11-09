@@ -2,6 +2,7 @@ package vsock
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -9,12 +10,25 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// noVsock reports the errors of a kernel without vsock or its loopback.
+func noVsock(err error) bool {
+	for _, e := range []error{unix.EAFNOSUPPORT, unix.ENODEV, unix.ENETUNREACH, unix.EHOSTUNREACH, unix.EADDRNOTAVAIL} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
 // The tests use the vsock loopback (CID 1, module vsock_loopback). They skip
 // where it is missing.
 func loopback(t *testing.T) (port uint32, accepted <-chan []byte) {
 	t.Helper()
 	for p := uint32(40000); p < 40100; p++ {
 		ln, err := Listen(p)
+		if noVsock(err) {
+			t.Skipf("no vsock: %v", err)
+		}
 		if err != nil {
 			continue
 		}
@@ -34,14 +48,17 @@ func loopback(t *testing.T) (port uint32, accepted <-chan []byte) {
 			}
 		}()
 		probe, err := Dial(context.Background(), unix.VMADDR_CID_LOCAL, p)
-		if err != nil {
+		if noVsock(err) {
 			t.Skipf("no vsock loopback: %v", err)
+		}
+		if err != nil {
+			t.Fatalf("probe dial: %v", err)
 		}
 		_ = probe.Close()
 		<-ch
 		return p, ch
 	}
-	t.Skip("no vsock")
+	t.Fatal("no free vsock port in 40000-40099")
 	return 0, nil
 }
 

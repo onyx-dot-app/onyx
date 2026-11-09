@@ -26,20 +26,21 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |
 | Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drive). It does nothing if init already attached them. |
 | Egress relay | Init sends SIGHUP to the PID in `/run/craft-fc/egress-relay.pid`. |
-| Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size. |
+| Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size, and fails if the device is still smaller than `scratch_bytes` after about 1 s. |
 | Init state | `/run/craft-fc/guest-daemon-init.json` (mode 0600, tmpfs). A restarted daemon keeps its key, env and session list. |
 | Logs | stderr, text. |
 
 Flags (defaults in brackets): `--port` (52), `--attach-cmd` (`/craft-fc/lib/attach`; empty to skip),
 `--relay-pidfile` (`/run/craft-fc/egress-relay.pid`; empty to skip), `--cgroup-root`
 (`/sys/fs/cgroup/guestd`), `--state-file`, `--grow-fs` (`/mnt/scratch`), `--default-deadline` (30m),
-`--max-deadline` (24h), `--output-bytes` (4 MiB per stream), `--max-running` (64), `--listen`
+`--max-deadline` (24h), `--output-bytes` (4 MiB per stream), `--output-budget` (256 MiB for all
+executions), `--max-running` (64), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
 
 The daemon builds its gRPC server itself (`guestd.Server.NewGRPCServer`), with the key check on every
-call. Limits are checked at start: a negative limit, or a default deadline above `--max-deadline`, is an
+call except `Health` and `SetKey`. Limits are checked at start: a negative limit, or a default deadline above `--max-deadline`, is an
 error.
 
 Build:
@@ -51,35 +52,38 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main
 
 ### Bring-up sequence (api_server)
 
-1. Node agent `Create` (restore from the template, booted with `craft.scratch=defer`).
+1. Node agent `Create` with a new per-VM key in `sandboxd_key` (restore from the template, booted with
+   `craft.scratch=defer`). Before Create returns, the agent installs the key with the daemon's `SetKey`
+   over vsock. So no other caller can set a key first.
 2. Node agent `CloseConnections(sandbox_id, attempt, generation)`. **Do this before Init.** A restore
    keeps the guest's pooled egress connections, which then hang (T5 in `results/prebuild.md`). After a
    cold boot there is nothing to close; the call is harmless.
-3. Daemon `Init`: host time (add half the measured round trip), 32+ bytes of host entropy
-   (`os.urandom`), a new per-VM key, env, session IDs, generation and sandbox ID. In the guest, Init sets
-   the clock, adds the entropy, runs attach, grows the scratch file system and sends SIGHUP to the egress
-   relay (the guest side of the reset in step 2).
-4. Every later call sends the key in the `x-sandboxd-key` metadata.
+3. Daemon `Init`, with the key: host time (add half the measured round trip), 32+ bytes of host entropy
+   (`os.urandom`), env, session IDs, generation, sandbox ID and `scratch_bytes`. In the guest, Init sets
+   the clock, adds the entropy and reseeds the CRNG, runs attach, grows the scratch file system and sends
+   SIGHUP to the egress relay (the guest side of the reset in step 2).
+4. Every call except `Health` sends the key in the `x-sandboxd-key` metadata.
 
-The template must not call Init: it would bake a key into the snapshot. A repeat Init needs the current key.
-Two Init calls at the same time run one after the other; the second must carry the key that the first
-installed. The key must be printable ASCII with no spaces (for example the hex of 32 random bytes),
-because later calls send it as metadata. Through the node agent, every call also carries
-`x-sandbox-id`.
+The template must not call `SetKey` or Init: it would bake a key into the snapshot. The first key stays:
+`SetKey` with the same key succeeds again (a Create retry), with another key it fails with
+`KEY_ALREADY_SET`. The node agent pass-through refuses `SetKey`. The key must be printable ASCII with no
+spaces (for example the hex of 32 random bytes), because calls send it as metadata. Through the node
+agent, every call also carries `x-sandbox-id`.
 
 ### API
 
 | Call | What it does |
 |---|---|
-| `Health` | Answers before Init, with no key. Initialized flag, version, guest time, generation, running count. |
-| `Init` | Sets `CLOCK_REALTIME`, adds the entropy with `RNDADDENTROPY` (credited), runs attach, grows `--grow-fs` mounts (`EXT4_IOC_RESIZE_FS`), resets the egress relay, stores key, env and sessions. Other calls fail with `NOT_INITIALIZED` until it succeeds. |
+| `Health` | Answers before Init, with no key. Initialized and key-set flags, version, guest time, generation, running count. |
+| `SetKey` | Node agent only (the pass-through refuses it). Installs the per-VM key once. Before it, every call but `Health` fails with `KEY_NOT_SET`. |
+| `Init` | Needs the key. Sets `CLOCK_REALTIME`, adds the entropy with `RNDADDENTROPY` (credited) and `RNDRESEEDCRNG`, runs attach, grows `--grow-fs` mounts (`EXT4_IOC_RESIZE_FS`) after a device size check, resets the egress relay, stores env and sessions. Other calls fail with `NOT_INITIALIZED` until it succeeds. |
 | `Run` | Starts a command and streams `started`, output chunks (with byte offsets) and the result. |
 | `Start` | Starts a command and returns its execution ID at once. |
 | `Stream` | Output of an execution from given offsets, then the result. Works after a dropped client. |
 | `Interact` | Writes to (or closes) the stdin of a command started with `stdin: true`. |
-| `Cancel` | Kills the command's cgroup and returns the result (`CANCELED`). Not an error. |
+| `Cancel` | Kills the command's cgroup and returns the result (`CANCELED`, or `EXITED` if the command exited first). Not an error. |
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
-| Files, `CaptureSession`, `RestoreSession`, `InstallSkill` | Reserved for ENG-4572. `UNIMPLEMENTED`. |
+| Files, `CaptureSession`, `RestoreSession` | Reserved for ENG-4572. `UNIMPLEMENTED`. |
 | `BrowserStart`, `BrowserStop` | Reserved for ENG-4573. `UNIMPLEMENTED`. |
 
 Commands:
@@ -94,6 +98,9 @@ Commands:
   `exit_code`), `SIGNALED`, `CANCELED` or `DEADLINE_EXCEEDED`.
 - Records and the last `--output-bytes` of each stream stay in memory after the client goes away: ended
   records for 1 h (at most 256). A timer removes expired records, also when no new command starts.
+- All kept output is capped by `--output-budget`. Over it, the daemon drops the output of ended records
+  (oldest first) down to 3/4 of the budget, then keeps only the latest bytes of running ones. The
+  records and results stay; a `Stream` gets an `OutputGap`.
 - A relative `PATH` entry (for example `node_modules/.bin`) is relative to the command's working
   directory.
 - A command can make child cgroups in its cgroup. The daemon removes them, deepest first, when the
@@ -103,7 +110,7 @@ Commands:
 - Execution IDs come from `crypto/rand`: userspace PRNG state is the same in every clone of a snapshot.
 
 Errors are gRPC statuses with one `google.rpc.ErrorInfo`: domain `sandboxd.craft.onyx.app`, reason an
-`ErrorReason` name (`NOT_INITIALIZED`, `UNAUTHENTICATED`, `EXECUTION_NOT_FOUND`, `START_FAILED`, ...).
+`ErrorReason` name (`KEY_NOT_SET`, `NOT_INITIALIZED`, `UNAUTHENTICATED`, `EXECUTION_NOT_FOUND`, ...).
 
 ## Egress relay
 

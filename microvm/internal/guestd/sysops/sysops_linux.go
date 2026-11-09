@@ -18,9 +18,11 @@ func SetClock(t time.Time) error {
 	return unix.ClockSettime(unix.CLOCK_REALTIME, &ts)
 }
 
-// AddEntropy adds b to the kernel RNG with RNDADDENTROPY (credited). If
-// the ioctl fails, it writes b to /dev/urandom (mixed in, not credited) and
-// returns the ioctl error as notCredited, for the log.
+// AddEntropy adds b to the kernel RNG with RNDADDENTROPY (credited), then
+// reseeds the CRNG (RNDRESEEDCRNG) so that clones of one snapshot stop
+// sharing output at once. If RNDADDENTROPY fails, it writes b to
+// /dev/urandom (mixed in, not credited) and returns the ioctl error as
+// notCredited, for the log.
 func AddEntropy(b []byte) (credited bool, notCredited, err error) {
 	f, err := os.OpenFile("/dev/urandom", os.O_WRONLY, 0)
 	if err != nil {
@@ -33,23 +35,34 @@ func AddEntropy(b []byte) (credited bool, notCredited, err error) {
 	binary.NativeEndian.PutUint32(info[4:], uint32(len(b)))
 	copy(info[8:], b)
 	_, _, errno := unix.Syscall(unix.SYS_IOCTL, f.Fd(), unix.RNDADDENTROPY, uintptr(unsafe.Pointer(&info[0])))
-	if errno == 0 {
-		return true, nil, nil
+	credited = errno == 0
+	if !credited {
+		notCredited = fmt.Errorf("RNDADDENTROPY: %w", errno)
+		if _, err := f.Write(b); err != nil {
+			return false, notCredited, fmt.Errorf("%w; write: %w", notCredited, err)
+		}
 	}
-	ioctlErr := fmt.Errorf("RNDADDENTROPY: %w", errno)
-	if _, err := f.Write(b); err != nil {
-		return false, ioctlErr, fmt.Errorf("%w; write: %w", ioctlErr, err)
+	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, f.Fd(), unix.RNDRESEEDCRNG, 0); errno != 0 {
+		return credited, notCredited, fmt.Errorf("RNDRESEEDCRNG: %w", errno)
 	}
-	return false, ioctlErr, nil
+	return credited, notCredited, nil
 }
+
+// The device size is read again for up to about 1 s.
+const (
+	devSizeTries = 20
+	devSizeEvery = 50 * time.Millisecond
+)
 
 // _IOW('f', 16, __u64)
 const ext4IocResizeFS = 0x40086610
 
 // GrowFS grows the ext4 file system mounted at mountPoint to the size of
 // its block device (online, like resize2fs). It returns the file system
-// size before and after. A mount point that is not ext4 is an error.
-func GrowFS(mountPoint string) (oldBytes, newBytes uint64, err error) {
+// size before and after. A mount point that is not ext4 is an error. If the
+// device is smaller than minDevBytes (the host resize has not reached the
+// guest), it reads the size again for a short time, then fails.
+func GrowFS(mountPoint string, minDevBytes uint64) (oldBytes, newBytes uint64, err error) {
 	dev, fstype, err := mountSource(mountPoint)
 	if err != nil {
 		return 0, 0, err
@@ -67,11 +80,16 @@ func GrowFS(mountPoint string) (oldBytes, newBytes uint64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	var devBytes uint64
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, df.Fd(), unix.BLKGETSIZE64, uintptr(unsafe.Pointer(&devBytes)))
+	devBytes, err := waitDevSize(func() (uint64, error) {
+		var n uint64
+		if _, _, errno := unix.Syscall(unix.SYS_IOCTL, df.Fd(), unix.BLKGETSIZE64, uintptr(unsafe.Pointer(&n))); errno != 0 {
+			return 0, fmt.Errorf("BLKGETSIZE64 %s: %w", dev, errno)
+		}
+		return n, nil
+	}, minDevBytes, devSizeTries, devSizeEvery)
 	_ = df.Close()
-	if errno != 0 {
-		return 0, 0, fmt.Errorf("BLKGETSIZE64 %s: %w", dev, errno)
+	if err != nil {
+		return 0, 0, err
 	}
 	mp, err := os.Open(mountPoint)
 	if err != nil {
@@ -79,7 +97,7 @@ func GrowFS(mountPoint string) (oldBytes, newBytes uint64, err error) {
 	}
 	defer func() { _ = mp.Close() }()
 	blocks := devBytes / bsize
-	_, _, errno = unix.Syscall(unix.SYS_IOCTL, mp.Fd(), ext4IocResizeFS, uintptr(unsafe.Pointer(&blocks)))
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, mp.Fd(), ext4IocResizeFS, uintptr(unsafe.Pointer(&blocks)))
 	if errno != 0 {
 		return 0, 0, fmt.Errorf("EXT4_IOC_RESIZE_FS %s to %d blocks: %w", mountPoint, blocks, errno)
 	}

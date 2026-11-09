@@ -28,7 +28,8 @@ type System struct {
 	AddEntropy func([]byte) (credited bool, err error)
 	// Attach mounts the per-VM drives (idempotent).
 	Attach func() error
-	GrowFS func(mountPoint string) (oldBytes, newBytes uint64, err error)
+	// GrowFS fails if the device stays smaller than minDevBytes.
+	GrowFS func(mountPoint string, minDevBytes uint64) (oldBytes, newBytes uint64, err error)
 	// ResetRelay makes the in-guest egress relay reset its connections. It
 	// reports false if the relay is not running.
 	ResetRelay func() (bool, error)
@@ -109,7 +110,7 @@ func (s *Server) Health(context.Context, *pb.HealthRequest) (*pb.HealthResponse,
 	r := &pb.HealthResponse{
 		Initialized: st.Initialized, Version: s.cfg.Version, GuestTime: timestamppb.Now(),
 		Generation: st.Generation, SandboxId: st.SandboxID, RunningExecutions: uint32(s.m.Running()),
-		Uptime: durationpb.New(time.Since(s.started)),
+		Uptime: durationpb.New(time.Since(s.started)), KeySet: st.Key != "",
 	}
 	if st.Initialized {
 		r.InitializedAt = timestamppb.New(st.InitializedAt)
@@ -129,16 +130,6 @@ func validateInit(r *pb.InitRequest) error {
 	}
 	if n := len(r.GetEntropy()); n < minEntropy || n > maxEntropy {
 		return fmt.Errorf("entropy must be %d to %d bytes, got %d", minEntropy, maxEntropy, n)
-	}
-	if n := len(r.GetKey()); n < minKey || n > maxKey {
-		return fmt.Errorf("key must be %d to %d bytes, got %d", minKey, maxKey, n)
-	}
-	// Later calls send the key as gRPC metadata, which allows only printable
-	// ASCII. A space can be trimmed on the way, so it is not allowed either.
-	for _, c := range []byte(r.GetKey()) {
-		if c <= ' ' || c > '~' {
-			return fmt.Errorf("key must be printable ASCII with no spaces (for example hex or base64url of random bytes)")
-		}
 	}
 	if err := validateEnv(r.GetEnv()); err != nil {
 		return err
@@ -164,18 +155,12 @@ func validateEnv(env map[string]string) error {
 }
 
 // Init implements pb.SandboxdServer.
-func (s *Server) Init(ctx context.Context, r *pb.InitRequest) (*pb.InitResponse, error) {
+func (s *Server) Init(_ context.Context, r *pb.InitRequest) (*pb.InitResponse, error) {
 	if err := validateInit(r); err != nil {
 		return nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
 	}
 	s.initMu.Lock()
 	defer s.initMu.Unlock()
-	// Check the key again with initMu held. The interceptor checked it before
-	// an Init that ran first could install a key; this call must then carry
-	// that key.
-	if err := s.check(ctx, pb.Sandboxd_Init_FullMethodName); err != nil {
-		return nil, err
-	}
 
 	host := r.GetHostTime().AsTime()
 	before := time.Now()
@@ -195,7 +180,7 @@ func (s *Server) Init(ctx context.Context, r *pb.InitRequest) (*pb.InitResponse,
 		resp.Attached = true
 	}
 	for _, mp := range s.cfg.GrowMounts {
-		oldB, newB, err := s.sys.GrowFS(mp)
+		oldB, newB, err := s.sys.GrowFS(mp, r.GetScratchBytes())
 		if err != nil {
 			return nil, apiError(pb.ErrorReason_INIT_FAILED, "grow %s: %v", mp, err)
 		}
@@ -209,8 +194,11 @@ func (s *Server) Init(ctx context.Context, r *pb.InitRequest) (*pb.InitResponse,
 		resp.RelayReset = reset
 	}
 
+	s.mu.Lock()
+	key := s.state.Key
+	s.mu.Unlock()
 	st := initState{
-		Initialized: true, Key: r.GetKey(), Env: maps.Clone(r.GetEnv()), SessionIDs: slices.Clone(r.GetSessionIds()),
+		Initialized: true, Key: key, Env: maps.Clone(r.GetEnv()), SessionIDs: slices.Clone(r.GetSessionIds()),
 		Generation: r.GetGeneration(), SandboxID: r.GetSandboxId(), InitializedAt: time.Now(),
 	}
 	if err := s.saveState(st); err != nil {

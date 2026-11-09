@@ -37,6 +37,7 @@ func main() {
 	defDeadline := flag.Duration("default-deadline", 30*time.Minute, "command deadline when the call sets none")
 	maxDeadline := flag.Duration("max-deadline", 24*time.Hour, "largest command deadline")
 	outBytes := flag.Int("output-bytes", 4<<20, "output bytes kept per stream and execution")
+	outBudget := flag.Int64("output-budget", 256<<20, "output bytes kept by all executions; over it, ended ones lose their output first")
 	maxRunning := flag.Int("max-running", 64, "most running executions")
 	logLevel := flag.String("log-level", "info", "debug, info, warn or error")
 	flag.Parse()
@@ -62,7 +63,7 @@ func main() {
 		sys.ResetRelay = func() (bool, error) { return sysops.SignalPIDFile(pf) }
 	}
 	if err := run(log, sys, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
-		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, MaxRunning: *maxRunning, Log: log,
+		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
 		os.Exit(1)

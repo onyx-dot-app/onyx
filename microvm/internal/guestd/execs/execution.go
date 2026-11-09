@@ -78,6 +78,8 @@ const (
 	killNone int32 = iota
 	killCancel
 	killDeadline
+	// The main process exited before any kill: later kills change nothing.
+	killExited
 )
 
 // Execution is one command and its record.
@@ -94,6 +96,8 @@ type Execution struct {
 	group  Group
 	reason atomic.Int32
 	done   chan struct{}
+	// acct reports changes of the output memory to the Manager.
+	acct func(delta int64)
 
 	stdinMu sync.Mutex
 	stdin   *os.File
@@ -123,9 +127,33 @@ func (e *Execution) notifyLocked() {
 
 func (e *Execution) appendOut(s Stream, p []byte) {
 	e.mu.Lock()
+	before := e.out[s].size()
 	e.out[s].append(p)
+	delta := int64(e.out[s].size() - before)
 	e.notifyLocked()
 	e.mu.Unlock()
+	if delta != 0 && e.acct != nil {
+		e.acct(delta)
+	}
+}
+
+// trimOut keeps at most n bytes of each stream. It returns the bytes freed.
+func (e *Execution) trimOut(n int) int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var freed int
+	for i := range e.out {
+		before := e.out[i].size()
+		e.out[i].keep(n)
+		freed += before - e.out[i].size()
+	}
+	return int64(freed)
+}
+
+func (e *Execution) outSize() int64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return int64(e.out[Stdout].size() + e.out[Stderr].size())
 }
 
 // Read returns up to n bytes of stream s from off. gapTo > 0 means the
@@ -178,8 +206,11 @@ func (e *Execution) WriteStdin(data []byte, closeStdin bool) (int, error) {
 	return n, err
 }
 
-// kill stops every process of the execution. The first reason wins.
+// kill stops every process of the execution. The first reason wins. It does
+// nothing after the main process exited.
 func (e *Execution) kill(reason int32) error {
-	e.reason.CompareAndSwap(killNone, reason)
+	if !e.reason.CompareAndSwap(killNone, reason) && e.reason.Load() == killExited {
+		return nil
+	}
 	return e.group.Kill()
 }

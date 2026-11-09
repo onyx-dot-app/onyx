@@ -292,14 +292,22 @@ func randHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-func initRequest(key, sandboxID string) *pb.InitRequest {
+func initRequest(sandboxID string) *pb.InitRequest {
 	ent := make([]byte, 64)
 	_, _ = rand.Read(ent)
 	return &pb.InitRequest{
-		HostTime: timestamppb.Now(), Entropy: ent, Key: key,
+		HostTime: timestamppb.Now(), Entropy: ent,
 		Env: map[string]string{"ONYX_SANDBOX_ID": sandboxID}, SessionIds: []string{"s1"},
-		Generation: 1, SandboxId: sandboxID,
+		Generation: 1, SandboxId: sandboxID, ScratchBytes: scratchGiB << 30,
 	}
+}
+
+// keyInit sets the key, as the node agent does at Create, then runs Init.
+func keyInit(ctx context.Context, c pb.SandboxdClient, key string, r *pb.InitRequest) (*pb.InitResponse, error) {
+	if _, err := c.SetKey(ctx, &pb.SetKeyRequest{Key: key}); err != nil {
+		return nil, err
+	}
+	return c.Init(keyed(ctx, key), r)
 }
 
 func keyed(ctx context.Context, key string) context.Context {

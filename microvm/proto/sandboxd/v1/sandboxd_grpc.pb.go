@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	Sandboxd_Health_FullMethodName         = "/craft.sandboxd.v1.Sandboxd/Health"
+	Sandboxd_SetKey_FullMethodName         = "/craft.sandboxd.v1.Sandboxd/SetKey"
 	Sandboxd_Init_FullMethodName           = "/craft.sandboxd.v1.Sandboxd/Init"
 	Sandboxd_Run_FullMethodName            = "/craft.sandboxd.v1.Sandboxd/Run"
 	Sandboxd_Start_FullMethodName          = "/craft.sandboxd.v1.Sandboxd/Start"
@@ -34,7 +35,6 @@ const (
 	Sandboxd_DeleteFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/DeleteFile"
 	Sandboxd_CaptureSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/CaptureSession"
 	Sandboxd_RestoreSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/RestoreSession"
-	Sandboxd_InstallSkill_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/InstallSkill"
 	Sandboxd_BrowserStart_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/BrowserStart"
 	Sandboxd_BrowserStop_FullMethodName    = "/craft.sandboxd.v1.Sandboxd/BrowserStop"
 )
@@ -46,9 +46,12 @@ const (
 // Sandboxd is the guest daemon inside each Craft micro-VM. It listens on
 // vsock port 52. The api_server reaches it through the node agent.
 //
-// Auth: Init installs a per-VM key. Every later call except Health must
-// carry it in the "x-sandboxd-key" metadata. Calls other than Health and
-// Init fail with NOT_INITIALIZED until Init succeeds.
+// Auth: the node agent installs a per-VM key with SetKey before its Create
+// returns, so no other caller can reach the VM first. Every call except
+// Health and SetKey, Init included, must carry that key in the
+// "x-sandboxd-key" metadata. Before SetKey they fail with KEY_NOT_SET.
+// Calls other than Health, SetKey and Init fail with NOT_INITIALIZED until
+// Init succeeds.
 //
 // Routing: through the node agent pass-through, every call, Health
 // included, must also carry exactly one "x-sandbox-id" metadata value: the
@@ -64,13 +67,18 @@ const (
 type SandboxdClient interface {
 	// Health answers before Init. It needs no key.
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
+	// SetKey installs the per-VM key. Only the node agent calls it, from its
+	// Create (with CreateRequest.sandboxd_key); the pass-through refuses it
+	// with PERMISSION_DENIED. It needs no key. The first key stays: a repeat
+	// call with the same key succeeds, any other key fails with
+	// KEY_ALREADY_SET.
+	SetKey(ctx context.Context, in *SetKeyRequest, opts ...grpc.CallOption) (*SetKeyResponse, error)
 	// Init runs after every cold boot and every restore, before the sandbox
 	// is handed out. In order: set the wall clock, add host entropy to the
 	// kernel RNG, attach the per-VM drives (the image's attach script: scratch,
 	// overlays, managed drive; a no-op when init already ran it), grow the
 	// scratch file system, send SIGHUP to the in-guest egress relay (it resets
-	// every live connection), then install the key, env and session list. A
-	// repeat Init needs the current key. Before Init after a restore, the
+	// every live connection), then install the env and session list. Before Init after a restore, the
 	// caller must also close the VM's host-side relay connections (node agent
 	// CloseConnections).
 	Init(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error)
@@ -88,21 +96,21 @@ type SandboxdClient interface {
 	Interact(ctx context.Context, in *InteractRequest, opts ...grpc.CallOption) (*InteractResponse, error)
 	// Cancel kills every process of the execution (its cgroup) and returns
 	// the result, with completion CANCELED. Cancel of an ended execution
-	// returns its result.
+	// returns its result. If the main process exited before the kill, the
+	// result is EXITED with its exit code.
 	Cancel(ctx context.Context, in *CancelRequest, opts ...grpc.CallOption) (*CancelResponse, error)
 	// Inspect returns one execution record.
 	Inspect(ctx context.Context, in *InspectRequest, opts ...grpc.CallOption) (*InspectResponse, error)
 	// List returns every execution record, optionally filtered by labels.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
-	// Reserved for ENG-4572 (files, session capture/restore, skills). They
-	// return UNIMPLEMENTED; the messages get their fields with that issue.
+	// Reserved for ENG-4572 (files, session capture/restore). They return
+	// UNIMPLEMENTED; the messages get their fields with that issue.
 	ReadFile(ctx context.Context, in *ReadFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DataChunk], error)
 	WriteFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteFileRequest, WriteFileResponse], error)
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
 	CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DataChunk], error)
 	RestoreSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse], error)
-	InstallSkill(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[InstallSkillRequest, InstallSkillResponse], error)
 	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
@@ -120,6 +128,16 @@ func (c *sandboxdClient) Health(ctx context.Context, in *HealthRequest, opts ...
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HealthResponse)
 	err := c.cc.Invoke(ctx, Sandboxd_Health_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sandboxdClient) SetKey(ctx context.Context, in *SetKeyRequest, opts ...grpc.CallOption) (*SetKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetKeyResponse)
+	err := c.cc.Invoke(ctx, Sandboxd_SetKey_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -308,19 +326,6 @@ func (c *sandboxdClient) RestoreSession(ctx context.Context, opts ...grpc.CallOp
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Sandboxd_RestoreSessionClient = grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse]
 
-func (c *sandboxdClient) InstallSkill(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[InstallSkillRequest, InstallSkillResponse], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[6], Sandboxd_InstallSkill_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[InstallSkillRequest, InstallSkillResponse]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Sandboxd_InstallSkillClient = grpc.ClientStreamingClient[InstallSkillRequest, InstallSkillResponse]
-
 func (c *sandboxdClient) BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(BrowserStartResponse)
@@ -348,9 +353,12 @@ func (c *sandboxdClient) BrowserStop(ctx context.Context, in *BrowserStopRequest
 // Sandboxd is the guest daemon inside each Craft micro-VM. It listens on
 // vsock port 52. The api_server reaches it through the node agent.
 //
-// Auth: Init installs a per-VM key. Every later call except Health must
-// carry it in the "x-sandboxd-key" metadata. Calls other than Health and
-// Init fail with NOT_INITIALIZED until Init succeeds.
+// Auth: the node agent installs a per-VM key with SetKey before its Create
+// returns, so no other caller can reach the VM first. Every call except
+// Health and SetKey, Init included, must carry that key in the
+// "x-sandboxd-key" metadata. Before SetKey they fail with KEY_NOT_SET.
+// Calls other than Health, SetKey and Init fail with NOT_INITIALIZED until
+// Init succeeds.
 //
 // Routing: through the node agent pass-through, every call, Health
 // included, must also carry exactly one "x-sandbox-id" metadata value: the
@@ -366,13 +374,18 @@ func (c *sandboxdClient) BrowserStop(ctx context.Context, in *BrowserStopRequest
 type SandboxdServer interface {
 	// Health answers before Init. It needs no key.
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
+	// SetKey installs the per-VM key. Only the node agent calls it, from its
+	// Create (with CreateRequest.sandboxd_key); the pass-through refuses it
+	// with PERMISSION_DENIED. It needs no key. The first key stays: a repeat
+	// call with the same key succeeds, any other key fails with
+	// KEY_ALREADY_SET.
+	SetKey(context.Context, *SetKeyRequest) (*SetKeyResponse, error)
 	// Init runs after every cold boot and every restore, before the sandbox
 	// is handed out. In order: set the wall clock, add host entropy to the
 	// kernel RNG, attach the per-VM drives (the image's attach script: scratch,
 	// overlays, managed drive; a no-op when init already ran it), grow the
 	// scratch file system, send SIGHUP to the in-guest egress relay (it resets
-	// every live connection), then install the key, env and session list. A
-	// repeat Init needs the current key. Before Init after a restore, the
+	// every live connection), then install the env and session list. Before Init after a restore, the
 	// caller must also close the VM's host-side relay connections (node agent
 	// CloseConnections).
 	Init(context.Context, *InitRequest) (*InitResponse, error)
@@ -390,21 +403,21 @@ type SandboxdServer interface {
 	Interact(context.Context, *InteractRequest) (*InteractResponse, error)
 	// Cancel kills every process of the execution (its cgroup) and returns
 	// the result, with completion CANCELED. Cancel of an ended execution
-	// returns its result.
+	// returns its result. If the main process exited before the kill, the
+	// result is EXITED with its exit code.
 	Cancel(context.Context, *CancelRequest) (*CancelResponse, error)
 	// Inspect returns one execution record.
 	Inspect(context.Context, *InspectRequest) (*InspectResponse, error)
 	// List returns every execution record, optionally filtered by labels.
 	List(context.Context, *ListRequest) (*ListResponse, error)
-	// Reserved for ENG-4572 (files, session capture/restore, skills). They
-	// return UNIMPLEMENTED; the messages get their fields with that issue.
+	// Reserved for ENG-4572 (files, session capture/restore). They return
+	// UNIMPLEMENTED; the messages get their fields with that issue.
 	ReadFile(*ReadFileRequest, grpc.ServerStreamingServer[DataChunk]) error
 	WriteFile(grpc.ClientStreamingServer[WriteFileRequest, WriteFileResponse]) error
 	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
 	CaptureSession(*CaptureSessionRequest, grpc.ServerStreamingServer[DataChunk]) error
 	RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error
-	InstallSkill(grpc.ClientStreamingServer[InstallSkillRequest, InstallSkillResponse]) error
 	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
@@ -420,6 +433,9 @@ type UnimplementedSandboxdServer struct{}
 
 func (UnimplementedSandboxdServer) Health(context.Context, *HealthRequest) (*HealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Health not implemented")
+}
+func (UnimplementedSandboxdServer) SetKey(context.Context, *SetKeyRequest) (*SetKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetKey not implemented")
 }
 func (UnimplementedSandboxdServer) Init(context.Context, *InitRequest) (*InitResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Init not implemented")
@@ -463,9 +479,6 @@ func (UnimplementedSandboxdServer) CaptureSession(*CaptureSessionRequest, grpc.S
 func (UnimplementedSandboxdServer) RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error {
 	return status.Error(codes.Unimplemented, "method RestoreSession not implemented")
 }
-func (UnimplementedSandboxdServer) InstallSkill(grpc.ClientStreamingServer[InstallSkillRequest, InstallSkillResponse]) error {
-	return status.Error(codes.Unimplemented, "method InstallSkill not implemented")
-}
 func (UnimplementedSandboxdServer) BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BrowserStart not implemented")
 }
@@ -507,6 +520,24 @@ func _Sandboxd_Health_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SandboxdServer).Health(ctx, req.(*HealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Sandboxd_SetKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SandboxdServer).SetKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Sandboxd_SetKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SandboxdServer).SetKey(ctx, req.(*SetKeyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -713,13 +744,6 @@ func _Sandboxd_RestoreSession_Handler(srv interface{}, stream grpc.ServerStream)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Sandboxd_RestoreSessionServer = grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]
 
-func _Sandboxd_InstallSkill_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(SandboxdServer).InstallSkill(&grpc.GenericServerStream[InstallSkillRequest, InstallSkillResponse]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Sandboxd_InstallSkillServer = grpc.ClientStreamingServer[InstallSkillRequest, InstallSkillResponse]
-
 func _Sandboxd_BrowserStart_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BrowserStartRequest)
 	if err := dec(in); err != nil {
@@ -766,6 +790,10 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Health",
 			Handler:    _Sandboxd_Health_Handler,
+		},
+		{
+			MethodName: "SetKey",
+			Handler:    _Sandboxd_SetKey_Handler,
 		},
 		{
 			MethodName: "Init",
@@ -837,11 +865,6 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "RestoreSession",
 			Handler:       _Sandboxd_RestoreSession_Handler,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "InstallSkill",
-			Handler:       _Sandboxd_InstallSkill_Handler,
 			ClientStreams: true,
 		},
 	},

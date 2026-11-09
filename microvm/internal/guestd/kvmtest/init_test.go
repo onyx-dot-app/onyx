@@ -1,4 +1,4 @@
-//go:build kvm
+//go:build kvm && linux
 
 package kvmtest
 
@@ -94,7 +94,7 @@ func TestInitKVM(t *testing.T) {
 	parent := t
 	c, _ := client(t, v)
 	key := randHex(32)
-	if _, err := c.Init(ctx, initRequest(key, "init-main")); err != nil {
+	if _, err := keyInit(ctx, c, key, initRequest("init-main")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -123,14 +123,16 @@ func TestInitKVM(t *testing.T) {
 	t.Run("restart_never_runs_overlay_helpers", func(t *testing.T) {
 		// Fakes for every helper the old init found through PATH, in the
 		// writable /usr overlay and in the sandbox-owned venv.
-		plant := `for d in /usr/bin /usr/local/bin /usr/sbin /workspace/.venv/bin; do
+		plant := `bb=/craft-fc/bin/busybox
+for d in /usr/bin /usr/local/bin /usr/sbin /workspace/.venv/bin; do
   [ -d $d ] || continue
   for n in env setpriv nsenter stat mv cp sleep date; do
-    [ -e $d/$n ] && cp -a $d/$n /tmp/orig-$(echo $d | tr / _)-$n
-    printf '#!/bin/sh\ntouch /tmp/pwned-%s\n' $n >$d/$n.fake && chmod 0755 $d/$n.fake && mv -f $d/$n.fake $d/$n
+    [ -e $d/$n ] && $bb cp -a $d/$n /tmp/orig-$(echo $d | $bb tr / _)-$n
+    printf '#!/bin/sh\ntouch /tmp/pwned-%s\n' $n >$d/$n.fake && $bb chmod 0755 $d/$n.fake && $bb mv -f $d/$n.fake $d/$n
   done
 done; echo planted`
-		// Run it in the static busybox shell: its applets never use the fakes.
+		// Call busybox applets by path, so a fake planted earlier in the loop
+		// never runs.
 		if r, err := run(keyed(ctx, key), c, &pb.Command{Argv: []string{"/craft-fc/bin/busybox", "sh", "-c", plant}}); err != nil || !strings.Contains(r.stdout, "planted") {
 			t.Fatalf("plant: %v %q %q", err, r.stdout, r.stderr)
 		}
@@ -169,7 +171,7 @@ done; echo planted`
 		}
 		mc, _ := client(t, m)
 		mkey := randHex(32)
-		if _, err := mc.Init(ctx, initRequest(mkey, "init-managed")); err != nil {
+		if _, err := keyInit(ctx, mc, mkey, initRequest("init-managed")); err != nil {
 			t.Fatal(err)
 		}
 		out := rootSh(ctx, t, mc, mkey, `grep ' /workspace/managed ' /proc/mounts | cut -d' ' -f1,4 | cut -d, -f1

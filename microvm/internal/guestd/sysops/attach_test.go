@@ -71,7 +71,7 @@ func TestRunAttachTimeoutWithStuckChild(t *testing.T) {
 	attachWaitDelay = 200 * time.Millisecond
 	t.Cleanup(func() { attachWaitDelay = old })
 	script := filepath.Join(t.TempDir(), "stuck")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 30 &\nsleep 30\n"), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 1 &\nsleep 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now()

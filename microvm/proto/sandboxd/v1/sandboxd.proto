@@ -10,9 +10,12 @@ option go_package = "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1;sand
 // Sandboxd is the guest daemon inside each Craft micro-VM. It listens on
 // vsock port 52. The api_server reaches it through the node agent.
 //
-// Auth: Init installs a per-VM key. Every later call except Health must
-// carry it in the "x-sandboxd-key" metadata. Calls other than Health and
-// Init fail with NOT_INITIALIZED until Init succeeds.
+// Auth: the node agent installs a per-VM key with SetKey before its Create
+// returns, so no other caller can reach the VM first. Every call except
+// Health and SetKey, Init included, must carry that key in the
+// "x-sandboxd-key" metadata. Before SetKey they fail with KEY_NOT_SET.
+// Calls other than Health, SetKey and Init fail with NOT_INITIALIZED until
+// Init succeeds.
 //
 // Routing: through the node agent pass-through, every call, Health
 // included, must also carry exactly one "x-sandbox-id" metadata value: the
@@ -29,13 +32,19 @@ service Sandboxd {
   // Health answers before Init. It needs no key.
   rpc Health(HealthRequest) returns (HealthResponse);
 
+  // SetKey installs the per-VM key. Only the node agent calls it, from its
+  // Create (with CreateRequest.sandboxd_key); the pass-through refuses it
+  // with PERMISSION_DENIED. It needs no key. The first key stays: a repeat
+  // call with the same key succeeds, any other key fails with
+  // KEY_ALREADY_SET.
+  rpc SetKey(SetKeyRequest) returns (SetKeyResponse);
+
   // Init runs after every cold boot and every restore, before the sandbox
   // is handed out. In order: set the wall clock, add host entropy to the
   // kernel RNG, attach the per-VM drives (the image's attach script: scratch,
   // overlays, managed drive; a no-op when init already ran it), grow the
   // scratch file system, send SIGHUP to the in-guest egress relay (it resets
-  // every live connection), then install the key, env and session list. A
-  // repeat Init needs the current key. Before Init after a restore, the
+  // every live connection), then install the env and session list. Before Init after a restore, the
   // caller must also close the VM's host-side relay connections (node agent
   // CloseConnections).
   rpc Init(InitRequest) returns (InitResponse);
@@ -58,7 +67,8 @@ service Sandboxd {
 
   // Cancel kills every process of the execution (its cgroup) and returns
   // the result, with completion CANCELED. Cancel of an ended execution
-  // returns its result.
+  // returns its result. If the main process exited before the kill, the
+  // result is EXITED with its exit code.
   rpc Cancel(CancelRequest) returns (CancelResponse);
 
   // Inspect returns one execution record.
@@ -67,15 +77,14 @@ service Sandboxd {
   // List returns every execution record, optionally filtered by labels.
   rpc List(ListRequest) returns (ListResponse);
 
-  // Reserved for ENG-4572 (files, session capture/restore, skills). They
-  // return UNIMPLEMENTED; the messages get their fields with that issue.
+  // Reserved for ENG-4572 (files, session capture/restore). They return
+  // UNIMPLEMENTED; the messages get their fields with that issue.
   rpc ReadFile(ReadFileRequest) returns (stream DataChunk);
   rpc WriteFile(stream WriteFileRequest) returns (WriteFileResponse);
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
   rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
   rpc CaptureSession(CaptureSessionRequest) returns (stream DataChunk);
   rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
-  rpc InstallSkill(stream InstallSkillRequest) returns (InstallSkillResponse);
 
   // Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
   rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
@@ -105,6 +114,10 @@ enum ErrorReason {
   INIT_FAILED = 9;
   // Any other error.
   INTERNAL = 10;
+  // No key yet: the node agent has not called SetKey.
+  KEY_NOT_SET = 11;
+  // SetKey: the daemon already has a different key.
+  KEY_ALREADY_SET = 12;
 }
 
 message HealthRequest {}
@@ -122,6 +135,21 @@ message HealthResponse {
   google.protobuf.Timestamp initialized_at = 7;
   // Time since the daemon process started.
   google.protobuf.Duration uptime = 8;
+  // True after SetKey.
+  bool key_set = 9;
+}
+
+message SetKeyRequest {
+  // Per-VM key, 32 to 512 bytes of printable ASCII with no spaces (0x21 to
+  // 0x7E), because later calls send it as x-sandboxd-key metadata. Encode
+  // random bytes, for example the hex or base64url of 32 bytes from
+  // os.urandom. Any other key fails with INVALID_ARGUMENT.
+  string key = 1;
+}
+
+message SetKeyResponse {
+  // True if the daemon already had this key.
+  bool already_set = 1;
 }
 
 message InitRequest {
@@ -131,11 +159,9 @@ message InitRequest {
   // 32 to 4096 random bytes from the host. The daemon adds them to the
   // kernel RNG.
   bytes entropy = 2;
-  // Per-VM key, 32 to 512 bytes of printable ASCII with no spaces (0x21 to
-  // 0x7E), because later calls send it as x-sandboxd-key metadata. Encode
-  // random bytes, for example the hex or base64url of 32 bytes from
-  // os.urandom. Init rejects any other key with INVALID_ARGUMENT.
-  string key = 3;
+  // The key moved to SetKey.
+  reserved 3;
+  reserved "key";
   // Base env for every command. Per-command env overrides it.
   map<string, string> env = 4;
   // Sessions of this sandbox (used by ENG-4572 capture/restore).
@@ -143,6 +169,10 @@ message InitRequest {
   // Node agent VM generation and sandbox ID, for Health and logs.
   uint64 generation = 6;
   string sandbox_id = 7;
+  // Size of the scratch drive in bytes (CreateRequest.scratch_gib << 30).
+  // Init fails with INIT_FAILED if a grown drive is still smaller after a
+  // short wait (the resize has not reached the guest). 0 skips the check.
+  uint64 scratch_bytes = 8;
 }
 
 message InitResponse {
@@ -230,8 +260,9 @@ message OutputChunk {
   bytes data = 3;
 }
 
-// The daemon keeps only the last bytes of each stream. A gap means the
-// bytes [from, to) are gone.
+// The daemon keeps only the last bytes of each stream, and drops the output
+// of old ended executions when all output passes its memory budget. A gap
+// means the bytes [from, to) are gone.
 message OutputGap {
   OutputStream stream = 1;
   int64 from = 2;
@@ -341,8 +372,6 @@ message DeleteFileResponse {}
 message CaptureSessionRequest {}
 message RestoreSessionRequest {}
 message RestoreSessionResponse {}
-message InstallSkillRequest {}
-message InstallSkillResponse {}
 message BrowserStartRequest {}
 message BrowserStartResponse {}
 message BrowserStopRequest {}

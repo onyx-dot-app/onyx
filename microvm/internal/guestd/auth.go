@@ -3,6 +3,7 @@ package guestd
 import (
 	"context"
 	"crypto/subtle"
+	"fmt"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -13,19 +14,17 @@ import (
 // KeyHeader is the metadata key that carries the per-VM key.
 const KeyHeader = "x-sandboxd-key"
 
-// check enforces the Init gate and the per-VM key for one call.
+// check enforces the per-VM key and the Init gate for one call. Health and
+// SetKey need no key; SetKey checks the key itself.
 func (s *Server) check(ctx context.Context, method string) error {
-	if method == pb.Sandboxd_Health_FullMethodName {
+	if method == pb.Sandboxd_Health_FullMethodName || method == pb.Sandboxd_SetKey_FullMethodName {
 		return nil
 	}
 	s.mu.Lock()
 	key, initialized := s.state.Key, s.state.Initialized
 	s.mu.Unlock()
-	if !initialized {
-		if method == pb.Sandboxd_Init_FullMethodName {
-			return nil
-		}
-		return apiError(pb.ErrorReason_NOT_INITIALIZED, "call Init first")
+	if key == "" {
+		return apiError(pb.ErrorReason_KEY_NOT_SET, "the node agent has not set the key")
 	}
 	var got string
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
@@ -36,7 +35,51 @@ func (s *Server) check(ctx context.Context, method string) error {
 	if subtle.ConstantTimeCompare([]byte(got), []byte(key)) != 1 {
 		return apiError(pb.ErrorReason_UNAUTHENTICATED, "missing or wrong %s", KeyHeader)
 	}
+	if !initialized && method != pb.Sandboxd_Init_FullMethodName {
+		return apiError(pb.ErrorReason_NOT_INITIALIZED, "call Init first")
+	}
 	return nil
+}
+
+func validateKey(key string) error {
+	if n := len(key); n < minKey || n > maxKey {
+		return fmt.Errorf("key must be %d to %d bytes, got %d", minKey, maxKey, n)
+	}
+	// Later calls send the key as gRPC metadata, which allows only printable
+	// ASCII. A space can be trimmed on the way, so it is not allowed either.
+	for _, c := range []byte(key) {
+		if c <= ' ' || c > '~' {
+			return fmt.Errorf("key must be printable ASCII with no spaces (for example hex or base64url of random bytes)")
+		}
+	}
+	return nil
+}
+
+// SetKey implements pb.SandboxdServer. The first key stays.
+func (s *Server) SetKey(_ context.Context, r *pb.SetKeyRequest) (*pb.SetKeyResponse, error) {
+	if err := validateKey(r.GetKey()); err != nil {
+		return nil, apiError(pb.ErrorReason_INVALID_ARGUMENT, "%v", err)
+	}
+	s.initMu.Lock()
+	defer s.initMu.Unlock()
+	s.mu.Lock()
+	st := s.state
+	s.mu.Unlock()
+	if st.Key != "" {
+		if subtle.ConstantTimeCompare([]byte(r.GetKey()), []byte(st.Key)) != 1 {
+			return nil, apiError(pb.ErrorReason_KEY_ALREADY_SET, "the daemon already has a different key")
+		}
+		return &pb.SetKeyResponse{AlreadySet: true}, nil
+	}
+	st.Key = r.GetKey()
+	if err := s.saveState(st); err != nil {
+		return nil, apiError(pb.ErrorReason_INTERNAL, "save state: %v", err)
+	}
+	s.mu.Lock()
+	s.state.Key = st.Key
+	s.mu.Unlock()
+	s.cfg.Log.Info("key set")
+	return &pb.SetKeyResponse{}, nil
 }
 
 // NewGRPCServer returns a gRPC server that serves s, with check applied to
