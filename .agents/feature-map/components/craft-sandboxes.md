@@ -922,3 +922,15 @@ With a custom build certificate bundle, backend tokenizer downloads use standard
 Image refresh accepts `CRAFT_BUILD_CA_BUNDLE` for backend Python dependencies, Chromium, tokenizers, and sandbox npm, pip, GitHub CLI, OpenCode, and Bun downloads behind a trusted TLS inspection proxy.
 The certificate bundle is a BuildKit secret and does not enter the image.
 Without this bundle, downloads retain their default certificate and transport settings.
+
+## Browser security updates
+
+- **Browser security updates do not wait for Debian.**
+  `backend/onyx/server/features/build/sandbox/image/install-browser.sh` pins
+  Chrome for Testing and verifies the selected archive with its architecture's
+  checksum. Release gates require current stable Chrome and run Grype on its
+  inventory. The deployment gate scans apt before the browser. CVE report collection uses `--report` to
+  resolve the image without enforcing the browser gate, so browser failures
+  cannot stop unrelated alerts.
+  Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
+  use the ODS allowlist or automatic issue tracking.
