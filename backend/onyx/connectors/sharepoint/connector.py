@@ -2833,8 +2833,8 @@ class SharepointConnector(
             checkpoint.seen_hierarchy_node_raw_ids.add(folder_url)
             external_access = None
             if include_permissions:
-                folder_server_relative_path = self._build_folder_server_relative_path(
-                    drive_web_url, current_path
+                folder_server_relative_path: str = (
+                    self._build_folder_server_relative_path(drive_web_url, current_path)
                 )
                 # One folder must not fail the whole sync. A node without
                 # external_access keeps the permissions it already has.
