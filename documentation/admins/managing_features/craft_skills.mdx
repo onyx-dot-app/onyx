@@ -482,7 +482,8 @@ It cannot use the user's admin or group-manager role to change installation sett
 
 ### Self-hosted push updates
 
-Self-hosted installations can register GitHub push updates through `POST /api/marketplaces/{id}/webhook`.
+On self-hosted installations, open a marketplace and select **Enable** under **Push Updates**.
+The same action is available through `POST /api/marketplaces/{id}/webhook`.
 The caller must own the source or have global Manage skills permission.
 A restricted API token must allow that permission when the caller manages another owner's source or a company source.
 
@@ -494,9 +495,11 @@ Manual sync remains available, and retrying setup reuses the callback's hook.
 Push updates support branches and tags, including the default branch selected by `HEAD`. For `HEAD`,
 repeat setup if the default branch changes or is renamed. Pinned commits cannot receive push updates.
 Use `refs/heads/` or `refs/tags/` when a branch and tag have the same name.
-Marketplace responses include the registered ref and last verified delivery time. Cloud installations keep manual sync.
+The marketplace shows the registered ref and last verified delivery time.
+Select **Refresh** under **Push Updates** to retry registration. Cloud installations keep manual sync.
 Initial setup must finish before pushes can request a sync or update the delivery time.
-The receiver accepts bodies up to 5 MiB. If a larger push is rejected, select **Sync now**.
+A setup ping does not confirm completed registration. The receiver accepts bodies up to 5 MiB.
+If a larger push is rejected, select **Sync now**.
 
 Removing a marketplace also attempts to remove its registered GitHub webhook.
 If GitHub is unavailable or the login has lost permission,
@@ -532,7 +535,7 @@ The webhook server is separate from the API server. Keep the existing Craft and 
     ```
 
     The response identifies `webhook_server` as healthy.
-    Register push updates with `POST /api/marketplaces/{id}/webhook`. Push a change to the registered branch or tag.
+    Open the marketplace and select **Enable** under **Push Updates**. Push a change to the registered branch or tag.
     Check that the last verified delivery time and applied revision advance.
     A setup ping received before registration finishes does not update the delivery time.
     A health response alone does not prove that GitHub can deliver a signed push.

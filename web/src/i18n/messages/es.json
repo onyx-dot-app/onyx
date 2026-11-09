@@ -17686,6 +17686,17 @@
       "setUpButton": {
         "label": "Configurar GitHub"
       }
+    },
+    "pushUpdates": {
+      "title": "Actualizaciones por Push",
+      "description": "Sincroniza después de los pushes de GitHub. Requiere acceso de administrador al repositorio y una dirección pública de webhook.",
+      "configured": "Actualizaciones por push configuradas",
+      "lastDelivery": "Última entrega verificada: {date}",
+      "awaitingDelivery": "Esperando la primera entrega verificada",
+      "refresh": "Actualizar configuración de push",
+      "enable": "Activar actualizaciones por push",
+      "enableAction": "Activar",
+      "refreshAction": "Actualizar"
     }
   }
 }

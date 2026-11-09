@@ -19,8 +19,9 @@ including from a replacement hook. Only pings matching the saved hook ID update
 the verified delivery time. A failed initial setup cannot queue push syncs.
 `POST /marketplaces/{id}/webhook` performs this sequence on self-hosted installs.
 Setup errors leave Sync now available. The API reuses signing intent on retries;
-it exposes registration and delivery status without the secret. UI controls follow
-in a separate layer.
+it exposes registration and delivery status without the secret. Marketplace detail
+offers setup and retry, and shows verified delivery time. Setup errors leave manual
+sync available; completed registration does not itself request sync.
 
 ## Resource limits
 

@@ -545,12 +545,15 @@ The library preview of an external-app skill calls the same renderer
     the hook ID. Provider calls hold no application database transaction.
     Setup errors leave manual sync available. The public URL must be an HTTPS origin with no path, query or fragment.
     Read snapshots expose capability, registration state, ref and delivery time,
-    never the signing secret. UI controls remain pending.
-    Compose's webhook service uses the background worker's Redis host; the Lite
-    overlay selects local dispatch and PostgreSQL storage/cache/auth.
-    The public `/webhook/` prefix must be stripped before forwarding to port 8091.
-    Real GitHub delivery acceptance remains pending.
-
+    never the signing secret. Marketplace detail offers setup and retry only when the provider
+    supports hooks. Setup errors stay inline and preserve Sync now. Successful setup
+    refreshes status without claiming a sync. Open detail polls registered hooks for
+    delivery time. Visible lists also poll registered hooks so a push's revision or
+    count change refreshes the Skills library; hidden browser and host tabs do not poll.
+    Compose's webhook service uses the
+    background worker's Redis host; the Lite overlay selects local dispatch and
+    PostgreSQL storage/cache/auth. The public `/webhook/` prefix must be stripped
+    before forwarding to port 8091. Real GitHub delivery acceptance remains pending.
     `skills/marketplace/github_webhooks.py`, called by the adapter, resolves exact
     branch/tag refs, refuses pinned or ambiguous refs, and creates or updates a hook
     by its exact callback URL. Retries reuse that hook after a lost response.

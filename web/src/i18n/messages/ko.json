@@ -17686,6 +17686,17 @@
       "setUpButton": {
         "label": "GitHub 설정"
       }
+    },
+    "pushUpdates": {
+      "title": "푸시 업데이트",
+      "description": "GitHub 푸시 후 동기화합니다. 저장소 관리자 권한과 공개 웹후크 주소가 필요합니다.",
+      "configured": "푸시 업데이트가 설정됨",
+      "lastDelivery": "마지막으로 검증된 전송: {date}",
+      "awaitingDelivery": "첫 번째 검증된 전송을 기다리는 중",
+      "refresh": "푸시 설정 새로 고침",
+      "enable": "푸시 업데이트 활성화",
+      "enableAction": "활성화",
+      "refreshAction": "새로 고침"
     }
   }
 }

@@ -17686,6 +17686,17 @@
       "setUpButton": {
         "label": "GitHub を設定"
       }
+    },
+    "pushUpdates": {
+      "title": "プッシュ更新",
+      "description": "GitHubへのプッシュ後に同期します。リポジトリの管理者権限と公開Webhookアドレスが必要です。",
+      "configured": "プッシュ更新を設定済み",
+      "lastDelivery": "最終検証済み配信: {date}",
+      "awaitingDelivery": "最初の検証済み配信を待機中",
+      "refresh": "プッシュ設定を更新",
+      "enable": "プッシュ更新を有効化",
+      "enableAction": "有効化",
+      "refreshAction": "更新"
     }
   }
 }

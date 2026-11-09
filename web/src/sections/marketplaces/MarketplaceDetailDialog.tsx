@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import {
   Badge,
@@ -22,6 +22,7 @@ import {
   removeMarketplace,
   replaceMarketplaceLogin,
   requestMarketplaceSync,
+  setupMarketplaceWebhook,
 } from "@/lib/marketplaces/api";
 import type {
   Marketplace,
@@ -59,6 +60,14 @@ type Action =
     }
   | { kind: "retire"; confirmation: RetirementConfirmation; names: string[] };
 
+type Operation =
+  | "sync"
+  | "replace"
+  | "remove"
+  | "retire"
+  | "deleteSkill"
+  | "webhook";
+
 export default function MarketplaceDetailDialog(
   props: MarketplaceDetailDialogProps
 ) {
@@ -75,6 +84,7 @@ function DetailSession({
   getCountLabel,
 }: MarketplaceDetailDialogProps) {
   const t = useTranslations("marketplaces");
+  const format = useFormatter();
   const versionsT = useTranslations("skills.versions");
   const { isSmallScreen } = useScreenSize();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_SKILLS);
@@ -84,14 +94,21 @@ function DetailSession({
     () => getMarketplace(marketplaceId),
     {
       refreshInterval: (detail) =>
-        detail?.marketplace.sync_pending ? 3000 : 0,
+        detail?.marketplace.sync_pending
+          ? 3000
+          : detail?.marketplace.webhook_enabled
+            ? 10000
+            : 0,
       refreshWhenHidden: false,
       onErrorRetry: skipRetryOnAuthError,
       errorRetryCount: 2,
     }
   );
   const [action, setAction] = useState<Action>({ kind: "overview" });
-  const [pending, setPending] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState<
+    Operation | "history" | null
+  >(null);
+  const pending = pendingOperation !== null;
   const [failure, setFailure] = useState<string | null>(null);
   const [requested, setRequested] = useState(false);
   const alive = useRef(true);
@@ -138,9 +155,7 @@ function DetailSession({
     });
   }
 
-  async function run(
-    operation: "sync" | "replace" | "remove" | "retire" | "deleteSkill"
-  ) {
+  async function run(operation: Operation) {
     if (pending || !row || error) return;
     if (
       operation === "retire" &&
@@ -155,7 +170,7 @@ function DetailSession({
         ))
     )
       return;
-    setPending(true);
+    setPendingOperation(operation);
     setFailure(null);
     setRequested(false);
     try {
@@ -182,12 +197,14 @@ function DetailSession({
           ? await requestMarketplaceSync(marketplaceId)
           : operation === "replace"
             ? await replaceMarketplaceLogin(marketplaceId)
-            : action.kind === "retire"
-              ? await confirmMarketplaceRetirements({
-                  id: marketplaceId,
-                  confirmation: action.confirmation,
-                })
-              : null;
+            : operation === "webhook"
+              ? await setupMarketplaceWebhook(marketplaceId)
+              : action.kind === "retire"
+                ? await confirmMarketplaceRetirements({
+                    id: marketplaceId,
+                    confirmation: action.confirmation,
+                  })
+                : null;
       if (!updated) return;
       await mutate(
         { ...data, marketplace: updated, skills: data?.skills ?? [] },
@@ -196,7 +213,7 @@ function DetailSession({
       void cache.mutate(SWR_KEYS.marketplaces);
       if (alive.current) {
         setAction({ kind: "overview" });
-        setRequested(true);
+        setRequested(operation !== "webhook");
         onChanged?.();
       }
     } catch (caught) {
@@ -210,7 +227,7 @@ function DetailSession({
         await mutate().catch(() => undefined);
       }
     } finally {
-      if (alive.current) setPending(false);
+      if (alive.current) setPendingOperation(null);
     }
   }
 
@@ -310,6 +327,68 @@ function DetailSession({
                 )}
                 {action.kind === "overview" && (
                   <>
+                    {data.marketplace.webhook_available && (
+                      <Section height="auto" alignItems="start" gap={2}>
+                        <Text font="main-ui-action">
+                          {t("pushUpdates.title")}
+                        </Text>
+                        <Text font="secondary-body">
+                          {t(
+                            data.marketplace.webhook_enabled
+                              ? "pushUpdates.configured"
+                              : "pushUpdates.description"
+                          )}
+                        </Text>
+                        {data.marketplace.webhook_enabled && (
+                          <>
+                            {data.marketplace.webhook_ref && (
+                              <Text
+                                font="secondary-mono"
+                                wordWrap="wrap-anywhere"
+                              >
+                                {data.marketplace.webhook_ref}
+                              </Text>
+                            )}
+                            <Text font="secondary-body">
+                              {data.marketplace.webhook_last_delivery_at
+                                ? t("pushUpdates.lastDelivery", {
+                                    date: format.dateTime(
+                                      new Date(
+                                        data.marketplace
+                                          .webhook_last_delivery_at
+                                      ),
+                                      {
+                                        dateStyle: "medium",
+                                        timeStyle: "short",
+                                      }
+                                    ),
+                                  })
+                                : t("pushUpdates.awaitingDelivery")}
+                            </Text>
+                          </>
+                        )}
+                        <Button
+                          prominence="secondary"
+                          disabled={pending}
+                          onClick={() => void run("webhook")}
+                          aria-label={t(
+                            pendingOperation === "webhook"
+                              ? "working"
+                              : data.marketplace.webhook_enabled
+                                ? "pushUpdates.refresh"
+                                : "pushUpdates.enable"
+                          )}
+                        >
+                          {t(
+                            pendingOperation === "webhook"
+                              ? "working"
+                              : data.marketplace.webhook_enabled
+                                ? "pushUpdates.refreshAction"
+                                : "pushUpdates.enableAction"
+                          )}
+                        </Button>
+                      </Section>
+                    )}
                     {Object.entries(data.marketplace.blocked_entries).map(
                       ([entry, reason]) => (
                         <MessageCard
@@ -446,7 +525,9 @@ function DetailSession({
                       key={action.skill.id}
                       kind="retired"
                       skillId={action.skill.id}
-                      onBusyChange={setPending}
+                      onBusyChange={(busy) =>
+                        setPendingOperation(busy ? "history" : null)
+                      }
                       onRestored={() => onChanged?.()}
                     />
                   </Section>
@@ -505,7 +586,7 @@ function DetailSession({
             )}
           </Section>
         </Modal.Body>
-        <Modal.Footer padding={scrollingHeader ? 2 : 4}>
+        <Modal.Footer padding={scrollingHeader ? 2 : 4} wrap>
           {data && !error && action.kind !== "history" && (
             <Button
               prominence="tertiary"
