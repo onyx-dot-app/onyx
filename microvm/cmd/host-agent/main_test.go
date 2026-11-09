@@ -1,0 +1,24 @@
+package main
+
+import (
+	"math"
+	"testing"
+)
+
+func TestCheckRanges(t *testing.T) {
+	ok := flags{uidBase: 1000000, uidCount: 65536, maxScratchGiB: 100}
+	if err := checkRanges(ok); err != nil {
+		t.Fatal(err)
+	}
+	for name, f := range map[string]flags{
+		"uid base wraps":     {uidBase: math.MaxUint32 + 6, uidCount: 10, maxScratchGiB: 1},
+		"uid count wraps":    {uidBase: 1, uidCount: math.MaxUint32 + 2, maxScratchGiB: 1},
+		"uid range too long": {uidBase: math.MaxUint32 - 5, uidCount: 10, maxScratchGiB: 1},
+		"zero uid count":     {uidBase: 1000, maxScratchGiB: 1},
+		"scratch wraps":      {uidBase: 1000, uidCount: 10, maxScratchGiB: math.MaxUint32 + 1},
+	} {
+		if err := checkRanges(f); err == nil {
+			t.Errorf("%s: accepted %+v", name, f)
+		}
+	}
+}
