@@ -27,6 +27,7 @@ type obsFlags struct {
 	guestLogRate  int
 	guestLogBurst int
 	guestLogNode  int
+	guestLogMax   int64
 }
 
 func (o *obsFlags) register(fs *flag.FlagSet) {
@@ -34,11 +35,12 @@ func (o *obsFlags) register(fs *flag.FlagSet) {
 	fs.IntVar(&o.guestLogRate, "guest-log-rate", guestlog.DefaultVMRate, "bytes per second of serial console and Firecracker log shipped to stdout per VM; 0 turns shipping off")
 	fs.IntVar(&o.guestLogBurst, "guest-log-burst", guestlog.DefaultVMBurst, "guest log burst per VM, in bytes")
 	fs.IntVar(&o.guestLogNode, "guest-log-node-rate", guestlog.DefaultNodeRate, "guest log bytes per second for the whole node")
+	fs.Int64Var(&o.guestLogMax, "guest-log-max-file-bytes", guestlog.DefaultMaxFileBytes, "cap of each VM's console.log and fc.log on the data disk, also with shipping off; 0: no cap")
 }
 
 func (o obsFlags) check() error {
-	if o.guestLogRate < 0 || o.guestLogBurst < 1 || o.guestLogNode < 1 {
-		return errors.New("--guest-log-rate must be 0 or more, --guest-log-burst and --guest-log-node-rate 1 or more")
+	if o.guestLogRate < 0 || o.guestLogBurst < 1 || o.guestLogNode < 1 || o.guestLogMax < 0 {
+		return errors.New("--guest-log-rate and --guest-log-max-file-bytes must be 0 or more, --guest-log-burst and --guest-log-node-rate 1 or more")
 	}
 	if o.metricsListen != "" {
 		if _, _, err := net.SplitHostPort(o.metricsListen); err != nil {
@@ -86,12 +88,12 @@ func newObservability(f obsFlags, m *agent.Manager, lay jailer.Layout, stats age
 		rl.Events = mt.RelayEvent
 	}
 	o.observer = &server.Observer{Log: log, Metrics: mt, Tenant: m.Tenant}
-	if f.guestLogRate > 0 {
+	if f.guestLogRate > 0 || f.guestLogMax > 0 {
 		o.shipper = &guestlog.Shipper{
 			Layout: lay, VMs: m.List,
 			Out:    slog.New(slog.NewJSONHandler(os.Stdout, nil)),
 			VMRate: f.guestLogRate, VMBurst: f.guestLogBurst, NodeRate: f.guestLogNode,
-			Count: mt.GuestLog,
+			Count: mt.GuestLog, MaxFileBytes: f.guestLogMax, ShipOff: f.guestLogRate == 0,
 		}
 		m.OnRelease(o.shipper.Release)
 	}

@@ -9,6 +9,15 @@
 // one more; bytes over a budget are skipped and counted, so a noisy guest
 // cannot flood the node's log pipeline.
 //
+// MaxFileBytes caps each file on the data disk. Firecracker writes the
+// console to its stdout, a file the agent opens with O_APPEND, so the shipper
+// empties console.log in place once it has read past the cap (copytruncate):
+// Firecracker's next write lands at the new end. Firecracker v1.17 opens
+// fc.log without O_APPEND (vmm/src/utils open_file_nonblock: read, write,
+// O_NONBLOCK), so after a truncate it would write at its old offset and
+// leave a hole. For fc.log the shipper punches a hole over the bytes it has
+// read instead (Linux): the size stays, the disk blocks are freed.
+//
 // From E2B's orchestrator (e2b-dev/infra, Apache-2.0,
 // packages/orchestrator/internal/sandbox/fc/process.go and
 // packages/shared/pkg/logger/sandbox): one structured line per Firecracker
@@ -43,6 +52,8 @@ const (
 	DefaultVMBurst  = 256 << 10
 	DefaultNodeRate = 1 << 20
 	DefaultMaxLine  = 4 << 10
+	// DefaultMaxFileBytes is the default cap of each log file on disk.
+	DefaultMaxFileBytes = 16 << 20
 )
 
 // Shipper tails the log files of the VMs in a Manager.
@@ -64,6 +75,11 @@ type Shipper struct {
 	MaxLine int
 	// Count, if set, gets the shipped and dropped bytes of each read.
 	Count func(stream string, shipped, dropped int)
+	// MaxFileBytes caps each log file on disk (see the package doc). 0 means
+	// no cap.
+	MaxFileBytes int64
+	// ShipOff skips the lines and only enforces MaxFileBytes.
+	ShipOff bool
 
 	now func() time.Time
 
@@ -86,6 +102,10 @@ type fileTail struct {
 	// skipLine drops bytes up to the next newline, after a skip or a
 	// truncated line.
 	skipLine bool
+	// appendOnly: the writer uses O_APPEND, so the file may be truncated.
+	// Otherwise the shipper punches holes; punched is the end of the last one.
+	appendOnly bool
+	punched    int64
 }
 
 type bucket struct {
@@ -194,7 +214,7 @@ func (s *Shipper) syncLocked(adopted bool) {
 		r := float64(s.VMRate)
 		t := &vmTail{vm: vm, budget: bucket{tokens: float64(s.VMBurst), rate: r, burst: float64(s.VMBurst), last: s.now()}}
 		for _, f := range []*fileTail{
-			{stream: Console, path: s.Layout.ConsoleLog(vm.SandboxID)},
+			{stream: Console, path: s.Layout.ConsoleLog(vm.SandboxID), appendOnly: true},
 			{stream: Firecracker, path: s.Layout.HostPath(vm.SandboxID, jailer.LogFile)},
 		} {
 			if adopted {
@@ -228,7 +248,7 @@ func (s *Shipper) pumpLocked(t *vmTail, now time.Time, final bool) {
 }
 
 func (s *Shipper) readFile(t *vmTail, f *fileTail, final bool) (shipped, dropped int) {
-	fh, err := os.Open(f.path)
+	fh, err := os.OpenFile(f.path, os.O_RDWR, 0)
 	if err != nil {
 		// Not there yet, or removed with the VM.
 		return 0, 0
@@ -241,8 +261,14 @@ func (s *Shipper) readFile(t *vmTail, f *fileTail, final bool) (shipped, dropped
 	size := st.Size()
 	if size < f.off {
 		// Truncated or replaced: start over.
-		f.off, f.partial, f.skipLine = 0, nil, false
+		f.off, f.partial, f.skipLine, f.punched = 0, nil, false, 0
 	}
+	if s.ShipOff {
+		f.off, f.partial, f.skipLine = size, nil, !endsLine(fh, size)
+		s.capFile(fh, f)
+		return 0, 0
+	}
+	defer func() { dropped += s.capFile(fh, f) }()
 	avail := size - f.off
 	budget := int64(min(t.budget.tokens, s.node.tokens))
 	n := min(avail, max(budget, 0))
@@ -268,6 +294,44 @@ func (s *Shipper) readFile(t *vmTail, f *fileTail, final bool) (shipped, dropped
 		f.partial = nil
 	}
 	return int(n), dropped
+}
+
+// capFile frees the bytes of f that the shipper has read once they pass
+// MaxFileBytes. It returns the bytes lost when it had to empty a file that
+// had unread bytes.
+func (s *Shipper) capFile(fh *os.File, f *fileTail) int {
+	limit := s.MaxFileBytes
+	if limit <= 0 {
+		return 0
+	}
+	if !f.appendOnly {
+		if f.off-f.punched >= limit && punchHole(fh, f.off) == nil {
+			f.punched = f.off
+		}
+		return 0
+	}
+	if f.off < limit {
+		return 0
+	}
+	st, err := fh.Stat()
+	if err != nil {
+		return 0
+	}
+	// Bytes written since the read would be lost: wait for the next read,
+	// unless the file keeps growing past twice the cap.
+	lost := st.Size() - f.off
+	if lost > 0 && st.Size() < 2*limit {
+		return 0
+	}
+	if err := fh.Truncate(0); err != nil {
+		return 0
+	}
+	f.off, f.punched = 0, 0
+	if lost > 0 {
+		f.partial, f.skipLine = nil, false
+		return int(lost)
+	}
+	return 0
 }
 
 // atEnd returns the size of a file and whether its last line is unfinished.

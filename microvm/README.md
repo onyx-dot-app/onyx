@@ -269,6 +269,14 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   cut (`truncated=true`). Stop and VM exit ship the last lines before the files are removed. After an
   agent restart, adopted VMs are read from the current end of their files, so nothing is shipped twice.
   `--guest-log-rate=0` turns shipping off.
+- **Log files on disk.** `--guest-log-max-file-bytes` (default 16 MiB, 0 = no cap) caps each file, also
+  with shipping off. Firecracker writes the console to its stdout, which the agent opens with `O_APPEND`,
+  so after the shipper has read past the cap it empties `console.log` in place and starts again at 0.
+  If bytes arrived after the last read, it waits for the next read, unless the file is over twice the
+  cap; then the unread bytes are dropped and counted. Firecracker v1.17 opens `fc.log` without
+  `O_APPEND` (a truncate would leave it writing at its old offset), so for `fc.log` the agent punches a
+  hole over the bytes it has read (`fallocate` `PUNCH_HOLE`, Linux): the size stays and the disk blocks
+  are freed.
 - **Audit.** One `rpc` line (`kind=audit`) on stderr for every HostAgent call and every daemon
   pass-through call: `method`, `passthrough`, `caller` (the URI and DNS SANs of the verified client
   certificate, or `unix` for the root-only socket), `sandbox_id`, `tenant_id` (from the request or the VM

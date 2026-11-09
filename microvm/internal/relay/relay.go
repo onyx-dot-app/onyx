@@ -167,8 +167,8 @@ func (r *Relay) accept(ln net.Listener, vm VM) {
 				r.handle(c, vm)
 			}()
 		default:
-			_ = c.Close()
 			r.event(EventOverCap)
+			_ = c.Close()
 			if !full {
 				full = true
 				r.Log.Warn("relay connection cap reached; closing new connections", "sandbox_id", vm.SandboxID, "max", cap(sem))
