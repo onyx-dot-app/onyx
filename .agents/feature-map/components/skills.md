@@ -137,6 +137,14 @@ The library preview of an external-app skill calls the same renderer
 
 ## Contracts and traps
 
+Metadata repair recovers retained history before clearing old bundle links.
+This keeps digest, size, and count after retention deletes the files.
+Versions with incomplete metadata keep their links and remain repair candidates.
+Only confirmed absence clears a non-current link; transient failures retain it.
+Background repair isolates each skill in a savepoint. Both scan phases advance
+through failures and retry pending work after the cursor wraps. User saves
+still propagate unexpected storage errors.
+
 1. `rendering-input-changes-hash` **A new rendering input must change the
    hash.** If a value that changes the rendered files is not in the bytes that
    `skills/push.py:compute_skill_runtime_hash` reads, an edit never re-pushes and sessions
@@ -263,7 +271,8 @@ The library preview of an external-app skill calls the same renderer
     adapts the generic `db/resource_version.py` service. A row lock serializes
     version numbers. The version, pointer and legacy columns change in one
     transaction. Equal content digests keep the current version and stored-byte
-    hash; ZIP timestamps and entry order do not affect the digest. See
+    hash. `utils/bundle.py:compute_bundle_metadata` computes the digest without
+    database imports; ZIP timestamps and entry order do not affect it. See
     [[#bundle-retention]] for which bundle files stay.
     Legacy columns remain authoritative during rollout. A save repairs a stale
     or missing pointer before writing its new content. A recovery snapshot has
@@ -273,10 +282,28 @@ The library preview of an external-app skill calls the same renderer
     Identical saves verify the existing bundle before reusing it. A missing,
     changed or corrupt current file creates a fresh version from the upload.
     Unexpected storage errors abort the save and keep the current version.
-    Missing or corrupt historical files retain unknown metadata. Built-ins have
-    no versions. The next layer adds bounded tenant repair; finish a fresh drift
-    check after old writers drain before switching readers. No migration reads
-    blobs.
+    Repair checks physical object metadata for complete history without downloading
+    its payload. Incomplete metadata still needs a bounded bundle read.
+    Confirmed missing historical objects lose their file links; current links remain
+    recoverable. Missing primary buckets, containers, and uncertain errors keep the links.
+    A confirmed primary object miss plus an absent legacy bucket confirms absence.
+    Historical failures use separate savepoints so current pointer recovery can commit.
+    Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
+    tenant in bounded batches through Celery or Lite's API poller. The base
+    interval is five minutes; cloud uses the standard beat multiplier (eight
+    by default). Repair prunes bundle links under the skill lock, then deletes
+    unreferenced files after commit, with the same retention rule as saves.
+    The deadline is cooperative between skills;
+    a single skill's blob reads can exceed it. Each skill commits before its
+    UUID cursor advances, including failed attempts. Failed work remains eligible
+    for retry after the cursor wraps.
+    Progress reloads from PostgreSQL because KV caching precedes its commit.
+    After the initial scan, `db/skill_version.py:skill_version_repair_batch`
+    checks pointer, file, hash and validity drift with an outer join and
+    null-safe comparisons. This catches old-writer edits and pointerless
+    inserts below the cursor. The completed flag means only the initial scan
+    finished. Before switching readers, drain old writers and require a fresh
+    empty drift query, not that flag. No migration reads blobs.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the

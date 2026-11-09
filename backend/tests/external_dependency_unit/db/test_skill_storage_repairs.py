@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 from onyx.db.models import FileContent, FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import repair_version_metadata
 from onyx.db.skill import delete_skill
-from onyx.db.skill_version import delete_unreferenced_skill_bundles
+from onyx.db.skill_version import (
+    delete_unreferenced_skill_bundles,
+    repair_skill_version_metadata,
+)
 from onyx.file_store import postgres_file_store
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import BundleLimits
@@ -21,7 +24,9 @@ from onyx.server.features.skill import api
 from onyx.skills.ingest import save_skill_bundle_bytes
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     bundle,
+    skill_with_versions,
     upload,
+    versions,
 )
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     session as session,
@@ -174,3 +179,41 @@ def test_metadata_preserves_legacy_file_count(session: Session, user: User) -> N
     assert version.bundle_file_id is not None
     with store.read_file(version.bundle_file_id) as source:
         assert source.read() == content
+
+
+def test_physical_history_absence_clears_link_without_payload_reads(
+    session: Session, user: User
+) -> None:
+    store = postgres_file_store.PostgresBackedFileStore()
+    with patch("onyx.file_store.file_store._DEFAULT_FILE_STORE", store):
+        skill = skill_with_versions(session, user, 2)
+        current, old = versions(skill, session)
+        current_file = current.bundle_file_id
+        old_file = old.bundle_file_id
+        assert current_file is not None and old_file is not None
+        for file_id in (current_file, old_file):
+            oid = session.scalar(
+                select(FileContent.lobj_oid).where(FileContent.file_id == file_id)
+            )
+            assert oid is not None
+            session.execute(text("SELECT lo_unlink(:oid)"), {"oid": oid})
+        session.commit()
+        with patch.object(store, "read_file", wraps=store.read_file) as read:
+            assert repair_skill_version_metadata(skill, session, store) == []
+        read.assert_not_called()
+        session.commit()
+        assert old.bundle_file_id is None
+        assert current.bundle_file_id == current_file
+        assert skill.bundle_file_id == current_file
+        assert session.get(FileRecord, old_file) is not None
+        assert session.get(FileRecord, current_file) is not None
+        api.replace_current_user_skill_bundle(
+            skill.id, upload(bundle(skill.name, "Version 2")), user, session
+        )
+        session.refresh(skill)
+        assert skill.bundle_file_id != current_file
+        assert skill.bundle_file_id is not None
+        with store.read_file(skill.bundle_file_id) as source:
+            assert source.read() == bundle(skill.name, "Version 2")
+        for file_id in (old_file, current_file, skill.bundle_file_id):
+            store.delete_file(file_id)
