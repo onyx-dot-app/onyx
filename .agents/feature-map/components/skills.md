@@ -258,7 +258,11 @@ The library preview of an external-app skill calls the same renderer
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
-    placeholder. The sent bytes feed the runtime hash. OpenCode adds the base
+    placeholder. Before substitution, the push checks the predicted instruction
+    size against the configured file limit. An oversized expansion skips that
+    whole Skill, logs a warning and leaves other Skills available. Files without
+    placeholders are unchanged; this check does not cap the combined library.
+    The sent bytes feed the runtime hash. OpenCode adds the base
     folder line and the relative-path rule itself, so the push adds neither.
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
     `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode

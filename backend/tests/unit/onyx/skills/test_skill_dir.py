@@ -67,3 +67,46 @@ def test_render_for_model_matches_opencode_skill_tool() -> None:
             "relative to this base directory.",
         ]
     )
+
+
+@pytest.mark.parametrize("excess", [0, 1])
+def test_expansion_limit_skips_the_whole_skill_only_above_the_limit(
+    monkeypatch: pytest.MonkeyPatch, excess: int
+) -> None:
+    path = "report/SKILL.md"
+    body = "${CLAUDE_SKILL_DIR}/café\n".encode()
+    files = {
+        path: body,
+        "report/data.txt": b"supporting data",
+        "report-other/SKILL.md": b"other instructions",
+    }
+    expected = f"{_SKILL_DIR}/café\n".encode()
+    monkeypatch.setattr(
+        push, "DEFAULT_PER_FILE_MAX_BYTES", len(expected) - excess, raising=False
+    )
+
+    push._resolve_skill_dirs(files, ["report", "report-other"])
+
+    if excess:
+        assert files == {"report-other/SKILL.md": b"other instructions"}
+    else:
+        assert files[path] == expected
+        assert files["report/data.txt"] == b"supporting data"
+
+
+def test_existing_files_and_combined_library_are_not_readmitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    files = {
+        "first/SKILL.md": b"old instructions" * 100,
+        "first/data.txt": b"a" * 2000,
+        "second/SKILL.md": b"other instructions" * 100,
+        "second/data.txt": b"b" * 2000,
+    }
+    original = dict(files)
+    monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 100, raising=False)
+    monkeypatch.setattr(push, "DEFAULT_TOTAL_MAX_BYTES", 150, raising=False)
+
+    push._resolve_skill_dirs(files, ["first", "second"])
+
+    assert files == original

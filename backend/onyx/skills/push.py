@@ -35,7 +35,11 @@ from onyx.skills.built_in import (
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
 )
-from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
+from onyx.skills.bundle import (
+    DEFAULT_PER_FILE_MAX_BYTES,
+    SKILL_MD_NAME,
+    TEMPLATE_SUFFIX,
+)
 from onyx.skills.content import iter_builtin_skill_files
 from onyx.skills.rendering import (
     CLAUDE_SKILL_DIR_PLACEHOLDER,
@@ -154,6 +158,16 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         path = f"{name}/{SKILL_MD_NAME}"
         content = files.get(path)
         if content is None or placeholder not in content:
+            continue
+        if _resolved_file_size(path, content) > DEFAULT_PER_FILE_MAX_BYTES:
+            logger.warning(
+                "Skipping skill %s: resolved instructions exceed %d bytes",
+                name,
+                DEFAULT_PER_FILE_MAX_BYTES,
+            )
+            prefix = f"{name}/"
+            for skill_path in [key for key in files if key.startswith(prefix)]:
+                del files[skill_path]
             continue
         files[path] = resolve_skill_dir_placeholder(
             content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
