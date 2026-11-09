@@ -231,19 +231,26 @@ enable or disable the Skill, and delete it.
   This keeps the Skill broadly usable without making its behavior broadly editable.
 </Tip>
 
-A Skill that is associated with an App stays visible to the organization. You cannot make it private.
+An uploaded Skill associated with an App stays visible to the organization.
+Company marketplace Skills keep their access settings when linked to an App.
+
+Company visibility changes require global manage-skills permission, including changes by the owner.
+Group managers can change sharing only within the groups they manage.
 
 ## Choose an installation policy
 
-Admins set how a shared Skill is installed for everyone with access:
+Users with global manage-skills permission set how a shared Skill is installed for everyone with access:
 
 | Policy | Effect |
 | --- | --- |
 | **Available to install** | Users can install or uninstall the Skill at any time. |
 | **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
-| **Required** | Onyx installs it automatically. Users cannot disable or uninstall it. Only Admins can delete it. |
+| **Required** | Onyx installs it automatically. Users cannot disable or uninstall it. Deleting it requires global manage-skills permission. |
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
+Bulk sharing preserves existing grants and group install settings that the request omits. In the sharing API,
+an omitted group `installation_policy` preserves its value; explicit `null` clears the override.
+Retired Skills reject changes other than deletion.
 
 ## Maintain a Skill
 
