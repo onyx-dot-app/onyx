@@ -427,7 +427,30 @@ still propagate unexpected storage errors.
     fail the read. `read`, `readline` and `readlines` fail above
     `MEMBER_CALL_MAX_BYTES` instead of truncating. `read1` can return less;
     `readinto` fills larger buffers in bounded steps. All reads share the byte budget.
-    It inflates gzip once into a temporary spool. See `backend/onyx/skills/marketplace/README.md` for compatibility costs.
+    It inflates gzip once into a temporary spool.
+    `skills/marketplace/reader.py:read_marketplace_archive` reads only the
+    declared marketplace. Blocked keys retain their current version; a failed
+    read cannot retire anything. Shared paths reuse bundle bytes. Unique output
+    has a separate ceiling, including nested paths. Mixed plugins are unsupported.
+    Completed entries form an immutable snapshot. Present catalog metadata must
+    be an object. Empty declarations cannot hide agent or command Markdown files.
+    Marketplace discovery enables `archive_files(require_complete=True)`: missing
+    TAR end markers fail discovery even when gzip itself is intact. General archive
+    reads retain member-boundary EOF support. ZIP discovery verifies the end-record
+    entry count and each local header/name, including unselected members, without
+    inflating their data. Truncated sparse extensions become
+    parsing errors, so the reader returns a failed result instead of raising IndexError.
+    Missing explicit skill definitions keep their keys as blocked entries.
+    Plugin manifest skill paths participate in discovery; Claude paths add to
+    defaults, while Codex compatibility paths replace defaults. Entry paths
+    suppress defaults but retain manifest paths. Overlapping paths load once.
+    Declaring the default `skills/` directory preserves default child keys even
+    when every definition is broken. Plugin entries and declared paths each
+    have a 500-count processing budget; all manifests share the path budget, including agents and commands.
+    Unique manifest bytes share a 25 MiB budget, and parsed configs are reused by path.
+    Invalid YAML, including excessive nesting, blocks only the affected skill.
+    See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
+    This pure reader does not change the one-time GitHub import.
 
 ---
 

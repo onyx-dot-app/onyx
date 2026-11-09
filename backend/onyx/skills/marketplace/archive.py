@@ -3,6 +3,7 @@
 import gzip
 import io
 import stat
+import struct
 import sys
 import tarfile
 import zipfile
@@ -212,6 +213,9 @@ class _StrictTarInfo(tarfile.TarInfo):
             ):
                 raise
             raise ReadError(str(exc)) from exc
+        except IndexError as exc:
+            # Truncated GNU sparse extensions can escape tarfile as IndexError.
+            raise ReadError("Truncated TAR extension") from exc
 
 
 def _open_member(
@@ -234,8 +238,58 @@ def _open_member(
     )
 
 
+def _zip_catalog_count(data: bytes) -> int:
+    # Match zipfile's end-record selection, including its no-comment fast path.
+    end = len(data) - 22
+    if data[end : end + 4] != b"PK\x05\x06" or data[-2:] != b"\0\0":
+        end = data.rfind(b"PK\x05\x06", max(0, len(data) - 65535 - 22))
+    if end < 0 or end + 22 > len(data):
+        raise ValueError("ZIP end record is missing")
+    disk, start_disk, disk_count, count = struct.unpack_from("<4H", data, end + 4)
+    locator = end - 20
+    if locator >= 0 and data[locator : locator + 4] == b"PK\x06\x07":
+        record = int.from_bytes(data[locator + 8 : locator + 16], "little")
+        if data[record : record + 4] != b"PK\x06\x06":
+            record = locator - 56  # ZIP64 with prepended executable data.
+        if (
+            record < 0
+            or record + 56 > locator
+            or data[record : record + 4] != b"PK\x06\x06"
+        ):
+            raise ValueError("ZIP64 end record is missing")
+        length = int.from_bytes(data[record + 4 : record + 12], "little")
+        if record + 12 + length != locator:
+            raise ValueError("ZIP64 end record is truncated")
+        disk, start_disk, disk_count, count = struct.unpack_from(
+            "<IIQQ", data, record + 16
+        )
+    if disk or start_disk or disk_count != count:
+        raise ValueError("ZIP catalog spans multiple disks")
+    return count
+
+
+def _require_complete_catalog(
+    archive: zipfile.ZipFile | tarfile.TarFile, data: bytes, *, required: bool
+) -> None:
+    if not required:
+        return
+    if isinstance(archive, zipfile.ZipFile):
+        if len(archive.infolist()) != _zip_catalog_count(data):
+            raise ValueError("ZIP directory entry count does not match its end record")
+        for member in archive.infolist():
+            # Opening checks every local header and name without inflating content.
+            with archive.open(member):
+                pass
+    else:
+        archive.fileobj.seek(archive.offset)
+        if archive.fileobj.read(tarfile.BLOCKSIZE) != b"\0" * tarfile.BLOCKSIZE:
+            raise ValueError("Tar archive has no valid end marker")
+
+
 @contextmanager
-def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
+def archive_files(
+    data: bytes, *, require_complete: bool = False
+) -> Iterator[ArchiveFiles]:
     if len(data) > ARCHIVE_MAX_BYTES:
         raise ArchiveLimitError(f"Archive exceeds {ARCHIVE_MAX_BYTES} bytes")
     with ExitStack() as stack:
@@ -331,6 +385,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                 files[path] = partial(_open_member, archive, member, budget)
             else:
                 files[path] = None
+        _require_complete_catalog(archive, data, required=require_complete)
         # Directories named like files must not silently select a fallback manifest.
         for path in directories:
             if path == "SKILL.md" or path.endswith((".json", "/SKILL.md")):
