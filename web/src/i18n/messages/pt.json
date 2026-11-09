@@ -3753,7 +3753,7 @@
             "title": "Todos na sua organização"
           },
           "onlyMe": {
-            "description": "Somente o dono da credencial deste conector obtém acesso por meio dele; para uma origem sem credencial, somente você.",
+            "description": "Somente o dono da credencial deste conector obtém acesso por meio dele; para uma origem sem credencial, somente quem o criou.",
             "title": "Somente eu"
           },
           "specificGroups": {

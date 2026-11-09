@@ -3753,7 +3753,7 @@
             "title": "Tout le monde dans votre organisation"
           },
           "onlyMe": {
-            "description": "Seul le propriétaire des identifiants de ce connecteur y accède par son biais ; pour une source sans identifiants, vous seul.",
+            "description": "Seul le propriétaire des identifiants de ce connecteur y accède par son biais ; pour une source sans identifiants, seule la personne qui l'a créé.",
             "title": "Moi uniquement"
           },
           "specificGroups": {

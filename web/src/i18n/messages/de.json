@@ -3753,7 +3753,7 @@
             "title": "Alle in Ihrer Organisation"
           },
           "onlyMe": {
-            "description": "Nur der Inhaber der Anmeldedaten dieses Connectors erhält darüber Zugriff; bei einer Quelle ohne Anmeldedaten nur du.",
+            "description": "Nur der Inhaber der Anmeldedaten dieses Connectors erhält darüber Zugriff; bei einer Quelle ohne Anmeldedaten nur die Person, die ihn erstellt hat.",
             "title": "Nur ich"
           },
           "specificGroups": {
