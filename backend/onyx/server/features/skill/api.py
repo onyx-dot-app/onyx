@@ -879,6 +879,28 @@ def _inspect_skill_bundle(
     )
 
 
+def _fetch_skill_for_history(
+    skill_id: UUID, user: User, db_session: Session, *, allow_management: bool
+) -> Skill:
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+        allow_management=allow_management,
+        allow_retired=True,
+    )
+    if skill is None or (
+        skill.retired_at is not None
+        and skill.author_user_id != user.id
+        and not (
+            allow_management and has_global_permission(user, Permission.MANAGE_SKILLS)
+        )
+    ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return skill
+
+
 @user_router.get("/custom/{skill_id}/versions")
 def list_custom_skill_versions(
     skill_id: UUID,
@@ -890,15 +912,9 @@ def list_custom_skill_versions(
 ) -> list[SkillVersionResponse]:
     """Return up to 50 versions. Use the last version number to read older rows."""
     allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        allow_management=allow_management,
+    skill = _fetch_skill_for_history(
+        skill_id, user, db_session, allow_management=allow_management
     )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     return [
         SkillVersionResponse(
             id=version.id,
@@ -929,15 +945,9 @@ def preview_custom_skill_version(
     http_request: Request,
 ) -> SkillBundleInspectResponse:
     allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
-    skill = fetch_skill(
-        skill_id,
-        policy=SkillManagementPolicy.EDIT,
-        user=user,
-        db_session=db_session,
-        allow_management=allow_management,
+    skill = _fetch_skill_for_history(
+        skill_id, user, db_session, allow_management=allow_management
     )
-    if skill is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     version = fetch_skill_version(skill, version_id, db_session)
     return _inspect_skill_bundle(
         read_version_bundle(

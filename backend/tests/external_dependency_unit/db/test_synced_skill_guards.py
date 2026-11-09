@@ -223,10 +223,14 @@ def test_retired_reads_hidden_and_bulk_delete_allowed(
                 f"/{old.id}/preview",
                 f"/custom/{old.id}/edit",
                 f"/custom/{old.id}/share",
-                f"/custom/{old.id}/versions",
                 f"/custom/{old.id}/versions/{old.current_version_id}",
             ]:
                 assert client.get(f"/skills{path}").status_code == 404, path
+            history = client.get(f"/skills/custom/{old.id}/versions")
+            assert history.status_code == 200, history.text
+            assert [row["id"] for row in history.json()] == [
+                str(old.current_version_id)
+            ]
     with (
         client_for(owner, session) as client,
         patch.object(api, "delete_unreferenced_skill_bundles"),
