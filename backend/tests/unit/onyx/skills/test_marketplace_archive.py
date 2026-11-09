@@ -580,17 +580,20 @@ def test_tar_seek_preserves_shared_read_budget(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
-def test_encrypted_zip_fails_before_listing(compression: int) -> None:
+@pytest.mark.parametrize("flags", [0x01, 0x20, 0x40, 0x41])
+def test_unsupported_zip_flags_fail_before_listing(
+    compression: int, flags: int
+) -> None:
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=compression) as archive:
         archive.writestr("data", b"content")
     data = bytearray(out.getvalue())
     central = data.index(b"PK\x01\x02")
-    data[6] |= 1
-    data[central + 8] |= 1
-    with pytest.raises(archives.ArchiveLimitError, match="encryption"):
+    data[6] |= flags
+    data[central + 8] |= flags
+    with pytest.raises(archives.ArchiveLimitError, match="ZIP compression"):
         with archives.archive_files(bytes(data)):
-            pytest.fail("Encrypted members must fail before listing")
+            pytest.fail("Unsupported members must fail before listing")
 
 
 @pytest.mark.parametrize("damage", ["checksum", "truncated", "short_zero_block"])
@@ -621,3 +624,29 @@ def test_tar_accepts_normal_end_after_member(ending: bytes) -> None:
         assert opener is not None
         with opener() as stream:
             assert stream.read() == b"ok"
+
+
+@pytest.mark.parametrize("damage", ["oversized_pax", "sparse_extension"])
+def test_failed_tar_extension_cannot_hide_as_end_marker(damage: str) -> None:
+    first = tarfile.TarInfo("repo/first.md").tobuf()
+    tail = tarfile.TarInfo("repo/lost.md").tobuf() + bytes(1024)
+    if damage == "oversized_pax":
+        info = tarfile.TarInfo("extension")
+        info.type = tarfile.XHDTYPE
+        info.size = 2 * 1024 * 1024
+        extension = info.tobuf()
+    else:
+        body = (
+            b"21 GNU.sparse.size=1\n23 GNU.sparse.offset=x\n25 GNU.sparse.numbytes=1\n"
+        )
+        info = tarfile.TarInfo("repo/sparse")
+        info.type = tarfile.GNUTYPE_SPARSE
+        header = bytearray(info.tobuf(format=tarfile.GNU_FORMAT))
+        header[482] = 1
+        header[483:495] = b"00000000001\0"
+        header[148:156] = b" " * 8
+        header[148:156] = b"%06o\0 " % sum(header)
+        extension = _extension(tarfile.XHDTYPE, body) + header + bytes(512)
+    with pytest.raises(tarfile.ReadError):
+        with archives.archive_files(gzip.compress(first + extension + tail)):
+            pytest.fail("Failed extension parsing must not return a partial catalog")

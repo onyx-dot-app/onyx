@@ -200,6 +200,7 @@ class _TarReader(io.BufferedReader):
 class _StrictTarInfo(tarfile.TarInfo):
     @classmethod
     def fromtarfile(cls, tarfile: TarFile) -> Self:
+        start = tarfile.fileobj.tell()
         try:
             return super().fromtarfile(tarfile)
         except HeaderError as exc:
@@ -207,6 +208,7 @@ class _StrictTarInfo(tarfile.TarInfo):
             if (
                 isinstance(tarfile.fileobj, _TarReader)
                 and tarfile.fileobj.last_read_was_end
+                and tarfile.fileobj.tell() - start <= 512
             ):
                 raise
             raise ReadError(str(exc)) from exc
@@ -282,12 +284,12 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                     f"Archive exceeds {ARCHIVE_MAX_ENTRIES} entries"
                 )
             if isinstance(member, zipfile.ZipInfo):
-                if member.flag_bits & 0x1 or member.compress_type not in (
+                if member.flag_bits & 0x61 or member.compress_type not in (
                     zipfile.ZIP_STORED,
                     zipfile.ZIP_DEFLATED,
                 ):
                     raise ArchiveLimitError(
-                        "Archive ZIP compression or encryption is not supported"
+                        "Archive ZIP compression, encryption or patched data is not supported"
                     )
                 name = member.orig_filename
                 mode = stat.S_IFMT(member.external_attr >> 16)
