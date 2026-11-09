@@ -1,4 +1,6 @@
 from enum import StrEnum
+from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -57,3 +59,12 @@ class MarketplaceArchive(BaseModel):
     revision: str
     archive_bytes: bytes
     folder: str | None
+
+
+class ReconciliationResult(BaseModel):
+    status: Literal["applied", "failed", "needs_confirmation"]
+    reason: str | None = None
+    changed_skill_ids: list[UUID] = Field(default_factory=list)
+    retired_skill_ids: list[UUID] = Field(default_factory=list)
+    blocked_entries: dict[str, str] = Field(default_factory=dict)
+    cleanup_file_ids: set[str] = Field(default_factory=set)

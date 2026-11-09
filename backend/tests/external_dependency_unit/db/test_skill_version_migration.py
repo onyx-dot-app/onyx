@@ -186,6 +186,9 @@ def test_version_constraints(
             marketplace_revision = scripts.get_revision("1c894e757414")
             assert marketplace_revision is not None
             marketplace_revision.module.upgrade()
+            reconciliation_revision = scripts.get_revision("3833433b1585")
+            assert reconciliation_revision is not None
+            reconciliation_revision.module.upgrade()
     else:
         connection.execute(text("DROP TABLE skill"))
         Base.metadata.create_all(

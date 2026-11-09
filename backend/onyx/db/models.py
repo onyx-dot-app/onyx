@@ -5447,6 +5447,9 @@ class Marketplace(Base):
         DateTime(timezone=True), nullable=True
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    blocked_entries: Mapped[dict[str, str]] = mapped_column(
+        PGJSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     webhook_id: Mapped[str | None] = mapped_column(String, nullable=True)
     webhook_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
@@ -5536,6 +5539,7 @@ class Skill(Base):
         index=True,
     )
     marketplace_entry_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    marketplace_path: Mapped[str | None] = mapped_column(String, nullable=True)
     follows_marketplace_access: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
