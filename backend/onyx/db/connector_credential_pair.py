@@ -85,6 +85,22 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
         .correlate(ConnectorCredentialPair)
         .exists()
     )
+    # A PERSONAL pair on an ownerless credential is read by its creator.
+    ownerless_credential = (
+        select(1)
+        .select_from(Credential)
+        .where(
+            Credential.id == ConnectorCredentialPair.credential_id,
+            Credential.user_id.is_(None),
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    personal_creator = and_(
+        ConnectorCredentialPair.access_type == AccessType.PERSONAL,
+        ConnectorCredentialPair.creator_id == user_id,
+        ownerless_credential,
+    )
     group_access_clause_fn = fetch_versioned_implementation(
         "onyx.db.connector_credential_pair", "_build_user_group_cc_pair_access_clause"
     )
@@ -92,7 +108,7 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
         ConnectorCredentialPair.access_type == AccessType.PUBLIC,
         and_(
             ConnectorCredentialPair.access_type.notin_(AccessType.perm_synced_types()),
-            or_(credential_owner, group_access_clause_fn(user_id)),
+            or_(credential_owner, personal_creator, group_access_clause_fn(user_id)),
         ),
     )
 
@@ -1125,16 +1141,30 @@ def _relate_data_access_groups_to_cc_pair__no_commit(
         )
 
 
-def ensure_personal_credential_owner(
-    access_type: AccessType, credential_user_id: UUID | None
+def ensure_personal_has_reader(
+    access_type: AccessType,
+    credential_user_id: UUID | None,
+    creator_id: UUID | None,
 ) -> None:
-    """A PERSONAL pair is read by its credential's owner only, so the
-    credential must have one."""
-    if access_type == AccessType.PERSONAL and credential_user_id is None:
+    """A PERSONAL pair is read by its credential's owner, or by its creator
+    when the credential has no owner, so one of them must exist."""
+    if (
+        access_type == AccessType.PERSONAL
+        and credential_user_id is None
+        and creator_id is None
+    ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "An owner-only connector needs a credential that belongs to a user.",
+            "An owner-only connector needs a credential owner or a creator.",
         )
+
+
+def fetch_cc_pair_creator_id(db_session: Session, cc_pair_id: int) -> UUID | None:
+    return db_session.scalar(
+        select(ConnectorCredentialPair.creator_id).where(
+            ConnectorCredentialPair.id == cc_pair_id
+        )
+    )
 
 
 def add_credential_to_connector(
@@ -1181,7 +1211,8 @@ def add_credential_to_connector(
             status_code=401,
             detail=error_msg,
         )
-    ensure_personal_credential_owner(access_type, credential.user_id)
+    # The creating user becomes the pair's creator.
+    ensure_personal_has_reader(access_type, credential.user_id, user.id)
 
     existing_association = (
         db_session.query(ConnectorCredentialPair)

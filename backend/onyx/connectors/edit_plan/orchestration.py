@@ -38,7 +38,10 @@ from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.connectors.planning_rule import PlanningData
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.context.search.models import CCPairAccessMode
-from onyx.db.connector_credential_pair import ensure_personal_credential_owner
+from onyx.db.connector_credential_pair import (
+    ensure_personal_has_reader,
+    fetch_cc_pair_creator_id,
+)
 from onyx.db.connector_edit_requests import (
     has_restartable_attempt,
     has_scoped_backfill_outstanding,
@@ -147,7 +150,11 @@ def plan_connector_edit(
     credential = fetch_proposed_credential(
         db_session, user=user, current=current, proposed=proposed
     )
-    ensure_personal_credential_owner(proposed.access_type, credential.user_id)
+    ensure_personal_has_reader(
+        proposed.access_type,
+        credential.user_id,
+        fetch_cc_pair_creator_id(db_session, cc_pair_id),
+    )
     validation = _validate_proposed_state(
         db_session, current, proposed, credential, user.id
     )
