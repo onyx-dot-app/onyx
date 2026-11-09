@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 from onyx.server.features.skill.models import SkillShareRequest
 from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
 from onyx.skills.marketplace.read_models import BlockedSkill, UnsupportedPlugin
-from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
 
 
 class MarketplaceSourceRequest(BaseModel):
@@ -48,7 +47,7 @@ class MarketplaceConfirmationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     revision: str = Field(min_length=1)
-    skill_ids: list[UUID] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
+    skill_ids: list[UUID] = Field(min_length=1)
 
 
 class MarketplaceCompletePreview(BaseModel):
