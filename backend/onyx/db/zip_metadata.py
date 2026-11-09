@@ -86,15 +86,13 @@ class ZipEntryStore:
         self._db.close()
 
 
-class SpooledZipInfos(list[zipfile.ZipInfo]):
-    """The written entries of a ZipFile, kept in SQLite until it writes them.
+class SpooledZipInfos:
+    """Written ZIP entries, kept in SQLite until the central directory is written.
 
-    Each row holds the ZipInfo fields that zipfile writes to the central
-    directory.
+    Each row holds the ZipInfo fields of one central directory record.
     """
 
     def __init__(self) -> None:
-        super().__init__()
         self._db = sqlite3.connect("")
         try:
             self._db.execute(

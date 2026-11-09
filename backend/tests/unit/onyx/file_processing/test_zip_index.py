@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.file_processing.zip_index import SpooledZipWriter, ZipIndex
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_processing.zip_limits import ZipMetadataLimitError
 
 _EXTRA_ID = 0xCAFE
@@ -287,22 +287,6 @@ def test_reader_closes_archive_when_storage_creation_fails(
         connection.close()
 
 
-def test_writer_closes_sqlite_when_schema_creation_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    connection = sqlite3.connect("")
-    failed = MagicMock(wraps=connection)
-    failed.execute.side_effect = sqlite3.OperationalError("schema failure")
-    monkeypatch.setattr(sqlite3, "connect", lambda _: failed)
-    try:
-        with pytest.raises(sqlite3.OperationalError, match="schema failure"):
-            SpooledZipWriter(io.BytesIO())
-        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
-            connection.execute("SELECT 1")
-    finally:
-        connection.close()
-
-
 def _with_version(data: bytes, version: int) -> bytes:
     start = data.index(b"PK\x01\x02")
     return data[: start + 6] + bytes([version, 0]) + data[start + 8 :]
@@ -431,42 +415,6 @@ def test_reader_memory_does_not_grow_with_entries() -> None:
 
     assert _peak(lambda: read_all(large)) < 512 * 1024 < zipfile_peak // 40
     assert _peak(lambda: read_all(large)) < 2 * _peak(lambda: read_all(small))
-
-
-@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
-def test_spooled_writer_writes_the_same_bytes_as_zipfile(compression: int) -> None:
-    def write(archive: zipfile.ZipFile | SpooledZipWriter) -> None:
-        with archive:
-            for index in range(0x10001):
-                info = zipfile.ZipInfo(f"{index:x}", (2022, 2, 2, 2, 2, 2))
-                info.compress_type = compression
-                info.extra = struct.pack("<HH", _EXTRA_ID, 1) + b"e"
-                info.comment = b"note" if index % 7 else b""
-                archive.writestr(info, b"data" if index % 3 else b"")
-
-    expected = io.BytesIO()
-    write(zipfile.ZipFile(expected, "w", compression=zipfile.ZIP_DEFLATED))
-    ours = io.BytesIO()
-    write(SpooledZipWriter(ours))
-
-    assert ours.getvalue() == expected.getvalue()
-    assert b"PK\x06\x06" in ours.getvalue()[-200:]
-
-
-def test_writer_can_finish_after_close_with_an_open_member() -> None:
-    output = io.BytesIO()
-    writer = SpooledZipWriter(output)
-    member = writer.open(zipfile.ZipInfo("SKILL.md"), mode="w")
-    try:
-        member.write(b"saved skill")
-        with pytest.raises(ValueError, match="open writing handle"):
-            writer.close()
-    finally:
-        member.close()
-        writer.close()
-    writer.close()
-    with zipfile.ZipFile(io.BytesIO(output.getvalue())) as archive:
-        assert archive.read("SKILL.md") == b"saved skill"
 
 
 def test_import_does_not_write_a_probe_archive() -> None:

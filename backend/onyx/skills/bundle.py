@@ -17,8 +17,9 @@ from typing import IO, Final, Literal
 from onyx.db.zip_metadata import DiskPathSet
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_processing.zip_index import SpooledZipWriter, ZipIndex
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_processing.zip_limits import ZipMetadataLimitError
+from onyx.file_processing.zip_writer import SpooledZipWriter
 from onyx.file_store.models import BundleLimits
 from onyx.skills.metadata import (
     parse_skill_document,
@@ -442,7 +443,7 @@ def _add_capped(values: set[str] | None, value: str) -> set[str]:
 
 def _copy_bundle_stream(
     source: IO[bytes] | io.BufferedIOBase,
-    target: IO[bytes] | None,
+    target: IO[bytes] | io.BufferedIOBase | None,
     output_path: str,
     per_file_max_bytes: int,
     total_bytes_before_file: int,
@@ -483,14 +484,13 @@ def _copy_validated_bundle_file(
     total_bytes_before_file: int,
     total_max_bytes: int,
 ) -> int:
-    target: IO[bytes] | None = None
+    target: IO[bytes] | io.BufferedIOBase | None = None
     size = 0
     try:
         with source_zip.open(source_info) as source:
             if target_zip is not None:
                 target_info = copy(source_info)
                 target_info.filename = output_path
-                target_info.orig_filename = output_path
                 target_info.compress_type = zipfile.ZIP_DEFLATED
                 target = target_zip.open(target_info, mode="w")
 

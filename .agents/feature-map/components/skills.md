@@ -271,9 +271,11 @@ The library preview of an external-app skill calls the same renderer
    `db/zip_metadata.py` owns all entry-index, written-entry, and path-set queries.
    Its end-record and equal-offset handling match supported Python patch releases.
    The tie-order probe runs once on first use, not during import.
-   `SpooledZipWriter` exposes only member writes and close, and keeps entry metadata
-   on disk. A refused close with an open member keeps that metadata until the member
-   closes and the caller retries. Editor/history responses
+   `file_processing/zip_writer.py:SpooledZipWriter` writes the bytes of
+   `zipfile.ZipFile(output, "w", ZIP_DEFLATED)` with `struct` and the documented
+   compressors, to a seekable output only. It exposes only member writes and
+   close, and keeps entry metadata on disk. A refused close with an open member
+   keeps that metadata until the member closes and the caller retries. Editor/history responses
    and sandbox file maps still allocate per file; only directory parsing is bounded.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and

@@ -19,7 +19,7 @@ from types import TracebackType
 from typing import IO, Literal, Self
 from zlib import crc32
 
-from onyx.db.zip_metadata import SpooledZipInfos, ZipEntryStore
+from onyx.db.zip_metadata import ZipEntryStore
 from onyx.file_processing.zip_limits import ZipMetadataLimitError
 
 # APPNOTE 4.3.12 central directory header, as in zipfile.structCentralDir.
@@ -213,59 +213,3 @@ class ZipIndex:
     def read(self, name: str) -> bytes:
         with self.open(self.getinfo(name)) as source:
             return source.read()
-
-
-class _UnkeptNames(dict[str, zipfile.ZipInfo]):
-    def __setitem__(self, name: str, info: zipfile.ZipInfo) -> None:
-        pass
-
-
-class _SpooledZipFile(zipfile.ZipFile):
-    """A ZIP writer that keeps written entries in SQLite, not in memory.
-
-    It does not warn about duplicate names; callers reject them first.
-    """
-
-    def __init__(self, file: IO[bytes]) -> None:
-        super().__init__(file, mode="w", compression=zipfile.ZIP_DEFLATED)
-        try:
-            self.filelist = SpooledZipInfos()
-        except BaseException:
-            super().close()
-            raise
-        self.NameToInfo = _UnkeptNames()
-
-    def close(self) -> None:
-        try:
-            super().close()
-        finally:
-            infos = self.filelist
-            if self.fp is None and isinstance(infos, SpooledZipInfos):
-                infos.close()
-
-
-class SpooledZipWriter:
-    """Write ZIP members with a disk-backed directory and no read interface."""
-
-    def __init__(self, file: IO[bytes]) -> None:
-        self._archive = _SpooledZipFile(file)
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        self.close()
-
-    def open(self, info: zipfile.ZipInfo, mode: Literal["w"] = "w") -> IO[bytes]:
-        return self._archive.open(info, mode=mode)
-
-    def writestr(self, info: zipfile.ZipInfo | str, data: str | bytes) -> None:
-        self._archive.writestr(info, data)
-
-    def close(self) -> None:
-        self._archive.close()
