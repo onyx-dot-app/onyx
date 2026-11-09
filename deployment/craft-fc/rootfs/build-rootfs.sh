@@ -12,9 +12,10 @@
 #                 ECR pull-through cache, <account>.dkr.ecr.<region>.amazonaws.com/docker-hub).
 #   --ca          PEM certificate of the egress proxy CA (public certificate
 #                 only). It goes into the trust stores.
-#   --daemon-bin  Static guest daemon, installed as /craft-fc/bin/guest-daemon. Required.
+#   --daemon-bin  Static guest daemon, installed at the --daemon-cmd program
+#                 path. Required.
 #   --daemon-cmd  Command line that craft-init supervises. Default:
-#                 /craft-fc/bin/guest-daemon. The program must be a file in /craft-fc.
+#                 /craft-fc/bin/guest-daemon. The program must be /craft-fc/bin/<name>.
 #   --relay-bin   Static egress relay (microvm/cmd/egress-relay), installed as
 #                 /craft-fc/bin/egress-relay. Required, unless --python-relay.
 #   --python-relay  Fallback: install egress-relay.py from this directory
@@ -83,20 +84,29 @@ require_static() {
   esac
 }
 require_static "${daemon_bin}"
-# The supervised program must be on the read-only root, outside every overlay.
-daemon_path=${daemon_cmd%% *}
-daemon_path=${daemon_path:-/craft-fc/bin/guest-daemon}
-case "${daemon_path}" in
-  /craft-fc/*/../* | /craft-fc/../* | */./*)
-    echo "--daemon-cmd: ${daemon_path} must be a plain path in /craft-fc" >&2
-    exit 2
-    ;;
-  /craft-fc/*) ;;
-  *)
-    echo "--daemon-cmd: ${daemon_path} is not in /craft-fc" >&2
+# init.conf is sourced by bash and busybox sh: no quoting or expansion characters.
+case "${daemon_cmd}" in
+  *[\"\$\`\\\']* | *$'\n'*)
+    echo "--daemon-cmd must not contain quotes, \$, \`, \\ or a newline" >&2
     exit 2
     ;;
 esac
+# The supervised program must be on the read-only root, outside every overlay.
+# --daemon-bin is installed at this path.
+daemon_path=${daemon_cmd%% *}
+daemon_path=${daemon_path:-/craft-fc/bin/guest-daemon}
+case "${daemon_path}" in
+  /craft-fc/bin/busybox | /craft-fc/bin/egress-relay)
+    echo "--daemon-cmd: ${daemon_path} is taken" >&2
+    exit 2
+    ;;
+  /craft-fc/bin/ | /craft-fc/bin/. | /craft-fc/bin/.. | /craft-fc/bin/*[!A-Za-z0-9._-]*) ;;
+  /craft-fc/bin/*) daemon_name_ok=1 ;;
+esac
+[ -n "${daemon_name_ok:-}" ] || {
+  echo "--daemon-cmd: ${daemon_path} must be /craft-fc/bin/<name>" >&2
+  exit 2
+}
 if [ -n "${relay_bin}" ]; then
   relay_kind=go
   require_static "${relay_bin}"
@@ -119,7 +129,9 @@ fi
   echo "${ca} must have exactly one certificate" >&2
   exit 1
 }
-openssl x509 -in "${ca}" -noout -text | grep -q 'CA:TRUE' || {
+# Capture first: grep -q can end the pipe early, and pipefail then fails it.
+ca_text=$(openssl x509 -in "${ca}" -noout -text)
+grep -q 'CA:TRUE' <<<"${ca_text}" || {
   echo "${ca} is not a CA certificate" >&2
   exit 1
 }
@@ -198,9 +210,9 @@ COPY craft-init /sbin/craft-init
 COPY attach.sh /craft-fc/lib/attach
 COPY egress-relay /craft-fc/bin/egress-relay
 COPY init.conf guest.env /craft-fc/etc/
-COPY guest-daemon /craft-fc/bin/guest-daemon
+COPY guest-daemon ${daemon_path}
 RUN chown -R root:root /craft-fc \\
- && chmod 0755 /craft-fc /craft-fc/bin /craft-fc/lib /craft-fc/etc /sbin/craft-init /craft-fc/lib/attach /craft-fc/bin/egress-relay /craft-fc/bin/guest-daemon \\
+ && chmod 0755 /craft-fc /craft-fc/bin /craft-fc/lib /craft-fc/etc /sbin/craft-init /craft-fc/lib/attach /craft-fc/bin/egress-relay ${daemon_path} \\
  && chmod 0644 /craft-fc/etc/init.conf /craft-fc/etc/guest.env \\
  && printf 'Acquire::http::Proxy "${proxy}";\nAcquire::https::Proxy "${proxy}";\n' >/etc/apt/apt.conf.d/80craft-egress-proxy \\
  && printf 'while IFS= read -r l; do case "\$l" in ""|"#"*) ;; *=*) export "\$l" ;; esac; done < /craft-fc/etc/guest.env\n' >/etc/profile.d/craft-guest-env.sh \\
@@ -226,10 +238,20 @@ cid=""
 
 # Every program that init runs after attach must be static and in /craft-fc.
 require_static "${tree}/craft-fc/bin/busybox"
-[ -f "${tree}${daemon_path}" ] || {
-  echo "--daemon-cmd: ${daemon_path} is not in the root tree" >&2
+[ -f "${tree}${daemon_path}" ] && [ -x "${tree}${daemon_path}" ] || {
+  echo "--daemon-cmd: ${daemon_path} is not an executable file in the root tree" >&2
   exit 1
 }
+require_static "${tree}${daemon_path}"
+# craft-init and attach run these busybox applets (nsenter and setpriv drop
+# the relay's privileges). Without one, a service or attach fails at boot.
+applets=$("${tree}/craft-fc/bin/busybox" --list)
+for applet in nsenter setpriv env mv cp sleep stat mount blockdev cat grep rm mkdir chown chmod tr; do
+  grep -qx "${applet}" <<<"${applets}" || {
+    echo "${tree}/craft-fc/bin/busybox has no ${applet} applet; craft-init and attach need it" >&2
+    exit 1
+  }
+done
 
 # Docker fills these at run time. The VM has no DNS: all traffic goes through the proxy.
 rm -f "${tree}/.dockerenv"
@@ -360,6 +382,9 @@ manifest = {
             {"drive_id": "scratch", "guest_dev": "/dev/vdb", "is_read_only": False, "fs": "ext4", "mount": "/mnt/scratch"},
             {"drive_id": "managed", "guest_dev": "/dev/vdc", "is_read_only": True, "fs": "ext4", "mount": "/workspace/managed"},
         ],
+        # attach mounts slot A. B is optional, the last drive, and stays
+        # unmounted until a skills update (MANAGED_DEV_B in init.conf).
+        "managed_slots": {"a": "/dev/vdc", "b": "/dev/vdf"},
         "overlay_dirs": ["/etc", "/home", "/root", "/opt", "/srv", "/usr", "/var", "/workspace"],
         "scratch_layout_version": 1,
     },

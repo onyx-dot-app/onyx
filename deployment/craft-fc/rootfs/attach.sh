@@ -10,10 +10,12 @@
 #    in OVERLAY_DIRS gets an overlay: the read-only root is the lower layer,
 #    the upper layer is on the scratch disk. A saved scratch disk therefore
 #    holds only the user's changes, and can go on top of a new template.
-# 2. Managed drive (ext4, Firecracker is_read_only): mounted read-only on
-#    /workspace/managed. The device itself is read-only, so root in the guest
-#    cannot write to it, also not after a remount. With no managed drive, an
-#    empty read-only tmpfs goes there, so the path is never writable.
+# 2. Managed drive slot A (ext4, Firecracker is_read_only): mounted read-only
+#    and noexec on /workspace/managed, with private propagation. The device
+#    itself is read-only, so root in the guest cannot write to it, also not
+#    after a remount. With no managed drive, an empty read-only tmpfs goes
+#    there, so the path is never writable. Slot B (MANAGED_DEV_B) is a spare
+#    for a live skills update; attach never mounts it (see README.md).
 #
 # It runs in the static busybox shell on the read-only root, and busybox runs
 # every command in this script itself (no PATH lookup). Once the /usr and /etc
@@ -26,6 +28,7 @@ PATH=/nonexistent
 
 SCRATCH_DEV=/dev/vdb
 MANAGED_DEV=/dev/vdc
+MANAGED_DEV_B=/dev/vdf
 SCRATCH_MNT=/mnt/scratch
 MANAGED_MNT=/workspace/managed
 OVERLAY_DIRS="/etc /home /root /opt /srv /usr /var /workspace"
@@ -72,11 +75,14 @@ fi
   log "${SCRATCH_DEV} is read-only"
   exit 1
 }
-if [ -b "${MANAGED_DEV}" ] && [ "$(dev_ro "${MANAGED_DEV}")" != 1 ]; then
-  # A writable managed drive is a host configuration error. Do not mount it.
-  log "${MANAGED_DEV} is not a read-only drive"
-  exit 1
-fi
+# A writable managed drive is a host configuration error. Do not mount it.
+# Slot B is optional: older templates do not have it.
+for dev in "${MANAGED_DEV}" ${MANAGED_DEV_B:+"${MANAGED_DEV_B}"}; do
+  if [ -b "${dev}" ] && [ "$(dev_ro "${dev}")" != 1 ]; then
+    log "${dev} is not a read-only drive"
+    exit 1
+  fi
+done
 
 # The template guest may have cached blocks of the template's scratch file.
 blockdev --flushbufs "${SCRATCH_DEV}"
@@ -111,11 +117,16 @@ done
 mkdir -p "${MANAGED_MNT}"
 if is_mnt "${MANAGED_MNT}"; then
   log "${MANAGED_MNT} already mounted"
-elif [ -b "${MANAGED_DEV}" ]; then
-  mount -t ext4 -o ro,noload,nodev,nosuid "${MANAGED_DEV}" "${MANAGED_MNT}"
 else
-  log "no managed drive ${MANAGED_DEV}; ${MANAGED_MNT} is an empty read-only tmpfs"
-  mount -t tmpfs -o ro,nodev,nosuid,noexec,size=4k,mode=0755 craft-managed-empty "${MANAGED_MNT}"
+  if [ -b "${MANAGED_DEV}" ]; then
+    mount -t ext4 -o ro,noload,nodev,nosuid,noexec "${MANAGED_DEV}" "${MANAGED_MNT}"
+  else
+    log "no managed drive ${MANAGED_DEV}; ${MANAGED_MNT} is an empty read-only tmpfs"
+    mount -t tmpfs -o ro,nodev,nosuid,noexec,size=4k,mode=0755 craft-managed-empty "${MANAGED_MNT}"
+  fi
+  # Private: a skills update mounts slot B beneath this mount and then
+  # detaches this one (README.md). Those events must stay local.
+  mount --make-private "${MANAGED_MNT}"
 fi
 
 : >/run/craft-fc/attached

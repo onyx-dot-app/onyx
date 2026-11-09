@@ -16,7 +16,8 @@ change the image or its Dockerfile.
 | `init.conf` | `/craft-fc/etc/init.conf` | Settings: daemon command, drive names, overlay directories |
 
 The build also writes `/craft-fc/etc/guest.env` (the service environment),
-installs the daemon as `/craft-fc/bin/guest-daemon`, and installs a static
+installs the daemon as `/craft-fc/bin/guest-daemon` (or the `--daemon-cmd`
+program path), and installs a static
 busybox (Debian `busybox-static`) as `/craft-fc/bin/busybox`.
 
 ### Rule: supervised programs live outside the overlays
@@ -39,8 +40,11 @@ restarts. Do not use `/sbin` or `/usr/...`: the image has a merged `/usr`
   from the overlays never runs as root on the restart path. A saved scratch
   disk can bring back changes to `/usr` and `/etc` at the next boot, so this
   also applies to a cold boot.
-- The build stops if the daemon, the relay or busybox is not a static x86-64
-  executable, or if the `--daemon-cmd` program is not a file in `/craft-fc`.
+- The build stops if the daemon, the Go egress relay (`--relay-bin`) or busybox
+  is not a static x86-64 executable, or if the `--daemon-cmd` program is not
+  `/craft-fc/bin/<name>`.
+- The build stops if busybox does not have an applet that init or `attach`
+  runs (for example `nsenter` and `setpriv`, which drop the relay's privileges).
 - The egress relay is a static Go binary (`--relay-bin`), so it needs no
   interpreter. The Python fallback (`--python-relay`) runs with
   `/usr/local/bin/python3`, which is under the `/usr` overlay. The rule does
@@ -69,13 +73,15 @@ sudo deployment/craft-fc/rootfs/build-rootfs.sh --image onyxdotapp/sandbox:v5.1.
   The manifest records the reference that was pulled.
 - `--ca`: the public certificate of the egress proxy CA. The build stops if the
   file has a private key, has more than one certificate or is not a CA.
-- `--daemon-bin`: the guest daemon (required), installed as `/craft-fc/bin/guest-daemon`.
+- `--daemon-bin`: the guest daemon (required), installed at the `--daemon-cmd`
+  program path.
 - `--relay-bin`: the egress relay, installed as `/craft-fc/bin/egress-relay`.
   The build stops if it is not a static x86-64 executable.
 - `--python-relay`: install `egress-relay.py` as the relay instead of
   `--relay-bin` (fallback, for tests).
 - `--daemon-cmd`: the command line that init supervises. The default is
-  `/craft-fc/bin/guest-daemon`. Its program must be a file in `/craft-fc`. The
+  `/craft-fc/bin/guest-daemon`. Its program must be `/craft-fc/bin/<name>`, and
+  the value must not have quotes, `$`, backticks, backslashes or newlines. The
   manifest records that path and its SHA256.
 
 Each build exports its own image ID (no shared tag), so two builds can run on
@@ -144,7 +150,13 @@ Attach the drives in this order. The guest finds them by order:
 |---|---|---|---|---|
 | `rootfs` | `/dev/vda` | `true` (root device) | `rootfs.ext4` | `/` |
 | `scratch` | `/dev/vdb` | `false` | Per-VM ext4, made by the host (empty or a saved disk) | `/mnt/scratch` |
-| `managed` | `/dev/vdc` | `true` | Per-VM ext4 with the managed files | `/workspace/managed` |
+| `managed` | `/dev/vdc` | `true` | Managed slot A: per-VM ext4 with the managed files (skills) | `/workspace/managed` |
+| `upload_a`, `upload_b` | `/dev/vdd`, `/dev/vde` | `true` | Upload slots of the template layout | not by `attach` |
+| `managed_b` | `/dev/vdf` | `true` | Managed slot B: the spare for a skills update. Always the last drive, so the other device names do not move. Optional: older templates do not have it | not by `attach` |
+
+`init.conf` sets the managed slot devices: `MANAGED_DEV` (slot A, default
+`/dev/vdc`) and `MANAGED_DEV_B` (slot B, default `/dev/vdf`). The manifest
+lists them in `guest.managed_slots`.
 
 Kernel boot arguments: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/craft-init`.
 Add `craft.scratch=defer` for a template boot.
@@ -154,6 +166,30 @@ also not with `mount -o remount,rw` or `blockdev --setrw`. `attach` stops (and
 init starts no service) if the guest sees the managed drive as writable. With
 no managed drive, `attach` mounts an empty read-only tmpfs on
 `/workspace/managed`, so the path is never writable.
+
+`attach` mounts slot A with `ro,noload,nodev,nosuid,noexec` and private mount
+propagation. It never mounts slot B. If slot B is there, `attach` only checks
+that the guest sees it as read-only.
+
+### Skills update without a new VM
+
+The guest daemon and the node agent do the update (ENG-4614), not `attach`:
+
+1. The host points the idle slot at the new managed image (Firecracker
+   `PATCH /drives`).
+2. The daemon mounts that slot with the same options on a staging directory
+   under `/run/craft-fc`, and moves a clone of it beneath the current mount
+   (`open_tree` with `OPEN_TREE_CLONE`, then `move_mount` with
+   `MOVE_MOUNT_BENEATH`, Linux 6.5 or later).
+3. The daemon unmounts the top (old) mount of `/workspace/managed` with
+   `MNT_DETACH`, then the staging mount. New opens see the new files at once.
+   Open files of the old mount keep working until they close.
+   A plain stacked mount does not work here: after the new mount goes on top,
+   no path reaches the old mount, so it cannot be unmounted.
+4. The old slot is now idle. The next update uses it (step 1).
+
+The daemon makes the new mount private too. Private mounts keep these mount
+and unmount events local. A container check (kernel 7.0) passed this order.
 
 Root in the guest can unmount `/workspace/managed` and then write to the
 directory below it. Those files go to the user's own scratch disk; the
@@ -212,8 +248,9 @@ PID files: `/run/craft-fc/guest-daemon.pid` and `/run/craft-fc/egress-relay.pid`
 3. Mounts an overlay on each of `/etc /home /root /opt /srv /usr /var /workspace`.
    The read-only root is the lower layer. The upper layer is
    `/mnt/scratch/overlay/<name>/upper` (for example `overlay/usr/upper`).
-4. Mounts the managed drive read-only on `/workspace/managed`, or an empty
-   read-only tmpfs if there is no managed drive.
+4. Mounts managed slot A read-only and `noexec`, with private propagation, on
+   `/workspace/managed`, or an empty read-only tmpfs if there is no managed
+   drive. Slot B stays unmounted.
 
 There is no overlay over the whole root. A saved scratch disk holds only the
 changes under these directories, so it can go on top of a shared template. `/usr`
@@ -230,8 +267,8 @@ The template build (ENG-4566) must not snapshot a guest with the scratch drive
 mounted. A scratch disk that changes under a mounted file system corrupts it.
 Use this order:
 
-1. Template boot with `craft.scratch=defer`. Attach the three drives. The scratch
-   and managed files can be empty placeholders. Init starts the daemon and the
+1. Template boot with `craft.scratch=defer`. Attach every drive of the
+   template layout. The scratch and managed files can be empty placeholders. Init starts the daemon and the
    relay. It does not mount the scratch or managed drive.
 2. Wait for the daemon health check. Pause the VM and create the snapshot.
 3. For each VM: put the VM's own `scratch.ext4` and `managed.ext4` at the drive
@@ -261,7 +298,10 @@ KVM host (see `../README.md`, "Boot test") and check:
 
 - `/proc/mounts` has the overlays and the read-only managed drive;
 - `apt-get install`, `pip install` and `npm install -g` work as root;
-- writes to `/workspace/managed` fail, also after `mount -o remount,rw`;
+- writes to `/workspace/managed` fail, also after `mount -o remount,rw`, and
+  a program on it does not run (`noexec`);
+- with slot B attached: it is not mounted, and a stacked mount of slot B plus
+  a lazy unmount of slot A leaves slot B on `/workspace/managed`;
 - after `kill -9` of the daemon, init starts it again and the guest keeps running;
 - a service that stops during the other service's backoff starts again;
 - a failed `attach` (for example no scratch drive) starts no service;
