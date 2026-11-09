@@ -109,6 +109,20 @@ const (
 	// --egress-ca-configmap) but cannot read a valid CA from it. No VM
 	// starts. Retry later; sandbox-proxy writes the CA at its first start.
 	ErrorReason_EGRESS_CA_UNAVAILABLE ErrorReason = 29
+	// Session saves (ENG-4572).
+	// UploadCapture: no spooled capture with this ID (never made, uploaded,
+	// discarded or expired). Capture again.
+	ErrorReason_CAPTURE_NOT_FOUND ErrorReason = 32
+	// CaptureSession: the archive is larger than the agent allows
+	// (--capture-max-bytes or the request limit).
+	ErrorReason_CAPTURE_TOO_LARGE ErrorReason = 33
+	// UploadCapture or RestoreSession: the presigned request failed (network
+	// error or a non-2xx status), or the URL is not allowed.
+	ErrorReason_TRANSFER_FAILED ErrorReason = 34
+	// RestoreSession: the downloaded archive has another size or SHA-256 than
+	// the request names. UploadCapture: the signed Content-Length is not the
+	// spool size.
+	ErrorReason_ARCHIVE_MISMATCH ErrorReason = 35
 )
 
 // Enum value maps for ErrorReason.
@@ -144,6 +158,10 @@ var (
 		27: "MANAGED_MOUNT_FAILED",
 		28: "NODE_DRAINING",
 		29: "EGRESS_CA_UNAVAILABLE",
+		32: "CAPTURE_NOT_FOUND",
+		33: "CAPTURE_TOO_LARGE",
+		34: "TRANSFER_FAILED",
+		35: "ARCHIVE_MISMATCH",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -176,6 +194,10 @@ var (
 		"MANAGED_MOUNT_FAILED":     27,
 		"NODE_DRAINING":            28,
 		"EGRESS_CA_UNAVAILABLE":    29,
+		"CAPTURE_NOT_FOUND":        32,
+		"CAPTURE_TOO_LARGE":        33,
+		"TRANSFER_FAILED":          34,
+		"ARCHIVE_MISMATCH":         35,
 	}
 )
 
@@ -1116,6 +1138,781 @@ func (x *CloseConnectionsResponse) GetClosed() uint32 {
 	return 0
 }
 
+// A presigned request from the api_server (FileStore presign_upload or
+// presign_download). The agent sends exactly these headers.
+type PresignedRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// https, or http when the agent runs with --transfer-allow-http.
+	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	// "PUT" for UploadCapture, "GET" for RestoreSession.
+	Method        string            `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
+	Headers       map[string]string `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PresignedRequest) Reset() {
+	*x = PresignedRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PresignedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PresignedRequest) ProtoMessage() {}
+
+func (x *PresignedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PresignedRequest.ProtoReflect.Descriptor instead.
+func (*PresignedRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *PresignedRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *PresignedRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *PresignedRequest) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+// Archive limits (craft.sandboxd.v1.ArchiveLimits). 0 means the default.
+type ArchiveLimits struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	MaxStoredBytes   int64                  `protobuf:"varint,1,opt,name=max_stored_bytes,json=maxStoredBytes,proto3" json:"max_stored_bytes,omitempty"`
+	MaxExpandedBytes int64                  `protobuf:"varint,2,opt,name=max_expanded_bytes,json=maxExpandedBytes,proto3" json:"max_expanded_bytes,omitempty"`
+	MaxEntries       int64                  `protobuf:"varint,3,opt,name=max_entries,json=maxEntries,proto3" json:"max_entries,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ArchiveLimits) Reset() {
+	*x = ArchiveLimits{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveLimits) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveLimits) ProtoMessage() {}
+
+func (x *ArchiveLimits) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveLimits.ProtoReflect.Descriptor instead.
+func (*ArchiveLimits) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ArchiveLimits) GetMaxStoredBytes() int64 {
+	if x != nil {
+		return x.MaxStoredBytes
+	}
+	return 0
+}
+
+func (x *ArchiveLimits) GetMaxExpandedBytes() int64 {
+	if x != nil {
+		return x.MaxExpandedBytes
+	}
+	return 0
+}
+
+func (x *ArchiveLimits) GetMaxEntries() int64 {
+	if x != nil {
+		return x.MaxEntries
+	}
+	return 0
+}
+
+type CaptureSessionRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId  string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Attempt    uint64                 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Generation uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+	// Secret: the VM's guest daemon key (CreateRequest.sandboxd_key).
+	SandboxdKey string `protobuf:"bytes,4,opt,name=sandboxd_key,json=sandboxdKey,proto3" json:"sandboxd_key,omitempty"`
+	SessionId   string `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Empty: the daemon defaults (see craft.sandboxd.v1.CaptureSessionRequest).
+	Roots         []string       `protobuf:"bytes,6,rep,name=roots,proto3" json:"roots,omitempty"`
+	ExcludeNames  []string       `protobuf:"bytes,7,rep,name=exclude_names,json=excludeNames,proto3" json:"exclude_names,omitempty"`
+	Limits        *ArchiveLimits `protobuf:"bytes,8,opt,name=limits,proto3" json:"limits,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureSessionRequest) Reset() {
+	*x = CaptureSessionRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureSessionRequest) ProtoMessage() {}
+
+func (x *CaptureSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureSessionRequest.ProtoReflect.Descriptor instead.
+func (*CaptureSessionRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CaptureSessionRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *CaptureSessionRequest) GetAttempt() uint64 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *CaptureSessionRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *CaptureSessionRequest) GetSandboxdKey() string {
+	if x != nil {
+		return x.SandboxdKey
+	}
+	return ""
+}
+
+func (x *CaptureSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CaptureSessionRequest) GetRoots() []string {
+	if x != nil {
+		return x.Roots
+	}
+	return nil
+}
+
+func (x *CaptureSessionRequest) GetExcludeNames() []string {
+	if x != nil {
+		return x.ExcludeNames
+	}
+	return nil
+}
+
+func (x *CaptureSessionRequest) GetLimits() *ArchiveLimits {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+type CaptureSessionResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	CaptureId string                 `protobuf:"bytes,1,opt,name=capture_id,json=captureId,proto3" json:"capture_id,omitempty"`
+	// Archive size and hex SHA-256, as the agent received and spooled it.
+	SizeBytes int64  `protobuf:"varint,2,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Sha256    string `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// The guest daemon's summary of the archive.
+	Files         int64    `protobuf:"varint,4,opt,name=files,proto3" json:"files,omitempty"`
+	Directories   int64    `protobuf:"varint,5,opt,name=directories,proto3" json:"directories,omitempty"`
+	ExpandedBytes int64    `protobuf:"varint,6,opt,name=expanded_bytes,json=expandedBytes,proto3" json:"expanded_bytes,omitempty"`
+	Excluded      int64    `protobuf:"varint,7,opt,name=excluded,proto3" json:"excluded,omitempty"`
+	Skipped       int64    `protobuf:"varint,8,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	Changed       int64    `protobuf:"varint,9,opt,name=changed,proto3" json:"changed,omitempty"`
+	Roots         []string `protobuf:"bytes,10,rep,name=roots,proto3" json:"roots,omitempty"`
+	CaptureMs     uint64   `protobuf:"varint,11,opt,name=capture_ms,json=captureMs,proto3" json:"capture_ms,omitempty"`
+	// The agent deletes the spool after this time.
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureSessionResponse) Reset() {
+	*x = CaptureSessionResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureSessionResponse) ProtoMessage() {}
+
+func (x *CaptureSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureSessionResponse.ProtoReflect.Descriptor instead.
+func (*CaptureSessionResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CaptureSessionResponse) GetCaptureId() string {
+	if x != nil {
+		return x.CaptureId
+	}
+	return ""
+}
+
+func (x *CaptureSessionResponse) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *CaptureSessionResponse) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetDirectories() int64 {
+	if x != nil {
+		return x.Directories
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetExpandedBytes() int64 {
+	if x != nil {
+		return x.ExpandedBytes
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetExcluded() int64 {
+	if x != nil {
+		return x.Excluded
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetSkipped() int64 {
+	if x != nil {
+		return x.Skipped
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetChanged() int64 {
+	if x != nil {
+		return x.Changed
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetRoots() []string {
+	if x != nil {
+		return x.Roots
+	}
+	return nil
+}
+
+func (x *CaptureSessionResponse) GetCaptureMs() uint64 {
+	if x != nil {
+		return x.CaptureMs
+	}
+	return 0
+}
+
+func (x *CaptureSessionResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+type UploadCaptureRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CaptureId     string                 `protobuf:"bytes,1,opt,name=capture_id,json=captureId,proto3" json:"capture_id,omitempty"`
+	Request       *PresignedRequest      `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadCaptureRequest) Reset() {
+	*x = UploadCaptureRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadCaptureRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadCaptureRequest) ProtoMessage() {}
+
+func (x *UploadCaptureRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadCaptureRequest.ProtoReflect.Descriptor instead.
+func (*UploadCaptureRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *UploadCaptureRequest) GetCaptureId() string {
+	if x != nil {
+		return x.CaptureId
+	}
+	return ""
+}
+
+func (x *UploadCaptureRequest) GetRequest() *PresignedRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type UploadCaptureResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SizeBytes int64                  `protobuf:"varint,1,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Sha256    string                 `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// HTTP status of the PUT (2xx) and the ETag header, if any.
+	HttpStatus    uint32 `protobuf:"varint,3,opt,name=http_status,json=httpStatus,proto3" json:"http_status,omitempty"`
+	Etag          string `protobuf:"bytes,4,opt,name=etag,proto3" json:"etag,omitempty"`
+	UploadMs      uint64 `protobuf:"varint,5,opt,name=upload_ms,json=uploadMs,proto3" json:"upload_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadCaptureResponse) Reset() {
+	*x = UploadCaptureResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadCaptureResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadCaptureResponse) ProtoMessage() {}
+
+func (x *UploadCaptureResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadCaptureResponse.ProtoReflect.Descriptor instead.
+func (*UploadCaptureResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *UploadCaptureResponse) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *UploadCaptureResponse) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *UploadCaptureResponse) GetHttpStatus() uint32 {
+	if x != nil {
+		return x.HttpStatus
+	}
+	return 0
+}
+
+func (x *UploadCaptureResponse) GetEtag() string {
+	if x != nil {
+		return x.Etag
+	}
+	return ""
+}
+
+func (x *UploadCaptureResponse) GetUploadMs() uint64 {
+	if x != nil {
+		return x.UploadMs
+	}
+	return 0
+}
+
+type DiscardCaptureRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CaptureId     string                 `protobuf:"bytes,1,opt,name=capture_id,json=captureId,proto3" json:"capture_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardCaptureRequest) Reset() {
+	*x = DiscardCaptureRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardCaptureRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardCaptureRequest) ProtoMessage() {}
+
+func (x *DiscardCaptureRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardCaptureRequest.ProtoReflect.Descriptor instead.
+func (*DiscardCaptureRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *DiscardCaptureRequest) GetCaptureId() string {
+	if x != nil {
+		return x.CaptureId
+	}
+	return ""
+}
+
+type DiscardCaptureResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// False if there was no such capture.
+	Discarded     bool `protobuf:"varint,1,opt,name=discarded,proto3" json:"discarded,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardCaptureResponse) Reset() {
+	*x = DiscardCaptureResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardCaptureResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardCaptureResponse) ProtoMessage() {}
+
+func (x *DiscardCaptureResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardCaptureResponse.ProtoReflect.Descriptor instead.
+func (*DiscardCaptureResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DiscardCaptureResponse) GetDiscarded() bool {
+	if x != nil {
+		return x.Discarded
+	}
+	return false
+}
+
+type RestoreSessionRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId  string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Attempt    uint64                 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Generation uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+	// Secret: the VM's guest daemon key.
+	SandboxdKey string            `protobuf:"bytes,4,opt,name=sandboxd_key,json=sandboxdKey,proto3" json:"sandboxd_key,omitempty"`
+	SessionId   string            `protobuf:"bytes,5,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Request     *PresignedRequest `protobuf:"bytes,6,opt,name=request,proto3" json:"request,omitempty"`
+	// Exact archive size and hex SHA-256 (from CaptureSessionResponse).
+	SizeBytes     int64          `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Sha256        string         `protobuf:"bytes,8,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Roots         []string       `protobuf:"bytes,9,rep,name=roots,proto3" json:"roots,omitempty"`
+	Limits        *ArchiveLimits `protobuf:"bytes,10,opt,name=limits,proto3" json:"limits,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreSessionRequest) Reset() {
+	*x = RestoreSessionRequest{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreSessionRequest) ProtoMessage() {}
+
+func (x *RestoreSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreSessionRequest.ProtoReflect.Descriptor instead.
+func (*RestoreSessionRequest) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *RestoreSessionRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *RestoreSessionRequest) GetAttempt() uint64 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *RestoreSessionRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *RestoreSessionRequest) GetSandboxdKey() string {
+	if x != nil {
+		return x.SandboxdKey
+	}
+	return ""
+}
+
+func (x *RestoreSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *RestoreSessionRequest) GetRequest() *PresignedRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *RestoreSessionRequest) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *RestoreSessionRequest) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *RestoreSessionRequest) GetRoots() []string {
+	if x != nil {
+		return x.Roots
+	}
+	return nil
+}
+
+func (x *RestoreSessionRequest) GetLimits() *ArchiveLimits {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+type RestoreSessionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Files         int64                  `protobuf:"varint,1,opt,name=files,proto3" json:"files,omitempty"`
+	Directories   int64                  `protobuf:"varint,2,opt,name=directories,proto3" json:"directories,omitempty"`
+	ExpandedBytes int64                  `protobuf:"varint,3,opt,name=expanded_bytes,json=expandedBytes,proto3" json:"expanded_bytes,omitempty"`
+	Roots         []string               `protobuf:"bytes,4,rep,name=roots,proto3" json:"roots,omitempty"`
+	// Time from the call to the restored files.
+	RestoreMs     uint64 `protobuf:"varint,5,opt,name=restore_ms,json=restoreMs,proto3" json:"restore_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreSessionResponse) Reset() {
+	*x = RestoreSessionResponse{}
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreSessionResponse) ProtoMessage() {}
+
+func (x *RestoreSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreSessionResponse.ProtoReflect.Descriptor instead.
+func (*RestoreSessionResponse) Descriptor() ([]byte, []int) {
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *RestoreSessionResponse) GetFiles() int64 {
+	if x != nil {
+		return x.Files
+	}
+	return 0
+}
+
+func (x *RestoreSessionResponse) GetDirectories() int64 {
+	if x != nil {
+		return x.Directories
+	}
+	return 0
+}
+
+func (x *RestoreSessionResponse) GetExpandedBytes() int64 {
+	if x != nil {
+		return x.ExpandedBytes
+	}
+	return 0
+}
+
+func (x *RestoreSessionResponse) GetRoots() []string {
+	if x != nil {
+		return x.Roots
+	}
+	return nil
+}
+
+func (x *RestoreSessionResponse) GetRestoreMs() uint64 {
+	if x != nil {
+		return x.RestoreMs
+	}
+	return 0
+}
+
 type NodeInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1124,7 +1921,7 @@ type NodeInfoRequest struct {
 
 func (x *NodeInfoRequest) Reset() {
 	*x = NodeInfoRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1136,7 +1933,7 @@ func (x *NodeInfoRequest) String() string {
 func (*NodeInfoRequest) ProtoMessage() {}
 
 func (x *NodeInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[11]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1149,7 +1946,7 @@ func (x *NodeInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInfoRequest.ProtoReflect.Descriptor instead.
 func (*NodeInfoRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{11}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{21}
 }
 
 type NodeInfoResponse struct {
@@ -1181,7 +1978,7 @@ type NodeInfoResponse struct {
 
 func (x *NodeInfoResponse) Reset() {
 	*x = NodeInfoResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1193,7 +1990,7 @@ func (x *NodeInfoResponse) String() string {
 func (*NodeInfoResponse) ProtoMessage() {}
 
 func (x *NodeInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[12]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1206,7 +2003,7 @@ func (x *NodeInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeInfoResponse.ProtoReflect.Descriptor instead.
 func (*NodeInfoResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{12}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *NodeInfoResponse) GetMemTotalMib() uint64 {
@@ -1319,7 +2116,7 @@ type DrainStatus struct {
 
 func (x *DrainStatus) Reset() {
 	*x = DrainStatus{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1331,7 +2128,7 @@ func (x *DrainStatus) String() string {
 func (*DrainStatus) ProtoMessage() {}
 
 func (x *DrainStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[13]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1344,7 +2141,7 @@ func (x *DrainStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DrainStatus.ProtoReflect.Descriptor instead.
 func (*DrainStatus) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{13}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DrainStatus) GetState() DrainState {
@@ -1392,7 +2189,7 @@ type SetDrainRequest struct {
 
 func (x *SetDrainRequest) Reset() {
 	*x = SetDrainRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1404,7 +2201,7 @@ func (x *SetDrainRequest) String() string {
 func (*SetDrainRequest) ProtoMessage() {}
 
 func (x *SetDrainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[14]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1417,7 +2214,7 @@ func (x *SetDrainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDrainRequest.ProtoReflect.Descriptor instead.
 func (*SetDrainRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{14}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetDrainRequest) GetDrain() bool {
@@ -1436,7 +2233,7 @@ type SetDrainResponse struct {
 
 func (x *SetDrainResponse) Reset() {
 	*x = SetDrainResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[15]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1448,7 +2245,7 @@ func (x *SetDrainResponse) String() string {
 func (*SetDrainResponse) ProtoMessage() {}
 
 func (x *SetDrainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[15]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1461,7 +2258,7 @@ func (x *SetDrainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDrainResponse.ProtoReflect.Descriptor instead.
 func (*SetDrainResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{15}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetDrainResponse) GetDrain() *DrainStatus {
@@ -1504,7 +2301,7 @@ type TemplateInfo struct {
 
 func (x *TemplateInfo) Reset() {
 	*x = TemplateInfo{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[16]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +2313,7 @@ func (x *TemplateInfo) String() string {
 func (*TemplateInfo) ProtoMessage() {}
 
 func (x *TemplateInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[16]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +2326,7 @@ func (x *TemplateInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TemplateInfo.ProtoReflect.Descriptor instead.
 func (*TemplateInfo) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{16}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *TemplateInfo) GetVersion() string {
@@ -1645,7 +2442,7 @@ type BuildTemplateRequest struct {
 
 func (x *BuildTemplateRequest) Reset() {
 	*x = BuildTemplateRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[17]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1657,7 +2454,7 @@ func (x *BuildTemplateRequest) String() string {
 func (*BuildTemplateRequest) ProtoMessage() {}
 
 func (x *BuildTemplateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[17]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1670,7 +2467,7 @@ func (x *BuildTemplateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildTemplateRequest.ProtoReflect.Descriptor instead.
 func (*BuildTemplateRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{17}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{27}
 }
 
 type BuildTemplateResponse struct {
@@ -1688,7 +2485,7 @@ type BuildTemplateResponse struct {
 
 func (x *BuildTemplateResponse) Reset() {
 	*x = BuildTemplateResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[18]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1700,7 +2497,7 @@ func (x *BuildTemplateResponse) String() string {
 func (*BuildTemplateResponse) ProtoMessage() {}
 
 func (x *BuildTemplateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[18]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1713,7 +2510,7 @@ func (x *BuildTemplateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuildTemplateResponse.ProtoReflect.Descriptor instead.
 func (*BuildTemplateResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{18}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *BuildTemplateResponse) GetTemplate() *TemplateInfo {
@@ -1757,7 +2554,7 @@ type PutManagedImageRequest struct {
 
 func (x *PutManagedImageRequest) Reset() {
 	*x = PutManagedImageRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[19]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1769,7 +2566,7 @@ func (x *PutManagedImageRequest) String() string {
 func (*PutManagedImageRequest) ProtoMessage() {}
 
 func (x *PutManagedImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[19]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1782,7 +2579,7 @@ func (x *PutManagedImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutManagedImageRequest.ProtoReflect.Descriptor instead.
 func (*PutManagedImageRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{19}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *PutManagedImageRequest) GetPart() isPutManagedImageRequest_Part {
@@ -1840,7 +2637,7 @@ type ManagedBundleHeader struct {
 
 func (x *ManagedBundleHeader) Reset() {
 	*x = ManagedBundleHeader{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[20]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1852,7 +2649,7 @@ func (x *ManagedBundleHeader) String() string {
 func (*ManagedBundleHeader) ProtoMessage() {}
 
 func (x *ManagedBundleHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[20]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1865,7 +2662,7 @@ func (x *ManagedBundleHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedBundleHeader.ProtoReflect.Descriptor instead.
 func (*ManagedBundleHeader) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{20}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ManagedBundleHeader) GetSha256() string {
@@ -1897,7 +2694,7 @@ type PutManagedImageResponse struct {
 
 func (x *PutManagedImageResponse) Reset() {
 	*x = PutManagedImageResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[21]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1909,7 +2706,7 @@ func (x *PutManagedImageResponse) String() string {
 func (*PutManagedImageResponse) ProtoMessage() {}
 
 func (x *PutManagedImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[21]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1922,7 +2719,7 @@ func (x *PutManagedImageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutManagedImageResponse.ProtoReflect.Descriptor instead.
 func (*PutManagedImageResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{21}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *PutManagedImageResponse) GetImage() *ManagedImageInfo {
@@ -1975,7 +2772,7 @@ type ManagedImageInfo struct {
 
 func (x *ManagedImageInfo) Reset() {
 	*x = ManagedImageInfo{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[22]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1987,7 +2784,7 @@ func (x *ManagedImageInfo) String() string {
 func (*ManagedImageInfo) ProtoMessage() {}
 
 func (x *ManagedImageInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[22]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2000,7 +2797,7 @@ func (x *ManagedImageInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedImageInfo.ProtoReflect.Descriptor instead.
 func (*ManagedImageInfo) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{22}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ManagedImageInfo) GetImageId() string {
@@ -2072,7 +2869,7 @@ type SwapManagedRequest struct {
 
 func (x *SwapManagedRequest) Reset() {
 	*x = SwapManagedRequest{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[23]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2084,7 +2881,7 @@ func (x *SwapManagedRequest) String() string {
 func (*SwapManagedRequest) ProtoMessage() {}
 
 func (x *SwapManagedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[23]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2097,7 +2894,7 @@ func (x *SwapManagedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwapManagedRequest.ProtoReflect.Descriptor instead.
 func (*SwapManagedRequest) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{23}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SwapManagedRequest) GetImageId() string {
@@ -2129,7 +2926,7 @@ type SwapTarget struct {
 
 func (x *SwapTarget) Reset() {
 	*x = SwapTarget{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[24]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2141,7 +2938,7 @@ func (x *SwapTarget) String() string {
 func (*SwapTarget) ProtoMessage() {}
 
 func (x *SwapTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[24]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2154,7 +2951,7 @@ func (x *SwapTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwapTarget.ProtoReflect.Descriptor instead.
 func (*SwapTarget) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{24}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *SwapTarget) GetSandboxId() string {
@@ -2195,7 +2992,7 @@ type SwapManagedResponse struct {
 
 func (x *SwapManagedResponse) Reset() {
 	*x = SwapManagedResponse{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[25]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2207,7 +3004,7 @@ func (x *SwapManagedResponse) String() string {
 func (*SwapManagedResponse) ProtoMessage() {}
 
 func (x *SwapManagedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[25]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2220,7 +3017,7 @@ func (x *SwapManagedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwapManagedResponse.ProtoReflect.Descriptor instead.
 func (*SwapManagedResponse) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{25}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SwapManagedResponse) GetResults() []*SwapResult {
@@ -2253,7 +3050,7 @@ type SwapResult struct {
 
 func (x *SwapResult) Reset() {
 	*x = SwapResult{}
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[26]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2265,7 +3062,7 @@ func (x *SwapResult) String() string {
 func (*SwapResult) ProtoMessage() {}
 
 func (x *SwapResult) ProtoReflect() protoreflect.Message {
-	mi := &file_hostagent_v1_hostagent_proto_msgTypes[26]
+	mi := &file_hostagent_v1_hostagent_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2278,7 +3075,7 @@ func (x *SwapResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwapResult.ProtoReflect.Descriptor instead.
 func (*SwapResult) Descriptor() ([]byte, []int) {
-	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{26}
+	return file_hostagent_v1_hostagent_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SwapResult) GetSandboxId() string {
@@ -2412,7 +3209,91 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"generation\x18\x04 \x01(\x04R\n" +
 	"generation\"2\n" +
 	"\x18CloseConnectionsResponse\x12\x16\n" +
-	"\x06closed\x18\x01 \x01(\rR\x06closed\"\x11\n" +
+	"\x06closed\x18\x01 \x01(\rR\x06closed\"\xc5\x01\n" +
+	"\x10PresignedRequest\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\x12K\n" +
+	"\aheaders\x18\x03 \x03(\v21.craft.hostagent.v1.PresignedRequest.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x01\n" +
+	"\rArchiveLimits\x12(\n" +
+	"\x10max_stored_bytes\x18\x01 \x01(\x03R\x0emaxStoredBytes\x12,\n" +
+	"\x12max_expanded_bytes\x18\x02 \x01(\x03R\x10maxExpandedBytes\x12\x1f\n" +
+	"\vmax_entries\x18\x03 \x01(\x03R\n" +
+	"maxEntries\"\xa8\x02\n" +
+	"\x15CaptureSessionRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
+	"\aattempt\x18\x02 \x01(\x04R\aattempt\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x03 \x01(\x04R\n" +
+	"generation\x12!\n" +
+	"\fsandboxd_key\x18\x04 \x01(\tR\vsandboxdKey\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x05 \x01(\tR\tsessionId\x12\x14\n" +
+	"\x05roots\x18\x06 \x03(\tR\x05roots\x12#\n" +
+	"\rexclude_names\x18\a \x03(\tR\fexcludeNames\x129\n" +
+	"\x06limits\x18\b \x01(\v2!.craft.hostagent.v1.ArchiveLimitsR\x06limits\"\x8d\x03\n" +
+	"\x16CaptureSessionResponse\x12\x1d\n" +
+	"\n" +
+	"capture_id\x18\x01 \x01(\tR\tcaptureId\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x14\n" +
+	"\x05files\x18\x04 \x01(\x03R\x05files\x12 \n" +
+	"\vdirectories\x18\x05 \x01(\x03R\vdirectories\x12%\n" +
+	"\x0eexpanded_bytes\x18\x06 \x01(\x03R\rexpandedBytes\x12\x1a\n" +
+	"\bexcluded\x18\a \x01(\x03R\bexcluded\x12\x18\n" +
+	"\askipped\x18\b \x01(\x03R\askipped\x12\x18\n" +
+	"\achanged\x18\t \x01(\x03R\achanged\x12\x14\n" +
+	"\x05roots\x18\n" +
+	" \x03(\tR\x05roots\x12\x1d\n" +
+	"\n" +
+	"capture_ms\x18\v \x01(\x04R\tcaptureMs\x129\n" +
+	"\n" +
+	"expires_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"u\n" +
+	"\x14UploadCaptureRequest\x12\x1d\n" +
+	"\n" +
+	"capture_id\x18\x01 \x01(\tR\tcaptureId\x12>\n" +
+	"\arequest\x18\x02 \x01(\v2$.craft.hostagent.v1.PresignedRequestR\arequest\"\xa0\x01\n" +
+	"\x15UploadCaptureResponse\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x01 \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12\x1f\n" +
+	"\vhttp_status\x18\x03 \x01(\rR\n" +
+	"httpStatus\x12\x12\n" +
+	"\x04etag\x18\x04 \x01(\tR\x04etag\x12\x1b\n" +
+	"\tupload_ms\x18\x05 \x01(\x04R\buploadMs\"6\n" +
+	"\x15DiscardCaptureRequest\x12\x1d\n" +
+	"\n" +
+	"capture_id\x18\x01 \x01(\tR\tcaptureId\"6\n" +
+	"\x16DiscardCaptureResponse\x12\x1c\n" +
+	"\tdiscarded\x18\x01 \x01(\bR\tdiscarded\"\xfa\x02\n" +
+	"\x15RestoreSessionRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
+	"\aattempt\x18\x02 \x01(\x04R\aattempt\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x03 \x01(\x04R\n" +
+	"generation\x12!\n" +
+	"\fsandboxd_key\x18\x04 \x01(\tR\vsandboxdKey\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x05 \x01(\tR\tsessionId\x12>\n" +
+	"\arequest\x18\x06 \x01(\v2$.craft.hostagent.v1.PresignedRequestR\arequest\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\a \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06sha256\x18\b \x01(\tR\x06sha256\x12\x14\n" +
+	"\x05roots\x18\t \x03(\tR\x05roots\x129\n" +
+	"\x06limits\x18\n" +
+	" \x01(\v2!.craft.hostagent.v1.ArchiveLimitsR\x06limits\"\xac\x01\n" +
+	"\x16RestoreSessionResponse\x12\x14\n" +
+	"\x05files\x18\x01 \x01(\x03R\x05files\x12 \n" +
+	"\vdirectories\x18\x02 \x01(\x03R\vdirectories\x12%\n" +
+	"\x0eexpanded_bytes\x18\x03 \x01(\x03R\rexpandedBytes\x12\x14\n" +
+	"\x05roots\x18\x04 \x03(\tR\x05roots\x12\x1d\n" +
+	"\n" +
+	"restore_ms\x18\x05 \x01(\x04R\trestoreMs\"\x11\n" +
 	"\x0fNodeInfoRequest\"\xcb\x04\n" +
 	"\x10NodeInfoResponse\x12\"\n" +
 	"\rmem_total_mib\x18\x01 \x01(\x04R\vmemTotalMib\x12*\n" +
@@ -2515,7 +3396,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x06active\x18\x05 \x01(\x0e2\x1f.craft.hostagent.v1.ManagedSlotR\x06active\x12\x18\n" +
 	"\achanged\x18\x06 \x01(\bR\achanged\x12\x0e\n" +
 	"\x02ms\x18\a \x01(\x04R\x02ms\x12&\n" +
-	"\x0fprevious_in_use\x18\b \x01(\bR\rpreviousInUse*\xbc\x05\n" +
+	"\x0fprevious_in_use\x18\b \x01(\bR\rpreviousInUse*\x95\x06\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -2549,7 +3430,11 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x11MANAGED_SLOT_BUSY\x10\x1a\x12\x18\n" +
 	"\x14MANAGED_MOUNT_FAILED\x10\x1b\x12\x11\n" +
 	"\rNODE_DRAINING\x10\x1c\x12\x19\n" +
-	"\x15EGRESS_CA_UNAVAILABLE\x10\x1d*t\n" +
+	"\x15EGRESS_CA_UNAVAILABLE\x10\x1d\x12\x15\n" +
+	"\x11CAPTURE_NOT_FOUND\x10 \x12\x15\n" +
+	"\x11CAPTURE_TOO_LARGE\x10!\x12\x13\n" +
+	"\x0fTRANSFER_FAILED\x10\"\x12\x14\n" +
+	"\x10ARCHIVE_MISMATCH\x10#*t\n" +
 	"\n" +
 	"DrainState\x12\x1b\n" +
 	"\x17DRAIN_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -2564,13 +3449,18 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x14VM_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11VM_STATE_STARTING\x10\x01\x12\x14\n" +
 	"\x10VM_STATE_RUNNING\x10\x02\x12\x13\n" +
-	"\x0fVM_STATE_EXITED\x10\x032\x8d\a\n" +
+	"\x0fVM_STATE_EXITED\x10\x032\xae\n" +
+	"\n" +
 	"\tHostAgent\x12O\n" +
 	"\x06Create\x12!.craft.hostagent.v1.CreateRequest\x1a\".craft.hostagent.v1.CreateResponse\x12I\n" +
 	"\x04Stop\x12\x1f.craft.hostagent.v1.StopRequest\x1a .craft.hostagent.v1.StopResponse\x12I\n" +
 	"\x04List\x12\x1f.craft.hostagent.v1.ListRequest\x1a .craft.hostagent.v1.ListResponse\x12U\n" +
 	"\bNodeInfo\x12#.craft.hostagent.v1.NodeInfoRequest\x1a$.craft.hostagent.v1.NodeInfoResponse\x12m\n" +
-	"\x10CloseConnections\x12+.craft.hostagent.v1.CloseConnectionsRequest\x1a,.craft.hostagent.v1.CloseConnectionsResponse\x12H\n" +
+	"\x10CloseConnections\x12+.craft.hostagent.v1.CloseConnectionsRequest\x1a,.craft.hostagent.v1.CloseConnectionsResponse\x12g\n" +
+	"\x0eCaptureSession\x12).craft.hostagent.v1.CaptureSessionRequest\x1a*.craft.hostagent.v1.CaptureSessionResponse\x12d\n" +
+	"\rUploadCapture\x12(.craft.hostagent.v1.UploadCaptureRequest\x1a).craft.hostagent.v1.UploadCaptureResponse\x12g\n" +
+	"\x0eDiscardCapture\x12).craft.hostagent.v1.DiscardCaptureRequest\x1a*.craft.hostagent.v1.DiscardCaptureResponse\x12g\n" +
+	"\x0eRestoreSession\x12).craft.hostagent.v1.RestoreSessionRequest\x1a*.craft.hostagent.v1.RestoreSessionResponse\x12H\n" +
 	"\x04Dial\x12\x1d.craft.hostagent.v1.DialFrame\x1a\x1d.craft.hostagent.v1.DialFrame(\x010\x01\x12d\n" +
 	"\rBuildTemplate\x12(.craft.hostagent.v1.BuildTemplateRequest\x1a).craft.hostagent.v1.BuildTemplateResponse\x12l\n" +
 	"\x0fPutManagedImage\x12*.craft.hostagent.v1.PutManagedImageRequest\x1a+.craft.hostagent.v1.PutManagedImageResponse(\x01\x12^\n" +
@@ -2590,7 +3480,7 @@ func file_hostagent_v1_hostagent_proto_rawDescGZIP() []byte {
 }
 
 var file_hostagent_v1_hostagent_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_hostagent_v1_hostagent_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_hostagent_v1_hostagent_proto_goTypes = []any{
 	(ErrorReason)(0),                 // 0: craft.hostagent.v1.ErrorReason
 	(DrainState)(0),                  // 1: craft.hostagent.v1.DrainState
@@ -2607,71 +3497,96 @@ var file_hostagent_v1_hostagent_proto_goTypes = []any{
 	(*CloseConnectionsRequest)(nil),  // 12: craft.hostagent.v1.CloseConnectionsRequest
 	(*DialFrame)(nil),                // 13: craft.hostagent.v1.DialFrame
 	(*CloseConnectionsResponse)(nil), // 14: craft.hostagent.v1.CloseConnectionsResponse
-	(*NodeInfoRequest)(nil),          // 15: craft.hostagent.v1.NodeInfoRequest
-	(*NodeInfoResponse)(nil),         // 16: craft.hostagent.v1.NodeInfoResponse
-	(*DrainStatus)(nil),              // 17: craft.hostagent.v1.DrainStatus
-	(*SetDrainRequest)(nil),          // 18: craft.hostagent.v1.SetDrainRequest
-	(*SetDrainResponse)(nil),         // 19: craft.hostagent.v1.SetDrainResponse
-	(*TemplateInfo)(nil),             // 20: craft.hostagent.v1.TemplateInfo
-	(*BuildTemplateRequest)(nil),     // 21: craft.hostagent.v1.BuildTemplateRequest
-	(*BuildTemplateResponse)(nil),    // 22: craft.hostagent.v1.BuildTemplateResponse
-	(*PutManagedImageRequest)(nil),   // 23: craft.hostagent.v1.PutManagedImageRequest
-	(*ManagedBundleHeader)(nil),      // 24: craft.hostagent.v1.ManagedBundleHeader
-	(*PutManagedImageResponse)(nil),  // 25: craft.hostagent.v1.PutManagedImageResponse
-	(*ManagedImageInfo)(nil),         // 26: craft.hostagent.v1.ManagedImageInfo
-	(*SwapManagedRequest)(nil),       // 27: craft.hostagent.v1.SwapManagedRequest
-	(*SwapTarget)(nil),               // 28: craft.hostagent.v1.SwapTarget
-	(*SwapManagedResponse)(nil),      // 29: craft.hostagent.v1.SwapManagedResponse
-	(*SwapResult)(nil),               // 30: craft.hostagent.v1.SwapResult
-	(*timestamppb.Timestamp)(nil),    // 31: google.protobuf.Timestamp
+	(*PresignedRequest)(nil),         // 15: craft.hostagent.v1.PresignedRequest
+	(*ArchiveLimits)(nil),            // 16: craft.hostagent.v1.ArchiveLimits
+	(*CaptureSessionRequest)(nil),    // 17: craft.hostagent.v1.CaptureSessionRequest
+	(*CaptureSessionResponse)(nil),   // 18: craft.hostagent.v1.CaptureSessionResponse
+	(*UploadCaptureRequest)(nil),     // 19: craft.hostagent.v1.UploadCaptureRequest
+	(*UploadCaptureResponse)(nil),    // 20: craft.hostagent.v1.UploadCaptureResponse
+	(*DiscardCaptureRequest)(nil),    // 21: craft.hostagent.v1.DiscardCaptureRequest
+	(*DiscardCaptureResponse)(nil),   // 22: craft.hostagent.v1.DiscardCaptureResponse
+	(*RestoreSessionRequest)(nil),    // 23: craft.hostagent.v1.RestoreSessionRequest
+	(*RestoreSessionResponse)(nil),   // 24: craft.hostagent.v1.RestoreSessionResponse
+	(*NodeInfoRequest)(nil),          // 25: craft.hostagent.v1.NodeInfoRequest
+	(*NodeInfoResponse)(nil),         // 26: craft.hostagent.v1.NodeInfoResponse
+	(*DrainStatus)(nil),              // 27: craft.hostagent.v1.DrainStatus
+	(*SetDrainRequest)(nil),          // 28: craft.hostagent.v1.SetDrainRequest
+	(*SetDrainResponse)(nil),         // 29: craft.hostagent.v1.SetDrainResponse
+	(*TemplateInfo)(nil),             // 30: craft.hostagent.v1.TemplateInfo
+	(*BuildTemplateRequest)(nil),     // 31: craft.hostagent.v1.BuildTemplateRequest
+	(*BuildTemplateResponse)(nil),    // 32: craft.hostagent.v1.BuildTemplateResponse
+	(*PutManagedImageRequest)(nil),   // 33: craft.hostagent.v1.PutManagedImageRequest
+	(*ManagedBundleHeader)(nil),      // 34: craft.hostagent.v1.ManagedBundleHeader
+	(*PutManagedImageResponse)(nil),  // 35: craft.hostagent.v1.PutManagedImageResponse
+	(*ManagedImageInfo)(nil),         // 36: craft.hostagent.v1.ManagedImageInfo
+	(*SwapManagedRequest)(nil),       // 37: craft.hostagent.v1.SwapManagedRequest
+	(*SwapTarget)(nil),               // 38: craft.hostagent.v1.SwapTarget
+	(*SwapManagedResponse)(nil),      // 39: craft.hostagent.v1.SwapManagedResponse
+	(*SwapResult)(nil),               // 40: craft.hostagent.v1.SwapResult
+	nil,                              // 41: craft.hostagent.v1.PresignedRequest.HeadersEntry
+	(*timestamppb.Timestamp)(nil),    // 42: google.protobuf.Timestamp
 }
 var file_hostagent_v1_hostagent_proto_depIdxs = []int32{
 	10, // 0: craft.hostagent.v1.CreateResponse.vm:type_name -> craft.hostagent.v1.VM
 	10, // 1: craft.hostagent.v1.ListResponse.vms:type_name -> craft.hostagent.v1.VM
 	3,  // 2: craft.hostagent.v1.VM.state:type_name -> craft.hostagent.v1.VMState
-	31, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
+	42, // 3: craft.hostagent.v1.VM.started_at:type_name -> google.protobuf.Timestamp
 	11, // 4: craft.hostagent.v1.VM.managed:type_name -> craft.hostagent.v1.ManagedState
 	2,  // 5: craft.hostagent.v1.ManagedState.active:type_name -> craft.hostagent.v1.ManagedSlot
-	20, // 6: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
-	26, // 7: craft.hostagent.v1.NodeInfoResponse.managed_images:type_name -> craft.hostagent.v1.ManagedImageInfo
-	17, // 8: craft.hostagent.v1.NodeInfoResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
-	1,  // 9: craft.hostagent.v1.DrainStatus.state:type_name -> craft.hostagent.v1.DrainState
-	31, // 10: craft.hostagent.v1.DrainStatus.since:type_name -> google.protobuf.Timestamp
-	17, // 11: craft.hostagent.v1.SetDrainResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
-	31, // 12: craft.hostagent.v1.TemplateInfo.built_at:type_name -> google.protobuf.Timestamp
-	20, // 13: craft.hostagent.v1.BuildTemplateResponse.template:type_name -> craft.hostagent.v1.TemplateInfo
-	24, // 14: craft.hostagent.v1.PutManagedImageRequest.header:type_name -> craft.hostagent.v1.ManagedBundleHeader
-	26, // 15: craft.hostagent.v1.PutManagedImageResponse.image:type_name -> craft.hostagent.v1.ManagedImageInfo
-	31, // 16: craft.hostagent.v1.ManagedImageInfo.built_at:type_name -> google.protobuf.Timestamp
-	28, // 17: craft.hostagent.v1.SwapManagedRequest.targets:type_name -> craft.hostagent.v1.SwapTarget
-	30, // 18: craft.hostagent.v1.SwapManagedResponse.results:type_name -> craft.hostagent.v1.SwapResult
-	0,  // 19: craft.hostagent.v1.SwapResult.reason:type_name -> craft.hostagent.v1.ErrorReason
-	2,  // 20: craft.hostagent.v1.SwapResult.active:type_name -> craft.hostagent.v1.ManagedSlot
-	4,  // 21: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
-	6,  // 22: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
-	8,  // 23: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
-	15, // 24: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
-	12, // 25: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
-	13, // 26: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
-	21, // 27: craft.hostagent.v1.HostAgent.BuildTemplate:input_type -> craft.hostagent.v1.BuildTemplateRequest
-	23, // 28: craft.hostagent.v1.HostAgent.PutManagedImage:input_type -> craft.hostagent.v1.PutManagedImageRequest
-	27, // 29: craft.hostagent.v1.HostAgent.SwapManaged:input_type -> craft.hostagent.v1.SwapManagedRequest
-	18, // 30: craft.hostagent.v1.HostAgent.SetDrain:input_type -> craft.hostagent.v1.SetDrainRequest
-	5,  // 31: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
-	7,  // 32: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
-	9,  // 33: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
-	16, // 34: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
-	14, // 35: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
-	13, // 36: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
-	22, // 37: craft.hostagent.v1.HostAgent.BuildTemplate:output_type -> craft.hostagent.v1.BuildTemplateResponse
-	25, // 38: craft.hostagent.v1.HostAgent.PutManagedImage:output_type -> craft.hostagent.v1.PutManagedImageResponse
-	29, // 39: craft.hostagent.v1.HostAgent.SwapManaged:output_type -> craft.hostagent.v1.SwapManagedResponse
-	19, // 40: craft.hostagent.v1.HostAgent.SetDrain:output_type -> craft.hostagent.v1.SetDrainResponse
-	31, // [31:41] is the sub-list for method output_type
-	21, // [21:31] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	41, // 6: craft.hostagent.v1.PresignedRequest.headers:type_name -> craft.hostagent.v1.PresignedRequest.HeadersEntry
+	16, // 7: craft.hostagent.v1.CaptureSessionRequest.limits:type_name -> craft.hostagent.v1.ArchiveLimits
+	42, // 8: craft.hostagent.v1.CaptureSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
+	15, // 9: craft.hostagent.v1.UploadCaptureRequest.request:type_name -> craft.hostagent.v1.PresignedRequest
+	15, // 10: craft.hostagent.v1.RestoreSessionRequest.request:type_name -> craft.hostagent.v1.PresignedRequest
+	16, // 11: craft.hostagent.v1.RestoreSessionRequest.limits:type_name -> craft.hostagent.v1.ArchiveLimits
+	30, // 12: craft.hostagent.v1.NodeInfoResponse.templates:type_name -> craft.hostagent.v1.TemplateInfo
+	36, // 13: craft.hostagent.v1.NodeInfoResponse.managed_images:type_name -> craft.hostagent.v1.ManagedImageInfo
+	27, // 14: craft.hostagent.v1.NodeInfoResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
+	1,  // 15: craft.hostagent.v1.DrainStatus.state:type_name -> craft.hostagent.v1.DrainState
+	42, // 16: craft.hostagent.v1.DrainStatus.since:type_name -> google.protobuf.Timestamp
+	27, // 17: craft.hostagent.v1.SetDrainResponse.drain:type_name -> craft.hostagent.v1.DrainStatus
+	42, // 18: craft.hostagent.v1.TemplateInfo.built_at:type_name -> google.protobuf.Timestamp
+	30, // 19: craft.hostagent.v1.BuildTemplateResponse.template:type_name -> craft.hostagent.v1.TemplateInfo
+	34, // 20: craft.hostagent.v1.PutManagedImageRequest.header:type_name -> craft.hostagent.v1.ManagedBundleHeader
+	36, // 21: craft.hostagent.v1.PutManagedImageResponse.image:type_name -> craft.hostagent.v1.ManagedImageInfo
+	42, // 22: craft.hostagent.v1.ManagedImageInfo.built_at:type_name -> google.protobuf.Timestamp
+	38, // 23: craft.hostagent.v1.SwapManagedRequest.targets:type_name -> craft.hostagent.v1.SwapTarget
+	40, // 24: craft.hostagent.v1.SwapManagedResponse.results:type_name -> craft.hostagent.v1.SwapResult
+	0,  // 25: craft.hostagent.v1.SwapResult.reason:type_name -> craft.hostagent.v1.ErrorReason
+	2,  // 26: craft.hostagent.v1.SwapResult.active:type_name -> craft.hostagent.v1.ManagedSlot
+	4,  // 27: craft.hostagent.v1.HostAgent.Create:input_type -> craft.hostagent.v1.CreateRequest
+	6,  // 28: craft.hostagent.v1.HostAgent.Stop:input_type -> craft.hostagent.v1.StopRequest
+	8,  // 29: craft.hostagent.v1.HostAgent.List:input_type -> craft.hostagent.v1.ListRequest
+	25, // 30: craft.hostagent.v1.HostAgent.NodeInfo:input_type -> craft.hostagent.v1.NodeInfoRequest
+	12, // 31: craft.hostagent.v1.HostAgent.CloseConnections:input_type -> craft.hostagent.v1.CloseConnectionsRequest
+	17, // 32: craft.hostagent.v1.HostAgent.CaptureSession:input_type -> craft.hostagent.v1.CaptureSessionRequest
+	19, // 33: craft.hostagent.v1.HostAgent.UploadCapture:input_type -> craft.hostagent.v1.UploadCaptureRequest
+	21, // 34: craft.hostagent.v1.HostAgent.DiscardCapture:input_type -> craft.hostagent.v1.DiscardCaptureRequest
+	23, // 35: craft.hostagent.v1.HostAgent.RestoreSession:input_type -> craft.hostagent.v1.RestoreSessionRequest
+	13, // 36: craft.hostagent.v1.HostAgent.Dial:input_type -> craft.hostagent.v1.DialFrame
+	31, // 37: craft.hostagent.v1.HostAgent.BuildTemplate:input_type -> craft.hostagent.v1.BuildTemplateRequest
+	33, // 38: craft.hostagent.v1.HostAgent.PutManagedImage:input_type -> craft.hostagent.v1.PutManagedImageRequest
+	37, // 39: craft.hostagent.v1.HostAgent.SwapManaged:input_type -> craft.hostagent.v1.SwapManagedRequest
+	28, // 40: craft.hostagent.v1.HostAgent.SetDrain:input_type -> craft.hostagent.v1.SetDrainRequest
+	5,  // 41: craft.hostagent.v1.HostAgent.Create:output_type -> craft.hostagent.v1.CreateResponse
+	7,  // 42: craft.hostagent.v1.HostAgent.Stop:output_type -> craft.hostagent.v1.StopResponse
+	9,  // 43: craft.hostagent.v1.HostAgent.List:output_type -> craft.hostagent.v1.ListResponse
+	26, // 44: craft.hostagent.v1.HostAgent.NodeInfo:output_type -> craft.hostagent.v1.NodeInfoResponse
+	14, // 45: craft.hostagent.v1.HostAgent.CloseConnections:output_type -> craft.hostagent.v1.CloseConnectionsResponse
+	18, // 46: craft.hostagent.v1.HostAgent.CaptureSession:output_type -> craft.hostagent.v1.CaptureSessionResponse
+	20, // 47: craft.hostagent.v1.HostAgent.UploadCapture:output_type -> craft.hostagent.v1.UploadCaptureResponse
+	22, // 48: craft.hostagent.v1.HostAgent.DiscardCapture:output_type -> craft.hostagent.v1.DiscardCaptureResponse
+	24, // 49: craft.hostagent.v1.HostAgent.RestoreSession:output_type -> craft.hostagent.v1.RestoreSessionResponse
+	13, // 50: craft.hostagent.v1.HostAgent.Dial:output_type -> craft.hostagent.v1.DialFrame
+	32, // 51: craft.hostagent.v1.HostAgent.BuildTemplate:output_type -> craft.hostagent.v1.BuildTemplateResponse
+	35, // 52: craft.hostagent.v1.HostAgent.PutManagedImage:output_type -> craft.hostagent.v1.PutManagedImageResponse
+	39, // 53: craft.hostagent.v1.HostAgent.SwapManaged:output_type -> craft.hostagent.v1.SwapManagedResponse
+	29, // 54: craft.hostagent.v1.HostAgent.SetDrain:output_type -> craft.hostagent.v1.SetDrainResponse
+	41, // [41:55] is the sub-list for method output_type
+	27, // [27:41] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_hostagent_v1_hostagent_proto_init() }
@@ -2679,7 +3594,7 @@ func file_hostagent_v1_hostagent_proto_init() {
 	if File_hostagent_v1_hostagent_proto != nil {
 		return
 	}
-	file_hostagent_v1_hostagent_proto_msgTypes[19].OneofWrappers = []any{
+	file_hostagent_v1_hostagent_proto_msgTypes[29].OneofWrappers = []any{
 		(*PutManagedImageRequest_Header)(nil),
 		(*PutManagedImageRequest_Data)(nil),
 	}
@@ -2689,7 +3604,7 @@ func file_hostagent_v1_hostagent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hostagent_v1_hostagent_proto_rawDesc), len(file_hostagent_v1_hostagent_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   27,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

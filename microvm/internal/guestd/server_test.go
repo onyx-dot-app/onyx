@@ -591,9 +591,6 @@ func TestErrors(t *testing.T) {
 	if _, err := c.Inspect(ctx, &pb.InspectRequest{ExecutionId: "nope"}); reason(err) != "EXECUTION_NOT_FOUND" {
 		t.Fatalf("unknown id: %v", err)
 	}
-	if _, err := c.ListFiles(ctx, &pb.ListFilesRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("reserved call: %v", err)
-	}
 	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{}); status.Code(err) != codes.Unimplemented {
 		t.Fatalf("reserved call: %v", err)
 	}
