@@ -325,6 +325,8 @@ class SkillUserShareRequest(BaseModel):
 
 
 class SkillGroupShareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     group_id: int
     permission: SkillSharePermission
 
@@ -332,7 +334,11 @@ class SkillGroupShareRequest(BaseModel):
 class SkillShareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
+    installation_policy: Literal[
+        SkillInstallationPolicy.AVAILABLE,
+        SkillInstallationPolicy.DEFAULT,
+        SkillInstallationPolicy.REQUIRED,
+    ] = SkillInstallationPolicy.AVAILABLE
 
     user_shares: list[SkillUserShareRequest] | None = None
     group_shares: list[SkillGroupShareRequest] | None = None
