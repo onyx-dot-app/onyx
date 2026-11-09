@@ -303,13 +303,15 @@ The library preview of an external-app skill calls the same renderer
     deletion explicitly allows retirement only for the personal owner or global
     `MANAGE_SKILLS`. Single and bulk routes cap that global authority by token scopes.
     Reset requires manage-skills token scope as well as refreshed global authority.
-    Library reads, sharing, content/version routes, enable, transfer and deletion
-    cap management authority by the request token. Response permissions use the
+    Library reads, sharing, creation/import, content/version routes, enable,
+    transfer and deletion cap management authority by the request token. Response permissions use the
     same cap as selection. Required-skill deletion also requires that scope. The capped EDIT query still permits ownership and
     explicit editor grants, but neither global nor scoped management fallback.
     The access adapter carries the same cap through the locked write. Internal
-    database callers retain their own authority; this is not a claim that every
-    creation/import endpoint enforces token scopes inside its handler.
+    database callers retain their own authority. Creation/import carries the cap
+    through staging into the access savepoint; rejected uploads are cleaned after
+    rollback. App-linked creation also caps full-admin authority before storage
+    and after actor reload.
     Active synced skills reject content changes,
     restore, ownership transfer, and deletion through shared database guards.
     Content routes check before storage and again at publication. Access and personal
@@ -439,8 +441,9 @@ The library preview of an external-app skill calls the same renderer
     a younger file can be live. A version preview or restore must read through
     `read_version_bundle` with the resource's stored-byte limit. It gives NOT_FOUND "The files of this version are
     no longer kept." for a pruned bundle, also when pruning wins a race. A
-    restore stages the old bytes before locking, then checks that its source bundle
-    is still retained before publishing the copy.
+    restore stages the old bytes before locking. Then
+    `db/skill_version.py:assert_skill_version_bundle_unchanged` reloads the historical
+    version and rejects a changed bundle reference before publishing the copy.
 20. `history-requires-edit` **History uses EDIT access, including its reads.**
     The `/skills/custom/{skill_id}/versions` family calls `fetch_skill` with
     `SkillManagementPolicy.EDIT` before listing or reading any history.

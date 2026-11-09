@@ -199,7 +199,13 @@ def versions(skill: Skill, session: Session) -> list[SkillVersion]:
 def test_all_writers(creation: str, session: Session, user: User) -> None:
     name = f"version-{uuid4().hex[:8]}"
     if creation == "upload":
-        response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+        response = api.create_custom_skill(
+            upload(bundle(name)),
+            False,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )
         skill = session.get(Skill, response.id)
     elif creation == "editor":
         response = api.create_custom_skill_from_editor(
@@ -209,6 +215,7 @@ def test_all_writers(creation: str, session: Session, user: User) -> None:
             auto_enable=False,
             user=user,
             db_session=session,
+            http_request=Request({"type": "http"}),
         )
         skill = session.get(Skill, response.id)
     else:
@@ -295,7 +302,13 @@ def test_all_writers(creation: str, session: Session, user: User) -> None:
 
 def test_rezip_noop(session: Session, user: User) -> None:
     name = f"rezip-{uuid4().hex[:8]}"
-    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    response = api.create_custom_skill(
+        upload(bundle(name)),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     skill = session.get(Skill, response.id)
     assert skill is not None
     api.upload_current_user_skill_files(
@@ -339,7 +352,11 @@ def test_lazy_validity_keeps_one_version(
     session: Session, user: User, save: bool, classified: bool
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("legacy-validity")), False, user, session
+        upload(bundle("legacy-validity")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -394,7 +411,13 @@ def test_failed_write_rolls_back(session: Session, user: User) -> None:
 
 def test_failed_replacement_preserves_pointer(session: Session, user: User) -> None:
     name = f"failed-{uuid4().hex[:8]}"
-    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    response = api.create_custom_skill(
+        upload(bundle(name)),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     skill = session.get(Skill, response.id)
     assert skill is not None
     original = versions(skill, session)[0]
@@ -413,7 +436,13 @@ def test_failed_replacement_preserves_pointer(session: Session, user: User) -> N
 
 def test_concurrent_replacements(tenant: str, session: Session, user: User) -> None:
     name = f"concurrent-{uuid4().hex[:8]}"
-    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    response = api.create_custom_skill(
+        upload(bundle(name)),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     skill_id, creator_id = response.id, user.id
     session.commit()
 
@@ -603,7 +632,11 @@ def test_corrupt_legacy_bundle_does_not_block_repair_or_replace(
     session: Session, user: User, compression: int
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("corrupt-history")), False, user, session
+        upload(bundle("corrupt-history")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -641,7 +674,13 @@ def test_identical_reupload_repairs_damaged_current_bundle(
     session: Session, user: User, damage: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     content = bundle("recovered")
-    response = api.create_custom_skill(upload(content), False, user, session)
+    response = api.create_custom_skill(
+        upload(content),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.bundle_file_id is not None
     lost_file = skill.bundle_file_id
@@ -695,7 +734,11 @@ def test_noop_cleans_staged_bundle_before_push_failure(
     writer: str, session: Session, user: User
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("noop-push")), False, user, session
+        upload(bundle("noop-push")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     api.upload_current_user_skill_files(
         response.id,
@@ -762,7 +805,11 @@ def test_metadata_repair_classifies_object_store_errors(
     code: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("missing-object")), False, user, session
+        upload(bundle("missing-object")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -786,7 +833,13 @@ def test_metadata_repair_classifies_object_store_errors(
 
 def skill_with_versions(session: Session, user: User, count: int) -> Skill:
     name = f"kept-{uuid4().hex[:8]}"
-    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    response = api.create_custom_skill(
+        upload(bundle(name)),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     for number in range(2, count + 1):
         api.replace_current_user_skill_bundle(
             response.id,
@@ -1170,7 +1223,13 @@ def test_tenant_repair_stale_deleted_and_pointerless(
 ) -> None:
     store = get_default_file_store()
     name = f"legacy-{uuid4().hex[:8]}"
-    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    response = api.create_custom_skill(
+        upload(bundle(name)),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     skill = session.get(Skill, response.id)
     assert skill is not None
     if completed:
@@ -1826,7 +1885,13 @@ def test_replacement_preserves_history_on_unexpected_read_failure(
     error: Exception, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     content = bundle("failed-verification")
-    response = api.create_custom_skill(upload(content), False, user, session)
+    response = api.create_custom_skill(
+        upload(content),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     skill = session.get(Skill, response.id)
     assert skill is not None
     original_id = skill.current_version_id

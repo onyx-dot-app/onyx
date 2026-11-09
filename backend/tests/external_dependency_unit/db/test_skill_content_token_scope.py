@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -28,7 +29,11 @@ pytestmark = pytest.mark.usefixtures("enable_ee")
 @pytest.fixture
 def skill(session: Session, user: User) -> Skill:
     response = api.create_custom_skill(
-        upload(bundle("token-content")), False, user, session
+        upload(bundle("token-content")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     row = session.get(Skill, response.id)
     assert row is not None
