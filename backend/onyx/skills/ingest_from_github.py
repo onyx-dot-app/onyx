@@ -25,12 +25,12 @@ from onyx.skills.models import (
     GitHubSkillBundle,
 )
 from onyx.utils.github import (
+    GITHUB_ARCHIVE_MAX_BYTES,
     download_github_archive,
     parse_github_source,
     resolve_github_revision,
 )
 
-_ARCHIVE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
 _ARCHIVE_MAX_MEMBERS: Final[int] = 10_000
 
 
@@ -54,7 +54,7 @@ def fetch_github_skill_bundles(
         github_source,
         resolved_source.revision,
         authorization_header,
-        max_size_bytes=_ARCHIVE_MAX_BYTES,
+        max_size_bytes=GITHUB_ARCHIVE_MAX_BYTES,
     )
 
     files: dict[str, bytes] = {}
