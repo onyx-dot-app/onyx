@@ -151,7 +151,9 @@ def add_cc_pair_data_access__no_commit(
             select(
                 ConnectorCredentialPair.id, ConnectorCredentialPair.access_type
             ).where(ConnectorCredentialPair.id.in_(cc_pair_ids))
-        ).tuples()
+        )
+        .tuples()
+        .all()
     )
     db_session.execute(
         insert(UserGroup__CCPairDataAccess)
