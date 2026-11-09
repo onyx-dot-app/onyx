@@ -5,6 +5,13 @@ into the read-only root drive of a Craft Firecracker VM. It also has the guest
 init. The pod runtime keeps using the sandbox image as it is: the build does not
 change the image or its Dockerfile.
 
+The separate `onyxdotapp/craft-runtime:<Onyx version>` userspace image can also
+be passed to `--image` for the new integrated harness. Existing Craft continues
+to use `onyxdotapp/sandbox`. The new image supplies tools without OpenCode or the
+pod sidecar. The converter still owns init, the Go daemon and relay, the public
+CA, overlays, and the rootfs manifest. See `../../craft-runtime/README.md`.
+Choosing that input does not change the pod or Docker image settings.
+
 ## Files
 
 | File | Installed as | What it does |
