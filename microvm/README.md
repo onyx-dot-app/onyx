@@ -60,8 +60,9 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 - Both listeners serve the same API.
 
 `Dial(sandbox_id, guest_port, generation)` is a bidirectional stream of byte frames to a vsock port of a
-running VM: the guest daemon port or the app preview (3010). Only the ports in `--dial-ports` (default
-`52,3010`; 52 is the guest daemon port) are allowed (`PORT_NOT_ALLOWED`). The agent does not start with
+running VM, for example the app preview (3010). Only the ports in `--dial-ports` (default `3010`) are
+allowed (`PORT_NOT_ALLOWED`). Dial always refuses the guest daemon port (`--daemon-port`) with
+`PORT_NOT_ALLOWED`, also if `--dial-ports` names it: use the pass-through. The agent does not start with
 an empty `--dial-ports`. If nothing in the VM accepts the connection, the call fails with
 `GUEST_UNREACHABLE`. A `generation` other than 0 must match the running VM, else the call fails with
 `INSTANCE_MISMATCH`. A VM that is starting, stopping or exited fails with `VM_NOT_RUNNING`. One VM can
@@ -92,9 +93,8 @@ messages, so a new daemon call needs no agent change (`internal/server/passthrou
   does not log the key or write it to the journal: after an agent restart the daemon still has it. If
   the daemon refuses the key (it has another one), Create fails with `GUEST_KEY_REJECTED`: stop that
   attempt and create a new one. If the daemon does not answer in time, Create fails with
-  `GUEST_UNREACHABLE`; a repeat Create with the same attempt and key tries again.
-  `Dial` to port 52 (in the default `--dial-ports`) does not pass this check. A key set that way only
-  makes Create fail with `GUEST_KEY_REJECTED`, so the VM is never handed out.
+  `GUEST_UNREACHABLE`; a repeat Create with the same attempt and key tries again. `Dial` refuses the
+  daemon port, so a client cannot reach `SetKey` that way.
 - The agent keeps one gRPC connection per VM instance (sandbox and generation) and shares it between
   calls. It closes the connection when the VM stops or exits; calls on it end with `VM_NOT_RUNNING`. An
   idle connection closes after 10 min and opens again on the next call.

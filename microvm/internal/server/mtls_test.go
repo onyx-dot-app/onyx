@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -34,8 +35,12 @@ import (
 
 const sandbox = "11111111-1111-4111-8111-111111111111"
 
+// pingPort is a fake guest service that answers one line. Dial never allows
+// the daemon port (52), so tests do not use it as a stand-in.
+const pingPort = 3020
+
 // fakeGuest emulates the Firecracker vsock UDS: "CONNECT <port>\n" → "OK n\n",
-// then a per-port handler. Port 52 answers one line; 3010 echoes; 4000 stops
+// then a per-port handler. pingPort answers one line; 3010 echoes; 4000 stops
 // reading (shutdown of its read side) and stays open.
 func fakeGuest(t *testing.T) string {
 	t.Helper()
@@ -60,7 +65,7 @@ func fakeGuest(t *testing.T) string {
 					return
 				}
 				switch strings.TrimSpace(line) {
-				case "CONNECT 52":
+				case fmt.Sprintf("CONNECT %d", pingPort):
 					_, _ = io.WriteString(c, "OK 1\n")
 					cmd, _ := br.ReadString('\n')
 					if strings.TrimSpace(cmd) == "ping" {
@@ -209,7 +214,7 @@ func TestMTLSRejectsWrongCAAndNoCert(t *testing.T) {
 }
 
 func TestMTLSGoodClientAndDial(t *testing.T) {
-	addr, certs := mtlsAgent(t)
+	addr, certs := mtlsAgent(t, pingPort, 3010)
 	c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -218,13 +223,12 @@ func TestMTLSGoodClientAndDial(t *testing.T) {
 		t.Fatalf("list: %v %v", l, err)
 	}
 
-	// Daemon port: request, then the client ends its send side; the reply
-	// still arrives.
+	// Request, then the client ends its send side; the reply still arrives.
 	s, err := c.Dial(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52, Data: []byte("ping\n")}); err != nil {
+	if err := s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: pingPort, Data: []byte("ping\n")}); err != nil {
 		t.Fatal(err)
 	}
 	_ = s.CloseSend()
@@ -258,7 +262,7 @@ func TestMTLSGoodClientAndDial(t *testing.T) {
 		port uint32
 		want pb.ErrorReason
 	}{
-		"unknown sandbox":  {"22222222-2222-4222-8222-222222222222", 52, pb.ErrorReason_SANDBOX_NOT_FOUND},
+		"unknown sandbox":  {"22222222-2222-4222-8222-222222222222", pingPort, pb.ErrorReason_SANDBOX_NOT_FOUND},
 		"port not allowed": {sandbox, 22, pb.ErrorReason_PORT_NOT_ALLOWED},
 	} {
 		s, err := c.Dial(ctx)
@@ -275,7 +279,7 @@ func TestMTLSGoodClientAndDial(t *testing.T) {
 
 func TestDialGuestNotListening(t *testing.T) {
 	// 4096 is allowed here, but the fake guest does not serve it.
-	addr, certs := mtlsAgent(t, 52, 3010, 4096)
+	addr, certs := mtlsAgent(t, pingPort, 3010, 4096)
 	c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -331,7 +335,7 @@ func TestDialReturnsUploadErrors(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("only Linux fails a write after the peer's SHUT_RD")
 	}
-	addr, certs := mtlsAgent(t, 52, 3010, 4000)
+	addr, certs := mtlsAgent(t, pingPort, 3010, 4000)
 	c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -423,7 +427,7 @@ func writeAt(t *testing.T, path string, data []byte, mod time.Time) {
 }
 
 func TestDialChecksGeneration(t *testing.T) {
-	addr, certs := mtlsAgent(t)
+	addr, certs := mtlsAgent(t, pingPort)
 	c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -433,12 +437,12 @@ func TestDialChecksGeneration(t *testing.T) {
 	}
 	gen := l.GetVms()[0].GetGeneration()
 	s, _ := c.Dial(ctx)
-	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52, Generation: gen + 1})
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: pingPort, Generation: gen + 1})
 	if _, err := s.Recv(); apierr.FromStatus(err) != pb.ErrorReason_INSTANCE_MISMATCH {
 		t.Fatalf("old generation: %v", err)
 	}
 	s, _ = c.Dial(ctx)
-	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52, Generation: gen, Data: []byte("ping\n")})
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: pingPort, Generation: gen, Data: []byte("ping\n")})
 	_ = s.CloseSend()
 	if got := readAll(t, s); got != "pong\n" {
 		t.Fatalf("daemon reply %q", got)
@@ -446,13 +450,13 @@ func TestDialChecksGeneration(t *testing.T) {
 }
 
 func TestDialCapPerVM(t *testing.T) {
-	addr, certs := mtlsAgentWith(t, &Service{MaxDialsPerVM: 1}, nil)
+	addr, certs := mtlsAgentWith(t, &Service{DialPorts: []uint32{pingPort, 3010}, MaxDialsPerVM: 1}, nil)
 	c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// A finished stream gives its slot back.
 	s, _ := c.Dial(ctx)
-	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52, Data: []byte("ping\n")})
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: pingPort, Data: []byte("ping\n")})
 	_ = s.CloseSend()
 	if got := readAll(t, s); got != "pong\n" {
 		t.Fatalf("daemon reply %q", got)
@@ -464,10 +468,36 @@ func TestDialCapPerVM(t *testing.T) {
 		t.Fatalf("echo: %v %v", f, err)
 	}
 	s, _ = c.Dial(ctx)
-	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52})
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: pingPort})
 	_, err := s.Recv()
 	if got := apierr.FromStatus(err); got != pb.ErrorReason_DIAL_LIMIT || status.Code(err) != codes.ResourceExhausted {
 		t.Fatalf("over the cap: %s %v", got, err)
+	}
+}
+
+func TestDialRefusesDaemonPort(t *testing.T) {
+	for name, svc := range map[string]*Service{
+		// 52 is on the allow-list, but it is the daemon port.
+		"default daemon port": {DialPorts: []uint32{DefaultDaemonPort, 3010}},
+		"custom daemon port":  {DialPorts: []uint32{pingPort, 3010}, DaemonPort: pingPort},
+	} {
+		addr, certs := mtlsAgentWith(t, svc, nil)
+		c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		port := svc.DaemonPort
+		if port == 0 {
+			port = DefaultDaemonPort
+		}
+		s, err := c.Dial(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: port, Data: []byte("ping\n")})
+		_, err = s.Recv()
+		if got := apierr.FromStatus(err); got != pb.ErrorReason_PORT_NOT_ALLOWED || status.Code(err) != codes.PermissionDenied {
+			t.Errorf("%s: %s %v", name, got, err)
+		}
+		cancel()
 	}
 }
 

@@ -29,7 +29,10 @@ type Service struct {
 	pb.UnimplementedHostAgentServer
 	M *agent.Manager
 	// DialPorts are the guest ports Dial allows. Nil means DefaultDialPorts.
+	// Dial refuses DaemonPort even if it is listed here.
 	DialPorts []uint32
+	// DaemonPort is the guest daemon's vsock port. 0 means DefaultDaemonPort.
+	DaemonPort uint32
 	// MaxDialsPerVM caps the open Dial streams of one VM. 0 means
 	// DefaultMaxDialsPerVM.
 	MaxDialsPerVM int
