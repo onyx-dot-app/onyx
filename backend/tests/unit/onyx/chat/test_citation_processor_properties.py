@@ -3,7 +3,7 @@ anywhere, and markdown full of brackets, digits and code fences is common."""
 
 from typing import NamedTuple
 
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
@@ -141,6 +141,12 @@ def _split(text: str, cuts: list[int]) -> list[str]:
     cuts=st.lists(st.integers(0, 10_000), max_size=12),
     mode=_MODES,
 )
+# A double bracket citation split before its last bracket.
+@example(text="See [[1]] now", cuts=[6, 7, 8, 9], mode=CitationMode.HYPERLINK)
+@example(text="See [[1]] now", cuts=[8], mode=CitationMode.HYPERLINK)
+@example(text="See 【【1】】 now", cuts=[8], mode=CitationMode.HYPERLINK)
+# A citation at the start of a token gets its leading space.
+@example(text="word[1][2] end", cuts=[4, 7, 10], mode=CitationMode.HYPERLINK)
 def test_output_does_not_depend_on_chunk_boundaries(
     text: str, cuts: list[int], mode: CitationMode
 ) -> None:
@@ -170,6 +176,18 @@ _PLAIN = st.lists(st.tuples(_PLAIN_PROSE, _code_block()), max_size=4).map(
 
 @settings(max_examples=150, deadline=None, derandomize=True)
 @given(text=_PLAIN, cuts=st.lists(st.integers(0, 10_000), max_size=8), mode=_MODES)
+# A citation in a fence info string, streamed one character at a time.
+@example(
+    text="```text [1]\ncode\n```\n",
+    cuts=list(range(1, 21)),
+    mode=CitationMode.HYPERLINK,
+)
+# The fence ends the list item's block and opens a new one.
+@example(
+    text="- ```\n``` [1]\ncode\n```\n",
+    cuts=list(range(1, 23)),
+    mode=CitationMode.HYPERLINK,
+)
 def test_text_without_citations_outside_code_passes_through(
     text: str, cuts: list[int], mode: CitationMode
 ) -> None:
