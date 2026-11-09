@@ -512,7 +512,7 @@ The library preview of an external-app skill calls the same renderer
     freshness. Retirement releases enabled preferences and automatic-policy names.
     Access materialization and audience
     capture share the reconciliation transaction without tier lookups or external I/O.
-    No management API calls the sync service yet.
+    Management API writes persist requests for the background sync service.
 23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**
     `skills/sync.py:sync_marketplace` owns the tenant context, sessions and commit.
     Callers must authorize access first. A detached current-version snapshot
@@ -549,11 +549,14 @@ The library preview of an external-app skill calls the same renderer
     Explicit requests reset the budget and delay, including during a running attempt.
     Lost login errors survive completion; publication checks the login under the row lock.
     An unchanged success clears the prior error. Errors contain no provider bodies.
-    Request entry points use `background/celery/tasks/marketplace_sync/tasks.py:enqueue_marketplace_sync`
-    after authorization and commit. It persists intent before transport I/O. Recovery
+    Management writes persist intent in their transaction, then call
+    `background/celery/tasks/marketplace_sync/tasks.py:dispatch_marketplace_sync` after commit.
+    Other authorized callers can use `enqueue_marketplace_sync` to persist intent first. Recovery
     retries requested work, expired queue reservations and expired owners; it never
     polls idle sources. Cloud recovery skips gated tenants and uses tenant activity
-    gating. Request, claim and retry paths mark activity outside database locks;
+    gating. API requests mark activity before saving sync intent, including when
+    dispatch fails or the commit acknowledgement is lost. Request, claim and retry
+    paths mark activity outside database locks;
     reaping marks activity even when backoff postpones dispatch. Idle recovery does
     not mark activity. Single-tenant deployments skip activity flag reads and writes,
     so Lite does not need Redis for sync. The cloud scheduler stretches the recovery interval, so
@@ -589,18 +592,23 @@ The library preview of an external-app skill calls the same renderer
     List/detail return safe typed snapshots with batched live/retired counts.
     Snapshots expose `sync_pending` for queued or claimed work; claiming clears
     `sync_requested`, so clients must not use it to stop polling.
-    `server/features/skill/marketplace_api.py` exposes these reads and source preview.
+    `server/features/skill/marketplace_api.py` exposes reads, preview and mutations.
     Preview uses the provider adapter and reader, then ingestion validation without
     saving bundles or rows. It checks active authority before and after provider I/O,
     outside database locks, and returns descriptions/statuses rather than bundle bytes.
-    Token scopes cap company previews and management reads through the shared
+    Token scopes cap company previews, management reads and mutations through the shared
     `auth/permissions.py:token_allows_permission` check. A Basic-only token sees only
     its owner's personal sources, even when that owner has global manage-skills.
     Creation and login replacement follow caller provider validation and recheck
     stored active login, enabled app and credential presence without network calls.
     The login is always the actor; company sources have no owner. MIT-only creation
     uses public defaults; installed licensed builds start private regardless of tier lookup.
-    Replacement clears retirement approval, old status/error and sync ownership before requesting work.
+    Replacement validates the acting login's repository access before the write. It clears
+    retirement approval, old status/error and sync ownership before requesting work.
+    Source config is fixed at creation; no route changes it. Replacement keeps
+    `last_synced_revision`, so the next sync rereads an unapplied revision and proposes
+    retirements again. A future config edit must clear that revision in the same write,
+    or an unchanged revision would end as a no-op and hide a needed confirmation.
     Default access requires global authority before the existing access adapter;
     resolve tier before locking, then commit and push its returned audience once.
     Removal captures all version/legacy file IDs and sandbox recipients before cascading.
@@ -626,12 +634,9 @@ The library preview of an external-app skill calls the same renderer
 
 ## Known issues
 
-- **Marketplace mutation endpoints remain pending.** Preview and management reads,
-  the management database service, and skill reset are available. S8 must validate
-  providers before database locks, commit service writes, then dispatch, push and
-  clean files.
-  Plugin membership is not modeled
-  yet; its access guard belongs in `SkillAccessAdapter.load`.
+- **Marketplace UI remains pending.** Preview, management mutations and skill reset
+  are available through the API. Plugin membership is not modeled yet; its access
+  guard belongs in `SkillAccessAdapter.load`.
   S9 must expose personal synced owner audience controls and hide sharing actions
   from non-owner editors; existing generic UI capabilities do not encode this yet.
 

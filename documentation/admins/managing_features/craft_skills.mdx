@@ -342,7 +342,7 @@ Creating a Skill for an App also requires full-admin token scope.
 A Basic-only token retains the user's ownership and explicit editor grants.
 It cannot use the user's admin or group-manager role to change installation settings or company access.
 
-## Preview and read marketplaces through the API
+## Manage marketplaces through the API
 
 Management responses include `sync_pending` while work is queued or claimed by a worker.
 Use this field to keep polling until the sync finishes. `sync_requested` becomes false when a worker claims the request.
@@ -372,10 +372,42 @@ A missing or invalid marketplace file returns `status: "failed"` with a reason.
 Preview does not save a marketplace or upload bundles. It validates source content;
 sync still checks library name conflicts and the source's current revision.
 
+To add the source, send the same fields and a non-empty `name` to `POST /api/marketplaces`.
+Onyx validates the current source again, saves the marketplace, and requests its first background sync.
+An invalid marketplace file prevents creation. Blocked and unsupported entries do not prevent creation.
+
 Use `GET /api/marketplaces` to list sources you can manage. Use `GET /api/marketplaces/{marketplace_id}` for its Skills,
 including retired Skills. Owners can read personal sources. Global manage-skills users can read all sources.
 A token restricted to Basic access can read only its owner's personal sources. Responses include sync status,
 blocked entries, default access, and live and retired Skill counts. They exclude credentials.
+
+Use these routes to manage a saved source:
+
+| Route | Effect |
+| --- | --- |
+| `POST /api/marketplaces/{id}/sync` | Request a background sync. |
+| `POST /api/marketplaces/{id}/replace-login` | Validate and use your connected GitHub account for future syncs. Preserve Skill IDs, history and shares. |
+| `POST /api/marketplaces/{id}/confirm-retirements` | Approve the exact pending retirement proposal. |
+| `PATCH /api/marketplaces/{id}/access` | Set company and group defaults for a company marketplace. |
+| `DELETE /api/marketplaces/{id}` | Permanently delete the marketplace, its Skills and their history. |
+
+The owner or a global manage-skills user can sync, replace login, confirm or remove a personal source.
+Company operations and default access changes require global manage-skills permission.
+Token scopes must also allow the operation.
+An admin can remove a deactivated user's personal sources before deleting that user.
+
+Confirmation takes `revision` and `skill_ids` from the current `retirement_proposal` in the detail response.
+Confirm only when `sync_status` is `needs_confirmation`. A changed proposal returns a conflict. After a failed sync,
+run sync again before confirming a preserved proposal.
+
+Access changes use `public_permission`, `installation_policy`, and `group_shares`, as in the Skill sharing API.
+Each group share has `group_id`, `permission` (`VIEWER` or `EDITOR`), and an optional `installation_policy`.
+Omitted settings stay unchanged. An explicit `null` group installation policy clears that override.
+Personal marketplace Skills are shared individually; marketplaces do not accept direct user grants.
+Company default changes apply only to Skills that follow marketplace access.
+
+Sync requests return after saving the request. Read the detail route to check progress and errors.
+If dispatch is temporarily unavailable, the saved request remains queued for recovery.
 
 ## Marketplace sync recovery
 

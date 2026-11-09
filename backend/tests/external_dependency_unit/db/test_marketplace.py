@@ -202,13 +202,21 @@ def test_skill_constraints_and_group_null(
     assert marketplace.provider_config.ref == "main"
     version = skill.current_version
     assert version is not None
-    db_session.execute(delete(Marketplace).where(Marketplace.id == marketplace.id))
+    marketplace_id = marketplace.id
+    db_session.execute(delete(Marketplace).where(Marketplace.id == marketplace_id))
     assert db_session.scalar(select(Skill.id).where(Skill.id == skill.id)) is None
     assert (
         db_session.scalar(select(SkillVersion.id).where(SkillVersion.id == version.id))
         is None
     )
-    assert db_session.scalar(select(Marketplace__UserGroup.marketplace_id)) is None
+    assert (
+        db_session.scalar(
+            select(Marketplace__UserGroup.marketplace_id).where(
+                Marketplace__UserGroup.marketplace_id == marketplace_id
+            )
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize("raw_delete", [False, True])
