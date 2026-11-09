@@ -25,7 +25,7 @@ pattern with a fence.
 - **Components that run their flows here:** [[indexing-pipeline]],
   [[permission-sync]], [[document-index]], [[file-store-and-user-files]],
   [[connector-capability-checks]], [[craft-scheduled-tasks]] and [[skills]]
-  (orphan bundle cleanup). They rely on
+  (bundle cleanup, version repair and marketplace sync). They rely on
   the tenant context, the ack mode and the signal handlers, and keep
   [[#idempotent-tasks]] and [[#no-session-across-external-call]].
 - **[[cc-pairs-and-creds]]** starts pruning and connector deletion from the

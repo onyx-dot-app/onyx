@@ -152,7 +152,12 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
-from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
+from onyx.skills.marketplace.models import (
+    GitHubMarketplaceConfig,
+    MarketplaceProvider,
+    MarketplaceRetirementProposal,
+    MarketplaceSyncStatus,
+)
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
@@ -5442,6 +5447,31 @@ class Marketplace(Base):
     )
     group_shares: Mapped[list["Marketplace__UserGroup"]] = relationship(viewonly=True)
 
+    sync_requested: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    sync_owner: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    sync_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sync_retry_after: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_lease_expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_dispatch_after: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    sync_status: Mapped[MarketplaceSyncStatus | None] = mapped_column(
+        Enum(
+            MarketplaceSyncStatus,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        )
+    )
+
     last_synced_revision: Mapped[str | None] = mapped_column(String, nullable=True)
     last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -5449,6 +5479,9 @@ class Marketplace(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     blocked_entries: Mapped[dict[str, str]] = mapped_column(
         PGJSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    retirement_proposal: Mapped[MarketplaceRetirementProposal | None] = mapped_column(
+        PydanticType(MarketplaceRetirementProposal, none_as_null=True), nullable=True
     )
     webhook_id: Mapped[str | None] = mapped_column(String, nullable=True)
     webhook_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
