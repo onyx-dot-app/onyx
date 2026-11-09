@@ -141,6 +141,7 @@ def process_jsm_issue(
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
 ) -> Document | None:
+    """Converts a Jira Service Management issue into an Onyx Document with JSM metadata."""
     doc = process_jira_issue(
         jira_base_url=jira_base_url,
         issue=issue,
@@ -183,6 +184,7 @@ class JiraServiceManagementConnector(JiraConnector):
         self._service_desk_project_keys: list[str] | None = None
 
     def _resolve_service_desk_project_keys(self) -> list[str]:
+        """Resolves and caches all Service Desk (``service_desk``) project keys on Jira Server/DC."""
         if self._service_desk_project_keys is None:
             try:
                 projects = self.source_operations.list_projects()
@@ -237,6 +239,7 @@ class JiraServiceManagementConnector(JiraConnector):
     def _fetch_issues_by_key(
         self, issue_keys: list[str]
     ) -> tuple[list[JiraIssue], dict[str, Exception]]:
+        """Fetches the requested JSM issues by key after validating default project scope."""
         if not self.jira_project and not self.jql_query:
             self._get_default_scope_clause()
         return super()._fetch_issues_by_key(issue_keys)
@@ -245,6 +248,7 @@ class JiraServiceManagementConnector(JiraConnector):
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
+        """Builds the JQL query for indexing JSM tickets within the [start, end] window."""
         default_clause = (
             _CLOUD_DEFAULT_JSM_SCOPE
             if (self.jira_project or self.jql_query)
@@ -260,6 +264,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @override
     def _search_issues_by_key(self, issue_keys: list[str]) -> list[JiraIssue]:
+        """Searches for JSM issues matching ``issue_keys`` within the configured JSM scope."""
         keys_jql: str = "key in (%s)" % ", ".join(f'"{key}"' for key in issue_keys)
         default_clause = (
             _CLOUD_DEFAULT_JSM_SCOPE
@@ -283,6 +288,7 @@ class JiraServiceManagementConnector(JiraConnector):
         issue: JiraIssue,
         parent_hierarchy_raw_node_id: str | None,
     ) -> Document | None:
+        """Processes a single JSM issue into an Onyx Document."""
         return process_jsm_issue(
             jira_base_url=self.jira_base,
             issue=issue,
@@ -293,6 +299,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @override
     def validate_connector_settings(self) -> None:
+        """Validates Jira Service Management credentials, JQL syntax, and ``service_desk`` project type."""
         if self._source_operations is None:
             super().validate_connector_settings()
             return

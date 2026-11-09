@@ -71,6 +71,7 @@ class JiraConnectorConfig(JiraCredentialBinding, ConnectorConfig):
 def jira_planning_rule(
     old: JiraConnectorConfig, new: JiraConnectorConfig
 ) -> ConnectorChangeOverride | None:
+    """Returns a scope override ignoring ``project_key`` changes when a non-empty JQL query is set."""
     # The connector ignores the project key while a JQL query is set.
     if (old.jql_query or "").strip() and (new.jql_query or "").strip():
         return ConnectorChangeOverride(

@@ -33,6 +33,7 @@ def _make_mock_jsm_issue(
     project_name: str = "IT Service Desk",
     labels: list[str] | None = None,
 ) -> dict[str, Any]:
+    """Builds a mock Jira Service Management issue payload for unit tests."""
     return {
         "key": key,
         "fields": {
@@ -118,6 +119,7 @@ def test_build_jsm_jql_query_defaults_to_service_desk_project_type() -> None:
 
 
 def test_extract_jsm_metadata_and_process_jsm_issue() -> None:
+    """Verifies JSM metadata extraction and document source tagging."""
     raw_issue = _make_mock_jsm_issue()
     meta = extract_jsm_metadata(raw_issue)
     assert meta == {
@@ -151,6 +153,7 @@ def test_extract_jsm_metadata_and_process_jsm_issue() -> None:
 
 
 def test_jsm_connector_load_credentials_and_checkpoint() -> None:
+    """Verifies credential loading, checkpoint iteration, and slim document retrieval."""
     connector = JiraServiceManagementConnector(
         jira_base_url="https://jira.example.com/",
         project_key="SD",
@@ -205,6 +208,7 @@ def test_jsm_connector_load_credentials_and_checkpoint() -> None:
 
 
 def test_jsm_server_dc_resolves_service_desk_projects() -> None:
+    """Verifies Server/DC service_desk project key resolution and error propagation."""
     connector = JiraServiceManagementConnector(
         jira_base_url="https://jira.example.com",
     )
@@ -234,6 +238,7 @@ def test_jsm_server_dc_resolves_service_desk_projects() -> None:
 
 
 def test_jsm_validate_connector_settings() -> None:
+    """Verifies connector settings validation across project, JQL, Cloud, and Server/DC modes."""
     connector = JiraServiceManagementConnector(
         jira_base_url="https://jira.example.com",
         project_key="SD",
