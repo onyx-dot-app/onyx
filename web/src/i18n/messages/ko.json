@@ -17515,7 +17515,7 @@
       "moreActionsForSkill": "{name} 추가 작업",
       "updated": "{count, plural, one {스킬 #개 업데이트됨} other {스킬 #개 업데이트됨}}",
       "failed": "스킬을 업데이트하지 못했습니다. 다시 시도하세요.",
-      "partialFailure": "{count, plural, one {스킬 #개를 업데이트하지 못했습니다} other {스킬 #개를 업데이트하지 못했습니다}}",
+      "partialFailure": "{count, plural, one {스킬 #개에 대한 작업이 실패했습니다} other {스킬 #개에 대한 작업이 실패했습니다}}",
       "deleteTitle": "{count, plural, one {스킬 #개를 삭제할까요?} other {스킬 #개를 삭제할까요?}}",
       "deleteDescription": "{count, plural, one {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬을 삭제합니다. 이 작업은 취소할 수 없습니다.} other {액세스 권한이 있는 모든 사용자에 대해 선택한 스킬 #개를 모두 삭제합니다. 이 작업은 취소할 수 없습니다.}}",
       "shareTitle": "{count, plural, one {스킬 #개의 액세스 업데이트} other {스킬 #개의 액세스 업데이트}}",

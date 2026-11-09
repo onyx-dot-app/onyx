@@ -17515,7 +17515,7 @@
       "moreActionsForSkill": "Mais ações para {name}",
       "updated": "{count, plural, one {# habilidade atualizada} other {# habilidades atualizadas}}",
       "failed": "Não foi possível atualizar as habilidades. Tente novamente.",
-      "partialFailure": "{count, plural, one {Não foi possível atualizar # habilidade} other {Não foi possível atualizar # habilidades}}",
+      "partialFailure": "{count, plural, one {A ação falhou para # habilidade} other {A ação falhou para # habilidades}}",
       "deleteTitle": "{count, plural, one {Excluir # habilidade?} other {Excluir # habilidades?}}",
       "deleteDescription": "{count, plural, one {Isso exclui a habilidade selecionada para todas as pessoas com acesso. Esta ação não pode ser desfeita.} other {Isso exclui todas as # habilidades selecionadas para todas as pessoas com acesso. Esta ação não pode ser desfeita.}}",
       "shareTitle": "{count, plural, one {Atualizar acesso para # habilidade} other {Atualizar acesso para # habilidades}}",

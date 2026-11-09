@@ -17515,7 +17515,7 @@
       "moreActionsForSkill": "{name} 的更多操作",
       "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
       "failed": "无法更新技能。请重试。",
-      "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
+      "partialFailure": "{count, plural, one {# 个技能的操作失败} other {# 个技能的操作失败}}",
       "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
       "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选技能。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选技能。此操作无法撤销。}}",
       "shareTitle": "{count, plural, one {更新 # 个技能的访问权限} other {更新 # 个技能的访问权限}}",

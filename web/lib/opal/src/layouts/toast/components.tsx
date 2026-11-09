@@ -8,6 +8,7 @@ import { SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { useOpalStrings } from "@opal/strings";
 import useOverflow from "@opal/hooks/useOverflow";
+import useScreenSize from "@opal/hooks/useScreenSize";
 import {
   shownToasts,
   toast,
@@ -39,7 +40,11 @@ interface ExpandedDetailsProps {
 
 function ExpandedDetails({ message }: ExpandedDetailsProps) {
   return (
-    <div className="max-h-72 overflow-y-auto whitespace-pre-wrap px-3 py-2 wrap-break-word">
+    <div
+      // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users can scroll the full message.
+      tabIndex={0}
+      className="max-h-[min(18rem,25dvh)] overflow-y-auto whitespace-pre-wrap px-3 py-2 wrap-break-word"
+    >
       <Text font="secondary-body" color="text-03" as="p">
         {message}
       </Text>
@@ -76,8 +81,8 @@ interface ToastCardProps {
 }
 
 /**
- * One toast. The title stays on one line; when that line cuts it off, a
- * chevron left of the close button shows and hides the full message below.
+ * On narrow screens, plain titles use two lines and controls sit below the message.
+ * Wider screens keep a one-line title with an expansion control.
  */
 function ToastCard({
   toast: t,
@@ -89,6 +94,7 @@ function ToastCard({
   onClose,
 }: ToastCardProps) {
   const strings = useOpalStrings();
+  const { isMobile } = useScreenSize();
   // The title lives inside MessageCard; ContentMd marks it so it can be
   // measured from here.
   const [title, setTitle] = useState<HTMLElement | null>(null);
@@ -97,18 +103,52 @@ function ToastCard({
       node?.querySelector<HTMLElement>("[data-opal-content-title]") ?? null
     );
   }, []);
-  const truncated = useOverflow(title);
+  const titleOverflows = useOverflow(title);
+  const truncated = !t.children && titleOverflows;
   const close = t.dismissible ? () => onClose(t.id) : undefined;
   const action = t.action;
   const shared = {
     innerPadding: 1,
     variant: t.level ?? "info",
     title: t.message,
-    titleMaxLines: 1,
+    titleMaxLines: t.children ? undefined : isMobile ? 2 : 1,
     description: buildDescription(t, errorAppendix),
     outerPadding: 1,
     contentPadding: 1,
   } as const;
+  const controls = (
+    <Section flexDirection="row" justifyContent="end" height="auto" gap={0}>
+      {action && (
+        <Button
+          icon={action.icon}
+          prominence="internal"
+          size="md"
+          tooltip={action.label}
+          aria-label={action.label}
+          onClick={action.onClick}
+        />
+      )}
+      {truncated && (
+        <Button
+          icon={ToastChevronIcon}
+          prominence="internal"
+          size="md"
+          onClick={() => onToggle(t)}
+          aria-label={strings.showFullMessage}
+          aria-expanded={expanded}
+        />
+      )}
+      {close && (
+        <Button
+          icon={SvgX}
+          prominence="internal"
+          size="md"
+          onClick={close}
+          aria-label={strings.close}
+        />
+      )}
+    </Section>
+  );
 
   return (
     <div
@@ -125,52 +165,48 @@ function ToastCard({
       inert={pileDepth !== undefined}
       style={{ zIndex: layer }}
     >
-      <div className="opal-toast-body">
+      <div
+        className="opal-toast-body"
+        role={t.children ? undefined : t.level === "error" ? "alert" : "status"}
+        aria-atomic={t.children ? undefined : true}
+      >
         <div className="opal-toast-spacer">
-          {truncated || action ? (
+          {isMobile ? (
             <MessageCard
               {...shared}
-              rightChildren={
-                <Section flexDirection="row" gap={0}>
-                  {action && (
-                    <Button
-                      icon={action.icon}
-                      prominence="internal"
-                      size="md"
-                      tooltip={action.label}
-                      aria-label={action.label}
-                      onClick={action.onClick}
-                    />
-                  )}
-                  {truncated && (
-                    <Button
-                      icon={ToastChevronIcon}
-                      prominence="internal"
-                      size="md"
-                      onClick={() => onToggle(t)}
-                      aria-label={strings.showFullMessage}
-                      aria-expanded={expanded}
-                    />
-                  )}
-                  {close && (
-                    <Button
-                      icon={SvgX}
-                      prominence="internal"
-                      size="md"
-                      onClick={close}
-                      aria-label={strings.close}
-                    />
-                  )}
-                </Section>
-              }
               bottomChildren={
-                truncated && expanded ? (
-                  <ExpandedDetails message={t.message} />
+                t.children || truncated || action || close ? (
+                  <>
+                    {truncated && expanded && (
+                      <ExpandedDetails message={t.message} />
+                    )}
+                    {t.children}
+                    {controls}
+                  </>
                 ) : undefined
               }
             />
+          ) : truncated || action ? (
+            <MessageCard
+              {...shared}
+              rightChildren={controls}
+              bottomChildren={
+                truncated && expanded ? (
+                  <>
+                    <ExpandedDetails message={t.message} />
+                    {t.children}
+                  </>
+                ) : (
+                  t.children
+                )
+              }
+            />
           ) : (
-            <MessageCard {...shared} onClose={close} />
+            <MessageCard
+              {...shared}
+              onClose={close}
+              bottomChildren={t.children}
+            />
           )}
         </div>
       </div>
