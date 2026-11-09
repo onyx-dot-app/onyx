@@ -30,6 +30,19 @@ def validate_idp_url(url: str, *, field: str) -> None:
         raise UnsafeSSOUrl(f"{field}: {e}") from e
     if parts.username or parts.password:
         raise UnsafeSSOUrl(f"{field} must not carry credentials")
+    # HTTP clients may decode or rewrite such hosts, so the address checked here
+    # could differ from the one they connect to. urlsplit drops tabs and
+    # newlines before parsing, so check the raw URL for them.
+    if (
+        not parts.netloc.isascii()
+        or "%" in parts.netloc
+        or "\\" in parts.netloc
+        or any(ch.isspace() or not ch.isprintable() for ch in url.strip())
+    ):
+        raise UnsafeSSOUrl(
+            f"{field} must name its host in plain ASCII, without percent-encoding,"
+            " backslashes, whitespace or control characters"
+        )
 
     params = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
     try:
