@@ -73,6 +73,9 @@ function ExternalAppsOAuthCallbackPageContent() {
           ) {
             throw new Error(t("errors.missingParams"));
           }
+          // The member plugin dialog waits on this state; it verifies the
+          // connection itself.
+          if (reportOAuthCallback(state, true)) return;
           target.searchParams.set("message", "oauth_connected");
           navigation.go(`${target.pathname}?${target.searchParams}`, {
             replace: true,
@@ -147,7 +150,9 @@ function ExternalAppsOAuthCallbackPageContent() {
                 <div className="pt-2">
                   <Button
                     onClick={() =>
-                      leaveOAuthCallback(() => navigation.go(CRAFT_PLUGINS_PATH))
+                      leaveOAuthCallback(() =>
+                        navigation.go(CRAFT_PLUGINS_PATH)
+                      )
                     }
                   >
                     {t("backButton")}

@@ -1,4 +1,5 @@
 import { INTERNAL_URL } from "@/lib/constants";
+import { getDomain } from "@/lib/redirectSS";
 import { NextRequest, NextResponse } from "next/server";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { desktopOAuthReturnUrl, isDesktopOAuthState } from "@/lib/oauth/launch";
@@ -14,7 +15,12 @@ interface OAuthCallbackProxyBody extends ErrorResponseBody {
 export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
   if (state && isDesktopOAuthState(state)) {
-    return NextResponse.redirect(desktopOAuthReturnUrl(request.nextUrl));
+    // Behind a proxy nextUrl has the internal host; the app checks the public origin.
+    const callback = new URL(
+      request.nextUrl.pathname + request.nextUrl.search,
+      getDomain(request)
+    );
+    return NextResponse.redirect(desktopOAuthReturnUrl(callback));
   }
   try {
     const backendUrl = new URL(INTERNAL_URL);

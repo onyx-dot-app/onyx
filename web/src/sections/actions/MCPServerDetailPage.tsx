@@ -297,6 +297,10 @@ export default function MCPServerDetailPage({
           else toast.error(t("mcpAuthModal.errors.oauthFailed"));
         }
       )
+      .catch((error: unknown) => {
+        console.error("Failed to save MCP authentication:", error);
+        toast.error(t("mcpAuthModal.errors.saveAuthFailed"));
+      })
       .finally(() => setAuthorizing(false));
   };
   const saveAuthentication = async (saved: MCPServer) => {

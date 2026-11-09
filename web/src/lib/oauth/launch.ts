@@ -387,7 +387,9 @@ export function openOAuthAuthorization(
         error instanceof OAuthLaunchError &&
         error.reason === "popup_blocked"
       ) {
-        loadPage(authorizationUrl);
+        const url = parseAuthorizationUrl(authorizationUrl);
+        if (!url) throw new OAuthLaunchError("request_failed");
+        loadPage(url.href);
         return new Promise<OAuthCompletion>(() => {});
       }
       throw error;

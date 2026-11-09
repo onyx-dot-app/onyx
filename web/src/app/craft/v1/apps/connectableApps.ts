@@ -134,9 +134,10 @@ export function mcpServerToConnectable(server: MCPServer): ConnectableApp {
     startOAuth,
     saveCredentials: async (values) => {
       await saveMCPUserCredentials(server.id, values, server.transport);
-      if (server.auth_type === MCPAuthenticationType.OAUTH) {
-        await openOAuthAuthorization(await startOAuth());
-      }
+      if (server.auth_type !== MCPAuthenticationType.OAUTH) return;
+      const result = await startMCPUserOAuth(server.id, CRAFT_APPS_PATH);
+      if (result.status === "authorization_required")
+        await openOAuthAuthorization(result.authorization_url);
     },
     disconnect: userConnectable ? () => disconnectMCPServer(server.id) : null,
   };

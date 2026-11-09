@@ -149,13 +149,14 @@ panel picks up the new session when the user returns.
    suffix. The browser-side callback page opens
    `onyx://oauth-callback?path=...&origin=...`, and
    `desktop/src-tauri/src/oauth_handoff.rs` accepts only allowlisted callback
-   paths on the configured server. It first offers the callback to the main
-   window (`__ONYX_DESKTOP__.claimOAuthCallback`): a page still waiting on that
-   state runs it in a hidden same-origin iframe. If no page claims it within
-   2s, the shell loads it in an app window. Either way the callback reports
-   completion through `BroadcastChannel`.
-   Older OAuth flows still open `about:blank` inside the click, navigate it,
-   and wait for a `postMessage`.
+   paths on the configured server. When the main window is on that server, it
+   first offers the callback to it (`__ONYX_DESKTOP__.claimOAuthCallback`): a
+   page still waiting on that state runs it in a hidden same-origin iframe. If
+   no page claims it within 2s, the shell loads it in an app window. Either
+   way the callback reports completion through `BroadcastChannel`.
+   Two cases still open `about:blank` inside the click, navigate it, and wait
+   for a `postMessage`: desktop builds without the `oauthInBrowser` flag, and
+   flows that do not use `launchOAuth`, such as the Craft setup card.
    `desktop/tests/webdriver_smoke.py` drives the real binary through these
    rules, `confirm()` and downloads. Add a check there when the web app starts
    to depend on a new browser behaviour.
