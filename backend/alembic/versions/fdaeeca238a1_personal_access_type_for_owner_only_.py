@@ -12,6 +12,8 @@ Create Date: 2026-11-08 17:29:24.007968
 
 from alembic import op
 
+# access_type stores the AccessType member names, not their values.
+
 
 # revision identifiers, used by Alembic.
 revision = "fdaeeca238a1"
@@ -24,8 +26,8 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE connector_credential_pair
-        SET access_type = 'personal'
-        WHERE access_type = 'private'
+        SET access_type = 'PERSONAL'
+        WHERE access_type = 'PRIVATE'
           AND NOT EXISTS (
             SELECT 1
             FROM user_group__cc_pair_data_access AS data_access
@@ -38,7 +40,7 @@ def upgrade() -> None:
         DELETE FROM user_group__cc_pair_data_access AS data_access
         USING connector_credential_pair AS cc_pair
         WHERE data_access.cc_pair_id = cc_pair.id
-          AND cc_pair.access_type IN ('public', 'sync', 'personal')
+          AND cc_pair.access_type IN ('PUBLIC', 'SYNC', 'PERSONAL')
         """
     )
 
@@ -48,7 +50,7 @@ def downgrade() -> None:
     op.execute(
         """
         UPDATE connector_credential_pair
-        SET access_type = 'private'
-        WHERE access_type = 'personal'
+        SET access_type = 'PRIVATE'
+        WHERE access_type = 'PERSONAL'
         """
     )
