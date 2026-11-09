@@ -23,7 +23,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import APIRouter, Depends, FastAPI
@@ -325,6 +325,36 @@ def test_route_permission_manifest_is_current(app: FastAPI) -> None:
         "Route gates changed (committed, current). Review them, then run "
         f"ONYX_UPDATE_ROUTE_MANIFEST=1 pytest {Path(__file__).name}: {changed}"
     )
+
+
+@pytest.mark.parametrize(
+    "route",
+    [
+        "GET /skills/custom/{skill_id}/versions",
+        "GET /skills/custom/{skill_id}/versions/{version_id}",
+        "POST /skills/custom/{skill_id}/versions/{version_id}/restore",
+    ],
+)
+def test_skill_history_requires_edit_access(app: FastAPI, route: str) -> None:
+    from onyx.db.skill import SkillManagementPolicy
+    from onyx.error_handling.exceptions import OnyxError
+    from onyx.server.features.skill import api
+
+    handler = next(item.endpoint for item in iter_routes(app) if item.key == route)
+    assert build_manifest(app)[route] == "basic"
+    with patch.object(api, "fetch_skill", return_value=None) as fetch:
+        with pytest.raises(OnyxError):
+            kwargs = {
+                "skill_id": MagicMock(),
+                "user": MagicMock(),
+                "db_session": MagicMock(),
+            }
+            if "{version_id}" in route:
+                kwargs["version_id"] = MagicMock()
+            handler(**kwargs)
+    assert fetch.call_args.kwargs["policy"] == SkillManagementPolicy.EDIT
+    if route.endswith("/restore"):
+        assert fetch.call_args.kwargs["lock_for_update"] is True
 
 
 def test_gate2_helpers_exist() -> None:
