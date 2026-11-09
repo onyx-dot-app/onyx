@@ -867,6 +867,41 @@ async def test_authorize_fetches_no_store_metadata_once_per_request(
         _cimd_fetcher.cache_clear()
 
 
+async def test_private_key_jwt_metadata_client_completes_public_flow(
+    protocol_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client_id = "https://chatgpt.example/oauth/client.json"
+    fetch = AsyncMock(
+        return_value=SSRFFetchResponse(
+            content=json.dumps(
+                {
+                    "client_id": client_id,
+                    "client_name": "ChatGPT",
+                    "redirect_uris": [_REDIRECT],
+                    "token_endpoint_auth_method": "private_key_jwt",
+                    "token_endpoint_auth_methods_supported": [
+                        "none",
+                        "private_key_jwt",
+                    ],
+                    "grant_types": ["authorization_code", "refresh_token"],
+                    "response_types": ["code"],
+                }
+            ).encode(),
+            status_code=200,
+            headers={"Cache-Control": "max-age=300"},
+        )
+    )
+    monkeypatch.setattr(cimd, "ssrf_safe_fetch_response", fetch)
+    _cimd_fetcher.cache_clear()
+    try:
+        code, verifier = await _authorize(protocol_client, client_id)
+        response = await _exchange(protocol_client, client_id, code, verifier)
+        assert response.status_code == 200, response.text
+        assert response.json()["scope"] == "read:search"
+    finally:
+        _cimd_fetcher.cache_clear()
+
+
 async def test_authorize_rejects_missing_pkce_method(
     protocol_client: httpx.AsyncClient,
 ) -> None:

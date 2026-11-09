@@ -255,7 +255,9 @@ class OnyxOAuthProvider(OAuthProvider):
                 grant_types=document.grant_types,
                 response_types=document.response_types,
                 scope=document.scope or OAUTH_PROVIDER_SCOPE,
-                token_endpoint_auth_method=document.token_endpoint_auth_method,
+                # The token endpoint only serves public PKCE clients, so CIMD clients
+                # that also support private_key_jwt (ChatGPT) are served as public.
+                token_endpoint_auth_method="none",
             )
             validate_public_oauth_client(client)
             return client
