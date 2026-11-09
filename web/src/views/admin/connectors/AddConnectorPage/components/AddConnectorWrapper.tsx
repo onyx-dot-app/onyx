@@ -21,7 +21,7 @@ import {
   isLoadState,
   splitCredentialBoundFields,
 } from "@/lib/connectors/utils";
-import { Formik, useFormikContext } from "formik";
+import { Formik } from "formik";
 import * as Yup from "yup";
 import { useTranslations } from "next-intl";
 import { PageLoader, IconLoader } from "@opal/loaders";
@@ -89,6 +89,7 @@ import {
 } from "@/lib/credentials/hooks";
 import {
   NEW_ACCOUNT_FIELD,
+  SAVED_ACCOUNT_FIELD,
   initialNewAccountValues,
   newAccountSchema,
   typedAccountSpec,
@@ -282,12 +283,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   // Whether the source's checks can run on a schedule (Run Checks Every).
   const [hasNamedChecks, setHasNamedChecks] = useState(false);
 
-  // The picked saved account. Clicking a saved card picks it; typing into
-  // the new account drops the pick (see AuthenticationAccountSection). Edit
-  // mode starts on the pair's credential.
-  const [currentCredential, setCurrentCredential] =
-    useState<Credential<any> | null>(edit?.ccPair.credential ?? null);
-
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
@@ -306,6 +301,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   // account, which Create sends as the credential.
   const formControlFieldNames = connectorFormControlFieldNames(configuration, [
     NEW_ACCOUNT_FIELD,
+    SAVED_ACCOUNT_FIELD,
   ]);
 
   // In edit mode, the file connector's files are a list of stored and
@@ -437,7 +433,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    currentCredential ||
+    savedAccountOf(values) ||
     typedDraft(connector, accountSchemaFor(values), values) ||
     null;
 
@@ -517,6 +513,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   if (typedSpec) {
     initialValues[NEW_ACCOUNT_FIELD] = initialNewAccountValues(typedSpec);
   }
+  // The picked saved account. Clicking a saved card picks it; typing into
+  // the new account drops the pick (see AuthenticationAccountSection). Edit
+  // mode starts on the pair's credential.
+  initialValues[SAVED_ACCOUNT_FIELD] = edit?.ccPair.credential ?? null;
 
   /**
    * The form's errors that block Create. A typed account's errors do not
@@ -795,12 +795,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       ).shape({
         // The account choice is part of the form: a saved pick, or a valid
         // typed account. A saved pick leaves the typed account unchecked.
-        // Reads the pick at validation time; `RevalidateOnChange` reruns
-        // validation when it changes.
         [NEW_ACCOUNT_FIELD]: noCredentials
           ? Yup.mixed()
           : Yup.lazy((_value, { parent }) => {
-              if (currentCredential !== null) return Yup.mixed();
+              if (savedAccountOf(parent) !== null) return Yup.mixed();
               return (
                 accountSchemaFor(parent) ??
                 Yup.mixed().test(
@@ -893,7 +891,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 !formikProps.isValid || !createReady || busy;
               return (
                 <SettingsLayouts.Root loading={credentialsLoading} width="sm">
-                  <RevalidateOnChange value={currentCredential} />
                   <SettingsLayouts.Header
                     icon={sourceMetadata.icon}
                     moreIcon1={SvgArrowExchange}
@@ -1048,8 +1045,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                               <AuthenticationAccountSection
                                 connector={connector}
                                 accessType={formikProps.values.access_type}
-                                currentCredential={currentCredential}
-                                onCredentialChange={setCurrentCredential}
+                                currentCredential={savedAccountOf(
+                                  formikProps.values
+                                )}
+                                onCredentialChange={(credential) =>
+                                  void formikProps.setFieldValue(
+                                    SAVED_ACCOUNT_FIELD,
+                                    credential
+                                  )
+                                }
                                 newAccountReady={newAccountReady}
                                 checkedCredential={checkedCredential}
                                 // A typed account's binding waits for a run,
@@ -1214,13 +1218,14 @@ export interface AddConnectorWrapperProps {
   connector: ConfigurableSources;
 }
 
-/** Reruns validation when `value`, which the schema reads, changes. */
-function RevalidateOnChange({ value }: { value: unknown }) {
-  const { validateForm } = useFormikContext();
-  useEffect(() => {
-    void validateForm();
-  }, [value, validateForm]);
-  return null;
+/** The saved account picked in the form, or null. */
+function savedAccountOf(
+  values: Readonly<Record<string, unknown>>
+): Credential<any> | null {
+  const value = values[SAVED_ACCOUNT_FIELD];
+  // SAFETY: only the account picker writes this field, always a saved
+  // Credential or null.
+  return value && typeof value === "object" ? (value as Credential<any>) : null;
 }
 
 export default function AddConnectorWrapper({
