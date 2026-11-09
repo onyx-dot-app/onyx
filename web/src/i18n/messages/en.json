@@ -17506,7 +17506,7 @@
       "moreActionsForSkill": "More actions for {name}",
       "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
       "failed": "Could not update skills. Try again.",
-      "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
+      "partialFailure": "{count, plural, one {Action failed for # skill} other {Action failed for # skills}}",
       "deleteTitle": "{count, plural, one {Delete # skill?} other {Delete # skills?}}",
       "deleteDescription": "{count, plural, one {This deletes the selected skill for everyone who has access. This cannot be undone.} other {This deletes all # selected skills for everyone who has access. This cannot be undone.}}",
       "shareTitle": "{count, plural, one {Update Access for # Skill} other {Update Access for # Skills}}",

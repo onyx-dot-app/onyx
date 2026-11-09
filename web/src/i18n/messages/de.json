@@ -17506,7 +17506,7 @@
       "moreActionsForSkill": "Weitere Aktionen für {name}",
       "updated": "{count, plural, one {# Skill aktualisiert} other {# Skills aktualisiert}}",
       "failed": "Skills konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
-      "partialFailure": "{count, plural, one {# Skill konnte nicht aktualisiert werden} other {# Skills konnten nicht aktualisiert werden}}",
+      "partialFailure": "{count, plural, one {Aktion für # Skill fehlgeschlagen} other {Aktion für # Skills fehlgeschlagen}}",
       "deleteTitle": "{count, plural, one {# Skill löschen?} other {# Skills löschen?}}",
       "deleteDescription": "{count, plural, one {Der ausgewählte Skill wird für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.} other {Alle # ausgewählten Skills werden für alle Personen mit Zugriff gelöscht. Dies kann nicht rückgängig gemacht werden.}}",
       "shareTitle": "{count, plural, one {Zugriff für # Skill aktualisieren} other {Zugriff für # Skills aktualisieren}}",

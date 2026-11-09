@@ -38,10 +38,16 @@
   stay selected. Search changes clear selection. The admin table header selects all filtered
   custom skills. It uses Opal multi-selection, disabled during bulk requests. Row activation
   opens the preview; checkbox activation changes selection without opening it.
-  Admin search spans the table width. A compact row below it anchors the count at the start and bulk actions at the end.
-  The count appears only after a successful load and changes from the filtered total to the selection count.
+  Admin search spans the table width. A compact row below it anchors the count at the start and bulk actions at the end. Actions wrap below the count when space is limited.
+  Admin search and bulk controls stay pinned while the title header scrolls away.
+  Table focus targets reserve the controls' measured height with scroll margins; the scroll container has no extra padding.
+  The count appears only for a nonempty list after a successful load and changes from the filtered total to the selection count.
   Hidden actions and a reserved loading-icon slot keep search, count and table positions fixed during selection and bulk requests.
   The loading icon sits beside the count for every bulk action. The personal toolbar stays separate.
+  Bulk failures appear as separate list items in an alert below the pinned controls. Keyboard focus moves to the alert, which scrolls into view only when needed. Failed rows stay selected for retry.
+  Only a fully successful bulk response shows a success toast.
+  Pending retries retain the alert to prevent scroll jumps. Tall alerts reveal
+  their heading first; both page variants reserve their sticky header height.
   Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal. The table shows

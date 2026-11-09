@@ -17506,7 +17506,7 @@
       "moreActionsForSkill": "Plus d’actions pour {name}",
       "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
       "failed": "Impossible de mettre à jour les compétences. Réessayez.",
-      "partialFailure": "{count, plural, one {# compétence n’a pas pu être mise à jour} other {# compétences n’ont pas pu être mises à jour}}",
+      "partialFailure": "{count, plural, one {Échec de l’action pour # compétence} other {Échec de l’action pour # compétences}}",
       "deleteTitle": "{count, plural, one {Supprimer # compétence ?} other {Supprimer # compétences ?}}",
       "deleteDescription": "{count, plural, one {La compétence sélectionnée sera supprimée pour toutes les personnes qui y ont accès. Cette action est irréversible.} other {Les # compétences sélectionnées seront supprimées pour toutes les personnes qui y ont accès. Cette action est irréversible.}}",
       "shareTitle": "{count, plural, one {Mettre à jour l’accès à # compétence} other {Mettre à jour l’accès à # compétences}}",
