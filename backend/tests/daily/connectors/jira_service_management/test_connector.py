@@ -137,7 +137,7 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
 
     def test_comment_fetch_error_raises_runtime_error(self) -> None:
         """Verify non-200 comment response raises RuntimeError instead of silent truncation."""
-        def error_transport(url: str, headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
+        def error_transport(url: str, _headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
             if "/comment" in url:
                 return 500, {"errorMessages": ["Internal Server Error"]}
             return 200, {
@@ -164,7 +164,7 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
 
     def test_infinite_pagination_loop_detection(self) -> None:
         """Detect and reject repeated nextPageToken that would cause an infinite loop."""
-        def looping_transport(url: str, headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
+        def looping_transport(_url: str, _headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
             return 200, {
                 "issues": [{"key": "ITSM-999", "fields": {"summary": "Loop item"}}],
                 "nextPageToken": "stuck_token",
