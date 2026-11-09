@@ -416,14 +416,18 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     action: "share" | "enable" | "disable" | "delete",
     sharing?: SkillShareUpdatePayload
   ) {
-    if (bulkLocked || selectedItems.length === 0) return;
+    const pool = action === "delete" ? bulkDeleteTargets : selectedItems;
+    if (bulkLocked || pool.length === 0) return;
     setBulkBusy(true);
     setBulkFailures([]);
     try {
+      // Delete acts on exactly the skills its confirm listed.
       const targets =
         action === "enable" || action === "disable"
           ? toggleableItems
-          : selectedItems;
+          : action === "delete"
+            ? bulkDeleteTargets
+            : selectedItems;
       const skill_ids = targets.map((item) => item.id);
       const result = await bulkUpdateSkills(
         action === "share"

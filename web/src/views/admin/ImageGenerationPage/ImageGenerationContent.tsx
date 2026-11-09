@@ -61,8 +61,8 @@ interface DisconnectTarget {
   image_provider_id: string;
   title: string;
   llmProviderOwned: boolean;
-  /** Whether it was the default when the confirm opened. Fixed, so the copy
-   *  does not change when the refetch lands while the card fades out. */
+  /** Whether it is the default. Tracks the live default while the confirm is
+   *  open and freezes on close, so the copy holds while the card fades out. */
   isDefault: boolean;
 }
 
@@ -401,6 +401,18 @@ export default function ImageGenerationContent() {
       if (firstOption) setReplacementProviderId(firstOption.value);
     }
   }, [disconnectProvider]);
+
+  // Follow the live default while the confirm is open, so a default that
+  // changes meanwhile still asks for a replacement. Closing freezes it, so the
+  // copy holds while the card fades out.
+  useEffect(() => {
+    if (!disconnectModal.isOpen || !disconnectProvider) return;
+    const isDefault =
+      defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
+    if (isDefault !== disconnectProvider.isDefault) {
+      setDisconnectProvider({ ...disconnectProvider, isDefault });
+    }
+  }, [disconnectModal.isOpen, disconnectProvider, defaultConfig]);
 
   if (configError) {
     return (
