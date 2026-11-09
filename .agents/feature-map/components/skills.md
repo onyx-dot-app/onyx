@@ -279,7 +279,7 @@ The library preview of an external-app skill calls the same renderer
     no creator; a user content change follows it. Runtime classification updates
     the observed current version only while it remains unclassified. It also
     updates legacy validity when the bundle links match, without creating history.
-    Identical saves verify the existing bundle before reusing it. A missing,
+    Identical user saves verify the existing bundle before reusing it. A missing,
     changed or corrupt current file creates a fresh version from the upload.
     Unexpected storage errors abort the save and keep the current version.
     Missing, corrupt or oversized historical files retain unknown metadata.
@@ -321,7 +321,8 @@ The library preview of an external-app skill calls the same renderer
     config.** `skills/marketplace/provider.py:MarketplaceProviderAdapter` owns
     login checks, ref resolution, change checks and webhook capability. GitHub
     verifies every ref, including pinned commits, and fetches one bounded archive
-    at that commit. Reconciliation receives bytes and a folder, not GitHub config.
+    at that commit. The reader receives bytes and a folder. Reconciliation receives
+    its result and staged bundle metadata.
     Config and import share repository-name and folder validation in `utils/github.py`.
     Empty folders become NULL; trailing slashes are removed. Absolute paths and
     dot segments are rejected.
@@ -407,6 +408,26 @@ The library preview of an external-app skill calls the same renderer
     Invalid YAML, including excessive nesting, blocks only the affected skill.
     See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
     This pure reader does not change the one-time GitHub import.
+22. `marketplace-reconciliation` **Only complete reads can retire entries.**
+    `db/marketplace.py:reconcile_marketplace__no_commit` takes S2 results and staged
+    `IngestedBundle` values. It does no provider or FileStore I/O. Failed reads
+    change nothing. A savepoint covers rows, versions, paths, blocked reasons,
+    and the synced revision. The caller owns commit and post-commit cleanup.
+    Changed entries require a staged bundle whose name and digest match the read.
+    Unchanged digests need no upload. The shared version writer and retention
+    functions maintain history and legacy columns; save-time storage repair is skipped.
+    Missing keys retire permanently; reappearance creates a new id. Moves retain ids.
+    Unsupported plugin keys protect all their existing child skills. Blocked keys
+    keep their versions; `Marketplace.blocked_entries` stores reasons for the later UI.
+    More than five retirements AND more than half the live marketplace sets
+    `last_error` to "needs confirmation" and leaves skills and synced revision intact.
+    New names conflict only within a library. Synced skills use marketplace ownership;
+    public manual skills use the company library, private manual skills use their author.
+    Reconciliation serializes each tenant/library with a transaction advisory lock.
+    G3 must use that same lock for manual name checks. S4 still owns staging, failure
+    cleanup, and deletion of returned unreferenced files after commit. S5 owns job
+    freshness; S6 owns retired-read/write guards; S7 owns access materialization.
+    No API or worker calls reconciliation yet.
 
 ---
 
