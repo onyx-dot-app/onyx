@@ -77,6 +77,11 @@ Add clear comments:
   - If you're afraid to touch the original, you don't understand it well enough.
   - LLMs often create subtle duplicate logic — review carefully and remove it.
   - Avoid "nearly identical" objects that confuse when to use which.
+- A second path that does the job of an existing path calls the function that enforces its rules
+  (limits, registries, error states). Do not re-implement the rules. Examples: a replay or resume
+  path, a mobile copy of a web transform, a test mock of a production protocol.
+- When you change what a value means, find every reader of the value and update each one. For
+  example, when a flag gets an effective mode, each reader reads the effective mode.
 - Avoid extremely long functions with chained logic:
   - Encapsulate steps into helpers for readability, even if not reused.
   - "Pythonic" multi-step expressions are OK in moderation; don't trade clarity for cleverness.
@@ -85,9 +90,12 @@ Add clear comments:
 
 - Avoid holding resources for extended periods (DB sessions, locks/semaphores).
 - Validate objects on creation and right before use.
-- Connector code (data to Onyx documents):
-  - Any in-memory structure that can grow without bound based on input must be periodically size-checked.
-  - If a connector is OOMing (often shows up as "missing celery tasks"), this is a top thing to check retroactively.
+- Treat input from users, LLMs, sandboxes, MCP and OpenAPI servers, and connectors as untrusted.
+  Limit its size, item count and nesting depth before you store, render or return it. Measure each
+  limit in the unit that you store, for example bytes, not characters. Name each limit as a constant.
+  - Connector code (data to Onyx documents): any in-memory structure that can grow without bound
+    based on input must be periodically size-checked. If a connector is OOMing (often shows up as
+    "missing celery tasks"), this is a top thing to check retroactively.
 - Async and event loops:
   - Never introduce new async/event loop Python code, and try to make existing async code synchronous when possible if it makes sense.
   - Writing async code without 100% understanding the code and having a concrete reason to do so is likely to introduce bugs and not add any meaningful performance gains.
@@ -134,6 +142,9 @@ Add clear comments:
 ### Trunk-based development and feature flags
 
 - **PRs should contain no more than 500 lines of real change.**
+- **In a PR stack, each PR includes the first reader of what it adds,** such as a field, parameter
+  or helper. If the first reader is in a later PR, move the addition to that PR. Write each doc
+  claim in the PR whose code makes it true.
 - **Merge to main frequently.** Avoid long-lived feature branches — they create merge conflicts and integration pain.
 - **Use feature flags for incremental rollout.**
   - Large features should be merged in small, shippable increments behind a flag.
