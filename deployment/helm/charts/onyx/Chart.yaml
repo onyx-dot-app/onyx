@@ -21,6 +21,7 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
+      description: Document the stored skill ZIP allowance separately from upload limits.
       description: Add CODE_MODE_ENABLED to the configMap, empty by
         default. Set it to "true" to turn on code mode for chat; empty means
         off.
