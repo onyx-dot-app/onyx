@@ -377,3 +377,22 @@ def test_rejects_repository_symlinks(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(OnyxError, match="symbolic link"):
         fetch_github_skill_bundles("owner/repository")
+
+
+def test_skill_over_file_count_limit_does_not_block_other_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    files = {
+        "skills/large/SKILL.md": _skill_md("large"),
+        "skills/small/SKILL.md": _skill_md("small"),
+    }
+    files.update({f"skills/large/refs/{index}.md": b"x" for index in range(500)})
+    _mock_repository(monkeypatch, files)
+
+    _, skills = fetch_github_skill_bundles("owner/repository")
+
+    by_name = {skill.name: skill for skill in skills}
+    assert by_name["large"].bundle_bytes is None
+    assert by_name["large"].unavailable_reason is not None
+    assert "more than 500 files" in by_name["large"].unavailable_reason
+    assert by_name["small"].bundle_bytes is not None
