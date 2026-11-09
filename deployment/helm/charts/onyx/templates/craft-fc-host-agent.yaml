@@ -239,7 +239,7 @@ spec:
             - --tls-cert=/etc/craft-fc/tls/tls.crt
             - --tls-key=/etc/craft-fc/tls/tls.key
             - --client-ca=/etc/craft-fc/tls/ca.crt
-            - --dial-ports={{ $agent.dialPorts | default "52,3010" }}
+            - --dial-ports={{ $agent.dialPorts | default "3010" }}
             - --relay-max-conns={{ $agent.relayMaxConns | default 256 | int64 }}
             - --dial-max-streams={{ $agent.dialMaxStreams | default 64 | int64 }}
             {{- with $agent.clientAllowedSans }}
