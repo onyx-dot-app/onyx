@@ -2094,8 +2094,11 @@ class LitellmLLM(LLM):
         self, request: GenerationRequest
     ) -> tuple[list[ChatCompletionMessage], dict[str, str]]:
         config = self.config
-        messages, cacheable_prefix = serialize_request(request, config)
-        cache_stats = cache_split_stats(request, cacheable_prefix)
+        messages, request_prefix = serialize_request(request, config)
+        # request_prefix counts the request's messages, which cache_split_stats
+        # walks. cacheable_prefix counts the provider messages; it is smaller
+        # when the leading system messages are merged into one.
+        cacheable_prefix = request_prefix
         if not get_provider_adapter(config).caches_leading_system_messages_separately():
             messages, cacheable_prefix = merge_leading_system_messages(
                 messages, cacheable_prefix
@@ -2108,7 +2111,7 @@ class LitellmLLM(LLM):
                 continuation=False,
                 with_metadata=False,
             )
-        return messages, cache_stats
+        return messages, cache_split_stats(request, request_prefix)
 
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
