@@ -10,6 +10,7 @@ Accept a token only if all of these hold:
 - the signature verifies against a registered, unexpired key whose node matches
   the `node` claim;
 - the token is fresh (`iat`/`exp`, lifetime capped) and its `jti` is unused;
+- `aud` is exactly `sandbox-proxy`;
 - the placement record puts the sandbox on that node with that generation.
 """
 
@@ -37,7 +38,8 @@ _MAX_TOKEN_BYTES = 4096
 _SUBJECT_PATTERN = re.compile(
     r"^spiffe://onyx/tenant/(?P<tenant>[A-Za-z0-9_-]+)/sandbox/(?P<sandbox>[0-9a-f-]{36})$"
 )
-_REQUIRED_CLAIMS = ["sub", "gen", "node", "iat", "exp", "jti"]
+SIGNED_IDENTITY_AUDIENCE = "sandbox-proxy"
+_REQUIRED_CLAIMS = ["sub", "gen", "node", "iat", "exp", "jti", "aud"]
 
 
 class SignedIdentityRejection(str, Enum):
@@ -174,12 +176,13 @@ class SignedIdentityVerifier:
                 token,
                 key=signing_key.public_key,
                 algorithms=["EdDSA"],
+                audience=SIGNED_IDENTITY_AUDIENCE,
                 options={
                     "require": _REQUIRED_CLAIMS,
+                    "strict_aud": True,
                     "verify_exp": False,
                     "verify_iat": False,
                     "verify_nbf": False,
-                    "verify_aud": False,
                 },
             )
         except (jwt.InvalidSignatureError, jwt.DecodeError):
