@@ -10,10 +10,11 @@ from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
+from onyx.file_store.models import FileSizeLimitExceeded
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
-    DEFAULT_STORED_ZIP_MAX_BYTES,
     SKILL_MD_NAME,
+    STORED_BUNDLE_LIMITS,
     NormalizedSkillBundle,
     normalize_custom_bundle,
     read_bundle_file,
@@ -34,10 +35,12 @@ def load_stored_custom_skill_bundle(
     file_store: FileStore,
 ) -> NormalizedSkillBundle:
     # Lower upload limits without lowering the allowance for existing bundles.
-    bundle_stream = file_store.read_file(bundle_file_id)
+    bundle_stream = file_store.read_file(
+        bundle_file_id, max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes
+    )
     try:
         bundle_bytes = read_bundle_file(
-            bundle_stream, max_bytes=DEFAULT_STORED_ZIP_MAX_BYTES
+            bundle_stream, max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes
         )
     finally:
         bundle_stream.close()
@@ -99,11 +102,12 @@ def validate_stored_custom_skill(
                 normalized_bundle=None,
                 detail="stored bundle does not exist",
             )
-        if isinstance(exc, OnyxError):
+        if isinstance(exc, (OnyxError, FileSizeLimitExceeded)):
+            detail = exc.detail if isinstance(exc, OnyxError) else str(exc)
             return SkillValidationResult(
                 is_valid=False,
                 normalized_bundle=None,
-                detail=f"stored bundle is invalid: {exc.detail}",
+                detail=f"stored bundle is invalid: {detail}",
             )
         return SkillValidationResult(
             is_valid=None,

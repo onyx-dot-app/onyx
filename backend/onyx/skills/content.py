@@ -17,6 +17,7 @@ from onyx.skills.bundle import (
     read_custom_bundle_instructions,
     strip_skill_md_frontmatter,
 )
+from onyx.utils.bundle import compute_bundle_metadata
 
 
 def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
@@ -68,21 +69,24 @@ def read_custom_skill_bundle_bytes(
             f"Custom skill '{skill.name}' has no current version.",
         )
     try:
-        return read_version_bundle(
-            skill.current_version,
-            file_store or get_default_file_store(),
-            max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
-        )
-    except FileSizeLimitExceeded as exc:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            f"Stored bundle for skill '{skill.name}' exceeds the "
-            f"{STORED_BUNDLE_LIMITS.max_stored_bytes}-byte read limit.",
-        ) from exc
-    except OnyxError:
+        try:
+            bundle_bytes = read_version_bundle(
+                skill.current_version,
+                file_store or get_default_file_store(),
+                max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
+            )
+        except FileSizeLimitExceeded as exc:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                f"Stored bundle for skill '{skill.name}' exceeds the "
+                f"{STORED_BUNDLE_LIMITS.max_stored_bytes}-byte read limit.",
+            ) from exc
+        compute_bundle_metadata(bundle_bytes, limits=STORED_BUNDLE_LIMITS)
+    except (OnyxError, FileSizeLimitExceeded):
         raise
     except Exception as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Failed to read bundle for skill '{skill.name}'.",
         ) from exc
+    return bundle_bytes
