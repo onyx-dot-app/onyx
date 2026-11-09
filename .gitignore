@@ -17,6 +17,7 @@
 .mypy_cache
 .idea
 __pycache__/
+.hypothesis/
 
 # testing
 /web/test-results/
