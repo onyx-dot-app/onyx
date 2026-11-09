@@ -1269,32 +1269,12 @@
       "status": "deprecated"
     },
     "grok-imagine-image-quality": {
-      "attachment": true,
       "cost": {
         "image_input": 0.05
       },
-      "family": "grok",
-      "limit": {
-        "context": 16000,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "image"
-        ]
-      },
       "mode": "image_generation",
-      "name": "Grok Imagine Image Quality",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-04-03",
-      "status": "deprecated",
-      "temperature": false,
-      "tool_call": false
+      "name": "grok-imagine-image-quality",
+      "status": "deprecated"
     },
     "grok-imagine-image-quality-20260403": {
       "cost": {
