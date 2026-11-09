@@ -797,6 +797,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       onOpenChange={(isOpen) => !isOpen && !saving && closeModal()}
     >
       <Modal.Content
+        restoreOpeningFocus
         height={props.mode === "edit" && view === "share" ? "lg" : "fit"}
         width={view === "share" ? "lg" : "sm"}
         maxHeight="80dvh"

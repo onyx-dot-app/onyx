@@ -1,5 +1,8 @@
 import {
   bulkUpdateSkills,
+  listSkillVersions,
+  previewSkillVersion,
+  restoreSkillVersion,
   createCustomSkillFromEditor,
   importGitHubSkills,
   isSkillNameConflict,
@@ -37,6 +40,67 @@ describe("skills API", () => {
     await expect(resetSkillMarketplaceAccess("skill-id")).rejects.toThrow(
       "Only company skills can follow defaults"
     );
+  });
+
+  it("reads version metadata, previews retained content and restores through dedicated routes", async () => {
+    const version = {
+      id: "v1",
+      version_number: 1,
+      created_at: "2026-11-08T12:00:00Z",
+      created_by: null,
+      is_current: false,
+      has_bundle: true,
+      marketplace_revision: null,
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([version])));
+    await expect(listSkillVersions("skill-id")).resolves.toEqual([version]);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/skills/custom/skill-id/versions"
+    );
+    const bundle = {
+      name: "test",
+      description: "Test",
+      instructions_markdown: "Use this",
+      files: [],
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(bundle)));
+    await expect(previewSkillVersion("skill-id", "v1")).resolves.toEqual(
+      bundle
+    );
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/skills/custom/skill-id/versions/v1"
+    );
+    await restoreSkillVersion("skill-id", "v1");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/skills/custom/skill-id/versions/v1/restore",
+      { method: "POST" }
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ detail: "Version files are no longer retained" }),
+        { status: 410 }
+      )
+    );
+    await expect(restoreSkillVersion("skill-id", "v1")).rejects.toThrow(
+      "Version files are no longer retained"
+    );
+  });
+
+  it("keeps the authorization status when a history response is not JSON", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("Unauthorized", { status: 401 })
+    );
+    await expect(listSkillVersions("skill-id")).rejects.toMatchObject({
+      status: 401,
+      message: "Request failed (401)",
+    });
+  });
+
+  it("rejects malformed version metadata", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify([{ id: "v1" }]))
+    );
+    await expect(listSkillVersions("skill-id")).rejects.toThrow();
   });
 
   it("sends the confirmed disabled state through editor creation", async () => {

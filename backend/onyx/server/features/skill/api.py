@@ -911,6 +911,7 @@ def list_custom_skill_versions(
             ),
             is_current=is_current,
             has_bundle=version.bundle_file_id is not None,
+            marketplace_revision=version.marketplace_revision,
         )
         for version, creator, is_current in list_skill_versions(
             skill, db_session, before_version=before_version

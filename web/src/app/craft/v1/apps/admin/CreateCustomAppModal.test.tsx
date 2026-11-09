@@ -519,6 +519,7 @@ describe("CreateCustomAppModal", () => {
       ownership_vacant: false,
       marketplace: null,
       retired_at: null,
+      current_version_number: null,
       public_permission: null,
       is_personal: true,
       user_permission: "OWNER",

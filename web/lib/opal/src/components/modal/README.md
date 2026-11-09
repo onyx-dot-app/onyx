@@ -38,6 +38,8 @@ Radix Dialog compound, the Figma Modal. `Modal` is the Radix root (`open`, `onOp
 
 ## Modal.Backdrop
 
+Set `restoreOpeningFocus` on controlled dialogs without a Radix trigger to restore the opening control when the dialog closes. The default is `false`. An explicit `onCloseAutoFocus` handler can prevent this behavior.
+
 For flows that replace `Modal.Content` between screens, mount one `Modal.Backdrop`
 directly inside `Modal`. Set `skipOverlay` on each content screen. The backdrop
 stays mounted during navigation, so its entrance animation runs only when the
