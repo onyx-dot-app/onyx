@@ -57,6 +57,8 @@
   Sharing settings stay in the dialog. Access badges have an outline, and keyboard focus uses a rounded neutral outline.
   App dependency status has its own line, so it does not replace desktop descriptions.
   The table keeps page ordering and all filtered rows without pagination.
+  Content-sized rows keep names and marketplace folders visible above and below descriptions.
+  Row actions wrap within their column when enlarged text leaves too little space.
   `web/src/lib/skills/hooks.ts` is shared by cards and rows for permission, dependency,
   validity and toggle presentation.
 - **Skill dialog.** Owners and editors open custom cards or rows in a single
@@ -65,7 +67,7 @@
   keep a preview-only dialog. The sharing endpoint requires EDIT; do not
   require that endpoint for a VIEW-only preview.
 - **Version history UI.** Custom Skills with OWNER or EDITOR permission expose
-  Versions in the sharing dialog or read-only preview. Viewers and built-ins make no history requests.
+  Versions in the sharing dialog or read-only preview, including app details. Viewers and built-ins make no history requests.
   `web/src/sections/skills/SkillVersions.tsx` shares retained preview and confirmed restore.
   Desktop history uses a table; narrow screens keep every field in compact entries.
   Narrow dialog headings scroll with the body, and Versions hides the current description.
@@ -112,7 +114,7 @@
   managed groups for company Skills; all current groups must be managed and
   the Skill must be private unless the actor is global. Explicit Editor grants
   alone do not allow company sharing. The flag respects token caps and retirement;
-  writes still recheck authority. Other editors use a read-only preview.
+  writes still recheck authority. Other editors use a read-only Details/Versions dialog.
   Individual grants on ownerless Skills require global management authority;
   scoped managers keep group controls in single and bulk sharing dialogs.
 
@@ -722,7 +724,8 @@ The library preview of an external-app skill calls the same renderer
     Acceptance means sync requested. Shared summaries separate pending work
     from the last applied revision. Hosts can override or hide skill counts
     without inferring unsupported plugin data. Detail polls pending work while
-    visible. Retirement confirmation sends the reviewed revision and IDs only;
+    visible. Closing detail restores focus to its opening control.
+    Retirement confirmation sends the reviewed revision and IDs only;
     names come from detail. A rejected proposal needs a fresh review. Removal
     and login replacement require confirmation. Host access callbacks open
     `CompanyMarketplaceAccessModal`, which loads a fresh draft per opening,

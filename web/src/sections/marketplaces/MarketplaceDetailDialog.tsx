@@ -185,7 +185,12 @@ function DetailSession({
         if (!open) close();
       }}
     >
-      <Modal.Content width="md" height="fit" maxHeight="85dvh">
+      <Modal.Content
+        width="md"
+        height="fit"
+        maxHeight="85dvh"
+        restoreOpeningFocus
+      >
         <Modal.Header
           icon={SvgGitHub}
           title={t(

@@ -45,6 +45,13 @@ it("fetches shared sources locally and opens the real detail dialog", async () =
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(await screen.findByText("alpha")).toBeInTheDocument();
   expect(fetchSpy).toHaveBeenCalledWith(SWR_KEYS.marketplace(marketplace.id));
+  await user.keyboard("{Escape}");
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View details for Team tools" })
+    ).toHaveFocus();
+  });
 });
 
 it("renders loading, empty state and the host sync action", async () => {

@@ -1,4 +1,6 @@
 import {
+  act,
+  deferred,
   fireEvent,
   render,
   screen,
@@ -19,6 +21,7 @@ const mockUpdateSkillShares = jest.fn();
 const mockResetAccess = jest.fn();
 const mockLoadSkill = jest.fn();
 jest.mock("@/lib/fetcher", () => ({
+  ...jest.requireActual<typeof import("@/lib/fetcher")>("@/lib/fetcher"),
   errorHandlingFetcher: (...args: unknown[]) => mockLoadSkill(...args),
 }));
 
@@ -41,6 +44,7 @@ jest.mock("@/hooks/useShareableGroups", () => ({
   default: () => ({ data: mockShareableGroups }),
 }));
 jest.mock("@/lib/skills/api", () => ({
+  ...jest.requireActual("@/lib/skills/api"),
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
   transferSkillOwnership: jest.fn(),
   resetSkillMarketplaceAccess: (...args: unknown[]) => mockResetAccess(...args),
@@ -99,6 +103,124 @@ describe("ShareSkillModal", () => {
       expect(mockUpdateSkillShares).toHaveBeenCalledWith(
         "custom-1",
         expect.objectContaining({ installation_policy: "REQUIRED" })
+      )
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves sharing edits through restore, blocks closing while pending and refreshes details", async () => {
+    const user = setupUser();
+    mockShareableUsers = [{ id: "new-person", email: "new@example.com" }];
+    const onClose = jest.fn();
+    const onSaved = jest.fn();
+    let current = {
+      ...customFixture({
+        user_permission: "OWNER",
+        public_permission: null,
+        current_version_number: 2,
+      }),
+      instructions_markdown: "Current instructions",
+      files: [],
+    };
+    mockLoadSkill.mockImplementation(async () => current);
+    const request = deferred<Response>();
+    let attempts = 0;
+    const fetchMock = jest.fn(
+      async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          attempts += 1;
+          if (attempts === 1) return request.promise;
+          current = {
+            ...current,
+            current_version_number: 3,
+            instructions_markdown: "Restored instructions",
+          };
+          return new Response(JSON.stringify(current));
+        }
+        return new Response(
+          JSON.stringify([
+            {
+              id: "v1",
+              version_number: 1,
+              created_at: "2026-11-08T12:00:00Z",
+              created_by: null,
+              is_current: false,
+              has_bundle: true,
+              marketplace_revision: null,
+            },
+          ])
+        );
+      }
+    );
+    global.fetch = fetchMock;
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    );
+    await user.click(await screen.findByRole("button", { name: "Required" }));
+    await user.type(
+      screen.getByRole("combobox", { name: "Add users, groups, and accounts" }),
+      "new@example.com"
+    );
+    await screen.findByRole("option", { name: /new@example.com/ });
+    await user.keyboard("{ArrowDown}{Enter}");
+    await user.click(screen.getByRole("tab", { name: "Versions" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Restore version 1" })
+    );
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(screen.getByRole("tab", { name: "Details" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Sharing" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(
+      screen
+        .getAllByRole("button", { name: "Cancel" })
+        .every((button) => button.hasAttribute("disabled"))
+    ).toBe(true);
+    await user.keyboard("{Escape}");
+    fireEvent.pointerDown(document.body);
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () =>
+      request.resolve(
+        new Response(
+          JSON.stringify({
+            detail: "Version files changed. Retry this request.",
+          }),
+          { status: 409 }
+        )
+      )
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Version files changed. Retry this request."
+    );
+    expect(onSaved).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Selected version content is now current."
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { name: "Versions" })).toHaveFocus();
+    await user.click(screen.getByRole("tab", { name: "Details" }));
+    expect(await screen.findByText("Restored instructions")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Sharing" }));
+    expect(screen.getByRole("button", { name: "Required" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({
+          installation_policy: "REQUIRED",
+          user_shares: [{ user_id: "new-person", permission: "VIEWER" }],
+        })
       )
     );
     expect(onClose).toHaveBeenCalledTimes(1);

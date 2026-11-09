@@ -100,6 +100,10 @@
 .opal-modal-header-content {
   @apply relative w-full;
 }
+.opal-modal-header-content[data-reserve-close-space] {
+  @apply pe-8;
+  overflow-wrap: anywhere;
+}
 .opal-modal-header-close {
   @apply absolute top-0 end-0;
 }

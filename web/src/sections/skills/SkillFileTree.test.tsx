@@ -13,6 +13,25 @@ function getVisibleText(text: string): HTMLElement {
 }
 
 describe("SkillFileTree", () => {
+  it("keeps focus in the file list after a focused removal completes", async () => {
+    const user = userEvent.setup();
+    const onRemove = jest.fn();
+    const { rerender } = render(
+      <SkillFileTree
+        files={[
+          { path: "a.txt", size: 1 },
+          { path: "b.txt", size: 1 },
+        ]}
+        onRemove={onRemove}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Remove a.txt" }));
+    rerender(
+      <SkillFileTree files={[{ path: "b.txt", size: 1 }]} onRemove={onRemove} />
+    );
+    expect(screen.getByRole("button", { name: "Remove b.txt" })).toHaveFocus();
+  });
+
   it("groups paths into expandable folders and sorts folders before files", async () => {
     const user = userEvent.setup();
     render(

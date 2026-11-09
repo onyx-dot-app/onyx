@@ -1570,3 +1570,56 @@ test("skill conflicts can be confirmed without losing remaining drafts", async (
     })
   );
 });
+
+test.each(["VIEWER", "EDITOR", "OWNER"] as const)(
+  "%s app preview exposes only permitted history",
+  async (permission) => {
+    const skill = customFixture({
+      user_permission: permission,
+      external_app: {
+        external_app_id: 7,
+        name: "GitHub",
+        enabled: true,
+        ready: true,
+      },
+    });
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) =>
+        jsonResponse(
+          String(input).includes("/action-policies/")
+            ? { ...approvalApp, actions: [] }
+            : String(input).includes("/versions")
+              ? []
+              : String(input).endsWith("/preview")
+                ? { ...skill, instructions_markdown: "App instructions" }
+                : { builtins: [], customs: [skill] }
+        )
+      );
+    show({
+      kind: "external-app",
+      app: memberApp({ authenticated: true }),
+      connection: { kind: "connected", ownership: "user" },
+    });
+    const user = setupUser();
+    await user.click(screen.getByRole("tab", { name: "Skills" }));
+    await user.click(await screen.findByRole("button", { name: "Preview" }));
+    await screen.findByText("App instructions");
+    const requestedHistory = () =>
+      fetch.mock.calls.some(([url]) => String(url).includes("/versions"));
+    if (permission === "VIEWER") {
+      expect(
+        screen.queryByRole("tab", { name: "Versions" })
+      ).not.toBeInTheDocument();
+      expect(requestedHistory()).toBe(false);
+    } else {
+      await user.click(screen.getByRole("tab", { name: "Versions" }));
+      await waitFor(() => expect(requestedHistory()).toBe(true));
+    }
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("tab", { name: "Skills" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  }
+);

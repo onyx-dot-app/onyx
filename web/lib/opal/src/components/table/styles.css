@@ -54,6 +54,15 @@ table.tbl[data-row-height="content"] .tbl-cell-inner[data-size="2.25"] {
   @apply py-1;
 }
 
+table.tbl[data-row-height="content"] .table-head-label {
+  @apply min-w-0;
+}
+
+table.tbl[data-row-height="content"] .table-head-label > span {
+  @apply whitespace-normal;
+  overflow-wrap: anywhere;
+}
+
 /* Sort button wrapper */
 .table-head[data-size="2.75"] .table-head-sort {
   @apply py-1.5;

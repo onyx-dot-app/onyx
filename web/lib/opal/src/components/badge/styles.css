@@ -11,7 +11,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-badge {
-  @apply flex flex-row items-center shrink-0;
+  @apply flex flex-row items-center shrink-0 max-w-full;
   border-radius: var(--radius-04);
   padding: 0.125rem;
   gap: 0;
@@ -20,6 +20,10 @@
 .opal-badge[data-size="6"] {
   border-radius: var(--radius-08);
   padding: 0.25rem;
+}
+
+.opal-badge > [data-content-color] {
+  @apply min-w-0 max-w-full;
 }
 
 /* The title is always capped: an ellipsis past 10rem. */
