@@ -410,8 +410,8 @@ The response lists up to 50 versions from newest to oldest. Each entry contains 
 `marketplace_revision` identifies the source commit for a synced version; it is `null` for other versions.
 To read the next page, set `before_version` to the last entry’s `version_number`. The cursor must be a positive integer.
 Stop when the response is empty or includes version 1. New versions do not shift older pages.
-Skill list and detail responses include `current_version_number`,
-which is `null` for built-ins and custom Skills that have no version.
+Skill list and detail responses include `current_version_number`, which is `null` for built-in Skills.
+Every custom Skill has a current version.
 
 | Method | Path after `/api` | Result |
 | --- | --- | --- |
@@ -426,6 +426,24 @@ Restored content must pass the current bundle validation and upload limits.
 Onyx keeps files for the newest ten versions, including a newly restored version. Older entries remain with `has_bundle:
 false`. Preview and restore return `404` with "The files of this version are no longer kept." if the bundle is absent.
 A version ID from another Skill also returns `404`.
+
+### Self-hosted storage upgrade
+
+The version-only storage migration is `ef73786dc783`. Stop older API servers, workers,
+and Lite processes before applying it. Start the matching application code after the migration finishes.
+Do not restart older writers against the new schema.
+
+This change is scheduled for the next planned release.
+The migration preserves history and records legacy content changes as recovery versions.
+It does not read or recreate bundle files. Background metadata recovery retries retained files.
+A missing bundle stays unavailable until its file is recovered or its content is replaced.
+
+The old storage columns remain in the database. The migration clears them after preserving their content in versions.
+A database check rejects writes that refill them.
+Older processes left running during an upgrade fail instead of restoring stale content.
+Removing the legacy storage columns must wait at least one release after this application change.
+Before returning to older application code, downgrade the migration to copy current version data into those columns.
+If a custom Skill has no current bundle reference, replace its content or delete it before downgrading.
 
 ## Synced marketplace Skills
 

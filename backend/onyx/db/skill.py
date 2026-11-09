@@ -814,9 +814,6 @@ def create_skill_from_ingested_bundle(
         Skill(
             name=ingested.canonical_name,
             description=ingested.description,
-            bundle_file_id=ingested.bundle_file_id,
-            bundle_sha256=ingested.bundle_sha256,
-            is_valid=True,
             current_version_id=uuid4(),
             author_user_id=creator_id,
         ),

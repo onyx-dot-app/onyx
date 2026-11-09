@@ -14,6 +14,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Column,
     DateTime,
     Enum,
     Float,
@@ -5528,6 +5529,9 @@ class Skill(Base):
     """
 
     __tablename__ = "skill"
+    __mapper_args__ = {
+        "exclude_properties": ["bundle_file_id", "bundle_sha256", "is_valid"]
+    }
 
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
@@ -5537,19 +5541,8 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Discriminator: when set, definition (source files, has_template, etc.)
-    # comes from BUILT_IN_SKILLS in `onyx.skills.built_in`. When NULL, the
-    # row is a custom (admin-uploaded) skill and bundle_file_id is set.
-    # Exactly one of (built_in_skill_id, bundle_file_id) is non-null —
-    # enforced by `ck_skill_definition_source` below.
+    # Built-ins load files from disk; custom skills use their current version.
     built_in_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # Bundle bytes for custom skills. NULL for built-ins (their source
-    # files live on disk under BUILTIN_SKILLS_PATH).
-    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # Existing custom rows are classified lazily before sandbox hydration.
-    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     current_version_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), nullable=True
@@ -5639,6 +5632,14 @@ class Skill(Base):
     )
 
     __table_args__ = (
+        # Keep physical columns until V8, without exposing them as ORM attributes.
+        Column("bundle_file_id", String, nullable=True),
+        Column("bundle_sha256", String(64), nullable=True),
+        Column("is_valid", Boolean, nullable=True),
+        CheckConstraint(
+            "bundle_file_id IS NULL AND bundle_sha256 IS NULL AND is_valid IS NULL",
+            name="ck_skill_legacy_fields_retired",
+        ),
         CheckConstraint(
             "marketplace_id IS NULL OR marketplace_entry_key IS NOT NULL",
             name="ck_skill_marketplace_entry_key",
@@ -5649,11 +5650,6 @@ class Skill(Base):
             "marketplace_entry_key",
             unique=True,
             postgresql_where=text("retired_at IS NULL"),
-        ),
-        Index(
-            "ix_skill_bundle_file_id",
-            "bundle_file_id",
-            postgresql_where=text("bundle_file_id IS NOT NULL"),
         ),
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
         # Preallocate both IDs, insert the skill, then its version before commit.
@@ -5666,7 +5662,7 @@ class Skill(Base):
             use_alter=True,
         ),
         CheckConstraint(
-            "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
+            "(built_in_skill_id IS NULL) <> (current_version_id IS NULL)",
             name="ck_skill_definition_source",
         ),
         CheckConstraint(

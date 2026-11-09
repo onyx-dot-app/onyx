@@ -189,6 +189,9 @@ def test_version_constraints(
             reconciliation_revision = scripts.get_revision("3833433b1585")
             assert reconciliation_revision is not None
             reconciliation_revision.module.upgrade()
+            cutover = scripts.get_revision("ef73786dc783")
+            assert cutover is not None
+            cutover.module.upgrade()
     else:
         connection.execute(text("DROP TABLE skill"))
         Base.metadata.create_all(
@@ -210,7 +213,6 @@ def test_version_constraints(
                 id=skill_id,
                 name="cyclic",
                 description="cyclic",
-                bundle_file_id="first.zip",
                 current_version_id=version_id,
                 public_permission=SkillSharePermission.VIEWER,
             )
@@ -230,16 +232,32 @@ def test_version_constraints(
             session.scalar(select(Skill.current_version_id).where(Skill.id == skill_id))
             == version_id
         )
+        for column, value in (
+            ("bundle_file_id", "old.zip"),
+            ("bundle_sha256", "old-hash"),
+            ("is_valid", True),
+        ):
+            with pytest.raises(IntegrityError, match="ck_skill_legacy_fields_retired"):
+                with session.begin_nested():
+                    session.execute(
+                        text(f"UPDATE skill SET {column} = :value WHERE id = :id"),
+                        {"value": value, "id": skill_id},
+                    )
 
-        # Old writers can still create a custom skill without a pointer during rollout.
+        # Current custom rows require a pointer; its FK remains deferred.
+        other_version_id = uuid4()
         session.add(
             Skill(
                 id=other_id,
                 name="other",
                 description="other",
-                bundle_file_id="other.zip",
+                current_version_id=other_version_id,
                 public_permission=SkillSharePermission.VIEWER,
             )
+        )
+        session.flush()
+        session.add(
+            SkillVersion(id=other_version_id, skill_id=other_id, version_number=1)
         )
         session.commit()
         for bad_pointer in (version_id, uuid4()):
@@ -257,9 +275,7 @@ def test_version_constraints(
             session.commit()
         session.rollback()
 
-        # The same number is allowed for another skill; a pruned bundle is nullable.
-        session.add(SkillVersion(skill_id=other_id, version_number=1))
-        session.commit()
+        # The other skill has the same number and a nullable (pruned) bundle.
         session.execute(text('DELETE FROM "user" WHERE id = :id'), {"id": creator})
         session.commit()
         assert (

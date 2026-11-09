@@ -269,7 +269,6 @@ def reconcile_marketplace__no_commit(
                     author_user_id=marketplace.owner_user_id,
                     marketplace_id=marketplace.id,
                     marketplace_entry_key=key,
-                    bundle_file_id=bundle.bundle_file_id,
                     current_version_id=initial_version_id,
                 )
                 db_session.add(skill)

@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -81,7 +82,7 @@ def test_history_current_marker_includes_edit_after_authorization(
     ]
 
 
-def test_history_without_current_pointer_has_no_current_marker(
+def test_history_keeps_current_marker_when_pointer_removal_is_refused(
     session: Session, user: User
 ) -> None:
     created = api.create_custom_skill(
@@ -94,7 +95,9 @@ def test_history_without_current_pointer_has_no_current_marker(
     skill = session.get(Skill, created.id)
     assert skill is not None
     skill.current_version_id = None
-    session.commit()
+    with pytest.raises(IntegrityError, match="ck_skill_definition_source"):
+        session.commit()
+    session.rollback()
     history = api.list_custom_skill_versions(
         created.id,
         user,
@@ -102,7 +105,7 @@ def test_history_without_current_pointer_has_no_current_marker(
         http_request=Request({"type": "http"}),
     )
     assert [(version.version_number, version.is_current) for version in history] == [
-        (1, False)
+        (1, True)
     ]
 
 
@@ -615,10 +618,7 @@ def test_legacy_large_central_directory_stays_readable(
     version.bundle_file_id = save_skill_bundle_bytes(
         content, display_name="legacy.zip", file_store=store
     )
-    skill.bundle_file_id = version.bundle_file_id
-    skill.is_valid = None
     version.bundle_sha256 = compute_bundle_sha256(content)
-    skill.bundle_sha256 = version.bundle_sha256
     version.content_digest = None
     version.unpacked_size_bytes = None
     version.file_count = None

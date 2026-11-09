@@ -232,11 +232,8 @@ def test_create_update_move_and_unchanged(
         == "revision-2"
     )
     assert skill.current_version_id == history[0].id != original_version
-    assert (skill.bundle_file_id, skill.bundle_sha256, skill.is_valid) == (
-        history[0].bundle_file_id,
-        history[0].bundle_sha256,
-        True,
-    )
+    assert skill.current_version == history[0]
+    assert history[0].is_valid is True
     assert history[0].file_count == 1 and history[0].unpacked_size_bytes is not None
 
 
@@ -468,7 +465,9 @@ def test_retention_and_cleanup_are_transactional(
     for index in range(11):
         result = apply(session, marketplace, catalog("hello", body=str(index).encode()))
         if index == 0:
-            first_file = skills(session, marketplace)[0].bundle_file_id
+            current = skills(session, marketplace)[0].current_version
+            assert current is not None
+            first_file = current.bundle_file_id
         session.commit()
     skill = skills(session, marketplace)[0]
     history = list(session.scalars(SkillVersionAdapter(skill).versions()))

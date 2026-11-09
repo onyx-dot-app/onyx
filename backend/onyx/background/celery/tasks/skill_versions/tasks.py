@@ -1,4 +1,4 @@
-"""Resume metadata repair and reconcile legacy writers after the first pass."""
+"""Repair retained version metadata with a bounded, repeating backlog scan."""
 
 from time import monotonic
 from uuid import UUID
@@ -18,8 +18,7 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
-PROGRESS_KEY = "skill_version_metadata_v2"
-_COMPLETED = "completed"
+PROGRESS_KEY = "skill_version_metadata_v3"
 _LOCK_TIMEOUT_SECONDS = 300
 _TIME_BUDGET_SECONDS = 30
 
@@ -38,16 +37,11 @@ def repair_skill_versions(*, tenant_id: str) -> None:
                 progress = store.load(PROGRESS_KEY, refresh_cache=True)
             except KvKeyNotFoundError:
                 progress = None
-            completed = progress == _COMPLETED
-            cursor = (
-                UUID(str(progress)) if progress is not None and not completed else None
-            )
+            cursor = UUID(str(progress)) if progress is not None else None
             deadline = monotonic() + _TIME_BUDGET_SECONDS
             file_store = get_default_file_store()
             with get_session_with_current_tenant() as session:
-                batch = skill_version_repair_batch(
-                    session, cursor, drift_only=completed
-                )
+                batch = skill_version_repair_batch(session, cursor)
                 for skill in batch:
                     if monotonic() >= deadline:
                         return
@@ -61,11 +55,10 @@ def repair_skill_versions(*, tenant_id: str) -> None:
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
                     delete_unreferenced_skill_bundles(stale_file_ids, session)
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
-                    if not completed:
-                        store.store(PROGRESS_KEY, str(cursor))
-                if not batch and not completed:
+                    store.store(PROGRESS_KEY, str(cursor))
+                if not batch:
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
-                    store.store(PROGRESS_KEY, _COMPLETED)
+                    store.store(PROGRESS_KEY, None)
         finally:
             if lock.owned():
                 lock.release()
