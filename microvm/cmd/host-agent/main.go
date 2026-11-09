@@ -186,7 +186,7 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	svc := &server.Service{M: m, DialPorts: ports, MaxDialsPerVM: f.dialMax}
+	svc := &server.Service{M: m, DialPorts: ports, MaxDialsPerVM: f.dialMax, Keys: pt}
 	ln, err := server.ListenUnix(f.socket)
 	if err != nil {
 		return err

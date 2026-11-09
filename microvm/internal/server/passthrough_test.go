@@ -87,7 +87,7 @@ func startFakeVM(t *testing.T) *fakeVM {
 	nop := guestd.System{
 		SetClock:   func(time.Time) error { return nil },
 		AddEntropy: func([]byte) (bool, error) { return true, nil },
-		GrowFS:     func(string) (uint64, uint64, error) { return 0, 0, nil },
+		GrowFS:     func(string, uint64) (uint64, uint64, error) { return 0, 0, nil },
 	}
 	d, err := guestd.NewServer(guestd.Config{Version: "test"}, nop, m)
 	if err != nil {
@@ -221,7 +221,7 @@ func newPTAgent(t *testing.T, mtls bool, uds map[string]string) *ptAgent {
 		target = "unix://" + sock
 		clientCreds = insecure.NewCredentials()
 	}
-	srv := NewServer(&Service{M: m}, opts...)
+	srv := NewServer(&Service{M: m, Keys: pt}, opts...)
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(clientCreds))
@@ -239,12 +239,17 @@ func to(ctx context.Context, id string) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, SandboxIDHeader, id, guestd.KeyHeader, vmKey)
 }
 
+// initVM installs the key as Create does, then runs Init through the
+// pass-through.
 func initVM(t *testing.T, a *ptAgent, id string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if err := a.pt.InstallKey(ctx, a.vms[id], vmKey); err != nil {
+		t.Fatalf("install key %s: %v", id, err)
+	}
 	if _, err := a.daemon().Init(to(ctx, id), &sdpb.InitRequest{
-		HostTime: timestamppb.Now(), Entropy: make([]byte, 32), Key: vmKey, SandboxId: id, Generation: a.vms[id].Generation,
+		HostTime: timestamppb.Now(), Entropy: make([]byte, 32), SandboxId: id, Generation: a.vms[id].Generation,
 	}); err != nil {
 		t.Fatalf("init %s: %v", id, err)
 	}
@@ -304,8 +309,8 @@ func TestPassthroughOverMTLS(t *testing.T) {
 	if err == nil {
 		_, err = collect(rs)
 	}
-	if d, r := errInfo(err); status.Code(err) != codes.FailedPrecondition || d != guestd.ErrorDomain || r != "NOT_INITIALIZED" {
-		t.Fatalf("run before init: %v (%s %s)", err, d, r)
+	if d, r := errInfo(err); status.Code(err) != codes.FailedPrecondition || d != guestd.ErrorDomain || r != "KEY_NOT_SET" {
+		t.Fatalf("run before the key: %v (%s %s)", err, d, r)
 	}
 	initVM(t, a, sandbox)
 
@@ -552,5 +557,71 @@ func TestPassthroughStaleCallKeepsNewerConnection(t *testing.T) {
 	}
 	if g, ok := a.pt.Cached(sandbox); !ok || g != gen+1 {
 		t.Fatalf("cached generation %d %v, want %d", g, ok, gen+1)
+	}
+}
+
+// Create installs sandboxd_key in the daemon before it returns; callers
+// cannot install a key through the pass-through.
+func TestCreateInstallsKey(t *testing.T) {
+	vm := startFakeVM(t)
+	// sandbox2's VM has no daemon: its socket refuses CONNECT.
+	refuse := filepath.Join("/tmp", "pk-"+filepath.Base(t.TempDir())+".sock")
+	rln, err := net.Listen("unix", refuse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rln.Close(); _ = os.Remove(refuse) })
+	go func() {
+		for {
+			c, err := rln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	a := newPTAgent(t, true, map[string]string{sandbox: vm.uds, sandbox2: refuse})
+	a.pt.KeyTimeout = 500 * time.Millisecond
+	ha := pb.NewHostAgentClient(a.conn)
+	c := a.daemon()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	create := func(id, key string) (*pb.CreateResponse, error) {
+		return ha.Create(ctx, &pb.CreateRequest{SandboxId: id, Attempt: 1, Template: "t1", Vcpus: 2, MemMib: 4096,
+			ScratchGib: 1, TenantId: "public", SandboxdKey: key})
+	}
+	initReq := &sdpb.InitRequest{HostTime: timestamppb.Now(), Entropy: make([]byte, 32), SandboxId: sandbox}
+
+	// No key yet: the daemon refuses Init, and callers cannot set a key.
+	if _, err := c.Init(to(ctx, sandbox), initReq); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("init before the key: %v", err)
+	}
+	_, err = c.SetKey(metadata.AppendToOutgoingContext(ctx, SandboxIDHeader, sandbox), &sdpb.SetKeyRequest{Key: strings.Repeat("a", 32)})
+	if status.Code(err) != codes.PermissionDenied || apierr.FromStatus(err) != pb.ErrorReason_METHOD_NOT_ALLOWED {
+		t.Fatalf("SetKey through the pass-through: %v", err)
+	}
+
+	if _, err := create(sandbox, "short"); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("bad key: %v", err)
+	}
+	r, err := create(sandbox, vmKey)
+	if err != nil || r.GetCreated() {
+		t.Fatalf("create with key: %v %v", r, err)
+	}
+	// A repeat Create with the same key succeeds; another key is refused.
+	if _, err := create(sandbox, vmKey); err != nil {
+		t.Fatalf("repeat create: %v", err)
+	}
+	_, err = create(sandbox, strings.Repeat("z", 32))
+	if status.Code(err) != codes.FailedPrecondition || apierr.FromStatus(err) != pb.ErrorReason_GUEST_KEY_REJECTED {
+		t.Fatalf("create with another key: %v", err)
+	}
+	if _, err := c.Init(to(ctx, sandbox), initReq); err != nil {
+		t.Fatalf("init with the installed key: %v", err)
+	}
+
+	_, err = create(sandbox2, vmKey)
+	if status.Code(err) != codes.Unavailable || apierr.FromStatus(err) != pb.ErrorReason_GUEST_UNREACHABLE {
+		t.Fatalf("create without a daemon: %v", err)
 	}
 }

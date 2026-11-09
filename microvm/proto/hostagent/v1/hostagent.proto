@@ -16,7 +16,10 @@ service HostAgent {
   // Create restores a VM for (sandbox_id, attempt) from a template on this
   // node. A repeat call with the same (sandbox_id, attempt) returns the
   // existing VM and does not start a second one. A different attempt for a
-  // sandbox that has a VM on this node returns ATTEMPT_CONFLICT.
+  // sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
+  // sandboxd_key set, Create installs that key in the guest daemon (its
+  // SetKey, over vsock) before it returns a running VM; a repeat call
+  // installs it again (the daemon accepts the same key).
   rpc Create(CreateRequest) returns (CreateResponse);
 
   // Stop stops the VM only if sandbox_id, attempt and generation all match
@@ -96,6 +99,13 @@ enum ErrorReason {
   // Dial: the VM already has the most open Dial streams that the agent
   // allows (--dial-max-streams).
   DIAL_LIMIT = 20;
+  // The guest daemon pass-through: only the agent may call this daemon
+  // method (SetKey).
+  METHOD_NOT_ALLOWED = 21;
+  // Create: the guest daemon refused sandboxd_key, for example because it
+  // already has a different key. Do not use the VM: Stop it and create a
+  // new attempt.
+  GUEST_KEY_REJECTED = 22;
 }
 
 enum VMState {
@@ -126,6 +136,11 @@ message CreateRequest {
   // Tenant of the sandbox (^[A-Za-z0-9_-]+$). The egress relay stamps
   // spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>.
   string tenant_id = 7;
+  // Secret. The per-VM guest daemon key (craft.sandboxd.v1 SetKey rules:
+  // 32 to 512 bytes, 0x21 to 0x7E). Daemon calls must carry it in
+  // x-sandboxd-key. The agent does not log or store it. Without it, the
+  // daemon answers only Health.
+  string sandboxd_key = 8;
 }
 
 message CreateResponse {

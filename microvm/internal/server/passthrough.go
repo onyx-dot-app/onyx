@@ -26,6 +26,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
+	sdpb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
 
 const (
@@ -40,6 +41,8 @@ const (
 	MaxMessageBytes = 16 << 20
 	// upstreamIdle closes an idle vsock connection. The next call dials again.
 	upstreamIdle = 10 * time.Minute
+	// DefaultKeyTimeout bounds the wait for the daemon in InstallKey.
+	DefaultKeyTimeout = 10 * time.Second
 )
 
 // Passthrough forwards craft.sandboxd.v1.Sandboxd calls to the guest daemon
@@ -49,7 +52,9 @@ type Passthrough struct {
 	M *agent.Manager
 	// Port is the guest daemon's vsock port. 0 means DefaultDaemonPort.
 	Port uint32
-	Log  *slog.Logger
+	// KeyTimeout bounds InstallKey. 0 means DefaultKeyTimeout.
+	KeyTimeout time.Duration
+	Log        *slog.Logger
 
 	mu    sync.Mutex
 	conns map[string]*upstream
@@ -201,6 +206,38 @@ func (p *Passthrough) dial(t agent.GuestTarget) (*upstream, error) {
 	return &upstream{gen: t.Generation, conn: conn, dropped: make(chan struct{})}, nil
 }
 
+// InstallKey sets the daemon key of vm (SetKey over vsock). It waits for the
+// daemon to accept the connection, up to KeyTimeout.
+func (p *Passthrough) InstallKey(ctx context.Context, vm agent.VM, key string) error {
+	u, err := p.get(vm.SandboxID)
+	if err != nil {
+		return err
+	}
+	if u.gen != vm.Generation {
+		return apierr.New(pb.ErrorReason_VM_NOT_RUNNING, "sandbox %s was replaced during Create", vm.SandboxID)
+	}
+	timeout := p.KeyTimeout
+	if timeout == 0 {
+		timeout = DefaultKeyTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	_, err = sdpb.NewSandboxdClient(u.conn).SetKey(ctx, &sdpb.SetKeyRequest{Key: key}, grpc.WaitForReady(true))
+	switch {
+	case err == nil:
+		return nil
+	case u.isDropped():
+		return apierr.New(pb.ErrorReason_VM_NOT_RUNNING, "sandbox %s VM stopped during Create", vm.SandboxID)
+	case status.Code(err) == codes.Unavailable, status.Code(err) == codes.DeadlineExceeded:
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return ctx.Err()
+		}
+		return apierr.New(pb.ErrorReason_GUEST_UNREACHABLE, "guest daemon of sandbox %s did not take the key: %s", vm.SandboxID, status.Convert(err).Message())
+	default:
+		return apierr.New(pb.ErrorReason_GUEST_KEY_REJECTED, "guest daemon of sandbox %s: %s", vm.SandboxID, status.Convert(err).Message())
+	}
+}
+
 var bothStreams = &grpc.StreamDesc{ClientStreams: true, ServerStreams: true}
 
 // handle is the grpc.UnknownServiceHandler.
@@ -208,6 +245,9 @@ func (p *Passthrough) handle(_ any, ss grpc.ServerStream) error {
 	method, ok := grpc.MethodFromServerStream(ss)
 	if !ok || !strings.HasPrefix(method, "/"+DaemonService+"/") {
 		return status.Errorf(codes.Unimplemented, "unknown method %s", method)
+	}
+	if method == sdpb.Sandboxd_SetKey_FullMethodName {
+		return toStatus(apierr.New(pb.ErrorReason_METHOD_NOT_ALLOWED, "only the node agent sets the guest daemon key (Create)"))
 	}
 	ctx := ss.Context()
 	md, _ := metadata.FromIncomingContext(ctx)

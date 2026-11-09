@@ -26,9 +26,11 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
@@ -289,7 +291,7 @@ func TestPassthroughKVM(t *testing.T) {
 		wg.Go(func() {
 			t0 := time.Now()
 			r, err := ha.Create(ctx, &pb.CreateRequest{SandboxId: ids[i], Attempt: 1, Template: e.Template,
-				Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB, TenantId: "public"})
+				Vcpus: tplVCPUs, MemMib: tplMemMiB, ScratchGib: scratchGiB, TenantId: "public", SandboxdKey: keys[i]})
 			createMS[i], errs[i] = msOf(time.Since(t0)), err
 			if err == nil {
 				vms[i] = r.GetVm()
@@ -327,8 +329,8 @@ func TestPassthroughKVM(t *testing.T) {
 		t1 := time.Now()
 		ent := make([]byte, 64)
 		_, _ = rand.Read(ent)
-		ir, err := sd.Init(vmCtx(ctx, ids[i], keys[i]), &sdpb.InitRequest{HostTime: timestamppb.Now(), Entropy: ent, Key: keys[i],
-			SandboxId: ids[i], Generation: vms[i].GetGeneration(), SessionIds: []string{"s1"}})
+		ir, err := sd.Init(vmCtx(ctx, ids[i], keys[i]), &sdpb.InitRequest{HostTime: timestamppb.Now(), Entropy: ent,
+			SandboxId: ids[i], Generation: vms[i].GetGeneration(), SessionIds: []string{"s1"}, ScratchBytes: scratchGiB << 30})
 		if err != nil {
 			t.Fatalf("vm %d init through the pass-through: %v", i, err)
 		}
@@ -348,8 +350,11 @@ func TestPassthroughKVM(t *testing.T) {
 			}
 		}
 		h, err := sd.Health(vmCtx(ctx, ids[i], keys[i]), &sdpb.HealthRequest{})
-		if err != nil || h.GetGeneration() != vms[i].GetGeneration() || h.GetSandboxId() != ids[i] {
+		if err != nil || h.GetGeneration() != vms[i].GetGeneration() || h.GetSandboxId() != ids[i] || !h.GetKeySet() {
 			t.Fatalf("vm %d health: %v %v", i, h, err)
+		}
+		if _, err := sd.SetKey(vmCtx(ctx, ids[i], keys[i]), &sdpb.SetKeyRequest{Key: randKey()}); status.Code(err) != codes.PermissionDenied {
+			t.Fatalf("vm %d SetKey through the pass-through: %v", i, err)
 		}
 	}
 	t.Logf("BENCH close_connections_ms p50=%.2f p95=%.2f max=%.2f", pctl(closeMS, 0.5), pctl(closeMS, 0.95), pctl(closeMS, 1))

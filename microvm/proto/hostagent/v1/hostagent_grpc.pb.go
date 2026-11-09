@@ -41,7 +41,10 @@ type HostAgentClient interface {
 	// Create restores a VM for (sandbox_id, attempt) from a template on this
 	// node. A repeat call with the same (sandbox_id, attempt) returns the
 	// existing VM and does not start a second one. A different attempt for a
-	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT.
+	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
+	// sandboxd_key set, Create installs that key in the guest daemon (its
+	// SetKey, over vsock) before it returns a running VM; a repeat call
+	// installs it again (the daemon accepts the same key).
 	Create(ctx context.Context, in *CreateRequest, opts ...grpc.CallOption) (*CreateResponse, error)
 	// Stop stops the VM only if sandbox_id, attempt and generation all match
 	// it. A repeat Stop of the same instance succeeds.
@@ -149,7 +152,10 @@ type HostAgentServer interface {
 	// Create restores a VM for (sandbox_id, attempt) from a template on this
 	// node. A repeat call with the same (sandbox_id, attempt) returns the
 	// existing VM and does not start a second one. A different attempt for a
-	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT.
+	// sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
+	// sandboxd_key set, Create installs that key in the guest daemon (its
+	// SetKey, over vsock) before it returns a running VM; a repeat call
+	// installs it again (the daemon accepts the same key).
 	Create(context.Context, *CreateRequest) (*CreateResponse, error)
 	// Stop stops the VM only if sandbox_id, attempt and generation all match
 	// it. A repeat Stop of the same instance succeeds.

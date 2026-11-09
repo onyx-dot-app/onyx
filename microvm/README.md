@@ -17,7 +17,7 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 
 | Call | What it does |
 |---|---|
-| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib, tenant_id)` | Restores a VM from a template snapshot and returns it with its `generation`. A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
+| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib, tenant_id, sandboxd_key)` | Restores a VM from a template snapshot and returns it with its `generation`. With `sandboxd_key`, it installs that key in the guest daemon (`SetKey` over vsock, up to 10 s) before it returns a running VM (see Guest daemon pass-through). A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
 | `Stop(sandbox_id, attempt, generation)` | Stops the VM only if all three match. A repeat Stop of the same instance succeeds with `already_stopped`. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes every relay connection of the VM. New connections still work. Stop and VM exit also close them. |
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
@@ -78,13 +78,23 @@ call to the daemon of one VM on vsock port `--daemon-port` (default 52). It neve
 messages, so a new daemon call needs no agent change (`internal/server/passthrough.go`).
 
 - Metadata `x-sandbox-id` (one lowercase UUID) names the VM. The agent removes it and forwards all other
-  metadata, so `x-sandboxd-key` (the per-VM key from `Init`) reaches the daemon. Headers, trailers and the
+  metadata, so `x-sandboxd-key` (the per-VM key) reaches the daemon. Headers, trailers and the
   daemon's status (domain `sandboxd.craft.onyx.app`) come back unchanged. The caller's deadline and
   cancel apply to the daemon call.
 - Other services get `UNIMPLEMENTED`. A missing or bad `x-sandbox-id` is `INVALID_ARGUMENT`. No VM for
   the sandbox is `SANDBOX_NOT_FOUND`; a VM that is starting, stopping or exited is `VM_NOT_RUNNING`. If
   the daemon does not accept the vsock connection, the call fails with `GUEST_UNREACHABLE`. These errors
   have the agent's domain, so the client sees which side failed.
+- The per-VM key: the api_server makes a new random key for each Create and sends it in `sandboxd_key`.
+  The agent installs it with the daemon's `SetKey` before Create returns, so no other caller can set a
+  key first. The daemon keeps the first key; every later call except `Health` must carry it, `Init`
+  included. The pass-through refuses `SetKey` (`PERMISSION_DENIED`, `METHOD_NOT_ALLOWED`). The agent
+  does not log the key or write it to the journal: after an agent restart the daemon still has it. If
+  the daemon refuses the key (it has another one), Create fails with `GUEST_KEY_REJECTED`: stop that
+  attempt and create a new one. If the daemon does not answer in time, Create fails with
+  `GUEST_UNREACHABLE`; a repeat Create with the same attempt and key tries again.
+  `Dial` to port 52 (in the default `--dial-ports`) does not pass this check. A key set that way only
+  makes Create fail with `GUEST_KEY_REJECTED`, so the VM is never handed out.
 - The agent keeps one gRPC connection per VM instance (sandbox and generation) and shares it between
   calls. It closes the connection when the VM stops or exits; calls on it end with `VM_NOT_RUNNING`. An
   idle connection closes after 10 min and opens again on the next call.
