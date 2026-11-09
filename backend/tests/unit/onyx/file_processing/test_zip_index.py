@@ -266,8 +266,11 @@ def test_reader_closes_archive_when_storage_creation_fails(
     original_close = zipfile.ZipFile.close
 
     def close(archive: zipfile.ZipFile) -> None:
+        # ZipFile.__del__ also calls close; count only closes of open archives.
+        was_open = archive.fp is not None
         original_close(archive)
-        closed.append(archive)
+        if was_open:
+            closed.append(archive)
 
     monkeypatch.setattr(zipfile.ZipFile, "close", close)
     try:
