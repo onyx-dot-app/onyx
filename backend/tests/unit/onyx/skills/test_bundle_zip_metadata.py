@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import io
-import os
 import sqlite3
 import struct
 import tracemalloc
 import zipfile
 from collections.abc import Callable
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -271,7 +271,10 @@ def test_forged_directory_sizes_fail_without_partial_state(
     zip64: bool, parsed_entries: list[str]
 ) -> None:
     zip_bytes = _forged(zip64)
-    descriptors = len(os.listdir("/proc/self/fd"))
+    descriptor_dir = Path("/proc/self/fd")
+    descriptors = (
+        len(list(descriptor_dir.iterdir())) if descriptor_dir.is_dir() else None
+    )
     parsed_entries.clear()
 
     with pytest.raises(OnyxError) as upload:
@@ -286,4 +289,5 @@ def test_forged_directory_sizes_fail_without_partial_state(
     assert inspected.value.error_code == OnyxErrorCode.INTERNAL_ERROR
     with pytest.raises(zipfile.BadZipFile):
         compute_bundle_metadata(zip_bytes, limits=STORED_BUNDLE_LIMITS)
-    assert len(os.listdir("/proc/self/fd")) == descriptors
+    if descriptors is not None:
+        assert len(list(descriptor_dir.iterdir())) == descriptors

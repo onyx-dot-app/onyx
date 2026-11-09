@@ -25,7 +25,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill import api
-from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES
+from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES, compute_bundle_sha256
 from onyx.skills.ingest import save_skill_bundle_bytes
 from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.db.test_skill_version_writes import (
@@ -373,6 +373,8 @@ def test_legacy_large_central_directory_stays_readable(
     )
     skill.bundle_file_id = version.bundle_file_id
     skill.is_valid = None
+    version.bundle_sha256 = compute_bundle_sha256(content)
+    skill.bundle_sha256 = version.bundle_sha256
     version.content_digest = None
     version.unpacked_size_bytes = None
     version.file_count = None

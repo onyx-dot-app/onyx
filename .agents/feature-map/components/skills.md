@@ -202,8 +202,9 @@ The library preview of an external-app skill calls the same renderer
    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
    Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
    Stored reads retain the existing per-file and expanded-total limits.
-   New uploads and saves also cap ZIP directory metadata at 1 MiB before parsing entries.
-   Stored reads have no directory cap. `file_processing/zip_index.py` indexes entries
+   New upload inputs have a 1 MiB central-directory cap before parsing. Stored reads
+   and edits read the saved input without this cap. Saves check the rewritten
+   directory against the 1 MiB cap. `file_processing/zip_index.py` indexes entries
    in an anonymous SQLite file, preserving native zipfile reads and digest order.
    Its end-record and equal-offset handling match supported Python patch releases.
    The tie-order probe runs once on first use, not during import.
