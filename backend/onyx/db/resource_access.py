@@ -5,9 +5,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
-from onyx.db.enums import Permission, SkillInstallationPolicy, SkillSharePermission
+from onyx.db.enums import (
+    Permission,
+    PermissionAuthority,
+    SkillInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id, lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -33,6 +38,7 @@ class ResourceAccessState:
     user_shares: Mapping[UUID, SkillSharePermission]
     group_shares: Mapping[int, SkillSharePermission]
     group_installation_policies: Mapping[int, SkillInstallationPolicy | None]
+    sharing_owner_id: UUID | None = None
 
 
 @dataclass
@@ -99,6 +105,7 @@ def mutate_resource_access[Resource](
                     (
                         change.set_public_permission
                         and change.public_permission != current.public_permission
+                        and current.sharing_owner_id != user.id
                     )
                     or change.installation_policy is not None
                 ) and not has_global_permission(user, adapter.permission):
@@ -122,20 +129,30 @@ def mutate_resource_access[Resource](
                 if (
                     groups is not None and groups != current.group_shares
                 ) or change.group_installation_policies:
-                    assert_within_scope(
-                        user,
-                        db_session,
-                        permission=adapter.permission,
-                        current_group_ids=list(current.group_shares),
-                        requested_group_ids=list(
-                            groups if groups is not None else current.group_shares
-                        ),
-                        is_non_public=current.public_permission is None
-                        and (
-                            not change.set_public_permission
-                            or change.public_permission is None
-                        ),
+                    owner_grant = (
+                        current.sharing_owner_id == user.id
+                        and has_permission(user, adapter.permission)
+                        != PermissionAuthority.SCOPED
+                        and all(
+                            current.group_installation_policies.get(group_id) == policy
+                            for group_id, policy in change.group_installation_policies.items()
+                        )
                     )
+                    if not owner_grant:
+                        assert_within_scope(
+                            user,
+                            db_session,
+                            permission=adapter.permission,
+                            current_group_ids=list(current.group_shares),
+                            requested_group_ids=list(
+                                groups if groups is not None else current.group_shares
+                            ),
+                            is_non_public=current.public_permission is None
+                            and (
+                                not change.set_public_permission
+                                or change.public_permission is None
+                            ),
+                        )
                 users = change.user_shares
                 if users is not None:
                     users = dict(users)
@@ -152,6 +169,22 @@ def mutate_resource_access[Resource](
                     raise OnyxError(
                         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                         "Company user grants require global manage-skills permission.",
+                    )
+                if (
+                    current.sharing_owner_id is not None
+                    and current.sharing_owner_id != user.id
+                    and (
+                        (
+                            change.set_public_permission
+                            and change.public_permission != current.public_permission
+                        )
+                        or (users is not None and users != current.user_shares)
+                        or (groups is not None and groups != current.group_shares)
+                    )
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                        "Only the owner can share personal synced skills.",
                     )
                 adapter.write(
                     resource,

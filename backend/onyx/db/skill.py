@@ -867,6 +867,8 @@ SkillBulkAction = Literal["enable", "disable", "delete"]
 
 def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
     assert_skill_mutable(skill)
+    if skill.marketplace_id is not None and skill.author_user_id == user.id:
+        return
     if not has_global_permission(user, Permission.MANAGE_SKILLS):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -912,6 +914,9 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
                 share.user_group_id: share.installation_policy
                 for share in resource.group_shares
             },
+            sharing_owner_id=(
+                resource.author_user_id if resource.marketplace_id is not None else None
+            ),
         )
 
     def write(
@@ -963,11 +968,23 @@ def share_skill__no_commit(
 
 
 def delete_skill_for_user__no_commit(
-    skill: Skill, user: User, db_session: Session
+    skill: Skill, user: User, db_session: Session, *, allow_global_management: bool
 ) -> tuple[set[UUID], list[str]]:
     """Delete a skill the user may edit. Returns the affected users and the
     bundle file ids for cleanup after commit."""
     assert_skill_deletable(skill)
+    if (
+        skill.marketplace_id is not None
+        and skill.author_user_id != user.id
+        and not (
+            allow_global_management
+            and has_global_permission(user, Permission.MANAGE_SKILLS)
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Deleting retired synced skills requires the owner or global manage-skills permission.",
+        )
     if (
         skill.retired_at is None
         and skill.installation_policy == SkillInstallationPolicy.REQUIRED
@@ -1010,6 +1027,8 @@ def bulk_update_skill__no_commit(
     action: SkillBulkAction,
     user: User,
     db_session: Session,
+    *,
+    allow_global_management: bool,
 ) -> tuple[set[UUID], list[str]]:
     """Apply one bulk action to one skill inside a savepoint, so a failure
     rolls back this skill only. Returns the affected users and, for a delete,
@@ -1034,4 +1053,6 @@ def bulk_update_skill__no_commit(
         )
         if skill is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-        return delete_skill_for_user__no_commit(skill, user, db_session)
+        return delete_skill_for_user__no_commit(
+            skill, user, db_session, allow_global_management=allow_global_management
+        )

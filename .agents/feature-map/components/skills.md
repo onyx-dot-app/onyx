@@ -241,7 +241,12 @@ The library preview of an external-app skill calls the same renderer
     `db/resource_access.py:mutate_resource_access` handles single and bulk changes.
     `db/skill.py:SkillAccessAdapter` supplies skill grants with real foreign keys,
     locked EDIT authorization and eligibility checks. Company visibility and
-    installation settings require global `MANAGE_SKILLS`, even for owners.
+    installation settings require global `MANAGE_SKILLS`, even for owners, except
+    that personal synced skill owners control their own audience. Their adapter
+    state sets `sharing_owner_id`; only that actor may change user/group grants
+    or public visibility. Unchanged grants do not block a manager's policy edit.
+    Ordinary owners can grant groups without changing installation settings;
+    scoped owners remain bounded by their managed groups.
     Client company controls use `usePermissionAuthority` with that permission,
     not ownership or scoped admin capabilities. `web/src/lib/skills/sharing.ts:serializeSkillSharing`
     omits company fields without global authority, preserving existing public access.
@@ -280,7 +285,10 @@ The library preview of an external-app skill calls the same renderer
     change or clear them. Explicit downgrade persists public defaults and removes marketplace
     group grants so sync cannot recreate them.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
-    deletion explicitly allows retirement. Active synced skills reject content changes,
+    deletion explicitly allows retirement only for the personal owner or global
+    `MANAGE_SKILLS`. Single and bulk routes cap that global authority by token scopes.
+    Reset requires manage-skills token scope as well as refreshed global authority.
+    Active synced skills reject content changes,
     restore, ownership transfer, and deletion through shared database guards.
     Content routes check before storage and again at publication. Access and personal
     toggles remain editable, subject to policy. User reads, including admin and app
@@ -585,6 +593,8 @@ The library preview of an external-app skill calls the same renderer
   skill reset endpoint are available. S8 must authorize marketplace changes, call the
   adapter, commit, and push its affected users once. Plugin membership is not modeled
   yet; its access guard belongs in `SkillAccessAdapter.load`.
+  S9 must expose personal synced owner audience controls and hide sharing actions
+  from non-owner editors; existing generic UI capabilities do not encode this yet.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing

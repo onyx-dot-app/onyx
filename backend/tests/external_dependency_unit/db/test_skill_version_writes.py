@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from botocore.exceptions import ClientError
-from fastapi import UploadFile
+from fastapi import Request, UploadFile
 from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
@@ -812,7 +812,9 @@ def test_delete_skill_with_twelve_versions(session: Session, user: User) -> None
     skill_id = skill.id
     assert len(versions(skill, session)) == 12
     assert len(stored_bundles(session)) == 10
-    api.delete_current_user_skill(skill_id, user, session)
+    api.delete_current_user_skill(
+        skill_id, user, session, http_request=Request({"type": "http"})
+    )
     count = select(func.count()).where(SkillVersion.skill_id == skill_id)
     assert session.scalar(count) == 0
     assert stored_bundles(session) == set()
@@ -828,6 +830,7 @@ def test_bulk_delete_removes_every_retained_bundle(
         SkillBulkActionRequest(skill_ids=[first.id, second.id], action="delete"),
         user,
         session,
+        http_request=Request({"type": "http"}),
     )
     assert response.failed == []
     assert session.scalar(select(func.count()).select_from(SkillVersion)) == 0
@@ -840,7 +843,9 @@ def test_cleanup_task_retries_failed_deletes(
     skill = skill_with_versions(session, user, 2)
     with monkeypatch.context() as patch:
         patch.setattr(staging, "get_default_file_store", FailingStore)
-        api.delete_current_user_skill(skill.id, user, session)
+        api.delete_current_user_skill(
+            skill.id, user, session, http_request=Request({"type": "http"})
+        )
     leaked = stored_bundles(session)
     assert len(leaked) == 2
     # Younger than one hour: an upload may not have committed its row yet.
@@ -872,7 +877,9 @@ def test_cleanup_keeps_files_in_use(session: Session, user: User) -> None:
         io.BytesIO(b"chat"), "chat.txt", FileOrigin.CHAT_UPLOAD, "text/plain"
     )
     session.commit()
-    api.delete_current_user_skill(deleted.id, user, session)
+    api.delete_current_user_skill(
+        deleted.id, user, session, http_request=Request({"type": "http"})
+    )
     in_use = stored_bundles(session)
     assert {legacy.bundle_file_id, shared} <= in_use
     make_old(in_use | {other_origin}, session)

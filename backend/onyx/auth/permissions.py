@@ -333,6 +333,16 @@ def has_global_permission(user: User, permission: Permission) -> bool:
     return has_permission(user, permission) is PermissionAuthority.GLOBAL
 
 
+def token_allows_permission(request: Request, required: Permission) -> bool:
+    """Apply the authenticating token's cap to a permission chosen inside a route."""
+    token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
+        request.state, "token_scopes", None
+    )
+    return token_scopes is None or required.value in resolve_effective_permissions(
+        {scope.value for scope in token_scopes}
+    )
+
+
 def require_permission(
     required: Permission,
     *,
@@ -354,19 +364,13 @@ def require_permission(
     base_user = current_chat_accessible_user if allow_anonymous else current_user
 
     async def dependency(request: Request, user: User = Depends(base_user)) -> User:
-        token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
-            request.state, "token_scopes", None
-        )
         authority = has_permission(user, required)
         # allow_scope: GATE 1 lets a SCOPED manager reach the route; default GLOBAL-only.
         if allow_scope:
             permitted_by_user = authority is not PermissionAuthority.NONE
         else:
             permitted_by_user = authority is PermissionAuthority.GLOBAL
-        token_implies = token_scopes is not None and required.value in (
-            resolve_effective_permissions({s.value for s in token_scopes})
-        )
-        permitted_by_token = token_scopes is None or token_implies
+        permitted_by_token = token_allows_permission(request, required)
         permitted = permitted_by_user and permitted_by_token
         if not permitted:
             raise OnyxError(

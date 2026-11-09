@@ -3,13 +3,14 @@ from contextlib import contextmanager
 from typing import Annotated, NamedTuple
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from pydantic import Field, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import (
     has_global_permission,
     require_permission,
+    token_allows_permission,
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
@@ -352,6 +353,8 @@ def bulk_update_skills(
     ],
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> SkillBulkResponse:
     user = lock_resource_access_user(user.id, db_session)
     succeeded: list[UUID] = []
@@ -378,7 +381,13 @@ def bulk_update_skills(
         for skill_id in sorted(set(request.skill_ids)):
             try:
                 item_affected, item_file_ids = bulk_update_skill__no_commit(
-                    skill_id, request.action, user, db_session
+                    skill_id,
+                    request.action,
+                    user,
+                    db_session,
+                    allow_global_management=token_allows_permission(
+                        http_request, Permission.MANAGE_SKILLS
+                    ),
                 )
             except OnyxError as exc:
                 failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
@@ -1234,6 +1243,8 @@ def delete_current_user_skill(
     skill_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> None:
     user = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
@@ -1247,7 +1258,14 @@ def delete_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    affected, file_ids = delete_skill_for_user__no_commit(skill, user, db_session)
+    affected, file_ids = delete_skill_for_user__no_commit(
+        skill,
+        user,
+        db_session,
+        allow_global_management=token_allows_permission(
+            http_request, Permission.MANAGE_SKILLS
+        ),
+    )
     db_session.commit()
 
     push_skills_for_users(affected, db_session)

@@ -9,6 +9,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 from sqlalchemy import Engine, func, select, text, true
 from sqlalchemy import delete as sql_delete
 from sqlalchemy.orm import Session
@@ -191,7 +192,9 @@ def test_content_storage_does_not_hold_membership(
     finally:
         db_session.rollback()
         for skill_id in cleanup_ids:
-            api.delete_current_user_skill(skill_id, user, db_session)
+            api.delete_current_user_skill(
+                skill_id, user, db_session, http_request=Request({"type": "http"})
+            )
 
 
 @pytest.mark.parametrize("race", ["content", "direct", "group", "manager", "publish"])
@@ -295,7 +298,9 @@ def test_staged_patch_rechecks_content_and_access(
         assert stored_bundles(db_session) == before
     finally:
         db_session.rollback()
-        api.delete_current_user_skill(skill.id, owner, db_session)
+        api.delete_current_user_skill(
+            skill.id, owner, db_session, http_request=Request({"type": "http"})
+        )
 
 
 def test_toggle_waits_for_membership_before_locking_user(
@@ -414,7 +419,9 @@ def test_commit_ack_failure_keeps_referenced_upload(
         with get_default_file_store().read_file(skill.bundle_file_id) as stream:
             assert stream.read()
     finally:
-        api.delete_current_user_skill(skill.id, user, db_session)
+        api.delete_current_user_skill(
+            skill.id, user, db_session, http_request=Request({"type": "http"})
+        )
 
 
 @pytest.mark.parametrize("operation", ["create", "editor"])
@@ -468,4 +475,6 @@ def test_create_conflict_releases_locks_before_blob_cleanup(
         )
     finally:
         db_session.rollback()
-        api.delete_current_user_skill(existing.id, user, db_session)
+        api.delete_current_user_skill(
+            existing.id, user, db_session, http_request=Request({"type": "http"})
+        )
