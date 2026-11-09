@@ -14438,8 +14438,8 @@
         "associateButton": "ربط مهارة موجودة",
         "create": {
           "github": {
-            "description": "إذا كانت مهاراتك على GitHub، فاستوردها أولًا من صفحة المهارات، ثم اربطها بهذا التطبيق.",
-            "label": "استيراد من GitHub"
+            "description": "زامن سوقًا من صفحة المهارات، ثم اربط مهاراته بهذا التطبيق.",
+            "label": "مزامنة من GitHub"
           },
           "scratch": {
             "description": "اكتب التعليمات وأضف الملفات الداعمة.",
@@ -17175,88 +17175,11 @@
           "selected": "{count, plural, zero {لم يتم تحديد أي حزمة مهارة} one {تم تحديد حزمة مهارة واحدة} two {تم تحديد حزمتي مهارات} few {تم تحديد # حزم مهارات} many {تم تحديد # حزمة مهارة} other {تم تحديد # حزمة مهارة}}",
           "result": "{imported, plural, zero {لم يتم استيراد أي مهارة} one {تم استيراد مهارة واحدة} two {تم استيراد مهارتين} few {تم استيراد # مهارات} many {تم استيراد # مهارة} other {تم استيراد # مهارة}}. {failed, plural, zero {لم تفشل أي مهارة} one {فشلت مهارة واحدة} two {فشلت مهارتان} few {فشلت # مهارات} many {فشلت # مهارة} other {فشلت # مهارة}}.",
           "failure": "{name}: {reason}",
-          "requirement": "حدد ملفات ZIP متعددة لاستيراد المهارات معًا. يجب أن يحتوي كل ZIP على مهارة واحدة."
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "إلغاء"
-        },
-        "doneButton": {
-          "label": "تم"
-        },
-        "header": {
-          "chooseDescription": "اختر مهارات من {repository}.",
-          "completeDescription": "راجع ما تمت إضافته إلى مهاراتك.",
-          "completeTitle": "اكتمل الاستيراد من GitHub",
-          "description": "استورد مهارة أو أكثر من مستودع GitHub.",
-          "title": "استيراد من GitHub"
-        },
-        "importError": {
-          "message": "تعذّر استيراد المهارات.",
-          "title": "تعذّر استيراد المهارات"
-        },
-        "loadError": {
-          "message": "تعذّر تحميل المستودع.",
-          "title": "تعذّر تحميل المستودع"
-        },
-        "privateRepos": {
-          "askAdmin": "المستودعات العامة تُستورد مباشرة. اطلب من المسؤول إعداد GitHub قبل استيراد المستودعات الخاصة.",
-          "connect": "المستودعات العامة تُستورد مباشرة. اربط GitHub لاستيراد المستودعات الخاصة.",
-          "connectButton": {
-            "label": "ربط GitHub"
-          },
-          "connected": "المستودعات العامة تُستورد مباشرة. المستودعات الخاصة تستخدم اتصالك بـ GitHub.",
-          "needsConnection": "المستودعات العامة تُستورد مباشرة. المستودعات الخاصة تتطلب اتصالًا بـ GitHub.",
-          "setUp": "المستودعات العامة تُستورد مباشرة. قم بإعداد GitHub قبل استيراد المستودعات الخاصة.",
-          "setUpButton": {
-            "label": "إعداد GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "المستودع"
-        },
-        "result": {
-          "disabledCount": "{count} استُوردت معطّلة لأن مهارة أخرى بنفس الاسم مفعّلة.",
-          "enabledCount": "{count} فُعّلت تلقائيًا.",
-          "failedCount": "{count} تعذّر استيرادها.",
-          "importedSection": {
-            "title": "المستوردة"
-          },
-          "importedTitle": "{count, plural, one {# مهارة مستوردة} other {# مهارات مستوردة}}",
-          "noneTitle": "لم يتم استيراد أي مهارات",
-          "notImportedSection": {
-            "title": "غير مستوردة"
-          },
-          "notSelectedCount": "{count} غير محددة."
-        },
-        "selectAll": {
-          "ariaLabel": "تحديد جميع المهارات القابلة للاستيراد"
-        },
-        "selection": {
-          "label": "تم تحديد {selected} من {total, plural, one {# مهارة قابلة للاستيراد} other {# مهارات قابلة للاستيراد}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "تحديد {name}"
-        },
-        "skillTag": {
-          "disabled": "معطّلة",
-          "enabled": "مفعّلة"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {استيراد مهارة} other {استيراد # مهارات}}",
-          "importingLabel": "جارٍ الاستيراد…",
-          "searchLabel": "البحث في المستودع",
-          "searchingLabel": "جارٍ البحث…"
-        },
-        "unavailableFallback": "لا يمكن استيراد هذه المهارة.",
-        "unavailableTag": {
-          "label": "يتعذّر الاستيراد"
-        },
-        "sharing": {
-          "title": "الوصول إلى المهارات المستوردة",
-          "configureButton": "إعداد الوصول",
-          "description": "تنطبق إعدادات الوصول هذه على {count, plural, zero {المهارات المحددة} one {المهارة المحددة} two {المهارتين المحددتين} few {جميع المهارات المحددة وعددها #} many {جميع المهارات المحددة وعددها #} other {جميع المهارات المحددة وعددها #}}."
+          "requirement": "حدد ملفات ZIP متعددة لاستيراد المهارات معًا. يجب أن يحتوي كل ZIP على مهارة واحدة.",
+          "configureAccess": "إعداد الوصول",
+          "done": "تم",
+          "importing": "جارٍ الاستيراد…",
+          "submit": "{count, plural, one {استيراد مهارة} other {استيراد # مهارات}}"
         }
       },
       "nameConflict": {
@@ -17644,6 +17567,19 @@
       "loadError": "تعذر تحميل الإعدادات الافتراضية للسوق. تم الاحتفاظ بتعديلاتك.",
       "companyOnly": "إعدادات الوصول الافتراضية متاحة فقط لأسواق الشركات.",
       "save": "حفظ الإعدادات الافتراضية"
+    },
+    "githubConnection": {
+      "askAdmin": "المستودعات العامة تتم مزامنتها مباشرة. اطلب من المسؤول إعداد GitHub قبل مزامنة المستودعات الخاصة.",
+      "connect": "المستودعات العامة تتم مزامنتها مباشرة. اربط GitHub لمزامنة المستودعات الخاصة.",
+      "connectButton": {
+        "label": "ربط GitHub"
+      },
+      "connected": "المستودعات العامة تتم مزامنتها مباشرة. المستودعات الخاصة تستخدم اتصالك بـ GitHub.",
+      "needsConnection": "المستودعات العامة تتم مزامنتها مباشرة. المستودعات الخاصة تتطلب اتصالًا بـ GitHub.",
+      "setUp": "المستودعات العامة تتم مزامنتها مباشرة. قم بإعداد GitHub قبل مزامنة المستودعات الخاصة.",
+      "setUpButton": {
+        "label": "إعداد GitHub"
+      }
     }
   }
 }

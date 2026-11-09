@@ -14438,8 +14438,8 @@
         "associateButton": "Associer une existante",
         "create": {
           "github": {
-            "description": "Si vos compétences sont sur GitHub, importez-les d'abord sur la page Compétences, puis associez-les à cette app.",
-            "label": "Importer depuis GitHub"
+            "description": "Synchronisez un marketplace sur la page Compétences, puis associez ses compétences à cette app.",
+            "label": "Synchroniser depuis GitHub"
           },
           "scratch": {
             "description": "Rédigez des instructions et ajoutez des fichiers annexes.",
@@ -17175,88 +17175,11 @@
           "selected": "{count, plural, one {# paquet de compétence sélectionné} other {# paquets de compétences sélectionnés}}",
           "result": "{imported, plural, one {# compétence importée} other {# compétences importées}}. {failed, plural, one {# échec} other {# échecs}}.",
           "failure": "{name} : {reason}",
-          "requirement": "Sélectionnez plusieurs fichiers ZIP pour importer des compétences ensemble. Chaque ZIP doit contenir une compétence."
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "Annuler"
-        },
-        "doneButton": {
-          "label": "Terminé"
-        },
-        "header": {
-          "chooseDescription": "Choisissez des compétences dans {repository}.",
-          "completeDescription": "Vérifiez ce qui a été ajouté à vos compétences.",
-          "completeTitle": "Importation GitHub terminée",
-          "description": "Importez une ou plusieurs compétences depuis un dépôt GitHub.",
-          "title": "Importer depuis GitHub"
-        },
-        "importError": {
-          "message": "Impossible d'importer les compétences.",
-          "title": "Impossible d'importer les compétences"
-        },
-        "loadError": {
-          "message": "Impossible de charger le dépôt.",
-          "title": "Impossible de charger le dépôt"
-        },
-        "privateRepos": {
-          "askAdmin": "Les dépôts publics s'importent directement. Demandez à un administrateur de configurer GitHub avant d'importer des dépôts privés.",
-          "connect": "Les dépôts publics s'importent directement. Connectez GitHub pour importer des dépôts privés.",
-          "connectButton": {
-            "label": "Connecter GitHub"
-          },
-          "connected": "Les dépôts publics s'importent directement. Les dépôts privés utilisent votre connexion GitHub.",
-          "needsConnection": "Les dépôts publics s'importent directement. Les dépôts privés exigent une connexion GitHub.",
-          "setUp": "Les dépôts publics s'importent directement. Configurez GitHub avant d'importer des dépôts privés.",
-          "setUpButton": {
-            "label": "Configurer GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "Dépôt"
-        },
-        "result": {
-          "disabledCount": "{count} importée(s) mais désactivée(s), car une autre compétence du même nom est activée.",
-          "enabledCount": "{count} activée(s) automatiquement.",
-          "failedCount": "{count} non importée(s).",
-          "importedSection": {
-            "title": "Importées"
-          },
-          "importedTitle": "{count, plural, one {# compétence importée} other {# compétences importées}}",
-          "noneTitle": "Aucune compétence importée",
-          "notImportedSection": {
-            "title": "Non importées"
-          },
-          "notSelectedCount": "{count} non sélectionnée(s)."
-        },
-        "selectAll": {
-          "ariaLabel": "Sélectionner toutes les compétences importables"
-        },
-        "selection": {
-          "label": "Sélection : {selected} sur {total, plural, one {# compétence importable} other {# compétences importables}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "Sélectionner {name}"
-        },
-        "skillTag": {
-          "disabled": "Désactivée",
-          "enabled": "Activée"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {Importer la compétence} other {Importer # compétences}}",
-          "importingLabel": "Importation…",
-          "searchLabel": "Rechercher dans le dépôt",
-          "searchingLabel": "Recherche…"
-        },
-        "unavailableFallback": "Cette compétence ne peut pas être importée.",
-        "unavailableTag": {
-          "label": "Importation impossible"
-        },
-        "sharing": {
-          "title": "Accès aux compétences importées",
-          "configureButton": "Configurer l’accès",
-          "description": "Ces paramètres d’accès s’appliquent à {count, plural, one {la compétence sélectionnée} other {toutes les # compétences sélectionnées}}."
+          "requirement": "Sélectionnez plusieurs fichiers ZIP pour importer des compétences ensemble. Chaque ZIP doit contenir une compétence.",
+          "configureAccess": "Configurer l’accès",
+          "done": "Terminé",
+          "importing": "Importation…",
+          "submit": "{count, plural, one {Importer la compétence} other {Importer # compétences}}"
         }
       },
       "nameConflict": {
@@ -17644,6 +17567,19 @@
       "loadError": "Impossible de charger les paramètres du marketplace. Vos modifications sont conservées.",
       "companyOnly": "Les paramètres d’accès sont disponibles uniquement pour les marketplaces d’entreprise.",
       "save": "Enregistrer les paramètres"
+    },
+    "githubConnection": {
+      "askAdmin": "Les dépôts publics se synchronisent directement. Demandez à un administrateur de configurer GitHub avant de synchroniser des dépôts privés.",
+      "connect": "Les dépôts publics se synchronisent directement. Connectez GitHub pour synchroniser des dépôts privés.",
+      "connectButton": {
+        "label": "Connecter GitHub"
+      },
+      "connected": "Les dépôts publics se synchronisent directement. Les dépôts privés utilisent votre connexion GitHub.",
+      "needsConnection": "Les dépôts publics se synchronisent directement. Les dépôts privés exigent une connexion GitHub.",
+      "setUp": "Les dépôts publics se synchronisent directement. Configurez GitHub avant de synchroniser des dépôts privés.",
+      "setUpButton": {
+        "label": "Configurer GitHub"
+      }
     }
   }
 }

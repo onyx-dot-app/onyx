@@ -498,7 +498,7 @@ describe("ConfigureProviderModal", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("directs GitHub imports through the Skills page", () => {
+  it("directs GitHub sync through the Skills page", () => {
     renderExistingProvider();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Skills" }), {
       button: 0,
@@ -506,11 +506,11 @@ describe("ConfigureProviderModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
 
     expect(
-      screen.getByRole("menuitem", { name: /Import from GitHub/ })
+      screen.getByRole("menuitem", { name: /Sync from GitHub/ })
     ).toHaveAttribute("aria-disabled", "true");
     expect(
       screen.getByText(
-        "If your skills are in GitHub, import them on the Skills page first, then associate them with this app."
+        "Sync a marketplace on the Skills page, then associate its skills with this app."
       )
     ).toBeInTheDocument();
   });

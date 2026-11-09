@@ -14438,8 +14438,8 @@
         "associateButton": "Asociar existente",
         "create": {
           "github": {
-            "description": "Si tus habilidades están en GitHub, impórtalas primero en la página de Habilidades y luego asócialas con esta app.",
-            "label": "Importar desde GitHub"
+            "description": "Sincroniza un marketplace en la página de Habilidades y luego asocia sus habilidades con esta app.",
+            "label": "Sincronizar desde GitHub"
           },
           "scratch": {
             "description": "Escribe instrucciones y añade archivos de apoyo.",
@@ -17175,88 +17175,11 @@
           "selected": "{count, plural, one {# paquete de habilidad seleccionado} other {# paquetes de habilidades seleccionados}}",
           "result": "{imported, plural, one {# habilidad importada} other {# habilidades importadas}}. {failed, plural, one {# fallo} other {# fallos}}.",
           "failure": "{name}: {reason}",
-          "requirement": "Selecciona varios archivos ZIP para importar habilidades juntas. Cada ZIP debe contener una habilidad."
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "Cancelar"
-        },
-        "doneButton": {
-          "label": "Listo"
-        },
-        "header": {
-          "chooseDescription": "Elige habilidades de {repository}.",
-          "completeDescription": "Revisa lo que se añadió a tus habilidades.",
-          "completeTitle": "Importación desde GitHub completada",
-          "description": "Importa una o varias habilidades desde un repositorio de GitHub.",
-          "title": "Importar desde GitHub"
-        },
-        "importError": {
-          "message": "No se pudieron importar las habilidades.",
-          "title": "No se pudieron importar las habilidades"
-        },
-        "loadError": {
-          "message": "No se pudo cargar el repositorio.",
-          "title": "No se pudo cargar el repositorio"
-        },
-        "privateRepos": {
-          "askAdmin": "Los repositorios públicos se importan directamente. Pide a un administrador que configure GitHub antes de importar repositorios privados.",
-          "connect": "Los repositorios públicos se importan directamente. Conecta GitHub para importar repositorios privados.",
-          "connectButton": {
-            "label": "Conectar GitHub"
-          },
-          "connected": "Los repositorios públicos se importan directamente. Los repositorios privados usan tu conexión de GitHub.",
-          "needsConnection": "Los repositorios públicos se importan directamente. Los repositorios privados necesitan una conexión de GitHub.",
-          "setUp": "Los repositorios públicos se importan directamente. Configura GitHub antes de importar repositorios privados.",
-          "setUpButton": {
-            "label": "Configurar GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "Repositorio"
-        },
-        "result": {
-          "disabledCount": "{count} se importaron desactivadas porque hay otra habilidad activada con el mismo nombre.",
-          "enabledCount": "{count} se activaron automáticamente.",
-          "failedCount": "{count} no se pudieron importar.",
-          "importedSection": {
-            "title": "Importadas"
-          },
-          "importedTitle": "{count, plural, one {# habilidad importada} other {# habilidades importadas}}",
-          "noneTitle": "No se importó ninguna habilidad",
-          "notImportedSection": {
-            "title": "No importadas"
-          },
-          "notSelectedCount": "{count} sin seleccionar."
-        },
-        "selectAll": {
-          "ariaLabel": "Seleccionar todas las habilidades importables"
-        },
-        "selection": {
-          "label": "{selected} de {total, plural, one {# habilidad importable} other {# habilidades importables}} seleccionadas"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "Seleccionar {name}"
-        },
-        "skillTag": {
-          "disabled": "Desactivada",
-          "enabled": "Activada"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {Importar la habilidad} other {Importar # habilidades}}",
-          "importingLabel": "Importando…",
-          "searchLabel": "Buscar el repositorio",
-          "searchingLabel": "Buscando…"
-        },
-        "unavailableFallback": "Esta habilidad no se puede importar.",
-        "unavailableTag": {
-          "label": "No se puede importar"
-        },
-        "sharing": {
-          "title": "Acceso a habilidades importadas",
-          "configureButton": "Configurar acceso",
-          "description": "Estos ajustes de acceso se aplican a {count, plural, one {la habilidad seleccionada} other {las # habilidades seleccionadas}}."
+          "requirement": "Selecciona varios archivos ZIP para importar habilidades juntas. Cada ZIP debe contener una habilidad.",
+          "configureAccess": "Configurar acceso",
+          "done": "Listo",
+          "importing": "Importando…",
+          "submit": "{count, plural, one {Importar la habilidad} other {Importar # habilidades}}"
         }
       },
       "nameConflict": {
@@ -17644,6 +17567,19 @@
       "loadError": "No se pudieron cargar los valores del marketplace. Se conservan tus cambios.",
       "companyOnly": "Los valores de acceso solo están disponibles para marketplaces de empresa.",
       "save": "Guardar valores"
+    },
+    "githubConnection": {
+      "askAdmin": "Los repositorios públicos se sincronizan directamente. Pide a un administrador que configure GitHub antes de sincronizar repositorios privados.",
+      "connect": "Los repositorios públicos se sincronizan directamente. Conecta GitHub para sincronizar repositorios privados.",
+      "connectButton": {
+        "label": "Conectar GitHub"
+      },
+      "connected": "Los repositorios públicos se sincronizan directamente. Los repositorios privados usan tu conexión de GitHub.",
+      "needsConnection": "Los repositorios públicos se sincronizan directamente. Los repositorios privados necesitan una conexión de GitHub.",
+      "setUp": "Los repositorios públicos se sincronizan directamente. Configura GitHub antes de sincronizar repositorios privados.",
+      "setUpButton": {
+        "label": "Configurar GitHub"
+      }
     }
   }
 }
