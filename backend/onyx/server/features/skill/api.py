@@ -226,7 +226,7 @@ def _replace_skill_bundle_from_editor(
         file_store,
         expected_name=skill.name,
     ) as ingested:
-        bundle_used = replace_skill_bundle(
+        stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             creator_id=user.id,
@@ -234,8 +234,7 @@ def _replace_skill_bundle_from_editor(
         )
         db_session.commit()
 
-    if not bundle_used:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
+    delete_unreferenced_skill_bundles(stale_file_ids, db_session)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
@@ -665,7 +664,7 @@ def replace_current_user_skill_bundle(
         file_store,
         expected_name=skill.name,
     ) as ingested:
-        bundle_used = replace_skill_bundle(
+        stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
             creator_id=user.id,
@@ -673,8 +672,7 @@ def replace_current_user_skill_bundle(
         )
         db_session.commit()
 
-    if not bundle_used:
-        delete_bundle_blob(file_store, ingested.bundle_file_id)
+    delete_unreferenced_skill_bundles(stale_file_ids, db_session)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
@@ -772,7 +770,7 @@ def patch_current_user_skill(
     before_affected = affected_user_ids_for_skill(skill, db_session)
     file_store = get_default_file_store() if patch_req.has_details_update else None
     new_bundle_file_id: str | None = None
-    bundle_used = True
+    stale_file_ids: list[str] = []
 
     try:
         if file_store is not None:
@@ -800,7 +798,7 @@ def patch_current_user_skill(
                 expected_name=skill.name,
             )
             new_bundle_file_id = ingested.bundle_file_id
-            bundle_used = replace_skill_bundle(
+            stale_file_ids = replace_skill_bundle(
                 skill=skill,
                 ingested=ingested,
                 creator_id=user.id,
@@ -824,8 +822,7 @@ def patch_current_user_skill(
             delete_bundle_blob(file_store, new_bundle_file_id)
         raise
 
-    if file_store is not None and new_bundle_file_id is not None and not bundle_used:
-        delete_bundle_blob(file_store, new_bundle_file_id)
+    delete_unreferenced_skill_bundles(stale_file_ids, db_session)
 
     db_session.expire(skill)
     visibility_changed = old_public_permission != skill.public_permission
