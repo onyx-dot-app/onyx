@@ -186,17 +186,18 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
 
 def list_skill_versions(
     skill: Skill, db_session: Session
-) -> list[tuple[SkillVersion, User | None]]:
+) -> list[tuple[SkillVersion, User | None, bool]]:
     """List history for a skill the caller has authorized for editing."""
     statement = (
         SkillVersionAdapter(skill)
         .versions()
-        .add_columns(User)
+        .add_columns(User, (SkillVersion.id == Skill.current_version_id).is_(True))
+        .join(Skill, SkillVersion.skill_id == Skill.id)
         .outerjoin(User, SkillVersion.created_by_user_id == User.id)
     )
     return [
-        (version, creator)
-        for version, creator in db_session.execute(statement).unique()
+        (version, creator, is_current)
+        for version, creator, is_current in db_session.execute(statement).unique()
     ]
 
 

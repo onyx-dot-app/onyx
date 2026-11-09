@@ -286,6 +286,8 @@ The library preview of an external-app skill calls the same renderer
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `version-rollout-reads` **Custom readers use `Skill.current_version`.**
+    History rows and their current-version markers come from one SQL statement,
+    so an edit after authorization cannot mark an older version as current.
     Its eager outer join retains built-ins, which have no versions. A custom
     row without a pointer cannot load or enable. Locks on joined skill queries
     must specify `of=Skill`. Reload `current_version` after a locking read before

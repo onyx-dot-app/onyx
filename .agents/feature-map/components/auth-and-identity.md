@@ -261,7 +261,7 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
   (`db/users.py:delete_user_from_db__no_commit`). Transfer or delete private
   uploaded skills, and remove personal marketplaces first ([[skills#marketplace-ownership]]).
   Company marketplace skills survive deletion of their author or GitHub login user.
-  Replace the source's GitHub login to resume syncing.
+  If the deleted user supplied the source's GitHub login, replace it to resume syncing.
 - **Anonymous access can turn itself off.** `auth/users.py` reads
   `anonymous_user_enabled` from the same cache key as the settings store, and
   the key expires ([[chat-preferences]] Known issues).

@@ -319,7 +319,7 @@ A version ID from another Skill also returns `404`.
 ## Reset marketplace Skill access through the API
 
 Company marketplace Skills remain when their author or GitHub login user is deleted.
-The source needs a replacement GitHub login before it can sync again.
+If the deleted user supplied the source's GitHub login, replace it to resume syncing.
 Remove a user's personal marketplaces and transfer or delete their private uploaded Skills before deleting that user.
 
 For a Skill from a company marketplace,

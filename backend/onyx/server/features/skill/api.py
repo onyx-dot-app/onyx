@@ -778,10 +778,10 @@ def list_custom_skill_versions(
                 if creator is not None
                 else None
             ),
-            is_current=version.id == skill.current_version_id,
+            is_current=is_current,
             has_bundle=version.bundle_file_id is not None,
         )
-        for version, creator in list_skill_versions(skill, db_session)
+        for version, creator, is_current in list_skill_versions(skill, db_session)
     ]
 
 
