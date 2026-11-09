@@ -9,6 +9,7 @@ from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, cast
 
 import puremagic
+from azure.core.exceptions import HttpResponseError
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
@@ -39,6 +40,7 @@ from onyx.file_store.file_store import (
     PresignedUrlsNotSupportedError,
     content_byte_size,
     presign_expiry,
+    read_file_to_buffer,
 )
 from onyx.file_store.models import (
     PendingPresignedUpload,
@@ -316,6 +318,8 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         mode: str | None = None,  # noqa: ARG002
         use_tempfile: bool = False,
         db_session: Session | None = None,
+        *,
+        max_bytes: int | None = None,
     ) -> IO[bytes]:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             file_record = get_filerecord_by_file_id(
@@ -326,6 +330,22 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         blob_client = client.get_blob_client(
             container=file_record.bucket_name, blob=file_record.object_key
         )
+
+        if max_bytes is not None:
+            try:
+                source = blob_client.download_blob(offset=0, length=max_bytes + 1)
+            except HttpResponseError as exc:
+                if (
+                    exc.status_code != 416
+                    or blob_client.get_blob_properties().size != 0
+                ):
+                    raise
+                return read_file_to_buffer(
+                    BytesIO().read, use_tempfile=use_tempfile, max_bytes=max_bytes
+                )
+            return read_file_to_buffer(
+                source.read, use_tempfile=use_tempfile, max_bytes=max_bytes
+            )
 
         if use_tempfile:
             temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)

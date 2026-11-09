@@ -81,6 +81,7 @@ from onyx.server.features.skill.response_helpers import (
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
+    STORED_BUNDLE_LIMITS,
     build_single_file_bundle,
     build_skill_md,
     inspect_custom_bundle,
@@ -704,7 +705,12 @@ def preview_custom_skill_version(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     version = fetch_skill_version(skill, version_id, db_session)
     return _inspect_skill_bundle(
-        read_version_bundle(version, get_default_file_store()), stored=True
+        read_version_bundle(
+            version,
+            get_default_file_store(),
+            max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
+        ),
+        stored=True,
     )
 
 
@@ -727,7 +733,11 @@ def restore_custom_skill_version(
     version = fetch_skill_version(skill, version_id, db_session)
     return _replace_skill_bundle_from_editor(
         skill,
-        read_version_bundle(version, get_default_file_store()),
+        read_version_bundle(
+            version,
+            get_default_file_store(),
+            max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
+        ),
         user,
         db_session,
     )

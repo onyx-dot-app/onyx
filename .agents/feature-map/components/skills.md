@@ -282,7 +282,13 @@ The library preview of an external-app skill calls the same renderer
     Identical saves verify the existing bundle before reusing it. A missing,
     changed or corrupt current file creates a fresh version from the upload.
     Unexpected storage errors abort the save and keep the current version.
-    Missing or corrupt historical files retain unknown metadata. Built-ins have
+    Missing, corrupt or oversized historical files retain unknown metadata.
+    Repair receives `skills/bundle.py:STORED_BUNDLE_LIMITS`: stored bytes use
+    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. Expansion counts actual
+    per-file and total bytes. No upload ZIP or file-count cap applies to history.
+    Current-content reads verify expansion before inspection or editing.
+    Stored-byte and expansion limits return 400 through the ValueError handler.
+    Metadata hashes original entries without normalization. Built-ins have
     no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
     interval is five minutes; cloud uses the standard beat multiplier (eight
@@ -351,7 +357,7 @@ The library preview of an external-app skill calls the same renderer
     then wraps. New arrivals cannot postpone retries of earlier failures.
     An upload saves its file before its row commits, so
     a younger file can be live. A version preview or restore must read through
-    `read_version_bundle`, which gives NOT_FOUND "The files of this version are
+    `read_version_bundle` with the resource's stored-byte limit. It gives NOT_FOUND "The files of this version are
     no longer kept." for a pruned bundle, also when pruning wins a race. A
     restore that copies an old version must read it under the version lock.
 20. `history-requires-edit` **History uses EDIT access, including its reads.**

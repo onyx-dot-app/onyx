@@ -11,6 +11,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.content import (
     read_builtin_skill_instructions,
     read_custom_skill_bundle_bytes,
@@ -72,7 +73,9 @@ def test_read_custom_skill_bundle_instructions_reads_bundle_from_file_store() ->
         file_store,
     )
 
-    file_store.read_file.assert_called_once_with("bundle-file-id")
+    file_store.read_file.assert_called_once_with(
+        "bundle-file-id", max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes
+    )
     assert instructions == "# Instructions\n\nDo it."
 
 
