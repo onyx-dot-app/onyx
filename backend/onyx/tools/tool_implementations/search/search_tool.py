@@ -583,32 +583,32 @@ class SearchTool(Tool):
                 if not federated_oauth_tokens:
                     return access_token, bot_token, entities
 
-                slack_oauth_token = next(
-                    (
-                        token
-                        for token in federated_oauth_tokens
-                        if token.federated_connector.source
-                        == FederatedConnectorSource.FEDERATED_SLACK
-                    ),
-                    None,
-                )
+                slack_tokens = [
+                    token
+                    for token in federated_oauth_tokens
+                    if token.federated_connector.source
+                    == FederatedConnectorSource.FEDERATED_SLACK
+                ]
                 selected = self._selected_document_set_names
-                if (
-                    slack_oauth_token
-                    and selected
-                    and not any(
+                if slack_tokens and selected:
+                    linked_connector_ids = {
                         mapping.federated_connector_id
-                        == slack_oauth_token.federated_connector_id
                         for mapping in get_federated_connector_document_set_mappings_by_document_set_names(
                             db_session, selected
                         )
-                    )
-                ):
-                    logger.debug(
-                        "Skipping Slack federated search: Slack is not linked to the selected document sets %s",
-                        selected,
-                    )
-                    return access_token, bot_token, entities
+                    }
+                    slack_tokens = [
+                        token
+                        for token in slack_tokens
+                        if token.federated_connector_id in linked_connector_ids
+                    ]
+                    if not slack_tokens:
+                        logger.debug(
+                            "Skipping Slack federated search: Slack is not linked to the selected document sets %s",
+                            selected,
+                        )
+                        return access_token, bot_token, entities
+                slack_oauth_token = next(iter(slack_tokens), None)
                 if slack_oauth_token and slack_oauth_token.token:
                     access_token = slack_oauth_token.token.get_value(apply_mask=False)
                     entities = slack_oauth_token.federated_connector.config or {}

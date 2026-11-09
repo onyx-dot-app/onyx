@@ -152,9 +152,11 @@ both.
      `team_id` are both set. `_run_slack_search` passes `team_id=None`, so it
      never runs on this path (see Known issues).
 2. `token-branches-asymmetric` **The two token branches are not symmetric.**
-   Only the bot branch of `tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data` checks the document-set link.
-   A web user's Slack results are scoped by their own token, not by the agent's
-   document sets. In the bot branch, a change that reads a token before the
+   The bot branch of `tools/tool_implementations/search/search_tool.py:SearchTool._prefetch_slack_data`
+   always checks the document-set link. The web-user branch checks it only
+   when the caller selected document sets, and then picks the first linked
+   Slack token. Otherwise a web user's Slack results are scoped by their own
+   token, not by the agent's document sets. In both branches, a change that reads a token before the
    document-set check lets Slack search run outside that scope. Do not assume a
    change to one branch applies to the other.
 3. `registry-skip-in-step` **The registry skip and the `SearchTool` lane must

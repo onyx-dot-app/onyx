@@ -188,21 +188,26 @@ def test_federated_retrieval_uses_selected_document_sets(
     assert federated.call_args.kwargs["document_set_names"] == expected
 
 
+def _slack_oauth_token(connector_id: int) -> MagicMock:
+    token = MagicMock(federated_connector_id=connector_id)
+    token.federated_connector.source = FederatedConnectorSource.FEDERATED_SLACK
+    token.federated_connector.config = {"channels": ["eng"]}
+    token.token.get_value.return_value = f"slack-token-{connector_id}"
+    return token
+
+
 @pytest.mark.parametrize(
-    ("linked_connector_id", "expect_token"), [(7, True), (8, False)]
+    ("linked_connector_id", "expected_token"),
+    [(7, "slack-token-7"), (9, "slack-token-9"), (8, None)],
 )
 def test_slack_oauth_search_requires_link_to_selected_document_sets(
-    linked_connector_id: int, expect_token: bool
+    linked_connector_id: int, expected_token: str | None
 ) -> None:
     tool = _make_tool(user_selected_filters=BaseFilters(document_set=["Eng"]))
-    slack_token = MagicMock(federated_connector_id=7)
-    slack_token.federated_connector.source = FederatedConnectorSource.FEDERATED_SLACK
-    slack_token.federated_connector.config = {"channels": ["eng"]}
-    slack_token.token.get_value.return_value = "user-slack-token"
     with (
         patch(
             f"{MODULE}.list_federated_connector_oauth_tokens",
-            return_value=[slack_token],
+            return_value=[_slack_oauth_token(7), _slack_oauth_token(9)],
         ),
         patch(
             f"{MODULE}.get_federated_connector_document_set_mappings_by_document_set_names",
@@ -213,7 +218,7 @@ def test_slack_oauth_search_requires_link_to_selected_document_sets(
 
     mappings.assert_called_once()
     assert mappings.call_args.args[1] == ["Eng"]
-    assert (access_token == "user-slack-token") is expect_token
+    assert access_token == expected_token
 
 
 def test_empty_search_never_resolves_selection_model() -> None:
