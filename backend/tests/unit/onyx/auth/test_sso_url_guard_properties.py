@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
@@ -196,6 +196,9 @@ _LEVELS = st.sampled_from(
 
 @settings(max_examples=200, deadline=None, derandomize=True)
 @given(url=_tricky_url(), level=_LEVELS)
+# URLs that do not parse raise UnsafeSSOUrl, which callers catch.
+@example(url="https://idp.example.com%40[::1]/", level=SSRFProtectionLevel.VALIDATE_ALL)
+@example(url="https://[::1]\\@127.0.0.1/", level=SSRFProtectionLevel.VALIDATE_ALL)
 def test_no_url_that_reaches_a_blocked_address_passes(
     url: str, level: SSRFProtectionLevel
 ) -> None:
@@ -215,6 +218,13 @@ def test_no_url_that_reaches_a_blocked_address_passes(
     ),
     query=st.sampled_from(["", "?a=1", "?next=%2Fhome&x=y"]),
     level=_LEVELS,
+)
+@example(
+    host="8.8.8.8",
+    port="",
+    path="/.well-known/openid-configuration",
+    query="",
+    level=SSRFProtectionLevel.VALIDATE_ALL,
 )
 def test_ordinary_public_https_urls_pass(
     host: str, port: str, path: str, query: str, level: SSRFProtectionLevel
