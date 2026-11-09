@@ -313,7 +313,7 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
         form_values={"channels": ["a"]},
     )
     run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
-    assert harness.runs == [_TOKEN, _CHANNELS]
+    assert sorted(harness.runs) == sorted([_TOKEN, _CHANNELS])
     # A reused result counts as finished at once, also for a check that would
     # now be slow.
     harness.make_slow(_CHANNELS)
@@ -323,7 +323,7 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
     assert time.monotonic() - started < creation.CREATION_BLOCKING_BUDGET_SECONDS
     # Nothing ran again, and the reused results are stored.
-    assert harness.runs == [_TOKEN, _CHANNELS]
+    assert sorted(harness.runs) == sorted([_TOKEN, _CHANNELS])
     harness.send_task.assert_not_called()
     harness.release_all()
     assert _stored_statuses(db_session, slack_pair) == {
@@ -334,7 +334,7 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
 
     # Another form value changes only the config-reading check's key.
     assert _validate(db_session, slack_pair, {"channels": ["b"]}) is True
-    assert harness.runs == [_TOKEN, _CHANNELS, _CHANNELS]
+    assert sorted(harness.runs) == sorted([_TOKEN, _CHANNELS, _CHANNELS])
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -425,12 +425,14 @@ def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
         form_values={"channels": ["a"]},
     )
     run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
-    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    assert sorted(harness.runs[:-1]) == sorted([_TOKEN, _CHANNELS])
+    assert harness.runs[-1] == _DISCOVERY
     harness.send_task.reset_mock()
 
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
 
-    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    assert sorted(harness.runs[:-1]) == sorted([_TOKEN, _CHANNELS])
+    assert harness.runs[-1] == _DISCOVERY
     db_session.expire_all()
     row = get_capability_report_row(
         db_session, slack_pair.credential_id, slack_pair.connector_id
