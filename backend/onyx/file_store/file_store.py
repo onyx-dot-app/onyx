@@ -1014,7 +1014,15 @@ class S3BackedFileStore(PresignableFileStore):
                         # HEAD omits the error body, including NoSuchBucket.
                         try:
                             client.head_bucket(Bucket=file_record.bucket_name)
-                        except ClientError:
+                        except ClientError as bucket_error:
+                            if s3_error_code(bucket_error) in (
+                                "404",
+                                "NotFound",
+                                "NoSuchBucket",
+                            ):
+                                raise ClientError(
+                                    {"Error": {"Code": "NoSuchBucket"}}, "HeadBucket"
+                                ) from bucket_error
                             return None
                     raise
 

@@ -119,3 +119,32 @@ def test_repair_preserves_links_without_missing_object_evidence(
                 version, store, limits=STORED_BUNDLE_LIMITS, clear_missing_bundle=True
             )
     assert version.bundle_file_id == (None if failure == "object" else "bundle")
+
+
+@pytest.mark.parametrize(
+    "bucket_error", ["404", "NotFound", "NoSuchBucket", "403", "500"]
+)
+def test_missing_primary_object_with_legacy_bucket_error(
+    monkeypatch: pytest.MonkeyPatch, bucket_error: str
+) -> None:
+    store = cloud_store(monkeypatch, "s3", "object")
+    legacy = MagicMock()
+    legacy.head_object.side_effect = ClientError(
+        {"Error": {"Code": "404"}}, "HeadObject"
+    )
+    legacy.head_bucket.side_effect = ClientError(
+        {"Error": {"Code": bucket_error}}, "HeadBucket"
+    )
+    monkeypatch.setattr(store, "_get_legacy_s3_client", lambda: legacy)
+    version = SkillVersion(
+        bundle_file_id="bundle",
+        content_digest="digest",
+        unpacked_size_bytes=20,
+        file_count=1,
+    )
+    assert not repair_version_metadata(
+        version, store, limits=STORED_BUNDLE_LIMITS, clear_missing_bundle=True
+    )
+    missing = bucket_error in ("404", "NotFound", "NoSuchBucket")
+    assert version.bundle_file_id == (None if missing else "bundle")
+    legacy.get_object.assert_not_called()
