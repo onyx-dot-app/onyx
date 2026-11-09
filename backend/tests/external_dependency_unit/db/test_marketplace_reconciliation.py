@@ -61,6 +61,7 @@ def session(isolated_engine: Engine) -> Generator[Session, None, None]:
             "sandbox",
             "external_app__skill",
             "user__user_group",
+            "user_skill_preference",
             "oauth_account",
             "user__pinned_persona",
         )

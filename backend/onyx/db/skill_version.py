@@ -23,7 +23,7 @@ from onyx.db.resource_version import (
     repair_version_metadata,
     write_resource_version,
 )
-from onyx.db.skill_mutation import assert_skill_mutable
+from onyx.db.skill_mutation import assert_skill_content_editable
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -183,20 +183,21 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
 
 def list_skill_versions(
     skill: Skill, db_session: Session, *, before_version: int | None = None
-) -> list[tuple[SkillVersion, User | None]]:
+) -> list[tuple[SkillVersion, User | None, bool]]:
     """List up to 50 versions of an authorized skill, newest first."""
     statement = (
         SkillVersionAdapter(skill)
         .versions()
-        .add_columns(User)
+        .add_columns(User, (SkillVersion.id == Skill.current_version_id).is_(True))
+        .join(Skill, SkillVersion.skill_id == Skill.id)
         .outerjoin(User, SkillVersion.created_by_user_id == User.id)
         .limit(50)
     )
     if before_version is not None:
         statement = statement.where(SkillVersion.version_number < before_version)
     return [
-        (version, creator)
-        for version, creator in db_session.execute(statement).unique()
+        (version, creator, is_current)
+        for version, creator, is_current in db_session.execute(statement).unique()
     ]
 
 
@@ -249,12 +250,13 @@ def save_skill_version(
 ) -> list[str]:
     """Returns the bundle files to delete after commit: pruned bundles and the
     staged upload when the current version is reused."""
+    assert_skill_content_editable(skill)
     if not initial and prepared is None:
         prepared = prepare_skill_version_write(skill, ingested, db_session)
     adapter = SkillVersionAdapter(skill)
     adapter.lock(db_session)
     db_session.refresh(skill, ["current_version"])
-    assert_skill_mutable(skill)
+    assert_skill_content_editable(skill)
     reuse_current = False
     if not initial:
         matches = (
@@ -489,7 +491,6 @@ def repair_skill_version_metadata(
             OnyxErrorCode.CONFLICT, "Skill content changed. Retry metadata repair."
         )
     current = repair_skill_version(skill, db_session)
-    stale_file_ids = prune_resource_bundles(adapter, db_session)
     for version in db_session.scalars(adapter.versions()):
         observed = prepared.get(version.id)
         if (
@@ -500,4 +501,4 @@ def repair_skill_version_metadata(
             _apply_metadata(version, observed[2])
     if current.bundle_file_id is not None and legacy_metadata is not None:
         _apply_metadata(current, legacy_metadata)
-    return stale_file_ids
+    return prune_resource_bundles(adapter, db_session)
