@@ -45,6 +45,41 @@ def test_disabled_level_allows_a_private_idp() -> None:
         validate_idp_url(f"https://10.0.0.1{_CONFIG_PATH}", field="openid_config_url")
 
 
+@pytest.mark.parametrize("level", list(SSRFProtectionLevel))
+@pytest.mark.parametrize(
+    "host",
+    [
+        "127%2E0%2E0%2E1",
+        "%31%32%37.0.0.1",
+        "169%2E254%2E169%2E254",
+        "169.254.169.254%2Eexample.com",
+        "169.254.169.254\\.example.com",
+        "\uff11\uff16\uff19.254.169.254",
+        "169.254.169.254\t",
+    ],
+)
+def test_rejects_hosts_a_client_could_decode_differently(
+    level: SSRFProtectionLevel, host: str
+) -> None:
+    """HTTP clients may percent-decode, IDNA-map or strip parts of a host, so the
+    guard rejects any host it cannot judge exactly as a client would."""
+    with _at_level(level), pytest.raises(UnsafeSSOUrl):
+        validate_idp_url(f"https://{host}{_CONFIG_PATH}", field="openid_config_url")
+
+
+@pytest.mark.parametrize("level", list(SSRFProtectionLevel))
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"https://8.8.8.8{_CONFIG_PATH}",
+        f"https://8.8.8.8:8443/realms/a%20b{_CONFIG_PATH}?x=%2F",
+    ],
+)
+def test_public_idp_urls_still_pass(level: SSRFProtectionLevel, url: str) -> None:
+    with _at_level(level):
+        validate_idp_url(url, field="openid_config_url")
+
+
 @pytest.mark.asyncio
 async def test_refresh_declines_a_private_discovery_url() -> None:
     """Refresh posts the client secret and the refresh token to whatever the
