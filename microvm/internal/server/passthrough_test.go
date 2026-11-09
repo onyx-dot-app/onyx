@@ -74,6 +74,11 @@ type fakeVM struct {
 
 func startFakeVM(t *testing.T) *fakeVM {
 	t.Helper()
+	return startFakeVMWith(t, guestd.Config{Version: "test"})
+}
+
+func startFakeVMWith(t *testing.T, cfg guestd.Config) *fakeVM {
+	t.Helper()
 	sock := filepath.Join("/tmp", "pt-"+filepath.Base(t.TempDir())+".sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
@@ -89,7 +94,7 @@ func startFakeVM(t *testing.T) *fakeVM {
 		AddEntropy: func([]byte) (bool, error) { return true, nil },
 		GrowFS:     func(string, uint64) (uint64, uint64, error) { return 0, 0, nil },
 	}
-	d, err := guestd.NewServer(guestd.Config{Version: "test"}, nop, m)
+	d, err := guestd.NewServer(cfg, nop, m)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -164,7 +164,8 @@ func writeRootfs(t *testing.T, dir, data, ca string) *Rootfs {
 				{"drive_id": "rootfs", "is_read_only": true}, {"drive_id": "scratch", "is_read_only": false},
 				{"drive_id": "managed", "is_read_only": true},
 			},
-			"daemon": map[string]any{"vsock_port": 52},
+			"managed_slots": map[string]any{"a": "/dev/vdc", "b": "/dev/vdf"},
+			"daemon":        map[string]any{"vsock_port": 52},
 		},
 		"output": map[string]any{"file": RootfsImageFile, "sha256": hex.EncodeToString(sum[:]), "size_bytes": len(data)},
 	}
@@ -231,8 +232,8 @@ func TestBuildWritesAVerifiedTemplate(t *testing.T) {
 	for _, d := range cfg.Drives {
 		ids = append(ids, d.ID)
 	}
-	if strings.Join(ids, ",") != "rootfs,scratch,managed,upload_a,upload_b" || !cfg.Drives[2].ReadOnly || !cfg.Drives[3].ReadOnly ||
-		!cfg.Drives[4].ReadOnly || cfg.Drives[1].ReadOnly || !cfg.Drives[0].ReadOnly {
+	if strings.Join(ids, ",") != "rootfs,scratch,managed,upload_a,upload_b,managed_b" || !cfg.Drives[2].ReadOnly || !cfg.Drives[3].ReadOnly ||
+		!cfg.Drives[4].ReadOnly || !cfg.Drives[5].ReadOnly || cfg.Drives[1].ReadOnly || !cfg.Drives[0].ReadOnly {
 		t.Fatalf("drives %+v", cfg.Drives)
 	}
 	if r.vmm.killed != 1 || r.slots.freed != 1 || len(r.slots.held) != 0 {
@@ -430,6 +431,33 @@ func TestLoadRootfsChecksTheDriveOrder(t *testing.T) {
 	}
 	if _, err := LoadRootfs(t.TempDir()); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_MISSING {
 		t.Fatalf("empty dir: %v", err)
+	}
+	// Managed slots: the root drive's devices must be the template's
+	// managed (vdc) and managed_b (vdf) drives. No managed_slots: an older
+	// root drive, accepted.
+	for name, c := range map[string]struct {
+		from, to string
+		ok       bool
+	}{
+		"slot b moved": {`"b":"/dev/vdf"`, `"b":"/dev/vde"`, false},
+		"slot a moved": {`"a":"/dev/vdc"`, `"a":"/dev/vdd"`, false},
+		"no slot b":    {`,"b":"/dev/vdf"`, ``, false},
+		"no slots":     {`"managed_slots":{"a":"/dev/vdc","b":"/dev/vdf"},`, ``, true},
+	} {
+		d := t.TempDir()
+		writeRootfs(t, d, "x", opensslCA)
+		raw, _ := os.ReadFile(filepath.Join(d, RootfsManifestFile))
+		edited := strings.Replace(string(raw), c.from, c.to, 1)
+		if edited == string(raw) {
+			t.Fatalf("%s: edit did not apply to %s", name, raw)
+		}
+		if err := os.WriteFile(filepath.Join(d, RootfsManifestFile), []byte(edited), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := LoadRootfs(d)
+		if c.ok && err != nil || !c.ok && apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
 

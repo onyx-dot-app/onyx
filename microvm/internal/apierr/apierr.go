@@ -41,13 +41,14 @@ func ReasonOf(err error) pb.ErrorReason {
 func Code(r pb.ErrorReason) codes.Code {
 	switch r {
 	case pb.ErrorReason_INVALID_ARGUMENT, pb.ErrorReason_TEMPLATE_SHAPE_MISMATCH,
-		pb.ErrorReason_SCRATCH_TOO_SMALL, pb.ErrorReason_SCRATCH_TOO_LARGE:
+		pb.ErrorReason_SCRATCH_TOO_SMALL, pb.ErrorReason_SCRATCH_TOO_LARGE, pb.ErrorReason_MANAGED_BUNDLE_INVALID:
 		return codes.InvalidArgument
-	case pb.ErrorReason_TEMPLATE_MISSING, pb.ErrorReason_SANDBOX_NOT_FOUND:
+	case pb.ErrorReason_TEMPLATE_MISSING, pb.ErrorReason_SANDBOX_NOT_FOUND, pb.ErrorReason_MANAGED_IMAGE_MISSING:
 		return codes.NotFound
 	case pb.ErrorReason_TEMPLATE_INCOMPATIBLE, pb.ErrorReason_ATTEMPT_CONFLICT,
 		pb.ErrorReason_STALE_ATTEMPT, pb.ErrorReason_INSTANCE_MISMATCH, pb.ErrorReason_SANDBOX_IN_DOUBT,
-		pb.ErrorReason_VM_NOT_RUNNING, pb.ErrorReason_GUEST_KEY_REJECTED:
+		pb.ErrorReason_VM_NOT_RUNNING, pb.ErrorReason_GUEST_KEY_REJECTED, pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED,
+		pb.ErrorReason_MANAGED_SLOT_BUSY:
 		return codes.FailedPrecondition
 	case pb.ErrorReason_CAPACITY_MEMORY, pb.ErrorReason_CAPACITY_DISK, pb.ErrorReason_CAPACITY_VM_SLOTS,
 		pb.ErrorReason_DIAL_LIMIT:

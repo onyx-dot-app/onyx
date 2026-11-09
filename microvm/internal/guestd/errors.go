@@ -21,7 +21,8 @@ func code(r pb.ErrorReason) codes.Code {
 	case pb.ErrorReason_INVALID_ARGUMENT, pb.ErrorReason_START_FAILED:
 		return codes.InvalidArgument
 	case pb.ErrorReason_NOT_INITIALIZED, pb.ErrorReason_STDIN_NOT_OPEN, pb.ErrorReason_EXECUTION_ENDED,
-		pb.ErrorReason_KEY_NOT_SET, pb.ErrorReason_KEY_ALREADY_SET:
+		pb.ErrorReason_KEY_NOT_SET, pb.ErrorReason_KEY_ALREADY_SET, pb.ErrorReason_MANAGED_SLOT_BUSY,
+		pb.ErrorReason_MANAGED_DEVICE_MISMATCH:
 		return codes.FailedPrecondition
 	case pb.ErrorReason_UNAUTHENTICATED:
 		return codes.Unauthenticated

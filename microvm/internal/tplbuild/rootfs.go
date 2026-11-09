@@ -55,7 +55,10 @@ type RootfsManifest struct {
 			DriveID    string `json:"drive_id"`
 			IsReadOnly bool   `json:"is_read_only"`
 		} `json:"drives"`
-		Daemon struct {
+		// ManagedSlots maps slot "a" and "b" to the guest devices that the
+		// image's attach and guest daemon use. Older root drives have none.
+		ManagedSlots map[string]string `json:"managed_slots"`
+		Daemon       struct {
 			VsockPort uint32 `json:"vsock_port"`
 		} `json:"daemon"`
 	} `json:"guest"`
@@ -105,8 +108,12 @@ func LoadRootfs(dir string) (*Rootfs, error) {
 	return &Rootfs{Path: filepath.Join(dir, RootfsImageFile), Manifest: m, ManifestSHA256: hex.EncodeToString(sum[:])}, nil
 }
 
+// guestDev returns the guest device of drive slot i (/dev/vda, /dev/vdb, ...).
+func guestDev(i int) string { return "/dev/vd" + string(rune('a'+i)) }
+
 // checkDrives checks that the root drive expects the template's first drive
-// slots (rootfs, scratch, managed) in that order.
+// slots (rootfs, scratch, managed) in that order, and that its managed slots
+// (if it lists them) are the template's managed and managed_b drives.
 func checkDrives(m RootfsManifest) error {
 	want := template.Drives[:3]
 	if len(m.Guest.Drives) != len(want) {
@@ -115,6 +122,26 @@ func checkDrives(m RootfsManifest) error {
 	for i, d := range m.Guest.Drives {
 		if d.DriveID != want[i].ID || d.IsReadOnly != want[i].ReadOnly {
 			return fmt.Errorf("drive %d is %s (read-only %v), the agent has %s (read-only %v)", i, d.DriveID, d.IsReadOnly, want[i].ID, want[i].ReadOnly)
+		}
+	}
+	if m.Guest.ManagedSlots == nil {
+		return nil
+	}
+	slots := map[string]string{}
+	for i, d := range template.Drives {
+		switch d.ID {
+		case template.ManagedDriveID:
+			slots["a"] = guestDev(i)
+		case template.ManagedBDriveID:
+			slots["b"] = guestDev(i)
+		}
+	}
+	if len(m.Guest.ManagedSlots) != len(slots) {
+		return fmt.Errorf("the root drive has managed slots %v, the agent has %v", m.Guest.ManagedSlots, slots)
+	}
+	for k, v := range slots {
+		if m.Guest.ManagedSlots[k] != v {
+			return fmt.Errorf("the root drive has managed slot %s on %s, the agent puts it on %s", k, m.Guest.ManagedSlots[k], v)
 		}
 	}
 	return nil

@@ -37,6 +37,8 @@ const (
 	Sandboxd_RestoreSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/RestoreSession"
 	Sandboxd_BrowserStart_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/BrowserStart"
 	Sandboxd_BrowserStop_FullMethodName    = "/craft.sandboxd.v1.Sandboxd/BrowserStop"
+	Sandboxd_ManagedStatus_FullMethodName  = "/craft.sandboxd.v1.Sandboxd/ManagedStatus"
+	Sandboxd_MountManaged_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/MountManaged"
 )
 
 // SandboxdClient is the client API for Sandboxd service.
@@ -114,6 +116,18 @@ type SandboxdClient interface {
 	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
+	// ManagedStatus returns the slot that is mounted on /workspace/managed and
+	// the state of each slot device.
+	ManagedStatus(ctx context.Context, in *ManagedStatusRequest, opts ...grpc.CallOption) (*ManagedStatusResponse, error)
+	// MountManaged makes a slot the drive on /workspace/managed. It waits
+	// until the device has size_bytes (Firecracker tells the guest the new
+	// size after the host changed the drive), drops the guest's cached blocks
+	// of the device, checks the ext4 UUID, mounts the device read-only
+	// (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
+	// (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
+	// files on the old drive keep working until they close. If the slot is
+	// already on /workspace/managed with this UUID, it does nothing.
+	MountManaged(ctx context.Context, in *MountManagedRequest, opts ...grpc.CallOption) (*MountManagedResponse, error)
 }
 
 type sandboxdClient struct {
@@ -346,6 +360,26 @@ func (c *sandboxdClient) BrowserStop(ctx context.Context, in *BrowserStopRequest
 	return out, nil
 }
 
+func (c *sandboxdClient) ManagedStatus(ctx context.Context, in *ManagedStatusRequest, opts ...grpc.CallOption) (*ManagedStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedStatusResponse)
+	err := c.cc.Invoke(ctx, Sandboxd_ManagedStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sandboxdClient) MountManaged(ctx context.Context, in *MountManagedRequest, opts ...grpc.CallOption) (*MountManagedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MountManagedResponse)
+	err := c.cc.Invoke(ctx, Sandboxd_MountManaged_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SandboxdServer is the server API for Sandboxd service.
 // All implementations must embed UnimplementedSandboxdServer
 // for forward compatibility.
@@ -421,6 +455,18 @@ type SandboxdServer interface {
 	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
+	// ManagedStatus returns the slot that is mounted on /workspace/managed and
+	// the state of each slot device.
+	ManagedStatus(context.Context, *ManagedStatusRequest) (*ManagedStatusResponse, error)
+	// MountManaged makes a slot the drive on /workspace/managed. It waits
+	// until the device has size_bytes (Firecracker tells the guest the new
+	// size after the host changed the drive), drops the guest's cached blocks
+	// of the device, checks the ext4 UUID, mounts the device read-only
+	// (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
+	// (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
+	// files on the old drive keep working until they close. If the slot is
+	// already on /workspace/managed with this UUID, it does nothing.
+	MountManaged(context.Context, *MountManagedRequest) (*MountManagedResponse, error)
 	mustEmbedUnimplementedSandboxdServer()
 }
 
@@ -484,6 +530,12 @@ func (UnimplementedSandboxdServer) BrowserStart(context.Context, *BrowserStartRe
 }
 func (UnimplementedSandboxdServer) BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BrowserStop not implemented")
+}
+func (UnimplementedSandboxdServer) ManagedStatus(context.Context, *ManagedStatusRequest) (*ManagedStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ManagedStatus not implemented")
+}
+func (UnimplementedSandboxdServer) MountManaged(context.Context, *MountManagedRequest) (*MountManagedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MountManaged not implemented")
 }
 func (UnimplementedSandboxdServer) mustEmbedUnimplementedSandboxdServer() {}
 func (UnimplementedSandboxdServer) testEmbeddedByValue()                  {}
@@ -780,6 +832,42 @@ func _Sandboxd_BrowserStop_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Sandboxd_ManagedStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ManagedStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SandboxdServer).ManagedStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Sandboxd_ManagedStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SandboxdServer).ManagedStatus(ctx, req.(*ManagedStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Sandboxd_MountManaged_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MountManagedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SandboxdServer).MountManaged(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Sandboxd_MountManaged_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SandboxdServer).MountManaged(ctx, req.(*MountManagedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Sandboxd_ServiceDesc is the grpc.ServiceDesc for Sandboxd service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -834,6 +922,14 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BrowserStop",
 			Handler:    _Sandboxd_BrowserStop_Handler,
+		},
+		{
+			MethodName: "ManagedStatus",
+			Handler:    _Sandboxd_ManagedStatus_Handler,
+		},
+		{
+			MethodName: "MountManaged",
+			Handler:    _Sandboxd_MountManaged_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

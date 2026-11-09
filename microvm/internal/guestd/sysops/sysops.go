@@ -1,6 +1,7 @@
-// Package sysops holds the guest system calls of the daemon's Init: set the
-// clock, add entropy, grow a file system, mount cgroup v2. They work on
-// Linux as root; other systems get stubs that fail.
+// Package sysops holds the guest system calls of the daemon's Init (set the
+// clock, add entropy, grow a file system, mount cgroup v2) and of the managed
+// drive swap (Managed). They work on Linux as root; other systems get stubs
+// that fail.
 package sysops
 
 import (

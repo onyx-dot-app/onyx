@@ -21,8 +21,9 @@ import (
 // KernelFile is the guest kernel file name in the build VM chroot.
 const KernelFile = "vmlinux"
 
-// Placeholder sizes. The managed placeholder is an empty ext4 (attach mounts
-// it); the upload slots are never mounted in the template.
+// Placeholder sizes. The managed slot A placeholder is an empty ext4 (attach
+// mounts it); the upload slots and managed slot B are never mounted in the
+// template. A managed swap puts an image in slot B (PATCH /drives).
 const (
 	managedBytes = 8 << 20
 	uploadBytes  = 1 << 20
@@ -260,7 +261,7 @@ func (b *Builder) build(ctx context.Context, r *Rootfs, key template.Key, name s
 	if err := mkfs(ctx, filepath.Join(stage, template.ManagedFile), managedBytes, "managed"); err != nil {
 		return nil, 0, fmt.Errorf("managed drive: %w", err)
 	}
-	for _, f := range []string{template.UploadAFile, template.UploadBFile} {
+	for _, f := range []string{template.UploadAFile, template.UploadBFile, template.ManagedBFile} {
 		if err := sparseFile(filepath.Join(stage, f), uploadBytes); err != nil {
 			return nil, 0, err
 		}
