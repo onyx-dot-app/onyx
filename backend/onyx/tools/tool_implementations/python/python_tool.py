@@ -29,6 +29,9 @@ from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
     ChatFile,
+    CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     LlmPythonExecutionResult,
     PythonArguments,
     PythonExecutionDelta,
@@ -242,6 +245,10 @@ class PythonTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -252,6 +259,12 @@ class PythonTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.JSON_OBJECT, model=LlmPythonExecutionResult
+        )
 
     @override
     @classmethod

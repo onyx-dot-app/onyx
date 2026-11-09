@@ -23,19 +23,18 @@ from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
-    ChatSearchResult,
     CitationMode,
     PersonaPromptConfig,
     PromptMetadata,
+    StagedChatFiles,
 )
 from onyx.chat.prompt_utils import (
     build_chat_prompt,
     prepare_prompt,
 )
+from onyx.chat.tool_results import staged_result_details, tool_result_sources
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
-from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -198,31 +197,26 @@ class ChatAgent(Agent, RestorableFeature):
         self.chat_files = [file.restore() for file in saved.chat_files]
         self.has_called_search_tool = saved.has_called_search_tool
 
-    def _update_tool_context(
-        self,
-        responses: list[ToolResultMessage],
-    ) -> None:
+    def _update_tool_context(self, responses: list[ToolResultMessage]) -> None:
         """Apply accepted tool results to the next request's context policy."""
         for response in responses:
             data = response.details
             if response.tool_name == SearchTool.NAME:
                 self.has_called_search_tool = True
-            if isinstance(data, SearchDocsResponse):
-                self.gathered_documents.extend(data.search_docs)
-            elif isinstance(data, ResearchAgentCallResult):
-                self.gathered_documents.extend(data.citation_mapping.values())
-            if isinstance(data, ChatSearchResult):
+            sources = tool_result_sources(data)
+            if sources is not None:
+                self.gathered_documents.extend(sources.documents)
+            if isinstance(data, StagedChatFiles):
                 existing = {file.filename for file in self.chat_files}
                 self.chat_files.extend(
                     file for file in data.staged_files if file.filename not in existing
                 )
-            self.citation_processor.update_citation_mapping(
-                message_citation_sources(response)
-            )
-            if isinstance(data, (SearchDocsResponse, ResearchAgentCallResult)):
-                for number in data.citation_mapping:
-                    if source := self.citation_processor.citation_to_doc.get(number):
-                        self.citation_mapping[number] = source.document_id
+            if sources is None:
+                continue
+            self.citation_processor.update_citation_mapping(sources.citations)
+            for number in sources.citations:
+                if source := self.citation_processor.citation_to_doc.get(number):
+                    self.citation_mapping[number] = source.document_id
 
     def _tool_context(self) -> ToolContext:
         """Read feature state that advances only after a completed step."""
@@ -331,25 +325,12 @@ class ChatAgent(Agent, RestorableFeature):
     def _finalize_tool(
         self, _context: ToolCallContext, result: ToolResult
     ) -> ToolResult:
-        if self.stages_files and isinstance(result.details, SearchDocsResponse):
-            search = result.details
-            known_file_ids = {file.file_id for file in self.chat_files if file.file_id}
-            result.details = ChatSearchResult(
-                queries=search.queries,
-                sources=search.sources,
-                time_filter_start=search.time_filter_start,
-                time_filter_end=search.time_filter_end,
-                search_docs=search.search_docs,
-                citation_mapping=search.citation_mapping,
-                displayed_docs=search.displayed_docs,
-                staged_files=build_python_chat_files_from_search_docs(
-                    [
-                        doc
-                        for doc in search.search_docs
-                        if doc.file_id not in known_file_ids
-                    ]
-                ),
-            )
+        if not self.stages_files:
+            return result
+        known = {file.file_id for file in self.chat_files if file.file_id is not None}
+        result.details = staged_result_details(
+            result.details, known, build_python_chat_files_from_search_docs
+        )
         return result
 
     def _validate_answer(self, result: StepResult) -> None:

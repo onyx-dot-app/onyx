@@ -20,28 +20,66 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.DEEP_RESEARCH_PLAN_START,
 ]);
 
-// Nested output shares its parent's group but does not end it.
+// A packet from a tool call nested under a parent tool (research agent, coding
+// agent). Nested packets share the parent's group key and set sub_turn_index.
 export const isNestedPacket = (packet: Packet): boolean =>
   packet.placement.sub_turn_index != null;
 
+// A parent-level SECTION_END or ERROR ends a group. A nested call ends with its
+// own SECTION_END while the parent tool keeps running.
 export const isGroupEndPacket = (packet: Packet): boolean =>
   !isNestedPacket(packet) &&
   (packet.obj.type === PacketType.SECTION_END ||
     packet.obj.type === PacketType.ERROR);
 
+/** One nested tool call of a parent step. */
+export interface NestedCall {
+  subTurnIndex: number;
+  /** The call's packets placed at parent level (sub_turn_index null), so the
+   * tool's own renderer and the step-kind checks read it as a standalone call. */
+  packets: Packet[];
+  complete: boolean;
+}
+
+/** Nested calls ordered by sub_turn_index, from packets already placed at
+ * parent level. A call whose packet count did not change keeps its previous
+ * object, and an unchanged list keeps its previous array, so memoized renderers
+ * skip calls that have not changed. */
+export function nestedCallSnapshot(
+  bySubTurn: ReadonlyMap<number, Packet[]>,
+  previous: NestedCall[] = []
+): NestedCall[] {
+  const previousByIndex = new Map(
+    previous.map((call) => [call.subTurnIndex, call])
+  );
+  let changed = previous.length !== bySubTurn.size;
+  const calls = Array.from(bySubTurn.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([subTurnIndex, callPackets]): NestedCall => {
+      const prior = previousByIndex.get(subTurnIndex);
+      if (prior && prior.packets.length === callPackets.length) return prior;
+      changed = true;
+      return {
+        subTurnIndex,
+        packets: [...callPackets],
+        complete: callPackets.some(isGroupEndPacket),
+      };
+    });
+  return changed ? calls : previous;
+}
+
+// The step-kind checks below take a step's own packets (GroupedPacket.packets),
+// which exclude the packets of nested calls.
+
 // Check if packets belong to a research agent (handles its own Done indicator)
 export const isResearchAgentPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 
-// Check if packets belong to a coding agent. The agent's group always contains
-// CodingAgentStart, but BashTool packets are emitted into the same group, so
-// any of these types signal a coding-agent group.
+// Parent-level packet types that identify a coding agent group. The agent's
+// bash calls and thinking stream as nested sections of the same group.
 export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
   PacketType.CODING_AGENT_START,
-  PacketType.CODING_AGENT_THINKING_DELTA,
   PacketType.CODING_AGENT_FINAL,
-  PacketType.BASH_TOOL_START,
-  PacketType.BASH_TOOL_DELTA,
 ]);
 
 export const isCodingAgentPackets = (packets: Packet[]): boolean =>

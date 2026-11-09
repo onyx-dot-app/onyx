@@ -1,4 +1,5 @@
-import { GroupedPacket } from "./hooks/packetProcessor";
+import { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import { NestedCall } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 /**
  * Transformed step data ready for rendering
@@ -10,8 +11,12 @@ export interface TransformedStep {
   turnIndex: number;
   /** Tab index for parallel tools */
   tabIndex: number;
-  /** Raw packets for content rendering */
+  /** The step's own packets, without the packets of nested calls */
   packets: GroupedPacket["packets"];
+  /** Tool calls nested under the step, ordered by sub_turn_index */
+  nestedCalls: NestedCall[];
+  /** Every packet of the step, nested calls included, in stream order */
+  streamPackets: GroupedPacket["streamPackets"];
 }
 
 /**
@@ -33,6 +38,8 @@ export function transformPacketGroup(group: GroupedPacket): TransformedStep {
     turnIndex: group.turn_index,
     tabIndex: group.tab_index,
     packets: group.packets,
+    nestedCalls: group.nestedCalls,
+    streamPackets: group.streamPackets,
   };
 }
 

@@ -6,9 +6,15 @@ import {
   type GroupedPacket,
   type ProcessedMessageState,
 } from "@/chat/messageProcessor";
-import { PacketType, type Packet } from "@/chat/streamingModels";
+import {
+  PacketType,
+  type Packet,
+  type Placement,
+} from "@/chat/streamingModels";
 
 import { makePlacedPacket } from "../../__tests__/fixtures";
+import { isCodingAgentPackets } from "../packetHelpers";
+import { isToolComplete } from "../toolDisplay";
 
 const reasoningStart = (turn: number, tab = 0): Packet =>
   makePlacedPacket(
@@ -49,6 +55,19 @@ const searchQueriesDelta = (turn: number, tab = 0): Packet =>
   makePlacedPacket(
     { type: "search_tool_queries_delta", queries: ["q"] },
     { turn_index: turn, tab_index: tab },
+  );
+
+const imageFinal = (fileIds: string[], placement: Partial<Placement>): Packet =>
+  makePlacedPacket(
+    {
+      type: "image_generation_final",
+      images: fileIds.map((file_id) => ({
+        file_id,
+        url: "u",
+        revised_prompt: "p",
+      })),
+    },
+    placement,
   );
 
 function run(packets: Packet[]): ProcessedMessageState {
@@ -172,31 +191,10 @@ describe("grouping engine", () => {
     expect(state.toolGroups.map(keyOf)).toEqual(["0-0"]);
   });
 
-  it("collects generated images", () => {
+  it("treats image generation as a tool step and collects its images once", () => {
     const state = run([
       makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
-      makePlacedPacket(
-        {
-          type: "image_generation_final",
-          images: [
-            { file_id: "a", url: "u", revised_prompt: "p" },
-            { file_id: "b", url: "u", revised_prompt: "p" },
-          ],
-        },
-        { turn_index: 0 },
-      ),
-    ]);
-    expect(state.generatedImages.length).toBe(2);
-  });
-
-  it("keeps earlier images once when another tool precedes the answer", () => {
-    const image = { file_id: "a", url: "u", revised_prompt: "p" };
-    const state = run([
-      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
-      makePlacedPacket(
-        { type: "image_generation_final", images: [image, { ...image }] },
-        { turn_index: 0 },
-      ),
+      imageFinal(["a", "a", "b"], { turn_index: 0 }),
       sectionEnd(0),
       searchStart(1),
       sectionEnd(1),
@@ -204,7 +202,16 @@ describe("grouping engine", () => {
     ]);
     expect(state.toolGroups.map(keyOf)).toEqual(["0-0", "1-0"]);
     expect(state.potentialDisplayGroups.map(keyOf)).toEqual(["2-0"]);
-    expect(state.generatedImages).toEqual([image]);
+    expect(state.generatedImages.map((i) => i.file_id)).toEqual(["a", "b"]);
+    expect(state.finalAnswerComing).toBe(true);
+  });
+
+  it("does not start the answer on an image generation start", () => {
+    const state = run([
+      makePlacedPacket({ type: "image_generation_start" }, { turn_index: 0 }),
+    ]);
+    expect(state.finalAnswerComing).toBe(false);
+    expect(state.displayGroupKeys.size).toBe(0);
   });
 
   it("keeps unique images across separate generation steps", () => {
@@ -291,6 +298,23 @@ describe("nested research packet ownership", () => {
       }
     },
   );
+
+  it("gives a group only its own packets, so nested calls do not change or end it", () => {
+    const codingStart = makePlacedPacket(
+      { type: "coding_agent_start", query: "fix", repo: null },
+      { turn_index: 0 },
+    );
+    const nested = { turn_index: 0, sub_turn_index: 0 };
+    const state = run([
+      codingStart,
+      makePlacedPacket({ type: "bash_tool_start", cmd: "ls" }, nested),
+      makePlacedPacket({ type: "error", message: "exit 1" }, nested),
+    ]);
+    const [group] = state.toolGroups;
+    expect(group?.packets).toEqual([codingStart]);
+    expect(isCodingAgentPackets(group?.packets ?? [])).toBe(true);
+    expect(isToolComplete(group?.packets ?? [])).toBe(false);
+  });
 
   it("nested messages preserve the top-level answer timing", () => {
     const state = run([

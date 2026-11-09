@@ -76,31 +76,6 @@ export function isSearchToolPacket(packet: Packet): boolean {
   );
 }
 
-export function isStreamingComplete(packets: Packet[]): boolean {
-  return packets.some((packet) => packet.obj.type === PacketType.STOP);
-}
-
-export function isFinalAnswerComing(packets: Packet[]): boolean {
-  return packets.some((packet) => packet.obj.type === PacketType.MESSAGE_START);
-}
-
-export function isFinalAnswerComplete(packets: Packet[]): boolean {
-  const messageStartPacket = packets.find(
-    (packet) => packet.obj.type === PacketType.MESSAGE_START,
-  );
-
-  if (!messageStartPacket) {
-    return false;
-  }
-
-  return packets.some(
-    (packet) =>
-      (packet.obj.type === PacketType.SECTION_END ||
-        packet.obj.type === PacketType.ERROR) &&
-      packet.placement.turn_index === messageStartPacket.placement.turn_index,
-  );
-}
-
 export function groupPacketsByTurnIndex(
   packets: Packet[],
 ): { turn_index: number; tab_index: number; packets: Packet[] }[] {

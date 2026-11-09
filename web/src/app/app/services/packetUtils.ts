@@ -78,14 +78,6 @@ export function isSearchToolPacket(packet: Packet): boolean {
   );
 }
 
-export function isStreamingComplete(packets: Packet[]) {
-  return packets.some((packet) => packet.obj.type === PacketType.STOP);
-}
-
-export function isFinalAnswerComing(packets: Packet[]) {
-  return packets.some((packet) => packet.obj.type === PacketType.MESSAGE_START);
-}
-
 export function isFinalAnswerComplete(packets: Packet[]) {
   // Find the first MESSAGE_START packet and get its index
   const messageStartPacket = packets.find(

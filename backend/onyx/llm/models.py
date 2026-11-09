@@ -319,6 +319,9 @@ class GenerationRequest(BaseModel):
     tools: list[ToolDefinition] = Field(default_factory=list)
     allowed_tool_names: frozenset[str] | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
+    # Tool call IDs that the conversation uses outside `messages`, such as calls
+    # that compaction left out. New calls get other IDs.
+    reserved_tool_call_ids: frozenset[str] = frozenset()
 
 
 class GenerationRequestParams(BaseModel):

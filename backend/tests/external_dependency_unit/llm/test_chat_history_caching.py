@@ -20,7 +20,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolContext
+from onyx.tools.models import CodeModeExposure, ToolContext
 from tests.unit.onyx.agents.fakes import run_agent
 from tests.utils.secret_names import TestSecret
 
@@ -46,6 +46,10 @@ class CatalogTool(Tool):
     @property
     def display_name(self) -> str:
         return "Catalog"
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
 
     def tool_definition(self) -> ToolDefinition:
         return ToolDefinition(

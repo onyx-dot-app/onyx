@@ -29,6 +29,7 @@ class AgentEventType(str, Enum):
     TOOL_START = "tool_start"
     TOOL_UPDATE = "tool_update"
     TOOL_END = "tool_end"
+    TOOL_RESULT_AMENDED = "tool_result_amended"
 
 
 class _Event(BaseModel):
@@ -101,6 +102,16 @@ class ToolEndEvent(_MessageEvent):
     result: ToolResult
 
 
+class ToolResultAmendedEvent(_MessageEvent):
+    """A finish or suspend hook replaced the recorded result of an ended call."""
+
+    type: Literal[AgentEventType.TOOL_RESULT_AMENDED] = (
+        AgentEventType.TOOL_RESULT_AMENDED
+    )
+    tool_call: ToolCall
+    result: ToolResult
+
+
 AgentEvent = Annotated[
     AgentStartEvent
     | AgentSuspendedEvent
@@ -111,7 +122,8 @@ AgentEvent = Annotated[
     | MessageEndEvent
     | ToolStartEvent
     | ToolUpdateEvent
-    | ToolEndEvent,
+    | ToolEndEvent
+    | ToolResultAmendedEvent,
     Field(discriminator="type"),
 ]
 

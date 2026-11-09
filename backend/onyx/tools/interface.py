@@ -12,7 +12,11 @@ from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import (
+    DEFAULT_CODE_MODE_RESULT,
     ChatMinimalTextMessage,
+    CodeModeExposure,
+    CodeModeFunctionName,
+    CodeModeResultSpec,
     ToolCallException,
     ToolContext,
     ToolExecutionError,
@@ -153,6 +157,22 @@ class Tool(abc.ABC):
     @property
     def execution_mode(self) -> ToolExecutionMode:
         return ToolExecutionMode.PARALLEL
+
+    @property
+    @abc.abstractmethod
+    def code_mode_exposure(self) -> CodeModeExposure:
+        """How code mode offers the tool. Tools that wait for child runs
+        (`result_from_children`) must be DIRECT."""
+        raise NotImplementedError
+
+    @property
+    def code_mode_function_name(self) -> CodeModeFunctionName:
+        return CodeModeFunctionName(name=self.name)
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        """The value and stub type a code mode program receives from the tool."""
+        return DEFAULT_CODE_MODE_RESULT
 
     @property
     @abc.abstractmethod

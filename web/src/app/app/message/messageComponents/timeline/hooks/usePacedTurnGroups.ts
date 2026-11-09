@@ -362,7 +362,7 @@ export function usePacedTurnGroups(
           oldGroup.steps.every(
             (s, j) =>
               s.key === newGroup.steps[j]!.key &&
-              s.packets.length === newGroup.steps[j]!.packets.length
+              s.streamPackets.length === newGroup.steps[j]!.streamPackets.length
           )
         ) {
           // Reuse old object reference for this group

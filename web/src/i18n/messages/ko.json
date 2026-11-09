@@ -12901,6 +12901,9 @@
           "bashExit": {
             "header": "Bash · 종료 코드 {exitCode}"
           },
+          "bashFailed": {
+            "header": "Bash · 실패"
+          },
           "bashRequest": {
             "label": "요청"
           },

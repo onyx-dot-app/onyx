@@ -20,25 +20,28 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.DEEP_RESEARCH_PLAN_START,
 ]);
 
-// Nested output shares its parent's group but does not end it.
+// A packet from a tool call nested under a parent tool (research agent, coding agent).
+// Nested packets share the parent's group key and set sub_turn_index.
 export const isNestedPacket = (packet: Packet): boolean =>
   packet.placement.sub_turn_index != null;
 
+// A parent-level SECTION_END or ERROR ends a group. A nested call ends with its own SECTION_END
+// while the parent tool keeps running.
 export const isGroupEndPacket = (packet: Packet): boolean =>
   !isNestedPacket(packet) &&
   (packet.obj.type === PacketType.SECTION_END ||
     packet.obj.type === PacketType.ERROR);
 
+// The step-kind checks below take a step's own packets (GroupedPacket.packets), which exclude
+// the packets of nested calls.
 export const isResearchAgentPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
 
-// Bash packets are emitted into the coding-agent group, so any of these signals it.
+// Parent-level packet types that identify a coding agent group. The agent's bash calls and
+// thinking stream as nested sections of the same group.
 export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
   PacketType.CODING_AGENT_START,
-  PacketType.CODING_AGENT_THINKING_DELTA,
   PacketType.CODING_AGENT_FINAL,
-  PacketType.BASH_TOOL_START,
-  PacketType.BASH_TOOL_DELTA,
 ]);
 
 export const isCodingAgentPackets = (packets: Packet[]): boolean =>
