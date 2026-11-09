@@ -22,7 +22,8 @@ roll back atomically.
 
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
-from enum import Enum
+from datetime import datetime
+from enum import Enum, IntEnum
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -34,6 +35,7 @@ from sqlalchemy import (
     delete,
     exists,
     func,
+    null,
     or_,
     select,
     true,
@@ -128,6 +130,25 @@ class SkillUserState:
     external_app_dependency: SkillExternalAppDependencyState | None
     effective_installation_policy: SkillInstallationPolicy
     hidden_by_skill_id: UUID | None = None
+
+
+class SkillRuntimePriority(IntEnum):
+    """Keep classes under the runtime limit; a lower value stays first."""
+
+    BUILT_IN = 0
+    REQUIRED = 1
+    ENABLED = 2
+    DEFAULT = 3
+
+
+@dataclass(frozen=True)
+class RuntimeSkillCandidate:
+    skill: Skill
+    priority: SkillRuntimePriority
+    # Explicit enable time, or the newest grant that reaches the user.
+    granted_at: datetime | None
+    # Unique position in the runtime keep order across all candidates.
+    keep_rank: int
 
 
 @dataclass(frozen=True)
@@ -661,6 +682,95 @@ def list_runtime_skills_for_user(
     return list(db_session.scalars(stmt))
 
 
+def _runtime_skill_priorities(
+    user: User, skill_ids: Collection[UUID], db_session: Session
+) -> dict[UUID, tuple[SkillRuntimePriority, datetime | None, int]]:
+    """Rank already-eligible skills for the runtime limit in one query.
+
+    Order: class, newest date first, unknown dates last, then name and id.
+    """
+    if not skill_ids:
+        return {}
+    policies = _skill_installation_policy_rows([user.id], skill_ids)
+    priority = case(
+        (Skill.built_in_skill_id.is_not(None), int(SkillRuntimePriority.BUILT_IN)),
+        (
+            policies.c.installation_policy == SkillInstallationPolicy.REQUIRED,
+            int(SkillRuntimePriority.REQUIRED),
+        ),
+        (UserSkillPreference.enabled.is_(True), int(SkillRuntimePriority.ENABLED)),
+        else_=int(SkillRuntimePriority.DEFAULT),
+    )
+    direct_shared_at = (
+        select(Skill__User.created_at)
+        .where(Skill__User.skill_id == Skill.id, Skill__User.user_id == user.id)
+        .correlate(Skill)
+        .scalar_subquery()
+    )
+    group_shared_at = (
+        select(func.max(Skill__UserGroup.created_at))
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
+        )
+        .where(
+            Skill__UserGroup.skill_id == Skill.id,
+            User__UserGroup.user_id == user.id,
+        )
+        .correlate(Skill)
+        .scalar_subquery()
+    )
+    granted_at = case(
+        (priority == int(SkillRuntimePriority.BUILT_IN), null()),
+        (
+            priority == int(SkillRuntimePriority.ENABLED),
+            UserSkillPreference.enabled_at,
+        ),
+        # GREATEST ignores NULL, so one known grant date is enough.
+        else_=func.greatest(direct_shared_at, group_shared_at),
+    )
+    keep_rank = func.row_number().over(
+        order_by=(priority, granted_at.desc().nulls_last(), Skill.name, Skill.id)
+    )
+    rows = db_session.execute(
+        select(Skill.id, priority, granted_at, keep_rank)
+        .join(policies, policies.c.skill_id == Skill.id)
+        .outerjoin(
+            UserSkillPreference,
+            and_(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.skill_id == Skill.id,
+            ),
+        )
+        .where(Skill.id.in_(skill_ids))
+    )
+    return {
+        skill_id: (SkillRuntimePriority(rank_class), date, rank)
+        for skill_id, rank_class, date, rank in rows
+    }
+
+
+def list_runtime_skill_candidates_for_user(
+    *, db_session: Session, user: User
+) -> list[RuntimeSkillCandidate]:
+    """Return every delivery candidate in name-resolution order with its keep rank.
+
+    Name precedence and fallback order come from ``resolve_skill_runtime_names``;
+    the keep rank only orders whole Skills under the runtime limit.
+    """
+    skills = list_runtime_skills_for_user(
+        db_session=db_session, user=user, include_fallbacks=True
+    )
+    priorities = _runtime_skill_priorities(
+        user, [skill.id for skill in skills], db_session
+    )
+    return [
+        RuntimeSkillCandidate(skill, *priorities[skill.id])
+        for skill in skills
+        if skill.id in priorities
+    ]
+
+
 def fetch_skill(
     skill_id: UUID,
     *,
@@ -749,7 +859,13 @@ def enable_new_skill_if_name_available__no_commit(
         return False
     inserted_user_id = db_session.scalar(
         insert(UserSkillPreference)
-        .values(user_id=user_id, skill_id=skill.id, name=skill.name, enabled=True)
+        .values(
+            user_id=user_id,
+            skill_id=skill.id,
+            name=skill.name,
+            enabled=True,
+            enabled_at=func.clock_timestamp(),
+        )
         .on_conflict_do_nothing()
         .returning(UserSkillPreference.user_id)
     )
@@ -1014,10 +1130,21 @@ def set_skill_enabled_for_user(
         )
     db_session.execute(
         insert(UserSkillPreference)
-        .values(user_id=user.id, skill_id=skill.id, name=skill.name, enabled=enabled)
+        .values(
+            user_id=user.id,
+            skill_id=skill.id,
+            name=skill.name,
+            enabled=enabled,
+            enabled_at=func.clock_timestamp() if enabled else None,
+        )
         .on_conflict_do_update(
             index_elements=[UserSkillPreference.user_id, UserSkillPreference.skill_id],
-            set_={"enabled": enabled},
+            set_={
+                "enabled": enabled,
+                "enabled_at": func.clock_timestamp()
+                if enabled
+                else UserSkillPreference.enabled_at,
+            },
         )
     )
     return skill
@@ -1058,15 +1185,22 @@ def replace_skill_shares(
 ) -> None:
     assert_skill_mutable(skill)
     if user_shares is not None:
+        shared_at = {share.user_id: share.created_at for share in skill.user_shares}
         db_session.execute(delete(Skill__User).where(Skill__User.skill_id == skill.id))
         for user_id, permission in user_shares.items():
-            db_session.add(
-                Skill__User(skill_id=skill.id, user_id=user_id, permission=permission)
+            share = Skill__User(
+                skill_id=skill.id, user_id=user_id, permission=permission
             )
+            if user_id in shared_at:
+                share.created_at = shared_at[user_id]
+            db_session.add(share)
         _flush_shares(db_session, "One or more user share targets do not exist.")
         db_session.expire(skill, ["user_shares"])
 
     if group_shares is not None:
+        group_shared_at = {
+            share.user_group_id: share.created_at for share in skill.group_shares
+        }
         policies = {
             share.user_group_id: share.installation_policy
             for share in skill.group_shares
@@ -1078,14 +1212,15 @@ def replace_skill_shares(
             delete(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
         )
         for group_id, permission in group_shares.items():
-            db_session.add(
-                Skill__UserGroup(
-                    skill_id=skill.id,
-                    user_group_id=group_id,
-                    permission=permission,
-                    installation_policy=policies.get(group_id),
-                )
+            group_share = Skill__UserGroup(
+                skill_id=skill.id,
+                user_group_id=group_id,
+                permission=permission,
+                installation_policy=policies.get(group_id),
             )
+            if group_id in group_shared_at:
+                group_share.created_at = group_shared_at[group_id]
+            db_session.add(group_share)
         _flush_shares(db_session, "One or more group share targets do not exist.")
         db_session.expire(skill, ["group_shares"])
 

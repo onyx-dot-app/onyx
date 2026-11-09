@@ -2,6 +2,7 @@
 
 import hashlib
 from collections.abc import Iterable
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from onyx.db.skill import (
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
+from onyx.db.skill_runtime_models import SkillRuntimeOmission
 from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
@@ -49,6 +51,13 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
+
+
+@dataclass(frozen=True)
+class UserSkillsPayload:
+    files: FileSet
+    omissions: tuple[SkillRuntimeOmission, ...]
+    connectable_apps_section: str
 
 
 def compute_skill_runtime_hash(
@@ -231,7 +240,7 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     return _assemble_fileset(skills, user, db_session)
 
 
-def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, FileSet]:
+def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayload:
     """Return the connectable-apps section and skill fileset.
 
     The connectable-apps section lists org apps the user has not connected yet,
@@ -244,7 +253,9 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
-    return connectable_apps_section, files
+    return UserSkillsPayload(
+        files=files, omissions=(), connectable_apps_section=connectable_apps_section
+    )
 
 
 def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
@@ -260,50 +271,53 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
     try:
         sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
         current_hashes = lock_sandbox_skills_hashes(db_session, set(sandbox_map))
-        sandbox_payloads = {
-            sandbox_id: build_user_skills_payload(user, db_session)
-            for sandbox_id, user in sandbox_map.items()
-        }
-        desired_hashes = {
-            sandbox_id: compute_skill_runtime_hash(files, connectable_apps_section)
-            for sandbox_id, (
-                connectable_apps_section,
-                files,
-            ) in sandbox_payloads.items()
-        }
-        changed_files = {
-            sandbox_id: files
-            for sandbox_id, (
-                _connectable_apps_section,
-                files,
-            ) in sandbox_payloads.items()
-            if current_hashes.get(sandbox_id) != desired_hashes[sandbox_id]
-        }
-        if not changed_files:
-            return
-        result = get_sandbox_manager().push_to_sandboxes(
-            mount_path=SKILLS_MOUNT_PATH,
-            sandbox_files=changed_files,
-        )
-        failed_sandbox_ids = {failure.sandbox_id for failure in result.failures}
-        for failure in result.failures:
-            logger.warning(
-                "Skill push failed for sandbox %s: %s: %s",
-                failure.sandbox_id,
-                failure.reason,
-                failure.detail,
-            )
-        successful_sandbox_ids = set(changed_files) - failed_sandbox_ids
-        if not successful_sandbox_ids:
+        successful_hashes: dict[UUID, str] = {}
+        targets = 0
+        failures = 0
+        for sandbox_id, user in sandbox_map.items():
+            targets += 1
+            payload: UserSkillsPayload | None = None
+            try:
+                payload = build_user_skills_payload(user, db_session)
+                desired_hash = compute_skill_runtime_hash(
+                    payload.files, payload.connectable_apps_section
+                )
+                if current_hashes.get(sandbox_id) == desired_hash:
+                    targets -= 1
+                    continue
+                result = get_sandbox_manager().push_to_sandbox(
+                    sandbox_id=sandbox_id,
+                    mount_path=SKILLS_MOUNT_PATH,
+                    files=payload.files,
+                )
+                for failure in result.failures:
+                    logger.warning(
+                        "Skill push failed for sandbox %s: %s: %s",
+                        failure.sandbox_id,
+                        failure.reason,
+                        failure.detail,
+                    )
+                if result.succeeded == 1 and not result.failures:
+                    successful_hashes[sandbox_id] = desired_hash
+                else:
+                    failures += 1
+            except Exception:
+                failures += 1
+                logger.exception(
+                    "Failed to build or push skills for sandbox %s", sandbox_id
+                )
+            finally:
+                # Release the current payload before the next one is constructed.
+                del payload
+        if failures:
+            logger.warning("Skill push: %d/%d targets failed", failures, targets)
+        if not successful_hashes:
             return
         try:
             with db_session.begin_nested():
                 set_sandbox_skills_hashes__no_commit(
                     db_session,
-                    {
-                        sandbox_id: desired_hashes[sandbox_id]
-                        for sandbox_id in successful_sandbox_ids
-                    },
+                    successful_hashes,
                 )
         except Exception:
             logger.exception("Failed to persist successful skill push state")

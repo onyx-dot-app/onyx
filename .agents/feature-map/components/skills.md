@@ -221,6 +221,8 @@ The library preview of an external-app skill calls the same renderer
 
 ---
 
+**Runtime payload preparation.** `UserSkillsPayload` carries files, app guidance and omission records through session assembly. Selection currently leaves omissions empty. Bulk refresh builds and sends one user's payload at a time, releases it before building the next, and records only successful hashes. A user's build or transport error does not discard earlier successful states or stop later users. This avoids retaining one complete fileset per sandbox.
+
 ## Contracts and traps
 
 1. `rendering-input-changes-hash` **A new rendering input must change the
@@ -245,6 +247,16 @@ The library preview of an external-app skill calls the same renderer
    row.** Use `db/skill.py:_is_enabled_for_user`. Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
+   Explicit enable and successful upload auto-enable record `enabled_at`; disable
+   and conflict replacement retain the last enable time. User and group grants
+   record `created_at`. Replacing retained grants preserves their original date,
+   including NULL for pre-migration shares. Removing and re-adding a grant starts
+   a new date. These dates support runtime-limit ordering; they do not change
+   name precedence or imply that a Skill is currently enabled.
+   `list_runtime_skill_candidates_for_user` adds a separate keep rank without
+   changing name/fallback order: built-in, Required, explicitly enabled, then
+   Default. Each class sorts newest enable/grant first, unknown dates last,
+   then name and id. The runtime selector consumes this rank in its own layer.
    `db/skill.py:_skill_installation_policy_rows` resolves applicable group shares: null
    inherits the company setting; Required wins over Default, Available, and
    Not available, in that order. With no applicable shares, use the company setting.
