@@ -72,6 +72,8 @@
   Successful restore refreshes history, current details, preview and the library.
   The editor replaces its local fields from the restore response. Unsaved editor changes disable restore but keep preview available.
   Synced Skills show their source revision and have no local restore action.
+  Marketplace detail exposes retired history to its personal owner or a token-capped global Skill manager.
+  Former editors and viewers cannot read retired history. Restore remains refused, and retired rows stay out of libraries.
 - **Access at import.** GitHub import and multiple-ZIP upload accept one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
@@ -505,6 +507,7 @@ The library preview of an external-app skill calls the same renderer
 20. `history-requires-edit` **History uses EDIT access, including its reads.**
     The `/skills/custom/{skill_id}/versions` family calls `fetch_skill` with
     `SkillManagementPolicy.EDIT` before listing or reading any history.
+    Retired history additionally requires personal ownership or global Manage Skills within the token cap.
     The history UI hides cached rows and closes previews when list revalidation returns
     an auth, tier or not-found error. It clears that Skill's preview cache, so access
     recovery must fetch preview content again. Transient errors keep loaded rows.
@@ -735,7 +738,7 @@ The library preview of an external-app skill calls the same renderer
     before the library controls. Add offers Upload a skill, Create a skill, and
     Sync from GitHub. Pending and failed sources stay visible with zero Skills.
     Opening company defaults closes source detail first. Retired detail rows show
-    a Retired badge and confirmed deletion only. The existing Skill endpoint
+    a Retired badge, read-only Versions and confirmed deletion. The existing Skill endpoint
     rechecks owner/global authority. Pending deletion blocks dismissal; failures
     keep the confirmation. Success refreshes detail, source counts and Skills.
 

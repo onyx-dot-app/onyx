@@ -456,3 +456,66 @@ it("disables stale deletion after a refresh removes the selected skill", async (
     fetchSpy.mock.calls.some(([, init]) => init?.method === "DELETE")
   ).toBe(false);
 });
+
+it("reads and previews retired history without offering restore", async () => {
+  const versionId = "60000000-0000-4000-8000-000000000006";
+  fetchSpy.mockImplementation(async (path) => {
+    if (path === SWR_KEYS.skillVersions(retiredSkill.id))
+      return new Response(
+        JSON.stringify([
+          {
+            id: versionId,
+            version_number: 1,
+            created_at: retiredSkill.retired_at,
+            created_by: null,
+            is_current: true,
+            has_bundle: true,
+            marketplace_revision: "commit-old",
+          },
+        ])
+      );
+    if (path === SWR_KEYS.skillVersion(retiredSkill.id, versionId))
+      return new Response(
+        JSON.stringify({
+          name: retiredSkill.name,
+          description: "Earlier skill",
+          instructions_markdown: "Preserved instructions",
+          files: [],
+        })
+      );
+    return new Response(JSON.stringify(withRetired));
+  });
+  const user = setupUser();
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={jest.fn()}
+    />
+  );
+  await user.click(await screen.findByRole("button", { name: "Versions" }));
+  expect(screen.getByRole("dialog")).toHaveAccessibleName(retiredSkill.name);
+  expect(screen.queryByText(marketplace.name)).not.toBeInTheDocument();
+  await user.click(
+    await screen.findByRole("button", { name: "Preview version 1" })
+  );
+  expect(await screen.findByText("Preserved instructions")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Back" })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Back to marketplace" })
+  ).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: /Restore/ })
+  ).not.toBeInTheDocument();
+  expect(fetchSpy.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+    false
+  );
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(
+    await screen.findByRole("button", { name: "Preview version 1" })
+  ).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "Back to marketplace" }));
+  expect(screen.getByRole("dialog")).toHaveAccessibleName(
+    "Marketplace details"
+  );
+});
