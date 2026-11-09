@@ -6,6 +6,7 @@ Dockerfile copies ``sandbox_daemon/`` to ``/workspace/sandbox_daemon/``); the
 api-server imports the full module path.
 """
 
+from pathlib import PurePosixPath
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -25,6 +26,11 @@ SIDECAR_OPENCODE_HISTORY_CREATE_PATH = "/opencode-history/create"
 SIDECAR_OPENCODE_HISTORY_RESTORE_PATH = "/opencode-history/restore"
 SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH = "/opencode-history/mark-restored"
 SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
+
+
+def push_version_directory(mount_path: str, version: str) -> PurePosixPath:
+    mount = PurePosixPath(mount_path)
+    return mount.parent / ".versions" / mount.name / version
 
 
 _HIDDEN_NAMES = frozenset(
