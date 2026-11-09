@@ -21,6 +21,7 @@ const mockUpdateSkillShares = jest.fn();
 const mockResetAccess = jest.fn();
 const mockLoadSkill = jest.fn();
 jest.mock("@/lib/fetcher", () => ({
+  ...jest.requireActual<typeof import("@/lib/fetcher")>("@/lib/fetcher"),
   errorHandlingFetcher: (...args: unknown[]) => mockLoadSkill(...args),
 }));
 

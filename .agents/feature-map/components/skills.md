@@ -505,6 +505,10 @@ The library preview of an external-app skill calls the same renderer
 20. `history-requires-edit` **History uses EDIT access, including its reads.**
     The `/skills/custom/{skill_id}/versions` family calls `fetch_skill` with
     `SkillManagementPolicy.EDIT` before listing or reading any history.
+    The history UI hides cached rows and closes previews when list revalidation returns
+    an auth, tier or not-found error. It clears that Skill's preview cache, so access
+    recovery must fetch preview content again. Transient errors keep loaded rows.
+    Skill API errors retain HTTP status through the shared `FetchError` type.
     `db/skill_version.py:fetch_skill_version` scopes version ids to that skill.
     Preview returns the historical bundle's description, instructions, and file
     list through `SkillBundleInspectResponse`; it validates expansion before inspection.

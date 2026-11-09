@@ -1,4 +1,5 @@
 import * as yup from "yup";
+import { FetchError } from "@/lib/fetcher";
 import { skillVersionSchema } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 /**
@@ -34,11 +35,10 @@ async function handle<T>(res: Response): Promise<T> {
     } catch {
       // Use the generic status message.
     }
-    const error = new Error(detail) as Error & {
-      errorCode: string | undefined;
-    };
-    error.errorCode = errorCode;
-    throw error;
+    throw Object.assign(
+      new FetchError(detail, res.status, { detail, error_code: errorCode }),
+      { errorCode }
+    );
   }
   if (res.status === 204) {
     return undefined as T;

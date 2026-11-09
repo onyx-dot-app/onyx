@@ -512,3 +512,104 @@ test("a background retry does not move focus after an older page fails", async (
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(elsewhere).toHaveFocus();
 });
+
+function RevalidateHistory() {
+  const { mutate } = useSWRConfig();
+  return (
+    <Button
+      onClick={() =>
+        void mutate(
+          unstable_serialize(() => [SWR_KEYS.skillVersions(skill.id), null])
+        )
+      }
+    >
+      Revalidate history
+    </Button>
+  );
+}
+
+describe.each([401, 402, 403, 404])("history access response %s", (status) => {
+  test.each([false, true])(
+    "hides cached history and clears previews (preview open: %s)",
+    async (openPreview) => {
+      let historyStatus = 200;
+      let previewResponse: Promise<Response> | undefined;
+      fetchMock.mockImplementation(async (url) => {
+        if (url === SWR_KEYS.skillVersions(skill.id)) {
+          return historyStatus === 200
+            ? response(
+                versions.map((version) => ({
+                  ...version,
+                  marketplace_revision: "private-revision",
+                }))
+              )
+            : response({ detail: "Access denied" }, historyStatus);
+        }
+        if (url === SWR_KEYS.skillVersion(skill.id, "v1"))
+          return previewResponse ?? response(bundle);
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      render(
+        <>
+          <RevalidateHistory />
+          <SkillVersions
+            skill={{ ...skill, user_permission: "EDITOR" }}
+            onBusyChange={jest.fn()}
+            onRestored={jest.fn()}
+          />
+        </>
+      );
+      const user = setupUser();
+      expect(await screen.findByText("owner@example.com")).toBeVisible();
+      expect(
+        screen.getAllByText("Synced revision private-revision")
+      ).toHaveLength(3);
+      if (openPreview) {
+        await user.click(
+          screen.getByRole("button", { name: "Preview version 1" })
+        );
+        expect(await screen.findByText("Earlier instructions")).toBeVisible();
+      }
+      historyStatus = status;
+      await user.click(
+        screen.getByRole("button", { name: "Revalidate history" })
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Could not load versions."
+      );
+      expect(screen.queryByText("owner@example.com")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Synced revision private-revision")
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Earlier instructions")
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Restore version/ })
+      ).not.toBeInTheDocument();
+      if (openPreview) {
+        const freshPreview = deferred<Response>();
+        previewResponse = freshPreview.promise;
+        historyStatus = 200;
+        await user.click(screen.getByRole("button", { name: "Retry" }));
+        await user.click(
+          await screen.findByRole("button", { name: "Preview version 1" })
+        );
+        expect(
+          screen.queryByText("Earlier instructions")
+        ).not.toBeInTheDocument();
+        await act(async () =>
+          freshPreview.resolve(
+            response({
+              ...bundle,
+              instructions_markdown: "Freshly authorized instructions",
+            })
+          )
+        );
+        expect(
+          await screen.findByText("Freshly authorized instructions")
+        ).toBeVisible();
+      }
+    }
+  );
+});

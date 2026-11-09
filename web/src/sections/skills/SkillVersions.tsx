@@ -28,6 +28,7 @@ import type {
   SkillVersion,
 } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
 
 type HistoryView =
   | { kind: "list" }
@@ -130,6 +131,7 @@ export default function SkillVersions({
     ([, beforeVersion]: [string, number | null]) =>
       listSkillVersions(skill.id, beforeVersion)
   );
+  const accessDenied = isAuthStatusError(error) || isNotFoundError(error);
   const versions = pages?.flat();
   const oldest = pages?.at(-1)?.at(-1);
   const hasMore = oldest !== undefined && oldest.version_number > 1;
@@ -146,6 +148,17 @@ export default function SkillVersions({
     (node: HTMLElement | null) => node?.focus(),
     []
   );
+  useEffect(() => {
+    if (allowed && !accessDenied) return;
+    setView({ kind: "list" });
+    void mutate(
+      (key) =>
+        typeof key === "string" &&
+        key.startsWith(`${SWR_KEYS.skillVersions(skill.id)}/`),
+      undefined,
+      { revalidate: false }
+    );
+  }, [allowed, accessDenied, mutate, skill.id]);
   useEffect(() => {
     if (view.kind === "list" && returning.current) {
       listTitle.current?.focus();
@@ -186,6 +199,7 @@ export default function SkillVersions({
     if (
       requestPending.current ||
       !allowed ||
+      accessDenied ||
       skill.marketplace ||
       restoreDisabled ||
       !version.has_bundle
@@ -350,6 +364,13 @@ export default function SkillVersions({
   ];
 
   if (!allowed) return null;
+  if (accessDenied)
+    return (
+      <Section height="auto" role="alert">
+        <IllustrationContent title={t("loadError")} />
+        <Button onClick={() => void refreshVersions()}>{t("retry")}</Button>
+      </Section>
+    );
   if (view.kind !== "list")
     return (
       <Section height="auto" alignItems="stretch" gap={4} aria-busy={pending}>

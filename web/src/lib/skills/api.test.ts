@@ -86,6 +86,16 @@ describe("skills API", () => {
     );
   });
 
+  it("keeps the authorization status when a history response is not JSON", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("Unauthorized", { status: 401 })
+    );
+    await expect(listSkillVersions("skill-id")).rejects.toMatchObject({
+      status: 401,
+      message: "Request failed (401)",
+    });
+  });
+
   it("rejects malformed version metadata", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify([{ id: "v1" }]))
