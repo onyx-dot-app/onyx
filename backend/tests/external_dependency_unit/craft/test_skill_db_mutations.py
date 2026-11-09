@@ -857,7 +857,7 @@ def test_creation_serializes_with_toggle_preference_writes(db_session: Session) 
     db_session.commit()
     new = make_skill(db_session, name=existing.name, author_user_id=user.id)
     assert enable_new_skill_if_name_available__no_commit(new, user.id, db_session)
-    # A toggle cannot pass its user lock while creation's preference is uncommitted.
+    # A toggle cannot pass the shared lock while creation's preference is uncommitted.
     with Session(bind=db_session.get_bind()) as toggle_session:
         toggle_session.execute(text("SET LOCAL lock_timeout = '100ms'"))
         with pytest.raises(OperationalError, match="lock timeout") as locked:
@@ -865,7 +865,7 @@ def test_creation_serializes_with_toggle_preference_writes(db_session: Session) 
                 skill_id=existing.id, enabled=True, user=user, db_session=toggle_session
             )
         assert locked.value.statement is not None
-        assert "FOR NO KEY UPDATE" in locked.value.statement
+        assert "pg_advisory_xact_lock" in locked.value.statement
     db_session.commit()
     with Session(bind=db_session.get_bind()) as toggle_session:
         with pytest.raises(OnyxError) as error:
