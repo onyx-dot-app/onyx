@@ -309,8 +309,9 @@ still propagate unexpected storage errors.
     `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. Expansion counts actual per-file and total bytes.
     No upload ZIP or file-count cap applies to history.
     Current-content reads verify expansion before inspection or editing.
-    Current-content stored-byte limits return a specific 413. Other stored-byte
-    and expansion failures return 400 through the ValueError handler.
+    Current-content stored-byte limits return a specific 413; its expansion failures
+    return 400 through the ValueError handler. History preview and restore retain
+    their structured 413 responses for stored-byte and expansion limits.
     Metadata hashes original entries without normalization.
     Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
