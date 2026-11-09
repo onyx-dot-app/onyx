@@ -288,3 +288,9 @@ class PendingPresignedUpload(BaseModel):
     object_key: str
     size: int
     sha256: str
+
+
+class BundleMetadata(BaseModel):
+    content_digest: str
+    unpacked_size_bytes: int
+    file_count: int
