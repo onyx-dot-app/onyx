@@ -68,7 +68,8 @@ Its neighbours own:
 ```
 Admin config                                Turn time (tools/tool_constructor.py)
 MCPServer --1:N--> Tool (mcp_server_id,      resolve_mcp_credentials(server, user)
-   |               mcp_input_schema)           once per server -> one MCPTool per
+   |               mcp_input_schema,           once per server -> one MCPTool per
+   |               mcp_output_schema)
    +--admin_connection_config (shared)          saved Tool row, schema from the DB
    +--MCPConnectionConfig per user_email
 Tool (openapi_schema) ---------------------> build_custom_tools_from_openapi_schema_
@@ -183,7 +184,9 @@ Policy precedence is in [[craft-external-apps]].
    (`_list_mcp_tools_by_id` with `is_admin`, which
    `admin_list_mcp_tools_by_id` and `get_mcp_server_tools_snapshots` call). The
    member route `user_list_mcp_tools_by_id` discovers but never writes. OpenAPI
-   tools need no sync.
+   tools need no sync. The same sync saves the tool's declared `outputSchema`
+   in `Tool.mcp_output_schema`, and sets it to NULL when the server declares
+   none.
 6. `sync-matches-by-name` **Sync matches tools by name.**
    `server/features/mcp/api.py:_sync_mcp_server_tools` treats a tool that the
    remote server renames as a new tool: it is deleted and inserted again with

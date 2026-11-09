@@ -4471,6 +4471,10 @@ class Tool(Base):
     mcp_input_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # MCP tool output schema, when the server declares one. Only applies to MCP tools.
+    mcp_output_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )

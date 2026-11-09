@@ -1705,6 +1705,7 @@ def _upsert_db_tools(
             existing_tool.description = description
             existing_tool.display_name = display_name
             existing_tool.mcp_input_schema = input_schema
+            existing_tool.mcp_output_schema = tool.outputSchema
             continue
 
         new_tool = create_tool__no_commit(
@@ -1720,6 +1721,7 @@ def _upsert_db_tools(
         )
         new_tool.display_name = display_name
         new_tool.mcp_input_schema = input_schema
+        new_tool.mcp_output_schema = tool.outputSchema
         # Register it so a repeated name in this response is not inserted again.
         existing_by_name[tool_name] = new_tool
 
