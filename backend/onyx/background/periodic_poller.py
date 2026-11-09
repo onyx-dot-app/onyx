@@ -136,6 +136,13 @@ def _run_skill_bundle_cleanup() -> None:
     check_for_orphan_skill_bundle_cleanup.run(tenant_id=get_current_tenant_id())
 
 
+def _run_skill_version_repair() -> None:
+    from onyx.background.celery.tasks.skill_versions.tasks import repair_skill_versions
+    from shared_configs.contextvars import get_current_tenant_id
+
+    repair_skill_versions.run(tenant_id=get_current_tenant_id())
+
+
 def _run_fleet_telemetry() -> None:
     from onyx.utils.fleet_telemetry_collector import collect_snapshots
     from shared_configs.contextvars import get_current_tenant_id
@@ -223,6 +230,14 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
             interval_seconds=3600,
             lock_id=PERIODIC_TASK_LOCK_BASE + 6,
             run_fn=_run_skill_bundle_cleanup,
+        )
+    )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="skill-version-repair",
+            interval_seconds=300,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 7,
+            run_fn=_run_skill_version_repair,
         )
     )
     return tasks

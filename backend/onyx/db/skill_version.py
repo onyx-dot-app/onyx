@@ -23,7 +23,7 @@ from onyx.db.resource_version import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -253,3 +253,34 @@ def delete_orphan_skill_bundles() -> int:
     finally:
         if lock.owned():
             lock.release()
+
+
+def skill_version_repair_batch(
+    db_session: Session, after: UUID | None, *, drift_only: bool = False
+) -> list[Skill]:
+    statement = select(Skill).where(Skill.built_in_skill_id.is_(None))
+    if drift_only:
+        statement = statement.outerjoin(
+            SkillVersion, SkillVersion.id == Skill.current_version_id
+        ).where(
+            or_(
+                SkillVersion.id.is_(None),
+                SkillVersion.bundle_file_id.is_distinct_from(Skill.bundle_file_id),
+                SkillVersion.bundle_sha256.is_distinct_from(Skill.bundle_sha256),
+                SkillVersion.is_valid.is_distinct_from(Skill.is_valid),
+            )
+        )
+    if after is not None:
+        statement = statement.where(Skill.id > after)
+    return list(db_session.scalars(statement.order_by(Skill.id).limit(50)))
+
+
+def repair_skill_version_metadata(
+    skill: Skill, db_session: Session, file_store: FileStore
+) -> list[str]:
+    repair_skill_version(skill, db_session)
+    adapter = SkillVersionAdapter(skill)
+    stale_file_ids = prune_resource_bundles(adapter, db_session)
+    for version in db_session.scalars(adapter.versions()):
+        repair_version_metadata(version, file_store)
+    return stale_file_ids
