@@ -262,6 +262,8 @@ export const SWR_KEYS = {
   agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
+  marketplaces: "/api/marketplaces",
+  marketplace: (id: string) => `/api/marketplaces/${encodeURIComponent(id)}`,
   userSkills: "/api/skills",
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,

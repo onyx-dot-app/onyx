@@ -17535,5 +17535,17 @@
     "jvmMemoryTitle": "JVM 内存",
     "vectorMemoryTitle": "向量内存",
     "viewDetails": "查看详情"
+  },
+  "marketplaces": {
+    "retry": "刷新",
+    "connectionError": "无法检查 GitHub 连接。",
+    "previewFailed": "无法读取市场",
+    "sampleTitle": "添加市场文件",
+    "sampleDescription": "在所选文件夹中保存为 .claude-plugin/marketplace.json。将技能放在 team-skills/skills/example/SKILL.md，然后重新预览。",
+    "copySample": "复制示例",
+    "emptyPreview": "此目录没有条目。",
+    "ok": "就绪",
+    "blocked": "已阻止",
+    "not_supported": "不支持"
   }
 }
