@@ -8,6 +8,7 @@ from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from onyx.db import marketplace_sync as ownership
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Marketplace
 from onyx.skills.marketplace.models import MarketplaceSyncStatus
 from tests.external_dependency_unit.craft.db_helpers import make_user
@@ -95,6 +96,28 @@ def test_recovery_budget_and_explicit_restart(
     assert ownership.claim_marketplace_sync(marketplace.id, session) is not None
     session.refresh(marketplace)
     assert marketplace.sync_attempts == 1
+
+
+def test_recovery_refreshes_a_request_committed_by_another_session(
+    session: Session, marketplace: Marketplace
+) -> None:
+    marketplace.login_user_id = make_user(session).id
+    session.commit()
+    ownership.request_marketplace_sync(marketplace.id, session)
+    owner = ownership.claim_marketplace_sync(marketplace.id, session)
+    assert owner is not None
+    expire(session, marketplace.id)
+    assert marketplace.sync_owner == owner
+    assert not marketplace.sync_requested
+
+    with get_session_with_current_tenant() as requester:
+        ownership.request_marketplace_sync(marketplace.id, requester)
+
+    assert ownership.reserve_marketplace_dispatches(session) == ([marketplace.id], True)
+    session.refresh(marketplace)
+    assert marketplace.sync_requested
+    assert marketplace.sync_retry_after is None
+    assert marketplace.sync_attempts == 0
 
 
 @pytest.mark.parametrize("release", ["commit", "rollback", "savepoint_rollback"])

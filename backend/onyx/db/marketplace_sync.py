@@ -62,12 +62,7 @@ class MarketplaceSyncPublication:
             raise MarketplaceSyncLeaseLost(
                 "Marketplace sync operation deadline expired"
             )
-        if (
-            resolved_revision is not None
-            and row.retirement_proposal is not None
-            and row.retirement_proposal.revision != resolved_revision
-        ):
-            row.retirement_proposal = None
+        _discard_obsolete_retirement(row, resolved_revision)
         _finish(row, now, status, error, retry=retry)
         return row.sync_requested and row.sync_retry_after is None
 
@@ -170,6 +165,24 @@ def renew_marketplace_sync(marketplace_id: UUID, owner: UUID, session: Session) 
     return True
 
 
+def _discard_obsolete_retirement(row: Marketplace, revision: str | None) -> None:
+    if (
+        revision is not None
+        and row.retirement_proposal is not None
+        and row.retirement_proposal.revision != revision
+    ):
+        row.retirement_proposal = None
+
+
+def record_marketplace_sync_revision(
+    marketplace_id: UUID, owner: UUID, revision: str, session: Session
+) -> None:
+    """Invalidate old approval before staging can fail or the worker can stop."""
+    publication = fence_marketplace_sync(marketplace_id, owner, session)
+    _discard_obsolete_retirement(publication.marketplace, revision)
+    session.commit()
+
+
 def _finish(
     row: Marketplace,
     now: datetime,
@@ -251,7 +264,10 @@ def reserve_marketplace_dispatches(
         query = query.where(Marketplace.id == marketplace_id)
     rows = list(
         session.scalars(
-            query.order_by(Marketplace.id).limit(32).with_for_update(skip_locked=True)
+            query.order_by(Marketplace.id)
+            .limit(32)
+            .with_for_update(skip_locked=True)
+            .execution_options(populate_existing=True)
         )
     )
     ids: list[UUID] = []

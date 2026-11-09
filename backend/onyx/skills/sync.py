@@ -24,6 +24,7 @@ from onyx.db.marketplace_sync import (
     fence_marketplace_sync,
     finish_marketplace_sync,
     finish_marketplace_sync__no_commit,
+    record_marketplace_sync_revision,
     renew_marketplace_sync,
     request_marketplace_sync,
 )
@@ -123,6 +124,10 @@ def _sync_marketplace(
             db_session.commit()
         heartbeat.stop()
         return None, pending
+    with get_session_with_current_tenant() as db_session:
+        record_marketplace_sync_revision(
+            marketplace_id, owner, archive.revision, db_session
+        )
     if archive.revision != marketplace.last_synced_revision:
         recovery_keys |= frozenset(
             key

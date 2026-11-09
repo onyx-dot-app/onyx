@@ -481,8 +481,10 @@ The library preview of an external-app skill calls the same renderer
     clears it in the content transaction; rollback preserves both approval and content.
     Failed reads at the same revision preserve the proposal, but confirmation
     requires a new sync to restore NEEDS_CONFIRMATION status. A fenced sync that
-    resolves a different revision clears it, including a no-op revert to the last
-    synced revision. Consumed approval cannot authorize a later replay.
+    resolves a different revision clears it before bundle validation or staging,
+    including a no-op revert to the last synced revision. A storage failure or
+    stopped worker cannot preserve approval for the old revision. Consumed approval
+    cannot authorize a later replay.
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.

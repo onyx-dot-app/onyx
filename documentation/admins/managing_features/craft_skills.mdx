@@ -346,6 +346,8 @@ An unavailable login records an error and preserves existing Skills. A successfu
 even when the source has not changed. Missing sources, invalid input, and login failures wait for an explicit request;
 they do not retry automatically.
 A failed source read or a retirement that needs confirmation preserves the last successful content.
+A different source revision clears the previous retirement approval. This applies even if saving the new content fails.
+Returning to the earlier revision requires a new confirmation before a large retirement.
 Sync saves its result with the updated Skills. A later sandbox delivery failure does not change that result.
 
 ## Reset marketplace Skill access through the API

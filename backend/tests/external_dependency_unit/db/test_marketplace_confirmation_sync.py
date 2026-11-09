@@ -1,5 +1,7 @@
 """Approved retirements reach the durable worker; rollback leaves no queued work."""
 
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -159,3 +161,56 @@ def test_confirmation_requires_pending_status(
     assert error.value.detail == (
         "Sync the marketplace again before confirming retirement"
     )
+
+
+@pytest.mark.parametrize("changed_revision", [False, True])
+def test_staging_failure_cannot_preserve_approval_for_a_different_revision(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    user: User,
+    changed_revision: bool,
+) -> None:
+    marketplace.owner_user_id = marketplace.login_user_id = user.id
+    session.commit()
+    github.archive = catalog_bytes(*(f"skill-{i}" for i in range(8)))
+    sync_marketplace(marketplace.id, tenant)
+    github.archive, github.revision = (
+        catalog_bytes("skill-7", body=b"updated"),
+        "b" * 40,
+    )
+    sync_marketplace(marketplace.id, tenant)
+    session.refresh(marketplace)
+    proposal = marketplace.retirement_proposal
+    assert proposal is not None
+    confirm_marketplace_retirement__no_commit(
+        marketplace.id,
+        expected_revision=proposal.revision,
+        expected_skill_ids=proposal.skill_ids,
+        user=user,
+        db_session=session,
+    )
+    session.commit()
+    if changed_revision:
+        github.revision = "c" * 40
+    with (
+        patch(
+            "onyx.skills.sync.save_skill_bundle_bytes",
+            side_effect=OSError("storage unavailable"),
+        ),
+        pytest.raises(OSError, match="storage unavailable"),
+    ):
+        sync_marketplace(marketplace.id, tenant)
+    session.refresh(marketplace)
+    assert (marketplace.retirement_proposal is None) == changed_revision
+    assert session.scalar(select(Skill.id).where(Skill.retired_at.is_not(None))) is None
+
+    github.revision = "b" * 40
+    result = sync_marketplace(marketplace.id, tenant)
+    assert result is not None
+    if changed_revision:
+        assert result.status == "needs_confirmation"
+        assert not result.retired_skill_ids
+    else:
+        assert set(result.retired_skill_ids) == set(proposal.skill_ids)
