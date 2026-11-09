@@ -13,8 +13,12 @@ from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import BundleVersionMixin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import FileStore, is_missing_object
-from onyx.file_store.models import BundleMetadata
+from onyx.file_store.file_store import (
+    FileSizeLimitExceeded,
+    FileStore,
+    is_missing_object,
+)
+from onyx.file_store.models import BundleLimits, BundleMetadata
 from onyx.utils.bundle import compute_bundle_metadata
 from onyx.utils.logger import setup_logger
 
@@ -43,12 +47,16 @@ def fill_version_metadata(
     version.file_count = metadata.file_count
 
 
-def read_version_bundle(version: BundleVersionMixin, file_store: FileStore) -> bytes:
+def read_version_bundle(
+    version: BundleVersionMixin, file_store: FileStore, *, max_bytes: int
+) -> bytes:
     """Raises NOT_FOUND when pruning removed the bundle, also during a race."""
     if version.bundle_file_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT)
     try:
-        with file_store.read_file(version.bundle_file_id) as source:
+        with file_store.read_file(
+            version.bundle_file_id, max_bytes=max_bytes
+        ) as source:
             return source.read()
     except (
         FileRecordNotFoundError,
@@ -64,7 +72,11 @@ def read_version_bundle(version: BundleVersionMixin, file_store: FileStore) -> b
 
 
 def repair_version_metadata(
-    version: BundleVersionMixin, file_store: FileStore, *, verify_bundle: bool = False
+    version: BundleVersionMixin,
+    file_store: FileStore,
+    *,
+    limits: BundleLimits,
+    verify_bundle: bool = False,
 ) -> bool:
     if version.bundle_file_id is None:
         return False
@@ -78,12 +90,19 @@ def repair_version_metadata(
     ):
         return True
     try:
-        bundle_bytes = read_version_bundle(version, file_store)
-    except OnyxError:
+        bundle_bytes = read_version_bundle(
+            version, file_store, max_bytes=limits.max_stored_bytes
+        )
+    except FileSizeLimitExceeded:
+        logger.warning("Version bundle exceeds stored byte limit: %s", version.id)
+        return False
+    except OnyxError as exc:
+        if exc.error_code != OnyxErrorCode.NOT_FOUND:
+            raise
         logger.warning("Version bundle is missing: %s", version.id)
         return False
     try:
-        metadata = compute_bundle_metadata(bundle_bytes)
+        metadata = compute_bundle_metadata(bundle_bytes, limits=limits)
     except Exception:
         logger.warning("Version bundle cannot be decoded: %s", version.id)
         return False
