@@ -193,6 +193,29 @@ The upload is rejected when the bundle has unsafe paths, symbolic links, files e
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
 or a slug reserved by a built-in Skill or App.
 
+### Skill limit per user
+
+Each user can have up to 500 MiB and 5,000 files of Skills. The total counts the Skills that Craft loads for the user:
+built-in Skills, Required Skills, and the Skills that are on for the user.
+An Available Skill counts only after the user turns it on. Onyx uses the recorded size of each Skill's current version.
+
+Onyx refuses a change that puts a user past either limit:
+
+| Change | Result |
+| --- | --- |
+| A user uploads a Skill or turns on a Skill | Refused with HTTP 413. The error shows the user's total. |
+| An edit or a restore makes a Skill larger | Refused when the increase puts a user who has the Skill past the limit. |
+| A user joins a group | Allowed. Craft loads the Skills that fit. |
+
+A user who is already past the limit can turn Skills off and remove access.
+Onyx refuses only a change that makes that user's total larger.
+
+A Skill version that has no recorded size counts as 100 MiB and 500 files until Onyx measures it.
+
+The HTTP 413 response contains `skill_limit` with `failed_limit` (`bytes` or `files`) and `affected_user_count`.
+When your own total goes past the limit, `skill_limit.usage` shows `bytes`, `files`, `unknown_skill_count`, `max_bytes`,
+and `max_files`.
+
 ## Review a Skill before publishing
 
 Treat a Skill bundle as code and policy, not only as prompt text.

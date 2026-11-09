@@ -1,23 +1,40 @@
-"""Per-user Skill write limit: set-based usage."""
+"""Per-user Skill write limit: set-based usage, recipients and the guard."""
 
+from collections.abc import Generator
 from datetime import datetime, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import event, insert, update
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import AccountType
 from onyx.db.enums import SkillInstallationPolicy as Policy
 from onyx.db.models import Skill, User, UserSkillPreference
-from onyx.db.skill import skill_usage_for_users
+from onyx.db.skill import (
+    capture_skill_limit_baseline,
+    skill_audience_user_ids,
+    skill_limit_violations,
+    skill_usage_for_users,
+)
 from onyx.skills.built_in import get_builtin_skill_footprints
-from onyx.skills.limits import UNKNOWN_SKILL_BYTES, SkillUsage
+from onyx.skills.limits import (
+    SKILL_WRITE_MAX_BYTES,
+    SKILL_WRITE_MAX_FILES,
+    UNKNOWN_SKILL_BYTES,
+    SkillLimit,
+    SkillUsage,
+)
 from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
     make_built_in_skill_row,
     make_external_app,
+    make_group,
     make_skill,
     make_user,
     make_user_credential,
+    share_skill_with_group,
 )
 from tests.external_dependency_unit.db.test_skill_access_mutations import (
     session as session,
@@ -124,3 +141,135 @@ def test_app_skill_counts_only_when_the_user_can_use_the_app(clean: Session) -> 
     assert skill_usage_for_users([ready.id], clean, names=["other"]) == {
         ready.id: SkillUsage()
     }
+
+
+def test_audience_includes_users_without_sandboxes(clean: Session) -> None:
+    member, outsider = (make_user(clean, standard_account=True) for _ in range(2))
+    placeholder = make_user(clean)
+    assert placeholder.account_type == AccountType.EXT_PERM_USER
+    owner = make_user(clean, standard_account=True)
+    group = make_group(clean)
+    add_user_to_group(clean, member, group)
+    add_user_to_group(clean, placeholder, group)
+    skill = sized_skill(clean, size=MIB, author=owner)
+    share_skill_with_group(clean, skill, group)
+
+    audience = skill_audience_user_ids([skill.id], clean)
+
+    assert {member.id, owner.id} <= audience
+    assert outsider.id not in audience and placeholder.id not in audience
+
+
+@pytest.mark.parametrize(
+    "extra_bytes,extra_files,failed",
+    [
+        (0, 0, None),
+        (1, 0, SkillLimit.BYTES),
+        (0, 1, SkillLimit.FILES),
+    ],
+)
+def test_exact_limits(
+    clean: Session, extra_bytes: int, extra_files: int, failed: SkillLimit | None
+) -> None:
+    user = make_user(clean, standard_account=True)
+    sized_skill(
+        clean,
+        size=SKILL_WRITE_MAX_BYTES - 10 * MIB,
+        files=SKILL_WRITE_MAX_FILES - 10,
+        author=user,
+    )
+    added = sized_skill(
+        clean,
+        size=10 * MIB + extra_bytes,
+        files=10 + extra_files,
+        author=user,
+        policy=Policy.AVAILABLE,
+    )
+    baseline = capture_skill_limit_baseline([added.id], clean, user_ids=[user.id])
+    enable(clean, user, added)
+
+    violations = skill_limit_violations(baseline, clean)
+
+    assert {user_id: limit for user_id, (_, limit) in violations.items()} == (
+        {user.id: failed} if failed is not None else {}
+    )
+
+
+def test_new_recipient_and_already_over_users(clean: Session) -> None:
+    """A user over before a change may shrink; a new recipient may not pass the limit."""
+    over, near, low = (make_user(clean, standard_account=True) for _ in range(3))
+    big = sized_skill(clean, size=SKILL_WRITE_MAX_BYTES + MIB, author=over)
+    sized_skill(clean, size=SKILL_WRITE_MAX_BYTES - MIB, author=near)
+    group = make_group(clean)
+    for user in (near, low):
+        add_user_to_group(clean, user, group)
+    added = sized_skill(clean, size=2 * MIB, author=over, policy=Policy.REQUIRED)
+
+    baseline = capture_skill_limit_baseline([added.id], clean)
+    share_skill_with_group(clean, added, group)
+    violations = skill_limit_violations(baseline, clean)
+    assert set(violations) == {near.id}
+    assert violations[near.id][1] == SkillLimit.BYTES
+
+    baseline = capture_skill_limit_baseline([big.id], clean)
+    version = big.current_version
+    assert version is not None
+    version.unpacked_size_bytes = SKILL_WRITE_MAX_BYTES
+    assert skill_limit_violations(baseline, clean) == {}
+    version.unpacked_size_bytes = SKILL_WRITE_MAX_BYTES + 2 * MIB
+    assert set(skill_limit_violations(baseline, clean)) == {over.id}
+
+
+def _insert_users(session: Session, count: int) -> list[UUID]:
+    user_ids = [uuid4() for _ in range(count)]
+    session.execute(
+        insert(User),
+        [
+            {
+                "id": user_id,
+                "email": f"limit_{user_id.hex}@example.com",
+                "hashed_password": "unused",
+                "is_active": True,
+                "is_superuser": False,
+                "is_verified": True,
+                "account_type": AccountType.STANDARD,
+            }
+            for user_id in user_ids
+        ],
+    )
+    return user_ids
+
+
+@pytest.fixture
+def statements(session: Session) -> Generator[list[str], None, None]:
+    executed: list[str] = []
+    connection = session.connection()
+
+    def record(_: Connection, __: object, statement: str, *___: object) -> None:
+        executed.append(statement)
+
+    event.listen(connection, "before_cursor_execute", record)
+    yield executed
+    event.remove(connection, "before_cursor_execute", record)
+
+
+def test_company_change_for_1000_users_uses_constant_queries(
+    clean: Session, statements: list[str]
+) -> None:
+    sized_skill(clean, size=SKILL_WRITE_MAX_BYTES - MIB)
+    added = sized_skill(clean, size=2 * MIB, policy=Policy.AVAILABLE)
+    counts: list[int] = []
+    for count in (10, 990):
+        user_ids = _insert_users(clean, count)
+        added.installation_policy = Policy.AVAILABLE
+        clean.flush()
+        statements.clear()
+        baseline = capture_skill_limit_baseline([added.id], clean)
+        added.installation_policy = Policy.REQUIRED
+        violations = skill_limit_violations(baseline, clean)
+        counts.append(len(statements))
+        assert set(user_ids) <= set(violations)
+
+    assert len(violations) >= 1000
+    assert all(limit == SkillLimit.BYTES for _, limit in violations.values())
+    assert counts[0] == counts[1] <= 21, counts

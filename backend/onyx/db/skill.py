@@ -67,6 +67,7 @@ from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    AccountType,
     Permission,
     PermissionAuthority,
     SandboxStatus,
@@ -126,7 +127,16 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS, get_builtin_skill_footprints
 from onyx.skills.ingest import IngestedBundle
-from onyx.skills.limits import SkillUsage
+from onyx.skills.limits import (
+    SKILL_WRITE_MAX_BYTES,
+    SKILL_WRITE_MAX_FILES,
+    SkillLimit,
+    SkillLimitBaseline,
+    SkillLimitViolation,
+    SkillUsage,
+    SkillUsageSummary,
+    failed_skill_limit,
+)
 
 # Past these sizes, a usage query finds each name's shared winner once.
 # Smaller queries cost less to expand each user over each name.
@@ -559,13 +569,58 @@ def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
     )
 
 
-def _skill_reaches_user(user_id: UserIdRef) -> ColumnElement[bool]:
+def _skill_reaches_user(
+    user_id: UserIdRef, *, shared: ColumnElement[bool] | None = None
+) -> ColumnElement[bool]:
     """Any grant that can show the skill to the user, before installation policy."""
     return or_(
         Skill.public_permission.is_not(None),
         Skill.author_user_id == user_id,
-        _is_shared_with_user(user_id),
-        _is_shared_with_user_group(user_id),
+        shared
+        if shared is not None
+        else or_(_is_shared_with_user(user_id), _is_shared_with_user_group(user_id)),
+    )
+
+
+def skill_audience_user_ids(
+    skill_ids: Collection[UUID], db_session: Session
+) -> set[UUID]:
+    """Users who can sign in and reach any of the skills, with or without a sandbox."""
+    if not skill_ids:
+        return set()
+    audience = skill_audience_rows(skill_ids).subquery()
+    return set(db_session.scalars(select(audience.c.user_id).distinct()))
+
+
+def skill_audience_rows(skill_ids: Collection[UUID]) -> Select[tuple[UUID, UUID]]:
+    """Skill/user pairs at the executing statement's snapshot, including no sandbox."""
+    user_id = User.__table__.c.id
+    # Join grant edges once instead of running correlated subplans per user/Skill.
+    shares = union_all(
+        select(Skill__User.skill_id, Skill__User.user_id).where(
+            Skill__User.skill_id.in_(skill_ids)
+        ),
+        select(Skill__UserGroup.skill_id, User__UserGroup.user_id)
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
+        )
+        .where(Skill__UserGroup.skill_id.in_(skill_ids)),
+    ).subquery()
+    shared = select(shares.c.skill_id, shares.c.user_id).distinct().subquery()
+    return (
+        select(Skill.id.label("skill_id"), user_id.label("user_id"))
+        .select_from(User)
+        .join(Skill, true())
+        .outerjoin(
+            shared, and_(shared.c.skill_id == Skill.id, shared.c.user_id == user_id)
+        )
+        .where(
+            Skill.id.in_(skill_ids),
+            _skill_reaches_user(user_id, shared=shared.c.user_id.is_not(None)),
+            User.__table__.c.is_active.is_(True),
+            User.account_type.not_in([AccountType.BOT, AccountType.EXT_PERM_USER]),
+        )
     )
 
 
@@ -1283,6 +1338,157 @@ def _skill_usage_from_winners(
     return stmt
 
 
+def lock_skill_limit_users(user_ids: Collection[UUID], db_session: Session) -> None:
+    """Take the preference lock on many users, after membership and skill locks."""
+    if not user_ids:
+        return
+    lock_group_membership(db_session)
+    user_id = User.__table__.c.id
+    db_session.execute(
+        select(user_id)
+        .where(user_id == any_(uuid_array(user_ids)))
+        .order_by(user_id)
+        .with_for_update(key_share=True)
+    )
+
+
+def capture_skill_limit_baseline(
+    skill_ids: Collection[UUID],
+    db_session: Session,
+    *,
+    user_ids: Collection[UUID] | None = None,
+) -> SkillLimitBaseline:
+    """Lock and measure users who can reach the skills before a write changes them.
+
+    Pass ``user_ids`` when only those users' Skills change, such as an enable.
+    """
+    lock_group_membership(db_session)
+    users = (
+        set(user_ids)
+        if user_ids is not None
+        else skill_audience_user_ids(skill_ids, db_session)
+    )
+    lock_skill_limit_users(users, db_session)
+    names = _skill_names(skill_ids, db_session)
+    return SkillLimitBaseline(
+        skill_ids=frozenset(skill_ids),
+        user_ids=frozenset(user_ids) if user_ids is not None else None,
+        names=names,
+        before=skill_usage_for_users(users, db_session, names=names),
+    )
+
+
+def _skill_names(skill_ids: Collection[UUID], db_session: Session) -> frozenset[str]:
+    if not skill_ids:
+        return frozenset()
+    return frozenset(
+        db_session.scalars(select(Skill.name).where(Skill.id.in_(skill_ids)))
+    )
+
+
+def skill_limit_violations(
+    baseline: SkillLimitBaseline, db_session: Session
+) -> dict[UUID, tuple[SkillUsage, SkillLimit]]:
+    """Return users the write puts over a limit, with proposed usage and failed limit.
+
+    Locks users who gained access in stable order. Users already over may keep
+    or reduce their usage. Only the changed names are measured, and only users
+    whose usage grows get a full total.
+    """
+    db_session.flush()
+    users = (
+        set(baseline.user_ids)
+        if baseline.user_ids is not None
+        else skill_audience_user_ids(baseline.skill_ids, db_session)
+        | baseline.before.keys()
+    )
+    new_users = users - baseline.before.keys()
+    lock_skill_limit_users(new_users, db_session)
+    names = baseline.names | _skill_names(baseline.skill_ids, db_session)
+    after = skill_usage_for_users(users, db_session, names=names)
+    before = {user_id: baseline.before.get(user_id, SkillUsage()) for user_id in users}
+    # The changed Skills had none of these names or users before, so the
+    # current usage without them is the baseline.
+    for missing_users, missing_names in (
+        (new_users, names),
+        (users - new_users, names - baseline.names),
+    ):
+        if missing_users and missing_names:
+            for user_id, usage in skill_usage_for_users(
+                missing_users,
+                db_session,
+                exclude_skill_ids=baseline.skill_ids,
+                names=missing_names,
+            ).items():
+                before[user_id] += usage
+    deltas = {user_id: after[user_id] - before[user_id] for user_id in users}
+    totals = skill_usage_for_users(
+        [
+            user_id
+            for user_id, delta in deltas.items()
+            if delta.charged_bytes > 0 or delta.charged_files > 0
+        ],
+        db_session,
+    )
+    violations: dict[UUID, tuple[SkillUsage, SkillLimit]] = {}
+    for user_id, usage in totals.items():
+        failed = failed_skill_limit(usage, usage - deltas[user_id])
+        if failed is not None:
+            violations[user_id] = (usage, failed)
+    return violations
+
+
+def skill_limit_violation(
+    violations: Mapping[UUID, tuple[SkillUsage, SkillLimit]], actor_id: UUID | None
+) -> SkillLimitViolation:
+    actor = violations.get(actor_id) if actor_id is not None else None
+    return SkillLimitViolation(
+        failed_limit=(
+            SkillLimit.BYTES
+            if any(limit == SkillLimit.BYTES for _, limit in violations.values())
+            else SkillLimit.FILES
+        ),
+        affected_user_count=len(violations),
+        usage=SkillUsageSummary.from_usage(actor[0]) if actor is not None else None,
+    )
+
+
+def skill_limit_error(
+    violations: Mapping[UUID, tuple[SkillUsage, SkillLimit]], actor_id: UUID | None
+) -> OnyxError:
+    actor = violations.get(actor_id) if actor_id is not None else None
+    if actor is not None and len(violations) == 1:
+        usage = actor[0]
+        detail = (
+            "This would put your skills at "
+            f"{usage.charged_bytes / (1024 * 1024):.1f} MB in {usage.charged_files:,} "
+            f"files. The limit is {SKILL_WRITE_MAX_BYTES // (1024 * 1024)} MB and "
+            f"{SKILL_WRITE_MAX_FILES:,} files."
+        )
+    else:
+        count = len(violations)
+        detail = (
+            f"This change would put {count} {'user' if count == 1 else 'users'} "
+            f"past the {SKILL_WRITE_MAX_BYTES // (1024 * 1024)} MB or "
+            f"{SKILL_WRITE_MAX_FILES:,}-file skill limit."
+        )
+    violation = skill_limit_violation(violations, actor_id)
+    return OnyxError(
+        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        detail,
+        extra={"skill_limit": violation.model_dump(mode="json")},
+    )
+
+
+def assert_skill_limit(
+    baseline: SkillLimitBaseline, db_session: Session, *, actor_id: UUID | None
+) -> None:
+    """Raise 413 if the write since ``baseline`` puts any affected user over a limit."""
+    violations = skill_limit_violations(baseline, db_session)
+    if violations:
+        raise skill_limit_error(violations, actor_id)
+
+
 def fetch_skill(
     skill_id: UUID,
     *,
@@ -1351,6 +1557,7 @@ def enable_new_skill_if_name_available__no_commit(
     """Enable a newly inserted skill under the same user lock as toggles."""
     _lock_user_skill_preferences(user_id, db_session)
     user = lock_resource_access_user(user_id, db_session)
+    baseline = capture_skill_limit_baseline([skill.id], db_session, user_ids=[user_id])
     policy = resolve_skill_installation_policies([user.id], [skill.id], db_session).get(
         (user.id, skill.id)
     )
@@ -1381,7 +1588,10 @@ def enable_new_skill_if_name_available__no_commit(
         .on_conflict_do_nothing()
         .returning(UserSkillPreference.user_id)
     )
-    return inserted_user_id is not None
+    if inserted_user_id is None:
+        return False
+    assert_skill_limit(baseline, db_session, actor_id=user_id)
+    return True
 
 
 def clear_enabled_skill_preferences__no_commit(
@@ -1426,9 +1636,12 @@ def replace_skill_bundle(
     """Keep history and legacy columns; return the files to delete after commit."""
     if not skill.is_custom:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Built-in skills have no bundle.")
-    return save_skill_version(
+    baseline = capture_skill_limit_baseline([skill.id], db_session)
+    stale_file_ids = save_skill_version(
         skill, ingested, creator_id, db_session, prepared=prepared
     )
+    assert_skill_limit(baseline, db_session, actor_id=creator_id)
+    return stale_file_ids
 
 
 def create_skill_from_ingested_bundle(
@@ -1583,6 +1796,8 @@ def set_skill_enabled_for_user(
             OnyxErrorCode.INVALID_INPUT,
             "This skill cannot be enabled or disabled.",
         )
+    # A disable can also grow usage when it reveals a larger skill of that name.
+    baseline = capture_skill_limit_baseline([skill.id], db_session, user_ids=[user.id])
 
     if enabled:
         required_names = resolve_skill_runtime_names(
@@ -1659,6 +1874,7 @@ def set_skill_enabled_for_user(
             },
         )
     )
+    assert_skill_limit(baseline, db_session, actor_id=user.id)
     return skill
 
 
@@ -1754,6 +1970,7 @@ def transfer_skill_ownership(
     if new_owner_user_id == previous_owner_user_id:
         return
 
+    baseline = capture_skill_limit_baseline([skill.id], db_session)
     try:
         skill.author_user_id = new_owner_user_id
         db_session.execute(
@@ -1788,6 +2005,7 @@ def transfer_skill_ownership(
                 "New owner user does not exist.",
             ) from e
         raise
+    assert_skill_limit(baseline, db_session, actor_id=None)
 
 
 def delete_skill(skill: Skill, db_session: Session) -> list[str]:
@@ -2003,6 +2221,7 @@ def create_skill_from_bundle__no_commit(
             if change is not None
             else None,
         )
+        baseline = capture_skill_limit_baseline([skill.id], db_session)
         affected: set[UUID] = set()
         if change is not None:
             affected = share_skill__no_commit(
@@ -2011,6 +2230,7 @@ def create_skill_from_bundle__no_commit(
         enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         )
+        assert_skill_limit(baseline, db_session, actor_id=user.id)
         if enabled:
             affected.add(user.id)
     return skill, enabled, affected

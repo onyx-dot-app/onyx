@@ -283,7 +283,21 @@ runs both shapes. A new
 per-user input to `_runtime_eligibility` or `_runtime_candidate_order` must
 add its table there. App readiness comes from
 `db/external_app.py:get_ready_external_app_ids_for_users`, which applies
-`is_external_app_ready_for_user` to each credential.
+`is_external_app_ready_for_user` to each credential. `skill_audience_user_ids`
+finds every active sign-in user a grant reaches, with or without a sandbox.
+`capture_skill_limit_baseline` locks users in id order and measures them before
+a write. A write changes only its Skills, so the baseline measures only their
+names. `skill_limit_violations` measures those names after it and reads a
+full total only for users whose usage grows; a new recipient's baseline
+excludes the changed Skills. Background validity classification can expose a larger
+same-name fallback without the membership lock. App readiness can also change
+outside that lock. Never combine cached totals with fresh per-entry inputs.
+A user may stay over 500 MiB or 5,000 files when the write does not grow that total.
+Writes that check: enable and disable (a disable can reveal a larger skill
+of the same name), auto-enable after upload, `replace_skill_bundle` (edit,
+restore) and ownership transfer. Group joins do not check. The 413 `PAYLOAD_TOO_LARGE` body
+adds `skill_limit` (`skills/limits.py:SkillLimitViolation`): failed limit,
+affected user count, and the requesting user's proposed usage when they go over.
 
 ## Contracts and traps
 
