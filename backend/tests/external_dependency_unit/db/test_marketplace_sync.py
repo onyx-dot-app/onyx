@@ -1,12 +1,15 @@
 """Real PostgreSQL/FileStore syncs; only GitHub and deliberate faults are faked."""
 
+import gzip
 import io
 import json
 import os
 import subprocess
 import sys
+import tarfile
 from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -33,7 +36,7 @@ from onyx.file_store.file_store import (
 )
 from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
-from onyx.skills.marketplace.models import ReconciliationResult
+from onyx.skills.marketplace.models import MarketplaceSyncStatus, ReconciliationResult
 from onyx.skills.marketplace.read_models import CompleteMarketplace, FailedMarketplace
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
@@ -82,7 +85,11 @@ def catalog_bytes(*names: str, body: bytes = b"") -> bytes:
 
 
 @pytest.fixture
-def github(monkeypatch: pytest.MonkeyPatch) -> GitHub:
+def github(
+    monkeypatch: pytest.MonkeyPatch, session: Session, marketplace: Marketplace
+) -> GitHub:
+    marketplace.login_user_id = make_user(session).id
+    session.commit()
     github = GitHub()
     monkeypatch.setattr("onyx.utils.github.ssrf_safe_get", github.get)
     monkeypatch.setattr(
@@ -125,6 +132,59 @@ def test_success_and_noop(
     assert [row.current_version_id for row in rows(session)] == versions
     assert marketplace.last_synced_revision == github.revision
     assert stored_bundles(session) == files
+
+
+def test_zeroed_tar_header_cannot_retire_a_skill(
+    session: Session, marketplace: Marketplace, tenant: str, github: GitHub
+) -> None:
+    run(marketplace, tenant)
+    original = [(row.id, row.current_version_id) for row in rows(session)]
+    expanded = gzip.decompress(github.archive)
+    with tarfile.open(fileobj=io.BytesIO(expanded), mode="r:") as archive:
+        hidden = next(
+            member for member in archive if member.name.endswith("beta/SKILL.md")
+        )
+    github.archive = gzip.compress(
+        expanded[: hidden.offset] + b"\0" * 512 + expanded[hidden.offset + 512 :]
+    )
+    github.revision = "b" * 40
+    result = run(marketplace, tenant)
+    assert result.status == "failed"
+    assert not result.retired_skill_ids
+    assert [(row.id, row.current_version_id) for row in rows(session)] == original
+    assert all(row.retired_at is None for row in rows(session))
+    assert marketplace.last_synced_revision == "a" * 40
+
+
+@pytest.mark.parametrize(
+    "manifest", [".claude-plugin/plugin.json", ".codex-plugin/plugin.json"]
+)
+def test_missing_plugin_root_definition_preserves_its_saved_skill(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    manifest: str,
+) -> None:
+    files = {
+        CLAUDE: _catalog(source="./solo"),
+        "solo/SKILL.md": _md("solo"),
+        "solo/scripts/run.py": b"print('hello')",
+    }
+    github.archive = _archive(files)
+    run(marketplace, tenant)
+    skill = rows(session)[0]
+    original = (skill.id, skill.current_version_id)
+    del files["solo/SKILL.md"]
+    files[f"solo/{manifest}"] = b'{"name":"solo"}'
+    github.archive, github.revision = _archive(files), "b" * 40
+    result = run(marketplace, tenant)
+    assert result.status == "applied"
+    assert result.blocked_entries.keys() == {"tools/solo"}
+    assert not result.retired_skill_ids
+    skill = rows(session)[0]
+    assert (skill.id, skill.current_version_id) == original
+    assert skill.retired_at is None
 
 
 @pytest.mark.parametrize("failure", ["upload", "commit", "cleanup"])
@@ -445,6 +505,10 @@ with patch("onyx.utils.github.ssrf_safe_get", github.get), patch(
     assert marketplace.last_synced_revision == "a" * 40
     orphaned = stored_bundles(session) - retained
     assert len(orphaned) == 2
+    marketplace.sync_lease_expires_at = session.execute(
+        select(func.clock_timestamp())
+    ).scalar_one() - timedelta(seconds=1)
+    session.commit()
     assert len(run(marketplace, tenant).changed_skill_ids) == 2
     assert orphaned.issubset(stored_bundles(session))
     assert delete_orphan_skill_bundles() == 0
@@ -471,6 +535,8 @@ def test_source_guards_keep_rows_and_clean_stages(
     )
     result = run(marketplace, tenant)
     assert result.status == source
+    session.refresh(marketplace)
+    assert marketplace.sync_status == source and marketplace.last_error
     assert [(row.id, row.current_version_id) for row in rows(session)] == original
     assert all(row.retired_at is None for row in rows(session))
     assert marketplace.last_synced_revision == "a" * 40
@@ -634,3 +700,54 @@ def test_push_observes_committed_creation_and_retirement(
         retired = 1
         run(marketplace, tenant)
         assert push.call_count == 2
+
+
+@pytest.mark.parametrize("stop", [False, True])
+def test_publication_and_completion_survive_post_commit_failure(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    stop: bool,
+) -> None:
+    user = make_user(session)
+    make_sandbox(session, user)
+    marketplace.public_permission = SkillSharePermission.VIEWER
+    session.commit()
+    stopped = False
+    stop_heartbeat = sync.LeaseHeartbeat.stop
+
+    def record_stop(heartbeat: sync.LeaseHeartbeat) -> None:
+        nonlocal stopped
+        stop_heartbeat(heartbeat)
+        stopped = True
+
+    def fail_push(_recipients: set[UUID], _push_session: Session) -> None:
+        assert stopped
+        with sync.get_session_with_current_tenant() as observer:
+            published = observer.get(Marketplace, marketplace.id)
+            assert published is not None
+            assert published.last_synced_revision == github.revision
+            assert published.sync_status == MarketplaceSyncStatus.APPLIED
+            assert published.sync_owner is None
+        if stop:
+            raise SystemExit("worker stopped after publication")
+        raise RuntimeError("push unavailable")
+
+    with (
+        patch.object(sync, "push_skills_for_users", side_effect=fail_push),
+        patch.object(sync.LeaseHeartbeat, "stop", record_stop),
+    ):
+        if stop:
+            with pytest.raises(SystemExit, match="worker stopped"):
+                run(marketplace, tenant)
+        else:
+            assert run(marketplace, tenant).status == "applied"
+    session.refresh(marketplace)
+    assert marketplace.sync_status == MarketplaceSyncStatus.APPLIED
+    assert marketplace.last_error is None and marketplace.sync_owner is None
+    assert not marketplace.sync_requested
+    assert len(rows(session)) == 2
+    count = len(github.urls)
+    assert sync.sync_marketplace(marketplace.id, tenant, request_work=False) is None
+    assert len(github.urls) == count
