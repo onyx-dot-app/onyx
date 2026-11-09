@@ -1,28 +1,51 @@
 """Stage marketplace bundles, commit their rows together, then remove unused files.
 
-S5 must serialize this entire operation, including the read and upload phases.
+A renewable database lease serializes reads, uploads and publication.
 S8 owns confirmation of the retirement guard; this service preserves its result.
 """
 
 from uuid import UUID, uuid4
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
 from onyx.db.marketplace import (
     fetch_marketplace_sync_state,
     reconcile_marketplace__no_commit,
 )
+from onyx.db.marketplace_sync import (
+    LEASE_SECONDS,
+    MAX_RUN_SECONDS,
+    SYNC_FAILED,
+    MarketplaceSyncLeaseLost,
+    claim_marketplace_sync,
+    fence_marketplace_sync,
+    finish_marketplace_sync,
+    finish_marketplace_sync__no_commit,
+    record_marketplace_sync_revision,
+    renew_marketplace_sync,
+    request_marketplace_sync,
+)
 from onyx.db.models import SkillVersion
 from onyx.db.resource_version import repair_version_metadata
 from onyx.db.skill_version import delete_unreferenced_skill_bundles
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.ingest import (
     IngestedBundle,
     prepare_skill_bundle,
     save_skill_bundle_bytes,
 )
-from onyx.skills.marketplace.models import ReconciliationResult
+from onyx.skills.marketplace.models import (
+    MARKETPLACE_LOGIN_ERROR,
+    MarketplaceSyncStatus,
+    ReconciliationResult,
+)
 from onyx.skills.marketplace.provider import get_marketplace_adapter
 from onyx.skills.marketplace.read_models import (
     BlockedSkill,
@@ -33,6 +56,7 @@ from onyx.skills.marketplace.read_models import (
 from onyx.skills.marketplace.reader import read_marketplace_archive
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -61,10 +85,10 @@ def _bundle_available(version: SkillVersion, file_store: FileStore) -> bool:
     return 0 < size <= STORED_BUNDLE_LIMITS.max_stored_bytes
 
 
-def sync_marketplace(
-    marketplace_id: UUID, tenant_id: str
-) -> ReconciliationResult | None:
-    """Run in the target tenant context. Return None when an unchanged source needs no work.
+def _sync_marketplace(
+    marketplace_id: UUID, tenant_id: str, owner: UUID, heartbeat: LeaseHeartbeat
+) -> tuple[ReconciliationResult | None, bool]:
+    """Return the result and pending work after committing completion with publication.
 
     Owns its sessions and commit. Callers must authorize access before invoking.
     Failed commit attempts leave uploads for the aged orphan sweep.
@@ -89,7 +113,21 @@ def sync_marketplace(
         )
     )
     if archive is None:
-        return None
+        with get_session_with_current_tenant() as db_session:
+            pending = finish_marketplace_sync__no_commit(
+                marketplace_id,
+                owner,
+                db_session,
+                status=MarketplaceSyncStatus.APPLIED,
+                resolved_revision=marketplace.last_synced_revision,
+            )
+            db_session.commit()
+        heartbeat.stop()
+        return None, pending
+    with get_session_with_current_tenant() as db_session:
+        record_marketplace_sync_revision(
+            marketplace_id, owner, archive.revision, db_session
+        )
     if archive.revision != marketplace.last_synced_revision:
         recovery_keys |= frozenset(
             key
@@ -149,6 +187,13 @@ def sync_marketplace(
                 )
             read = CompleteMarketplace(entries=entries)
         with get_session_with_current_tenant() as db_session:
+            publication = fence_marketplace_sync(marketplace_id, owner, db_session)
+            locked = publication.marketplace
+            if (
+                locked.login_user_id is None
+                or locked.login_user_id != marketplace.login_user_id
+            ):
+                raise OnyxError(OnyxErrorCode.INVALID_INPUT, MARKETPLACE_LOGIN_ERROR)
             result = reconcile_marketplace__no_commit(
                 marketplace_id,
                 read,
@@ -158,22 +203,116 @@ def sync_marketplace(
                 created_by_user_id=marketplace.login_user_id,
                 recovery_keys=recovery_keys,
             )
+            status = MarketplaceSyncStatus(result.status)
+            pending = publication.finish__no_commit(
+                status=status,
+                error="needs confirmation"
+                if status == MarketplaceSyncStatus.NEEDS_CONFIRMATION
+                else SYNC_FAILED
+                if status == MarketplaceSyncStatus.FAILED
+                else None,
+                resolved_revision=archive.revision,
+            )
             commit_attempted = True
             db_session.commit()
     except Exception:
         if not commit_attempted:
             _cleanup(uploaded)
         raise
+    heartbeat.stop()
     _cleanup(result.cleanup_file_ids)
     if result.affected_user_ids:
-        with get_session_with_current_tenant() as db_session:
-            push_skills_for_users(result.affected_user_ids, db_session)
-            db_session.commit()
+        try:
+            with get_session_with_current_tenant() as db_session:
+                push_skills_for_users(result.affected_user_ids, db_session)
+                db_session.commit()
+        except Exception:
+            logger.warning(
+                "Marketplace sandbox push failed after publication", exc_info=True
+            )
     if (
         archive.revision == marketplace.last_synced_revision
         and result.status == "applied"
         and not result.changed_skill_ids
         and not result.retired_skill_ids
     ):
-        return None
-    return result
+        return None, pending
+    return result, pending
+
+
+def sync_marketplace(
+    marketplace_id: UUID, tenant_id: str, *, request_work: bool = True
+) -> ReconciliationResult | None:
+    """Serialize the full operation. Busy callers durably request another pass.
+
+    Background workers use request_work=False: duplicate deliveries must not create
+    new work. After two passes, recovery dispatches any remaining requested work.
+    """
+    context = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    result: ReconciliationResult | None = None
+    try:
+        if request_work:
+            maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
+            with get_session_with_tenant(tenant_id=tenant_id) as session:
+                request_marketplace_sync(marketplace_id, session)
+        for _ in range(2):
+            with get_session_with_tenant(tenant_id=tenant_id) as session:
+                owner = claim_marketplace_sync(marketplace_id, session)
+            if owner is None:
+                break
+            maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
+
+            def renew(owner: UUID = owner) -> bool:
+                with get_session_with_tenant(tenant_id=tenant_id) as session:
+                    return renew_marketplace_sync(marketplace_id, owner, session)
+
+            with LeaseHeartbeat(
+                f"marketplace:{marketplace_id}",
+                renew,
+                interval=10,
+                max_silence=LEASE_SECONDS / 2,
+                max_duration=MAX_RUN_SECONDS,
+            ) as heartbeat:
+                try:
+                    pass_result, pending = _sync_marketplace(
+                        marketplace_id, tenant_id, owner, heartbeat
+                    )
+                    if pass_result is not None:
+                        result = pass_result
+                except MarketplaceSyncLeaseLost:
+                    raise
+                except Exception as exc:
+                    error = (
+                        MARKETPLACE_LOGIN_ERROR
+                        if isinstance(exc, OnyxError)
+                        and exc.detail == MARKETPLACE_LOGIN_ERROR
+                        else SYNC_FAILED
+                    )
+                    try:
+                        with get_session_with_tenant(tenant_id=tenant_id) as session:
+                            finish_marketplace_sync(
+                                marketplace_id,
+                                owner,
+                                session,
+                                status=MarketplaceSyncStatus.FAILED,
+                                error=error,
+                                retry=isinstance(exc, OnyxError)
+                                and exc.error_code
+                                in {
+                                    OnyxErrorCode.BAD_GATEWAY,
+                                    OnyxErrorCode.GATEWAY_TIMEOUT,
+                                    OnyxErrorCode.RATE_LIMITED,
+                                    OnyxErrorCode.SERVICE_UNAVAILABLE,
+                                },
+                            )
+                        maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
+                    except MarketplaceSyncLeaseLost:
+                        logger.warning(
+                            "Sync failure could not update released ownership"
+                        )
+                    raise
+                if not pending:
+                    break
+        return result
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(context)
