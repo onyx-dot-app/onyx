@@ -11,7 +11,11 @@ import { SlackTokensForm } from "./SlackTokensForm";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
-import { Button, InputCheckbox as OpalInputCheckbox } from "@opal/components";
+import {
+  Button,
+  InputCheckbox as OpalInputCheckbox,
+  useCreateModal,
+} from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
@@ -48,7 +52,7 @@ export const ExistingSlackBotForm = ({
   const [formValues, setFormValues] = useState(existingSlackBot);
   const navigation = useNavigation();
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const deleteModal = useCreateModal();
 
   const handleUpdateField = async (
     field: keyof SlackBot,
@@ -115,7 +119,7 @@ export const ExistingSlackBotForm = ({
             </Button>
             <Button
               variant="danger"
-              onClick={() => setShowDeleteModal(true)}
+              onClick={() => deleteModal.toggle(true)}
               icon={SvgTrash}
             >
               {t("updateForm.deleteButton.label")}
@@ -145,12 +149,12 @@ export const ExistingSlackBotForm = ({
             onChange={(e) => handleUpdateField("enabled", e.target.checked)}
           />
         </div>
-        {showDeleteModal && (
+        <deleteModal.Provider>
           <GenericConfirmModal
             title={t("deleteModal.title")}
             message={t("deleteModal.message")}
             confirmText={t("deleteModal.confirmButton.label")}
-            onClose={() => setShowDeleteModal(false)}
+            onClose={() => deleteModal.toggle(false)}
             onConfirm={async () => {
               try {
                 const response = await deleteSlackBot(existingSlackBot.id);
@@ -162,10 +166,10 @@ export const ExistingSlackBotForm = ({
               } catch (error) {
                 toast.error(t("deleteModal.error.toast"));
               }
-              setShowDeleteModal(false);
+              deleteModal.toggle(false);
             }}
           />
-        )}
+        </deleteModal.Provider>
       </div>
     </div>
   );

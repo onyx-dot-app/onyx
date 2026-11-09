@@ -21,6 +21,7 @@ import {
   MessageCard,
   Tooltip,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { SvgAlertTriangle, SvgBlocks, SvgShare, SvgTrash } from "@opal/icons";
 import {
@@ -125,7 +126,9 @@ export default function SkillEditorPage({
     name: name || t("editor.header.createTitle"),
   };
   const [shareOpen, setShareOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const confirmUploadModal = useCreateModal();
+  const nameConflictModal = useCreateModal();
   const [isSaving, setIsSaving] = useState(false);
   const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
@@ -244,7 +247,7 @@ export default function SkillEditorPage({
           },
           pendingFilesUpload?.file
         );
-        setConflictingSkillName(null);
+        nameConflictModal.toggle(false);
         if (draftId) discardSkillCreationDraft(draftId);
         if (isCreatingForApp) {
           // The app editor reads this cache as soon as we return. Wait for its
@@ -297,6 +300,7 @@ export default function SkillEditorPage({
         isSkillNameConflict(err)
       ) {
         setConflictingSkillName(name.trim());
+        nameConflictModal.toggle(true);
         return;
       }
       console.error("Failed to save skill", err);
@@ -368,6 +372,7 @@ export default function SkillEditorPage({
         return;
       }
       setFilesUploadToConfirm(upload);
+      confirmUploadModal.toggle(true);
       return;
     }
     void applyFilesUpload(upload);
@@ -762,7 +767,7 @@ export default function SkillEditorPage({
                             prominence="secondary"
                             icon={SvgTrash}
                             disabled={isDeleting}
-                            onClick={() => setDeleteOpen(true)}
+                            onClick={() => deleteModal.toggle(true)}
                           >
                             {t("editor.delete.button.label")}
                           </Button>
@@ -794,44 +799,48 @@ export default function SkillEditorPage({
         />
       ) : null}
 
-      {filesUploadToConfirm && (
-        <ConfirmationModalLayout
-          icon={SvgAlertTriangle}
-          title={
-            isCreating
-              ? t("editor.confirmUpload.importTitle")
-              : t("editor.confirmUpload.replaceTitle")
-          }
-          onClose={() => setFilesUploadToConfirm(null)}
-          submit={
-            <Button
-              type="button"
-              onClick={() => {
-                const upload = filesUploadToConfirm;
-                setFilesUploadToConfirm(null);
-                void applyFilesUpload(upload);
-              }}
-            >
-              {isCreating
-                ? t("editor.confirmUpload.importSubmit.label")
-                : t("editor.confirmUpload.replaceSubmit.label")}
-            </Button>
-          }
-        >
-          {isCreating
-            ? t("editor.confirmUpload.importBody")
-            : t("editor.confirmUpload.replaceBody")}
-        </ConfirmationModalLayout>
-      )}
+      <confirmUploadModal.Provider>
+        {filesUploadToConfirm && (
+          <ConfirmationModalLayout
+            icon={SvgAlertTriangle}
+            title={
+              isCreating
+                ? t("editor.confirmUpload.importTitle")
+                : t("editor.confirmUpload.replaceTitle")
+            }
+            onClose={() => confirmUploadModal.toggle(false)}
+            submit={
+              <Button
+                type="button"
+                onClick={() => {
+                  const upload = filesUploadToConfirm;
+                  confirmUploadModal.toggle(false);
+                  void applyFilesUpload(upload);
+                }}
+              >
+                {isCreating
+                  ? t("editor.confirmUpload.importSubmit.label")
+                  : t("editor.confirmUpload.replaceSubmit.label")}
+              </Button>
+            }
+          >
+            {isCreating
+              ? t("editor.confirmUpload.importBody")
+              : t("editor.confirmUpload.replaceBody")}
+          </ConfirmationModalLayout>
+        )}
+      </confirmUploadModal.Provider>
 
-      {conflictingSkillName && (
-        <SkillNameConflictModal
-          skillName={conflictingSkillName}
-          onClose={() => setConflictingSkillName(null)}
-          onConfirm={() => void handleSave(undefined, true)}
-          pending={isSaving}
-        />
-      )}
+      <nameConflictModal.Provider>
+        {conflictingSkillName && (
+          <SkillNameConflictModal
+            skillName={conflictingSkillName}
+            onClose={() => nameConflictModal.toggle(false)}
+            onConfirm={() => void handleSave(undefined, true)}
+            pending={isSaving}
+          />
+        )}
+      </nameConflictModal.Provider>
 
       <UnsavedChangesModal
         open={unsavedChanges.confirmationOpen}
@@ -839,20 +848,22 @@ export default function SkillEditorPage({
         onDiscard={unsavedChanges.discardAndLeave}
       />
 
-      {skill && deleteOpen && (
-        <ConfirmEntityModal
-          danger
-          entityType={t("editor.deleteModal.entityType")}
-          entityName={skill.name}
-          actionButtonText={
-            isDeleting
-              ? t("editor.deleteModal.pendingLabel")
-              : t("editor.deleteModal.label")
-          }
-          onClose={() => setDeleteOpen(false)}
-          onSubmit={handleDeleteConfirmed}
-        />
-      )}
+      <deleteModal.Provider>
+        {skill && (
+          <ConfirmEntityModal
+            danger
+            entityType={t("editor.deleteModal.entityType")}
+            entityName={skill.name}
+            actionButtonText={
+              isDeleting
+                ? t("editor.deleteModal.pendingLabel")
+                : t("editor.deleteModal.label")
+            }
+            onClose={() => deleteModal.toggle(false)}
+            onSubmit={handleDeleteConfirmed}
+          />
+        )}
+      </deleteModal.Provider>
     </form>
   );
 }

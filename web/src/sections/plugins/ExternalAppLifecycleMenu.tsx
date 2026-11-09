@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { Button } from "@opal/components";
+import { Button, useCreateModal } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 import { toast, ConfirmationModalLayout } from "@opal/layouts";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
@@ -20,7 +20,7 @@ export default function ExternalAppLifecycleMenu({
 }) {
   const t = useTranslations("admin.externalApps");
   const { mutate } = useSWRConfig();
-  const [confirm, setConfirm] = useState(false);
+  const confirmModal = useCreateModal();
   const [pending, setPending] = useState(false);
   const writing = useRef(false);
   async function removeApp() {
@@ -29,7 +29,7 @@ export default function ExternalAppLifecycleMenu({
     setPending(true);
     try {
       await deleteExternalApp(app.id);
-      setConfirm(false);
+      confirmModal.toggle(false);
       await mutate(SWR_KEYS.buildExternalAppsAdmin);
     } catch (cause) {
       toast.error(
@@ -57,19 +57,19 @@ export default function ExternalAppLifecycleMenu({
             aria-label={t("card.deleteAction.label")}
             tooltip={t("card.deleteAction.label")}
             onClick={() => {
-              setConfirm(true);
+              confirmModal.toggle(true);
             }}
           />
         ) : (
           <span className="size-6 shrink-0" />
         )}
       </div>
-      {confirm && (
+      <confirmModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={t("card.deleteModal.title", { name: app.name })}
           description={t("card.deleteModal.description")}
-          onClose={pending ? undefined : () => setConfirm(false)}
+          onClose={pending ? undefined : () => confirmModal.toggle(false)}
           submit={
             <Button
               variant="danger"
@@ -84,7 +84,7 @@ export default function ExternalAppLifecycleMenu({
             count: app.associated_skills.length,
           })}
         </ConfirmationModalLayout>
-      )}
+      </confirmModal.Provider>
     </>
   );
 }

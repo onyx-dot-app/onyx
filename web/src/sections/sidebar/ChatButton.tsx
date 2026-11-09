@@ -22,7 +22,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { Button, SidebarTab } from "@opal/components";
+import { Button, SidebarTab, useCreateModal } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
@@ -64,9 +64,8 @@ const ChatButton = memo(
       chatSession.name || UNNAMED_CHAT
     );
     const [renaming, setRenaming] = useState(false);
-    const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-      useState(false);
-    const [showShareModal, setShowShareModal] = useState(false);
+    const deleteModal = useCreateModal();
+    const shareModal = useCreateModal();
     const [searchTerm, setSearchTerm] = useState("");
     const { refreshChatSessions, removeSession } = useChatSessions();
     const {
@@ -81,8 +80,7 @@ const ChatButton = memo(
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
     >(null);
-    const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-      useState(false);
+    const moveCustomAgentModal = useCreateModal();
     const [navigateAfterMoveProjectId, setNavigateAfterMoveProjectId] =
       useState<number | null>(null);
 
@@ -194,7 +192,7 @@ const ChatButton = memo(
         id: "share",
         icon: SvgShare,
         title: t("chatButton.share.label"),
-        onSelect: () => setShowShareModal(true),
+        onSelect: () => shareModal.toggle(true),
       },
       {
         kind: "action",
@@ -232,7 +230,7 @@ const ChatButton = memo(
             icon: SvgTrash,
             danger: true,
             title: t("chatButton.delete.label"),
-            onSelect: () => setDeleteConfirmationModalOpen(true),
+            onSelect: () => deleteModal.toggle(true),
           },
         ],
       },
@@ -293,7 +291,7 @@ const ChatButton = memo(
     async function handleChatMove(targetProject: Project) {
       if (shouldShowMoveModal(chatSession)) {
         setPendingMoveProjectId(targetProject.id);
-        setShowMoveCustomAgentModal(true);
+        moveCustomAgentModal.toggle(true);
         return;
       }
       await performMove(targetProject.id);
@@ -326,7 +324,7 @@ const ChatButton = memo(
         // Check if we should show the move modal for custom agents
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveProjectId(newProject.id);
-          setShowMoveCustomAgentModal(true);
+          moveCustomAgentModal.toggle(true);
           setSearchTerm("");
           return;
         }
@@ -407,16 +405,16 @@ const ChatButton = memo(
 
     return (
       <>
-        {deleteConfirmationModalOpen && (
+        <deleteModal.Provider>
           <ConfirmationModalLayout
             title={t("chatButton.deleteConfirmation.title")}
             icon={SvgTrash}
-            onClose={() => setDeleteConfirmationModalOpen(false)}
+            onClose={() => deleteModal.toggle(false)}
             submit={
               <Button
                 variant="danger"
                 onClick={() => {
-                  setDeleteConfirmationModalOpen(false);
+                  deleteModal.toggle(false);
                   handleChatDelete();
                 }}
               >
@@ -426,12 +424,12 @@ const ChatButton = memo(
           >
             {t("chatButton.deleteConfirmation.description")}
           </ConfirmationModalLayout>
-        )}
+        </deleteModal.Provider>
 
-        {showMoveCustomAgentModal && (
+        <moveCustomAgentModal.Provider>
           <MoveCustomAgentChatModal
             onCancel={() => {
-              setShowMoveCustomAgentModal(false);
+              moveCustomAgentModal.toggle(false);
               setPendingMoveProjectId(null);
               setNavigateAfterMoveProjectId(null);
             }}
@@ -444,7 +442,7 @@ const ChatButton = memo(
               }
               const target = pendingMoveProjectId;
               const shouldNavigate = navigateAfterMoveProjectId;
-              setShowMoveCustomAgentModal(false);
+              moveCustomAgentModal.toggle(false);
               setPendingMoveProjectId(null);
               if (target != null) {
                 await performMove(target);
@@ -456,14 +454,14 @@ const ChatButton = memo(
               }
             }}
           />
-        )}
+        </moveCustomAgentModal.Provider>
 
-        {showShareModal && (
+        <shareModal.Provider>
           <ShareChatSessionModal
             chatSession={chatSession}
-            onClose={() => setShowShareModal(false)}
+            onClose={() => shareModal.toggle(false)}
           />
-        )}
+        </shareModal.Provider>
 
         {draggable ? (
           <div

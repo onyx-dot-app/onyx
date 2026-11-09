@@ -4,7 +4,7 @@ import { useNavigation } from "@opal/navigation";
 import { memo, useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Button, SelectCard } from "@opal/components";
+import { Button, SelectCard, useCreateModal } from "@opal/components";
 import LLMProviderCard from "@/lib/onboarding/components/LLMProviderCard";
 import { OnboardingActions, OnboardingState } from "@/lib/onboarding/types";
 import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
@@ -64,7 +64,10 @@ const LLMStep = memo(
     const [editingProviderId, setEditingProviderId] = useState<number | null>(
       null
     );
-    const editingProviderQuery = useAdminLanguageModel(editingProviderId);
+    const editModal = useCreateModal();
+    const editingProviderQuery = useAdminLanguageModel(
+      editModal.isPresent ? editingProviderId : null
+    );
     const editingProvider = editingProviderQuery.llmProvider;
     // SWR types its error as any; only whether it failed matters here.
     const editingProviderFailed = Boolean(editingProviderQuery.error);
@@ -88,34 +91,38 @@ const LLMStep = memo(
           return;
         }
       }
-      if (configuredId !== undefined) setEditingProviderId(configuredId);
+      if (configuredId !== undefined) {
+        setEditingProviderId(configuredId);
+        editModal.toggle(true);
+      }
     };
     useEffect(() => {
       if (!editingProviderFailed) return;
       toast.error(t("llmStep.providerCard.settingsLoadError"));
+      editModal.toggle(false);
       setEditingProviderId(null);
     }, [editingProviderFailed, t]);
 
     const [selectedProvider, setSelectedProvider] =
       useState<WellKnownLLMProviderDescriptor | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const setupModal = useCreateModal();
+    const toggleSetupModal = setupModal.toggle;
     // The provider list starts open; the header opens and closes it.
     const [providersOpen, setProvidersOpen] = useState(true);
 
     const handleProviderClick = useCallback(
       (llmDescriptor: WellKnownLLMProviderDescriptor) => {
         setSelectedProvider(llmDescriptor);
-        setIsModalOpen(true);
+        toggleSetupModal(true);
       },
-      []
+      [toggleSetupModal]
     );
 
-    const handleModalClose = useCallback((open: boolean) => {
-      setIsModalOpen(open);
-      if (!open) {
-        setSelectedProvider(null);
-      }
-    }, []);
+    // Keeps the selected provider on close so the modal can animate out.
+    const handleModalClose = useCallback(
+      (open: boolean) => toggleSetupModal(open),
+      [toggleSetupModal]
+    );
 
     const providerName = selectedProvider?.name ?? "custom";
 
@@ -130,34 +137,36 @@ const LLMStep = memo(
           expandedContent={
             <div className="p-1">
               {/* Render the selected provider form */}
-              <ProviderSetupModal
-                providerKey={
-                  selectedProvider && isModalOpen ? providerName : null
-                }
-                shouldMarkAsDefault={
-                  (onboardingState?.data.llmProviders ?? []).length === 0
-                }
-                onboardingActions={onboardingActions}
-                onOpenChange={handleModalClose}
-                onSuccess={() => {
-                  onboardingActions.updateData({
-                    llmProviders: [
-                      ...(onboardingState?.data.llmProviders ?? []),
-                      providerName,
-                    ],
-                  });
-                  onboardingActions.setButtonActive(true);
-                }}
-              />
-              {EditModal && editingProvider && (
-                <EditModal
-                  variant="onboarding"
-                  existingLlmProvider={editingProvider}
-                  onOpenChange={(open) => {
-                    if (!open) setEditingProviderId(null);
+              <setupModal.Provider>
+                <ProviderSetupModal
+                  providerKey={selectedProvider ? providerName : null}
+                  shouldMarkAsDefault={
+                    (onboardingState?.data.llmProviders ?? []).length === 0
+                  }
+                  onboardingActions={onboardingActions}
+                  onOpenChange={handleModalClose}
+                  onSuccess={() => {
+                    onboardingActions.updateData({
+                      llmProviders: [
+                        ...(onboardingState?.data.llmProviders ?? []),
+                        providerName,
+                      ],
+                    });
+                    onboardingActions.setButtonActive(true);
                   }}
                 />
-              )}
+              </setupModal.Provider>
+              <editModal.Provider>
+                {EditModal && editingProvider && (
+                  <EditModal
+                    variant="onboarding"
+                    existingLlmProvider={editingProvider}
+                    onOpenChange={(open) => {
+                      if (!open) editModal.toggle(false);
+                    }}
+                  />
+                )}
+              </editModal.Provider>
               <CardGrid gap={1}>
                 {isLoading
                   ? Array.from(

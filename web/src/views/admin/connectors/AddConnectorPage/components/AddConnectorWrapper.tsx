@@ -36,7 +36,7 @@ import {
 } from "@opal/layouts";
 import { SvgPlugBroken } from "@opal/illustrations";
 import { escapeMarkdown, markdown } from "@opal/utils";
-import { Button, Divider, MessageCard } from "@opal/components";
+import { Button, Divider, MessageCard, useCreateModal } from "@opal/components";
 import { SvgAlertCircle, SvgArrowExchange } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -334,7 +334,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
   // Create warns of failed non-required checks before it runs.
-  const [advisoryOpen, setAdvisoryOpen] = useState(false);
+  const advisoryModal = useCreateModal();
   // Counts View Failed Checks clicks, so the checks card opens and scrolls into view.
   const [expandChecksRequest, setExpandChecksRequest] = useState(0);
   // Edit mode: the plan shown for review, with the proposal it was computed
@@ -344,6 +344,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     proposal: ConnectorEditProposal;
     plan: ConnectorEditPlanResponse;
   } | null>(null);
+  const editPlanModal = useCreateModal();
 
   const planEdit = async (
     target: ConnectorEditTarget,
@@ -357,6 +358,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         return;
       }
       setEditPlan({ proposal, plan: outcome.plan });
+      editPlanModal.toggle(true);
     } finally {
       setPlanning(false);
     }
@@ -939,7 +941,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           if (blockingErrorsEmpty(errors)) {
                             // Edit mode's plan lists failed checks itself.
                             if (!edit && checks.optionalFailedCount > 0) {
-                              setAdvisoryOpen(true);
+                              advisoryModal.toggle(true);
                               return;
                             }
                             // Formik's own submit stops at any error.
@@ -1157,40 +1159,46 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                         </StickyBox.Root>
                       </>
                     )}
-                    {!edit && advisoryOpen && (
-                      <FailedChecksAdvisoryModal
-                        failedCount={checks.optionalFailedCount}
-                        canCreate={!createDisabled}
-                        onClose={() => setAdvisoryOpen(false)}
-                        onViewChecks={() => {
-                          setAdvisoryOpen(false);
-                          setExpandChecksRequest((count) => count + 1);
-                        }}
-                        onProceed={async () => {
-                          setAdvisoryOpen(false);
-                          await submitForm(formikProps.values);
-                        }}
-                      />
-                    )}
-                    {edit && editPlan && (
-                      <EditPlanModal
-                        key={editPlan.plan.plan_id}
-                        planResponse={editPlan.plan}
-                        onApply={async (request) => {
-                          const outcome = await applyConnectorEdit(
-                            edit.ccPair.id,
-                            request
-                          );
-                          if (outcome.kind === "applied") {
-                            toast.success(editT("applied.toast"));
-                            navigation.go(`/admin/connector/${edit.ccPair.id}`);
-                          }
-                          return outcome;
-                        }}
-                        onReplan={() => planEdit(edit, editPlan.proposal)}
-                        onClose={() => setEditPlan(null)}
-                      />
-                    )}
+                    <advisoryModal.Provider>
+                      {!edit && (
+                        <FailedChecksAdvisoryModal
+                          failedCount={checks.optionalFailedCount}
+                          canCreate={!createDisabled}
+                          onClose={() => advisoryModal.toggle(false)}
+                          onViewChecks={() => {
+                            advisoryModal.toggle(false);
+                            setExpandChecksRequest((count) => count + 1);
+                          }}
+                          onProceed={async () => {
+                            advisoryModal.toggle(false);
+                            await submitForm(formikProps.values);
+                          }}
+                        />
+                      )}
+                    </advisoryModal.Provider>
+                    <editPlanModal.Provider>
+                      {edit && editPlan && (
+                        <EditPlanModal
+                          key={editPlan.plan.plan_id}
+                          planResponse={editPlan.plan}
+                          onApply={async (request) => {
+                            const outcome = await applyConnectorEdit(
+                              edit.ccPair.id,
+                              request
+                            );
+                            if (outcome.kind === "applied") {
+                              toast.success(editT("applied.toast"));
+                              navigation.go(
+                                `/admin/connector/${edit.ccPair.id}`
+                              );
+                            }
+                            return outcome;
+                          }}
+                          onReplan={() => planEdit(edit, editPlan.proposal)}
+                          onClose={() => editPlanModal.toggle(false)}
+                        />
+                      )}
+                    </editPlanModal.Provider>
                   </SettingsLayouts.Body>
                 </SettingsLayouts.Root>
               );

@@ -14,6 +14,7 @@ import {
   MessageCard,
   InputSwitch,
   Table,
+  useCreateModal,
   type TableColumn,
 } from "@opal/components";
 import {
@@ -146,7 +147,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     new Set()
   );
   const [incognitoEnabled, setIncognitoEnabled] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const deleteModal = useCreateModal();
   const [isDeleting, setIsDeleting] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [isAddingMembers, setIsAddingMembers] = useState(false);
@@ -505,7 +506,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       );
     } finally {
       setIsDeleting(false);
-      setShowDeleteModal(false);
+      deleteModal.toggle(false);
     }
   }
 
@@ -741,7 +742,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                         variant="danger"
                         prominence="secondary"
                         icon={SvgTrash}
-                        onClick={() => setShowDeleteModal(true)}
+                        onClick={() => deleteModal.toggle(true)}
                       >
                         {t("edit.delete.button.label")}
                       </Button>
@@ -754,11 +755,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
 
-      {showDeleteModal && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={t("edit.deleteModal.title")}
-          onClose={() => setShowDeleteModal(false)}
+          onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
               variant="danger"
@@ -784,7 +785,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             )}
           </Text>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
     </>
   );
 }
