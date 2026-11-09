@@ -7,8 +7,8 @@ const sharePermission = yup
   .oneOf(["VIEWER", "EDITOR"])
   .defined();
 const installationPolicy = yup
-  .string<"AVAILABLE" | "DEFAULT" | "REQUIRED">()
-  .oneOf(["AVAILABLE", "DEFAULT", "REQUIRED"])
+  .string<"AVAILABLE" | "DEFAULT" | "REQUIRED" | "NOT_AVAILABLE">()
+  .oneOf(["AVAILABLE", "DEFAULT", "REQUIRED", "NOT_AVAILABLE"])
   .defined();
 
 export const marketplaceSourceSchema = yup

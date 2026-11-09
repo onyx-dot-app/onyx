@@ -256,8 +256,10 @@ The library preview of an external-app skill calls the same renderer
    `hidden_reason="same_name"` for losing candidates. Reads must resolve against
    all eligible skills, even when the caller requests one row.
    Invalid, unavailable, retired, disabled and disconnected-app skills cannot
-   hide a usable competitor. `list_runtime_skills_for_user` returns only winners,
-   so duplicate automatic names no longer fail a sandbox push.
+   hide a usable competitor. `list_runtime_skills_for_user` returns database-known
+   winners by default. Delivery requests all eligible candidates in the same order
+   with `include_fallbacks=True`, using one resolver query. Library reads perform
+   no storage I/O, so temporary read failures do not change duplicate metadata.
    The partial
    unique index `uq_user_skill_preference_name` allows one enabled choice per
    user and name. The automatic-name index is removed. Retirement disables
@@ -282,8 +284,11 @@ The library preview of an external-app skill calls the same renderer
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
-   `skills/push.py:_assemble_fileset` also skips repeated names defensively.
-   Do not bypass the resolver when assembling production payloads.
+   `skills/push.py:_assemble_fileset` stages each candidate separately and claims
+   its name only after complete assembly, including rendering and path replacement.
+   Failed candidates leave no files; delivery tries the next eligible candidate.
+   After success, it never reads losing bundles for that name. Temporary storage
+   failures do not persist invalidity. Do not bypass the shared resolver.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
    match (`skills/metadata.py:parse_skill_document`). Storage removes the
@@ -333,7 +338,8 @@ The library preview of an external-app skill calls the same renderer
    you convert a built-in's SKILL.md into a template, add its renderer branch
    in `skills/push.py:_render_template` in the same change. The
    static copy skips template sources, and a templated built-in with no
-   renderer only logs a warning, so the skill ships no SKILL.md.
+   renderer logs a warning. Assembly rejects a candidate without root SKILL.md
+   and tries the next eligible candidate.
 9. `unresolved-marker-fails` **An unresolved `{{` marker fails the render.**
    `skills/rendering.py:render_external_app_skill` raises rather than send broken instructions.
    Other `.template` files in an app skill get only `{{APP:...}}` values and no

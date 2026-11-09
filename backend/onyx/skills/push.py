@@ -116,22 +116,11 @@ def _render_template(
 
 
 def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
-    try:
-        bundle_files: FileSet = {}
-        with ZipIndex(bundle_bytes) as zf:
-            for info in zf.infos():
-                if info.is_dir():
-                    continue
+    with ZipIndex(bundle_bytes) as zf:
+        for info in zf.infos():
+            if not info.is_dir():
                 with zf.open(info) as source:
-                    bundle_files[f"{skill.name}/{info.filename}"] = source.read()
-        files.update(bundle_files)
-    except Exception:
-        logger.warning(
-            "Failed to unpack bundle for skill %s (%s), skipping",
-            skill.name,
-            skill.current_version_id,
-            exc_info=True,
-        )
+                    files[f"{skill.name}/{info.filename}"] = source.read()
 
 
 def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
@@ -153,13 +142,11 @@ def _assemble_fileset(
     user: User,
     db_session: Session,
 ) -> FileSet:
-    """Return the hydrated skills as a flat ``{path: bytes}`` map.
+    """Publish the first complete candidate for each name in resolver order.
 
-    Built-ins render from disk. Custom rows must already be valid or pass lazy
-    validation before their FileStore bundle is unpacked. Invalid,
-    indeterminate, and unknown built-in rows are skipped.
+    Stage each candidate separately so read, unpack, or render failures cannot
+    reserve a name or leak partial files into the next candidate's bundle.
     """
-    skills = list(skills)
     seen_names: set[str] = set()
     files: FileSet = {}
     validity_updates: list[SkillValidityUpdate] = []
@@ -168,62 +155,66 @@ def _assemble_fileset(
     for skill in skills:
         if skill.name in seen_names:
             continue
-        seen_names.add(skill.name)
-        if skill.built_in_skill_id is None:
-            version = skill.current_version
-            if version is None or version.is_valid is False:
-                continue
-
-            if version.is_valid is None:
-                validation = validate_stored_custom_skill(skill, file_store)
-                if validation.is_valid is not None:
-                    validity_updates.append(
-                        SkillValidityUpdate(
-                            skill_id=skill.id,
-                            version_id=version.id,
-                            bundle_file_id=version.bundle_file_id,
-                            is_valid=validation.is_valid,
-                        )
-                    )
-                if validation.normalized_bundle is None:
-                    logger.warning(
-                        "Skipping unvalidated skill %s: %s",
-                        skill.id,
-                        validation.detail,
-                    )
+        candidate_files: FileSet = {}
+        try:
+            if skill.built_in_skill_id is None:
+                version = skill.current_version
+                if version is None or version.is_valid is False:
                     continue
-                bundle_bytes = validation.normalized_bundle
-            else:
-                try:
+
+                if version.is_valid is None:
+                    validation = validate_stored_custom_skill(skill, file_store)
+                    if validation.is_valid is not None:
+                        validity_updates.append(
+                            SkillValidityUpdate(
+                                skill_id=skill.id,
+                                version_id=version.id,
+                                bundle_file_id=version.bundle_file_id,
+                                is_valid=validation.is_valid,
+                            )
+                        )
+                    if validation.normalized_bundle is None:
+                        logger.warning(
+                            "Skipping unvalidated skill %s: %s",
+                            skill.id,
+                            validation.detail,
+                        )
+                        continue
+                    bundle_bytes = validation.normalized_bundle
+                else:
                     if version.bundle_file_id is None:
                         continue
                     bundle_bytes = load_stored_custom_skill_bundle(
                         version.bundle_file_id,
                         file_store,
                     ).content
-                except Exception as exc:
+                _add_bundle_bytes(candidate_files, skill, bundle_bytes)
+            else:
+                definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+                if definition is None:
                     logger.warning(
-                        "Skipping unreadable valid skill %s: %s",
-                        skill.id,
-                        exc,
+                        "Skill row %s references unknown built-in %s; skipping",
+                        skill.name,
+                        skill.built_in_skill_id,
                     )
                     continue
+                _add_static_builtin(candidate_files, skill, definition)
+                if definition.has_template:
+                    _render_template(
+                        candidate_files, skill, definition, db_session, user
+                    )
 
-            _add_bundle_bytes(files, skill, bundle_bytes)
-            continue
-        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-        if definition is None:
+            if f"{skill.name}/{SKILL_MD_NAME}" not in candidate_files:
+                logger.warning("Skipping skill %s without instructions", skill.id)
+                continue
+            _resolve_skill_dirs(candidate_files, [skill.name])
+        except Exception:
             logger.warning(
-                "Skill row %s references unknown built-in %s; skipping",
-                skill.name,
-                skill.built_in_skill_id,
+                "Failed to assemble skill %s; skipping", skill.id, exc_info=True
             )
             continue
-        _add_static_builtin(files, skill, definition)
-        if definition.has_template:
-            _render_template(files, skill, definition, db_session, user)
-
-    _resolve_skill_dirs(files, seen_names)
+        files.update(candidate_files)
+        seen_names.add(skill.name)
 
     try:
         persist_skill_validity(validity_updates)
@@ -234,7 +225,9 @@ def _assemble_fileset(
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
+    skills = list_runtime_skills_for_user(
+        user=user, db_session=db_session, include_fallbacks=True
+    )
     return _assemble_fileset(skills, user, db_session)
 
 
@@ -244,7 +237,9 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
     The connectable-apps section lists org apps the user has not connected yet,
     so the agent can offer to set one up through the connect tool.
     """
-    skills = list_runtime_skills_for_user(user=user, db_session=db_session)
+    skills = list_runtime_skills_for_user(
+        user=user, db_session=db_session, include_fallbacks=True
+    )
     files = _assemble_fileset(skills, user, db_session)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
