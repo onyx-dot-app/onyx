@@ -268,6 +268,8 @@ def _lock_skill_after_storage(
     user: User,
     db_session: Session,
     expected_content: SkillContentSnapshot | None = None,
+    *,
+    allow_management: bool = True,
 ) -> tuple[Skill, User]:
     actor = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
@@ -276,6 +278,7 @@ def _lock_skill_after_storage(
         user=actor,
         db_session=db_session,
         lock_for_update=True,
+        allow_management=allow_management,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -370,6 +373,9 @@ def bulk_update_skills(
             SkillAccessAdapter(),
             add_only=True,
             allow_partial=True,
+            allow_management=token_allows_permission(
+                http_request, Permission.MANAGE_SKILLS
+            ),
         )
         succeeded = result.succeeded
         failed = [
@@ -974,13 +980,17 @@ def patch_current_user_skill(
     patch_req: SkillPatchRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> SkillResponse:
+    allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
         allow_retired=True,
+        allow_management=allow_management,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -991,7 +1001,7 @@ def patch_current_user_skill(
         "public_permission" in patch_req.model_fields_set
         and patch_req.public_permission != skill.public_permission
     ):
-        ensure_can_edit_org_visibility(skill, user)
+        ensure_can_edit_org_visibility(skill, user, allow_management=allow_management)
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
         return skill_response_for_user(
             skill,
@@ -1034,7 +1044,11 @@ def patch_current_user_skill(
             new_bundle_file_id = ingested.bundle_file_id
             prepared = prepare_skill_version_write(skill, ingested, db_session)
             skill, user = _lock_skill_after_storage(
-                skill.id, user, db_session, expected_content
+                skill.id,
+                user,
+                db_session,
+                expected_content,
+                allow_management=allow_management,
             )
             stale_file_ids = replace_skill_bundle(
                 skill=skill,
@@ -1044,7 +1058,9 @@ def patch_current_user_skill(
                 prepared=prepared,
             )
         else:
-            skill, user = _lock_skill_after_storage(skill.id, user, db_session)
+            skill, user = _lock_skill_after_storage(
+                skill.id, user, db_session, allow_management=allow_management
+            )
 
         old_public_permission = skill.public_permission
         before_affected = affected_user_ids_for_skill(skill, db_session)
@@ -1057,6 +1073,7 @@ def patch_current_user_skill(
                 ),
                 user,
                 db_session,
+                allow_management=allow_management,
             )
 
         commit_attempted = True
@@ -1093,12 +1110,17 @@ def fetch_custom_skill_sharing(
     skill_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> SkillResponse:
     skill = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
+        allow_management=token_allows_permission(
+            http_request, Permission.MANAGE_SKILLS
+        ),
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -1111,7 +1133,10 @@ def share_current_user_skill(
     share_req: SkillShareRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> SkillResponse:
+    allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
     user = lock_resource_access_user(user.id, db_session)
     skill = fetch_skill(
         skill_id,
@@ -1119,6 +1144,7 @@ def share_current_user_skill(
         user=user,
         db_session=db_session,
         lock_for_update=True,
+        allow_management=allow_management,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -1135,7 +1161,13 @@ def share_current_user_skill(
             include_share_details=True,
         )
 
-    affected = share_skill__no_commit(skill, share_req.to_change(), user, db_session)
+    affected = share_skill__no_commit(
+        skill,
+        share_req.to_change(),
+        user,
+        db_session,
+        allow_management=allow_management,
+    )
     db_session.commit()
     db_session.expire(skill)
     push_skills_for_users(affected, db_session)
@@ -1153,13 +1185,17 @@ def reset_current_skill_marketplace_access(
     skill_id: UUID,
     user: User = Depends(require_permission(Permission.MANAGE_SKILLS)),
     db_session: Session = Depends(get_session),
+    *,
+    http_request: Request,
 ) -> SkillResponse:
     user = lock_resource_access_user(user.id, db_session)
     affected = reset_marketplace_skill_access__no_commit(skill_id, user, db_session)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    return fetch_custom_skill_sharing(skill_id, user, db_session)
+    return fetch_custom_skill_sharing(
+        skill_id, user, db_session, http_request=http_request
+    )
 
 
 @user_router.post("/custom/{skill_id}/transfer-ownership")

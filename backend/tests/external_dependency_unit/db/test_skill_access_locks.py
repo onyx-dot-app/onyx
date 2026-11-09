@@ -241,6 +241,7 @@ def test_staged_patch_rechecks_content_and_access(
                         SkillPatchRequest(description="Concurrent"),
                         writer,
                         other,
+                        http_request=Request({"type": "http"}),
                     )
                 else:
                     lock_group_membership(other)
@@ -379,6 +380,7 @@ def test_commit_ack_failure_keeps_referenced_upload(
                     ),
                     user,
                     db_session,
+                    http_request=Request({"type": "http"}),
                 )
             elif operation == "create":
                 api.create_custom_skill(upload(bundle(name)), False, user, db_session)

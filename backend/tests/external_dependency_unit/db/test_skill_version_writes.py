@@ -239,14 +239,30 @@ def test_all_writers(creation: str, session: Session, user: User) -> None:
     api.remove_current_user_skill_file(skill.id, "notes.txt", user, session)
     assert len(versions(skill, session)) == 4
     request = SkillPatchRequest(instructions_markdown="Edited instructions")
-    api.patch_current_user_skill(skill.id, request, user, session)
+    api.patch_current_user_skill(
+        skill.id,
+        request,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert len(versions(skill, session)) == 5
     current_file = skill.bundle_file_id
-    api.patch_current_user_skill(skill.id, request, user, session)
+    api.patch_current_user_skill(
+        skill.id,
+        request,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert len(versions(skill, session)) == 5
     assert skill.bundle_file_id == current_file
     api.patch_current_user_skill(
-        skill.id, SkillPatchRequest(description="Version test"), user, session
+        skill.id,
+        SkillPatchRequest(description="Version test"),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert len(versions(skill, session)) == 5
     for version in versions(skill, session):
@@ -313,6 +329,7 @@ def test_lazy_validity_keeps_one_version(
             SkillPatchRequest(instructions_markdown="First instructions"),
             user,
             session,
+            http_request=Request({"type": "http"}),
         )
     else:
         repair_skill_version(skill, session)
@@ -680,6 +697,7 @@ def test_noop_cleans_staged_bundle_before_push_failure(
                     SkillPatchRequest(instructions_markdown="First instructions"),
                     user,
                     session,
+                    http_request=Request({"type": "http"}),
                 )
     assert set(session.scalars(select(FileRecord.file_id))) == file_ids
     assert len(versions(skill, session)) == 2

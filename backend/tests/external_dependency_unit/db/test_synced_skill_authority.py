@@ -307,8 +307,9 @@ def test_personal_owner_controls_audience_but_not_installation(
         assert skill.public_permission is None
 
 
-def test_scoped_owner_cannot_share_outside_managed_groups(
-    session: Session, marketplace: Marketplace
+@pytest.mark.parametrize("scopes", [None, [Permission.BASIC_ACCESS]])
+def test_scoped_owner_keeps_personal_audience_authority(
+    session: Session, marketplace: Marketplace, scopes: list[Permission] | None
 ) -> None:
     owner, own_group = manager(session, global_access=False)
     _, outside_group = manager(session, global_access=False)
@@ -317,12 +318,29 @@ def test_scoped_owner_cannot_share_outside_managed_groups(
     skill = skills(session, marketplace)[0]
     session.commit()
     with (
-        client_for(owner, session) as client,
+        client_for(owner, session, scopes) as client,
         patch.object(api, "push_skills_for_users"),
     ):
-        for group, expected in ((own_group, 200), (outside_group, 403)):
+        published = client.patch(
+            f"/skills/custom/{skill.id}/share", json={"public_permission": "VIEWER"}
+        )
+        assert published.status_code == 200, published.text
+        for group in (own_group, outside_group):
             response = client.patch(
                 f"/skills/custom/{skill.id}/share",
                 json={"group_shares": [{"group_id": group, "permission": "VIEWER"}]},
             )
-            assert response.status_code == expected, response.text
+            assert response.status_code == 200, response.text
+        refused = client.patch(
+            f"/skills/custom/{skill.id}/share",
+            json={
+                "group_shares": [
+                    {
+                        "group_id": outside_group,
+                        "permission": "VIEWER",
+                        "installation_policy": "REQUIRED",
+                    }
+                ]
+            },
+        )
+        assert refused.status_code == 403, refused.text

@@ -332,10 +332,13 @@ Only the personal owner or a global manage-skills user can delete a retired sync
 An editor grant alone does not permit deletion. The same rule applies to bulk deletion.
 
 Through the sharing API, only the owner can change a personal synced Skill's audience,
-including company visibility and group grants. Group managers remain limited to their managed groups.
+including company visibility and group grants. This also applies when the owner is a group manager.
 Changing installation settings still requires the appropriate manage-skills authority.
 Other editors and admins cannot change that audience.
-A manager can change installation settings while preserving the existing grants.
+A manager can change installation settings while preserving the existing grants. For sharing reads,
+sharing changes and PATCH, API tokens must include manage-skills scope to use management authority.
+A Basic-only token retains the user's ownership and explicit editor grants.
+It cannot use the user's admin or group-manager role to change installation settings or company access.
 
 ## Marketplace sync recovery
 

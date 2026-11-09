@@ -184,14 +184,19 @@ def skill_visible_to_user(
     return visible if include_retired else and_(Skill.retired_at.is_(None), visible)
 
 
-def _is_editable_by_user(user: User) -> ColumnElement[bool]:
+def _is_editable_by_user(
+    user: User, *, allow_management: bool = True
+) -> ColumnElement[bool]:
     editable = or_(
         _is_owned_custom_skill(user),
         _is_shared_with_user(user, SkillSharePermission.EDITOR),
         _is_shared_with_user_group(user, SkillSharePermission.EDITOR),
         Skill.public_permission == SkillSharePermission.EDITOR,
     )
-    if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED:
+    if (
+        allow_management
+        and has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
+    ):
         editable = or_(editable, _is_group_shared_only_within_managed_scope(user))
     return editable
 
@@ -288,6 +293,7 @@ def _skill_select_for_management_policy(
     user: User,
     order_by_name: bool,
     include_retired: bool = False,
+    allow_management: bool = True,
 ) -> Select[tuple[Skill]]:
     stmt = _skill_select_with_eager_load(order_by_name=order_by_name)
     if not include_retired:
@@ -301,16 +307,16 @@ def _skill_select_for_management_policy(
                 ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
             )
         )
-        if has_global_permission(user, Permission.MANAGE_SKILLS):
+        if allow_management and has_global_permission(user, Permission.MANAGE_SKILLS):
             return stmt
         stmt = stmt.where(skill_visible_to_user(user, include_retired=include_retired))
         return _exclude_unavailable_built_in_skills(stmt, db_session)
 
     if policy == SkillManagementPolicy.EDIT:
         stmt = stmt.where(Skill.built_in_skill_id.is_(None))
-        if has_global_permission(user, Permission.MANAGE_SKILLS):
+        if allow_management and has_global_permission(user, Permission.MANAGE_SKILLS):
             return stmt
-        return stmt.where(_is_editable_by_user(user))
+        return stmt.where(_is_editable_by_user(user, allow_management=allow_management))
 
     raise ValueError(f"Unknown skill management policy: {policy}")
 
@@ -428,6 +434,7 @@ def fetch_skill(
     user: User,
     lock_for_update: bool = False,
     allow_retired: bool = False,
+    allow_management: bool = True,
 ) -> Skill | None:
     stmt = _skill_select_for_management_policy(
         policy=policy,
@@ -435,6 +442,7 @@ def fetch_skill(
         user=user,
         order_by_name=False,
         include_retired=lock_for_update or allow_retired,
+        allow_management=allow_management,
     ).where(Skill.id == skill_id)
     if lock_for_update:
         stmt = stmt.with_for_update(of=Skill).execution_options(populate_existing=True)
@@ -865,11 +873,13 @@ def persist_skill_validity(
 SkillBulkAction = Literal["enable", "disable", "delete"]
 
 
-def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
+def ensure_can_edit_org_visibility(
+    skill: Skill, user: User, *, allow_management: bool = True
+) -> None:
     assert_skill_mutable(skill)
     if skill.marketplace_id is not None and skill.author_user_id == user.id:
         return
-    if not has_global_permission(user, Permission.MANAGE_SKILLS):
+    if not (allow_management and has_global_permission(user, Permission.MANAGE_SKILLS)):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Company access changes require global manage-skills permission.",
@@ -879,17 +889,27 @@ def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
 class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
     permission = Permission.MANAGE_SKILLS
 
-    def load(self, resource_id: UUID, user: User, db_session: Session) -> Skill:
+    def load(
+        self,
+        resource_id: UUID,
+        user: User,
+        db_session: Session,
+        *,
+        allow_management: bool,
+    ) -> Skill:
         skill = fetch_skill(
             resource_id,
             policy=SkillManagementPolicy.EDIT,
             user=user,
             db_session=db_session,
             lock_for_update=True,
+            allow_management=allow_management,
         )
         if skill is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         if is_company_marketplace_skill(skill, db_session):
+            if not allow_management:
+                raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
             assert_within_scope(
                 user,
                 db_session,
@@ -957,6 +977,8 @@ def share_skill__no_commit(
     change: SkillSharingChange,
     user: User,
     db_session: Session,
+    *,
+    allow_management: bool = True,
 ) -> set[UUID]:
     return mutate_resource_access(
         [skill.id],
@@ -964,6 +986,7 @@ def share_skill__no_commit(
         user,
         db_session,
         SkillAccessAdapter(),
+        allow_management=allow_management,
     ).affected
 
 
