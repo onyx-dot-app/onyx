@@ -95,3 +95,54 @@ def test_recovery_budget_and_explicit_restart(
     assert ownership.claim_marketplace_sync(marketplace.id, session) is not None
     session.refresh(marketplace)
     assert marketplace.sync_attempts == 1
+
+
+@pytest.mark.parametrize("release", ["commit", "rollback", "savepoint_rollback"])
+def test_publication_cannot_reuse_a_released_transaction(
+    session: Session, marketplace: Marketplace, release: str
+) -> None:
+    marketplace.login_user_id = make_user(session).id
+    session.commit()
+    ownership.request_marketplace_sync(marketplace.id, session)
+    owner = ownership.claim_marketplace_sync(marketplace.id, session)
+    assert owner is not None
+    savepoint = session.begin_nested() if release == "savepoint_rollback" else None
+    publication = ownership.fence_marketplace_sync(marketplace.id, owner, session)
+    if savepoint is not None:
+        savepoint.rollback()
+    elif release == "commit":
+        session.commit()
+    else:
+        session.rollback()
+    with pytest.raises(ownership.MarketplaceSyncLeaseLost, match="lock released"):
+        publication.finish__no_commit(status=MarketplaceSyncStatus.APPLIED)
+    session.rollback()
+    ownership.finish_marketplace_sync(
+        marketplace.id, owner, session, status=MarketplaceSyncStatus.APPLIED
+    )
+    session.refresh(marketplace)
+    assert marketplace.sync_status == MarketplaceSyncStatus.APPLIED
+    assert marketplace.sync_owner is None
+
+
+def test_publication_keeps_the_operation_deadline(
+    session: Session, marketplace: Marketplace
+) -> None:
+    ownership.request_marketplace_sync(marketplace.id, session)
+    owner = ownership.claim_marketplace_sync(marketplace.id, session)
+    assert owner is not None
+    publication = ownership.fence_marketplace_sync(marketplace.id, owner, session)
+    session.execute(
+        update(Marketplace)
+        .where(Marketplace.id == marketplace.id)
+        .values(
+            sync_started_at=func.clock_timestamp()
+            - timedelta(seconds=ownership.MAX_RUN_SECONDS + 1)
+        )
+    )
+    with pytest.raises(ownership.MarketplaceSyncLeaseLost, match="operation deadline"):
+        publication.finish__no_commit(status=MarketplaceSyncStatus.APPLIED)
+    session.rollback()
+    session.refresh(marketplace)
+    assert marketplace.sync_owner == owner
+    assert marketplace.sync_status is None

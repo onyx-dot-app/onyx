@@ -513,8 +513,11 @@ The library preview of an external-app skill calls the same renderer
     V3 retries failed cleanup and removes aged uploads left by a stopped worker.
     `db/marketplace_sync.py` owns durable requests and per-marketplace leases.
     The shared heartbeat renews each lease for at most five minutes. Publication
-    checks ownership and expiry in the reconciliation transaction, with membership
-    before marketplace locks. Expired workers cannot publish or clear another owner.
+    checks ownership and expiry before reconciliation, with membership before
+    marketplace locks. `MarketplaceSyncPublication` binds completion to the transaction
+    that holds that row lock. Lease expiry during reconciliation does not revoke it;
+    the five-minute operation deadline still applies. Commit or rollback invalidates
+    the publication object. Unfenced expired workers cannot publish or clear another owner.
     Finalization releases ownership and reads pending work under the same row lock.
     After two passes, recovery dispatches any remaining request. Temporary upstream
     failures and expired workers share a three-attempt budget, with 60/120-second
@@ -544,7 +547,9 @@ The library preview of an external-app skill calls the same renderer
     `db/marketplace_sync.py` stores requested work and per-marketplace leases.
     Claim, renewal, completion and recovery lock the marketplace row. Publication
     fences take membership first, then the marketplace lock. Expired owners cannot
-    publish or complete. A lease lasts at most five minutes from its claim.
+    enter publication. A fenced publication can complete while it retains that lock,
+    until the five-minute operation deadline. A released transaction cannot reuse
+    its publication object. A lease lasts at most five minutes from its claim.
     Temporary failures and expired owners share three attempts with 60/120-second
     backoff. Explicit requests reset the budget and delay without replacing a live
     owner. Completion preserves a request made during the run and a deleted login's

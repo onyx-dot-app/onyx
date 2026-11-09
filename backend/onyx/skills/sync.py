@@ -182,7 +182,8 @@ def _sync_marketplace(
                 )
             read = CompleteMarketplace(entries=entries)
         with get_session_with_current_tenant() as db_session:
-            locked = fence_marketplace_sync(marketplace_id, owner, db_session)
+            publication = fence_marketplace_sync(marketplace_id, owner, db_session)
+            locked = publication.marketplace
             if (
                 locked.login_user_id is None
                 or locked.login_user_id != marketplace.login_user_id
@@ -198,10 +199,7 @@ def _sync_marketplace(
                 recovery_keys=recovery_keys,
             )
             status = MarketplaceSyncStatus(result.status)
-            pending = finish_marketplace_sync__no_commit(
-                marketplace_id,
-                owner,
-                db_session,
+            pending = publication.finish__no_commit(
                 status=status,
                 error="needs confirmation"
                 if status == MarketplaceSyncStatus.NEEDS_CONFIRMATION

@@ -1,6 +1,6 @@
 """Real PostgreSQL ownership races; GitHub and transport dispatch are controlled."""
 
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import timedelta
 from threading import BoundedSemaphore, Event
@@ -9,7 +9,9 @@ from uuid import UUID
 
 import pytest
 import requests
-from sqlalchemy import func, update
+from psycopg2.errors import LockNotAvailable
+from sqlalchemy import func, text, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.marketplace_sync import tasks
@@ -22,7 +24,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import sync
 from onyx.skills.github_auth import github_authorization_header
+from onyx.skills.ingest import IngestedBundle
 from onyx.skills.marketplace.models import MarketplaceSyncStatus, ReconciliationResult
+from onyx.skills.marketplace.read_models import CompleteMarketplace, FailedMarketplace
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
@@ -31,6 +35,7 @@ from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
 from tests.external_dependency_unit.db.test_marketplace_sync import (
     GitHub,
     catalog_bytes,
+    rows,
 )
 from tests.external_dependency_unit.db.test_marketplace_sync import github as github
 from tests.external_dependency_unit.db.test_skill_version_writes import (
@@ -65,6 +70,62 @@ def run_task(marketplace_id: UUID, tenant: str) -> None:
     tasks.sync_marketplace_task.run(
         marketplace_id=str(marketplace_id), tenant_id=tenant
     )
+
+
+def test_publication_finishes_when_lease_expires_under_its_row_lock(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    broker: Mock,
+) -> None:
+    identifier = marketplace.id
+    reconcile = sync.reconcile_marketplace__no_commit
+
+    def rival_claim() -> None:
+        with get_session_with_tenant(tenant_id=tenant) as other:
+            other.execute(text("SET LOCAL lock_timeout = '100ms'"))
+            with pytest.raises(OperationalError) as failure:
+                ownership.claim_marketplace_sync(identifier, other)
+            assert isinstance(failure.value.orig, LockNotAvailable)
+
+    def reconcile_after_expiry(
+        marketplace_id: UUID,
+        read: CompleteMarketplace | FailedMarketplace,
+        *,
+        revision: str,
+        staged: Mapping[str, IngestedBundle],
+        db_session: Session,
+        created_by_user_id: UUID | None = None,
+        recovery_keys: frozenset[str] = frozenset(),
+    ) -> ReconciliationResult:
+        db_session.execute(
+            update(Marketplace)
+            .where(Marketplace.id == marketplace_id)
+            .values(sync_lease_expires_at=func.clock_timestamp() - timedelta(seconds=1))
+        )
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(rival_claim).result(5)
+        return reconcile(
+            marketplace_id,
+            read,
+            revision=revision,
+            staged=staged,
+            db_session=db_session,
+            created_by_user_id=created_by_user_id,
+            recovery_keys=recovery_keys,
+        )
+
+    tasks.enqueue_marketplace_sync(identifier, tenant_id=tenant)
+    with patch.object(sync, "reconcile_marketplace__no_commit", reconcile_after_expiry):
+        run_task(identifier, tenant)
+    session.refresh(marketplace)
+    assert marketplace.sync_status == MarketplaceSyncStatus.APPLIED
+    assert marketplace.last_synced_revision == github.revision
+    assert marketplace.sync_owner is None
+    assert marketplace.sync_attempts == 1
+    assert {row.name for row in rows(session)} == {"alpha", "beta"}
+    assert broker.call_count == 1
 
 
 def test_second_commit_during_run(

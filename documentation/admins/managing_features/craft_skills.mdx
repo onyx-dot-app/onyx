@@ -338,6 +338,8 @@ Temporary source errors and interrupted runs get at most three attempts per requ
 Automatic retries wait at least one minute, then at least two minutes. The background schedule can add delay;
 Onyx Cloud normally checks recovery about every four minutes. After three failed attempts, request a new sync.
 An explicit request starts a fresh attempt budget and clears the retry delay.
+Each attempt must finish saving its changes within five minutes after it starts. If that limit expires,
+Onyx keeps the last successful content and applies the retry rules above.
 
 Each sync requires an active login user with a connected GitHub account.
 An unavailable login records an error and preserves existing Skills. A successful check clears an earlier error,

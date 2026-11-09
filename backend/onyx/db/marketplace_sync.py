@@ -1,10 +1,11 @@
 """Durable requested work and expiring ownership, scoped by the session's tenant."""
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, SessionTransaction
 
 from onyx.db.models import Marketplace
 from onyx.db.users import lock_group_membership
@@ -26,6 +27,49 @@ SYNC_INTERRUPTED = (
 
 class MarketplaceSyncLeaseLost(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class MarketplaceSyncPublication:
+    """Ownership fenced for the transaction that holds the marketplace row lock."""
+
+    marketplace: Marketplace
+    _owner: UUID
+    _session: Session
+    _transaction: SessionTransaction
+
+    def finish__no_commit(
+        self,
+        *,
+        status: MarketplaceSyncStatus,
+        error: str | None = None,
+        retry: bool = False,
+        resolved_revision: str | None = None,
+    ) -> bool:
+        session, row = self._session, self.marketplace
+        transaction = session.get_nested_transaction() or session.get_transaction()
+        if (
+            transaction is not self._transaction
+            or not self._transaction.is_active
+            or row.sync_owner != self._owner
+        ):
+            raise MarketplaceSyncLeaseLost("Marketplace publication lock released")
+        now = session.execute(select(func.clock_timestamp())).scalar_one()
+        if (
+            row.sync_started_at is None
+            or row.sync_started_at + timedelta(seconds=MAX_RUN_SECONDS) <= now
+        ):
+            raise MarketplaceSyncLeaseLost(
+                "Marketplace sync operation deadline expired"
+            )
+        if (
+            resolved_revision is not None
+            and row.retirement_proposal is not None
+            and row.retirement_proposal.revision != resolved_revision
+        ):
+            row.retirement_proposal = None
+        _finish(row, now, status, error, retry=retry)
+        return row.sync_requested and row.sync_retry_after is None
 
 
 def request_marketplace_sync__no_commit(marketplace_id: UUID, session: Session) -> None:
@@ -88,7 +132,7 @@ def claim_marketplace_sync(marketplace_id: UUID, session: Session) -> UUID | Non
 
 def fence_marketplace_sync(
     marketplace_id: UUID, owner: UUID, session: Session
-) -> Marketplace:
+) -> MarketplaceSyncPublication:
     # Publication follows the same lock order as access and reconciliation.
     lock_group_membership(session)
     row = _lock(marketplace_id, session)
@@ -100,7 +144,10 @@ def fence_marketplace_sync(
         or row.sync_lease_expires_at <= now
     ):
         raise MarketplaceSyncLeaseLost("Marketplace sync ownership expired")
-    return row
+    transaction = session.get_nested_transaction() or session.get_transaction()
+    if transaction is None:
+        raise MarketplaceSyncLeaseLost("Marketplace publication has no transaction")
+    return MarketplaceSyncPublication(row, owner, session, transaction)
 
 
 def renew_marketplace_sync(marketplace_id: UUID, owner: UUID, session: Session) -> bool:
@@ -159,21 +206,12 @@ def finish_marketplace_sync__no_commit(
     retry: bool = False,
     resolved_revision: str | None = None,
 ) -> bool:
-    row = fence_marketplace_sync(marketplace_id, owner, session)
-    if (
-        resolved_revision is not None
-        and row.retirement_proposal is not None
-        and row.retirement_proposal.revision != resolved_revision
-    ):
-        row.retirement_proposal = None
-    _finish(
-        row,
-        session.execute(select(func.clock_timestamp())).scalar_one(),
-        status,
-        error,
+    return fence_marketplace_sync(marketplace_id, owner, session).finish__no_commit(
+        status=status,
+        error=error,
         retry=retry,
+        resolved_revision=resolved_revision,
     )
-    return row.sync_requested and row.sync_retry_after is None
 
 
 def finish_marketplace_sync(
