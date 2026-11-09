@@ -910,11 +910,14 @@ async def test_private_key_jwt_metadata_client_completes_public_flow(
         _cimd_fetcher.cache_clear()
 
 
+@pytest.mark.parametrize("redirect_uri", [_REDIRECT, "http://[::1]:9876/callback"])
 async def test_private_key_jwt_metadata_client_with_loopback_redirect_is_rejected(
-    protocol_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    protocol_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    redirect_uri: str,
 ) -> None:
     client_id = "https://signed.example/oauth/client.json"
-    fetch = AsyncMock(return_value=_private_key_jwt_metadata(client_id, _REDIRECT))
+    fetch = AsyncMock(return_value=_private_key_jwt_metadata(client_id, redirect_uri))
     monkeypatch.setattr(cimd, "ssrf_safe_fetch_response", fetch)
     _cimd_fetcher.cache_clear()
     try:
@@ -923,7 +926,7 @@ async def test_private_key_jwt_metadata_client_with_loopback_redirect_is_rejecte
             "/oauth-provider/authorize",
             params={
                 "client_id": client_id,
-                "redirect_uri": _REDIRECT,
+                "redirect_uri": redirect_uri,
                 "response_type": "code",
                 "scope": "read:search",
                 "resource": _RESOURCE,

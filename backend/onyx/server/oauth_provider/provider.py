@@ -253,7 +253,7 @@ class OnyxOAuthProvider(OAuthProvider):
             # token requests (ChatGPT) is served as public only when no local app
             # can receive its codes on a loopback redirect.
             if document.token_endpoint_auth_method != "none" and any(
-                is_loopback_host(uri.host) for uri in redirect_uris
+                is_loopback_host(urlsplit(str(uri)).hostname) for uri in redirect_uris
             ):
                 return None
             client = LoopbackRedirectOAuthClient(
