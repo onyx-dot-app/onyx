@@ -249,6 +249,41 @@ def test_zip64_end_locations_across_python_releases(
         assert index.read("SKILL.md") == b"saved skill"
 
 
+@pytest.mark.parametrize("failure", ["connect", "schema"])
+def test_reader_closes_archive_when_storage_creation_fails(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    data = raw_zip([("SKILL.md", b"body")])
+    connection = sqlite3.connect("")
+    failed = MagicMock(wraps=connection)
+    error = sqlite3.OperationalError("storage failure")
+    if failure == "connect":
+        monkeypatch.setattr(sqlite3, "connect", MagicMock(side_effect=error))
+    else:
+        failed.executescript.side_effect = error
+        monkeypatch.setattr(sqlite3, "connect", lambda _: failed)
+    closed: list[zipfile.ZipFile] = []
+    original_close = zipfile.ZipFile.close
+
+    def close(archive: zipfile.ZipFile) -> None:
+        original_close(archive)
+        closed.append(archive)
+
+    monkeypatch.setattr(zipfile.ZipFile, "close", close)
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="storage failure") as caught:
+            ZipIndex(data)
+        assert caught.value is error
+        assert len(closed) == 1
+        with pytest.raises(ValueError, match="closed"):
+            closed[0].open("SKILL.md")
+        if failure == "schema":
+            with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+                connection.execute("SELECT 1")
+    finally:
+        connection.close()
+
+
 def test_writer_closes_sqlite_when_schema_creation_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

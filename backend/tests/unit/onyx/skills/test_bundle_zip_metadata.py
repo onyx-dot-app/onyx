@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.db.models import Skill
+from onyx.db.zip_metadata import DiskPathSet
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import BundleMetadata
@@ -24,7 +25,6 @@ from onyx.skills import push
 from onyx.skills.bundle import (
     STORED_BUNDLE_LIMITS,
     ZIP_METADATA_MAX_BYTES,
-    _PathSet,
     inspect_custom_bundle,
     normalize_custom_bundle,
     read_custom_bundle_instructions,
@@ -50,7 +50,7 @@ def test_paths_close_sqlite_when_schema_creation_fails(
     monkeypatch.setattr(sqlite3, "connect", lambda _: failed)
     try:
         with pytest.raises(sqlite3.OperationalError, match="schema failure"):
-            _PathSet()
+            DiskPathSet()
         with pytest.raises(sqlite3.ProgrammingError, match="closed"):
             connection.execute("SELECT 1")
     finally:

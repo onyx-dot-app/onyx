@@ -1,0 +1,166 @@
+"""Anonymous SQLite storage for ZIP metadata and validated bundle paths."""
+
+import sqlite3
+import zipfile
+from collections.abc import Iterable, Iterator
+from typing import Literal, Self
+
+_SCHEMA = (
+    "CREATE TABLE entries (seq INTEGER PRIMARY KEY, name BLOB NOT NULL, "
+    "record INTEGER NOT NULL, header INTEGER NOT NULL, end_offset INTEGER);"
+    "CREATE INDEX entries_by_name ON entries (name, seq);"
+    "CREATE INDEX entries_by_header ON entries (header, seq);"
+)
+
+
+# Each entry ends at the next header, with the runtime's tie order.
+_END_OFFSETS = (
+    "UPDATE entries SET end_offset = COALESCE(later.header, ?) FROM "  # noqa: S608 -- fixed ASC/DESC keywords only
+    "(SELECT seq, LEAD(header) OVER (ORDER BY header, seq {order}) AS header "
+    "FROM entries) AS later WHERE entries.seq = later.seq"
+)
+
+
+class ZipEntryStore:
+    """Disk-backed ZIP record offsets; ZIP parsing stays with the caller."""
+
+    def __init__(self) -> None:
+        self._db = sqlite3.connect("")
+        try:
+            self._db.executescript(_SCHEMA)
+        except BaseException:
+            self._db.close()
+            raise
+
+    def populate(
+        self,
+        entries: Iterable[tuple[int, bytes, int, int]],
+        *,
+        directory_start: int,
+        shared_header_order: Literal["ASC", "DESC"],
+    ) -> None:
+        with self._db:
+            self._db.executemany(
+                "INSERT INTO entries VALUES (?, ?, ?, ?, NULL)", entries
+            )
+            self._db.execute(
+                _END_OFFSETS.format(order=shared_header_order), (directory_start,)
+            )
+
+    def entries(self, *, by_name: bool = False) -> Iterator[tuple[int, int]]:
+        query = (
+            "SELECT record, end_offset FROM entries ORDER BY name, seq"
+            if by_name
+            else "SELECT record, end_offset FROM entries ORDER BY seq"
+        )
+        yield from self._db.execute(query)
+
+    def find(self, name: str) -> tuple[int, int] | None:
+        return self._db.execute(
+            "SELECT record, end_offset FROM entries WHERE name = ? ORDER BY seq DESC LIMIT 1",
+            (name.encode(),),
+        ).fetchone()
+
+    def close(self) -> None:
+        self._db.close()
+
+
+class SpooledZipInfos(list[zipfile.ZipInfo]):
+    """The written entries of a ZipFile, kept in SQLite until it writes them.
+
+    Each row holds the ZipInfo fields that zipfile writes to the central
+    directory.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._db = sqlite3.connect("")
+        try:
+            self._db.execute(
+                "CREATE TABLE infos (seq INTEGER PRIMARY KEY, filename, date_time, "
+                "flag_bits, comment, compress_size, compress_type, crc, "
+                "create_system, create_version, external_attr, extra, "
+                "extract_version, file_size, header_offset, internal_attr, reserved)"
+            )
+        except BaseException:
+            self._db.close()
+            raise
+        self._count = 0
+
+    def append(self, info: zipfile.ZipInfo) -> None:
+        self._db.execute(
+            "INSERT INTO infos VALUES "
+            "(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                info.filename,
+                ",".join(map(str, info.date_time)),
+                info.flag_bits,
+                info.comment,
+                info.compress_size,
+                info.compress_type,
+                info.CRC,
+                info.create_system,
+                info.create_version,
+                info.external_attr,
+                info.extra,
+                info.extract_version,
+                info.file_size,
+                info.header_offset,
+                info.internal_attr,
+                info.reserved,
+            ),
+        )
+        self._count += 1
+
+    def __len__(self) -> int:
+        return self._count
+
+    def __iter__(self) -> Iterator[zipfile.ZipInfo]:
+        for row in self._db.execute("SELECT * FROM infos ORDER BY seq"):
+            year, month, day, hour, minute, second = map(int, row[2].split(","))
+            info = zipfile.ZipInfo(row[1], (year, month, day, hour, minute, second))
+            (
+                info.flag_bits,
+                info.comment,
+                info.compress_size,
+                info.compress_type,
+                info.CRC,
+                info.create_system,
+                info.create_version,
+                info.external_attr,
+                info.extra,
+                info.extract_version,
+                info.file_size,
+                info.header_offset,
+                info.internal_attr,
+                info.reserved,
+            ) = row[3:]
+            yield info
+
+    def close(self) -> None:
+        self._db.close()
+
+
+class DiskPathSet:
+    """Paths kept in an anonymous SQLite database, a temp file."""
+
+    def __init__(self) -> None:
+        self._db = sqlite3.connect("")
+        try:
+            self._db.execute("CREATE TABLE paths (path TEXT PRIMARY KEY) WITHOUT ROWID")
+        except BaseException:
+            self._db.close()
+            raise
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._db.close()
+
+    def add(self, path: str) -> None:
+        self._db.execute("INSERT OR IGNORE INTO paths VALUES (?)", (path,))
+
+    def __contains__(self, path: str) -> bool:
+        query = "SELECT 1 FROM paths WHERE path = ?"
+        return self._db.execute(query, (path,)).fetchone() is not None

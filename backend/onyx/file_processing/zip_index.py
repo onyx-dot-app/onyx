@@ -11,7 +11,6 @@ use zipfile itself, including its overlapped entry check.
 """
 
 import io
-import sqlite3
 import struct
 import zipfile
 from collections.abc import Iterator
@@ -20,6 +19,7 @@ from types import TracebackType
 from typing import IO, Literal, Self
 from zlib import crc32
 
+from onyx.db.zip_metadata import SpooledZipInfos, ZipEntryStore
 from onyx.file_processing.zip_limits import ZipMetadataLimitError
 
 # APPNOTE 4.3.12 central directory header, as in zipfile.structCentralDir.
@@ -32,13 +32,6 @@ _END_SIZE = 5
 _END_OFFSET = 6
 _END_LOCATION = 9
 _ZIP64_END_SIZE = 56 + 20  # ZIP64 end record and locator.
-
-_SCHEMA = (
-    "CREATE TABLE entries (seq INTEGER PRIMARY KEY, name BLOB NOT NULL, "
-    "record INTEGER NOT NULL, header INTEGER NOT NULL, end_offset INTEGER);"
-    "CREATE INDEX entries_by_name ON entries (name, seq);"
-    "CREATE INDEX entries_by_header ON entries (header, seq);"
-)
 
 
 @cache
@@ -55,14 +48,6 @@ def _zipfile_shared_header_order() -> Literal["ASC", "DESC"]:
         first = reader.infolist()[0]
         end_offset = first._end_offset  # ty: ignore[unresolved-attribute]
         return "DESC" if end_offset else "ASC"
-
-
-# Each entry ends at the next header, with the runtime's tie order.
-_END_OFFSETS = (
-    "UPDATE entries SET end_offset = COALESCE(later.header, ?) FROM "  # noqa: S608 -- fixed ASC/DESC keywords only
-    "(SELECT seq, LEAD(header) OVER (ORDER BY header, seq {order}) AS header "
-    "FROM entries) AS later WHERE entries.seq = later.seq"
-)
 
 
 class _EndRecordZipFile(zipfile.ZipFile):
@@ -105,25 +90,25 @@ class ZipIndex:
 
     def __init__(self, data: bytes, *, max_metadata_bytes: int | None = None) -> None:
         self._archive = _EndRecordZipFile(io.BytesIO(data))
-        self._db = sqlite3.connect("")
+        try:
+            self._entries_store = ZipEntryStore()
+        except BaseException:
+            self._archive.close()
+            raise
         try:
             size = self._archive.directory_size
             if max_metadata_bytes is not None and size > max_metadata_bytes:
                 raise ZipMetadataLimitError("Zip metadata is too large")
             start = self._archive.directory_start
             self._directory = memoryview(data)[start : start + size]
-            self._db.executescript(_SCHEMA)
-            with self._db:
-                self._db.executemany(
-                    "INSERT INTO entries VALUES (?, ?, ?, ?, NULL)",
-                    (
-                        (seq, info.filename.encode(), offset, info.header_offset)
-                        for seq, (offset, info) in enumerate(self._records())
-                    ),
-                )
-                self._db.execute(
-                    _END_OFFSETS.format(order=_zipfile_shared_header_order()), (start,)
-                )
+            self._entries_store.populate(
+                (
+                    (seq, info.filename.encode(), offset, info.header_offset)
+                    for seq, (offset, info) in enumerate(self._records())
+                ),
+                directory_start=start,
+                shared_header_order=_zipfile_shared_header_order(),
+            )
         except BaseException:
             self.close()
             raise
@@ -140,7 +125,7 @@ class ZipIndex:
         self.close()
 
     def close(self) -> None:
-        self._db.close()
+        self._entries_store.close()
         self._archive.close()
 
     def _records(self) -> Iterator[tuple[int, zipfile.ZipInfo]]:
@@ -199,31 +184,28 @@ class ZipIndex:
         info.header_offset += self._archive.concat
         return info, _RECORD.size + fields[12] + fields[13] + fields[14]
 
-    def _entries(self, query: str, *args: object) -> Iterator[zipfile.ZipInfo]:
-        for record, end_offset in self._db.execute(query, args):
-            info, _ = self._parse(record)
-            info._end_offset = end_offset  # ty: ignore[unresolved-attribute]
-            yield info
+    def _entry(self, record: int, end_offset: int) -> zipfile.ZipInfo:
+        info, _ = self._parse(record)
+        info._end_offset = end_offset  # ty: ignore[unresolved-attribute]
+        return info
 
     def infos(self) -> Iterator[zipfile.ZipInfo]:
         """Entries in central directory order, as ZipFile.infolist()."""
-        return self._entries("SELECT record, end_offset FROM entries ORDER BY seq")
+        for record, end_offset in self._entries_store.entries():
+            yield self._entry(record, end_offset)
 
     def sorted_infos(self) -> Iterator[zipfile.ZipInfo]:
         """Entries sorted by filename, ties in directory order."""
         # UTF-8 byte order is code point order, so this matches sorting str.
-        return self._entries(
-            "SELECT record, end_offset FROM entries ORDER BY name, seq"
-        )
+        for record, end_offset in self._entries_store.entries(by_name=True):
+            yield self._entry(record, end_offset)
 
     def getinfo(self, name: str) -> zipfile.ZipInfo:
         """The last entry with this name, as ZipFile.getinfo()."""
-        for info in self._entries(
-            "SELECT record, end_offset FROM entries WHERE name = ? ORDER BY seq DESC LIMIT 1",
-            name.encode(),
-        ):
-            return info
-        raise KeyError(f"There is no item named {name!r} in the archive")
+        row = self._entries_store.find(name)
+        if row is None:
+            raise KeyError(f"There is no item named {name!r} in the archive")
+        return self._entry(*row)
 
     def open(self, info: zipfile.ZipInfo) -> IO[bytes]:
         return self._archive.open(info)
@@ -231,82 +213,6 @@ class ZipIndex:
     def read(self, name: str) -> bytes:
         with self.open(self.getinfo(name)) as source:
             return source.read()
-
-
-class _SpooledInfos(list[zipfile.ZipInfo]):
-    """The written entries of a ZipFile, kept in SQLite until it writes them.
-
-    Each row holds the ZipInfo fields that zipfile writes to the central
-    directory.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._db = sqlite3.connect("")
-        try:
-            self._db.execute(
-                "CREATE TABLE infos (seq INTEGER PRIMARY KEY, filename, date_time, "
-                "flag_bits, comment, compress_size, compress_type, crc, "
-                "create_system, create_version, external_attr, extra, "
-                "extract_version, file_size, header_offset, internal_attr, reserved)"
-            )
-        except BaseException:
-            self._db.close()
-            raise
-        self._count = 0
-
-    def append(self, info: zipfile.ZipInfo) -> None:
-        self._db.execute(
-            "INSERT INTO infos VALUES "
-            "(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                info.filename,
-                ",".join(map(str, info.date_time)),
-                info.flag_bits,
-                info.comment,
-                info.compress_size,
-                info.compress_type,
-                info.CRC,
-                info.create_system,
-                info.create_version,
-                info.external_attr,
-                info.extra,
-                info.extract_version,
-                info.file_size,
-                info.header_offset,
-                info.internal_attr,
-                info.reserved,
-            ),
-        )
-        self._count += 1
-
-    def __len__(self) -> int:
-        return self._count
-
-    def __iter__(self) -> Iterator[zipfile.ZipInfo]:
-        for row in self._db.execute("SELECT * FROM infos ORDER BY seq"):
-            year, month, day, hour, minute, second = map(int, row[2].split(","))
-            info = zipfile.ZipInfo(row[1], (year, month, day, hour, minute, second))
-            (
-                info.flag_bits,
-                info.comment,
-                info.compress_size,
-                info.compress_type,
-                info.CRC,
-                info.create_system,
-                info.create_version,
-                info.external_attr,
-                info.extra,
-                info.extract_version,
-                info.file_size,
-                info.header_offset,
-                info.internal_attr,
-                info.reserved,
-            ) = row[3:]
-            yield info
-
-    def close(self) -> None:
-        self._db.close()
 
 
 class _UnkeptNames(dict[str, zipfile.ZipInfo]):
@@ -323,7 +229,7 @@ class _SpooledZipFile(zipfile.ZipFile):
     def __init__(self, file: IO[bytes]) -> None:
         super().__init__(file, mode="w", compression=zipfile.ZIP_DEFLATED)
         try:
-            self.filelist = _SpooledInfos()
+            self.filelist = SpooledZipInfos()
         except BaseException:
             super().close()
             raise
@@ -334,7 +240,7 @@ class _SpooledZipFile(zipfile.ZipFile):
             super().close()
         finally:
             infos = self.filelist
-            if self.fp is None and isinstance(infos, _SpooledInfos):
+            if self.fp is None and isinstance(infos, SpooledZipInfos):
                 infos.close()
 
 

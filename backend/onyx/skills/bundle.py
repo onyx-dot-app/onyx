@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import os
-import sqlite3
 import stat
 import sys
 import zipfile
@@ -15,6 +14,7 @@ from copy import copy
 from dataclasses import dataclass
 from typing import IO, Final, Literal
 
+from onyx.db.zip_metadata import DiskPathSet
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_index import SpooledZipWriter, ZipIndex
@@ -103,31 +103,6 @@ def _open_bundle_index(zip_bytes: bytes, max_metadata_bytes: int | None) -> ZipI
             limit,
             f"Skill bundle zip file list exceeds the {limit // (1024 * 1024)} MiB limit.",
         ) from exc
-
-
-class _PathSet:
-    """Paths kept in an anonymous SQLite database, a temp file."""
-
-    def __init__(self) -> None:
-        self._db = sqlite3.connect("")
-        try:
-            self._db.execute("CREATE TABLE paths (path TEXT PRIMARY KEY) WITHOUT ROWID")
-        except BaseException:
-            self._db.close()
-            raise
-
-    def __enter__(self) -> _PathSet:
-        return self
-
-    def __exit__(self, *exc_info: object) -> None:
-        self._db.close()
-
-    def add(self, path: str) -> None:
-        self._db.execute("INSERT OR IGNORE INTO paths VALUES (?)", (path,))
-
-    def __contains__(self, path: str) -> bool:
-        query = "SELECT 1 FROM paths WHERE path = ?"
-        return self._db.execute(query, (path,)).fetchone() is not None
 
 
 def _parent_paths(path: str) -> Iterator[str]:
@@ -546,7 +521,7 @@ def _copy_validated_bundle_file(
 
 
 def _add_output_directories(
-    source_zip: ZipIndex, wrapper_prefix: str | None, output_directories: _PathSet
+    source_zip: ZipIndex, wrapper_prefix: str | None, output_directories: DiskPathSet
 ) -> None:
     for info in source_zip.infos():
         normalized = _validated_bundle_path(info)
@@ -568,7 +543,7 @@ def _add_output_directories(
 
 
 def _add_output_path(
-    output_path: str, output_paths: _PathSet, output_directories: _PathSet
+    output_path: str, output_paths: DiskPathSet, output_directories: DiskPathSet
 ) -> None:
     if output_path in output_paths:
         raise OnyxError(
@@ -617,7 +592,7 @@ def normalize_custom_bundle(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
     output = io.BytesIO()
-    with source_zip, _PathSet() as output_paths, _PathSet() as output_directories:
+    with source_zip, DiskPathSet() as output_paths, DiskPathSet() as output_directories:
         shape = _BundleShape()
         for info in source_zip.infos():
             normalized = _validated_bundle_path(info)
