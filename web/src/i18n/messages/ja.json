@@ -17391,15 +17391,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "リポジトリから1つ以上のスキルをインポートします。",
-          "title": "GitHubからインポート"
+          "description": "GitHub リポジトリのスキルを最新の状態に保ちます。",
+          "title": "GitHub から同期"
         },
         "scratch": {
           "description": "{appName}で指示を書き、サポートファイルを追加します。",
-          "title": "最初から作成"
+          "title": "スキルを作成"
         },
         "trigger": {
-          "label": "スキルを作成"
+          "label": "追加"
         },
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
@@ -17625,6 +17625,25 @@
     "listTitle": "マーケットプレイス",
     "emptyList": "マーケットプレイスはまだありません",
     "emptyListDescription": "GitHub から同期してスキルのカタログを追加します。",
-    "detailsFor": "{name} の詳細を表示"
+    "detailsFor": "{name} の詳細を表示",
+    "access": {
+      "description": "これらのデフォルト設定は、マーケットプレイスのアクセス設定に従う同期済みスキルに適用されます。",
+      "forbidden": "グローバルなスキル管理権限が必要です。",
+      "loading": "アクセス設定を読み込み中…",
+      "settingsError": "アクセス設定を読み込めませんでした。デフォルト設定は変更されていません。",
+      "community": "無料プランでは組織全体の使用権限を設定できます。非公開アクセスとグループには有料プランが必要です。",
+      "restricted": "保存済みの設定には有料プランが必要です。設定は保持されますが、無料プランでは保存できません。",
+      "groups": "グループ",
+      "addGroup": "追加するグループを検索",
+      "groupsLoading": "グループを読み込み中…",
+      "groupsError": "グループを読み込めませんでした。既存の権限は保持されています。",
+      "unknownGroup": "グループ #{id}",
+      "groupPermission": "{name} のアクセス権",
+      "installationDescription": "アクセス権を持つ全員に同期済みスキルをインストールする方法を選択します。",
+      "title": "会社マーケットプレイスのデフォルト設定",
+      "loadError": "マーケットプレイスのデフォルト設定を読み込めませんでした。編集内容は保持されています。",
+      "companyOnly": "アクセスのデフォルト設定は会社マーケットプレイスでのみ利用できます。",
+      "save": "デフォルト設定を保存"
+    }
   }
 }

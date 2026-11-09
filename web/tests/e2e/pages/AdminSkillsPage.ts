@@ -9,9 +9,7 @@ export class AdminSkillsPage {
   }
 
   async openUpload(): Promise<SkillUploadDialog> {
-    await this.page
-      .getByRole("button", { name: "Create skill", exact: true })
-      .click();
+    await this.page.getByRole("button", { name: "Add", exact: true }).click();
     await this.page.getByText("Upload a skill", { exact: true }).click();
     const upload = new SkillUploadDialog(this.page);
     await upload.expectVisible();
