@@ -203,12 +203,14 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     marketplace?.personal && skill?.user_permission === "OWNER";
   const canEditShares =
     props.mode === "edit"
-      ? !!loadedSkill &&
-        canShareSkill({ skill: loadedSkill, canManageCompanySkills })
+      ? !!loadedSkill && canShareSkill({ skill: loadedSkill })
       : skill?.user_permission === "OWNER" ||
         skill?.user_permission === "EDITOR";
   const canEditAudience =
     canEditShares && (!marketplace?.personal || isPersonalOwner);
+  const canEditUsers =
+    canEditAudience &&
+    (props.mode === "create" || !!skill?.owner || canManageCompanySkills);
   const canEditOrgVisibility =
     !skill?.external_app &&
     canEditAudience &&
@@ -663,7 +665,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 stagedGroups={stagedGroups}
                 stagedPermission={stagedPermission}
                 stagedUsers={stagedUsers}
-                users={shareableUsersData ?? []}
+                users={canEditUsers ? (shareableUsersData ?? []) : []}
               />
             ) : null}
             {(effectiveState.userShares.length > 0 ||
@@ -682,7 +684,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                             ariaLabel={t("share.permissionMenu.ariaLabel", {
                               name: share.user.email,
                             })}
-                            disabled={!canEditAudience || saving}
+                            disabled={!canEditUsers || saving}
                             onChange={(permission) =>
                               updateUserSharePermission(
                                 share.user.id,

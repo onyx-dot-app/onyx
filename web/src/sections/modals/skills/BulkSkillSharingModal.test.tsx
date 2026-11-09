@@ -35,11 +35,89 @@ describe("BulkSkillSharingModal", () => {
   beforeEach(() => {
     mockPermissions = [Permission.MANAGE_SKILLS];
   });
+  async function stageGroup(name: string) {
+    const user = setupUser();
+    await user.type(
+      screen.getByRole("combobox", { name: "Add users, groups, and accounts" }),
+      name.slice(0, 4)
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: new RegExp(name) })
+    );
+  }
+
+  it("keeps group sharing available when selected skills forbid individual grants", async () => {
+    mockPermissions = [];
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    render(
+      <BulkSkillSharingModal
+        count={2}
+        canChangeOrgAccess={false}
+        canChangeUserAccess={false}
+        open
+        saving={false}
+        onClose={jest.fn()}
+        onSave={onSave}
+      />
+    );
+    const search = screen.getByRole("combobox", {
+      name: "Add users, groups, and accounts",
+    });
+    await user.type(search, "sub");
+    expect(
+      screen.queryByRole("option", { name: /subash@onyx.app/ })
+    ).not.toBeInTheDocument();
+    await user.clear(search);
+    await stageGroup("Cash Kings");
+    await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        group_shares: [{ group_id: 7, permission: "VIEWER" }],
+      })
+    );
+  });
+
+  it("omits staged people if the selection stops allowing individual grants", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    const props = {
+      count: 2,
+      canChangeOrgAccess: false,
+      open: true,
+      saving: false,
+      onClose: jest.fn(),
+      onSave,
+    };
+    const { rerender } = render(
+      <BulkSkillSharingModal {...props} canChangeUserAccess />
+    );
+    const search = screen.getByRole("combobox", {
+      name: "Add users, groups, and accounts",
+    });
+    await user.type(search, "sub");
+    fireEvent.click(
+      await screen.findByRole("option", { name: /subash@onyx.app/ })
+    );
+    rerender(<BulkSkillSharingModal {...props} canChangeUserAccess={false} />);
+    expect(
+      screen.getByRole("button", { name: "Apply to 2 skills" })
+    ).toBeDisabled();
+    await stageGroup("Cash Kings");
+    await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        group_shares: [{ group_id: 7, permission: "VIEWER" }],
+      })
+    );
+  });
+
   it("shares all selected skills organization-wide without changing their installation policy", async () => {
     const user = setupUser();
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
+        canChangeUserAccess
         count={80}
         canChangeOrgAccess
         open
@@ -67,6 +145,7 @@ describe("BulkSkillSharingModal", () => {
     const onClose = jest.fn();
     const props = {
       count: 2,
+      canChangeUserAccess: true,
       canChangeOrgAccess: true,
       saving: false,
       onClose,
@@ -98,6 +177,7 @@ describe("BulkSkillSharingModal", () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     render(
       <BulkSkillSharingModal
+        canChangeUserAccess
         count={2}
         canChangeOrgAccess
         open
@@ -132,6 +212,7 @@ describe("BulkSkillSharingModal", () => {
     const onSave = jest.fn().mockResolvedValue(undefined);
     const props = {
       count: 2,
+      canChangeUserAccess: true,
       canChangeOrgAccess: true,
       open: true,
       saving: false,
