@@ -5,7 +5,6 @@ from contextlib import contextmanager
 from typing import NamedTuple
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.resource_version import compute_bundle_metadata
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -18,6 +17,7 @@ from onyx.skills.bundle import (
     normalize_custom_bundle,
 )
 from onyx.skills.metadata import parse_skill_document
+from onyx.utils.bundle import compute_bundle_metadata
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
