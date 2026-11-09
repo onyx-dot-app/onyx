@@ -500,7 +500,7 @@ def _copy_validated_bundle_file(
     source_info: zipfile.ZipInfo,
     source_path: str,
     output_path: str,
-    target_zip: zipfile.ZipFile | None,
+    target_zip: SpooledZipWriter | None,
     per_file_max_bytes: int,
     total_bytes_before_file: int,
     total_max_bytes: int,

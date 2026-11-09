@@ -3,12 +3,15 @@
 import io
 import sqlite3
 import struct
+import subprocess
+import sys
 import tracemalloc
 import warnings
 import zipfile
 import zlib
 from collections.abc import Callable
 from functools import partial
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -118,9 +121,10 @@ def directory_size(data: bytes) -> int:
 def _written() -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(zipfile.ZipInfo("b.txt", (2020, 1, 2, 3, 4, 6)), b"b" * 900)
-        archive.writestr(zipfile.ZipInfo("a/", (2021, 1, 1, 0, 0, 0)), b"")
-        archive.writestr(zipfile.ZipInfo("a/z.txt"), b"z")
+        for name, content in [("b.txt", b"b" * 900), ("a/", b""), ("a/z.txt", b"z")]:
+            info = zipfile.ZipInfo(name, (2020, 1, 2, 3, 4, 6))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, content)
         archive.comment = b"archive comment"
     return output.getvalue()
 
@@ -374,11 +378,13 @@ def test_reader_memory_does_not_grow_with_entries() -> None:
     assert _peak(lambda: read_all(large)) < 2 * _peak(lambda: read_all(small))
 
 
-def test_spooled_writer_writes_the_same_bytes_as_zipfile() -> None:
-    def write(archive: zipfile.ZipFile) -> None:
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+def test_spooled_writer_writes_the_same_bytes_as_zipfile(compression: int) -> None:
+    def write(archive: zipfile.ZipFile | SpooledZipWriter) -> None:
         with archive:
             for index in range(0x10001):
                 info = zipfile.ZipInfo(f"{index:x}", (2022, 2, 2, 2, 2, 2))
+                info.compress_type = compression
                 info.extra = struct.pack("<HH", _EXTRA_ID, 1) + b"e"
                 info.comment = b"note" if index % 7 else b""
                 archive.writestr(info, b"data" if index % 3 else b"")
@@ -390,3 +396,35 @@ def test_spooled_writer_writes_the_same_bytes_as_zipfile() -> None:
 
     assert ours.getvalue() == expected.getvalue()
     assert b"PK\x06\x06" in ours.getvalue()[-200:]
+
+
+def test_writer_can_finish_after_close_with_an_open_member() -> None:
+    output = io.BytesIO()
+    writer = SpooledZipWriter(output)
+    member = writer.open(zipfile.ZipInfo("SKILL.md"), mode="w")
+    try:
+        member.write(b"saved skill")
+        with pytest.raises(ValueError, match="open writing handle"):
+            writer.close()
+    finally:
+        member.close()
+        writer.close()
+    writer.close()
+    with zipfile.ZipFile(io.BytesIO(output.getvalue())) as archive:
+        assert archive.read("SKILL.md") == b"saved skill"
+
+
+def test_import_does_not_write_a_probe_archive() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from unittest.mock import patch; "
+            "guard = patch('zipfile.ZipFile.writestr', side_effect=RuntimeError('import wrote ZIP')); "
+            "guard.start(); import onyx.file_processing.zip_index; guard.stop()",
+        ],
+        cwd=Path(__file__).resolve().parents[4],
+        check=True,
+        capture_output=True,
+        text=True,
+    )

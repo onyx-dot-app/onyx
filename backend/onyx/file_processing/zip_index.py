@@ -15,6 +15,7 @@ import sqlite3
 import struct
 import zipfile
 from collections.abc import Iterator
+from functools import cache
 from types import TracebackType
 from typing import IO, Literal, Self
 from zlib import crc32
@@ -40,6 +41,7 @@ _SCHEMA = (
 )
 
 
+@cache
 def _zipfile_shared_header_order() -> Literal["ASC", "DESC"]:
     """Probe the two tie orders used by supported zipfile patch releases."""
     output = io.BytesIO()
@@ -55,12 +57,10 @@ def _zipfile_shared_header_order() -> Literal["ASC", "DESC"]:
         return "DESC" if end_offset else "ASC"
 
 
-# Two entries once at import, independent of the size of any saved archive.
-_SHARED_HEADER_ORDER = _zipfile_shared_header_order()
 # Each entry ends at the next header, with the runtime's tie order.
 _END_OFFSETS = (
     "UPDATE entries SET end_offset = COALESCE(later.header, ?) FROM "  # noqa: S608 -- fixed ASC/DESC keywords only
-    f"(SELECT seq, LEAD(header) OVER (ORDER BY header, seq {_SHARED_HEADER_ORDER}) AS header "
+    "(SELECT seq, LEAD(header) OVER (ORDER BY header, seq {order}) AS header "
     "FROM entries) AS later WHERE entries.seq = later.seq"
 )
 
@@ -121,7 +121,9 @@ class ZipIndex:
                         for seq, (offset, info) in enumerate(self._records())
                     ),
                 )
-                self._db.execute(_END_OFFSETS, (start,))
+                self._db.execute(
+                    _END_OFFSETS.format(order=_zipfile_shared_header_order()), (start,)
+                )
         except BaseException:
             self.close()
             raise
@@ -312,7 +314,7 @@ class _UnkeptNames(dict[str, zipfile.ZipInfo]):
         pass
 
 
-class SpooledZipWriter(zipfile.ZipFile):
+class _SpooledZipFile(zipfile.ZipFile):
     """A ZIP writer that keeps written entries in SQLite, not in memory.
 
     It does not warn about duplicate names; callers reject them first.
@@ -332,5 +334,32 @@ class SpooledZipWriter(zipfile.ZipFile):
             super().close()
         finally:
             infos = self.filelist
-            if isinstance(infos, _SpooledInfos):
+            if self.fp is None and isinstance(infos, _SpooledInfos):
                 infos.close()
+
+
+class SpooledZipWriter:
+    """Write ZIP members with a disk-backed directory and no read interface."""
+
+    def __init__(self, file: IO[bytes]) -> None:
+        self._archive = _SpooledZipFile(file)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def open(self, info: zipfile.ZipInfo, mode: Literal["w"] = "w") -> IO[bytes]:
+        return self._archive.open(info, mode=mode)
+
+    def writestr(self, info: zipfile.ZipInfo | str, data: str | bytes) -> None:
+        self._archive.writestr(info, data)
+
+    def close(self) -> None:
+        self._archive.close()

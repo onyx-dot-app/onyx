@@ -206,7 +206,10 @@ The library preview of an external-app skill calls the same renderer
    Stored reads have no directory cap. `file_processing/zip_index.py` indexes entries
    in an anonymous SQLite file, preserving native zipfile reads and digest order.
    Its end-record and equal-offset handling match supported Python patch releases.
-   `SpooledZipWriter` keeps rewritten entry metadata on disk. Editor/history responses
+   The tie-order probe runs once on first use, not during import.
+   `SpooledZipWriter` exposes only member writes and close, and keeps entry metadata
+   on disk. A refused close with an open member keeps that metadata until the member
+   closes and the caller retries. Editor/history responses
    and sandbox file maps still allocate per file; only directory parsing is bounded.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
