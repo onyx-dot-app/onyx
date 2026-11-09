@@ -761,6 +761,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       initialValues={
         editValues ? { ...initialValues, ...editValues } : initialValues
       }
+      // Create is disabled while the form has errors, so they must exist
+      // before the first edit; fields still show theirs only once touched.
+      validateOnMount
       validationSchema={createConnectorValidationSchema(
         connector,
         // Edit mode leaves the manage groups alone, so it needs none.
