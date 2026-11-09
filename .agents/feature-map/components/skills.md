@@ -539,6 +539,10 @@ The library preview of an external-app skill calls the same renderer
     Empty folders become NULL; trailing slashes are removed. Absolute paths and
     dot segments are rejected.
     Hook registration remains unavailable until the self-hosted webhook ticket ships.
+    `skills/marketplace/github_webhooks.py`, called by the adapter, resolves exact
+    branch/tag refs, refuses pinned or ambiguous refs, and creates or updates a hook
+    by its exact callback URL. Retries reuse that hook after a lost response.
+    Transport uses signed JSON, certificate verification, and no redirects.
     `webhook_server/marketplace.py` serves a separate, bounded receiver outside
     connector routing. The provider adapter verifies the encrypted secret,
     repository, hook ID and exact registered ref. `db/marketplace_webhook.py`

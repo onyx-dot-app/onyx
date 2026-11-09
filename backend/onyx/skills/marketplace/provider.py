@@ -8,6 +8,7 @@ from onyx.db.models import Marketplace
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.github_auth import github_authorization_header
+from onyx.skills.marketplace.github_webhooks import GitHubWebhooks
 from onyx.skills.marketplace.models import MarketplaceArchive, MarketplaceProvider
 from onyx.utils.github import (
     GITHUB_ARCHIVE_MAX_BYTES,
@@ -41,6 +42,12 @@ class MarketplaceProviderAdapter(Protocol):
     ) -> WebhookResult: ...
 
     def resolve_revision(self) -> str: ...
+
+    def resolve_webhook_ref(self) -> str: ...
+
+    def register_webhook(self, callback_url: str) -> str: ...
+
+    def remove_webhook(self) -> None: ...
 
     def fetch_if_changed(self, *, force: bool = False) -> MarketplaceArchive | None: ...
 
@@ -123,6 +130,31 @@ class GitHubMarketplaceAdapter(MarketplaceProviderAdapter):
         return github_authorization_header(
             self.tenant_id, self.marketplace.login_user_id, require_user_connection=True
         )
+
+    def _webhooks(self) -> GitHubWebhooks:
+        authorization = self._authorization()
+        if authorization is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Connect GitHub before configuring push updates.",
+            )
+        return GitHubWebhooks(self.marketplace.provider_config, authorization)
+
+    def resolve_webhook_ref(self) -> str:
+        return self._webhooks().resolve_ref()
+
+    def register_webhook(self, callback_url: str) -> str:
+        secret = self.marketplace.webhook_secret
+        if secret is None or self.marketplace.webhook_ref is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Save webhook signing state before registration.",
+            )
+        return self._webhooks().ensure(callback_url, secret.get_value(apply_mask=False))
+
+    def remove_webhook(self) -> None:
+        if self.marketplace.webhook_id is not None:
+            self._webhooks().remove(self.marketplace.webhook_id)
 
     def _source(self) -> GitHubSource:
         config = self.marketplace.provider_config

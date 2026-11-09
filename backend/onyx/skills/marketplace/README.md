@@ -1,7 +1,19 @@
 # Marketplace archive processing
 
 This package provides sync and preview building blocks. The marketplace API uses
-its provider adapter and reader. The one-time GitHub import remains separate.
+its provider adapter and reader.
+
+## Webhook setup transport
+
+The GitHub adapter resolves an exact branch or tag for registration. `HEAD` uses
+the current default branch. Pinned commits and ambiguous branch/tag names cannot
+register. Explicit `refs/heads/` or `refs/tags/` names resolve ambiguity.
+Registration lists hooks by the exact callback URL and updates an existing hook.
+This also recovers a lost creation response. Hooks use signed JSON with certificate
+verification. GitHub errors use controlled messages; credentials and provider
+response bodies are not returned. API setup must save signing state before calling
+GitHub, then recheck authority and source identity before saving the hook ID.
+Registration controls remain disabled until the management API is connected.
 
 ## Resource limits
 
