@@ -5,10 +5,13 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
+import { Permission } from "@/lib/types";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
 let mockIsAdmin = true;
+let mockPermissions: string[] = [];
+let mockAdminCapabilities: string[] = [];
 const mockUpdateSkillShares = jest.fn();
 const mockLoadSkill = jest.fn();
 jest.mock("@/lib/fetcher", () => ({
@@ -16,7 +19,14 @@ jest.mock("@/lib/fetcher", () => ({
 }));
 
 jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ isAdmin: mockIsAdmin, user: null }),
+  useUser: () => ({
+    isAdmin: mockIsAdmin,
+    user: null,
+    permissions: mockIsAdmin
+      ? [Permission.FULL_ADMIN_PANEL_ACCESS]
+      : mockPermissions,
+    adminCapabilities: mockAdminCapabilities,
+  }),
 }));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
@@ -34,6 +44,8 @@ jest.mock("@/lib/skills/api", () => ({
 describe("ShareSkillModal", () => {
   beforeEach(() => {
     mockIsAdmin = true;
+    mockPermissions = [];
+    mockAdminCapabilities = [];
     mockLoadSkill
       .mockReset()
       .mockResolvedValue(customFixture({ user_permission: "OWNER" }));
@@ -152,49 +164,55 @@ describe("ShareSkillModal", () => {
     );
   });
 
-  it("lets non-admin editors save invitations without changing organization access", async () => {
-    mockIsAdmin = false;
-    mockLoadSkill.mockResolvedValue(
-      customFixture({
-        user_permission: "EDITOR",
-        public_permission: null,
-        user_shares: [
-          {
-            user: { id: "invitee", email: "invitee@example.com" },
-            permission: "VIEWER",
-          },
-        ],
-      })
-    );
-    const user = setupUser();
-    render(
-      <ShareSkillModal
-        mode="edit"
-        skillId="custom-1"
-        open
-        onClose={jest.fn()}
-        onSaved={jest.fn()}
-      />
-    );
-    await screen.findByText("invitee@example.com");
-    await user.click(
-      screen.getByRole("button", {
-        name: "Update access for invitee@example.com",
-      })
-    );
-    fireEvent.click(
-      await screen.findByRole("option", { name: "Remove Access" })
-    );
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
-        installation_policy: undefined,
-        public_permission: undefined,
-        user_shares: [],
-        group_shares: [],
-      })
-    );
-  });
+  it.each(["OWNER", "EDITOR"] as const)(
+    "lets non-global %s save invitations without clearing public access",
+    async (permission) => {
+      mockIsAdmin = false;
+      mockLoadSkill.mockResolvedValue(
+        customFixture({
+          user_permission: permission,
+          public_permission: "VIEWER",
+          user_shares: [
+            {
+              user: { id: "invitee", email: "invitee@example.com" },
+              permission: "VIEWER",
+            },
+          ],
+        })
+      );
+      const user = setupUser();
+      render(
+        <ShareSkillModal
+          mode="edit"
+          skillId="custom-1"
+          open
+          onClose={jest.fn()}
+          onSaved={jest.fn()}
+        />
+      );
+      await user.click(
+        await screen.findByRole("button", { name: "Manage individual access" })
+      );
+      await screen.findByText("invitee@example.com");
+      await user.click(
+        screen.getByRole("button", {
+          name: "Update access for invitee@example.com",
+        })
+      );
+      fireEvent.click(
+        await screen.findByRole("option", { name: "Remove Access" })
+      );
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
+          installation_policy: undefined,
+          public_permission: undefined,
+          user_shares: [],
+          group_shares: [],
+        })
+      );
+    }
+  );
 
   it.each([false, true])(
     "lets owners revoke public user and group editors (app-associated: %s)",
@@ -324,6 +342,66 @@ describe("ShareSkillModal", () => {
         user_shares: [],
         group_shares: [],
       })
+    );
+  });
+  it.each(["basic owner", "scoped manager", "permissions loading"])(
+    "disables company visibility for %s without disabling individual access",
+    async (actor) => {
+      mockIsAdmin = false;
+      mockAdminCapabilities =
+        actor === "scoped manager" ? [Permission.MANAGE_SKILLS] : [];
+      render(
+        <ShareSkillModal
+          mode="create"
+          open
+          draft={customFixture({
+            user_permission: "OWNER",
+            public_permission: null,
+          })}
+          onClose={jest.fn()}
+          onSaveDraft={jest.fn()}
+        />
+      );
+      expect(
+        screen.getByRole("button", { name: "Change sharing scope" })
+      ).toBeDisabled();
+      expect(
+        screen.queryByRole("group", { name: "Installation" })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", {
+          name: "Add users, groups, and accounts",
+        })
+      ).toBeEnabled();
+    }
+  );
+
+  it("lets a global skill manager without full admin set company policy", async () => {
+    mockIsAdmin = false;
+    mockPermissions = [Permission.MANAGE_SKILLS];
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(await screen.findByRole("button", { name: "Required" }));
+    expect(
+      screen.getByRole("button", { name: "Change sharing scope" })
+    ).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({
+          installation_policy: "REQUIRED",
+          public_permission: "VIEWER",
+        })
+      )
     );
   });
 });
