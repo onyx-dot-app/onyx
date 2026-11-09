@@ -50,7 +50,8 @@
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
-  `.template` file is rejected with a message.
+  `.template` file is rejected with a message. A bundle over a size or file
+  count limit is rejected with a 413 that names the limit.
 - Turning on a skill whose name another enabled skill uses returns a name
   conflict. The client can retry with `replace_conflict` to switch skills.
 - A required skill rejects a toggle.
@@ -180,6 +181,15 @@ The library preview of an external-app skill calls the same renderer
    after `skills/validation.py:validate_stored_custom_skill` passes for an
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the same bundle.
+   Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
+   Count all non-directory archive entries, including ignored files. Check
+   both the incoming and normalized ZIP sizes. Raw uploads use the per-file
+   read cap; ZIP uploads use the ZIP cap.
+   Stored-bundle reads (`skills/validation.py:load_stored_custom_skill_bundle`)
+   skip the upload ZIP-size and file-count limits. Their separate
+   `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
+   Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
+   Stored reads retain the existing per-file and expanded-total limits.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
