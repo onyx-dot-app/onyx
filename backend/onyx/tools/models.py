@@ -238,7 +238,8 @@ class ToolCallInfo(BaseModel):
     tab_index: int
     tool_name: str
     tool_call_id: str
-    tool_id: int
+    # None for a tool that has no tool row, such as code mode.
+    tool_id: int | None
     reasoning_tokens: str | None
     tool_call_arguments: dict[str, Any]
     tool_call_response: str

@@ -4,11 +4,12 @@ import json
 from collections.abc import Iterable, Mapping
 from concurrent.futures import Future
 from functools import cached_property
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 from pydantic_monty import FunctionSnapshot, FutureSnapshot
 
+from onyx.agents.tools import ToolInvocation
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.models import Message, ToolResultMessage
 from onyx.tools.models import (
@@ -20,6 +21,7 @@ from onyx.tools.models import (
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 
 # Durable details of the tools that programs can call.
 CodeModeCallDetails = Annotated[
@@ -33,6 +35,9 @@ CodeModeCallDetails = Annotated[
     | ToolExecutionError,
     Field(discriminator="type"),
 ]
+CODE_MODE_CALL_DETAIL_TYPES: tuple[type[BaseModel], ...] = get_args(
+    get_args(CodeModeCallDetails)[0]
+)
 
 
 # How a program ended.
@@ -45,6 +50,7 @@ CodeModeStatus = Literal[ClosedStatus, "running"]
 # How a call ended: `running` calls had not ended when the observation ended;
 # `unfinished` calls were still running when the program ended.
 CodeModeCallState = Literal["running", "ok", "error", "unfinished"]
+UNFINISHED_CALL_MESSAGE = "The call did not finish before the program ended."
 
 
 class CodeModeCall(BaseModel):
@@ -65,10 +71,29 @@ class CodeModeCall(BaseModel):
     content: str = ""
     state: CodeModeCallState
     details: CodeModeCallDetails | None = None
+    # The planning decisions of a search call.
+    metadata: SearchPlanningResult | None = None
 
     @property
     def is_error(self) -> bool:
         return self.state in ("error", "unfinished")
+
+    def failed(self, message: str) -> "CodeModeCall":
+        """This call, ended with an error; the error details make clients show it
+        as failed."""
+        return self.model_copy(
+            update={
+                "state": "error",
+                "content": message,
+                "details": ToolExecutionError(message=message),
+            }
+        )
+
+    def unfinished(self) -> "CodeModeCall":
+        """This call, recorded as still running when its program ended."""
+        return self.failed(UNFINISHED_CALL_MESSAGE).model_copy(
+            update={"state": "unfinished"}
+        )
 
 
 def json_text(value: JsonValue) -> str:
@@ -102,6 +127,49 @@ class StoreCommit(BaseModel):
         return sum(entry_bytes(key, value) for key, value in self.writes.items())
 
 
+class LostStoreWrites(BaseModel):
+    """Commits that the store dropped because the commit each one follows was
+    never saved, as the first program after the drop reports them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The highest ordinal of the dropped commits. The report covers every
+    # dropped commit up to it, so its size does not grow with the commits.
+    through: int
+    # The keys that the dropped commits wrote, cut to a bounded length.
+    keys: tuple[str, ...]
+    # Keys left out of `keys` by the bound.
+    more_keys: int = 0
+
+    @property
+    def note(self) -> str:
+        keys = ", ".join(self.keys)
+        more = f", and {self.more_keys} more" if self.more_keys else ""
+        return (
+            "Store writes of an earlier program were discarded because the "
+            f"program before it did not finish saving its own: {keys}{more}. "
+            "load() returns the values from before those writes."
+        )
+
+
+STOPPED_BEFORE_END = "the program was stopped before it ended"
+
+
+class DiscardedWrites(BaseModel):
+    """Keys of store() writes that did not commit, and why."""
+
+    model_config = ConfigDict(frozen=True)
+
+    keys: tuple[str, ...]
+    reason: str
+
+    @property
+    def note(self) -> str | None:
+        if not self.keys:
+            return None
+        return f"Store writes discarded because {self.reason}: {', '.join(self.keys)}."
+
+
 class CellWindow(BaseModel):
     """What a cell did in one time window."""
 
@@ -112,6 +180,13 @@ class CellWindow(BaseModel):
     # programs read the store as the fold of commits over the conversation, in
     # ordinal order (code_mode/store.py).
     commit: StoreCommit | None = None
+    # Calls the cell had started by the end of the window.
+    tool_call_count: int = 0
+    # Set on the window that reports the program's end. `result` is the repr()
+    # of the JSON copy of the final expression, when it is not None; a value
+    # that is not JSON data or is too large gives `error` instead.
+    result: str | None = None
+    error: str | None = None
 
 
 # `suspended`: the run paused, for example to wait for a subagent.
@@ -144,10 +219,16 @@ class CodeModeExecutionResult(CellWindow):
     duration_seconds: float = 0.0
     # Set when the response ended after this observation reported a running cell.
     closing: CellClosing | None = None
+    # Set on observation 0 of the first program after the store dropped commits.
+    lost_store_writes: LostStoreWrites | None = None
 
     def windows(self) -> list[CellWindow]:
         """The observation's window, then its closing record's."""
         return [self] if self.closing is None else [self, self.closing]
+
+    def all_calls(self) -> list[CodeModeCall]:
+        """The calls of every window, in window order."""
+        return [call for window in self.windows() for call in window.calls]
 
 
 def code_mode_results(
@@ -160,6 +241,44 @@ def code_mode_results(
         if isinstance(message, ToolResultMessage)
         and isinstance(message.details, CodeModeExecutionResult)
     ]
+
+
+# Progress details, sent through ToolInvocation.update while the program runs.
+# They are not saved; the final CodeModeExecutionResult holds the same information.
+
+
+class CodeModeCallStarted(BaseModel):
+    """A call the program started; it has no result yet."""
+
+    type: Literal["code_mode_call_started"] = "code_mode_call_started"
+    call: CodeModeCall
+
+
+class CodeModeCallProgress(BaseModel):
+    """Progress details of an inner tool, forwarded unchanged."""
+
+    type: Literal["code_mode_call_progress"] = "code_mode_call_progress"
+    index: int
+    content: str = ""
+    details: SerializeAsAny[BaseModel] | None = None
+
+
+class CodeModeCallFinished(BaseModel):
+    type: Literal["code_mode_call_finished"] = "code_mode_call_finished"
+    call: CodeModeCall
+
+
+class CodeModeStdout(BaseModel):
+    """New text the program printed."""
+
+    type: Literal["code_mode_stdout"] = "code_mode_stdout"
+    text: str
+
+
+# What a cell reports to its observer while it runs.
+CellEvent = (
+    CodeModeCallStarted | CodeModeCallProgress | CodeModeCallFinished | CodeModeStdout
+)
 
 
 # Compute time one program may use. The sandbox pool is shared by every program,
@@ -208,6 +327,8 @@ class SandboxResult(BaseModel):
     result: str | None = None
     error: str | None = None
     duration_seconds: float = 0.0
+    # Non-fatal type checker diagnostics, kept for failed executions.
+    type_check_notes: str | None = None
     # The program's store() writes take effect: it completed, or stopped at an
     # exception it raised. A program that was stopped, timed out or did not start
     # does not commit.
@@ -293,6 +414,9 @@ class StoreSnapshot(BaseModel):
     last_ordinal: int = 0
     # The ordinal of the last commit that `values` include; 0 for none.
     last_applied: int = 0
+    # Commits the fold dropped that no saved observation reported yet, in
+    # ordinal order.
+    dropped: tuple[StoreCommit, ...] = ()
 
 
 class StubParameter(BaseModel):
@@ -354,3 +478,49 @@ class SearchableFunction(BaseModel):
     stub: str
     # Text that the search matches: the name (weighted), namespace and description.
     text: str
+
+
+class CellCallRecord(BaseModel):
+    """A nested call of a cell."""
+
+    # As started, then as it ended (bounded).
+    call: CodeModeCall
+    # The windows in which the call started and ended; None while it runs.
+    started_in: int
+    ended_in: int | None = None
+    # The call's thread has not returned; a call can ignore cancellation.
+    thread_alive: bool = True
+
+    def in_window(self, window: int) -> bool:
+        """Whether the window reports the call: it ended in it, or still runs."""
+        return self.ended_in is None or self.ended_in == window
+
+
+class CellObserver(BaseModel):
+    """The tool call that observes a cell."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    invocation: ToolInvocation
+    number: int
+    # Tokens of output that the observation returns.
+    max_tokens: int
+
+
+class ObservationCut(BaseModel):
+    """An ended observation, taken under the cell lock and formatted after it, so
+    tokenizing large output does not hold up the cell."""
+
+    model_config = ConfigDict(frozen=True)
+
+    call_id: str
+    # The parts as collected; `saved` holds them cut for saving.
+    details: CodeModeExecutionResult
+    saved: CodeModeExecutionResult
+    max_tokens: int
+    # Every call of the cell, earlier observations' included, in index order.
+    cell_calls: list[CodeModeCall]
+    # Set when the observation reports the program's end.
+    end: SandboxResult | None
+    discarded: DiscardedWrites | None
+    elided_chars: int

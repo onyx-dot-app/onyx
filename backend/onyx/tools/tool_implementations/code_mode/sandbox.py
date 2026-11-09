@@ -118,12 +118,20 @@ DUMP_MEMORY_MESSAGE = (
 # Tool calls of one program that run at the same time, each on its own thread.
 # Later calls wait in order for a free slot.
 MAX_CONCURRENT_TOOL_CALLS = 16
-# Threads of tool calls of all programs in the server process. Programs that
-# want threads share them equally. A call that finds no thread within its
-# program's share waits in its program's queue. A call that ignores cancellation
-# keeps its thread until it returns. A tool that runs its own parallel work, such
-# as a search that runs its queries in parallel, adds its threads to its call's.
-MAX_TOOL_CALL_THREADS = 192
+# Cells whose program has not ended, in the server process
+# (cells._RunningCells); each holds a driver thread. Programs give up their
+# sandbox worker while they wait on tools, so most of these cells wait on
+# tools, not on a worker.
+MAX_RUNNING_CELLS = 64
+# Threads of tool calls of all programs in the server process: a share of 3 for
+# each running cell. Programs that want threads share them equally. A call that
+# finds no thread within its program's share waits in its program's queue. A
+# call that ignores cancellation keeps its thread until it returns.
+MAX_TOOL_CALL_THREADS = MAX_RUNNING_CELLS * 3
+# So at its limits a server process runs MAX_RUNNING_CELLS driver threads and
+# MAX_TOOL_CALL_THREADS call threads for code mode, plus the threads of tools
+# that run their own parallel work, such as a search that runs its queries in
+# parallel.
 # A call that returns this long after its program ended held its thread while
 # ignoring cancellation; it is logged.
 LATE_CALL_WARNING_SECONDS = 30.0
@@ -267,6 +275,11 @@ class StdoutCollector:
         return text
 
     @property
+    def dropped(self) -> int:
+        """Characters the collector dropped from the middle."""
+        return self._dropped
+
+    @property
     def text(self) -> str:
         return self.cut(self._head_limit + self._tail_limit)
 
@@ -349,6 +362,7 @@ def sandbox_pool() -> Monty:
                 sandbox_workers=MAX_SANDBOX_PROCESSES,
                 suspended_bytes=MAX_SUSPENDED_BYTES,
                 tool_call_threads=MAX_TOOL_CALL_THREADS,
+                running_cells=MAX_RUNNING_CELLS,
             )
         return _pool
 
@@ -764,6 +778,8 @@ class _Run:
         # Bytes of the program's last dump; a dump this large that cannot fit is
         # not attempted.
         self.last_dump_bytes = 0
+        # Non-fatal type checker diagnostics of the program.
+        self.type_check_notes: str | None = None
 
     def start_clock(self) -> None:
         if self.started is None:
@@ -1092,6 +1108,7 @@ def _start(
                     status="failed",
                     error="Type check failed; the program did not run.\n" + text,
                 )
+            run.type_check_notes = text
             return session.feed_start(
                 code, print_callback=run.print_callback, skip_type_check=True
             )
@@ -1325,6 +1342,9 @@ def execute_program(
             result=bounded(result, "code mode result"),
             error=bounded(error, "code mode error"),
             duration_seconds=run.elapsed,
+            type_check_notes=None
+            if status == "completed"
+            else bounded(run.type_check_notes, "type checker notes"),
             # A stop can surface as an exception that the program raises.
             commits_store=status == "completed"
             or (raised and run.abort_reason() is None),

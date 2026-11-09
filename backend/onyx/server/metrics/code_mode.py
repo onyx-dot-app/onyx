@@ -1,17 +1,18 @@
 """Prometheus metrics for code mode capacity in one API server process.
 
-The sandbox worker pool, the dumped-program budget and the tool call thread
-budget are per process. The gauges of these budgets each have a matching
-`_limit` gauge to compare against; they describe the pod and have no tenant
-label. Counters of the use of this capacity carry a `tenant_id` label, so that
-`rate()` gives each tenant's share. Other labels are closed enums; no user
-labels.
+The sandbox worker pool, the dumped-program budget, the tool call thread budget
+and the running cell budget are per process. The gauges of these budgets each
+have a matching `_limit` gauge to compare against; they describe the pod and
+have no tenant label. Counters of the use of this capacity carry a `tenant_id`
+label, so that `rate()` gives each tenant's share. Other labels are closed
+enums; no user labels.
 """
 
 from typing import Literal
 
 from prometheus_client import Counter, Gauge, Histogram
 
+from onyx.tools.tool_implementations.code_mode.models import ClosedStatus
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 WorkerLossReason = Literal["crashed", "killed", "out_of_memory"]
@@ -72,6 +73,53 @@ TOOL_CALL_THREADS_LIMIT = Gauge(
     "onyx_code_mode_tool_call_threads_limit",
     "Budget of threads for tool calls of programs.",
 )
+CELLS_RUNNING = Gauge(
+    "onyx_code_mode_cells_running",
+    "Cells whose program has not ended, each with a driver thread.",
+)
+CELLS_LIMIT = Gauge(
+    "onyx_code_mode_cells_limit",
+    "Cells whose program has not ended that the process allows.",
+)
+CELL_BUSY_REJECTIONS = Counter(
+    "onyx_code_mode_cell_busy_rejections_total",
+    "New cells refused because the process had its limit of running cells, by tenant.",
+    ["tenant_id"],
+)
+CELL_SECONDS = Counter(
+    "onyx_code_mode_cell_seconds_total",
+    "Seconds that programs held a running-cell slot, by tenant.",
+    ["tenant_id"],
+)
+PROGRAMS = Counter(
+    "onyx_code_mode_programs_total",
+    "Programs that ended, by tenant and status.",
+    ["tenant_id", "status"],
+)
+PROGRAM_DURATION = Histogram(
+    "onyx_code_mode_program_duration_seconds",
+    "Time from a program's start to its end, waiting for tool calls included.",
+    # Dense from 2.5 s to 10 s, where the p95 of typical programs falls.
+    buckets=(
+        0.05,
+        0.1,
+        0.25,
+        0.5,
+        1.0,
+        2.5,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        8.0,
+        10.0,
+        30.0,
+        60.0,
+        120.0,
+        300.0,
+        900.0,
+    ),
+)
 PROGRAM_START_DURATION = Histogram(
     "onyx_code_mode_program_start_duration_seconds",
     "Time to type-check a program and run it to its first wait or end.",
@@ -80,11 +128,23 @@ PROGRAM_START_DURATION = Histogram(
 
 
 def set_code_mode_limits(
-    *, sandbox_workers: int, suspended_bytes: int, tool_call_threads: int
+    *,
+    sandbox_workers: int,
+    suspended_bytes: int,
+    tool_call_threads: int,
+    running_cells: int,
 ) -> None:
     SANDBOX_WORKERS_LIMIT.set(sandbox_workers)
     SUSPENDED_BYTES_LIMIT.set(suspended_bytes)
     TOOL_CALL_THREADS_LIMIT.set(tool_call_threads)
+    CELLS_LIMIT.set(running_cells)
+
+
+def observe_program_end(
+    tenant_id: str, status: ClosedStatus, duration_seconds: float
+) -> None:
+    PROGRAMS.labels(tenant_id=tenant_id, status=status).inc()
+    PROGRAM_DURATION.observe(duration_seconds)
 
 
 def count_worker_lost(reason: WorkerLossReason) -> None:

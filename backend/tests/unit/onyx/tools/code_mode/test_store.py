@@ -6,17 +6,20 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CellClosing,
     CodeModeExecutionResult,
     CodeModeStatus,
+    LostStoreWrites,
     StoreCommit,
     StoreSnapshot,
     json_text,
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     MAX_COMMITTED_BYTES,
+    MAX_LOST_KEYS_CHARS,
     MAX_PATH_KEY_CHARS,
     MAX_VALUE_DEPTH,
     ProgramStore,
     changed_writes,
     json_value,
+    lost_store_writes,
     store_snapshot,
 )
 
@@ -115,6 +118,42 @@ def test_a_commit_applies_only_after_the_commit_it_follows() -> None:
     messages.append(_execution("3", StoreCommit(ordinal=3, follows=0, writes={"c": 3})))
     assert stored_values(messages) == {"c": 3}
     assert store_snapshot(messages).committed_bytes == len("c") + len("3")
+
+
+def test_dropped_commits_are_listed_until_an_observation_reports_them() -> None:
+    dropped = StoreCommit(ordinal=2, follows=1, writes={"b": 2, "gone": None})
+    messages: list[Message] = [_execution("2", dropped)]
+    assert store_snapshot(messages).dropped == (dropped,)
+    lost = lost_store_writes(store_snapshot(messages).dropped)
+    assert lost == LostStoreWrites(through=2, keys=("b", "gone"))
+    # Commits that this response already reported are not listed again.
+    assert store_snapshot(messages, reported_through=2).dropped == ()
+    # Nor are commits that a saved observation reported.
+    report = ToolResultMessage(
+        tool_call_id="3",
+        tool_name="execute_code",
+        content="",
+        details=CodeModeExecutionResult(
+            cell_id=2, code="", status="completed", lost_store_writes=lost
+        ),
+    )
+    assert store_snapshot([*messages, report]).dropped == ()
+
+
+def test_the_report_of_dropped_commits_names_keys_within_a_bound() -> None:
+    keys = [f"key_{index:03}_" + "x" * 40 for index in range(50)]
+    lost = lost_store_writes(
+        [StoreCommit(ordinal=2, follows=1, writes=dict.fromkeys(keys, 1))]
+    )
+    assert lost is not None
+    assert 0 < len(lost.keys) < len(keys)
+    assert lost.keys == tuple(keys[: len(lost.keys)])
+    assert sum(len(key) + 2 for key in lost.keys) <= MAX_LOST_KEYS_CHARS
+    assert lost.note.endswith(
+        f", and {len(keys) - len(lost.keys)} more. load() "
+        "returns the values from before those writes."
+    )
+    assert lost_store_writes([]) is None
 
 
 def test_json_value_copies_and_converts_tuples() -> None:

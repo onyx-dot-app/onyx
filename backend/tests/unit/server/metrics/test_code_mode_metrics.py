@@ -18,6 +18,7 @@ def test_the_pool_sets_every_limit_gauge(monkeypatch: pytest.MonkeyPatch) -> Non
         metrics.SANDBOX_WORKERS_LIMIT,
         metrics.SUSPENDED_BYTES_LIMIT,
         metrics.TOOL_CALL_THREADS_LIMIT,
+        metrics.CELLS_LIMIT,
     ):
         gauge.set(0)
     monkeypatch.setattr(sandbox, "_pool", None)
@@ -32,3 +33,14 @@ def test_the_pool_sets_every_limit_gauge(monkeypatch: pytest.MonkeyPatch) -> Non
     assert _value("onyx_code_mode_tool_call_threads_limit") == (
         sandbox.MAX_TOOL_CALL_THREADS
     )
+    assert _value("onyx_code_mode_cells_limit") == sandbox.MAX_RUNNING_CELLS
+
+
+def test_program_duration_buckets_resolve_seconds_near_the_typical_p95() -> None:
+    bounds = {
+        float(sample.labels["le"])
+        for family in metrics.PROGRAM_DURATION.collect()
+        for sample in family.samples
+        if sample.name.endswith("_bucket")
+    }
+    assert {2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0} <= bounds
