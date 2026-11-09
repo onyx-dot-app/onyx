@@ -1003,6 +1003,7 @@ class SkillInstallationPolicy(str, PyEnum):
     AVAILABLE = "AVAILABLE"
     DEFAULT = "DEFAULT"
     REQUIRED = "REQUIRED"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
 
 
 class ConnectorEventType(str, PyEnum):

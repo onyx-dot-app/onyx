@@ -654,6 +654,11 @@ def set_skill_installation_policy(
     policy: SkillInstallationPolicy,
     db_session: Session,
 ) -> None:
+    if policy == SkillInstallationPolicy.NOT_AVAILABLE:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The Not available installation policy is not supported yet.",
+        )
     if policy != SkillInstallationPolicy.AVAILABLE and not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
