@@ -508,6 +508,8 @@ The library preview of an external-app skill calls the same renderer
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.
+    Its namespace uses tenant context, not PostgreSQL search_path, because schema
+    translation can leave current_schema() identical across tenants.
     G3 must use that same lock for manual name checks. S5 owns job
     freshness. Retirement releases enabled preferences and automatic-policy names.
     Access materialization and audience

@@ -32,6 +32,7 @@ from onyx.skills.marketplace.read_models import (
     ReadySkill,
     UnsupportedPlugin,
 )
+from shared_configs.contextvars import get_current_tenant_id
 
 
 def fetch_marketplace_sync_state(
@@ -152,7 +153,7 @@ def reconcile_marketplace__no_commit(
             select(
                 func.pg_advisory_xact_lock(
                     func.hashtextextended(
-                        func.current_schema() + ":skill-library:" + library, 0
+                        get_current_tenant_id() + ":skill-library:" + library, 0
                     )
                 )
             )

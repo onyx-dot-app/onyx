@@ -42,6 +42,7 @@ from onyx.skills.marketplace.read_models import (
 from onyx.skills.marketplace.reader import read_marketplace_archive
 from onyx.skills.metadata import parse_skill_document
 from onyx.utils.bundle import compute_bundle_metadata
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 from tests.unit.onyx.skills.marketplace_fixtures import CLAUDE, _archive, _catalog, _md
 
@@ -613,3 +614,37 @@ def test_waiting_sync_reads_committed_version(
         result = future.result(timeout=15)
     assert not result.changed_skill_ids
     assert len(list(session.scalars(SkillVersionAdapter(skill).versions()))) == 2
+
+
+def test_library_lock_uses_tenant_identity_with_shared_search_path(
+    session: Session, marketplace: Marketplace, isolated_engine: Engine
+) -> None:
+    other = Marketplace(
+        name="Other tenant catalog",
+        provider=MarketplaceProvider.GITHUB,
+        provider_config=marketplace.provider_config,
+    )
+    session.add(other)
+    session.commit()
+    first_id, second_id = marketplace.id, other.id
+    schema = session.scalar(select(func.current_schema()))
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(f"library_first_{uuid4().hex}")
+    try:
+        reconcile_marketplace__no_commit(
+            first_id, catalog(), revision="first", staged={}, db_session=session
+        )
+        with Session(isolated_engine) as second:
+            second.execute(
+                text("SELECT set_config('search_path', :schema, true)"),
+                {"schema": schema},
+            )
+            assert second.scalar(select(func.current_schema())) == schema
+            second.execute(text("SET LOCAL statement_timeout = '1s'"))
+            CURRENT_TENANT_ID_CONTEXTVAR.set(f"library_second_{uuid4().hex}")
+            result = reconcile_marketplace__no_commit(
+                second_id, catalog(), revision="second", staged={}, db_session=second
+            )
+            assert result.status == "applied"
+    finally:
+        session.rollback()
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
