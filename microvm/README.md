@@ -5,7 +5,7 @@ Go module that runs Onyx Craft micro-VMs on Firecracker. Linear project P-ENG-22
 - `cmd/host-agent/`: the host agent. One process per Craft node. It runs the Firecracker VMs.
 - `proto/hostagent/v1/`: the gRPC API of the host agent, with the generated Go code.
 - `internal/`: the agent packages.
-- The guest daemon (ENG-4571) will be `cmd/guest-daemon/` in this module.
+- `cmd/guest-daemon/`: the guest daemon (runs inside each VM; see its README). `cmd/egress-relay/`: the in-guest egress relay.
 
 Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SANDBOX_RUNTIME=firecracker`.
 
