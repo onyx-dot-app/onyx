@@ -35,7 +35,7 @@ DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_TOTAL_MAX_BYTES") or 100 * 1024 * 1024
 )
 DEFAULT_STORED_ZIP_MAX_BYTES: Final[int] = int(
-    os.environ.get("SKILL_BUNDLE_STORED_ZIP_MAX_BYTES") or 100 * 1024 * 1024
+    os.environ.get("SKILL_BUNDLE_STORED_ZIP_MAX_BYTES") or DEFAULT_TOTAL_MAX_BYTES
 )
 DEFAULT_ZIP_MAX_BYTES: Final[int] = min(
     int(os.environ.get("SKILL_BUNDLE_ZIP_MAX_BYTES") or 25 * 1024 * 1024),

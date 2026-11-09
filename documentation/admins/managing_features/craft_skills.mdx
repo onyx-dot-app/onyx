@@ -149,9 +149,10 @@ with a `reason` for each refusal.
 Repository-wide GitHub size checks can reject the whole request with HTTP 413 before individual Skills are inspected.
 Previously saved Skills keep the existing per-file and expanded-total limits.
 Lowering the upload ZIP-size or file-count limit does not change stored-bundle validation.
-Stored ZIP reads have a separate 100 MiB allowance, set by `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`.
+Stored ZIP reads default to `SKILL_BUNDLE_TOTAL_MAX_BYTES` (100 MiB unless configured).
+Set `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` to choose a separate stored ZIP allowance.
 Keep this allowance large enough for your existing bundles when you lower upload limits.
-If you previously allowed ZIPs above 100 MiB, set this allowance before upgrading.
+An existing expanded-total setting above 100 MiB also preserves that stored ZIP allowance after upgrading.
 Stored reads have no file-list size limit. Onyx applies the current upload limits when you save the Skill again.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,

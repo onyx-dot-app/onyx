@@ -201,6 +201,8 @@ The library preview of an external-app skill calls the same renderer
    Stored-bundle reads (`skills/validation.py:load_stored_custom_skill_bundle`)
    skip the upload ZIP-size and file-count limits. Their separate
    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
+   When unset, it inherits `SKILL_BUNDLE_TOTAL_MAX_BYTES`, the previous stored-read
+   allowance, including operator values above 100 MiB.
    Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
    Stored reads retain the existing per-file and expanded-total limits.
    New upload inputs have a 1 MiB central-directory cap before parsing. Stored reads
