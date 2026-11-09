@@ -245,18 +245,24 @@ class OnyxOAuthProvider(OAuthProvider):
             document = await _cimd_fetcher(client_id).fetch(client_id)
             if str(document.client_id) != client_id:
                 return None
+            redirect_uris = [
+                AnyUrl(validate_oauth_url(uri, allow_query=True))
+                for uri in document.redirect_uris
+            ]
+            # The token endpoint only serves public PKCE clients. A client that signs
+            # token requests (ChatGPT) is served as public only when no local app
+            # can receive its codes on a loopback redirect.
+            if document.token_endpoint_auth_method != "none" and any(
+                is_loopback_host(uri.host) for uri in redirect_uris
+            ):
+                return None
             client = LoopbackRedirectOAuthClient(
                 client_id=client_id,
                 client_name=document.client_name or urlsplit(client_id).netloc,
-                redirect_uris=[
-                    AnyUrl(validate_oauth_url(uri, allow_query=True))
-                    for uri in document.redirect_uris
-                ],
+                redirect_uris=redirect_uris,
                 grant_types=document.grant_types,
                 response_types=document.response_types,
                 scope=document.scope or OAUTH_PROVIDER_SCOPE,
-                # The token endpoint only serves public PKCE clients, so CIMD clients
-                # that also support private_key_jwt (ChatGPT) are served as public.
                 token_endpoint_auth_method="none",
             )
             validate_public_oauth_client(client)
