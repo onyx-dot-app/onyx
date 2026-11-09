@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import zipfile
 from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +15,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import Skill, User, UserGroup
 from onyx.db.skill import set_skill_enabled_for_user
+from onyx.file_store.file_store import get_default_file_store
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
@@ -230,6 +234,45 @@ class TestCustomSkillFileset:
 
         assert b"custom body" in files[f"{name}/SKILL.md"]
         assert files[f"{name}/nested/file.txt"] == b"nested body"
+
+    def test_skill_dir_resolves_in_sent_files_not_in_stored_bundle(
+        self,
+        db_session: Session,
+        test_user: User,
+        seeded_skill: Callable[..., Skill],
+    ) -> None:
+        name = f"skill-dir-{uuid4().hex[:8]}"
+        skill = seeded_skill(
+            name=name,
+            public=True,
+            bundle_files={
+                "SKILL.md": (
+                    f"---\nname: {name}\ndescription: d\n---\n"
+                    "Run python ${CLAUDE_SKILL_DIR}/scripts/x.py\n"
+                ),
+                "scripts/x.py": "print('ok')\n",
+            },
+        )
+        set_skill_enabled_for_user(
+            skill_id=skill.id, enabled=True, user=test_user, db_session=db_session
+        )
+        db_session.commit()
+        stored_sha256 = skill.bundle_sha256
+
+        files = build_skills_fileset_for_user(test_user, db_session)
+
+        sent = files[f"{name}/SKILL.md"].decode("utf-8")
+        assert f"Run python /workspace/managed/skills/{name}/scripts/x.py" in sent
+        assert "${CLAUDE_SKILL_DIR}" not in sent
+        assert files[f"{name}/scripts/x.py"] == b"print('ok')\n"
+
+        assert skill.bundle_file_id is not None
+        stored = get_default_file_store().read_file(skill.bundle_file_id).read()
+        assert hashlib.sha256(stored).hexdigest() == stored_sha256
+        with zipfile.ZipFile(io.BytesIO(stored)) as bundle_zip:
+            assert b"${CLAUDE_SKILL_DIR}/scripts/x.py" in bundle_zip.read("SKILL.md")
+        db_session.refresh(skill)
+        assert skill.bundle_sha256 == stored_sha256
 
 
 class TestUnknownBuiltInRowIsSkipped:
