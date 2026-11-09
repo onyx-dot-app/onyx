@@ -27,7 +27,14 @@ from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
-from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultSpec,
+    SearchResult,
+    SearchResults,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
     WebContentProvider,
@@ -39,6 +46,7 @@ from onyx.tools.tool_implementations.open_url.url_normalization import (
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
+from onyx.tools.tool_implementations.utils import SEARCH_RESULTS_CODE_MODE_RESULT
 from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
 )
@@ -302,13 +310,11 @@ def _resolve_urls_to_document_ids(
     return matches, unresolved
 
 
-def _estimate_result_chars(result: dict[str, Any]) -> int:
-    """Estimate character count from document fields in a result dict."""
-    total = 0
-    for value in result.values():
-        if value is not None:
-            total += len(str(value))
-    return total
+def _estimate_result_chars(result: SearchResult) -> int:
+    """Estimate character count from the document fields of a result."""
+    return sum(
+        len(str(value)) for value in result.model_dump(exclude_none=True).values()
+    )
 
 
 def _convert_sections_to_llm_string_with_citations(
@@ -355,40 +361,27 @@ def _convert_sections_to_llm_string_with_citations(
             next_citation_id += 1
 
     # Second pass: build results, respecting max_document_chars budget
-    results = []
+    results: list[SearchResult] = []
     total_chars = 0
 
     for section in sections:
         chunk = section.center_chunk
-        document_id = chunk.document_id
-        citation_id = document_id_to_citation_id[document_id]
-
-        # Format updated_at as ISO string if available
-        updated_at_str = None
-        if chunk.updated_at:
-            updated_at_str = chunk.updated_at.isoformat()
-
-        # Build result dict without content first to calculate metadata overhead
-        result: dict[str, Any] = {
-            "document": citation_id,
-            "title": chunk.semantic_identifier,
-        }
-        if updated_at_str is not None:
-            result["updated_at"] = updated_at_str
-        if chunk.source_links:
-            link = next(iter(chunk.source_links.values()), None)
-            if link:
-                result["url"] = link
-
-        if chunk.metadata:
-            result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
-
-        # Calculate chars used by metadata fields (everything except content)
-        metadata_chars = _estimate_result_chars(result)
+        # Built without content first to calculate the metadata overhead
+        result = SearchResult(
+            document=document_id_to_citation_id[chunk.document_id],
+            title=chunk.semantic_identifier,
+            updated_at=chunk.updated_at.isoformat() if chunk.updated_at else None,
+            url=next(iter((chunk.source_links or {}).values()), None) or None,
+            content="",
+            metadata=json.dumps(chunk.metadata, ensure_ascii=False)
+            if chunk.metadata
+            else None,
+        )
 
         # Calculate remaining budget for content
-        remaining_budget = max_document_chars - total_chars - metadata_chars
-        content = section.combined_content
+        remaining_budget = (
+            max_document_chars - total_chars - _estimate_result_chars(result)
+        )
 
         # Check if we have enough budget for meaningful content
         if remaining_budget < MIN_CONTENT_CHARS:
@@ -396,19 +389,11 @@ def _convert_sections_to_llm_string_with_citations(
             break
 
         # Truncate content if it exceeds remaining budget
-        if len(content) > remaining_budget:
-            content = content[:remaining_budget]
-
-        result["content"] = content
-
-        result_chars = _estimate_result_chars(result)
+        result.content = section.combined_content[:remaining_budget]
+        total_chars += _estimate_result_chars(result)
         results.append(result)
-        total_chars += result_chars
 
-    output = {"results": results}
-    return json.dumps(
-        output, separators=(",", ":"), ensure_ascii=False
-    ), citation_mapping
+    return SearchResults(results=results).model_dump_json(), citation_mapping
 
 
 MAX_URLS_PER_CALL = 10
@@ -475,6 +460,10 @@ class OpenURLTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -487,6 +476,10 @@ class OpenURLTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return SEARCH_RESULTS_CODE_MODE_RESULT
 
     @override
     @classmethod
@@ -558,9 +551,7 @@ class OpenURLTool(Tool):
                     # No index to serve from and crawling is off — nothing to do.
                     # (construct_tools normally drops the tool in this config;
                     # this is a defensive fallback.)
-                    return ToolResult(
-                        content=WEB_FETCH_DISABLED_REASON,
-                    )
+                    return ToolResult(content=WEB_FETCH_DISABLED_REASON, is_error=True)
                 # Crawl-only: no indexed retrieval / link-based fallback without a vector DB.
                 crawled_result = run_functions_tuples_in_parallel(
                     [
@@ -584,7 +575,7 @@ class OpenURLTool(Tool):
                     and not crawled_sections
                 ):
                     return ToolResult(
-                        content="The call to open_url timed out",
+                        content="The call to open_url timed out", is_error=True
                     )
             else:
                 url_requests, unresolved_urls = _resolve_urls_to_document_ids(
@@ -655,7 +646,7 @@ class OpenURLTool(Tool):
                     and not crawled_sections
                 ):
                     return ToolResult(
-                        content="The call to open_url timed out",
+                        content="The call to open_url timed out", is_error=True
                     )
 
                 # Last-resort: link-based lookup when doc-ID resolve + crawl both fail.
@@ -683,7 +674,7 @@ class OpenURLTool(Tool):
                 failed_web_fetches=failed_web_fetches,
             )
             logger.warning("OpenURL tool failed: %s", failure_msg)
-            return ToolResult(content=failure_msg)
+            return ToolResult(content=failure_msg, is_error=True)
 
         for section in inference_sections:
             chunk = section.center_chunk

@@ -131,6 +131,12 @@ Per-request data, such as chat files, memory and the next citation number,
 comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
 `ResearchAgent._tool_context` build it when the call starts.
 
+Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
+`IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
+`DIRECT`), `code_mode_function_name` (MCP tools add their server as a
+namespace) and `code_mode_result` (the value and stub type a program
+receives); see [[code-execution]].
+
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
 result. On Stop or a run failure, a running call ends with no result (status

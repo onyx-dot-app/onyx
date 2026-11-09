@@ -20,6 +20,7 @@ from onyx.tools.models import (
     MESSAGE_ID_PLACEHOLDER,
     USER_EMAIL_PLACEHOLDER,
     USER_ID_PLACEHOLDER,
+    CodeModeExposure,
     CustomToolCallSummary,
     CustomToolErrorInfo,
     CustomToolUserFileSnapshot,
@@ -117,6 +118,10 @@ class CustomTool(Tool):
     @property
     def id(self) -> int:
         return self._id
+
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DEFERRED
 
     @property
     def name(self) -> str:

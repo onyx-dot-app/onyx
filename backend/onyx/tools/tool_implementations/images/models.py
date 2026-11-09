@@ -11,6 +11,14 @@ class ImageGenerationResponse(BaseModel):
     image_data: str
 
 
+class ImageResult(BaseModel):
+    """A generated image as the model reads it: the file id that a later edit
+    uses, and the prompt the provider used."""
+
+    file_id: str
+    revised_prompt: str
+
+
 class FinalImageGenerationResponse(BaseModel):
     type: Literal["image_generation_result"] = "image_generation_result"
     generated_images: list[GeneratedImage]
