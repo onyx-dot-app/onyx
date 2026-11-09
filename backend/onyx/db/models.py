@@ -5340,6 +5340,12 @@ class FileRecord(Base):
             "created_at",
             postgresql_where=text("file_metadata ? 'staged_for_cc_pair_id'"),
         ),
+        # Orphan skill bundle cleanup.
+        Index(
+            "ix_file_record_skill_bundles",
+            "created_at",
+            postgresql_where=text("file_origin = 'SKILL_BUNDLE'"),
+        ),
     )
 
 
@@ -5391,6 +5397,11 @@ class SkillVersion(BundleVersionMixin, Base):
     )
 
     __table_args__ = (
+        Index(
+            "ix_skill_version_bundle_file_id",
+            "bundle_file_id",
+            postgresql_where=text("bundle_file_id IS NOT NULL"),
+        ),
         UniqueConstraint("skill_id", "version_number", name="uq_skill_version_number"),
         UniqueConstraint("id", "skill_id", name="uq_skill_version_id_skill_id"),
     )
@@ -5578,6 +5589,11 @@ class Skill(Base):
             "marketplace_entry_key",
             unique=True,
             postgresql_where=text("retired_at IS NULL"),
+        ),
+        Index(
+            "ix_skill_bundle_file_id",
+            "bundle_file_id",
+            postgresql_where=text("bundle_file_id IS NOT NULL"),
         ),
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
         # Preallocate both IDs, insert the skill, then its version before commit.
