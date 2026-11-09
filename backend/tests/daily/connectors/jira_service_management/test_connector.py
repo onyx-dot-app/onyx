@@ -135,6 +135,56 @@ class TestJiraServiceManagementConnector(unittest.TestCase):
                 project_key='ITSM" OR project = "SECRET',
             )
 
+    def test_comment_fetch_error_raises_runtime_error(self) -> None:
+        """Verify non-200 comment response raises RuntimeError instead of silent truncation."""
+        def error_transport(url: str, headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
+            if "/comment" in url:
+                return 500, {"errorMessages": ["Internal Server Error"]}
+            return 200, {
+                "issues": [
+                    {
+                        "key": "ITSM-500",
+                        "fields": {
+                            "summary": "Database latency spike",
+                            "comment": {"total": 5, "comments": []},
+                        },
+                    }
+                ],
+                "isLast": True,
+            }
+
+        conn = JiraServiceManagementConnector(
+            base_url="https://acme.atlassian.net",
+            project_key="ITSM",
+            transport=error_transport,
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            conn.fetch_tickets()
+        self.assertIn("JSM comment fetch failed for ITSM-500: HTTP 500", str(ctx.exception))
+
+    def test_infinite_pagination_loop_detection(self) -> None:
+        """Detect and reject repeated nextPageToken that would cause an infinite loop."""
+        def looping_transport(url: str, headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
+            return 200, {
+                "issues": [{"key": "ITSM-999", "fields": {"summary": "Loop item"}}],
+                "nextPageToken": "stuck_token",
+                "isLast": False,
+            }
+
+        conn = JiraServiceManagementConnector(
+            base_url="https://acme.atlassian.net",
+            project_key="ITSM",
+            transport=looping_transport,
+        )
+        batches = conn.iter_ticket_batches()
+        # First batch succeeds
+        first_batch = next(batches)
+        self.assertEqual(len(first_batch), 1)
+        # Second batch detects repeated token and raises RuntimeError
+        with self.assertRaises(RuntimeError) as ctx:
+            next(batches)
+        self.assertIn("Infinite JSM pagination loop detected", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
