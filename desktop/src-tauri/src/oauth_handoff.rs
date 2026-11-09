@@ -183,6 +183,14 @@ fn offer_to_main_window(app: &AppHandle, url: &Url) {
         fallback();
         return;
     };
+    // The URL carries the code: offer it only to a page on the configured server.
+    if !main
+        .url()
+        .is_ok_and(|current| current.origin() == url.origin())
+    {
+        fallback();
+        return;
+    }
     let on_result = {
         let decided = Arc::clone(&decided);
         let fallback = fallback.clone();
