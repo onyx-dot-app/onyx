@@ -375,6 +375,9 @@ sync still checks library name conflicts and the source's current revision.
 To add the source, send the same fields and a non-empty `name` to `POST /api/marketplaces`.
 Onyx validates the current source again, saves the marketplace, and requests its first background sync.
 An invalid marketplace file prevents creation. Blocked and unsupported entries do not prevent creation.
+For a company source, include `access` with the same fields as the access route below.
+Onyx saves these defaults with the source before starting its first sync. Invalid defaults prevent creation.
+Personal sources do not accept `access`.
 
 Use `GET /api/marketplaces` to list sources you can manage. Use `GET /api/marketplaces/{marketplace_id}` for its Skills,
 including retired Skills. Owners can read personal sources. Global manage-skills users can read all sources.

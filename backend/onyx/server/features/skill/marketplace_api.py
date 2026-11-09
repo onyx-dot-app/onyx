@@ -192,14 +192,20 @@ def create_marketplace(
     if isinstance(preview, MarketplaceFailedPreview):
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, preview.reason)
     maybe_mark_tenant_active(get_current_tenant_id(), caller="marketplace_sync")
-    marketplace = create_marketplace__no_commit(
-        name=source.name,
-        provider=source.provider,
-        config=source.provider_config,
-        personal=source.personal,
-        user=user,
-        db_session=db_session,
-    )
+    tier = get_current_tier() if source.access is not None else None
+    with db_session.begin_nested():
+        marketplace = create_marketplace__no_commit(
+            name=source.name,
+            provider=source.provider,
+            config=source.provider_config,
+            personal=source.personal,
+            user=user,
+            db_session=db_session,
+        )
+        if source.access is not None and tier is not None:
+            set_marketplace_default_access__no_commit(
+                marketplace.id, source.access.to_change(), user, db_session, tier=tier
+            )
     return _commit_and_dispatch(marketplace.id, user, db_session)
 
 

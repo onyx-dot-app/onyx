@@ -603,6 +603,9 @@ The library preview of an external-app skill calls the same renderer
     stored active login, enabled app and credential presence without network calls.
     The login is always the actor; company sources have no owner. MIT-only creation
     uses public defaults; installed licensed builds start private regardless of tier lookup.
+    Company creation can include initial access. The source, access defaults and first
+    sync request share one savepoint and commit before dispatch. Invalid defaults
+    roll back creation; personal sources reject source-wide defaults.
     Replacement validates the acting login's repository access before the write. It clears
     retirement approval, old status/error and sync ownership before requesting work.
     Source config is fixed at creation; no route changes it. Replacement keeps
