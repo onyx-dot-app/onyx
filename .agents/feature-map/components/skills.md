@@ -263,9 +263,8 @@ The library preview of an external-app skill calls the same renderer
     adapts the generic `db/resource_version.py` service. A row lock serializes
     version numbers. The version, pointer and legacy columns change in one
     transaction. Equal content digests keep the current version and stored-byte
-    hash; ZIP timestamps and entry order do not affect the digest. Replacement
-    never deletes a historical bundle. Cleanup of staged, unused blobs stays
-    with ingestion and the caller.
+    hash; ZIP timestamps and entry order do not affect the digest. See
+    [[#bundle-retention]] for which bundle files stay.
     Legacy columns remain authoritative during rollout. A save repairs a stale
     or missing pointer before writing its new content. A recovery snapshot has
     no creator; a user content change follows it. Runtime classification updates
@@ -293,7 +292,6 @@ The library preview of an external-app skill calls the same renderer
     still does this. A harness that loads skills in the API server must give the
     model `skills/rendering.py:render_skill_for_model`, which resolves the
     placeholder and adds the same two lines. No such harness is on main yet.
-
 17. `marketplace-provider-boundary` **Only the provider adapter reads provider
     config.** `skills/marketplace/provider.py:MarketplaceProviderAdapter` owns
     login checks, ref resolution, change checks and webhook capability. GitHub
@@ -314,6 +312,30 @@ The library preview of an external-app skill calls the same renderer
     Entry keys identify the plugin entry and skill, not the folder; only live
     entries are unique, so a retired entry can return as a new skill.
     Every marketplace skill must have an entry key; the database rejects NULL keys.
+
+19. `bundle-retention` **Every version row stays; retained files follow `BUNDLES_KEPT`.**
+    Under the version lock, `db/resource_version.py:prune_resource_bundles`
+    empties `bundle_file_id` on versions older than the retention cutoff (never the
+    current one). Writers and skill delete return file ids; callers delete them
+    after commit with `db/skill_version.py:delete_unreferenced_skill_bundles`,
+    which keeps any file that a version row or the legacy
+    `Skill.bundle_file_id` still uses. Old writers and pointerless skills use
+    only the legacy column, so a cleanup that checks only versions deletes
+    live bundles. The hourly `check_for_orphan_skill_bundle_cleanup` task uses
+    the configured tenant-scoped cache lock. It retries failed deletes and
+    removes `SKILL_BUNDLE` files older than `ORPHAN_BUNDLE_MIN_AGE` that nothing uses.
+    Lite runs the same cleanup through `background/periodic_poller.py`.
+    A pass stops between files after 30 seconds or 500 candidates. The cursor
+    advances only past attempted files. One storage call can exceed the deadline.
+    The cleanup renews its lease around each file deletion and before cursor writes;
+    losing the lease stops the pass without advancing its cursor.
+    A durable cursor advances past failed files within a fixed scan boundary,
+    then wraps. New arrivals cannot postpone retries of earlier failures.
+    An upload saves its file before its row commits, so
+    a younger file can be live. A version preview or restore must read through
+    `read_version_bundle`, which gives NOT_FOUND "The files of this version are
+    no longer kept." for a pruned bundle, also when pruning wins a race. A
+    restore that copies an old version must read it under the version lock.
 
 ---
 

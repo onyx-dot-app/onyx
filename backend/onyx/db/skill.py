@@ -11,8 +11,9 @@ Runtime selection is deliberately separate from authorization. It applies
 visibility without an admin bypass, user enablement for custom skills, app
 readiness for associated skills, validity, and built-in availability.
 
-Delete is a hard delete: `delete_skill` returns every retained bundle file id.
-Callers use `delete_unreferenced_skill_bundles` after commit to remove unused files.
+Delete is a hard delete: `delete_skill` removes the row and its versions and
+returns their bundle file ids. Callers delete those files after commit with
+`delete_unreferenced_skill_bundles`; the orphan cleanup task retries failures.
 
 Mutation helpers do not commit unless their docstring explicitly says otherwise.
 Callers normally control the transaction boundary so multi-step operations can
@@ -460,8 +461,8 @@ def replace_skill_bundle(
     ingested: IngestedBundle,
     creator_id: UUID,
     db_session: Session,
-) -> bool:
-    """Keep history and legacy columns; return whether the staged blob is used."""
+) -> list[str]:
+    """Keep history and legacy columns; return the files to delete after commit."""
     if not skill.is_custom:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Built-in skills have no bundle.")
     return save_skill_version(skill, ingested, creator_id, db_session)
