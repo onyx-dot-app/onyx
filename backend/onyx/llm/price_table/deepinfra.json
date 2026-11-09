@@ -1802,6 +1802,35 @@
       "temperature": false,
       "tool_call": true
     },
+    "moonshotai/Kimi-K3.1-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.2,
+        "input": 2,
+        "output": 10
+      },
+      "family": "kimi-k3",
+      "limit": {
+        "context": 1048576,
+        "output": 943718
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Kimi K3.1 Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-23",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5": {
       "attachment": false,
       "cost": {
