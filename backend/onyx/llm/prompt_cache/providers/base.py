@@ -18,6 +18,14 @@ class PromptCacheProvider(ABC):
         """
         raise NotImplementedError
 
+    def caches_leading_system_messages_separately(self) -> bool:
+        """Whether a cache breakpoint can end between leading system messages.
+
+        Other providers get one merged system message, because some chat
+        templates (such as Qwen's) reject a second system message.
+        """
+        return False
+
     @abstractmethod
     def prepare_messages_for_caching(
         self,

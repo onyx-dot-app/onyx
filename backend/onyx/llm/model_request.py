@@ -136,6 +136,23 @@ def serialize_request(
     return messages, cacheable_prefix
 
 
+def merge_leading_system_messages(
+    messages: list[ChatCompletionMessage], cacheable_prefix: int
+) -> tuple[list[ChatCompletionMessage], int]:
+    """Join the leading system messages into one and return the new cacheable
+    prefix length. The prefix is empty when it ended inside the merged block."""
+    contents: list[str] = []
+    for message in messages:
+        if not isinstance(message, SystemMessage):
+            break
+        contents.append(message.content)
+    leading = len(contents)
+    if leading < 2:
+        return messages, cacheable_prefix
+    prefix = cacheable_prefix - (leading - 1) if cacheable_prefix >= leading else 0
+    return [SystemMessage(content="\n\n".join(contents)), *messages[leading:]], prefix
+
+
 def format_provider_message(message: app.Message) -> ChatCompletionMessage:
     """Serialize message content, replaying thinking only when provider signatures exist."""
     if isinstance(message, app.SystemMessage):

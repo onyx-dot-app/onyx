@@ -82,6 +82,7 @@ from onyx.llm.model_request import (
     ChatCompletionMessage,
     RequestFunctionCall,
     cache_split_stats,
+    merge_leading_system_messages,
     serialize_request,
     serialize_tools,
 )
@@ -108,6 +109,7 @@ from onyx.llm.models import (
     resolve_reasoning_effort,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
 from onyx.llm.prompt_cache.providers.openai import (
     CACHE_BREAKPOINT_FLAG,
     explicit_cache_breakpoints,
@@ -2093,6 +2095,11 @@ class LitellmLLM(LLM):
     ) -> tuple[list[ChatCompletionMessage], dict[str, str]]:
         config = self.config
         messages, cacheable_prefix = serialize_request(request, config)
+        cache_stats = cache_split_stats(request, cacheable_prefix)
+        if not get_provider_adapter(config).caches_leading_system_messages_separately():
+            messages, cacheable_prefix = merge_leading_system_messages(
+                messages, cacheable_prefix
+            )
         if cacheable_prefix:
             messages, _ = process_with_prompt_cache(
                 llm_config=config,
@@ -2101,7 +2108,7 @@ class LitellmLLM(LLM):
                 continuation=False,
                 with_metadata=False,
             )
-        return messages, cache_split_stats(request, cacheable_prefix)
+        return messages, cache_stats
 
     def invoke(
         self, request: GenerationRequest, context: GenerationContext | None = None
