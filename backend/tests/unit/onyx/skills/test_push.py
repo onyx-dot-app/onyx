@@ -190,6 +190,32 @@ def test_assemble_normalizes_wrapped_known_valid_skill(
     validate.assert_not_called()
 
 
+def test_assemble_resolves_skill_dir_only_in_root_skill_md(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        bundle_zip.writestr(
+            "SKILL.md",
+            "---\nname: canonical-name\ndescription: d\n---\n"
+            "Run ${CLAUDE_SKILL_DIR}/scripts/x.py\n",
+        )
+        bundle_zip.writestr("scripts/x.py", "print('${CLAUDE_SKILL_DIR}')\n")
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.return_value = io.BytesIO(output.getvalue())
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+
+    files = push._assemble_fileset(
+        [_skill(is_valid=True)], cast(User, SimpleNamespace()), MagicMock(spec=Session)
+    )
+
+    assert files["canonical-name/SKILL.md"].endswith(
+        b"Run /workspace/managed/skills/canonical-name/scripts/x.py\n"
+    )
+    assert files["canonical-name/scripts/x.py"] == b"print('${CLAUDE_SKILL_DIR}')\n"
+
+
 def test_assemble_hydrates_when_validity_persistence_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
