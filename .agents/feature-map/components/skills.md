@@ -20,10 +20,10 @@
   after the user connects that app. Until then the user cannot turn it on, and
   the library says why.
 - **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
-  or a single SKILL.md, or imports skills from a GitHub repository after a
-  preview of every SKILL.md found. A private repository needs the user's
-  GitHub connection in Craft; without it the import is anonymous. Owners and editors
-  can share uploaded skills with users or groups as viewer or editor, subject to group scope.
+  or a single SKILL.md, or imports Skills once from GitHub.
+  Import uses the user's GitHub connection in Craft. Marketplace dialogs exist,
+  but the Skills pages do not mount them yet. Owners and editors of uploaded
+  skills can share with users or groups as viewer or editor, subject to group scope.
   Owners can transfer ownership; global `MANAGE_SKILLS` holders can transfer skills
   with vacant ownership. Synced skills keep their source ownership.
   Publishing requires global `MANAGE_SKILLS`.
@@ -56,6 +56,7 @@
   Narrow tables use two lines for names without descriptions. Duplicate names use one line and keep their descriptions; warnings remain visible.
   Mobile Create stays beside the title, and the personal-use column is labeled For me.
   Sharing settings stay in the dialog. Access badges have an outline, and keyboard focus uses a rounded neutral outline.
+  App dependency status has its own line, so it does not replace desktop descriptions.
   The table keeps page ordering and all filtered rows without pagination.
   `web/src/lib/skills/hooks.ts` is shared by cards and rows for permission, dependency,
   validity and toggle presentation.
@@ -92,7 +93,13 @@
   and confirms reset for global managers of overridden company skills. Reset replaces
   the draft with saved defaults; failures keep the draft. Personal synced owners
   control audience, while other managers can change installation policy only.
-  Synced ownership transfer is hidden. Non-owner personal editors have no sharing action.
+  Synced ownership transfer is hidden. `canShareSkill` checks retirement and
+  `user_permission`. Non-owner editors of personal synced Skills also need
+  global `MANAGE_SKILLS` to see sharing. Other Skills allow owners and editors.
+  Mutation endpoints recheck authority; the response has no `can_share` field.
+  Other recipients use a read-only preview.
+  Individual grants on ownerless Skills require global management authority;
+  scoped managers keep group controls in single and bulk sharing dialogs.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
@@ -733,18 +740,33 @@ still propagate unexpected storage errors.
     unsupported entries and offers a sample for a missing catalog. Connection
     guidance uses the existing Apps flow and cache. The sync dialog requires an
     explicit ref and invalidates preview on edits and close. Company creation
-    requires global authority and a host callback that saves access atomically.
+    requires global authority and a host-supplied company contract. The host
+    owns the access draft and saves source and defaults in one creation request.
     Revoked company authority keeps the checked scope visible so the user can return to personal creation.
     Acceptance means sync requested. Shared summaries separate pending work
     from the last applied revision. Hosts can override or hide skill counts
     without inferring unsupported plugin data. Detail polls pending work while
     visible. Retirement confirmation sends the reviewed revision and IDs only;
     names come from detail. A rejected proposal needs a fresh review. Removal
-    and login replacement require confirmation. Access configuration belongs
-    to the host sharing UI. The list owns its SWR read and accepts host kind
+    and login replacement require confirmation. Host access callbacks open
+    `CompanyMarketplaceAccessModal`, which loads a fresh draft per opening,
+    preserves edits across refreshes, and blocks dismissal while saving. A failed
+    PATCH retains edits and the server error. Only success revalidates list and
+    detail caches and calls the host to refresh Skills.
+    `CompanyMarketplaceAccessControls` and
+    `useCompanyMarketplaceAccess` provide a session-owned company draft.
+    Visibility changes preserve the session's last organization permission.
+    Creation submits it atomically. Readiness requires global MANAGE_SKILLS and
+    known settings; a settings failure never implies Community. Community allows
+    organization Viewer access without groups. Group lookup failures preserve
+    grants and per-group policies, including unresolved IDs. Closing the dialog
+    resets its creation session. The list owns its SWR read and accepts host kind
     filters and count labels. Hiding the list clears its open detail. List changes
     refresh host Skills once, including after removal. Pending work polls every three seconds while
-    visible; polling never requests source sync. Pages are not wired yet.
+    visible; polling never requests source sync. Skills pages still open
+    `ImportSkillsFromGitHubModal`; marketplace page integration remains pending.
+    Pending and failed sources stay visible in the shared list with zero Skills.
+    Access callbacks do not close detail; the host must arrange that handoff.
 
 
 ---
@@ -769,7 +791,7 @@ still propagate unexpected storage errors.
   are available through the API. Plugin membership is not modeled yet; its access
   guard belongs in `SkillAccessAdapter.load`.
   Company inheritance/reset and personal owner audience controls are wired in the
-  skill sharing dialog. Source creation/list pages and retired-skill management remain pending.
+  skill sharing dialog. Source creation/list pages are wired. Retired-skill management and live browser acceptance remain pending.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing
