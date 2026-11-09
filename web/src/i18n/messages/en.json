@@ -13007,6 +13007,9 @@
           },
           "updatingMemory": {
             "label": "Updating memory..."
+          },
+          "working": {
+            "label": "Working"
           }
         },
         "internalSearch": {

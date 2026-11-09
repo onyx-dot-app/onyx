@@ -13007,6 +13007,9 @@
           },
           "updatingMemory": {
             "label": "جارٍ تحديث الذاكرة..."
+          },
+          "working": {
+            "label": "قيد العمل"
           }
         },
         "internalSearch": {

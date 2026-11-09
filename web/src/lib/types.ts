@@ -560,7 +560,10 @@ export interface SlackBotTokens {
 export interface UserGroup {
   id: number;
   name: string;
+  // Empty when the list was fetched without members; use member_count.
   users: User[];
+  member_count: number;
+  active_member_count: number;
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)
   manager_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];

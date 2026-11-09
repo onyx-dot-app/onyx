@@ -11,7 +11,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { Permission } from "@/lib/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupListUrl } from "@/hooks/useGroups";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { can } from "@/lib/permissions/resource-actions";
@@ -36,7 +36,7 @@ function GroupsPage() {
     error,
     isLoading,
   } = useSWR<UserGroup[]>(
-    SWR_KEYS.adminUserGroupsWithDefault,
+    userGroupListUrl({ includeDefault: true, includeMembers: false }),
     errorHandlingFetcher
   );
 

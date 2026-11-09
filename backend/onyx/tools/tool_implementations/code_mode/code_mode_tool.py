@@ -104,6 +104,10 @@ class CodeModeTool(Tool):
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }
 
+    @property
+    def inner_tools(self) -> list[Tool]:
+        return self._inner_tools
+
     def operation_names(self, tool_id: int) -> list[str]:
         return [
             program_function_operation(name, deferred=function.deferred)
@@ -261,3 +265,33 @@ class WaitCodeTool(Tool):
             max_tokens=output_tokens(arguments.max_output_tokens),
             terminate=arguments.terminate,
         )
+
+
+def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
+    """Offer each tool as its `code_mode_exposure` declares: DIRECT tools stay
+    direct, the others become Python functions inside `execute_code`.
+
+    `execute_code` and `wait_code` share the returned cells of one response; None
+    when no tool is a function. Raises ValueError for a tool that waits for child
+    runs but is not DIRECT, since a program cannot wait for them.
+    """
+    for tool in tools:
+        if (
+            tool.result_from_children is not None
+            and tool.code_mode_exposure is not CodeModeExposure.DIRECT
+        ):
+            raise ValueError(
+                f"{tool.name} waits for child runs, so its code mode exposure must "
+                "be DIRECT."
+            )
+    inner = [
+        tool for tool in tools if tool.code_mode_exposure is not CodeModeExposure.DIRECT
+    ]
+    if not inner:
+        return tools, None
+    cells = CodeCells()
+    return [
+        *(tool for tool in tools if tool.code_mode_exposure is CodeModeExposure.DIRECT),
+        CodeModeTool(inner, cells=cells, limits=SandboxLimits()),
+        WaitCodeTool(cells),
+    ], cells

@@ -9,6 +9,7 @@ from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchMessageMetadata
 from onyx.file_store.models import ContextFileMetadata
 from onyx.llm.models import Message, ToolResultMessage
+from onyx.tools.constants import CITEABLE_TOOLS_NAMES
 
 
 def message_citation_sources(message: Message) -> CitationMapping:
@@ -19,6 +20,14 @@ def message_citation_sources(message: Message) -> CitationMapping:
         return {}
     sources = tool_result_sources(message.details)
     return dict(sources.citations) if sources is not None else {}
+
+
+def result_cites_documents(result: ToolResultMessage) -> bool:
+    """Whether the model can cite documents from this result."""
+    if result.tool_name in CITEABLE_TOOLS_NAMES:
+        return True
+    sources = tool_result_sources(result.details)
+    return sources is not None and bool(sources.citations)
 
 
 def extract_citation_order_from_text(text: str) -> list[int]:

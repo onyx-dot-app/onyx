@@ -346,7 +346,12 @@ def test_metrics_expose_workload_without_question_labels() -> None:
 
 
 @pytest.mark.parametrize(
-    "model", ["mock-profile-search-v1-len1000", "mock-profile-search-v1-faultstall"]
+    "model",
+    [
+        "mock-profile-search-v1-len1000",
+        "mock-profile-search-v1-faultstall",
+        "mock-profile-chat-v1-codebatched",
+    ],
 )
 def test_manifest_rejects_unmodeled_overrides(
     model: str, monkeypatch: pytest.MonkeyPatch

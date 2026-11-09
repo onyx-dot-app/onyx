@@ -113,6 +113,8 @@ class OpenSearchSearchType(str, Enum):
     """Search type label used for Prometheus metrics."""
 
     HYBRID = "hybrid"
+    # Source fetch for the top hits of a hybrid search that returned only keys.
+    HYBRID_FETCH = "hybrid_fetch"
     KEYWORD = "keyword"
     SEMANTIC = "semantic"
     RANDOM = "random"

@@ -124,7 +124,7 @@ export default function SharingSettingsSection({
     const group = userGroups?.find((candidate) => candidate.id === groupId);
     return group === undefined
       ? undefined
-      : tGroups("memberCount", { count: group.users.length });
+      : tGroups("memberCount", { count: group.member_count });
   };
   const isDefaultGroup = (groupId: number): boolean =>
     userGroups?.find((candidate) => candidate.id === groupId)?.is_default ??

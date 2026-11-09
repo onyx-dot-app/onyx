@@ -359,7 +359,9 @@ Community downgrade clears it ([[billing]]).
 9. `tool-id-not-foreign-key` **`ToolCall.tool_id` is not a foreign key.**
    After a tool is deleted, runtime replay still shows its calls from the
    typed result, but legacy replay skips them, and the steps vanish from a
-   reloaded chat silently.
+   reloaded chat silently. Code mode has no tool row: `persistence.tool_ids`
+   maps `execute_code` and `wait_code` to None, and their calls save with a
+   NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
     session.** `db/chat.py:get_chat_session_by_id` adds `deleted IS FALSE`
     whenever `is_shared` is set, because delete does not unshare. Keep that

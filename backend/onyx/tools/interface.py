@@ -161,6 +161,11 @@ class Tool(abc.ABC):
     def execution_mode(self) -> ToolExecutionMode:
         return ToolExecutionMode.PARALLEL
 
+    @property
+    def inner_tools(self) -> list["Tool"]:
+        """Tools that run inside this tool's calls, such as code mode functions."""
+        return []
+
     def operation_names(self, tool_id: int) -> list[str]:
         """How the model calls the configured tool `tool_id` through this tool."""
         return [self.name] if self.id == tool_id else []
