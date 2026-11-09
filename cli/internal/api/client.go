@@ -274,7 +274,7 @@ func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) 
 // ListDocumentSets returns the document sets the current user can search.
 func (c *Client) ListDocumentSets(ctx context.Context) ([]models.DocumentSetSummary, error) {
 	var result []models.DocumentSetSummary
-	if err := c.doJSON(ctx, "GET", "/manage/document-set", nil, &result); err != nil {
+	if err := c.doJSON(ctx, "GET", "/manage/document-set?searchable_only=true", nil, &result); err != nil {
 		return nil, err
 	}
 	return result, nil

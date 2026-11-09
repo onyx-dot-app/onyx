@@ -17,6 +17,9 @@ func serveDocumentSets(t *testing.T, body string) {
 		if r.URL.Path != "/api/manage/document-set" {
 			t.Errorf("path = %s, want /api/manage/document-set", r.URL.Path)
 		}
+		if got := r.URL.Query().Get("searchable_only"); got != "true" {
+			t.Errorf("searchable_only = %q, want true", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(body))
 	}))
