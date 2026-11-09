@@ -127,6 +127,15 @@ def _run_oauth_provider_cleanup() -> None:
     cleanup_oauth_provider_clients.run()
 
 
+def _run_skill_bundle_cleanup() -> None:
+    from onyx.background.celery.tasks.skills.tasks import (
+        check_for_orphan_skill_bundle_cleanup,
+    )
+    from shared_configs.contextvars import get_current_tenant_id
+
+    check_for_orphan_skill_bundle_cleanup.run(tenant_id=get_current_tenant_id())
+
+
 def _run_fleet_telemetry() -> None:
     from onyx.utils.fleet_telemetry_collector import collect_snapshots
     from shared_configs.contextvars import get_current_tenant_id
@@ -208,6 +217,14 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 run_fn=_run_fleet_telemetry,
             )
         )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="skill-bundle-cleanup",
+            interval_seconds=3600,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 6,
+            run_fn=_run_skill_bundle_cleanup,
+        )
+    )
     return tasks
 
 
