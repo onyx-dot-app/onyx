@@ -100,7 +100,10 @@ key fail the read. A nested plugin can load its root `SKILL.md` when neither a
 
 Marketplace discovery requires a TAR end marker after the last member.
 The general archive reader still accepts member-boundary EOF. Discovery enables
-`require_tar_end` because a valid gzip wrapper does not prove catalog completion.
+`require_complete` because a valid gzip wrapper does not prove catalog completion.
+ZIP discovery also checks the end-record entry count against the parsed directory.
+Every ZIP member, including unrelated files, must have a matching local header
+and name. These checks do not inflate unrelated member data.
 Missing end markers and parser-detected header errors fail discovery before
 reconciliation can infer removed skills. A zero header can still conceal later
 entries, as described above. Truncated sparse extensions also fail discovery.

@@ -4,6 +4,7 @@ import json
 import os
 import random
 import stat
+import struct
 import subprocess
 import sys
 import tarfile
@@ -853,3 +854,56 @@ def test_truncated_sparse_extension_returns_failed_marketplace() -> None:
     header[148:156] = b"%06o\0 " % sum(header)
     result = reader.read_marketplace_archive(gzip.compress(header))
     assert isinstance(result, FailedMarketplace), result
+
+
+@pytest.mark.parametrize("length_field", [30, 32])
+def test_zip_catalog_rejects_swallowed_directory_entries(length_field: int) -> None:
+    files = {CLAUDE: _catalog()}
+    files.update({f"skills/s{i}/SKILL.md": _md(f"s{i}") for i in range(4)})
+    data = bytearray(_archive(files))
+    end = data.rfind(b"PK\x05\x06")
+    central = struct.unpack_from("<I", data, end + 16)[0]
+    second = data.index(b"PK\x01\x02", central + 4)
+    third = data.index(b"PK\x01\x02", second + 4)
+    struct.pack_into("<H", data, second + length_field, end - third)
+    result = reader.read_marketplace_archive(bytes(data))
+    assert isinstance(result, FailedMarketplace), result
+
+
+@pytest.mark.parametrize("damage", ["name", "signature"])
+def test_zip_catalog_checks_unselected_local_headers(damage: str) -> None:
+    files = _files()
+    files["skills/hello/reference.txt"] = b"Keep this supporting file"
+    files["unrelated.txt"] = b"Outside the skill"
+    data = bytearray(_archive(files))
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        offset = archive.getinfo("unrelated.txt").header_offset
+    if damage == "name":
+        data[offset + 30] ^= 1
+    else:
+        data[offset] = 0
+    result = reader.read_marketplace_archive(bytes(data))
+    assert isinstance(result, FailedMarketplace), result
+
+
+@pytest.mark.parametrize("prefix", [b"", b"self extracting prefix"])
+@pytest.mark.parametrize("zip64", [False, True])
+def test_zip_catalog_accepts_comments_and_zip64(prefix: bytes, zip64: bool) -> None:
+    data = bytearray(_archive(_files()))
+    end = data.rfind(b"PK\x05\x06")
+    if zip64:
+        count = struct.unpack_from("<H", data, end + 10)[0]
+        size, offset = struct.unpack_from("<II", data, end + 12)
+        record = struct.pack(
+            "<4sQHHIIQQQQ", b"PK\x06\x06", 44, 45, 45, 0, 0, count, count, size, offset
+        )
+        locator = struct.pack("<4sIQI", b"PK\x06\x07", 0, end, 1)
+        struct.pack_into("<HHII", data, end + 8, 65535, 65535, 0xFFFFFFFF, 0xFFFFFFFF)
+        data[end:end] = record + locator
+        end += len(record) + len(locator)
+    comment = b"archive comment"
+    struct.pack_into("<H", data, end + 20, len(comment))
+    data.extend(comment)
+    result = reader.read_marketplace_archive(prefix + data)
+    assert isinstance(result, CompleteMarketplace), result
+    assert [entry.entry_key for entry in result.entries] == ["tools/hello"]
