@@ -87,8 +87,10 @@ manifest paths. When both compatibility manifests exist, Claude takes precedence
 Overlapping discovery sources load each path once; different paths with the same
 key fail the read. A nested plugin can load its root `SKILL.md` when neither a
 `skills` key nor a default skills directory with members exists.
+If that root definition disappears while other plugin files remain, its entry
+stays blocked with the same key. Sync preserves the existing Skill.
 
-Tar reads require an end marker after the last member. A valid gzip wrapper
+Tar reads require two zero end blocks and only zero padding afterward. A valid gzip wrapper
 does not prove that its tar body is complete. Missing or damaged tar headers
 fail the read before reconciliation can infer removed skills.
 
