@@ -4,7 +4,7 @@ from collections.abc import Collection, Mapping
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -15,6 +15,7 @@ from onyx.db.models import Marketplace, Skill, SkillVersion, User, UserSkillPref
 from onyx.db.resource_access import lock_resource_access_user
 from onyx.db.resource_version import prune_resource_bundles, write_resource_version
 from onyx.db.skill import affected_user_ids_for_skills
+from onyx.db.skill_library import lock_skill_library_names, skill_library_owner
 from onyx.db.skill_version import SkillVersionAdapter
 from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -32,7 +33,6 @@ from onyx.skills.marketplace.read_models import (
     ReadySkill,
     UnsupportedPlugin,
 )
-from shared_configs.contextvars import get_current_tenant_id
 
 
 def fetch_marketplace_sync_state(
@@ -147,17 +147,15 @@ def reconcile_marketplace__no_commit(
         )
         if marketplace is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found")
-        # G3's manual name checks must use this same tenant/library lock.
-        library = str(marketplace.owner_user_id or "company")
-        db_session.execute(
-            select(
-                func.pg_advisory_xact_lock(
-                    func.hashtextextended(
-                        get_current_tenant_id() + ":skill-library:" + library, 0
-                    )
+        names_to_lock = set(
+            db_session.scalars(
+                select(Skill.name).where(
+                    Skill.marketplace_id == marketplace_id, Skill.retired_at.is_(None)
                 )
             )
         )
+        names_to_lock.update(entry.path.rsplit("/", 1)[-1] for entry in ready.values())
+        lock_skill_library_names(marketplace.owner_user_id, names_to_lock, db_session)
         live = {
             skill.marketplace_entry_key: skill
             for skill in db_session.scalars(
@@ -216,11 +214,7 @@ def reconcile_marketplace__no_commit(
                 .values(enabled=False)
             )
         db_session.flush()
-        library_owner = case(
-            (Skill.marketplace_id.is_not(None), Marketplace.owner_user_id),
-            (Skill.public_permission.is_not(None), None),
-            else_=Skill.author_user_id,
-        )
+        library_owner = skill_library_owner()
         names = set(
             db_session.scalars(
                 select(Skill.name)
