@@ -291,9 +291,11 @@ curl "$ONYX_URL/api/skills/custom/$SKILL_ID/versions" \
   -H "Authorization: Bearer $ONYX_TOKEN"
 ```
 
-The response lists versions from newest to oldest. Each entry contains `id`, `version_number`, `created_at`,
+The response lists up to 50 versions from newest to oldest. Each entry contains `id`, `version_number`, `created_at`,
 `created_by`, `is_current`, and `has_bundle`. `created_by` contains the creator's `id` and `email`,
-or `null` when that information is unavailable.
+or `null` when that information is unavailable. To read the next page,
+set `before_version` to the last entry’s `version_number`. The cursor must be a positive integer.
+Stop when the response is empty or includes version 1. New versions do not shift older pages.
 
 | Method | Path after `/api` | Result |
 | --- | --- | --- |
