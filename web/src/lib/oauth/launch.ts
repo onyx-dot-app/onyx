@@ -1,4 +1,5 @@
 import * as yup from "yup";
+import { loadPage } from "@opal/navigation";
 
 export type OAuthLaunchFailure =
   | "popup_blocked"
@@ -386,7 +387,7 @@ export function openOAuthAuthorization(
         error instanceof OAuthLaunchError &&
         error.reason === "popup_blocked"
       ) {
-        window.location.assign(authorizationUrl);
+        loadPage(authorizationUrl);
         return new Promise<OAuthCompletion>(() => {});
       }
       throw error;

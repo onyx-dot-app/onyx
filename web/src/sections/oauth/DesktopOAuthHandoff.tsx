@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentType, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { loadPage, useSearchParams } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import { IllustrationContent, Section } from "@opal/layouts";
@@ -19,7 +19,7 @@ export function DesktopOAuthHandoff() {
   useEffect(() => {
     const url = desktopOAuthReturnUrl(new URL(window.location.href));
     setReturnUrl(url);
-    window.location.assign(url);
+    loadPage(url);
   }, []);
 
   return (
@@ -40,7 +40,7 @@ export function DesktopOAuthHandoff() {
             <Button
               width="full"
               disabled={returnUrl === null}
-              onClick={() => returnUrl && window.location.assign(returnUrl)}
+              onClick={() => returnUrl && loadPage(returnUrl)}
             >
               {t("button")}
             </Button>
