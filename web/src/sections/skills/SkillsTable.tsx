@@ -106,6 +106,7 @@ function SkillActions({
   const cards = useTranslations("cards");
   const {
     canEdit,
+    canShare,
     canDelete,
     isSynced,
     isInvalid,
@@ -115,7 +116,7 @@ function SkillActions({
   } = useSkillPresentation(item);
   const actions: DropdownMenuItem[] = [];
   if (item.source === "custom") {
-    if (canEdit && onShare)
+    if (canShare && onShare)
       actions.push({
         kind: "action",
         id: "share",

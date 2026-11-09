@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -35,7 +35,12 @@ import {
   StaticPermissionLabel,
   TransferTrailingButton,
 } from "@/sections/modals/ShareModalPermissionControls";
-import { updateSkillShares, transferSkillOwnership } from "@/lib/skills/api";
+import {
+  updateSkillShares,
+  transferSkillOwnership,
+  resetSkillMarketplaceAccess,
+} from "@/lib/skills/api";
+import { canShareSkill } from "@/lib/skills/permissions";
 import type {
   CustomSkill,
   SkillSharePermission,
@@ -60,7 +65,7 @@ import {
 import { markdown } from "@opal/utils";
 import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
 
-type ShareModalView = "share" | "transfer";
+type ShareModalView = "share" | "transfer" | "reset";
 
 type SkillShareDraftState = BaseShareDraftState<SkillSharePermission>;
 
@@ -132,12 +137,24 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const [transferTarget, setTransferTarget] =
     useState<TransferOwnershipTarget>(null);
   const [view, setView] = useState<ShareModalView>("share");
+  const previousView = useRef(view);
+  const sourceStatus = useRef<HTMLDivElement>(null);
+  const focusResetDescription = useCallback((node: HTMLElement | null) => {
+    node?.focus();
+  }, []);
+  useEffect(() => {
+    if (previousView.current === "reset" && view === "share") {
+      sourceStatus.current?.focus();
+    }
+    previousView.current = view;
+  }, [view]);
   const [installationPolicy, setInstallationPolicy] =
     useState<SkillInstallationPolicy>("AVAILABLE");
   const [initialPolicy, setInitialPolicy] =
     useState<SkillInstallationPolicy>("AVAILABLE");
   const [showIndividualAccess, setShowIndividualAccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrate once per open session: a background SWR refresh of `skill` must
@@ -149,6 +166,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       setTab(initialTab);
       setDetailsVisited(initialTab === "details");
       setDraftState(null);
+      setResetError(null);
       return;
     }
     if (!skill || hydrated || (skillId && isValidating)) return;
@@ -180,12 +198,31 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     );
   }, [draftState, stagedGroups, stagedPermission, stagedUsers]);
 
+  const marketplace = props.mode === "edit" ? loadedSkill?.marketplace : null;
+  const isPersonalOwner =
+    marketplace?.personal && skill?.user_permission === "OWNER";
   const canEditShares =
-    skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
+    props.mode === "edit"
+      ? !!loadedSkill &&
+        canShareSkill({ skill: loadedSkill, canManageCompanySkills })
+      : skill?.user_permission === "OWNER" ||
+        skill?.user_permission === "EDITOR";
+  const canEditAudience =
+    canEditShares && (!marketplace?.personal || isPersonalOwner);
   const canEditOrgVisibility =
-    !skill?.external_app && canEditShares && canManageCompanySkills;
+    !skill?.external_app &&
+    canEditAudience &&
+    (canManageCompanySkills || isPersonalOwner);
+  const canReset =
+    !!marketplace &&
+    !marketplace.personal &&
+    !marketplace.follows_access &&
+    canManageCompanySkills &&
+    canEditShares;
   const canTransfer =
     props.mode === "edit" &&
+    !marketplace &&
+    !loadedSkill?.retired_at &&
     !!skill &&
     (skill.user_permission === "OWNER" ||
       (canManageCompanySkills && skill.ownership_vacant));
@@ -320,7 +357,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   }, []);
 
   async function handleSave() {
-    if (!skill || !effectiveState || loadError) return;
+    if (!skill || !effectiveState || loadError || !canEditShares || saving)
+      return;
     if (!isDirty) {
       closeModal();
       return;
@@ -342,7 +380,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(nextDraft, canManageCompanySkills);
+      const payload = serializeSkillSharing(nextDraft, canManageCompanySkills, {
+        canEditPublicAccess: !!canEditOrgVisibility,
+      });
       await updateSkillShares(props.skillId, payload);
       void refreshSkill();
       toast.success(t("share.savedToast.message"));
@@ -360,6 +400,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
 
   async function handleTransfer() {
     if (
+      !canTransfer ||
+      saving ||
       props.mode !== "edit" ||
       !skill ||
       !transferTarget ||
@@ -387,11 +429,67 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     }
   }
 
+  async function handleReset() {
+    if (props.mode !== "edit" || !canReset || saving || loadError) return;
+    setSaving(true);
+    setResetError(null);
+    try {
+      const saved = await resetSkillMarketplaceAccess(props.skillId);
+      await refreshSkill(saved, { revalidate: false });
+      setHydrated(false);
+      setView("share");
+      props.onSaved();
+      toast.success(t("share.marketplace.resetSuccess"));
+    } catch (error) {
+      setResetError(
+        error instanceof Error
+          ? error.message
+          : t("share.marketplace.resetError")
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function renderSharingContent() {
     if (!skill || !draftState || !effectiveState) return null;
 
     return (
       <Section gap={6} height="auto" alignItems="stretch">
+        {marketplace && (
+          <Card border="solid" padding={3}>
+            <Section
+              ref={sourceStatus}
+              tabIndex={-1}
+              gap={3}
+              height="auto"
+              alignItems="start"
+            >
+              <Content
+                font="main-ui-action"
+                title={t(
+                  `share.marketplace.${marketplace.personal ? "personal" : marketplace.follows_access ? "following" : "overridden"}`
+                )}
+                description={t(
+                  `share.marketplace.${marketplace.personal ? "personalDescription" : marketplace.follows_access ? "followingDescription" : "overriddenDescription"}`,
+                  { name: marketplace.name }
+                )}
+              />
+              {canReset && (
+                <Button
+                  prominence="secondary"
+                  disabled={saving}
+                  onClick={() => {
+                    setResetError(null);
+                    setView("reset");
+                  }}
+                >
+                  {t("share.marketplace.reset")}
+                </Button>
+              )}
+            </Section>
+          </Card>
+        )}
         <Section gap={3} height="auto" alignItems="stretch">
           <Content font="main-ui-action" title={t("share.accessTitle")} />
           <Card border="solid" padding={2}>
@@ -405,7 +503,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             >
               <SharePermissionMenu
                 ariaLabel={t("share.scopeMenu.ariaLabel")}
-                disabled={!canEditOrgVisibility}
+                disabled={!canEditOrgVisibility || saving}
                 onChange={(scope) => {
                   setDraftState((currentDraftState) =>
                     currentDraftState
@@ -419,7 +517,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               />
               <SharePermissionMenu
                 ariaLabel={t("share.organizationPermissionMenu.ariaLabel")}
-                disabled={!canEditOrgVisibility}
+                disabled={!canEditOrgVisibility || saving}
                 onChange={(permission) => {
                   setDraftState((currentDraftState) =>
                     currentDraftState
@@ -539,8 +637,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   : "share.peopleTitle"
               )}
             />
-            {canEditShares ? (
+            {canEditAudience ? (
               <AddPeoplePicker
+                disabled={saving}
                 existingGroupIds={existingGroupIds}
                 existingUserIds={existingUserIds}
                 groups={shareableGroupsData ?? []}
@@ -583,7 +682,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                             ariaLabel={t("share.permissionMenu.ariaLabel", {
                               name: share.user.email,
                             })}
-                            disabled={!canEditShares}
+                            disabled={!canEditAudience || saving}
                             onChange={(permission) =>
                               updateUserSharePermission(
                                 share.user.id,
@@ -616,7 +715,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                           ariaLabel={t("share.permissionMenu.ariaLabel", {
                             name: share.group_name,
                           })}
-                          disabled={!canEditShares}
+                          disabled={!canEditAudience || saving}
                           onChange={(permission) =>
                             updateGroupSharePermission(
                               share.group_id,
@@ -658,7 +757,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                     : skill.owner.email
                 }
                 trailing={
-                  canTransfer ? (
+                  canTransfer && !saving ? (
                     <TransferTrailingButton
                       onTransfer={() => setView("transfer")}
                     />
@@ -676,7 +775,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 }
                 title={t("share.noOwnerTitle")}
                 trailing={
-                  canTransfer ? (
+                  canTransfer && !saving ? (
                     <TransferTrailingButton
                       onTransfer={() => setView("transfer")}
                     />
@@ -691,41 +790,59 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   }
 
   return (
-    <Modal open={open} onOpenChange={(isOpen) => !isOpen && closeModal()}>
+    <Modal
+      open={open}
+      onOpenChange={(isOpen) => !isOpen && !saving && closeModal()}
+    >
       <Modal.Content
-        height={props.mode === "edit" && view !== "transfer" ? "lg" : "fit"}
-        width={view === "transfer" ? "sm" : "lg"}
+        height={props.mode === "edit" && view === "share" ? "lg" : "fit"}
+        width={view === "share" ? "lg" : "sm"}
         maxHeight="80dvh"
         position="top"
       >
         <Modal.Header
           icon={view === "transfer" ? SvgArrowExchange : SvgBlocks}
           title={
-            !skill
-              ? props.mode === "edit"
-                ? (props.fallbackTitle ?? t("preview.fallbackTitle"))
-                : t("share.accessTitle")
-              : view === "transfer"
-                ? markdown(
-                    t("share.header.transferTitle", { name: skill.name })
-                  )
-                : skill.name
+            view === "reset"
+              ? t("share.marketplace.reset")
+              : !skill
+                ? props.mode === "edit"
+                  ? (props.fallbackTitle ?? t("preview.fallbackTitle"))
+                  : t("share.accessTitle")
+                : view === "transfer"
+                  ? markdown(
+                      t("share.header.transferTitle", { name: skill.name })
+                    )
+                  : skill.name
           }
           description={
-            view === "transfer"
+            view !== "share"
               ? undefined
               : props.mode === "edit"
                 ? loadedSkill?.description
                 : t("share.description")
           }
           gap={1}
-          onClose={closeModal}
+          onClose={saving ? undefined : closeModal}
         />
         <Modal.Body twoTone={false} alignItems="stretch">
           {loadError ? (
             <Text>{skillCopy("editor.loadError.description")}</Text>
           ) : !skill || !draftState ? (
             <Text>{t("share.loading.message")}</Text>
+          ) : view === "reset" ? (
+            <Section gap={3} height="auto" alignItems="stretch">
+              <Text ref={focusResetDescription} tabIndex={-1}>
+                {t("share.marketplace.resetDescription", {
+                  name: marketplace?.name ?? "",
+                })}
+              </Text>
+              {resetError && (
+                <Text color="status-error-05" role="alert">
+                  {resetError}
+                </Text>
+              )}
+            </Section>
           ) : view === "transfer" ? (
             <TransferOwnershipView
               agent={{ owner: skill.owner, owner_group: null }}
@@ -779,7 +896,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           )}
         </Modal.Body>
         <Modal.Footer justifyContent="between">
-          {view === "transfer" ? (
+          {view !== "share" ? (
             <Button
               disabled={saving}
               icon={SvgArrowLeft}
@@ -801,14 +918,21 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               onClick={closeModal}
               prominence="secondary"
             >
-              {view === "transfer" ||
+              {view !== "share" ||
               (canEditShares && (tab === "sharing" || isDirty))
                 ? t("share.cancelButton.label")
                 : props.mode === "edit" && tab === "details"
                   ? t("preview.closeButton.label")
                   : t("share.doneButton.label")}
             </Button>
-            {view === "transfer" ? (
+            {view === "reset" ? (
+              <Button
+                disabled={!canReset || saving || !!loadError}
+                onClick={handleReset}
+              >
+                {t("share.marketplace.confirmReset")}
+              </Button>
+            ) : view === "transfer" ? (
               <Button
                 disabled={
                   !transferTarget || transferTarget.type !== "user" || saving

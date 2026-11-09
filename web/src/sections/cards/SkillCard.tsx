@@ -107,6 +107,7 @@ export default function SkillCard({
     dependencyStatus,
     tooltip,
     canEdit,
+    canShare,
     toggleAriaLabel,
   } = useSkillPresentation(item, hasEnabledNameConflict);
 
@@ -201,7 +202,7 @@ export default function SkillCard({
                 gap={1}
                 className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100"
               >
-                {canEdit && onShare && (
+                {canShare && onShare && (
                   <Button
                     prominence="secondary"
                     size="sm"

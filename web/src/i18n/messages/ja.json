@@ -17350,7 +17350,20 @@
         "peopleTitle": "アクセスできるユーザー",
         "manageIndividualAccess": "個別のアクセスを管理",
         "individualAccessTitle": "個別のアクセス",
-        "ownershipTitle": "所有権"
+        "ownershipTitle": "所有権",
+        "marketplace": {
+          "personal": "個人マーケットプレイス",
+          "personalDescription": "{name} のこのスキルへのアクセスを変更できるのは所有者だけです。管理者はインストール設定を変更できます。",
+          "following": "マーケットプレイスのアクセス設定に従う",
+          "followingDescription": "アクセスとインストール設定は {name} に従います。ここで変更を保存すると個別設定になります。",
+          "overridden": "個別のアクセス設定",
+          "overriddenDescription": "このスキルは {name} の既定値ではなく、独自のアクセスとインストール設定を使用します。",
+          "reset": "マーケットプレイスのアクセス設定に戻す",
+          "resetDescription": "アクセスとインストール設定を {name} の既定値に置き換えます。個別の権限を削除し、未保存の変更を破棄します。今後のマーケットプレイスのアクセス変更がこのスキルに適用されます。",
+          "confirmReset": "アクセスをリセット",
+          "resetSuccess": "マーケットプレイスのアクセス設定を復元しました",
+          "resetError": "アクセスをリセットできませんでした。もう一度お試しください。"
+        }
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"

@@ -1467,47 +1467,56 @@ describe("SkillsPage preference toggles", () => {
       screen.getByRole("switch", { name: "other-skill" })
     ).toBeInTheDocument();
   });
-  it("shows synced source labels and blocks active deletion in row and bulk actions", async () => {
-    mockPermissions = [Permission.MANAGE_SKILLS];
-    const user = setupUser();
-    skillsData = {
-      builtins: [],
-      customs: [
-        {
-          ...customSkill("synced-id", "synced-skill"),
-          user_permission: "EDITOR",
-          marketplace: {
-            id: "source",
-            name: "Team tools",
-            personal: false,
-            folder: "skills/synced-skill",
-            follows_access: true,
+  it.each([false, true])(
+    "keeps synced row and bulk actions within authority (personal=%s)",
+    async (personal) => {
+      mockPermissions = personal ? [] : [Permission.MANAGE_SKILLS];
+      const user = setupUser();
+      skillsData = {
+        builtins: [],
+        customs: [
+          {
+            ...customSkill("synced-id", "synced-skill"),
+            user_permission: "EDITOR",
+            marketplace: {
+              id: "source",
+              name: "Team tools",
+              personal,
+              folder: "skills/synced-skill",
+              follows_access: true,
+            },
           },
-        },
-      ],
-    };
-    render(<SkillsPage admin />);
-    expect(screen.getByText("Team tools")).toBeInTheDocument();
-    expect(screen.getByText("skills/synced-skill")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "More actions for synced-skill" })
-    );
-    expect(
-      screen.getByRole("menuitem", { name: "View content" })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("menuitem", { name: "Delete skill" })
-    ).not.toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select synced-skill" })
-    );
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
-      "aria-disabled",
-      "true"
-    );
-    expect(mockDeleteUserSkill).not.toHaveBeenCalled();
-    expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
-  });
+        ],
+      };
+      render(<SkillsPage admin />);
+      expect(screen.getByText("Team tools")).toBeInTheDocument();
+      expect(screen.getByText("skills/synced-skill")).toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "More actions for synced-skill" })
+      );
+      expect(
+        screen.getByRole("menuitem", { name: "View content" })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("menuitem", { name: "Delete skill" })
+      ).not.toBeInTheDocument();
+      if (personal)
+        expect(
+          screen.queryByRole("menuitem", { name: "Edit sharing" })
+        ).not.toBeInTheDocument();
+      await user.keyboard("{Escape}");
+      await user.click(
+        screen.getByRole("checkbox", { name: "Select synced-skill" })
+      );
+      if (personal)
+        expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
+      await user.click(screen.getByRole("button", { name: "More actions" }));
+      expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
+      expect(mockDeleteUserSkill).not.toHaveBeenCalled();
+      expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
+    }
+  );
 });

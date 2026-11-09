@@ -69,7 +69,7 @@ import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
-import { canDeleteSkill } from "@/lib/skills/permissions";
+import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
 import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
 interface SkillEditorPageProps {
@@ -198,6 +198,7 @@ export default function SkillEditorPage({
   const isSynced = Boolean(skill?.marketplace);
   const canEditContent = canManageSkill && !isSynced && !skill?.retired_at;
   const canDelete = skill && canDeleteSkill({ skill, canManageCompanySkills });
+  const canShare = skill && canShareSkill({ skill, canManageCompanySkills });
 
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
@@ -506,7 +507,7 @@ export default function SkillEditorPage({
           }
           cancel={handleCancel}
           actions={[
-            ...(canManageSkill && !isCreating && skill
+            ...(canShare && !isCreating && skill
               ? [
                   <Button
                     key="sharing"
