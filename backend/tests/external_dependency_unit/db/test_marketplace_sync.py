@@ -1,10 +1,12 @@
 """Real PostgreSQL/FileStore syncs; only GitHub and deliberate faults are faked."""
 
+import gzip
 import io
 import json
 import os
 import subprocess
 import sys
+import tarfile
 from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext
 from datetime import timedelta
@@ -130,6 +132,59 @@ def test_success_and_noop(
     assert [row.current_version_id for row in rows(session)] == versions
     assert marketplace.last_synced_revision == github.revision
     assert stored_bundles(session) == files
+
+
+def test_zeroed_tar_header_cannot_retire_a_skill(
+    session: Session, marketplace: Marketplace, tenant: str, github: GitHub
+) -> None:
+    run(marketplace, tenant)
+    original = [(row.id, row.current_version_id) for row in rows(session)]
+    expanded = gzip.decompress(github.archive)
+    with tarfile.open(fileobj=io.BytesIO(expanded), mode="r:") as archive:
+        hidden = next(
+            member for member in archive if member.name.endswith("beta/SKILL.md")
+        )
+    github.archive = gzip.compress(
+        expanded[: hidden.offset] + b"\0" * 512 + expanded[hidden.offset + 512 :]
+    )
+    github.revision = "b" * 40
+    result = run(marketplace, tenant)
+    assert result.status == "failed"
+    assert not result.retired_skill_ids
+    assert [(row.id, row.current_version_id) for row in rows(session)] == original
+    assert all(row.retired_at is None for row in rows(session))
+    assert marketplace.last_synced_revision == "a" * 40
+
+
+@pytest.mark.parametrize(
+    "manifest", [".claude-plugin/plugin.json", ".codex-plugin/plugin.json"]
+)
+def test_missing_plugin_root_definition_preserves_its_saved_skill(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    manifest: str,
+) -> None:
+    files = {
+        CLAUDE: _catalog(source="./solo"),
+        "solo/SKILL.md": _md("solo"),
+        "solo/scripts/run.py": b"print('hello')",
+    }
+    github.archive = _archive(files)
+    run(marketplace, tenant)
+    skill = rows(session)[0]
+    original = (skill.id, skill.current_version_id)
+    del files["solo/SKILL.md"]
+    files[f"solo/{manifest}"] = b'{"name":"solo"}'
+    github.archive, github.revision = _archive(files), "b" * 40
+    result = run(marketplace, tenant)
+    assert result.status == "applied"
+    assert result.blocked_entries.keys() == {"tools/solo"}
+    assert not result.retired_skill_ids
+    skill = rows(session)[0]
+    assert (skill.id, skill.current_version_id) == original
+    assert skill.retired_at is None
 
 
 @pytest.mark.parametrize("failure", ["upload", "commit", "cleanup"])
