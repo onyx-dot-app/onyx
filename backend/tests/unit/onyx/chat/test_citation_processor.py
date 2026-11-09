@@ -2655,3 +2655,56 @@ class TestPossibleCitationPatternReDoS:
                 DynamicCitationProcessor().possible_citation_pattern.search(segment)
                 is None
             ), f"expected {segment!r} to NOT be treated as a possible citation"
+
+
+@pytest.mark.parametrize(
+    "tokens",
+    [
+        ["See [[", "1", "]", "]", " now"],
+        ["See [[1]", "] now"],
+        ["See 【【1】", "】 now"],
+    ],
+)
+def test_double_bracket_citation_split_before_its_last_bracket(
+    mock_search_docs: CitationMapping, tokens: list[str | None]
+) -> None:
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens(processor, tokens)
+
+    assert output == "See [[1]](https://example.com/doc1) now"
+    assert [citation.citation_number for citation in citations] == [1]
+
+
+def test_citation_at_the_start_of_a_token_gets_its_leading_space(
+    mock_search_docs: CitationMapping,
+) -> None:
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1], 2: mock_search_docs[2]})
+
+    output, _ = process_tokens(processor, ["word", "[1]", "[2]", " end"])
+
+    assert output == (
+        "word [[1]](https://example.com/doc1)[[2]](https://example.com/doc2) end"
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "```text [1]\ncode\n```\n",
+        # The fence ends the list item's block and opens a new one.
+        "- ```\n``` [1]\ncode\n```\n",
+    ],
+)
+def test_citation_in_a_fence_info_string_stays_code_when_streamed(
+    mock_search_docs: CitationMapping, text: str
+) -> None:
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({1: mock_search_docs[1]})
+
+    output, citations = process_tokens(processor, list(text))
+
+    assert output == text
+    assert citations == []

@@ -117,6 +117,16 @@ class CodeFenceTracker:
             return False
         return bisect_right(self._transitions, offset) % 2 == 1
 
+    def may_open_at(self, offset: int) -> bool:
+        """Whether `offset` is in the unfinished line and that line may open a
+        block, so its code state is known only when the line ends."""
+        line = self._partial_line
+        return (
+            offset >= self._line_start
+            and (self._open is None or self._container_ended(line))
+            and self._opening(line)[0] is not None
+        )
+
     def _container_ended(self, line: str) -> bool:
         if self._open is None:
             return False
@@ -143,29 +153,37 @@ class CodeFenceTracker:
                     self._set_open(None)
                 return
 
+        opened, self._list_column = self._opening(line)
+        if opened is not None:
+            self._set_open(opened)
+
+    def _opening(self, line: str) -> tuple[_OpenFence | None, int]:
+        """The block that `line` opens outside a block, if any, and the list
+        content column after it."""
+        list_column = self._list_column
         depth, rest = _strip_quotes(line)
         if not rest.strip():
-            return
+            return None, list_column
         marker = _LIST_MARKER.match(rest)
         if marker:
-            self._list_column = _width(marker.group())
+            list_column = _width(marker.group())
             match = _FENCE.match(rest, marker.end())
             if match and match.group(1):
-                return
+                return None, list_column
         else:
-            if _indent(rest) < self._list_column:
-                self._list_column = 0
+            if _indent(rest) < list_column:
+                list_column = 0
             match = _FENCE.match(rest)
             # 4+ spaces past the container column is an indented code block.
-            if match and _width(match.group(1)) > self._list_column + 3:
-                return
+            if match and _width(match.group(1)) > list_column + 3:
+                return None, list_column
         if not match:
-            return
+            return None, list_column
         fence, info = match.group(2), match.group(3)
         # Backtick fences cannot have backticks in the info string.
         if fence[0] == "`" and "`" in info:
-            return
-        self._set_open(_OpenFence(fence, depth, self._list_column))
+            return None, list_column
+        return _OpenFence(fence, depth, list_column), list_column
 
     def _set_open(self, open_fence: _OpenFence | None) -> None:
         self._open = open_fence
@@ -299,6 +317,8 @@ class DynamicCitationProcessor:
             set()
         )  # recently cited (for deduplication)
         self.non_citation_count = 0
+        # Offset in llm_out where the last processed citation ends.
+        self.last_citation_end = -1
 
         # Citation patterns
         # Matches potential incomplete citations: '[', '[[', '[1', '[[1', '[1,', '[1, ', etc.
@@ -387,12 +407,10 @@ class DynamicCitationProcessor:
             str: Text chunks to display. Citation format depends on citation_mode.
             CitationInfo: Citation metadata (only when citation_mode=HYPERLINK)
         """
-        # None -> end of stream, flush remaining segment
+        # None -> end of stream: process the held segment with no more text to come
         if token is None:
             self.code_fence_tracker.flush()
-            if self.curr_segment:
-                segment, self.curr_segment = self.curr_segment, ""
-                yield segment
+            yield from self._process_segment(final=True)
             return
 
         # Handle stop stream token
@@ -421,18 +439,31 @@ class DynamicCitationProcessor:
         self.curr_segment += token
         self.llm_out += token
         self.code_fence_tracker.feed(token)
+        yield from self._process_segment(final=False)
 
+    def _process_segment(
+        self, final: bool
+    ) -> Generator[str | CitationInfo, None, None]:
+        """Yield the held segment up to the first citation that later text can
+        still change; `final` means no more text comes. The output does not
+        depend on how the stream splits into tokens."""
         # Look for citations in current segment, skipping ones inside code blocks
         segment_offset = len(self.llm_out) - len(self.curr_segment)
-        citation_matches = [
-            match
-            for match in self.citation_pattern.finditer(self.curr_segment)
-            if not self.code_fence_tracker.in_code_block_at(
-                segment_offset + match.start()
-            )
-        ]
-        possible_citation_found = bool(
-            re.search(self.possible_citation_pattern, self.curr_segment)
+        citation_matches: list[re.Match[str]] = []
+        unsettled = False
+        for match in self.citation_pattern.finditer(self.curr_segment):
+            offset = segment_offset + match.start()
+            if self.code_fence_tracker.in_code_block_at(offset):
+                continue
+            if not final and (
+                self.code_fence_tracker.may_open_at(offset) or self._may_extend(match)
+            ):
+                unsettled = True
+                break
+            citation_matches.append(match)
+        possible_citation_found = unsettled or (
+            not final
+            and bool(re.search(self.possible_citation_pattern, self.curr_segment))
         )
 
         result = ""
@@ -446,24 +477,13 @@ class DynamicCitationProcessor:
                 self.non_citation_count += len(intermatch_str)
                 match_idx = match_span[1]
 
-                # Check if there is already a space before this citation
-                if intermatch_str:
-                    has_leading_space = intermatch_str[-1].isspace()
-                else:
-                    # No text between citations (consecutive citations)
-                    # If match_idx > 0, we've already processed a citation, so don't add space
-                    if match_idx > 0:
-                        # Consecutive citations - don't add space between them
-                        has_leading_space = True
-                    else:
-                        # Citation at start of segment - check if previous output has space
-                        segment_start_idx = len(self.llm_out) - len(self.curr_segment)
-                        if segment_start_idx > 0:
-                            has_leading_space = self.llm_out[
-                                segment_start_idx - 1
-                            ].isspace()
-                        else:
-                            has_leading_space = False
+                # A citation needs no added space after whitespace or right
+                # after another citation, in this token or an earlier one.
+                start = segment_offset + match_span[0]
+                has_leading_space = start == self.last_citation_end or (
+                    start > 0 and self.llm_out[start - 1].isspace()
+                )
+                self.last_citation_end = segment_offset + match_span[1]
 
                 # Reset recent citations if no citations found for a while
                 if self.non_citation_count > 5:
@@ -530,6 +550,17 @@ class DynamicCitationProcessor:
 
         if result:
             yield result
+
+    def _may_extend(self, match: re.Match[str]) -> bool:
+        """Whether `[n]` at the end of the segment follows an opening bracket, so
+        the next token can make it part of `[[n]]`."""
+        start = match.start()
+        return (
+            match.lastindex == 2
+            and match.end() == len(self.curr_segment)
+            and start > 0
+            and self.curr_segment[start - 1] in "[【［"
+        )
 
     def _process_citation(
         self, match: re.Match, has_leading_space: bool
