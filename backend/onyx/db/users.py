@@ -27,6 +27,7 @@ from onyx.db.models import (
     ChatSession,
     DocumentSet,
     DocumentSet__User,
+    Marketplace,
     MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
@@ -45,6 +46,7 @@ from onyx.db.utils import is_check_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import UserGroupInfo
+from onyx.skills.marketplace.models import MARKETPLACE_LOGIN_ERROR
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -953,6 +955,19 @@ def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
+    owned_marketplaces = list(
+        db_session.scalars(
+            select(Marketplace.name).where(
+                Marketplace.owner_user_id == user_to_delete.id
+            )
+        )
+    )
+    if owned_marketplaces:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Remove this user's personal marketplaces before deleting the user: "
+            + ", ".join(owned_marketplaces),
+        )
     if (
         db_session.scalar(
             select(Skill.id)
@@ -969,6 +984,14 @@ def delete_user_from_db__no_commit(
             OnyxErrorCode.CONFLICT,
             "Transfer or delete this user's private skills before deleting the user.",
         )
+    db_session.query(Marketplace).filter(
+        Marketplace.login_user_id == user_to_delete.id
+    ).update(
+        {
+            Marketplace.login_user_id: None,
+            Marketplace.last_error: MARKETPLACE_LOGIN_ERROR,
+        }
+    )
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 

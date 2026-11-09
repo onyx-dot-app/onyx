@@ -505,7 +505,12 @@ def set_skill_public_permission(
             "Skills associated with an external app must remain visible to the "
             "organization with viewer access.",
         )
-    if public_permission is None and skill.is_custom and skill.author_user_id is None:
+    if (
+        public_permission is None
+        and skill.is_custom
+        and skill.author_user_id is None
+        and skill.marketplace_id is None
+    ):
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "Assign an owner before making this skill private.",
