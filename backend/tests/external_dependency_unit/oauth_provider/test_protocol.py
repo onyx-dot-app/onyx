@@ -169,14 +169,14 @@ async def _register(client: httpx.AsyncClient) -> str:
 
 
 async def _begin_authorization(
-    client: httpx.AsyncClient, client_id: str
+    client: httpx.AsyncClient, client_id: str, redirect_uri: str = _REDIRECT
 ) -> tuple[str, str]:
     verifier, challenge = generate_pkce_pair()
     response = await client.get(
         "/oauth-provider/authorize",
         params={
             "client_id": client_id,
-            "redirect_uri": _REDIRECT,
+            "redirect_uri": redirect_uri,
             "response_type": "code",
             "scope": "read:search",
             "resource": _RESOURCE,
@@ -190,8 +190,10 @@ async def _begin_authorization(
     return handle, verifier
 
 
-async def _authorize(client: httpx.AsyncClient, client_id: str) -> tuple[str, str]:
-    handle, verifier = await _begin_authorization(client, client_id)
+async def _authorize(
+    client: httpx.AsyncClient, client_id: str, redirect_uri: str = _REDIRECT
+) -> tuple[str, str]:
+    handle, verifier = await _begin_authorization(client, client_id, redirect_uri)
     details = await client.get("/oauth-provider/consent", params={"request": handle})
     assert details.status_code == 200, details.text
     approval = await client.post(
@@ -211,7 +213,11 @@ async def _authorize(client: httpx.AsyncClient, client_id: str) -> tuple[str, st
 
 
 async def _exchange(
-    client: httpx.AsyncClient, client_id: str, code: str, verifier: str
+    client: httpx.AsyncClient,
+    client_id: str,
+    code: str,
+    verifier: str,
+    redirect_uri: str = _REDIRECT,
 ) -> httpx.Response:
     return await client.post(
         "/oauth-provider/token",
@@ -220,7 +226,7 @@ async def _exchange(
             "grant_type": "authorization_code",
             "code": code,
             "code_verifier": verifier,
-            "redirect_uri": _REDIRECT,
+            "redirect_uri": redirect_uri,
             "resource": _RESOURCE,
         },
     )
@@ -863,6 +869,72 @@ async def test_authorize_fetches_no_store_metadata_once_per_request(
         for expected_fetches in (1, 2):
             await _begin_authorization(protocol_client, client_id)
             assert fetch.await_count == expected_fetches
+    finally:
+        _cimd_fetcher.cache_clear()
+
+
+def _private_key_jwt_metadata(client_id: str, redirect_uri: str) -> SSRFFetchResponse:
+    return SSRFFetchResponse(
+        content=json.dumps(
+            {
+                "client_id": client_id,
+                "client_name": "ChatGPT",
+                "redirect_uris": [redirect_uri],
+                "token_endpoint_auth_method": "private_key_jwt",
+                "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+            }
+        ).encode(),
+        status_code=200,
+        headers={"Cache-Control": "max-age=300"},
+    )
+
+
+async def test_private_key_jwt_metadata_client_completes_public_flow(
+    protocol_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client_id = "https://chatgpt.example/oauth/client.json"
+    redirect_uri = "https://chatgpt.example/connector_platform_oauth_redirect"
+    fetch = AsyncMock(return_value=_private_key_jwt_metadata(client_id, redirect_uri))
+    monkeypatch.setattr(cimd, "ssrf_safe_fetch_response", fetch)
+    _cimd_fetcher.cache_clear()
+    try:
+        code, verifier = await _authorize(protocol_client, client_id, redirect_uri)
+        response = await _exchange(
+            protocol_client, client_id, code, verifier, redirect_uri
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["scope"] == "read:search"
+    finally:
+        _cimd_fetcher.cache_clear()
+
+
+@pytest.mark.parametrize("redirect_uri", [_REDIRECT, "http://[::1]:9876/callback"])
+async def test_private_key_jwt_metadata_client_with_loopback_redirect_is_rejected(
+    protocol_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    redirect_uri: str,
+) -> None:
+    client_id = "https://signed.example/oauth/client.json"
+    fetch = AsyncMock(return_value=_private_key_jwt_metadata(client_id, redirect_uri))
+    monkeypatch.setattr(cimd, "ssrf_safe_fetch_response", fetch)
+    _cimd_fetcher.cache_clear()
+    try:
+        _, challenge = generate_pkce_pair()
+        response = await protocol_client.get(
+            "/oauth-provider/authorize",
+            params={
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "scope": "read:search",
+                "resource": _RESOURCE,
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+            },
+        )
+        assert response.status_code == 400, response.text
     finally:
         _cimd_fetcher.cache_clear()
 
