@@ -171,18 +171,25 @@ Neighbours own the rest:
 skill mutation (server/features/skill/api.py)   compute affected users BEFORE the change
   -> db write, commit
   -> push_skills_for_users       skills/push.py
-       lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
-       build_user_skills_payload         per sandbox user
-         list_runtime_skills_for_user    db/skill.py: the one runtime gate
+       lock_sandbox_skills_states        SELECT ... FOR UPDATE on Sandbox rows
+       build_user_skills_payload         per sandbox user; returns UserSkillsPayload
+         list_runtime_skill_candidates_for_user
+                                         db/skill.py: the one runtime gate plus keep rank
          _assemble_fileset               built-ins from disk, custom from FileStore;
-                                         resolves ${CLAUDE_SKILL_DIR} in each SKILL.md
+                                         resolves ${CLAUDE_SKILL_DIR} in each SKILL.md;
+                                         keeps whole Skills within the runtime limit
          build_connectable_apps_list     guidance for unconnected apps
-       compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
-       push_to_sandboxes(SKILLS_MOUNT_PATH)
-       set_sandbox_skills_hashes__no_commit   only for successful pushes
+       compute_skill_runtime_hash        once per sandbox; a matching hash skips the
+                                         push and updates only changed omissions
+       push_to_sandbox(SKILLS_MOUNT_PATH)  one payload at a time
+       set_sandbox_skills_states__no_commit   hash + omissions, only for successful pushes
   -> commit
 session start: sandbox_lifecycle.py:build_managed_content_payload
-  uses the same payload and hash, before the sandbox is RUNNING
+  uses the same payload and hash, before the sandbox is RUNNING;
+  record_managed_content_hashes__no_commit stores ManagedContentPayload.skill_omissions
+  with the hash only when the skills push landed
+session GET/list/restore/reload: SkillRuntimeNoticeResponse.for_owner
+  reads Sandbox.skill_runtime_omissions; no bundle is opened
 ```
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
@@ -221,7 +228,7 @@ The library preview of an external-app skill calls the same renderer
 
 ---
 
-**Runtime payload preparation.** `UserSkillsPayload` carries files, app guidance and omission records through session assembly. Bulk refresh builds and sends one user's payload at a time, releases it before building the next, and records only successful hashes. A user's build or transport error does not discard earlier successful states or stop later users. This avoids retaining one complete fileset per sandbox.
+**Runtime payload preparation.** `UserSkillsPayload` carries files, app guidance and omission records through session assembly. Bulk refresh builds and sends one user's payload at a time, releases it before building the next, and records only successful delivery states. A user's build or transport error does not discard earlier successful states or stop later users. This avoids retaining one complete fileset per sandbox.
 
 **Runtime limit.** `skills/push.py:_assemble_fileset` keeps whole Skills
 within `SKILL_RUNTIME_MAX_BYTES` (900 MiB) and `SKILL_RUNTIME_MAX_FILES`
@@ -250,6 +257,8 @@ Kubernetes push transport accepts the same 900 MiB and 10,000 files
 omissions happen here, not in transport. Push archives use a dedicated temporary
 folder. The next authenticated push clears files left by a killed sidecar while
 holding the push lock; snapshot archives use separate paths.
+
+**Runtime notice.** `Sandbox.skill_runtime_omissions` records omissions with the delivered hash in one write. Failed pushes preserve the previous state. If files are unchanged, a refresh updates changed omissions without a transport call. Session and reload responses include the limits and omissions only for the session owner's sandbox. Reading the notice does not open a bundle. The web store refreshes skill state after turn acceptance and confirmed completion, without waiting for history. Reads check session identity, turn generation and skill revision. Only server responses clear stale state. Explicit notice dismissal survives equal refetches; changed or cleared omissions reset it.
 
 ## Contracts and traps
 
@@ -1051,6 +1060,8 @@ holding the push lock; snapshot archives use separate paths.
 ---
 
 ## Verification
+
+- `backend/tests/external_dependency_unit/craft/test_skill_runtime_notice.py` covers successful, failed and unchanged pushes, session start, session responses and owner-only access.
 
 - `backend/tests/unit/onyx/skills/` covers bundles, validation, rendering and
   GitHub import.

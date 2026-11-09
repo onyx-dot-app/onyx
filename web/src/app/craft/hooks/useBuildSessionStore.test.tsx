@@ -1271,6 +1271,7 @@ describe("Session loading and restoration", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_runtime_notice: null,
       nextjs_port: null,
       session_loaded_in_sandbox: false,
       sandbox: {
@@ -1332,6 +1333,57 @@ describe("Session loading and restoration", () => {
         webappInfo(true, true) as never
       );
     });
+
+    it("refreshes skill state after confirmed completion without selecting another session", async () => {
+      const store = () => useBuildSessionStore.getState();
+      store().createSession(SESSION_ID, {
+        status: "running",
+        turnGeneration: 1,
+      });
+      store().setCurrentSession("other");
+      mockedApi.fetchSession.mockResolvedValue({
+        ...runningSession(),
+        skills_stale: true,
+      });
+      await store().beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "done" },
+        1,
+        {
+          session_id: SESSION_ID,
+          turn_id: "done",
+          turn_index: 0,
+          status: "SUCCEEDED",
+        }
+      );
+      expect(store().sessions.get(SESSION_ID)?.skillsStale).toBe(true);
+      expect(store().currentSessionId).toBe("other");
+    });
+
+    it.each(["newer refresh", "newer turn", "recreated session", "reload"])(
+      "rejects a skill refresh after %s",
+      async (change) => {
+        const pending =
+          deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+        const store = () => useBuildSessionStore.getState();
+        store().createSession(SESSION_ID);
+        mockedApi.fetchSession.mockReturnValueOnce(pending.promise);
+        const refresh = store().refreshSessionSkills(SESSION_ID);
+        if (change === "newer refresh") {
+          mockedApi.fetchSession.mockResolvedValueOnce(runningSession());
+          await store().refreshSessionSkills(SESSION_ID);
+        } else if (change === "newer turn") {
+          store().updateSessionData(SESSION_ID, { turnGeneration: 1 });
+        } else if (change === "recreated session") {
+          store().createSession(SESSION_ID);
+        } else {
+          store().updateSessionData(SESSION_ID, { skillsStale: false });
+        }
+        pending.resolve({ ...runningSession(), skills_stale: true });
+        await refresh;
+        expect(store().sessions.get(SESSION_ID)?.skillsStale).toBe(false);
+      }
+    );
 
     it.each([
       ["running", "history"],
@@ -2030,6 +2082,40 @@ describe("Session loading and restoration", () => {
       expect(
         useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
       ).toBe(false);
+    });
+
+    it("keeps the runtime notice that the restored sandbox reports", async () => {
+      const notice = (name: string) => ({
+        max_bytes: 900 * 1024 * 1024,
+        max_files: 10_000,
+        max_directories: 10_000,
+        max_path_bytes: 4033,
+        max_path_component_bytes: 255,
+        omissions: [
+          {
+            skill_id: name,
+            name,
+            charged_bytes: 950 * 1024 * 1024,
+            file_count: 1,
+            failed_limit: "bytes" as const,
+          },
+        ],
+      });
+      mockedApi.fetchSession.mockResolvedValue({
+        ...sleepingSession(),
+        skill_runtime_notice: notice("before-wake"),
+      } as never);
+      mockedApi.restoreSession.mockResolvedValue({
+        ...runningSession(),
+        skill_runtime_notice: notice("after-wake"),
+      } as never);
+
+      await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+          ?.skillRuntimeNotice
+      ).toEqual(notice("after-wake"));
     });
 
     it("waits for the webapp before flipping to running, then shows running", async () => {
@@ -2739,6 +2825,10 @@ describe("Session loading and restoration", () => {
     );
 
     it("adopts a running successor even when its predecessor failed", async () => {
+      mockedApi.fetchSession.mockResolvedValue({
+        ...runningSession(),
+        skills_stale: true,
+      });
       mockedApi.fetchKnownTurn.mockResolvedValue({
         session_id: SESSION_ID,
         turn_id: "completed-turn",
@@ -2764,6 +2854,7 @@ describe("Session loading and restoration", () => {
       ).toMatchObject({
         status: "running",
         activeTurnId: "other-tab-turn",
+        skillsStale: true,
         error: null,
         turnSettlement: null,
       });
@@ -3012,7 +3103,8 @@ describe("Session loading and restoration", () => {
     });
 
     it("settles without waiting for runtime restoration", async () => {
-      mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+      const refresh = deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+      mockedApi.fetchSession.mockReturnValue(refresh.promise);
       await useBuildSessionStore
         .getState()
         .beginTurnSettlement(
@@ -3020,11 +3112,14 @@ describe("Session loading and restoration", () => {
           { kind: "interactive", turnId: "completed-turn" },
           0
         );
-      expect(mockedApi.fetchSession).not.toHaveBeenCalled();
+      expect(mockedApi.fetchSession).toHaveBeenCalledWith(SESSION_ID, {
+        checkWorkspace: false,
+      });
       expect(mockedApi.restoreSession).not.toHaveBeenCalled();
       expect(
         useBuildSessionStore.getState().sessions.get(SESSION_ID)?.turnSettlement
       ).toEqual(receipt);
+      refresh.resolve(sleepingSession());
     });
 
     it("does not replace a newer turn during completion polling", async () => {
@@ -3540,6 +3635,7 @@ describe("session history races and discarded queued starts", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_runtime_notice: null,
       session_loaded_in_sandbox: true,
     });
   });
@@ -4074,6 +4170,7 @@ describe("Session naming", () => {
     agent_provider: null,
     agent_model: null,
     skills_stale: false,
+    skill_runtime_notice: null,
   };
   beforeEach(() => {
     useBuildSessionStore.setState({

@@ -1,3 +1,4 @@
+import { deferred, waitFor } from "@tests/setup/test-utils";
 import { FetchError } from "@/lib/fetcher";
 import { act, renderHook } from "@testing-library/react";
 
@@ -54,6 +55,24 @@ jest.mock("@/app/craft/services/apiServices", () => ({
 }));
 
 const sessionId = "session-thinking";
+const skillSessionResponse: Awaited<ReturnType<typeof fetchSession>> = {
+  id: sessionId,
+  user_id: null,
+  name: null,
+  status: "active",
+  created_at: "2026-10-12T00:00:00Z",
+  last_activity_at: "2026-10-12T00:00:00Z",
+  nextjs_port: null,
+  sandbox: null,
+  artifacts: [],
+  sharing_scope: "private",
+  origin: "INTERACTIVE",
+  agent_provider: null,
+  agent_model: null,
+  skills_stale: false,
+  skill_runtime_notice: null,
+  session_loaded_in_sandbox: true,
+};
 const originalNameBuildSession =
   useBuildSessionStore.getState().nameBuildSession;
 const originalLoadSession = useBuildSessionStore.getState().loadSession;
@@ -243,12 +262,69 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
+  it("refreshes omissions after acceptance while the initial history load is pending", async () => {
+    useBuildSessionStore.setState({ loadSession: originalLoadSession });
+    const history = deferred<Awaited<ReturnType<typeof fetchMessages>>>();
+    const refreshed = deferred<Awaited<ReturnType<typeof fetchSession>>>();
+
+    const notice = {
+      max_bytes: 900,
+      max_files: 100,
+      max_directories: 100,
+      max_path_bytes: 4021,
+      max_path_component_bytes: 255,
+      omissions: [
+        {
+          skill_id: "large",
+          name: "Large",
+          charged_bytes: 901,
+          file_count: 1,
+          failed_limit: "bytes" as const,
+        },
+      ],
+    };
+    jest
+      .mocked(fetchSession)
+      .mockResolvedValueOnce(skillSessionResponse)
+      .mockReturnValueOnce(refreshed.promise);
+    jest.mocked(fetchMessages).mockReturnValueOnce(history.promise);
+    jest.mocked(fetchArtifacts).mockResolvedValue([]);
+    jest
+      .mocked(processSSEStream)
+      .mockImplementation(() => new Promise(() => {}));
+    const { result, unmount } = renderHook(() => useBuildStreaming());
+    const loading = originalLoadSession(sessionId, { force: true });
+    await waitFor(() => expect(fetchMessages).toHaveBeenCalledTimes(1));
+    act(() => {
+      void result.current.streamMessage(sessionId, "First prompt");
+    });
+    await waitFor(() => expect(fetchTurnEventStream).toHaveBeenCalled());
+    await act(async () => {
+      history.resolve([]);
+      await loading;
+      refreshed.resolve({
+        ...skillSessionResponse,
+        skill_runtime_notice: notice,
+      });
+    });
+    expect(fetchSession).toHaveBeenCalledTimes(2);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      skillsStale: false,
+      skillRuntimeNotice: notice,
+    });
+    unmount();
+  });
+
   it.each([
     { changesDuringTurn: false, expected: false },
     { changesDuringTurn: true, expected: true },
   ])(
     "reconciles stale skills after turn creation when changesDuringTurn is $changesDuringTurn",
     async ({ changesDuringTurn, expected }) => {
+      const refresh = deferred<Awaited<ReturnType<typeof fetchSession>>>();
+      jest.mocked(fetchSession).mockReturnValue(refresh.promise);
       let resolveTurn: (
         turn: Awaited<ReturnType<typeof createTurn>>
       ) => void = () => {};
@@ -275,6 +351,12 @@ describe("useBuildStreaming thinking packets", () => {
         turn_index: 0,
       });
       await act(async () => stream);
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
+      ).toBe(true);
+      await act(async () =>
+        refresh.resolve({ ...skillSessionResponse, skills_stale: expected })
+      );
 
       expect(
         useBuildSessionStore.getState().sessions.get(sessionId)?.skillsStale
@@ -3485,6 +3567,7 @@ describe("useBuildStreaming thinking packets", () => {
         agent_provider: null,
         agent_model: null,
         skills_stale: false,
+        skill_runtime_notice: null,
         session_loaded_in_sandbox: true,
       });
       jest.mocked(fetchArtifacts).mockResolvedValue([]);
@@ -3595,6 +3678,7 @@ describe("useBuildStreaming thinking packets", () => {
         agent_provider: null,
         agent_model: null,
         skills_stale: false,
+        skill_runtime_notice: null,
         session_loaded_in_sandbox: true,
       });
       jest.mocked(fetchArtifacts).mockResolvedValue([]);

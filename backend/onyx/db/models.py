@@ -141,6 +141,7 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
+from onyx.db.skill_runtime_models import SkillRuntimeOmission
 from onyx.deep_research.models import ResearchAgentCallResult, ResearchConfiguration
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
@@ -7422,6 +7423,13 @@ class Sandbox(Base):
         DateTime(timezone=True), nullable=True
     )
     skills_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Skills the runtime limit left out of the content behind ``skills_hash``.
+    skill_runtime_omissions: Mapped[list[SkillRuntimeOmission]] = mapped_column(
+        PydanticListType(SkillRuntimeOmission),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
     mcp_config_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     encrypted_pat: Mapped[SensitiveValue[str] | None] = mapped_column(

@@ -1088,7 +1088,6 @@ export function useBuildStreaming({
     ): Promise<void> => {
       const currentState = useBuildSessionStore.getState();
       const existingSession = currentState.sessions.get(sessionId);
-      const skillsStaleRevision = existingSession?.skillsStaleRevision;
 
       if (existingSession?.abortController) {
         existingSession.abortController.abort();
@@ -1168,10 +1167,9 @@ export function useBuildStreaming({
             agentProvider: CRAFT_GATEWAY_PROVIDER,
             agentModel: `${model.providerId}/${model.modelName}`,
           }),
-          ...(currentSession?.skillsStaleRevision === skillsStaleRevision && {
-            skillsStale: false,
-          }),
         });
+
+        void useBuildSessionStore.getState().refreshSessionSkills(sessionId);
 
         if (currentSession?.wasInterrupted) {
           const pendingStop = stopRequests.get(

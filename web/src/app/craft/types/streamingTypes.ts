@@ -109,10 +109,33 @@ export interface ApiSessionResponse {
   agent_provider: string | null;
   agent_model: string | null;
   skills_stale: boolean;
+  skill_runtime_notice: ApiSkillRuntimeNotice | null;
+}
+
+/** The runtime limit that a left-out Skill did not fit. */
+export type SkillRuntimeLimit = "bytes" | "files" | "directories" | "paths";
+
+export interface ApiSkillRuntimeOmission {
+  skill_id: string;
+  name: string;
+  charged_bytes: number;
+  file_count: number;
+  failed_limit: SkillRuntimeLimit;
+}
+
+/** Whole Skills the runtime limit left out of the owner's sandbox. */
+export interface ApiSkillRuntimeNotice {
+  max_bytes: number;
+  max_files: number;
+  max_directories: number;
+  max_path_bytes: number;
+  max_path_component_bytes: number;
+  omissions: ApiSkillRuntimeOmission[];
 }
 
 export interface ApiSessionSkillsState {
   skills_stale: boolean;
+  skill_runtime_notice: ApiSkillRuntimeNotice | null;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {

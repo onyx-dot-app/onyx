@@ -21,9 +21,10 @@ from onyx.db.skill_runtime_models import SkillRuntimeLimit, SkillRuntimeOmission
 from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.build.db.sandbox import (
+    SandboxSkillsState,
     get_sandbox_user_map,
-    lock_sandbox_skills_hashes,
-    set_sandbox_skills_hashes__no_commit,
+    lock_sandbox_skills_states,
+    set_sandbox_skills_states__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
@@ -420,8 +421,8 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
         return
     try:
         sandbox_map = get_sandbox_user_map(list(user_ids), db_session)
-        current_hashes = lock_sandbox_skills_hashes(db_session, set(sandbox_map))
-        successful_hashes: dict[UUID, str] = {}
+        current_states = lock_sandbox_skills_states(db_session, set(sandbox_map))
+        successful_states: dict[UUID, SandboxSkillsState] = {}
         targets = 0
         failures = 0
         for sandbox_id, user in sandbox_map.items():
@@ -429,11 +430,22 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             payload: UserSkillsPayload | None = None
             try:
                 payload = build_user_skills_payload(user, db_session)
-                desired_hash = compute_skill_runtime_hash(
-                    payload.files, payload.connectable_apps_section
+                desired_state = SandboxSkillsState(
+                    skills_hash=compute_skill_runtime_hash(
+                        payload.files, payload.connectable_apps_section
+                    ),
+                    omissions=payload.omissions,
                 )
-                if current_hashes.get(sandbox_id) == desired_hash:
+                current_state = current_states.get(sandbox_id)
+                if (
+                    current_state is not None
+                    and current_state.skills_hash == desired_state.skills_hash
+                ):
                     targets -= 1
+                    # The sandbox already has these files. An omitted Skill
+                    # changes no file, so only its record can be out of date.
+                    if current_state.omissions != desired_state.omissions:
+                        successful_states[sandbox_id] = desired_state
                     continue
                 result = get_sandbox_manager().push_to_sandbox(
                     sandbox_id=sandbox_id,
@@ -448,7 +460,7 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
                         failure.detail,
                     )
                 if result.succeeded == 1 and not result.failures:
-                    successful_hashes[sandbox_id] = desired_hash
+                    successful_states[sandbox_id] = desired_state
                 else:
                     failures += 1
             except Exception:
@@ -461,14 +473,11 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
                 del payload
         if failures:
             logger.warning("Skill push: %d/%d targets failed", failures, targets)
-        if not successful_hashes:
+        if not successful_states:
             return
         try:
             with db_session.begin_nested():
-                set_sandbox_skills_hashes__no_commit(
-                    db_session,
-                    successful_hashes,
-                )
+                set_sandbox_skills_states__no_commit(db_session, successful_states)
         except Exception:
             logger.exception("Failed to persist successful skill push state")
     except Exception:
