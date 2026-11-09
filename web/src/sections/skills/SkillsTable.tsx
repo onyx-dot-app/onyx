@@ -254,7 +254,7 @@ export default function SkillsTable({
         hideable: false,
         cell: ({ item: { skill } }) => (
           <Text
-            font="secondary-body"
+            font="main-ui-body"
             color="text-04"
             maxLines={1}
             overflowTooltip

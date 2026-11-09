@@ -17506,7 +17506,7 @@
       "moreActionsForSkill": "{name} のその他の操作",
       "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
       "failed": "スキルを更新できませんでした。もう一度お試しください。",
-      "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",
+      "partialFailure": "{count, plural, one {# 件のスキルで操作に失敗しました} other {# 件のスキルで操作に失敗しました}}",
       "deleteTitle": "{count, plural, one {# 件のスキルを削除しますか？} other {# 件のスキルを削除しますか？}}",
       "deleteDescription": "{count, plural, one {アクセス権を持つすべてのユーザーに対して、選択したスキルを削除します。この操作は元に戻せません。} other {アクセス権を持つすべてのユーザーに対して、選択した # 件のスキルをすべて削除します。この操作は元に戻せません。}}",
       "shareTitle": "{count, plural, one {# 件のスキルのアクセス権を更新} other {# 件のスキルのアクセス権を更新}}",
