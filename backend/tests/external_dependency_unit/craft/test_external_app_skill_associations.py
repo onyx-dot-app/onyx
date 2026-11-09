@@ -151,7 +151,8 @@ def test_associate_rejects_an_invalid_skill_without_promoting_it(
 ) -> None:
     app_id = _make_app(db_session)
     invalid = make_skill(db_session, name="invalid-app-skill", is_public=False)
-    invalid.is_valid = False
+    assert invalid.current_version is not None
+    invalid.current_version.is_valid = False
     db_session.flush()
 
     with pytest.raises(OnyxError) as exc_info:
@@ -200,7 +201,8 @@ def test_replace_rejects_an_invalid_skill_without_mutating_associations(
     app_id = _make_app(db_session)
     original = make_skill(db_session, name="original-skill", is_public=True)
     invalid = make_skill(db_session, name="invalid-app-skill", is_public=False)
-    invalid.is_valid = False
+    assert invalid.current_version is not None
+    invalid.current_version.is_valid = False
     associate_custom_skill_with_external_app__no_commit(
         db_session,
         external_app_id=app_id,
@@ -226,7 +228,8 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True, author_user_id=owner.id)
-    original_bundle_file_id = skill.bundle_file_id
+    assert skill.current_version is not None
+    original_bundle_file_id = skill.current_version.bundle_file_id
     db_session.add(
         UserSkillPreference(user_id=owner.id, skill_id=skill.id, name=skill.name)
     )
@@ -245,7 +248,8 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
     unlinked = affected[0]
 
     assert unlinked.public_permission == SkillSharePermission.VIEWER
-    assert unlinked.bundle_file_id == original_bundle_file_id
+    assert unlinked.current_version is not None
+    assert unlinked.current_version.bundle_file_id == original_bundle_file_id
     assert get_external_app_by_skill_id(db_session, skill.id) is None
     assert (
         db_session.get(
@@ -368,7 +372,8 @@ def test_editor_creation_with_app_context_is_atomic_and_not_auto_enabled(
     )
     skill = db_session.scalar(select(Skill).where(Skill.id == response.id))
     assert skill is not None
-    bundle_file_id = skill.bundle_file_id
+    assert skill.current_version is not None
+    bundle_file_id = skill.current_version.bundle_file_id
 
     try:
         assert response.public_permission == SkillSharePermission.VIEWER
