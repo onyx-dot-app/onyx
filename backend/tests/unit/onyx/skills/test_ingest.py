@@ -8,6 +8,7 @@ import pytest
 
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
+from onyx.file_store.models import BundleMetadata
 from onyx.skills.ingest import (
     IngestedBundle,
     ingest_skill_bundle,
@@ -150,6 +151,9 @@ def test_ingested_skill_bundle_deletes_new_blob_on_failure(
             bundle_file_id="new-bundle",
             bundle_sha256="0" * 64,
             description="Description",
+            metadata=BundleMetadata(
+                content_digest="0" * 64, unpacked_size_bytes=0, file_count=0
+            ),
         ),
     )
     monkeypatch.setattr(

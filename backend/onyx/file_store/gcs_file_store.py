@@ -10,6 +10,7 @@ from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, cast
 
 import puremagic
+from google.api_core.exceptions import RequestRangeNotSatisfiable
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
@@ -40,6 +41,7 @@ from onyx.file_store.file_store import (
     PresignedUrlsNotSupportedError,
     content_byte_size,
     presign_expiry,
+    read_file_to_buffer,
 )
 from onyx.file_store.models import (
     PendingPresignedUpload,
@@ -282,6 +284,8 @@ class GCSBackedFileStore(PresignableFileStore):
         mode: str | None = None,  # noqa: ARG002
         use_tempfile: bool = False,
         db_session: Session | None = None,
+        *,
+        max_bytes: int | None = None,
     ) -> IO[bytes]:
         with get_session_with_current_tenant_if_none(db_session) as db_session:
             file_record = get_filerecord_by_file_id(
@@ -291,6 +295,21 @@ class GCSBackedFileStore(PresignableFileStore):
         client = self._get_gcs_client()
         bucket = client.bucket(file_record.bucket_name)
         blob = bucket.blob(file_record.object_key)
+
+        if max_bytes is not None:
+            try:
+                content = blob.download_as_bytes(
+                    start=0, end=max_bytes, raw_download=True
+                )
+            except RequestRangeNotSatisfiable:
+                blob.reload()
+                if blob.size != 0:
+                    raise
+                content = b""
+            with BytesIO(content) as source:
+                return read_file_to_buffer(
+                    source.read, use_tempfile=use_tempfile, max_bytes=max_bytes
+                )
 
         if use_tempfile:
             temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=True)

@@ -15,6 +15,7 @@ from typing import IO, Final, Literal
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.models import BundleLimits
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.metadata import (
     parse_skill_document,
@@ -39,6 +40,12 @@ DEFAULT_ZIP_MAX_BYTES: Final[int] = min(
 )
 DEFAULT_MAX_FILE_COUNT: Final[int] = int(
     os.environ.get("SKILL_BUNDLE_MAX_FILE_COUNT") or 500
+)
+
+STORED_BUNDLE_LIMITS = BundleLimits(
+    max_stored_bytes=DEFAULT_STORED_ZIP_MAX_BYTES,
+    max_file_bytes=DEFAULT_PER_FILE_MAX_BYTES,
+    max_total_bytes=DEFAULT_TOTAL_MAX_BYTES,
 )
 
 SkillBundleLimit = Literal["zip_bytes", "file_count", "file_bytes", "total_bytes"]

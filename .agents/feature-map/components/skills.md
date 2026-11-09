@@ -190,6 +190,10 @@ The library preview of an external-app skill calls the same renderer
    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
    Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
    Stored reads retain the existing per-file and expanded-total limits.
+   Version metadata repair also bounds compressed reads at the storage backend
+   and expanded work per file and in total, without applying upload file counts.
+   Skill deletion collects every retained bundle before cascading version deletion.
+   Cleanup runs after commit and checks both legacy and version references.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
@@ -254,16 +258,25 @@ The library preview of an external-app skill calls the same renderer
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `version-rollout-reads` **Runtime reads still use the bundle columns on
-    `db/models.py:Skill`.** The version schema alone does not capture new
-    writes. A custom skill can have no current pointer until version writes
-    and their repair task ship. An old writer can also leave a stale pointer
-    and delete its version's bundle. Before readers switch, the repair task
-    must compare the legacy columns with the current version, append a version
-    from the legacy columns when they differ, and tolerate missing old files.
-    Built-ins have no version. The initial
-    snapshot copies database values without opening bundles; its content digest,
-    unpacked size and file count stay unknown until an application backfill.
-    Do not use these snapshots as runtime content during this rollout.
+    `db/models.py:Skill`.** Custom writers call `db/skill_version.py`, which
+    adapts the generic `db/resource_version.py` service. A row lock serializes
+    version numbers. The version, pointer and legacy columns change in one
+    transaction. Equal content digests keep the current version and stored-byte
+    hash; ZIP timestamps and entry order do not affect the digest. Replacement
+    never deletes a historical bundle. Cleanup of staged, unused blobs stays
+    with ingestion and the caller.
+    Legacy columns remain authoritative during rollout. A save repairs a stale
+    or missing pointer before writing its new content. A recovery snapshot has
+    no creator; a user content change follows it. Runtime classification updates
+    legacy validity. The next save or repair copies validity onto the existing
+    version without creating history or duplicating its blob.
+    Identical saves verify the existing bundle before reusing it. A missing,
+    changed or corrupt current file creates a fresh version from the upload.
+    Unexpected storage errors abort the save and keep the current version.
+    Missing or corrupt historical files retain unknown metadata. Built-ins have
+    no versions. The next layer adds bounded tenant repair; finish a fresh drift
+    check after old writers drain before switching readers. No migration reads
+    blobs.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
@@ -280,6 +293,7 @@ The library preview of an external-app skill calls the same renderer
     still does this. A harness that loads skills in the API server must give the
     model `skills/rendering.py:render_skill_for_model`, which resolves the
     placeholder and adds the same two lines. No such harness is on main yet.
+
 
 ---
 
