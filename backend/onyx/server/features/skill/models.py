@@ -62,6 +62,7 @@ class SkillResponse(BaseModel):
     hidden_by_skill_id: UUID | None = None
     hidden_reason: Literal["same_name"] | None = None
     installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
+    effective_installation_policy: SkillInstallationPolicy
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -86,17 +87,20 @@ class SkillResponse(BaseModel):
         db_session: Session,
         enabled: bool,
         can_toggle: bool,
+        effective_installation_policy: SkillInstallationPolicy,
         external_app: SkillExternalAppDependencyResponse | None = None,
         hidden_by_skill_id: UUID | None = None,
     ) -> "SkillResponse":
         return cls(
             source="builtin",
+            installation_policy=skill.installation_policy,
             id=skill.id,
             name=skill.name,
             description=skill.description,
             is_available=definition.is_available(db_session),
             unavailable_reason=definition.unavailable_reason,
             enabled=enabled,
+            effective_installation_policy=effective_installation_policy,
             can_toggle=can_toggle,
             hidden_by_skill_id=hidden_by_skill_id,
             hidden_reason="same_name" if hidden_by_skill_id is not None else None,
@@ -110,6 +114,7 @@ class SkillResponse(BaseModel):
         skill: Skill,
         *,
         enabled: bool,
+        effective_installation_policy: SkillInstallationPolicy,
         can_toggle: bool = True,
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
@@ -144,6 +149,7 @@ class SkillResponse(BaseModel):
             is_valid=skill.current_is_valid,
             installation_policy=skill.installation_policy,
             enabled=enabled,
+            effective_installation_policy=effective_installation_policy,
             can_toggle=can_toggle,
             hidden_by_skill_id=hidden_by_skill_id,
             hidden_reason="same_name" if hidden_by_skill_id is not None else None,
@@ -370,6 +376,7 @@ class SkillGroupShareRequest(BaseModel):
             SkillInstallationPolicy.AVAILABLE,
             SkillInstallationPolicy.DEFAULT,
             SkillInstallationPolicy.REQUIRED,
+            SkillInstallationPolicy.NOT_AVAILABLE,
         ]
         | None
     ) = None
@@ -382,6 +389,7 @@ class SkillShareRequest(BaseModel):
         SkillInstallationPolicy.AVAILABLE,
         SkillInstallationPolicy.DEFAULT,
         SkillInstallationPolicy.REQUIRED,
+        SkillInstallationPolicy.NOT_AVAILABLE,
     ] = SkillInstallationPolicy.AVAILABLE
 
     user_shares: list[SkillUserShareRequest] | None = None

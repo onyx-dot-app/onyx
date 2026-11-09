@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.auth.scoped_permissions import assert_global, assert_within_scope
-from onyx.db.enums import Permission, SkillInstallationPolicy, SkillSharePermission
+from onyx.db.enums import Permission, SkillSharePermission
 from onyx.db.models import Marketplace, Marketplace__UserGroup, Skill, User
 from onyx.db.resource_access import (
     ResourceAccessAdapter,
@@ -168,13 +168,6 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "Marketplaces use company and group access.",
-            )
-        if SkillInstallationPolicy.NOT_AVAILABLE in (
-            change.installation_policy,
-            *change.group_installation_policies.values(),
-        ):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT, "Not available is not supported yet."
             )
         community = self.tier == Tier.COMMUNITY
         current = self.state(resource)

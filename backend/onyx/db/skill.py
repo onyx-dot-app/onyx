@@ -126,6 +126,7 @@ class SkillUserState:
     enabled: bool
     can_toggle: bool
     external_app_dependency: SkillExternalAppDependencyState | None
+    effective_installation_policy: SkillInstallationPolicy
     hidden_by_skill_id: UUID | None = None
 
 
@@ -728,7 +729,12 @@ def enable_new_skill_if_name_available__no_commit(
     """Enable a newly inserted skill under the same user lock as toggles."""
     _lock_user_skill_preferences(user_id, db_session)
     user = lock_resource_access_user(user_id, db_session)
-    if skill.installation_policy == SkillInstallationPolicy.REQUIRED:
+    policy = resolve_skill_installation_policies([user.id], [skill.id], db_session).get(
+        (user.id, skill.id)
+    )
+    if policy is None or policy == SkillInstallationPolicy.NOT_AVAILABLE:
+        return False
+    if policy == SkillInstallationPolicy.REQUIRED:
         return True
     if (
         db_session.scalar(
@@ -748,6 +754,37 @@ def enable_new_skill_if_name_available__no_commit(
         .returning(UserSkillPreference.user_id)
     )
     return inserted_user_id is not None
+
+
+def clear_enabled_skill_preferences__no_commit(
+    skill_ids: Collection[UUID], db_session: Session, *, user_id: UUID | None = None
+) -> None:
+    """App removal preserves opt-outs and choices hidden by Not available."""
+    lock_group_membership(db_session)
+    users = select(UserSkillPreference.user_id).where(
+        UserSkillPreference.skill_id.in_(skill_ids),
+        UserSkillPreference.enabled.is_(True),
+    )
+    if user_id is not None:
+        users = users.where(UserSkillPreference.user_id == user_id)
+    user_ids = list(
+        db_session.scalars(users.distinct().order_by(UserSkillPreference.user_id))
+    )
+    for affected_user_id in user_ids:
+        _lock_user_skill_preferences(affected_user_id, db_session)
+    policies = _skill_installation_policy_rows(user_ids, skill_ids)
+    db_session.execute(
+        delete(UserSkillPreference)
+        .where(
+            UserSkillPreference.enabled.is_(True),
+            exists().where(
+                policies.c.user_id == UserSkillPreference.user_id,
+                policies.c.skill_id == UserSkillPreference.skill_id,
+                policies.c.installation_policy != SkillInstallationPolicy.NOT_AVAILABLE,
+            ),
+        )
+        .execution_options(synchronize_session=False)
+    )
 
 
 def replace_skill_bundle(
@@ -848,6 +885,7 @@ def skill_user_states(
     rows = db_session.execute(
         select(
             Skill.id,
+            policy,
             _is_enabled_for_user(user, policy).label("enabled"),
             skill_visible_to_user(user, installation_policy=policy).label("visible"),
             and_(
@@ -877,13 +915,14 @@ def skill_user_states(
                 or external_app_dependencies[skill_id].ready
             ),
             external_app_dependency=external_app_dependencies.get(skill_id),
+            effective_installation_policy=SkillInstallationPolicy(effective_policy),
             hidden_by_skill_id=(
                 winners[skill_id]
                 if skill_id in winners and winners[skill_id] != skill_id
                 else None
             ),
         )
-        for skill_id, enabled, visible, supports_preference in rows
+        for skill_id, effective_policy, enabled, visible, supports_preference in rows
     }
 
 
@@ -992,11 +1031,6 @@ def set_skill_installation_policy(
     db_session: Session,
 ) -> None:
     assert_skill_mutable(skill)
-    if policy == SkillInstallationPolicy.NOT_AVAILABLE:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "The Not available installation policy is not supported yet.",
-        )
     if policy != SkillInstallationPolicy.AVAILABLE and not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -1282,7 +1316,13 @@ def delete_skill_for_user__no_commit(
         )
     if (
         skill.retired_at is None
-        and skill.installation_policy == SkillInstallationPolicy.REQUIRED
+        and (
+            skill.installation_policy == SkillInstallationPolicy.REQUIRED
+            or any(
+                share.installation_policy == SkillInstallationPolicy.REQUIRED
+                for share in skill.group_shares
+            )
+        )
         and not (
             allow_global_management
             and has_global_permission(user, Permission.MANAGE_SKILLS)
