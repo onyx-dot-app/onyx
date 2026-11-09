@@ -30,6 +30,14 @@ export interface SkillExternalAppDependency {
   ready: boolean;
 }
 
+export interface SkillMarketplace {
+  id: string;
+  name: string;
+  personal: boolean;
+  folder: string | null;
+  follows_access: boolean;
+}
+
 export interface Skill {
   source: SkillSource;
   id: string;
@@ -59,6 +67,8 @@ export interface Skill {
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
   external_app: SkillExternalAppDependency | null;
+  marketplace: SkillMarketplace | null;
+  retired_at: string | null;
 }
 
 export type BuiltinSkill = Skill & {

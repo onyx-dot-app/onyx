@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, has_permission
@@ -16,11 +19,17 @@ from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
 from onyx.db.scoped_permissions import fetch_managed_group_ids
-from onyx.db.skill import SkillUserState, skill_user_states
+from onyx.db.skill import (
+    SkillMarketplaceSource,
+    SkillUserState,
+    skill_marketplace_sources,
+    skill_user_states,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (
     SkillExternalAppDependencyResponse,
+    SkillMarketplaceResponse,
     SkillPreviewResponse,
     SkillResponse,
     SkillsList,
@@ -117,6 +126,7 @@ def skill_response_for_user(
     managed_user_group_ids: set[int] | None = None,
     include_share_details: bool = False,
     allow_management: bool = True,
+    marketplaces: Mapping[UUID, SkillMarketplaceSource] | None = None,
 ) -> SkillResponse:
     if state is None:
         state = skill_user_states(user, [skill.id], db_session).get(skill.id)
@@ -135,6 +145,23 @@ def skill_response_for_user(
             external_app=_dependency_response(state.external_app_dependency),
         )
 
+    marketplace = None
+    if skill.marketplace_id is not None:
+        sources = (
+            marketplaces
+            if marketplaces is not None
+            else skill_marketplace_sources([skill.marketplace_id], db_session)
+        )
+        source = sources.get(skill.marketplace_id)
+        if source is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill source no longer exists")
+        marketplace = SkillMarketplaceResponse(
+            id=source.id,
+            name=source.name,
+            personal=source.personal,
+            folder=skill.marketplace_path,
+            follows_access=skill.follows_marketplace_access,
+        )
     if user_group_ids is None:
         user_group_ids = get_user_group_ids_for_user(db_session, user.id)
     if (
@@ -155,6 +182,7 @@ def skill_response_for_user(
         ),
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
+        marketplace=marketplace,
     )
 
 
@@ -174,9 +202,18 @@ def skills_list_response_for_user(
         else set()
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
+    marketplaces = skill_marketplace_sources(
+        {skill.marketplace_id for skill in rows if skill.marketplace_id is not None},
+        db_session,
+    )
     for skill in rows:
         state = states.get(skill.id)
         if state is None:
+            continue
+        if (
+            skill.marketplace_id is not None
+            and skill.marketplace_id not in marketplaces
+        ):
             continue
         if (
             skill.built_in_skill_id is not None
@@ -197,6 +234,7 @@ def skills_list_response_for_user(
             user_group_ids=user_group_ids,
             managed_user_group_ids=managed_user_group_ids,
             allow_management=allow_management,
+            marketplaces=marketplaces,
         )
         (customs if skill.is_custom else builtins).append(response)
 

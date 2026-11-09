@@ -17517,6 +17517,12 @@
       "addAccessDescription": "将这些人员和群组添加到每个所选技能。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
       "apply": "{count, plural, one {应用于 # 个技能} other {应用于 # 个技能}}",
       "moreActions": "更多操作"
+    },
+    "synced": {
+      "view": "查看内容",
+      "readOnlyTitle": "从 GitHub 同步",
+      "readOnlyDescription": "请在 GitHub 中编辑这些指令和文件。此市场同步时，Onyx 会更新它们。",
+      "source": "市场：{name}"
     }
   },
   "opensearchHealth": {

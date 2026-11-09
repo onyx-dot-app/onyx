@@ -16,6 +16,7 @@ import { Content, Section } from "@opal/layouts";
 import {
   SvgBlocks,
   SvgEdit,
+  SvgEye,
   SvgPlug,
   SvgShare,
   SvgTrash,
@@ -27,6 +28,7 @@ import type {
   SkillExternalAppDependency,
 } from "@/lib/skills/types";
 import { cn } from "@opal/utils";
+import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -93,7 +95,8 @@ export default function SkillCard({
   }, [onClick, item]);
 
   const {
-    canManageCompanySkills,
+    canDelete,
+    isSynced,
     isRequired,
     authorTitle,
     dependency,
@@ -136,12 +139,15 @@ export default function SkillCard({
         height="full"
       >
         <Section
-          height={6}
+          height="auto"
           gap={1}
           padding={1}
           alignItems="stretch"
           justifyContent="start"
-          className={cn(isSelectedDependencyUnavailable && "opacity-50")}
+          className={cn(
+            "min-h-24",
+            isSelectedDependencyUnavailable && "opacity-50"
+          )}
         >
           <Section
             flexDirection="row"
@@ -186,7 +192,9 @@ export default function SkillCard({
                 }}
               />
             </Section>
-            {item.source === "custom" && canEdit && !selection?.checked ? (
+            {item.source === "custom" &&
+            (canEdit || canDelete) &&
+            !selection?.checked ? (
               <Section
                 flexDirection="row"
                 justifyContent="start"
@@ -195,7 +203,7 @@ export default function SkillCard({
                 gap={1}
                 className="opacity-0 transition-opacity group-hover/SkillCard:opacity-100 group-focus-within/SkillCard:opacity-100 no-hover:opacity-100"
               >
-                {onShare && (
+                {canEdit && onShare && (
                   <Button
                     prominence="secondary"
                     size="sm"
@@ -210,15 +218,25 @@ export default function SkillCard({
                     }}
                   />
                 )}
-                <Button
-                  prominence="secondary"
-                  size="sm"
-                  icon={SvgEdit}
-                  tooltip={t("skill.edit.tooltip")}
-                  aria-label={t("skill.edit.tooltip")}
-                  onClick={handleEditClick}
-                />
-                {onDelete && (!isRequired || canManageCompanySkills) && (
+                {canEdit && (
+                  <Button
+                    prominence="secondary"
+                    size="sm"
+                    icon={isSynced ? SvgEye : SvgEdit}
+                    tooltip={
+                      isSynced
+                        ? skillCopy("synced.view")
+                        : t("skill.edit.tooltip")
+                    }
+                    aria-label={
+                      isSynced
+                        ? skillCopy("synced.view")
+                        : t("skill.edit.tooltip")
+                    }
+                    onClick={handleEditClick}
+                  />
+                )}
+                {onDelete && canDelete && (
                   <Button
                     prominence="secondary"
                     variant="danger"
@@ -236,6 +254,9 @@ export default function SkillCard({
             ) : undefined}
           </Section>
           <Section padding={2} gap={0} height="auto" alignItems="stretch">
+            {item.source === "custom" && item.skill.marketplace && (
+              <SkillMarketplaceLabel marketplace={item.skill.marketplace} />
+            )}
             <Text
               font="secondary-body"
               color="text-03"

@@ -673,6 +673,8 @@ describe("ConfigureProviderModal", () => {
             author_email: "admin@example.com",
             owner: { id: "admin-id", email: "admin@example.com" },
             ownership_vacant: false,
+            marketplace: null,
+            retired_at: null,
             user_permission: "OWNER",
           }),
         ],
