@@ -45,7 +45,7 @@ Headers are sticky when `actions` is non-empty or Cancel is enabled. Set `sticky
 | `sticky` | `boolean` | Automatic | Override whether the header stays visible while scrolling. |
 | `cancel`               | `boolean \| string \| () => void` | `false` | Render a secondary Cancel as the first action. `true` goes back within the app, or to `/` from a page not reached within it; a path does the same with that path as the fallback; a function replaces the action |
 | `divider`              | `boolean`                 | `false`   | Show a horizontal divider at the bottom of the header                                                                                                     |
-| `stackActionsOnMobile` | `boolean`                 | `false`   | Place actions below the title on a full-width row on narrow screens                                                                                       |
+| `stackActionsOnMobile` | `boolean`                 | `false`   | Place actions below the title on a full-width row on narrow screens; wrap actions when needed                                                                                       |
 
 ### Body
 
