@@ -549,3 +549,296 @@ def test_sibling_formats_and_relative_names() -> None:
     assert isinstance(_entries(files)[0], ReadySkill)
     files[CLAUDE] = files[CLAUDE].replace(b'"source": "p"', b'"source": "./plugins/p"')
     assert isinstance(_entries(files)[0], ReadySkill)
+
+
+@pytest.mark.parametrize("damage", ["header", "truncated", "partial_header"])
+def test_incomplete_tar_body_never_reports_removed_skills(damage: str) -> None:
+    files = _files()
+    files["skills/later/SKILL.md"] = _md("later")
+    payload = gzip.decompress(_archive(files, "tar"))
+    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+        offset = archive.getmember("skills/later/SKILL.md").offset
+    if damage == "header":
+        payload = payload[:offset] + b"!" + payload[offset + 1 :]
+    elif damage == "truncated":
+        payload = payload[:offset]
+    else:
+        payload = payload[: offset + 200]
+    result = reader.read_marketplace_archive(gzip.compress(payload))
+    assert isinstance(result, FailedMarketplace), result
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+def test_missing_explicit_skill_keeps_its_key(kind: str) -> None:
+    files = {
+        CLAUDE: _catalog(skills=["./skills/pdf"]),
+        "skills/pdf/skill.md": _md("pdf"),
+        "skills/pdf/scripts/run.py": b"print('pdf')",
+        "skills/pdf/reference/guide.md": b"Reference",
+    }
+    entries = _entries(files, kind)
+    assert [entry.entry_key for entry in entries] == ["tools/pdf"]
+    assert isinstance(entries[0], BlockedSkill)
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+@pytest.mark.parametrize("declared", ["./extra", ["./extra"]])
+def test_plugin_manifest_skill_paths(
+    kind: str, provider: str, declared: JsonValue
+) -> None:
+    files = _files()
+    files[f".{provider}-plugin/plugin.json"] = json.dumps({"skills": declared}).encode()
+    files["extra/additional/SKILL.md"] = _md("additional")
+    entries = _entries(files, kind)
+    expected = {"tools/additional"}
+    if provider == "claude":
+        expected.add("tools/hello")
+    assert {entry.entry_key for entry in entries} == expected
+    assert all(isinstance(entry, ReadySkill) for entry in entries)
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+def test_nested_plugin_root_skill(kind: str) -> None:
+    files = {
+        CLAUDE: _catalog(source="./plugins/hello"),
+        "plugins/hello/SKILL.md": _md(),
+    }
+    entries = _entries(files, kind)
+    assert [entry.entry_key for entry in entries] == ["tools/hello"]
+    assert isinstance(entries[0], ReadySkill)
+
+
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+@pytest.mark.parametrize("declared", [None, 1, {}, [1], ["../escape"]])
+def test_invalid_plugin_skill_paths_fail_read(
+    provider: str, declared: JsonValue
+) -> None:
+    files = _files()
+    files[f".{provider}-plugin/plugin.json"] = json.dumps({"skills": declared}).encode()
+    assert isinstance(
+        reader.read_marketplace_archive(_archive(files)), FailedMarketplace
+    )
+
+
+def test_overlapping_default_and_manifest_paths_load_once() -> None:
+    files = _files()
+    files[".claude-plugin/plugin.json"] = b'{"skills":["./skills"]}'
+    assert [entry.entry_key for entry in _entries(files)] == ["tools/hello"]
+    files["extra/hello/SKILL.md"] = _md()
+    files[".claude-plugin/plugin.json"] = b'{"skills":["./extra"]}'
+    assert isinstance(
+        reader.read_marketplace_archive(_archive(files)), FailedMarketplace
+    )
+
+
+def test_entry_paths_suppress_defaults_but_keep_manifest_paths() -> None:
+    files = _files(skills=["./listed/selected"])
+    files["listed/selected/SKILL.md"] = _md("selected")
+    files["extra/additional/SKILL.md"] = _md("additional")
+    files[".claude-plugin/plugin.json"] = b'{"skills":"./extra"}'
+    entries = _entries(files)
+    assert {entry.entry_key for entry in entries} == {
+        "tools/selected",
+        "tools/additional",
+    }
+    assert all(isinstance(entry, ReadySkill) for entry in entries)
+
+
+def test_claude_manifest_precedes_codex_skill_paths() -> None:
+    files = _files()
+    files[".claude-plugin/plugin.json"] = b'{"skills":"./skills"}'
+    files[".codex-plugin/plugin.json"] = b'{"skills":"./different"}'
+    files["different/other/SKILL.md"] = _md("other")
+    assert [entry.entry_key for entry in _entries(files)] == ["tools/hello"]
+
+
+@pytest.mark.parametrize("provider", ["claude", "codex"])
+def test_empty_manifest_skills_prevent_root_fallback(provider: str) -> None:
+    files = {
+        CLAUDE: _catalog(source="./plugins/hello"),
+        "plugins/hello/SKILL.md": _md(),
+        f"plugins/hello/.{provider}-plugin/plugin.json": b'{"skills":[]}',
+    }
+    assert _entries(files) == ()
+
+
+def test_root_fallback_does_not_claim_repository_or_default_container() -> None:
+    files = {CLAUDE: _catalog(), "SKILL.md": _md()}
+    assert _entries(files) == ()
+    files = {
+        CLAUDE: _catalog(source="./plugins/hello"),
+        "plugins/hello/SKILL.md": _md(),
+        "plugins/hello/skills/child/SKILL.md": _md("child"),
+    }
+    assert [entry.entry_key for entry in _entries(files)] == ["tools/child"]
+    files[CLAUDE] = _catalog(source="./plugins/hello", skills=[])
+    assert _entries(files) == ()
+
+
+def test_explicit_special_skill_path_stays_blocked() -> None:
+    data = io.BytesIO(_archive({CLAUDE: _catalog(skills=["./skills/hello"])}))
+    with zipfile.ZipFile(data, "a") as archive:
+        info = zipfile.ZipInfo("skills/hello")
+        info.create_system = 3
+        info.external_attr = stat.S_IFLNK << 16
+        archive.writestr(info, b"elsewhere")
+    result = reader.read_marketplace_archive(data.getvalue())
+    assert isinstance(result, CompleteMarketplace), result
+    assert len(result.entries) == 1
+    assert isinstance(result.entries[0], BlockedSkill)
+    assert result.entries[0].entry_key == "tools/hello"
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("declaration", ["entry", "claude", "codex"])
+@pytest.mark.parametrize("names", [["one"], ["one", "two"]])
+def test_declared_default_container_keeps_broken_child_keys(
+    kind: str, declaration: str, names: list[str]
+) -> None:
+    files = {CLAUDE: _catalog()}
+    if declaration == "entry":
+        files[CLAUDE] = _catalog(skills="./skills/")
+    else:
+        files[f".{declaration}-plugin/plugin.json"] = b'{"skills":"./skills/"}'
+    for name in names:
+        files[f"skills/{name}/scripts/run.py"] = b"pass"
+    entries = _entries(files, kind)
+    assert {entry.entry_key for entry in entries} == {f"tools/{name}" for name in names}
+    assert all(isinstance(entry, BlockedSkill) for entry in entries)
+
+
+def test_plugin_count_rejected_before_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reader, "PLUGIN_MAX_COUNT", 2)
+    files = _files()
+    files[CLAUDE] = json.dumps(
+        {"name": "m", "plugins": [{"name": str(i), "source": "./"} for i in range(3)]}
+    ).encode()
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "plugins" in result.reason
+
+
+@pytest.mark.parametrize("source", ["entry", "claude", "codex"])
+def test_declared_path_limit_applies_before_expansion(
+    source: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 2)
+    paths = ["./missing"] * 3
+    files = _files(skills=paths) if source == "entry" else _files()
+    if source != "entry":
+        files[f".{source}-plugin/plugin.json"] = json.dumps({"skills": paths}).encode()
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "declared component paths" in result.reason
+
+
+def test_declared_path_budget_shared_across_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 2)
+    files = _files()
+    files[CLAUDE] = json.dumps(
+        {
+            "name": "m",
+            "plugins": [
+                {"name": str(i), "source": "./", "skills": "./skills"} for i in range(2)
+            ],
+        }
+    ).encode()
+    assert len(_entries(files)) == 2
+    files[".codex-plugin/plugin.json"] = b'{"skills":"./skills"}'
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "declared component paths" in result.reason
+
+
+@pytest.mark.parametrize("component", ["agents", "commands"])
+@pytest.mark.parametrize("source", ["entry", "claude", "codex"])
+def test_component_declarations_share_discovery_budget(
+    component: str, source: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 2)
+    fields = {component: ["./absent"] * 3}
+    files = _files()
+    if source == "entry":
+        catalog = json.loads(files[CLAUDE])
+        catalog["plugins"][0].update(fields)
+        files[CLAUDE] = json.dumps(catalog).encode()
+    else:
+        files[f".{source}-plugin/plugin.json"] = json.dumps(fields).encode()
+    result = reader.read_marketplace_archive(_archive(files))
+    assert isinstance(result, FailedMarketplace), result
+    assert "declared" in result.reason
+
+
+def test_component_budget_combines_fields_and_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(reader, "DECLARED_PATH_MAX_COUNT", 4)
+    files = _files()
+    files[CLAUDE] = json.dumps(
+        {
+            "name": "m",
+            "plugins": [
+                {
+                    "name": str(i),
+                    "source": "./",
+                    "agents": ["./absent"],
+                    "commands": ["./absent"],
+                }
+                for i in range(2)
+            ],
+        }
+    ).encode()
+    assert len(_entries(files)) == 2
+    files[".codex-plugin/plugin.json"] = b'{"skills":"./skills"}'
+    assert isinstance(
+        reader.read_marketplace_archive(_archive(files)), FailedMarketplace
+    )
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("shared_root", [False, True])
+def test_unique_manifest_bytes_share_one_budget(
+    kind: str, shared_root: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roots = ["p", "p" if shared_root else "q"]
+    files = {
+        CLAUDE: json.dumps(
+            {
+                "name": "m",
+                "plugins": [
+                    {"name": str(i), "source": "./" + root}
+                    for i, root in enumerate(roots)
+                ],
+            }
+        ).encode()
+    }
+    for root in roots:
+        files[f"{root}/.claude-plugin/plugin.json"] = b'{"name":"test"}'
+        files[f"{root}/.codex-plugin/plugin.json"] = b'{"description":"test"}'
+        files[f"{root}/skills/hello/SKILL.md"] = _md()
+    limit = sum(len(data) for path, data in files.items() if path.endswith(".json"))
+    monkeypatch.setattr(reader, "MANIFEST_TOTAL_MAX_BYTES", limit, raising=False)
+    assert [e.entry_key for e in _entries(files, kind)] == ["0/hello", "1/hello"]
+    monkeypatch.setattr(reader, "MANIFEST_TOTAL_MAX_BYTES", limit - 1)
+    result = reader.read_marketplace_archive(_archive(files, kind))
+    assert isinstance(result, FailedMarketplace), result
+    assert "manifest bytes" in result.reason
+
+
+def test_deep_yaml_blocks_only_its_skill() -> None:
+    files = _files()
+    files["skills/deep/SKILL.md"] = (
+        b"---\nname: deep\ndescription: Test\nmetadata: "
+        + b"[" * 5000
+        + b"]" * 5000
+        + b"\n---\nInstructions."
+    )
+    entries = {entry.entry_key: entry for entry in _entries(files)}
+    assert isinstance(entries["tools/hello"], ReadySkill)
+    assert isinstance(entries["tools/deep"], BlockedSkill)
+    assert "not valid YAML" in entries["tools/deep"].reason
