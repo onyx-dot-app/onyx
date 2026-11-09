@@ -338,6 +338,14 @@ class SkillGroupShareRequest(BaseModel):
 
     group_id: int
     permission: SkillSharePermission
+    installation_policy: (
+        Literal[
+            SkillInstallationPolicy.AVAILABLE,
+            SkillInstallationPolicy.DEFAULT,
+            SkillInstallationPolicy.REQUIRED,
+        ]
+        | None
+    ) = None
 
 
 class SkillShareRequest(BaseModel):
@@ -367,6 +375,11 @@ class SkillShareRequest(BaseModel):
                 if self.user_shares is not None
                 else None
             ),
+            group_installation_policies={
+                share.group_id: share.installation_policy
+                for share in self.group_shares or []
+                if "installation_policy" in share.model_fields_set
+            },
             group_shares=(
                 {share.group_id: share.permission for share in self.group_shares}
                 if self.group_shares is not None
