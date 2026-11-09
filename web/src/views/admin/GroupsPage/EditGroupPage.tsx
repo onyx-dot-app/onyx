@@ -35,7 +35,11 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import { InputTypeIn, Text } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
+import {
+  errorHandlingFetcher,
+  isNotFoundError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
 import { AccountType } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
@@ -153,7 +157,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   } = useGroupMemberCandidates();
 
   const isLoading = groupLoading || candidatesLoading || permissionsLoading;
-  const error = groupError ?? candidatesError;
+  // A missing or hidden group renders the not-found state, not a load error.
+  const error =
+    (isNotFoundError(groupError) ? undefined : groupError) ?? candidatesError;
 
   // Pre-populate form when group data loads
   useEffect(() => {
@@ -416,10 +422,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
     // Re-fetch group to check sync status before saving
     const freshGroupResponse = await fetch(userGroupUrl(groupId));
-    const freshGroup: UserGroup | null = freshGroupResponse.ok
-      ? await freshGroupResponse.json()
-      : null;
-    if (freshGroup && !freshGroup.is_up_to_date) {
+    if (!freshGroupResponse.ok) {
+      toast.error(t("edit.toasts.updateFailed"));
+      return;
+    }
+    const freshGroup: UserGroup = await freshGroupResponse.json();
+    if (!freshGroup.is_up_to_date) {
       toast.error(t("edit.toasts.syncing"));
       return;
     }

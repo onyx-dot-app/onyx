@@ -909,7 +909,12 @@ export const useUserGroups = (
     errorHandlingFetcher
   );
 
-  const refreshUserGroups = () => mutate(url);
+  // Every variant, the same as useGroups' refreshGroups.
+  const refreshUserGroups = () =>
+    mutate(
+      (key) =>
+        typeof key === "string" && key.startsWith(SWR_KEYS.adminUserGroups)
+    );
 
   if (isLoading) {
     return {
