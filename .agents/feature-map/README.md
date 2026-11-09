@@ -294,6 +294,14 @@ The agent decides while it still knows what it changed; usually the answer is no
 update. `stale_docs.py --cited <files>` prints the contracts, recipes and
 documents that cite the files.
 
+`stale_docs.py --pr [<branch>]` lists the sections and keys that cite code the
+whole PR changed. It measures from the merge base with `<branch>`
+(`origin/main` by default; in a stack, the PR's base branch). It uses the same
+symbol matching as the brief. It also lists the documents that the PR edited,
+first, because they hold the claims that the PR wrote. It names at most
+`.agents/feature-map/stale_docs.py:MAX_PR_DOCUMENTS`
+documents and always exits 0.
+
 The check catches broken references. It cannot tell when a description is wrong
 while every reference still resolves. That is why the Verified-against line and
 the review in VERIFYING.md exist.
