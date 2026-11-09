@@ -351,6 +351,14 @@ version helper. Refused bundle files remain unused and eligible for cleanup.
 Limit refusals retain `SKILL_LIMIT_BLOCK_REASON` and `Marketplace.skill_limit_blocks`
 with failed limit and user count. `skills/sync.py` fetches again while blocks exist,
 so the next sync retries the same revision.
+Reads: `GET /skills/limit/me` returns the caller's `SkillUsageSummary`;
+`GET /skills/limit/users` (global manage-skills) lists users past the limit
+through `db/skill.py:users_over_skill_limit`, one usage query for all users.
+Both return measured totals plus `charged_bytes` and `charged_files`, which include
+the conservative unknown-size allowance. The admin rows also return
+`last_delivery_omitted_skill_count`: the persisted omission count for the last
+successful delivery, or null when no delivery is recorded. It is not a forecast
+from current usage.
 
 ## Contracts and traps
 

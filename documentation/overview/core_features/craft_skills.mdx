@@ -256,6 +256,16 @@ their charged sizes, file counts and the limit that failed. It describes the las
 Failed delivery preserves the previous notice. Only the session owner's sandbox supplies this notice.
 If every Skill fits, the field is null.
 
+## Skill usage API
+
+`GET /api/skills/limit/me` returns your measured usage and the totals used to check write limits.
+Those totals include an estimate for each Skill whose size has not been measured.
+`GET /api/skills/limit/users` requires global Manage Skills and lists users above a write limit.
+Each row includes the omission count from the last successful delivery. A null count means no delivery is recorded.
+This count does not predict the next delivery. A refused write includes `skill_limit`, with the failed limit,
+affected user count, and your proposed usage when applicable.
+Bulk failures include the same field for each refused Skill. Other failures set it to null.
+
 ## Troubleshooting
 
 <AccordionGroup>

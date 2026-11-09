@@ -362,6 +362,8 @@
   "GET /skills/custom/{skill_id}/share": "basic",
   "GET /skills/custom/{skill_id}/versions": "basic",
   "GET /skills/custom/{skill_id}/versions/{version_id}": "basic",
+  "GET /skills/limit/me": "basic",
+  "GET /skills/limit/users": "manage:skills",
   "GET /skills/{skill_id}": "basic",
   "GET /skills/{skill_id}/preview": "basic",
   "GET /tenants/anonymous-user-path": "admin",

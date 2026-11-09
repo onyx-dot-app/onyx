@@ -17,7 +17,7 @@ from onyx.db.skill import SkillSharingChange
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.limits import SkillLimit, SkillLimitViolation
+from onyx.skills.limits import SkillLimit, SkillLimitViolation, SkillUsageSummary
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
 from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
@@ -194,6 +194,13 @@ class SkillResponse(BaseModel):
                 skill.current_version.version_number if skill.current_version else None
             ),
         )
+
+
+class SkillLimitUserUsage(BaseModel):
+    user: MinimalUserSnapshot
+    usage: SkillUsageSummary
+    # None means there is no recorded successful delivery.
+    last_delivery_omitted_skill_count: int | None
 
 
 class SkillsList(BaseModel):

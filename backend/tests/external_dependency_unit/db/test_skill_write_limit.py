@@ -18,6 +18,11 @@ from onyx.db.skill import (
     skill_limit_violations,
     skill_usage_for_users,
 )
+from onyx.db.skill_runtime_models import SkillRuntimeLimit, SkillRuntimeOmission
+from onyx.server.features.skill.api import (
+    get_own_skill_usage,
+    list_users_over_skill_limit,
+)
 from onyx.skills.built_in import get_builtin_skill_footprints
 from onyx.skills.limits import (
     SKILL_WRITE_MAX_BYTES,
@@ -31,6 +36,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_built_in_skill_row,
     make_external_app,
     make_group,
+    make_sandbox,
     make_skill,
     make_user,
     make_user_credential,
@@ -273,3 +279,60 @@ def test_company_change_for_1000_users_uses_constant_queries(
     assert len(violations) >= 1000
     assert all(limit == SkillLimit.BYTES for _, limit in violations.values())
     assert counts[0] == counts[1] <= 21, counts
+
+
+def test_usage_read_routes(clean: Session) -> None:
+    over, under = (make_user(clean, standard_account=True) for _ in range(2))
+    sized_skill(clean, size=SKILL_WRITE_MAX_BYTES + MIB, files=7, author=over)
+    sized_skill(clean, size=MIB, author=under)
+
+    own = get_own_skill_usage(over, clean)
+    assert (own.bytes, own.files, own.max_bytes) == (
+        SKILL_WRITE_MAX_BYTES + MIB,
+        7,
+        SKILL_WRITE_MAX_BYTES,
+    )
+    listed = {
+        row.user.id: row.usage.bytes for row in list_users_over_skill_limit(over, clean)
+    }
+    assert listed.get(over.id) == SKILL_WRITE_MAX_BYTES + MIB
+    assert under.id not in listed
+
+
+@pytest.mark.parametrize("delivery", [None, -1, 0, 2])
+def test_usage_reports_estimates_and_last_delivery(
+    clean: Session, delivery: int | None
+) -> None:
+    user = make_user(clean, standard_account=True)
+    sized_skill(clean, size=SKILL_WRITE_MAX_BYTES, files=7, author=user)
+    unknown = sized_skill(clean, size=None, files=None, author=user)
+    if delivery is not None:
+        sandbox = make_sandbox(clean, user)
+        if delivery >= 0:
+            sandbox.skills_hash = "a" * 64
+            sandbox.skill_runtime_omissions = [
+                SkillRuntimeOmission(
+                    skill_id=unknown.id,
+                    name=f"omitted-{index}",
+                    charged_bytes=UNKNOWN_SKILL_BYTES,
+                    file_count=1,
+                    failed_limit=SkillRuntimeLimit.BYTES,
+                )
+                for index in range(delivery)
+            ]
+        clean.flush()
+
+    own = get_own_skill_usage(user, clean)
+    assert own.bytes == SKILL_WRITE_MAX_BYTES
+    assert own.unknown_skill_count == 1
+    assert own.charged_bytes == SKILL_WRITE_MAX_BYTES + UNKNOWN_SKILL_BYTES
+    assert own.charged_files == 7 + 500
+    row = next(
+        row
+        for row in list_users_over_skill_limit(user, clean)
+        if row.user.id == user.id
+    )
+    assert row.usage == own
+    assert row.last_delivery_omitted_skill_count == (
+        delivery if delivery is not None and delivery >= 0 else None
+    )

@@ -44,8 +44,10 @@ from onyx.db.skill import (
     resolve_skill_installation_policies,
     set_skill_enabled_for_user,
     share_skill__no_commit,
+    skill_usage_for_users,
     skill_user_states,
     transfer_skill_ownership,
+    users_over_skill_limit,
 )
 from onyx.db.skill_library import lock_skill_library_names
 from onyx.db.skill_mutation import assert_skill_content_editable, assert_skill_mutable
@@ -79,6 +81,7 @@ from onyx.server.features.skill.models import (
     SkillCreateRequest,
     SkillEditableDetailResponse,
     SkillEnableRequest,
+    SkillLimitUserUsage,
     SkillPatchRequest,
     SkillPreviewResponse,
     SkillResponse,
@@ -113,6 +116,7 @@ from onyx.skills.ingest import (
     ingest_skill_bundle,
 )
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
+from onyx.skills.limits import SkillUsageSummary
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
@@ -402,6 +406,35 @@ def list_skills_for_current_user(
         db_session,
         allow_management=allow_management,
     )
+
+
+@user_router.get("/limit/me")
+def get_own_skill_usage(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillUsageSummary:
+    """The caller's Skill total against the per-user write limit."""
+    return SkillUsageSummary.from_usage(
+        skill_usage_for_users([user.id], db_session)[user.id]
+    )
+
+
+@user_router.get("/limit/users")
+def list_users_over_skill_limit(
+    _: User = Depends(require_permission(Permission.MANAGE_SKILLS)),
+    db_session: Session = Depends(get_session),
+) -> list[SkillLimitUserUsage]:
+    """Users whose Skills are past the per-user write limit."""
+    return [
+        SkillLimitUserUsage(
+            user=MinimalUserSnapshot(id=over_user_id, email=email),
+            usage=SkillUsageSummary.from_usage(usage),
+            last_delivery_omitted_skill_count=omitted_count,
+        )
+        for over_user_id, email, usage, omitted_count in users_over_skill_limit(
+            db_session
+        )
+    ]
 
 
 @user_router.post("/bulk")

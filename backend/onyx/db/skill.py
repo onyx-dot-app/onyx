@@ -1356,6 +1356,44 @@ def _skill_usage_from_winners(
     return stmt
 
 
+def users_over_skill_limit(
+    db_session: Session,
+) -> list[tuple[UUID, str, SkillUsage, int | None]]:
+    """Sign-in users past the write limit, by email, with one usage query."""
+    user_id = User.__table__.c.id
+    users: dict[UUID, tuple[str, int | None]] = {
+        row_user_id: (email, omitted_count)
+        for row_user_id, email, omitted_count in db_session.execute(
+            select(
+                user_id,
+                User.__table__.c.email,
+                case(
+                    (
+                        Sandbox.skills_hash.is_not(None),
+                        func.jsonb_array_length(
+                            Sandbox.skill_runtime_omissions, type_=Integer
+                        ),
+                    ),
+                    else_=None,
+                ),
+            )
+            .outerjoin(Sandbox, Sandbox.user_id == user_id)
+            .where(
+                User.__table__.c.is_active.is_(True),
+                User.account_type.not_in([AccountType.BOT, AccountType.EXT_PERM_USER]),
+            )
+        )
+        .tuples()
+        .all()
+    }
+    over = [
+        (row_user_id, users[row_user_id][0], usage, users[row_user_id][1])
+        for row_user_id, usage in skill_usage_for_users(users, db_session).items()
+        if failed_skill_limit(usage, SkillUsage()) is not None
+    ]
+    return sorted(over, key=lambda row: row[1])
+
+
 def lock_skill_limit_users(user_ids: Collection[UUID], db_session: Session) -> None:
     """Take the preference lock on many users, after membership and skill locks."""
     if not user_ids:
