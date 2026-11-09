@@ -50,6 +50,8 @@
 - **Version history API.** Owners, editors and admins can list custom skill
   versions with their creator and timestamp, preview retained content, and
   restore it. Viewers can preview current instructions but cannot read history.
+  History returns at most 50 rows. The positive `before_version` cursor excludes
+  that version and loads older rows without shifting when a new version is saved.
   Restore creates a new version unless its content equals the current version.
 
 When it fails:
@@ -278,10 +280,11 @@ The library preview of an external-app skill calls the same renderer
     the observed current version only while it remains unclassified. It also
     updates legacy validity when the bundle links match, without creating history.
     Identical saves verify the existing bundle before reusing it. A missing,
-    changed or unreadable current file creates a fresh version from the upload.
+    changed or corrupt current file creates a fresh version from the upload.
+    Unexpected storage errors abort the save and keep the current version.
     Missing, corrupt or oversized historical files retain unknown metadata.
     Repair receives `skills/bundle.py:STORED_BUNDLE_LIMITS`: stored bytes use
-    the larger configured total or ZIP allowance. Expansion counts actual
+    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. Expansion counts actual
     per-file and total bytes. No upload ZIP or file-count cap applies to history.
     Current-content reads verify expansion before inspection or editing.
     Stored-byte and expansion limits return 400 through the ValueError handler.
