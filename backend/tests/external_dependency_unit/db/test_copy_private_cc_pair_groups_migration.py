@@ -65,7 +65,9 @@ def test_copies_current_groups_of_private_pairs(
         # An existing row is kept, not duplicated.
         db_session.add(
             UserGroup__CCPairDataAccess(
-                user_group_id=copied_group.id, cc_pair_id=private_pair.id
+                user_group_id=copied_group.id,
+                cc_pair_id=private_pair.id,
+                access_type=private_pair.access_type,
             )
         )
         db_session.flush()

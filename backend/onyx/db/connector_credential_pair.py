@@ -1115,6 +1115,7 @@ def _relate_groups_to_cc_pair__no_commit(
 def _relate_data_access_groups_to_cc_pair__no_commit(
     db_session: Session,
     cc_pair_id: int,
+    access_type: AccessType,
     user_group_ids: list[int],
 ) -> None:
     if not user_group_ids:
@@ -1137,7 +1138,9 @@ def _relate_data_access_groups_to_cc_pair__no_commit(
 
     for group_id in set(user_group_ids):
         db_session.add(
-            UserGroup__CCPairDataAccess(user_group_id=group_id, cc_pair_id=cc_pair_id)
+            UserGroup__CCPairDataAccess(
+                user_group_id=group_id, cc_pair_id=cc_pair_id, access_type=access_type
+            )
         )
 
 
@@ -1266,6 +1269,7 @@ def add_credential_to_connector(
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
+            access_type=access_type,
             user_group_ids=private_group_ids,
         )
     elif access_type == AccessType.SYNC_RESTRICTED:
@@ -1278,6 +1282,7 @@ def add_credential_to_connector(
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
+            access_type=access_type,
             user_group_ids=data_access_group_ids,
         )
 

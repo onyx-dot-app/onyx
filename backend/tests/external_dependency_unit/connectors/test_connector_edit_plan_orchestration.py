@@ -180,7 +180,9 @@ def test_state_builder_reads_the_pair(
     for group in reversed(groups):
         db_session.add(
             UserGroup__CCPairDataAccess(
-                cc_pair_id=slack_pair.id, user_group_id=group.id
+                cc_pair_id=slack_pair.id,
+                user_group_id=group.id,
+                access_type=slack_pair.access_type,
             )
         )
     db_session.commit()
@@ -281,7 +283,9 @@ def test_group_only_edit_skips_validation(
     slack_pair.access_type = AccessType.PRIVATE
     db_session.add(
         UserGroup__CCPairDataAccess(
-            cc_pair_id=slack_pair.id, user_group_id=groups[0].id
+            cc_pair_id=slack_pair.id,
+            user_group_id=groups[0].id,
+            access_type=slack_pair.access_type,
         )
     )
     db_session.commit()

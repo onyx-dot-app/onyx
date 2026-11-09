@@ -23,7 +23,9 @@ access, hierarchy filtering and post-query censoring.
   private to groups, owner-only (`personal`, Business+), or synced from the
   source), user groups, and document sets. `private` always names at least one
   group on create and edit; owner-only is its own type, so the edit form can
-  tell the two apart. A document set narrows what an agent searches. It never grants access
+  tell the two apart. Data-access rows copy their pair's access type, and a composite
+  foreign key on `(cc_pair_id, access_type)` limits them to `private` and
+  `sync_restricted`: leaving a group type must delete the rows first. A document set narrows what an agent searches. It never grants access
   to a document the user could not already see.
 - **A user who asks for a document set they cannot access** gets a 403
   `INSUFFICIENT_PERMISSIONS`, not an empty answer.

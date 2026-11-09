@@ -562,8 +562,22 @@ def apply_access_change__no_commit(
     if data_access_group_ids and not has_data_access:
         raise ValueError(f"Access type {access_type} takes no data-access groups")
 
+    def set_groups() -> None:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.cc_pair_data_access", "set_cc_pair_data_access_groups__no_commit"
+        )(
+            db_session,
+            cc_pair_id=cc_pair_id,
+            requested_group_ids=data_access_group_ids,
+            visible_group_ids=visible_group_ids if has_data_access else None,
+        )
+
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     previous_access_type = cc_pair.access_type
+    # The group rows' foreign key carries the access type: leaving a group
+    # type removes them first, and entering one adds them after the type.
+    if not has_data_access:
+        set_groups()
     cc_pair.access_type = access_type
     if access_type.is_perm_synced() and not previous_access_type.is_perm_synced():
         cc_pair.last_time_perm_sync = None
@@ -577,15 +591,8 @@ def apply_access_change__no_commit(
     elif not access_type.is_perm_synced():
         cc_pair.perm_sync_pending_since = None
     db_session.flush()
-
-    fetch_ee_implementation_or_noop(
-        "onyx.db.cc_pair_data_access", "set_cc_pair_data_access_groups__no_commit"
-    )(
-        db_session,
-        cc_pair_id=cc_pair_id,
-        requested_group_ids=data_access_group_ids,
-        visible_group_ids=visible_group_ids if has_data_access else None,
-    )
+    if has_data_access:
+        set_groups()
     fetch_ee_implementation_or_noop(
         "onyx.db.cc_pair_data_access", "assert_restricted_cc_pairs_keep_a_group"
     )(db_session, [cc_pair_id])
