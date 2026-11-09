@@ -129,16 +129,14 @@ function renderComplete(): boolean | undefined {
     ?.latestMessageRenderComplete;
 }
 
+afterEach(() => {
+  useChatSessionStore.setState({ currentSessionId: null, sessions: new Map() });
+  jest.useRealTimers();
+});
+
 describe("AgentMessage queue gate", () => {
   beforeEach(() => {
     seedSessionAwaitingAnswer();
-  });
-
-  afterEach(() => {
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
-    });
   });
 
   test("releases the gate when the latest answer arrives complete", async () => {
@@ -233,10 +231,6 @@ test("parallel search tabs complete independently", async () => {
     });
   } finally {
     view.unmount();
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
-    });
   }
 });
 
@@ -459,33 +453,6 @@ test("a timed out answer explains its deadline without claiming the user stopped
   await waitFor(() => expect(renderComplete()).toBe(true));
 });
 
-test.each([
-  StopReason.TIMED_OUT,
-  StopReason.USER_CANCELLED,
-  StopReason.FINISHED,
-])(
-  "a stopped response without an answer releases the render gate (%s)",
-  async (stopReason) => {
-    seedSessionAwaitingAnswer();
-    render(
-      <AgentMessage
-        rawPackets={[
-          {
-            placement,
-            obj: { type: PacketType.STOP, stop_reason: stopReason },
-          },
-        ]}
-        chatState={chatState}
-        nodeId={NEW_ANSWER_NODE_ID}
-        llmManager={null}
-        hideFooter
-        disableTTS
-      />
-    );
-    await waitFor(() => expect(renderComplete()).toBe(true));
-  }
-);
-
 test("generated images from earlier tool steps lead the answer once", async () => {
   seedSessionAwaitingAnswer();
   const image = {
@@ -537,10 +504,6 @@ test("generated images from earlier tool steps lead the answer once", async () =
     await waitFor(() => expect(renderComplete()).toBe(true));
   } finally {
     view.unmount();
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
-    });
   }
 });
 
@@ -652,11 +615,34 @@ test.each([
       await waitFor(() => expect(renderComplete()).toBe(true));
     } finally {
       view.unmount();
-      useChatSessionStore.setState({
-        currentSessionId: null,
-        sessions: new Map(),
-      });
     }
+  }
+);
+
+test.each([
+  StopReason.TIMED_OUT,
+  StopReason.USER_CANCELLED,
+  StopReason.FINISHED,
+])(
+  "a stopped response without an answer releases the render gate (%s)",
+  async (stopReason) => {
+    seedSessionAwaitingAnswer();
+    render(
+      <AgentMessage
+        rawPackets={[
+          {
+            placement,
+            obj: { type: PacketType.STOP, stop_reason: stopReason },
+          },
+        ]}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    await waitFor(() => expect(renderComplete()).toBe(true));
   }
 );
 
@@ -705,9 +691,92 @@ test("generated images remain visible when another tool follows answer text", as
     expect(renderComplete()).toBe(false);
   } finally {
     view.unmount();
-    useChatSessionStore.setState({
-      currentSessionId: null,
-      sessions: new Map(),
+  }
+});
+
+test("a research step shows each of its nested calls once", async () => {
+  seedSessionAwaitingAnswer();
+  const research = { turn_index: 0, tab_index: 0 };
+  const call = (subTurnIndex: number) => ({
+    ...research,
+    sub_turn_index: subTurnIndex,
+  });
+  const packets: Packet[] = [
+    {
+      placement: research,
+      obj: {
+        type: PacketType.RESEARCH_AGENT_START,
+        research_task: "Compare vendor pricing",
+      },
+    },
+    {
+      placement: call(1),
+      obj: { type: PacketType.SEARCH_TOOL_START, is_internet_search: false },
+    },
+    {
+      placement: call(0),
+      obj: { type: PacketType.SEARCH_TOOL_START, is_internet_search: false },
+    },
+    {
+      placement: call(0),
+      obj: {
+        type: PacketType.SEARCH_TOOL_QUERIES_DELTA,
+        queries: ["first query"],
+      },
+    },
+    {
+      placement: call(1),
+      obj: {
+        type: PacketType.SEARCH_TOOL_QUERIES_DELTA,
+        queries: ["second query"],
+      },
+    },
+    { placement: call(0), obj: { type: PacketType.SECTION_END } },
+    { placement: call(1), obj: { type: PacketType.SECTION_END } },
+    { placement: research, obj: { type: PacketType.SECTION_END } },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.MESSAGE_START,
+        id: "answer",
+        content: "",
+        final_documents: null,
+      },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: PacketType.MESSAGE_DELTA, content: "Done." },
+    },
+    {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={packets}
+      packetCount={packets.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    await act(async () => {
+      (await screen.findByRole("button", { name: "Expand timeline" })).click();
     });
+    expect(await screen.findByText("Compare vendor pricing")).toBeVisible();
+    const first = screen.getAllByText("first query");
+    const second = screen.getAllByText("second query");
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(
+      first[0]!.compareDocumentPosition(second[0]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  } finally {
+    view.unmount();
   }
 });

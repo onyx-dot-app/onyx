@@ -158,13 +158,36 @@ by file ID, and render once above the answer as soon as they arrive. Later tool
 calls do not hide them. An image call does not mark the
 answer as final; later search or image calls can continue the timeline.
 
-A group closes on its own `SECTION_END` or `ERROR`; a new `turn_index` or a
-stop packet adds a `SECTION_END` to each open group. Parallel tools share a
-`turn_index` and differ by `tab_index`. A subagent's child packets carry the
-parent's key plus `sub_turn_index`, which the processor ignores, so they join
-the parent group. `ResearchAgentRenderer` and `CodingAgentRenderer` split on
-`sub_turn_index`, and `app/app/message/messageComponents/toolDisplayHelpers.tsx:isToolComplete` ignores nested
-`SECTION_END` packets.
+A group closes on its own parent-level `SECTION_END` or `ERROR`
+(`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
+shared by `isToolComplete` and the packet processor); a new `turn_index` or a
+stop packet adds a parent-level `SECTION_END` to each open group. Parallel
+tools share a `turn_index` and differ by `tab_index`. The child packets of a
+subagent or a coding agent (its bash calls and thinking) carry the parent's
+key plus `sub_turn_index`, so they join the parent group, and their
+`SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START` does not
+start the answer.
+The packet processor splits each group once
+(`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:buildGroupsFromKeys`).
+`GroupedPacket.packets` holds only the group's own packets. The step-kind checks
+in `app/app/message/messageComponents/timeline/packetHelpers.ts`,
+`findRenderer`, the header, and `isToolComplete` read only these, so a research
+step with a nested search is a research step, not a search step.
+`GroupedPacket.nestedCalls` holds the nested calls, made with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+Each `NestedCall` holds one call's packets placed at parent level, so the tool's
+own renderer reads it as a direct call. The snapshot reuses the object of each
+unchanged call, so memoized renderers of finished calls do not redraw.
+`GroupedPacket.streamPackets` holds every packet in stream order. Every renderer
+receives all three as required props. `ResearchAgentRenderer` draws each entry
+of `nestedCalls` with the renderer of its tool. `CodingAgentRenderer` reads
+`streamPackets`, because its thinking and bash sections interleave in stream
+order.
+The mobile app copies the group end and step-kind rules in
+`mobile/src/chat/timeline/packetHelpers.ts` and
+`mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
+`GroupedPacket.packets` also holds only the group's own packets. Mobile has no
+`nestedCalls` or `streamPackets`.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at

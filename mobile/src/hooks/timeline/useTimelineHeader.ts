@@ -9,6 +9,7 @@ import {
   PacketType,
   StopReason,
 } from "@/chat/streamingModels";
+import { isDisplayPacket, isToolPacket } from "@/chat/timeline/packetUtils";
 import { TurnGroup } from "@/chat/timeline/transformers";
 
 export interface TimelineHeaderResult {
@@ -39,7 +40,9 @@ export function useTimelineHeader(
       return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
-    const firstPacket = currentStep.packets[0];
+    const firstPacket = currentStep.packets.find(
+      (packet) => isToolPacket(packet, false) || isDisplayPacket(packet),
+    );
     if (!firstPacket) {
       return { headerText: "Thinking...", hasPackets, userStopped };
     }

@@ -32,6 +32,8 @@ function renderStatus(error: CustomToolErrorInfo) {
   render(
     <CustomToolRenderer
       packets={packets(error)}
+      nestedCalls={[]}
+      streamPackets={packets(error)}
       state={{}}
       onComplete={jest.fn()}
       renderType={RenderType.FULL}
