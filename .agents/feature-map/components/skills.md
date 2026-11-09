@@ -88,6 +88,11 @@
   keeps synced content copyable but removes content-write controls. Sharing
   remains separate. `lib/skills/permissions.ts:canDeleteSkill` gates row,
   editor and bulk deletion; active synced skills cannot be deleted.
+  `sections/modals/skills/ShareSkillModal.tsx` shows company default inheritance
+  and confirms reset for global managers of overridden company skills. Reset replaces
+  the draft with saved defaults; failures keep the draft. Personal synced owners
+  control audience, while other managers can change installation policy only.
+  Synced ownership transfer is hidden. Non-owner personal editors have no sharing action.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
@@ -296,6 +301,8 @@ The library preview of an external-app skill calls the same renderer
     Client company controls use `usePermissionAuthority` with that permission,
     not ownership or scoped admin capabilities. `web/src/lib/skills/sharing.ts:serializeSkillSharing`
     omits company fields without global authority, preserving existing public access.
+    The personal synced owner can supply public access separately; this never grants
+    installation-policy authority.
     Changed group grants and explicit group settings use `assert_within_scope`
     against stored groups and visibility. Group managers cannot change another
     group's settings or company settings. An omitted group setting preserves
@@ -716,8 +723,8 @@ The library preview of an external-app skill calls the same renderer
 - **Marketplace UI remains pending.** Preview, management mutations and skill reset
   are available through the API. Plugin membership is not modeled yet; its access
   guard belongs in `SkillAccessAdapter.load`.
-  S9 must expose personal synced owner audience controls and hide sharing actions
-  from non-owner editors; existing generic UI capabilities do not encode this yet.
+  Company inheritance/reset and personal owner audience controls are wired in the
+  skill sharing dialog. Source creation/list pages and retired-skill management remain pending.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing

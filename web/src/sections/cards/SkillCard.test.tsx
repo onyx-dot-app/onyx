@@ -504,3 +504,21 @@ it.each([false, true])(
     expect(onShare).toHaveBeenCalledWith(item);
   }
 );
+
+it("keeps personal synced content visible but hides sharing from a non-owner editor", () => {
+  const item = custom({
+    user_permission: "EDITOR",
+    marketplace: {
+      id: "source",
+      name: "Personal tools",
+      personal: true,
+      folder: "skills/reports",
+      follows_access: false,
+    },
+  });
+  render(<SkillCard item={item} onEdit={jest.fn()} onShare={jest.fn()} />);
+  expect(screen.getByRole("button", { name: "View content" })).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "Edit sharing" })
+  ).not.toBeInTheDocument();
+});

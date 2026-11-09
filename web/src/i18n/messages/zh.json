@@ -17350,7 +17350,20 @@
         "peopleTitle": "有访问权限的人员",
         "manageIndividualAccess": "管理单独访问权限",
         "individualAccessTitle": "单独访问权限",
-        "ownershipTitle": "所有权"
+        "ownershipTitle": "所有权",
+        "marketplace": {
+          "personal": "个人市场",
+          "personalDescription": "只有所有者可以更改来自 {name} 的此技能的访问权限。管理员可以更改安装设置。",
+          "following": "遵循市场访问设置",
+          "followingDescription": "访问和安装设置遵循 {name}。在此保存更改将创建自定义设置。",
+          "overridden": "自定义访问",
+          "overriddenDescription": "此技能使用自己的访问和安装设置，而非 {name} 的默认设置。",
+          "reset": "重置为市场访问设置",
+          "resetDescription": "这会将访问和安装设置替换为 {name} 的默认值，移除个人授权并放弃未保存的更改。今后市场的访问更改将应用于此技能。",
+          "confirmReset": "重置访问",
+          "resetSuccess": "已恢复市场访问设置",
+          "resetError": "无法重置访问。请重试。"
+        }
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"

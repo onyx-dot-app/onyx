@@ -5,7 +5,7 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import type { SkillCardItem } from "@/sections/cards/SkillCard";
-import { canDeleteSkill } from "@/lib/skills/permissions";
+import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
 
 export function useSkillPresentation(
   item: SkillCardItem,
@@ -87,6 +87,9 @@ export function useSkillPresentation(
     dependencyStatus,
     tooltip,
     canEdit,
+    canShare:
+      item.source === "custom" &&
+      canShareSkill({ skill: item.skill, canManageCompanySkills }),
     canDelete:
       item.source === "custom" &&
       canDeleteSkill({ skill: item.skill, canManageCompanySkills }),

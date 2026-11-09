@@ -17350,7 +17350,20 @@
         "peopleTitle": "Pessoas com acesso",
         "manageIndividualAccess": "Gerenciar acesso individual",
         "individualAccessTitle": "Acesso individual",
-        "ownershipTitle": "Propriedade"
+        "ownershipTitle": "Propriedade",
+        "marketplace": {
+          "personal": "Marketplace pessoal",
+          "personalDescription": "Somente o proprietário pode alterar o acesso a esta habilidade de {name}. Os gerentes podem alterar as configurações de instalação.",
+          "following": "Segue o acesso do marketplace",
+          "followingDescription": "O acesso e a instalação seguem {name}. Salvar alterações aqui cria configurações próprias.",
+          "overridden": "Acesso personalizado",
+          "overriddenDescription": "Esta habilidade usa suas próprias configurações de acesso e instalação em vez dos padrões de {name}.",
+          "reset": "Restaurar o acesso do marketplace",
+          "resetDescription": "Isso substitui o acesso e a instalação pelos padrões de {name}. Remove permissões individuais e descarta alterações não salvas. Futuras alterações de acesso do marketplace serão aplicadas a esta habilidade.",
+          "confirmReset": "Redefinir acesso",
+          "resetSuccess": "Acesso do marketplace restaurado",
+          "resetError": "Não foi possível redefinir o acesso. Tente novamente."
+        }
       },
       "placeholders": {
         "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"
