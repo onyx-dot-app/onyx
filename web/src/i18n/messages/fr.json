@@ -17325,7 +17325,8 @@
       "empty": {
         "noMatches": {
           "description": "Essayez une autre recherche.",
-          "title": "Aucune compétence correspondante"
+          "title": "Aucune compétence correspondante",
+          "groupDescription": "Aucune compétence de ce groupe ne correspond. Essayez un autre groupe ou une autre recherche."
         },
         "noSkills": {
           "title": "Aucune compétence personnalisée pour le moment",
@@ -17497,6 +17498,17 @@
       "loadOlderCompact": "Précédentes",
       "files": "Fichiers",
       "noFiles": "Aucun fichier supplémentaire."
+    },
+    "groups": {
+      "columnTitle": "Groupes",
+      "marketplace": "Marketplace",
+      "marketplacePolicy": "{policy} · Marketplace",
+      "more": "{count, plural, one {+# autre groupe} other {+# autres groupes}}",
+      "compact": "{count, plural, one {Groupe : {names}} other {Groupes : {names}}}",
+      "filter": {
+        "placeholder": "Filtrer par groupe",
+        "all": "Tous les groupes"
+      }
     }
   },
   "opensearchHealth": {

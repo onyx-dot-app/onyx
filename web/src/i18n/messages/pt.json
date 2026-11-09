@@ -17325,7 +17325,8 @@
       "empty": {
         "noMatches": {
           "description": "Tente uma pesquisa diferente.",
-          "title": "Nenhuma habilidade correspondente"
+          "title": "Nenhuma habilidade correspondente",
+          "groupDescription": "Nenhuma habilidade deste grupo corresponde. Tente outro grupo ou outra pesquisa."
         },
         "noSkills": {
           "title": "Ainda não há habilidades personalizadas",
@@ -17497,6 +17498,17 @@
       "loadOlderCompact": "Anteriores",
       "files": "Arquivos",
       "noFiles": "Nenhum arquivo adicional."
+    },
+    "groups": {
+      "columnTitle": "Grupos",
+      "marketplace": "Marketplace",
+      "marketplacePolicy": "{policy} · Marketplace",
+      "more": "{count, plural, one {+# outro grupo} other {+# outros grupos}}",
+      "compact": "{count, plural, one {Grupo: {names}} other {Grupos: {names}}}",
+      "filter": {
+        "placeholder": "Filtrar por grupo",
+        "all": "Todos os grupos"
+      }
     }
   },
   "opensearchHealth": {

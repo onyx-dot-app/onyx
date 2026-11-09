@@ -17325,7 +17325,8 @@
       "empty": {
         "noMatches": {
           "description": "別の検索をお試しください。",
-          "title": "一致するスキルがありません"
+          "title": "一致するスキルがありません",
+          "groupDescription": "このグループに一致するスキルはありません。別のグループまたは検索語を試してください。"
         },
         "noSkills": {
           "title": "カスタムスキルはまだありません",
@@ -17497,6 +17498,17 @@
       "loadOlderCompact": "以前の版",
       "files": "ファイル",
       "noFiles": "追加ファイルはありません。"
+    },
+    "groups": {
+      "columnTitle": "グループ",
+      "marketplace": "マーケットプレイス",
+      "marketplacePolicy": "{policy} · マーケットプレイス",
+      "more": "{count, plural, other {他 # グループ}}",
+      "compact": "{count, plural, other {グループ: {names}}}",
+      "filter": {
+        "placeholder": "グループで絞り込む",
+        "all": "すべてのグループ"
+      }
     }
   },
   "opensearchHealth": {

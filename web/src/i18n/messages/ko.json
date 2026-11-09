@@ -17325,7 +17325,8 @@
       "empty": {
         "noMatches": {
           "description": "다른 검색어를 사용해 보세요.",
-          "title": "일치하는 스킬 없음"
+          "title": "일치하는 스킬 없음",
+          "groupDescription": "이 그룹에서 일치하는 스킬이 없습니다. 다른 그룹이나 검색어를 사용해 보세요."
         },
         "noSkills": {
           "title": "아직 사용자 지정 스킬이 없습니다",
@@ -17497,6 +17498,17 @@
       "loadOlderCompact": "이전 버전",
       "files": "파일",
       "noFiles": "추가 파일이 없습니다."
+    },
+    "groups": {
+      "columnTitle": "그룹",
+      "marketplace": "마켓플레이스",
+      "marketplacePolicy": "{policy} · 마켓플레이스",
+      "more": "{count, plural, other {그룹 #개 더 보기}}",
+      "compact": "{count, plural, other {그룹: {names}}}",
+      "filter": {
+        "placeholder": "그룹으로 필터링",
+        "all": "모든 그룹"
+      }
     }
   },
   "opensearchHealth": {

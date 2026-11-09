@@ -17325,7 +17325,8 @@
       "empty": {
         "noMatches": {
           "description": "Try a different search.",
-          "title": "No matching skills"
+          "title": "No matching skills",
+          "groupDescription": "No skills in this group match. Try a different group or search."
         },
         "noSkills": {
           "title": "No custom skills yet",
@@ -17497,6 +17498,17 @@
       "loadOlderCompact": "Older",
       "files": "Files",
       "noFiles": "No additional files."
+    },
+    "groups": {
+      "columnTitle": "Groups",
+      "marketplace": "Marketplace",
+      "marketplacePolicy": "{policy} · Marketplace",
+      "more": "{count, plural, one {+# more group} other {+# more groups}}",
+      "compact": "{count, plural, one {Group: {names}} other {Groups: {names}}}",
+      "filter": {
+        "placeholder": "Filter by group",
+        "all": "All groups"
+      }
     }
   },
   "opensearchHealth": {
