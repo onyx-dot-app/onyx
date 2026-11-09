@@ -70,6 +70,11 @@ class ResourceAccessAdapter[Resource](Protocol):
 def lock_resource_access_user(user_id: UUID, db_session: Session) -> User:
     """Reload authority after membership writers finish, using the request session."""
     lock_group_membership(db_session)
+    return fetch_resource_access_user(user_id, db_session)
+
+
+def fetch_resource_access_user(user_id: UUID, db_session: Session) -> User:
+    """Refresh read authority without serializing reads against workspace writes."""
     user = fetch_user_by_id(db_session, user_id, refresh=True)
     if (
         user is None
