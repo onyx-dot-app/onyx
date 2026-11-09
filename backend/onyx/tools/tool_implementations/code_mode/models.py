@@ -142,8 +142,13 @@ class StoreCommit(BaseModel):
 
     @cached_property
     def size_bytes(self) -> int:
-        """Bytes the commit adds to the chat's saved history; measured once."""
-        return sum(entry_bytes(key, value) for key, value in self.writes.items())
+        """Bytes of the values that the commit stores, which count toward the
+        chat's limit on saved writes; measured once. Deleted keys do not count."""
+        return sum(
+            entry_bytes(key, value)
+            for key, value in self.writes.items()
+            if value is not None
+        )
 
 
 class LostStoreWrites(BaseModel):
