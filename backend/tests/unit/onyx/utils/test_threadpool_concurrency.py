@@ -13,6 +13,7 @@ from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils import threadpool_concurrency
 from onyx.utils.threadpool_concurrency import (
     ThreadSafeDict,
+    call_later,
     parallel_yield,
     run_in_background,
     run_with_timeout,
@@ -503,3 +504,27 @@ def test_cancellation_logs_unexpected_cleanup_failure() -> None:
             )
     log.assert_called_once_with("Coroutine cleanup failed after cancellation")
     assert not cancellation._callbacks
+
+
+def test_call_later_runs_due_callbacks_in_order_on_one_thread() -> None:
+    request = contextvars.ContextVar("request", default="none")
+    request.set("caller")
+    ran: list[tuple[str, str, int]] = []
+    done = threading.Event()
+
+    def record(name: str) -> None:
+        ran.append((name, request.get(), threading.get_ident()))
+        if name == "last":
+            done.set()
+
+    call_later(0.2, lambda: record("last"))
+    cancel = call_later(0.05, lambda: record("cancelled"))
+    call_later(0.1, lambda: record("second"))
+    call_later(0.0, lambda: record("first"))
+    cancel()
+
+    assert done.wait(5)
+    assert [name for name, _, _ in ran] == ["first", "second", "last"]
+    assert {context for _, context, _ in ran} == {"caller"}
+    assert len({thread for _, _, thread in ran}) == 1
+    assert threading.get_ident() not in {thread for _, _, thread in ran}
