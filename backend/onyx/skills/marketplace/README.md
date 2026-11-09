@@ -13,7 +13,8 @@ The archive reader also has independent processing safeguards:
 
 - ZIP directory metadata reads are capped at 1 MiB before parsing. Larger
   directories fail even within the entry limit. Only stored and deflated ZIP
-  members are supported; other compression methods fail before member reads.
+  members are supported; other compression methods and encrypted entries fail
+  before member reads.
 - A gzip stream may expand to at most 1 GiB, including tar headers, padding,
   and unrelated files. The reader inflates it once into a temporary spool.
   Only the first 1 MiB stays in memory; larger spools use temporary disk.
@@ -21,6 +22,9 @@ The archive reader also has independent processing safeguards:
   counts actual returned bytes, including repeated reads and manifests.
   ZIP members outside the selected marketplace need no inflation. All supported
   stream reads, including readinto, lines and iteration, use that budget.
+  ZIP member streams reject seeking because it can decompress bytes outside
+  this budget. Reopen and read within the shared budget instead. TAR members
+  can seek within the already expanded spool; repeated reads still count.
 - `read`, `readline` and `readlines` return at most 4 MiB. An unsized read, a larger sized read,
   one line, or `readlines` fails if its result would be longer. It does
   not truncate the result. Callers must read larger members in chunks.
@@ -48,7 +52,9 @@ contain more than 100 MiB of valid skill content.
 These safeguards can reject an otherwise valid repository within the compressed
 and entry limits. In particular, a tar archive with large unrelated files can
 fail while a ZIP with those unread files succeeds. Processing failures must
-fail the whole read. A sync must retain the last good state and retire nothing.
+fail the whole read. Invalid or truncated TAR headers fail even after valid
+entries; they must not return a partial catalog. A sync must retain the last
+good state and retire nothing.
 A future streaming staging API can support larger repositories without retaining
 all output bundles in memory. Raising these limits requires resource measurements.
 

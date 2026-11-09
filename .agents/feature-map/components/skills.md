@@ -410,12 +410,15 @@ still propagate unexpected storage errors.
     `skills/marketplace/archive.py:archive_files` bounds gzip expansion and member
     reads separately from skill limits. Every supported stream read charges the
     shared byte budget. ZIP metadata reads are bounded before directory parsing;
-    only stored and deflated members are supported. Path depth, path bytes and
+    only unencrypted stored and deflated members are supported. ZIP member streams
+    reject seeking, which could otherwise bypass the decompression budget. TAR
+    streams can seek within the already expanded spool. Path depth, path bytes and
     the aggregate parent index
     are bounded before retained path allocations can grow without limit.
     The index budget also counts each retained TAR PAX dictionary and its text
     objects; global headers must not multiply retained metadata without a limit.
-    TAR enumeration also charges all metadata reads before a member returns.
+    TAR enumeration rejects invalid and truncated headers instead of returning
+    a partial catalog. It also charges metadata reads before a member returns.
     Each member also has its own metadata budget, so chained headers and sparse
     maps stop before large allocation or deep parser recursion. Sparse members
     fail the read. `read`, `readline` and `readlines` fail above

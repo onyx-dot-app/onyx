@@ -539,3 +539,85 @@ def test_long_tar_paths_and_large_members_remain_supported() -> None:
                 assert sum(
                     len(c) for c in iter(lambda: stream.read(65536), b"")
                 ) == len(content)
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+@pytest.mark.parametrize("whence", [io.SEEK_SET, io.SEEK_CUR, io.SEEK_END])
+def test_zip_seeks_cannot_bypass_member_read_budget(
+    compression: int, whence: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(archives, "MEMBER_READ_MAX_BYTES", 4)
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=compression) as archive:
+        archive.writestr("data", b"0123456789")
+    with archives.archive_files(out.getvalue()) as files:
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.read(1) == b"0"
+            with pytest.raises(io.UnsupportedOperation):
+                stream.seek(5, whence)
+            assert not stream.seekable()
+            assert stream.tell() == 1
+            assert stream.read(3) == b"123"
+            with pytest.raises(archives.ArchiveLimitError):
+                stream.read(1)
+
+
+def test_tar_seek_preserves_shared_read_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(archives, "MEMBER_READ_MAX_BYTES", 4)
+    with archives.archive_files(_archive({"data": b"0123456789"}, "tar")) as files:
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.seekable()
+            assert stream.seek(8) == 8
+            assert stream.read(2) == b"89"
+            assert stream.seek(0) == 0
+            assert stream.read(2) == b"01"
+            with pytest.raises(archives.ArchiveLimitError):
+                stream.read(1)
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+def test_encrypted_zip_fails_before_listing(compression: int) -> None:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=compression) as archive:
+        archive.writestr("data", b"content")
+    data = bytearray(out.getvalue())
+    central = data.index(b"PK\x01\x02")
+    data[6] |= 1
+    data[central + 8] |= 1
+    with pytest.raises(archives.ArchiveLimitError, match="encryption"):
+        with archives.archive_files(bytes(data)):
+            pytest.fail("Encrypted members must fail before listing")
+
+
+@pytest.mark.parametrize("damage", ["checksum", "truncated", "short_zero_block"])
+def test_corrupt_later_tar_header_fails_whole_read(damage: str) -> None:
+    data = bytearray(
+        gzip.decompress(_archive({"first": b"ok", "second": b"later"}, "tar"))
+    )
+    second_header = 1024
+    if damage == "checksum":
+        data[second_header] ^= 1
+    elif damage == "short_zero_block":
+        data[second_header:] = bytes(100)
+    else:
+        del data[second_header + 100 :]
+    with pytest.raises(tarfile.ReadError):
+        with archives.archive_files(gzip.compress(data)):
+            pytest.fail("A corrupt header must not produce a partial catalog")
+
+
+@pytest.mark.parametrize("ending", [b"", bytes(512), bytes(1024)])
+def test_tar_accepts_normal_end_after_member(ending: bytes) -> None:
+    header = tarfile.TarInfo("data")
+    header.size = 2
+    data = header.tobuf() + b"ok" + bytes(510) + ending
+    with archives.archive_files(gzip.compress(data)) as files:
+        assert list(files) == ["data"]
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.read() == b"ok"
