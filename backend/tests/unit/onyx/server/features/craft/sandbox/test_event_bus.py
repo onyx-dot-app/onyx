@@ -488,7 +488,7 @@ def test_close_is_idempotent(bus: PodEventBus) -> None:
 
 
 class _IdleSSEHandler(BaseHTTPRequestHandler):
-    """Sends one heartbeat, then holds the stream open with no frames."""
+    """Sends one ses_A event, then holds the stream open with no frames."""
 
     release = threading.Event()
 
@@ -496,7 +496,9 @@ class _IdleSSEHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        self.wfile.write(b'data: {"type": "server.heartbeat"}\n\n')
+        self.wfile.write(
+            b'data: {"type": "message.part.delta", "properties": {"sessionID": "ses_A"}}\n\n'
+        )
         self.wfile.flush()
         type(self).release.wait(timeout=30.0)
 
@@ -523,8 +525,10 @@ def test_close_interrupts_idle_stream(idle_sse_url: str) -> None:
     waiting out the join timeout."""
     bus = PodEventBus(base_url=idle_sse_url, auth=None, event_read_timeout=60.0)
     try:
-        bus.subscribe("ses_A")
-        assert bus.stream_ready.wait(timeout=5.0)
+        sub = bus.subscribe("ses_A")
+        # Once the frame is dispatched the reader is back in (or entering) the
+        # blocking read, so only a socket interrupt can end it quickly.
+        assert sub.queue.get(timeout=5.0) is not None
         reader = bus._reader_thread
         assert reader is not None
 
