@@ -17508,6 +17508,7 @@
       "disable": "Désactiver pour moi",
       "delete": "Supprimer",
       "selectSkill": "Sélectionner {name}",
+      "moreActionsForSkill": "Plus d’actions pour {name}",
       "updated": "{count, plural, one {# compétence mise à jour} other {# compétences mises à jour}}",
       "failed": "Impossible de mettre à jour les compétences. Réessayez.",
       "partialFailure": "{count, plural, one {# compétence n’a pas pu être mise à jour} other {# compétences n’ont pas pu être mises à jour}}",

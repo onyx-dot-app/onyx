@@ -4,6 +4,7 @@ import { useCallback, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
+  LineItemButton,
   Card,
   InputSwitch,
   InputCheckbox,
@@ -20,9 +21,7 @@ import {
   SvgTrash,
   SvgUser,
 } from "@opal/icons";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
-import { useSettings } from "@/lib/settings/hooks";
+import { useSkillPresentation } from "@/lib/skills/hooks";
 import type {
   CustomSkill,
   SkillExternalAppDependency,
@@ -88,57 +87,26 @@ export default function SkillCard({
 }: SkillCardProps) {
   const t = useTranslations("cards");
   const skillCopy = useTranslations("skills");
-  const { appName } = useSettings();
 
   const handleClick = useCallback(() => {
     onClick?.(item);
   }, [onClick, item]);
 
-  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
-    Permission.MANAGE_SKILLS
-  );
-  const isRequired =
-    item.source === "custom" && item.skill.installation_policy === "REQUIRED";
-
-  const authorTitle =
-    item.source === "builtin" ? appName : item.author_email || appName;
-  const dependency = item.external_app;
-  const isDependencyUnavailable = dependency !== null && !dependency.ready;
-  const isSelectedDependencyUnavailable =
-    item.enabled && isDependencyUnavailable;
-  const isInactive = !item.enabled || isDependencyUnavailable;
-  const isInvalid = item.source === "custom" && item.skill.is_valid === false;
-  const isBuiltinUnavailable = item.source === "builtin" && !item.is_available;
-  let dependencyStatus: string | null = null;
-  if (dependency) {
-    if (!dependency.ready) {
-      dependencyStatus = dependency.enabled
-        ? item.enabled
-          ? t("skill.dependency.connectToUse", { app: dependency.name })
-          : t("skill.dependency.connectToEnable", { app: dependency.name })
-        : t("skill.dependency.appDisabled", { app: dependency.name });
-    } else {
-      dependencyStatus =
-        !item.enabled && hasEnabledNameConflict
-          ? t("skill.dependency.nameConflict")
-          : t("skill.dependency.usesApp", { app: dependency.name });
-    }
-  }
-
-  let tooltip: string | undefined;
-  if (isInvalid) {
-    tooltip = t("skill.tooltips.invalid");
-  } else if (isBuiltinUnavailable) {
-    tooltip = t("skill.tooltips.unavailable");
-  } else if (isDependencyUnavailable && dependency) {
-    tooltip = dependency.enabled
-      ? t("skill.tooltips.connectApp", { app: dependency.name })
-      : t("skill.tooltips.appDisabled", { app: dependency.name });
-  }
-  const canEdit =
-    item.source === "custom" &&
-    (item.skill.user_permission === "OWNER" ||
-      item.skill.user_permission === "EDITOR");
+  const {
+    canManageCompanySkills,
+    isRequired,
+    authorTitle,
+    dependency,
+    isDependencyUnavailable,
+    isSelectedDependencyUnavailable,
+    isInactive,
+    isInvalid,
+    isBuiltinUnavailable,
+    dependencyStatus,
+    tooltip,
+    canEdit,
+    toggleAriaLabel,
+  } = useSkillPresentation(item, hasEnabledNameConflict);
 
   const handleEditClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -150,20 +118,6 @@ export default function SkillCard({
   const handleEnabledChange = (enabled: boolean) => {
     onEnabledChange?.(item, enabled);
   };
-
-  const toggleAriaLabel = dependency
-    ? item.enabled
-      ? t("skill.toggle.disableForApp.ariaLabel", {
-          name: item.name,
-          app: dependency.name,
-        })
-      : t("skill.toggle.enableForApp.ariaLabel", {
-          name: item.name,
-          app: dependency.name,
-        })
-    : item.enabled
-      ? t("skill.toggle.disable.ariaLabel", { name: item.name })
-      : t("skill.toggle.enable.ariaLabel", { name: item.name });
 
   return (
     <Tooltip tooltip={tooltip} side="top">
@@ -201,6 +155,7 @@ export default function SkillCard({
               justifyContent="start"
               gap={0}
               width="auto"
+              className="min-w-0 flex-1"
             >
               {selection && (
                 <Section
@@ -219,17 +174,17 @@ export default function SkillCard({
                   />
                 </Section>
               )}
-              <Button
-                prominence="internal"
+              <LineItemButton
+                font="main-ui-body"
+                title={item.name}
+                titleMaxLines={1}
                 icon={selection ? undefined : SvgBlocks}
                 aria-label={item.name}
                 onClick={(event) => {
                   event.stopPropagation();
                   handleClick();
                 }}
-              >
-                {item.name}
-              </Button>
+              />
             </Section>
             {item.source === "custom" && canEdit && !selection?.checked ? (
               <Section
