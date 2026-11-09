@@ -476,7 +476,9 @@ The library preview of an external-app skill calls the same renderer
     can combine the new skill pointer with the old joined version snapshot.
     Publishing also refreshes the loaded relationship. Custom writers call `db/skill_version.py`, which
     adapts the generic `db/resource_version.py` service. A row lock serializes
-    version numbers. The version, pointer and legacy columns change in one
+    version numbers. Custom creation reserves its first version ID before inserting
+    the skill; the deferred foreign key permits both rows in one transaction.
+    Later writes allocate a new version ID. The version, pointer and legacy columns change in one
     transaction. Equal content digests keep the current version and stored-byte
     hash. `utils/bundle.py:compute_bundle_metadata` computes the digest without
     application database or server imports. It uses only the temporary SQLite

@@ -450,9 +450,13 @@ def test_commit_ack_failure_keeps_referenced_upload(
                 )
         cleanup.assert_not_called()
     skill = db_session.scalar(select(Skill).where(Skill.name == name))
-    assert skill is not None and skill.bundle_file_id is not None
+    assert skill is not None and skill.current_version is not None
+    assert skill is not None and skill.current_version.bundle_file_id is not None
     try:
-        with get_default_file_store().read_file(skill.bundle_file_id) as stream:
+        assert skill is not None and skill.current_version is not None
+        with get_default_file_store().read_file(
+            skill.current_version.bundle_file_id
+        ) as stream:
             assert stream.read()
     finally:
         api.delete_current_user_skill(

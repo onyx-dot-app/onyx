@@ -2,7 +2,7 @@
 
 from collections.abc import Collection, Mapping
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -261,6 +261,7 @@ def reconcile_marketplace__no_commit(
                 raise ValueError(
                     f"Changed marketplace entry needs a staged bundle: {key}"
                 )
+            initial_version_id = uuid4() if skill is None else None
             if skill is None:
                 skill = Skill(
                     name=name,
@@ -269,11 +270,12 @@ def reconcile_marketplace__no_commit(
                     marketplace_id=marketplace.id,
                     marketplace_entry_key=key,
                     bundle_file_id=bundle.bundle_file_id,
+                    current_version_id=initial_version_id,
                 )
                 db_session.add(skill)
                 db_session.flush()
                 names.add(name)
-            adapter = SkillVersionAdapter(skill)
+            adapter = SkillVersionAdapter(skill, initial_version_id=initial_version_id)
             write_resource_version(
                 adapter,
                 bundle_file_id=bundle.bundle_file_id,

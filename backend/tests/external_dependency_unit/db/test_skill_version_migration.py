@@ -29,13 +29,13 @@ def revision() -> Script:
 
 @pytest.fixture
 def connection(isolated_engine: Engine) -> Generator[Connection, None, None]:
-    schema = f"skill_versions_{uuid4().hex}"
+    schema = f"skill-versions-{uuid4().hex}"
     with isolated_engine.connect() as connection:
         try:
             connection.execute(CreateSchema(schema))
             connection.execute(
                 text("SELECT set_config('search_path', :schema, false)"),
-                {"schema": schema},
+                {"schema": f'"{schema}"'},
             )
             connection.execute(text('CREATE TABLE "user" (id uuid PRIMARY KEY)'))
             connection.execute(
@@ -138,7 +138,7 @@ def test_backfill_round_trip(connection: Connection, revision: Script) -> None:
         revision.module.upgrade()
         connection.commit()
         versions = connection.execute(
-            select(SkillVersion).order_by(SkillVersion.id)
+            text("SELECT * FROM skill_version ORDER BY id")
         ).all()
         assert len(versions) == 3
         for row, original in zip(versions, before[:3], strict=True):
@@ -154,7 +154,7 @@ def test_backfill_round_trip(connection: Connection, revision: Script) -> None:
             )
             assert row.marketplace_revision is None
         assert connection.execute(
-            select(Skill.id, Skill.current_version_id).order_by(Skill.id)
+            text("SELECT id, current_version_id FROM skill ORDER BY id")
         ).all() == [(UUID(int=i), UUID(int=i)) for i in (2, 3, 4)] + [
             (UUID(int=5), None)
         ]
@@ -167,7 +167,7 @@ def test_backfill_round_trip(connection: Connection, revision: Script) -> None:
         revision.module.upgrade()
         connection.commit()
         assert (
-            connection.execute(select(SkillVersion).order_by(SkillVersion.id)).all()
+            connection.execute(text("SELECT * FROM skill_version ORDER BY id")).all()
             == versions
         )
 

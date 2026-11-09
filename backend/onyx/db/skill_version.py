@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from time import monotonic
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 from sqlalchemy import ColumnElement, Select, exists, func, or_, select
@@ -144,8 +144,9 @@ def _apply_metadata(version: SkillVersion, metadata: tuple[str, int, int]) -> No
 
 
 class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
-    def __init__(self, skill: Skill) -> None:
+    def __init__(self, skill: Skill, *, initial_version_id: UUID | None = None) -> None:
         self.skill = skill
+        self.initial_version_id = initial_version_id
 
     def lock(self, db_session: Session) -> None:
         db_session.refresh(self.skill, with_for_update={"of": Skill})
@@ -171,7 +172,9 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT, "Only custom skills have bundle versions"
             )
-        return SkillVersion(skill_id=self.skill.id)
+        return SkillVersion(
+            id=self.initial_version_id or uuid4(), skill_id=self.skill.id
+        )
 
     def publish(self, version: SkillVersion) -> None:
         self.skill.current_version_id = version.id
@@ -268,7 +271,9 @@ def save_skill_version(
     assert_skill_content_editable(skill)
     if not initial and prepared is None:
         prepared = prepare_skill_version_write(skill, ingested, db_session)
-    adapter = SkillVersionAdapter(skill)
+    adapter = SkillVersionAdapter(
+        skill, initial_version_id=skill.current_version_id if initial else None
+    )
     adapter.lock(db_session)
     db_session.refresh(skill, ["current_version"])
     assert_skill_content_editable(skill)

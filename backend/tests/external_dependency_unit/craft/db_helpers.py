@@ -56,7 +56,8 @@ from onyx.db.models import (
     WorkspaceActionPolicy,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.skill_version import repair_skill_version
+from onyx.db.resource_version import write_resource_version
+from onyx.db.skill_version import SkillVersionAdapter
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
 
@@ -179,11 +180,16 @@ def make_skill(
     db_session: Session,
     *,
     name: str | None = None,
+    skill_id: UUID | None = None,
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     author_user_id: UUID | None = None,
+    description: str = "d",
+    bundle_file_id: str | None = None,
+    bundle_sha256: str = "0" * 64,
+    is_valid: bool | None = None,
 ) -> Skill:
-    """Create a single custom ``Skill`` row.
+    """Create a custom Skill and its first version in one transaction.
 
     Bundle metadata (``bundle_file_id``, ``bundle_sha256``) is filled with
     placeholder values; tests that need a real bundle should use the
@@ -191,18 +197,30 @@ def make_skill(
     """
     if author_user_id is None and not is_public:
         author_user_id = make_user(db_session, standard_account=True).id
+    initial_version_id = uuid4()
+    bundle_file_id = bundle_file_id or f"bundle-{uuid4().hex[:8]}"
     skill = Skill(
-        id=uuid4(),
+        id=skill_id or uuid4(),
         name=name or f"helper-skill-{uuid4().hex[:8]}",
-        description="d",
-        bundle_file_id=f"bundle-{uuid4().hex[:8]}",
-        bundle_sha256="0" * 64,
+        description=description,
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=bundle_sha256,
+        is_valid=is_valid,
+        current_version_id=initial_version_id,
         public_permission=public_permission if is_public else None,
         author_user_id=author_user_id,
     )
     db_session.add(skill)
     db_session.flush()
-    repair_skill_version(skill, db_session)
+    write_resource_version(
+        SkillVersionAdapter(skill, initial_version_id=initial_version_id),
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=bundle_sha256,
+        is_valid=is_valid,
+        metadata=None,
+        created_by_user_id=None,
+        db_session=db_session,
+    )
     return skill
 
 
@@ -224,8 +242,6 @@ def make_built_in_skill_row(
         name=name or built_in_skill_id,
         description=description,
         built_in_skill_id=built_in_skill_id,
-        bundle_file_id=None,
-        bundle_sha256=None,
         public_permission=SkillSharePermission.VIEWER if is_public else None,
     )
     db_session.add(skill)

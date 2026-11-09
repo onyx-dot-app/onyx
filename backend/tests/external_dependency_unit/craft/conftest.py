@@ -22,7 +22,6 @@ from onyx.db.enums import (
     BuildSessionStatus,
     LLMModelFlowType,
     SandboxStatus,
-    SkillSharePermission,
 )
 from onyx.db.llm import (
     fetch_default_model,
@@ -40,7 +39,6 @@ from onyx.db.models import (
     User,
     UserGroup,
 )
-from onyx.db.skill_version import repair_skill_version
 from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
@@ -59,7 +57,7 @@ from tests.common.craft.skill_table_isolation import (
 )
 from tests.common.craft.stubs import StubSandboxManager
 from tests.common.models import CI_OPENAI_MODEL
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -336,18 +334,15 @@ def seeded_skill(
         if author_user_id is None and not public:
             author_user_id = make_user(db_session, standard_account=True).id
 
-        skill = Skill(
-            id=uuid4(),
+        skill = make_skill(
+            db_session,
             name=name,
             description=f"Seeded skill {name}",
             bundle_file_id=bundle_file_id,
             bundle_sha256=bundle_sha256,
-            public_permission=SkillSharePermission.VIEWER if public else None,
+            is_public=public,
             author_user_id=author_user_id,
         )
-        db_session.add(skill)
-        db_session.flush()
-        repair_skill_version(skill, db_session)
         db_session.commit()
         db_session.refresh(skill)
 

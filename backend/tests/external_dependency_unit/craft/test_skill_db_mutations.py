@@ -16,7 +16,7 @@ from onyx.db.models import (
     UserSkillPreference,
 )
 from onyx.db.skill import (
-    add_new_skill__no_commit,
+    create_skill_from_ingested_bundle,
     enable_new_skill_if_name_available__no_commit,
     list_runtime_skills_for_user,
     replace_skill_bundle,
@@ -164,17 +164,19 @@ def test_new_skill_name_is_not_reserved_by_external_app_association(
     name = f"shared-skill-name-{uuid4().hex[:8]}"
     associated_skill = make_skill(db_session, name=name, is_public=True)
     make_external_app(db_session, skill=associated_skill, auth_template={})
-    standalone_skill = Skill(
-        id=uuid4(),
-        name=name,
-        description="Independent skill with the same runtime name",
-        author_user_id=make_user(db_session, standard_account=True).id,
-        bundle_file_id=f"bundle-{uuid4().hex[:8]}",
-        bundle_sha256="0" * 64,
-        is_valid=True,
+    standalone_skill = create_skill_from_ingested_bundle(
+        IngestedBundle(
+            canonical_name=name,
+            description="Independent skill with the same runtime name",
+            bundle_file_id=f"bundle-{uuid4().hex[:8]}",
+            bundle_sha256="0" * 64,
+            metadata=BundleMetadata(
+                content_digest="0" * 64, unpacked_size_bytes=0, file_count=0
+            ),
+        ),
+        make_user(db_session, standard_account=True).id,
+        db_session,
     )
-
-    add_new_skill__no_commit(standalone_skill, db_session)
 
     assert set(db_session.scalars(select(Skill.id).where(Skill.name == name))) == {
         associated_skill.id,

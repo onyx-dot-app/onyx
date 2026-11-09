@@ -139,6 +139,7 @@ covers new files that match it.
 | `backend/tests/external_dependency_unit/db/test_skill_group_summaries.py` | skills |
 | `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/skill_library.py`, `backend/onyx/db/marketplace.py`, `backend/onyx/db/marketplace_management.py`, `backend/onyx/db/marketplace_sync.py`, `backend/onyx/db/marketplace_access.py`, `backend/onyx/db/skill_version.py`, `backend/onyx/utils/bundle.py`, `backend/onyx/db/resource_version.py`, `backend/onyx/db/resource_access.py`, `backend/onyx/db/skill_mutation.py`, `backend/scripts/check_skill_version_cutover.py`, `backend/onyx/server/features/skill/` | skills |
 | `backend/tests/external_dependency_unit/db/test_skill_library_lock.py` | skills |
+| `backend/tests/external_dependency_unit/db/test_skill_bundle_cleanup_schema.py` | skills, multi-tenancy |
 | `backend/onyx/db/zip_metadata.py` | skills |
 | `backend/onyx/background/celery/tasks/skills/`, `backend/onyx/background/celery/tasks/skill_versions/`, `backend/onyx/background/celery/tasks/marketplace_sync/` | skills, background-jobs |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
