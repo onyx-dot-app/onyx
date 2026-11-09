@@ -336,6 +336,11 @@ A version ID from another Skill also returns `404`.
 
 ## Synced marketplace Skills
 
+Synced Skills show their marketplace name and repository folder in the library.
+Owners and editors can select **View content** to read instructions and inspect the file list.
+The content page is read-only. To change instructions or files, edit the GitHub repository and sync the marketplace.
+Sharing remains available. Active synced Skills cannot be deleted from row actions or bulk selection.
+
 Skill list and detail responses include `marketplace` for synced Skills and `null` for other Skills.
 It contains the source `id`, `name`, `personal` scope, Skill `folder`, and `follows_access` flag.
 The folder is relative to the repository root. The response does not include source credentials or login details.

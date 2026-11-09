@@ -69,6 +69,7 @@ import {
   setSkillEnabled,
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
+import { canDeleteSkill } from "@/lib/skills/permissions";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -664,12 +665,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                       title: bulkCopy("delete"),
                       danger: true,
                       disabled:
-                        !canManageSelected ||
-                        (!canManageCompanySkills &&
-                          selectedItems.some(
-                            (item) =>
-                              item.skill.installation_policy === "REQUIRED"
-                          )),
+                        selectedItems.length === 0 ||
+                        selectedItems.some(
+                          ({ skill }) =>
+                            !canDeleteSkill({ skill, canManageCompanySkills })
+                        ),
                       onSelect: () => setBulkDeleteOpen(true),
                     },
                   ],

@@ -17517,6 +17517,12 @@
       "addAccessDescription": "選択したすべてのスキルに、これらのユーザーとグループを追加します。指定したユーザーとグループには選択した権限が設定されます。それ以外のユーザーの現在のアクセス権は変わりません。",
       "apply": "{count, plural, one {# 件のスキルに適用} other {# 件のスキルに適用}}",
       "moreActions": "その他の操作"
+    },
+    "synced": {
+      "view": "内容を表示",
+      "readOnlyTitle": "GitHub から同期",
+      "readOnlyDescription": "これらの指示とファイルは GitHub で編集してください。このマーケットプレイスの同期時に Onyx が更新します。",
+      "source": "マーケットプレイス: {name}"
     }
   },
   "opensearchHealth": {

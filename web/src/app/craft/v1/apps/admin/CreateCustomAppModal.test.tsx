@@ -517,6 +517,8 @@ describe("CreateCustomAppModal", () => {
       author_email: "admin@example.com",
       owner: { id: "admin-id", email: "admin@example.com" },
       ownership_vacant: false,
+      marketplace: null,
+      retired_at: null,
       public_permission: null,
       is_personal: true,
       user_permission: "OWNER",

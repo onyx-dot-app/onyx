@@ -56,6 +56,8 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     author_email: "owner@example.com",
     owner: { id: "user-id", email: "owner@example.com" },
     ownership_vacant: false,
+    marketplace: null,
+    retired_at: null,
     created_at: null,
     updated_at: null,
     user_shares: [],
@@ -466,3 +468,39 @@ it("lets a global nonadmin delete a required skill", async () => {
   await user.click(screen.getByRole("button", { name: "Delete skill" }));
   expect(onDelete).toHaveBeenCalledWith(item);
 });
+
+it.each([false, true])(
+  "shows synced provenance and content viewing, but never active deletion (global=%s)",
+  async (global) => {
+    mockPermissions = global ? [Permission.MANAGE_SKILLS] : [];
+    const user = setupUser();
+    const onEdit = jest.fn();
+    const onShare = jest.fn();
+    const item = custom({
+      marketplace: {
+        id: "source",
+        name: "Team tools",
+        personal: false,
+        folder: "skills/reports",
+        follows_access: true,
+      },
+    });
+    render(
+      <SkillCard
+        item={item}
+        onEdit={onEdit}
+        onShare={onShare}
+        onDelete={jest.fn()}
+      />
+    );
+    expect(screen.getByText("Team tools")).toBeInTheDocument();
+    expect(screen.getByText("skills/reports")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete skill" })
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View content" }));
+    expect(onEdit).toHaveBeenCalledWith(item);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    expect(onShare).toHaveBeenCalledWith(item);
+  }
+);

@@ -82,6 +82,11 @@
   `db/skill.py:skill_marketplace_sources` selects only display fields in one
   query per list. `server/features/skill/response_helpers.py` omits list rows
   whose source was deleted during the request; a detail request returns not found.
+  `sections/skills/SkillMarketplaceLabel.tsx` shows the source and folder in
+  cards, the admin table and the content page. `views/SkillEditorPage.tsx`
+  keeps synced content copyable but removes content-write controls. Sharing
+  remains separate. `lib/skills/permissions.ts:canDeleteSkill` gates row,
+  editor and bulk deletion; active synced skills cannot be deleted.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a

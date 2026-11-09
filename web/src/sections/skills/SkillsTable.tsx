@@ -14,12 +14,19 @@ import {
   type DropdownMenuItem,
 } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgEdit, SvgMoreHorizontal, SvgShare, SvgTrash } from "@opal/icons";
+import {
+  SvgEdit,
+  SvgEye,
+  SvgMoreHorizontal,
+  SvgShare,
+  SvgTrash,
+} from "@opal/icons";
 import type {
   CustomSkillCardItem,
   SkillCardProps,
 } from "@/sections/cards/SkillCard";
 import { useSkillPresentation } from "@/lib/skills/hooks";
+import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
 type SkillTableItem = SkillCardProps & {
   item: CustomSkillCardItem;
@@ -80,6 +87,9 @@ function SkillName({
             : (dependencyStatus ?? item.description)}
         </Text>
       )}
+      {item.skill.marketplace && (
+        <SkillMarketplaceLabel marketplace={item.skill.marketplace} />
+      )}
     </Section>
   );
 }
@@ -96,16 +106,16 @@ function SkillActions({
   const cards = useTranslations("cards");
   const {
     canEdit,
-    canManageCompanySkills,
-    isRequired,
+    canDelete,
+    isSynced,
     isInvalid,
     isDependencyUnavailable,
     toggleAriaLabel,
     tooltip,
   } = useSkillPresentation(item);
   const actions: DropdownMenuItem[] = [];
-  if (item.source === "custom" && canEdit) {
-    if (onShare)
+  if (item.source === "custom") {
+    if (canEdit && onShare)
       actions.push({
         kind: "action",
         id: "share",
@@ -113,15 +123,15 @@ function SkillActions({
         title: t("editor.management.sharing.edit.label"),
         onSelect: () => onShare(item),
       });
-    if (onEdit)
+    if (canEdit && onEdit)
       actions.push({
         kind: "action",
         id: "edit",
-        icon: SvgEdit,
-        title: cards("skill.edit.tooltip"),
+        icon: isSynced ? SvgEye : SvgEdit,
+        title: isSynced ? t("synced.view") : cards("skill.edit.tooltip"),
         onSelect: () => onEdit(item),
       });
-    if (onDelete && (!isRequired || canManageCompanySkills))
+    if (onDelete && canDelete)
       actions.push({
         kind: "action",
         id: "delete",

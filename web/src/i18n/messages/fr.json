@@ -17517,6 +17517,12 @@
       "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
       "apply": "{count, plural, one {Appliquer à # compétence} other {Appliquer à # compétences}}",
       "moreActions": "Plus d’actions"
+    },
+    "synced": {
+      "view": "Voir le contenu",
+      "readOnlyTitle": "Synchronisé depuis GitHub",
+      "readOnlyDescription": "Modifiez ces instructions et fichiers dans GitHub. Onyx les met à jour lors de la synchronisation de ce catalogue.",
+      "source": "Catalogue : {name}"
     }
   },
   "opensearchHealth": {
