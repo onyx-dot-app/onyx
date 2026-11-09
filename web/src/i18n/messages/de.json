@@ -17564,7 +17564,7 @@
     "needs_confirmation": "Bestätigung erforderlich",
     "idle": "Nicht synchronisiert",
     "personalScope": "Persönlich",
-    "skillCounts": "{live, number} aktive Skills · {retired, number} stillgelegt",
+    "skillCounts": "{live, plural, one {# aktiver Skill} other {# aktive Skills}} · {retired, number} stillgelegt",
     "source": "GitHub · {owner}/{repo} · {ref}",
     "folderValue": "Ordner: {folder}",
     "rootFolder": "Repository-Stammverzeichnis",
@@ -17588,6 +17588,10 @@
     "proposalChanged": "Der Vorschlag hat sich geändert. Prüfe den aktuellen Vorschlag vor der Bestätigung.",
     "proposalUnavailable": "Die Skill-Namen des Vorschlags sind nicht verfügbar. Aktualisiere vor der Bestätigung.",
     "activeSkill": "{name}",
-    "retiredSkill": "{name} · Stillgelegt"
+    "retiredSkill": "{name} · Stillgelegt",
+    "listTitle": "Marketplaces",
+    "emptyList": "Noch keine Marketplaces",
+    "emptyListDescription": "Synchronisiere von GitHub, um einen Skill-Katalog hinzuzufügen.",
+    "detailsFor": "Details für {name} anzeigen"
   }
 }

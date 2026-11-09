@@ -17564,7 +17564,7 @@
     "needs_confirmation": "Confirmation requise",
     "idle": "Non synchronisé",
     "personalScope": "Personnel",
-    "skillCounts": "{live, number} compétences actives · {retired, number} retirées",
+    "skillCounts": "{live, plural, one {# compétence active} other {# compétences actives}} · {retired, number} retirées",
     "source": "GitHub · {owner}/{repo} · {ref}",
     "folderValue": "Dossier : {folder}",
     "rootFolder": "Racine du dépôt",
@@ -17588,6 +17588,10 @@
     "proposalChanged": "La proposition a changé. Examinez la dernière proposition avant de confirmer.",
     "proposalUnavailable": "Les noms des compétences de la proposition sont indisponibles. Actualisez avant de confirmer.",
     "activeSkill": "{name}",
-    "retiredSkill": "{name} · Retirée"
+    "retiredSkill": "{name} · Retirée",
+    "listTitle": "Marketplaces",
+    "emptyList": "Aucun marketplace pour le moment",
+    "emptyListDescription": "Synchronisez depuis GitHub pour ajouter un catalogue de compétences.",
+    "detailsFor": "Voir les détails de {name}"
   }
 }

@@ -17564,7 +17564,7 @@
     "needs_confirmation": "Requer confirmação",
     "idle": "Não sincronizado",
     "personalScope": "Pessoal",
-    "skillCounts": "{live, number} habilidades ativas · {retired, number} retiradas",
+    "skillCounts": "{live, plural, one {# habilidade ativa} other {# habilidades ativas}} · {retired, number} desativadas",
     "source": "GitHub · {owner}/{repo} · {ref}",
     "folderValue": "Pasta: {folder}",
     "rootFolder": "Raiz do repositório",
@@ -17588,6 +17588,10 @@
     "proposalChanged": "A proposta mudou. Revise a proposta mais recente antes de confirmar.",
     "proposalUnavailable": "Os nomes das habilidades da proposta não estão disponíveis. Atualize antes de confirmar.",
     "activeSkill": "{name}",
-    "retiredSkill": "{name} · Desativada"
+    "retiredSkill": "{name} · Desativada",
+    "listTitle": "Marketplaces",
+    "emptyList": "Nenhum marketplace ainda",
+    "emptyListDescription": "Sincronize do GitHub para adicionar um catálogo de habilidades.",
+    "detailsFor": "Ver detalhes de {name}"
   }
 }

@@ -17564,7 +17564,7 @@
     "needs_confirmation": "يتطلب التأكيد",
     "idle": "لم تتم المزامنة",
     "personalScope": "شخصي",
-    "skillCounts": "المهارات النشطة: {live, number} · المتقاعدة: {retired, number}",
+    "skillCounts": "{live, plural, one {المهارات النشطة: #} other {المهارات النشطة: #}} · المتقاعدة: {retired, number}",
     "source": "GitHub · {owner}/{repo} · {ref}",
     "folderValue": "المجلد: {folder}",
     "rootFolder": "جذر المستودع",
@@ -17588,6 +17588,10 @@
     "proposalChanged": "تغيّر المقترح. راجع أحدث مقترح قبل التأكيد.",
     "proposalUnavailable": "أسماء المهارات في المقترح غير متاحة. حدّث قبل التأكيد.",
     "activeSkill": "{name}",
-    "retiredSkill": "{name} · متقاعدة"
+    "retiredSkill": "{name} · متقاعدة",
+    "listTitle": "الأسواق",
+    "emptyList": "لا توجد أسواق بعد",
+    "emptyListDescription": "زامن من GitHub لإضافة كتالوج مهارات.",
+    "detailsFor": "عرض تفاصيل {name}"
   }
 }
