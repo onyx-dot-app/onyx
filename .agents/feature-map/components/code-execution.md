@@ -302,6 +302,17 @@ health calls are not retried.
 - External dependency unit tests, against a running service:
   `backend/tests/external_dependency_unit/tools/`.
 - Integration: `backend/tests/integration/tests/code_interpreter/`.
+- Code mode timeline. Web: the code mode cases in
+  `web/src/app/app/message/messageComponents/AgentMessage.test.tsx`,
+  `web/src/app/app/message/messageComponents/timeline/transformers.test.ts`,
+  `web/src/app/app/message/messageComponents/timeline/hooks/useTimelineHeader.test.tsx`
+  and the code mode block of
+  `web/src/app/app/message/messageComponents/timeline/hooks/packetProcessor.test.ts`
+  (cells and closing records, live and replay order).
+  Playwright: `web/tests/e2e/chat/code_mode.spec.ts` (a call that outlives a yield reads
+  as one direct call, with `wait_code` or at response end). Mobile:
+  `mobile/src/chat/timeline/__tests__/grouping.test.ts` and
+  `mobile/src/chat/timeline/__tests__/transformers.test.ts`.
 - By hand, ask for a chart. The image must download, and it must still show
   after a reload. Turn the admin switch off: the next message must have no
   `run_python` call and no error.

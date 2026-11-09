@@ -28,13 +28,16 @@ function createStep(
       obj: { type: packetType },
     } as Packet,
   ];
+  const key = `${turnIndex}-${tabIndex}`;
   return {
-    key: `${turnIndex}-${tabIndex}`,
+    key,
+    groupKey: key,
     turnIndex,
     tabIndex,
     packets,
     nestedCalls: [],
     streamPackets: packets,
+    codeMode: null,
   };
 }
 
@@ -71,6 +74,7 @@ function createDisplayGroup(turnIndex: number): GroupedPacket {
     packets,
     nestedCalls: [],
     streamPackets: packets,
+    codeMode: null,
   };
 }
 

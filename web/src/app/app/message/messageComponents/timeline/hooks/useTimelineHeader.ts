@@ -84,7 +84,8 @@ export interface TimelineHeaderResult {
  */
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
-  stopReason?: StopReason
+  stopReason?: StopReason,
+  codeModeWorking = false
 ): TimelineHeaderResult {
   const t = useTranslations("chat.messages.timeline");
   const locale = useLocale();
@@ -93,6 +94,10 @@ export function useTimelineHeader(
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
     const thinkingHeader = t("header.thinkingEllipsis.label");
+
+    if (codeModeWorking) {
+      return { headerText: t("header.working.label"), hasPackets, userStopped };
+    }
 
     if (!hasPackets) {
       return { headerText: thinkingHeader, hasPackets, userStopped };
@@ -112,5 +117,5 @@ export function useTimelineHeader(
     const headerText =
       stepHeaderText(currentStep.packets, t, locale) ?? thinkingHeader;
     return { headerText, hasPackets, userStopped };
-  }, [turnGroups, stopReason, t, locale]);
+  }, [turnGroups, stopReason, codeModeWorking, t, locale]);
 }

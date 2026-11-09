@@ -24,10 +24,13 @@ import {
   parseToolKey,
 } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import {
+  CodeModeProgram,
+  isCodeModePacket,
   isGroupEndPacket,
   isNestedPacket,
   NestedCall,
   nestedCallSnapshot,
+  nextCodeModeProgram,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 
 // Re-export parseToolKey for consumers that import from this module
@@ -59,6 +62,11 @@ export interface ProcessorState {
   nestedCallSnapshots: Map<string, NestedCall[]>;
   seenGroupKeys: Set<string>;
   groupKeysWithSectionEnd: Set<string>;
+  // Groups whose tool has started: a tool packet other than a streamed
+  // argument arrived
+  startedToolGroupKeys: Set<string>;
+  // The program of each code mode group, updated once per packet
+  codeModePrograms: Map<string, CodeModeProgram>;
 
   // Pre-categorized groups (populated during packet processing)
   toolGroupKeys: Set<string>;
@@ -92,6 +100,8 @@ export interface GroupedPacket {
   /** Every packet of the group, nested calls included, in stream order. Only
    * renderers that interleave nested sections read it (coding agent). */
   streamPackets: Packet[];
+  /** The program of a code mode group; null for other groups. */
+  codeMode: CodeModeProgram | null;
 }
 
 // ============================================================================
@@ -111,6 +121,8 @@ export function createInitialState(nodeId: number): ProcessorState {
     nestedCallSnapshots: new Map(),
     seenGroupKeys: new Set(),
     groupKeysWithSectionEnd: new Set(),
+    startedToolGroupKeys: new Set(),
+    codeModePrograms: new Map(),
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     generatedImages: [],
@@ -168,6 +180,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
 
 function hasContentPackets(packets: Packet[]): boolean {
   return packets.some((packet) => {
+    if (isCodeModePacket(packet)) return true;
     const type = packet.obj.type as PacketType;
     if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
       return isCodeInterpreterToolType(
@@ -306,22 +319,40 @@ function handleStopPacket(state: ProcessorState, packet: Packet): void {
       injectSectionEnd(state, groupKey);
     }
   });
+
+  // Nothing follows Stop, so each open nested call ends with the response.
+  state.nestedCallsMap.forEach((calls) =>
+    calls.forEach((call) => {
+      if (!call.some(isGroupEndPacket)) {
+        call.push({
+          placement: call[0]!.placement,
+          obj: { type: PacketType.SECTION_END },
+        });
+      }
+    })
+  );
 }
 
 function handleToolAfterMessagePacket(
   state: ProcessorState,
-  packet: Packet
+  packet: Packet,
+  groupKey: string
 ): void {
-  // Handles case where we get a Message packet from Claude, and then tool
-  // calling packets. We use isActualToolCallPacket instead of isToolPacket
-  // to exclude reasoning packets - reasoning is just the model thinking,
-  // not an actual tool call that would produce new content.
+  // The model can write a message and then call a tool, so the answer is not
+  // final yet. Every tool packet up to the tool's start is part of a new call,
+  // even when the call's arguments streamed before the message. Packets after
+  // the start (such as a code mode cell's closing record) are not. Reasoning is
+  // not a tool call.
+  if (!isActualToolCallPacket(packet)) return;
   if (
     state.finalAnswerComing &&
     !state.stopPacketSeen &&
-    isActualToolCallPacket(packet)
+    !state.startedToolGroupKeys.has(groupKey)
   ) {
     state.finalAnswerComing = false;
+  }
+  if (packet.obj.type !== PacketType.TOOL_CALL_ARGUMENT_DELTA) {
+    state.startedToolGroupKeys.add(groupKey);
   }
 }
 
@@ -376,6 +407,14 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   // Add packet to group
   addPacketToGroup(state, packet, groupKey);
 
+  if (isCodeModePacket(packet)) {
+    const program = state.codeModePrograms.get(groupKey) ?? {
+      cellId: null,
+      running: false,
+    };
+    state.codeModePrograms.set(groupKey, nextCodeModeProgram(program, packet));
+  }
+
   // Debug and control packets can precede the first rendered packet.
   if (
     !state.toolGroupKeys.has(groupKey) &&
@@ -395,7 +434,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   handleDocumentPacket(state, packet);
   handleStreamingStatusPacket(state, packet);
   handleStopPacket(state, packet);
-  handleToolAfterMessagePacket(state, packet);
+  handleToolAfterMessagePacket(state, packet, groupKey);
 }
 
 export function processPackets(
@@ -496,6 +535,7 @@ function buildGroupsFromKeys(
         packets: streamPackets.filter((p) => !isNestedPacket(p)),
         nestedCalls,
         streamPackets: [...streamPackets],
+        codeMode: state.codeModePrograms.get(key) ?? null,
       };
     })
     .filter(

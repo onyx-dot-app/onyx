@@ -13007,6 +13007,9 @@
           },
           "updatingMemory": {
             "label": "正在更新记忆..."
+          },
+          "working": {
+            "label": "处理中"
           }
         },
         "internalSearch": {
