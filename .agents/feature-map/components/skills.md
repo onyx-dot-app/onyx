@@ -634,6 +634,8 @@ The library preview of an external-app skill calls the same renderer
     Removal captures all version/legacy file IDs and sandbox recipients before cascading.
     Commit before dispatch, push or unreferenced-file cleanup. Rollback preserves rows
     and blobs. Replacement and deletion fence workers that already staged content.
+    The source list refreshes host resources after completion, revision/count changes,
+    or source removal. Hidden host tabs neither read nor poll marketplace status.
     The shared web client in `web/src/lib/marketplaces/` validates management and
     preview responses with Yup before components use them. Its types come from
     those schemas. A queued request stays distinct from an applied revision;
@@ -651,7 +653,9 @@ The library preview of an external-app skill calls the same renderer
     visible. Retirement confirmation sends the reviewed revision and IDs only;
     names come from detail. A rejected proposal needs a fresh review. Removal
     and login replacement require confirmation. Access configuration belongs
-    to the host sharing UI. Pages are not wired yet.
+    to the host sharing UI. The list owns its SWR read and accepts host kind
+    filters and count labels. Pending work polls every three seconds while
+    visible; polling never requests source sync. Pages are not wired yet.
 
 
 ---

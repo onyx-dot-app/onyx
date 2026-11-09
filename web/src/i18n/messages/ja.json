@@ -17564,7 +17564,7 @@
     "needs_confirmation": "確認が必要",
     "idle": "未同期",
     "personalScope": "個人",
-    "skillCounts": "有効なスキル {live, number} · 廃止済み {retired, number}",
+    "skillCounts": "{live, plural, one {有効なスキル #} other {有効なスキル #}} · 廃止済み {retired, number}",
     "source": "GitHub · {owner}/{repo} · {ref}",
     "folderValue": "フォルダー: {folder}",
     "rootFolder": "リポジトリのルート",
@@ -17588,6 +17588,10 @@
     "proposalChanged": "提案が変更されました。確定する前に最新の提案を確認してください。",
     "proposalUnavailable": "提案のスキル名を取得できません。確定前に更新してください。",
     "activeSkill": "{name}",
-    "retiredSkill": "{name} · 廃止済み"
+    "retiredSkill": "{name} · 廃止済み",
+    "listTitle": "マーケットプレイス",
+    "emptyList": "マーケットプレイスはまだありません",
+    "emptyListDescription": "GitHub から同期してスキルのカタログを追加します。",
+    "detailsFor": "{name} の詳細を表示"
   }
 }

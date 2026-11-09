@@ -17564,7 +17564,7 @@
     "needs_confirmation": "Needs confirmation",
     "idle": "Not synced",
     "personalScope": "Personal",
-    "skillCounts": "{live, number} active skills · {retired, number} retired",
+    "skillCounts": "{live, plural, one {# active skill} other {# active skills}} · {retired, number} retired",
     "source": "GitHub · {owner}/{repo} · {ref}",
     "folderValue": "Folder: {folder}",
     "rootFolder": "Repository root",
@@ -17588,6 +17588,10 @@
     "proposalChanged": "The proposal changed. Review the latest proposal before confirming.",
     "proposalUnavailable": "The proposal’s skill names are unavailable. Refresh before confirming.",
     "activeSkill": "{name}",
-    "retiredSkill": "{name} · Retired"
+    "retiredSkill": "{name} · Retired",
+    "listTitle": "Marketplaces",
+    "emptyList": "No marketplaces yet",
+    "emptyListDescription": "Sync from GitHub to add a catalog of skills.",
+    "detailsFor": "View details for {name}"
   }
 }
