@@ -17616,6 +17616,21 @@
     "listTitle": "市场",
     "emptyList": "尚无市场",
     "emptyListDescription": "从 GitHub 同步以添加技能目录。",
-    "detailsFor": "查看 {name} 的详情"
+    "detailsFor": "查看 {name} 的详情",
+    "access": {
+      "description": "这些默认设置适用于遵循市场访问权限的已同步技能。",
+      "forbidden": "需要全局技能管理权限。",
+      "loading": "正在加载访问设置…",
+      "settingsError": "无法加载访问设置。默认设置保持不变。",
+      "community": "免费计划支持全组织的使用权限。私有访问和群组需要付费计划。",
+      "restricted": "这些已保存的默认设置需要付费计划。设置将保留，但免费计划无法保存。",
+      "groups": "群组",
+      "addGroup": "搜索要添加的群组",
+      "groupsLoading": "正在加载群组…",
+      "groupsError": "无法加载群组。现有权限将保留。",
+      "unknownGroup": "群组 #{id}",
+      "groupPermission": "{name} 的访问权限",
+      "installationDescription": "选择如何为所有有访问权限的用户安装已同步技能。"
+    }
   }
 }

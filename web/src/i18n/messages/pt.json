@@ -17616,6 +17616,21 @@
     "listTitle": "Marketplaces",
     "emptyList": "Nenhum marketplace ainda",
     "emptyListDescription": "Sincronize do GitHub para adicionar um catálogo de habilidades.",
-    "detailsFor": "Ver detalhes de {name}"
+    "detailsFor": "Ver detalhes de {name}",
+    "access": {
+      "description": "Estas definições aplicam-se às habilidades sincronizadas que seguem o acesso do marketplace.",
+      "forbidden": "É necessária permissão global para gerir habilidades.",
+      "loading": "A carregar definições de acesso…",
+      "settingsError": "Não foi possível carregar as definições de acesso. Os valores permanecem inalterados.",
+      "community": "O plano gratuito permite acesso de utilização em toda a organização. O acesso privado e os grupos exigem um plano pago.",
+      "restricted": "Estas definições guardadas exigem um plano pago. São preservadas; não é possível guardar no plano gratuito.",
+      "groups": "Grupos",
+      "addGroup": "Procurar um grupo para adicionar",
+      "groupsLoading": "A carregar grupos…",
+      "groupsError": "Não foi possível carregar os grupos. As permissões existentes são preservadas.",
+      "unknownGroup": "Grupo #{id}",
+      "groupPermission": "Acesso de {name}",
+      "installationDescription": "Escolha como as habilidades sincronizadas são instaladas para quem tem acesso."
+    }
   }
 }

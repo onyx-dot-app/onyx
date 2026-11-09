@@ -683,7 +683,13 @@ The library preview of an external-app skill calls the same renderer
     visible. Retirement confirmation sends the reviewed revision and IDs only;
     names come from detail. A rejected proposal needs a fresh review. Removal
     and login replacement require confirmation. Access configuration belongs
-    to the host sharing UI. The list owns its SWR read and accepts host kind
+    to the host sharing UI. `CompanyMarketplaceAccessControls` and
+    `useCompanyMarketplaceAccess` provide a session-owned company draft.
+    Creation submits it atomically. Readiness requires global MANAGE_SKILLS and
+    known settings; a settings failure never implies Community. Community allows
+    organization Viewer access without groups. Group lookup failures preserve
+    grants and per-group policies, including unresolved IDs. The host resets the
+    creation session on close. The list owns its SWR read and accepts host kind
     filters and count labels. Pending work polls every three seconds while
     visible; polling never requests source sync. Pages are not wired yet.
 

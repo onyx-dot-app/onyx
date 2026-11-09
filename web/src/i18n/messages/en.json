@@ -17616,6 +17616,21 @@
     "listTitle": "Marketplaces",
     "emptyList": "No marketplaces yet",
     "emptyListDescription": "Sync from GitHub to add a catalog of skills.",
-    "detailsFor": "View details for {name}"
+    "detailsFor": "View details for {name}",
+    "access": {
+      "description": "These defaults apply to synced skills that follow marketplace access.",
+      "forbidden": "Global skill management permission is required.",
+      "loading": "Loading access settings…",
+      "settingsError": "Could not load access settings. Your defaults are unchanged.",
+      "community": "The Free plan supports organization-wide Can use access. Private access and groups require a paid plan.",
+      "restricted": "These saved defaults require a paid plan. They are preserved; saving is unavailable on the Free plan.",
+      "groups": "Groups",
+      "addGroup": "Find a group to add",
+      "groupsLoading": "Loading groups…",
+      "groupsError": "Could not load groups. Existing grants are preserved.",
+      "unknownGroup": "Group #{id}",
+      "groupPermission": "Access for {name}",
+      "installationDescription": "Choose how synced skills are installed for everyone with access."
+    }
   }
 }

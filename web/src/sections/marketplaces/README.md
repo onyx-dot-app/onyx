@@ -21,6 +21,27 @@ Company scope appears only with this contract and global `MANAGE_SKILLS` authori
 Do not implement `company.create` as create followed by an access PATCH.
 Personal creation uses the shared client directly. Reset the host's sharing draft when starting a new dialog session.
 
+## CompanyMarketplaceAccessControls
+
+Mount `useCompanyMarketplaceAccess(initialDraft)` in the host's creation session.
+Pass its result as `<CompanyMarketplaceAccessControls access={access} disabled={saving} />`.
+The hook owns a complete `MarketplaceAccessDraft`; subsequent initial values do not replace user edits.
+Unmount or key the session on close/reopen. Keep controls disabled throughout creation.
+
+`DEFAULT_COMPANY_MARKETPLACE_ACCESS` explicitly selects organization Viewer access, Available installation, and no groups.
+The controls display that choice before creation. Hosts can supply another explicit initial draft.
+`marketplaceAccessDraft(snapshot)` converts snapshot `user_group_id` values to request `group_id` values, retaining group policies.
+
+Supply `company.ready = access.ready` and the controls to `SyncFromGitHubDialog`.
+Implement `company.create(source)` with one `createMarketplace({ ...source, personal: false, access: access.draft })` call.
+Never create first and PATCH defaults afterward. No direct-user grants are supported.
+
+Readiness requires global `MANAGE_SKILLS` and loaded settings with a known tier.
+Community permits organization Viewer access without groups. Incompatible stored defaults stay visible and cannot be saved.
+Settings errors disable edits and save; they never imply Community.
+Group lookup failures disable additions. Existing IDs and group policies remain in the draft and submission.
+Users can explicitly edit or remove an unresolved group grant on a paid plan.
+
 ## MarketplaceList
 
 The list owns its SWR read. Mount it above the host's resource list.

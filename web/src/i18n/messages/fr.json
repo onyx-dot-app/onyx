@@ -17616,6 +17616,21 @@
     "listTitle": "Marketplaces",
     "emptyList": "Aucun marketplace pour le moment",
     "emptyListDescription": "Synchronisez depuis GitHub pour ajouter un catalogue de compétences.",
-    "detailsFor": "Voir les détails de {name}"
+    "detailsFor": "Voir les détails de {name}",
+    "access": {
+      "description": "Ces paramètres s’appliquent aux compétences synchronisées qui suivent les accès du marketplace.",
+      "forbidden": "Une autorisation globale de gestion des compétences est requise.",
+      "loading": "Chargement des paramètres d’accès…",
+      "settingsError": "Impossible de charger les paramètres d’accès. Vos paramètres restent inchangés.",
+      "community": "Le forfait gratuit permet l’utilisation dans toute l’organisation. Les accès privés et les groupes nécessitent un forfait payant.",
+      "restricted": "Ces paramètres enregistrés nécessitent un forfait payant. Ils sont conservés ; l’enregistrement est indisponible avec le forfait gratuit.",
+      "groups": "Groupes",
+      "addGroup": "Rechercher un groupe à ajouter",
+      "groupsLoading": "Chargement des groupes…",
+      "groupsError": "Impossible de charger les groupes. Les autorisations existantes sont conservées.",
+      "unknownGroup": "Groupe n°{id}",
+      "groupPermission": "Accès de {name}",
+      "installationDescription": "Choisissez comment les compétences synchronisées sont installées pour les personnes autorisées."
+    }
   }
 }
