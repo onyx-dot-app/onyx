@@ -67,7 +67,11 @@ def test_content_storage_does_not_hold_membership(
     skill = db_session.get(Skill, response.id)
     assert skill is not None and skill.current_version_id is not None
     api.upload_current_user_skill_files(
-        skill.id, upload(b"support", "notes.txt"), user, db_session
+        skill.id,
+        upload(b"support", "notes.txt"),
+        user,
+        db_session,
+        http_request=Request({"type": "http"}),
     )
     store = get_default_file_store()
     original_read, original_ingest = store.read_file, api.ingest_skill_bundle
@@ -399,12 +403,20 @@ def test_commit_ack_failure_keeps_referenced_upload(
             elif operation == "bundle":
                 assert initial is not None
                 api.replace_current_user_skill_bundle(
-                    initial.id, upload(bundle(name, "Committed")), user, db_session
+                    initial.id,
+                    upload(bundle(name, "Committed")),
+                    user,
+                    db_session,
+                    http_request=Request({"type": "http"}),
                 )
             elif operation == "upload":
                 assert initial is not None
                 api.upload_current_user_skill_files(
-                    initial.id, upload(b"committed", "extra.txt"), user, db_session
+                    initial.id,
+                    upload(b"committed", "extra.txt"),
+                    user,
+                    db_session,
+                    http_request=Request({"type": "http"}),
                 )
             else:
                 api.create_custom_skills_batch(
