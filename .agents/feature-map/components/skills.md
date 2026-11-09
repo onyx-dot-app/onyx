@@ -64,6 +64,15 @@
   sharing edits survive tab switches. Other recipients and built-in skills
   keep a preview-only dialog. The sharing endpoint requires EDIT; do not
   require that endpoint for a VIEW-only preview.
+- **Version history UI.** Custom Skills with OWNER or EDITOR permission expose
+  Versions in the sharing dialog or read-only preview. Viewers and built-ins make no history requests.
+  `web/src/sections/skills/SkillVersions.tsx` shares retained preview and confirmed restore.
+  Desktop history uses a table; narrow screens keep every field in compact entries.
+  Narrow dialog headings scroll with the body, and Versions hides the current description.
+  Pending restore blocks close and tab changes. Sharing drafts stay mounted and survive restore.
+  Successful restore refreshes history, current details, preview and the library.
+  The editor replaces its local fields from the restore response. Unsaved editor changes disable restore but keep preview available.
+  Synced Skills show their source revision and have no local restore action.
 - **Access at import.** GitHub import and multiple-ZIP upload accept one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
@@ -77,6 +86,9 @@
   History returns at most 50 rows. The positive `before_version` cursor excludes
   that version and loads older rows without shifting when a new version is saved.
   Restore creates a new version unless its content equals the current version.
+  The shared `SkillVersions` panel chains cursor pages and refetches loaded pages after restore.
+  It keeps earlier rows on load errors, announces the error, and moves focus only after an explicit older-page request.
+  Restore loads another page when a new version would hide the oldest displayed row.
   Skill list/detail responses expose `current_version_number` (null without a version).
   History rows expose their `marketplace_revision`; this is source provenance, not an operation audit log.
 - **Synced source metadata.** Skill responses include the marketplace name,
@@ -496,6 +508,12 @@ The library preview of an external-app skill calls the same renderer
 20. `history-requires-edit` **History uses EDIT access, including its reads.**
     The `/skills/custom/{skill_id}/versions` family calls `fetch_skill` with
     `SkillManagementPolicy.EDIT` before listing or reading any history.
+    The history UI hides cached rows and closes previews when list revalidation returns
+    an auth, tier or not-found error. A cached denial replaces the list and every
+    page until a successful response, including after remounts or transient errors.
+    It clears that Skill's preview cache and request deduplication, so access
+    recovery must fetch preview content again. Transient errors keep loaded rows.
+    Skill API errors retain HTTP status through the shared `FetchError` type.
     `db/skill_version.py:fetch_skill_version` scopes version ids to that skill.
     Preview returns the historical bundle's description, instructions, and file
     list through `SkillBundleInspectResponse`; it validates expansion before inspection.
