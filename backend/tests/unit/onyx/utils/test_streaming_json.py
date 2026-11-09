@@ -46,6 +46,10 @@ class TestParsePartialObject:
     def test_blank_text_parses_as_empty(self, text: str) -> None:
         assert parse_partial_object(text) == {}
 
+    @pytest.mark.parametrize("text", ["n", "tr", "fals", "-", "1.", "1e", ' "a'])
+    def test_prefixes_of_non_object_documents_parse_as_empty(self, text: str) -> None:
+        assert parse_partial_object(text) == {}
+
     def test_incomplete_string_keeps_complete_characters(self) -> None:
         assert parse_partial_object('{"code": "prin') == {"code": "prin"}
 
