@@ -291,6 +291,19 @@ true
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{/* craft.sandboxRuntime: "pod" (default) or "firecracker". Mirrors Terraform craft_sandbox_runtime. */}}
+{{- define "onyx.craftSandboxRuntime" -}}
+{{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "pod")) -}}
+{{- if not (has $runtime (list "pod" "firecracker")) -}}
+{{- fail (printf "craft.sandboxRuntime must be \"pod\" or \"firecracker\", not %q" $runtime) -}}
+{{- end -}}
+{{- $runtime -}}
+{{- end }}
+
+{{- define "onyx.craftHostAgentNamespace" -}}
+{{- (dig "hostAgent" "namespace" "" (.Values.craft | default dict)) | default "onyx-sandbox-runtime" -}}
+{{- end }}
+
 {{/*
 Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
 and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods

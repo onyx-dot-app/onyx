@@ -220,6 +220,64 @@ to use a different image. The image must have a POSIX shell, awk, grep and GNU c
 `stat -f`, `mktemp`).
 Remove the DaemonSet after the check: set `enabled: false` and upgrade.
 
+### Craft Firecracker runtime (not usable yet)
+
+`craft.sandboxRuntime` selects how Craft sandboxes run: `pod` (default) or
+`firecracker`. It mirrors the Terraform `craft_sandbox_runtime` of the sandbox
+node pool. Keep `pod`: the backend Firecracker sandbox manager is not released.
+
+With `firecracker`, the chart:
+
+- sets `SANDBOX_RUNTIME=firecracker` for the backend and sandbox-proxy;
+- deploys the host agent (`onyxdotapp/craft-fc-host-agent`), a privileged
+  DaemonSet with `hostPID` and `/dev/kvm`, on the sandbox nodes that have the
+  label `onyx.app/kvm=true`;
+- puts the agent in its own namespace (`craft.hostAgent.namespace`) with Pod
+  Security `privileged`;
+- adds a headless Service for the agent port (7443);
+- lets only api_server pods reach the agent port, and lets the agent pods reach
+  the sandbox-proxy port.
+
+The agent needs a TLS Secret in the agent namespace. It holds the agent
+certificate (`tls.crt`, `tls.key`) and the CA of the api_server client
+certificates (`ca.crt`). The chart does not make certificates. Until the Secret
+exists, the agent pods stay in `ContainerCreating`.
+
+```yaml
+craft:
+  sandboxRuntime: firecracker
+  hostAgent:
+    image:
+      tag: "<host agent version>"
+    tls:
+      existingSecret: craft-fc-host-agent-tls
+auth:
+  sandboxNodeRegistration:
+    enabled: true
+    values:
+      sandbox_node_registration_secret: "<random value>"
+```
+
+The chart copies `sandbox_node_registration_secret` into the agent namespace.
+If you change `auth.sandboxNodeRegistration.secretKeys`, the copy uses the same
+key. If `auth.sandboxNodeRegistration` uses `existingSecret`, create the same
+Secret (with the same key) in the agent namespace too and set
+`craft.hostAgent.registrationExistingSecret`.
+
+For a private agent image, create the pull Secret in the agent namespace and
+set `craft.hostAgent.imagePullSecrets`. The release `imagePullSecrets` are not
+used there, because Secrets are namespaced.
+To manage the agent namespace yourself, set `craft.hostAgent.createNamespace:
+false` and give the namespace the label
+`pod-security.kubernetes.io/enforce: privileged`.
+The agent data dir (`craft.hostAgent.dataDir`, default `/var/lib/craft-fc`)
+must be on XFS with reflink. The preflight above checks
+`craft.firecrackerPreflight.scratchHostPath`, not the data dir. Set
+`scratchHostPath` to the same path as `dataDir` for the check, or check the
+data dir on a node (`stat -f -c %T <dataDir>` must print `xfs`, and
+`xfs_info` must show `reflink=1`). The agent also checks reflink support at
+start-up and does not start without it.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip

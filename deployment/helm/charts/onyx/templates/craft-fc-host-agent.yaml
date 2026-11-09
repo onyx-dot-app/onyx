@@ -1,0 +1,256 @@
+{{/*
+Craft Firecracker host agent (ENG-4583). Rendered only with
+craft.sandboxRuntime=firecracker. Render tests in
+backend/tests/external_dependency_unit/craft_helm/test_craft_fc_host_agent.py.
+Agent flags and node requirements: microvm/README.md.
+
+- One agent pod per Firecracker sandbox node: the sandbox node selector plus
+  onyx.app/kvm=true (Terraform craft_sandbox_runtime=firecracker), the sandbox
+  tolerations, and no RuntimeClass.
+- Own namespace with Pod Security "privileged": the agent needs privileged,
+  hostPID (it starts VMs in the host mount namespace and checks their PIDs)
+  and /dev/kvm. User sandboxes never run in this namespace.
+- The agent joins the host cgroup namespace (nsenter -C) before it starts.
+  With the pod's own cgroup namespace, /proc/<pid>/cgroup of a VM shows a
+  relative path and the agent cannot re-adopt VMs after a restart.
+- The data dir is a hostPath at the same path in the container: the agent
+  passes these paths to the jailer, which runs in the host mount namespace.
+- mTLS: craft.hostAgent.tls.existingSecret (in the agent namespace) has the
+  server certificate (tls.crt, tls.key) and the api_server client CA (ca.crt).
+  The chart does not make certificates.
+- SANDBOX_NODE_REGISTRATION_SECRET: the api_server reads it from
+  auth.sandboxNodeRegistration. Secrets are namespaced, so the agent reads a
+  copy in its own namespace.
+- Only api_server pods reach the agent listener (NetworkPolicy below). Agent
+  pods may reach the sandbox-proxy port (sandbox-proxy/networkpolicy.yaml).
+*/}}
+{{- $craft := .Values.craft | default dict }}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
+{{- if ne (include "onyx.craftEnabled" .) "true" }}
+{{- fail "craft.sandboxRuntime=firecracker needs configMap.ENABLE_CRAFT=true" }}
+{{- end }}
+{{- $agent := $craft.hostAgent | default dict }}
+{{- $ns := include "onyx.craftHostAgentNamespace" . }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- if or (eq $ns .Release.Namespace) (eq $ns $sandboxNs) }}
+{{- fail "craft.hostAgent.namespace must differ from the release namespace and configMap.SANDBOX_NAMESPACE" }}
+{{- end }}
+{{- $image := $agent.image | default dict }}
+{{- if not $image.tag }}
+{{- fail "craft.hostAgent.image.tag is required with craft.sandboxRuntime=firecracker" }}
+{{- end }}
+{{- $tls := $agent.tls | default dict }}
+{{- if not $tls.existingSecret }}
+{{- fail "craft.hostAgent.tls.existingSecret is required with craft.sandboxRuntime=firecracker" }}
+{{- end }}
+{{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
+{{- if ne (toString $reg.enabled) "true" }}
+{{- fail "auth.sandboxNodeRegistration.enabled must be true with craft.sandboxRuntime=firecracker" }}
+{{- end }}
+{{- /* The key the api_server reads (auth.sandboxNodeRegistration.secretKeys); the agent copy uses the same key. */}}
+{{- $regKey := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg }}
+{{- $regSecret := $agent.registrationExistingSecret }}
+{{- $regValue := dig "values" $regKey "" $reg }}
+{{- if and (not $regSecret) (or $reg.existingSecret (not $regValue)) }}
+{{- fail "craft.hostAgent.registrationExistingSecret is required when auth.sandboxNodeRegistration uses existingSecret or has no value" }}
+{{- end }}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") }}
+{{- $dataDir := $agent.dataDir | default "/var/lib/craft-fc" }}
+{{- $port := $agent.listenPort | default 7443 }}
+{{- $sandboxPod := .Values.sandboxPod | default dict }}
+{{- $nodeSelector := $agent.nodeSelector }}
+{{- if not $nodeSelector }}
+{{- $nodeSelector = merge (dict "onyx.app/kvm" "true") (deepCopy (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox"))) }}
+{{- end }}
+{{- $tolerations := $agent.tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) }}
+{{- if ne (toString $agent.createNamespace) "false" }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: {{ include "onyx.fullname" . }}
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+---
+{{- end }}
+{{- if not $regSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-registration
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+type: Opaque
+stringData:
+  {{ $regKey }}: {{ $regValue | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: craft-fc-host-agent
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "onyx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: craft-fc-host-agent
+    spec:
+      nodeSelector:
+        {{- $nodeSelector | toYaml | nindent 8 }}
+      tolerations:
+        {{- $tolerations | toYaml | nindent 8 }}
+      {{- with $agent.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- /* Pull secrets are namespaced: the release's imagePullSecrets do not exist here. */}}
+      {{- with $agent.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # VMs keep running while the agent restarts (journal + re-adopt).
+      hostPID: true
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ $agent.terminationGracePeriodSeconds | default 30 }}
+      containers:
+        - name: host-agent
+          image: "{{ $image.repository | default "onyxdotapp/craft-fc-host-agent" }}:{{ $image.tag }}"
+          imagePullPolicy: {{ $image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - nsenter
+            - --target=1
+            - --cgroup
+            - --
+            - /usr/local/bin/host-agent
+          args:
+            - --data-dir={{ $dataDir }}
+            - --artifacts-dir=/opt/craft-fc
+            - --uid-base={{ $agent.uidBase | default 1000000 | int64 }}
+            - --uid-count={{ $agent.uidCount | default 65536 | int64 }}
+            - --listen=:{{ $port }}
+            - --tls-cert=/etc/craft-fc/tls/tls.crt
+            - --tls-key=/etc/craft-fc/tls/tls.key
+            - --client-ca=/etc/craft-fc/tls/ca.crt
+            - --dial-ports={{ $agent.dialPorts | default "52,3010" }}
+            - --relay-max-conns={{ $agent.relayMaxConns | default 256 | int64 }}
+            - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.sandboxProxyPort" . }}
+            - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
+            {{- range $agent.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: SANDBOX_NODE_REGISTRATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $regSecret | default (printf "%s-registration" $name) }}
+                  key: {{ $regKey }}
+          ports:
+            - name: agent
+              containerPort: {{ $port }}
+              protocol: TCP
+          # The listener opens only after VM recovery, so readiness means the
+          # agent serves the API.
+          readinessProbe:
+            tcpSocket:
+              port: agent
+            periodSeconds: 5
+          resources:
+            {{- toYaml ($agent.resources | default dict) | nindent 12 }}
+          securityContext:
+            # Needed for /dev/kvm (runc's device cgroup), nsenter into the host
+            # mount and cgroup namespaces, and the jailer's UID/chroot setup.
+            privileged: true
+            runAsUser: 0
+            runAsNonRoot: false
+          volumeMounts:
+            - name: data
+              mountPath: {{ $dataDir }}
+            - name: kvm
+              mountPath: /dev/kvm
+            - name: tls
+              mountPath: /etc/craft-fc/tls
+              readOnly: true
+      volumes:
+        - name: data
+          hostPath:
+            path: {{ $dataDir }}
+            type: DirectoryOrCreate
+        - name: kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice
+        - name: tls
+          secret:
+            secretName: {{ $tls.existingSecret }}
+            defaultMode: 0400
+---
+{{- /* Headless: the api_server reaches the agent on a node by its pod IP. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  clusterIP: None
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+  ports:
+    - name: agent
+      port: {{ $port }}
+      targetPort: agent
+      protocol: TCP
+---
+{{- /* Only api_server pods reach the agent listener. Egress is not limited:
+the agent calls the api_server, sandbox-proxy and DNS. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: craft-fc-host-agent
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- (.Values.api.deploymentLabels | default (dict "app" "api-server")) | toYaml | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $port }}
+{{- end }}
