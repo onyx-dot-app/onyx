@@ -12,13 +12,17 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"google.golang.org/grpc"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
@@ -57,6 +61,13 @@ type flags struct {
 	apiServerURL  string
 	relayIdle     time.Duration
 	relayMaxConns int
+	listen        string
+	tlsCert       string
+	tlsKey        string
+	clientCA      string
+	dialPorts     string
+	clientSANs    string
+	dialMax       int
 }
 
 func main() {
@@ -79,6 +90,13 @@ func main() {
 	flag.StringVar(&f.apiServerURL, "api-server-url", "", "api_server URL for the node key registration (needs $SANDBOX_NODE_REGISTRATION_SECRET)")
 	flag.DurationVar(&f.relayIdle, "relay-idle-timeout", relay.DefaultIdleTimeout, "close a relay connection after this long without traffic (at least 180s)")
 	flag.IntVar(&f.relayMaxConns, "relay-max-conns", relay.DefaultMaxConns, "most open relay connections per VM; new ones over the cap are closed")
+	flag.StringVar(&f.listen, "listen", "", "mTLS TCP address for the api_server (for example :7443); empty: Unix socket only")
+	flag.StringVar(&f.tlsCert, "tls-cert", "", "server certificate file (PEM) for --listen")
+	flag.StringVar(&f.tlsKey, "tls-key", "", "server key file (PEM) for --listen")
+	flag.StringVar(&f.clientCA, "client-ca", "", "api_server client CA file (PEM); only clients it signed are accepted")
+	flag.StringVar(&f.dialPorts, "dial-ports", "52,3010", "guest vsock ports that Dial allows")
+	flag.StringVar(&f.clientSANs, "client-allowed-sans", "", "comma-separated DNS or URI SANs; a client cert must have one (empty: any cert from --client-ca)")
+	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -109,6 +127,9 @@ func run(f flags, log *slog.Logger) error {
 		return err
 	}
 	if err := checkRanges(f); err != nil {
+		return err
+	}
+	if err := checkListen(f); err != nil {
 		return err
 	}
 	uids, err := jailer.NewUIDPool(uint32(f.uidBase), uint32(f.uidCount))
@@ -146,18 +167,65 @@ func run(f flags, log *slog.Logger) error {
 		"abandoned", rep.Abandoned, "unverified", rep.Unverified, "unreadable", rep.Unreadable,
 		"tombstones", rep.Tombstones, "orphans_killed", rep.Orphans, "leftovers_removed", rep.Leftovers,
 		"ms", time.Since(t0).Milliseconds())
+	ports, err := parsePorts(f.dialPorts)
+	if err != nil {
+		return err
+	}
+	svc := &server.Service{M: m, DialPorts: ports, MaxDialsPerVM: f.dialMax}
 	ln, err := server.ListenUnix(f.socket)
 	if err != nil {
 		return err
 	}
-	srv := server.New(m)
+	servers := []*grpc.Server{server.NewServer(svc)}
+	listeners := []net.Listener{ln}
+	if f.listen != "" {
+		creds, err := (&server.MTLS{
+			CertFile: f.tlsCert, KeyFile: f.tlsKey, ClientCAFile: f.clientCA, AllowedSANs: splitList(f.clientSANs),
+		}).Credentials()
+		if err != nil {
+			return err
+		}
+		tln, err := net.Listen("tcp", f.listen)
+		if err != nil {
+			return err
+		}
+		servers = append(servers, server.NewServer(svc, grpc.Creds(creds)))
+		listeners = append(listeners, tln)
+	}
 	go func() {
 		<-ctx.Done()
 		// VMs keep running: they are in the host slice, not in this process.
-		srv.GracefulStop()
+		for _, s := range servers {
+			s.GracefulStop()
+		}
 	}()
-	log.Info("host agent ready", "socket", f.socket, "firecracker", bins.Version, "version", version)
-	return srv.Serve(ln)
+	log.Info("host agent ready", "socket", f.socket, "listen", f.listen, "dial_ports", ports,
+		"firecracker", bins.Version, "version", version)
+	errs := make(chan error, len(servers))
+	for i := range servers {
+		go func(i int) { errs <- servers[i].Serve(listeners[i]) }(i)
+	}
+	return <-errs
+}
+
+func parsePorts(s string) ([]uint32, error) {
+	var out []uint32
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		n, err := strconv.ParseUint(p, 10, 32)
+		if err != nil || n == 0 {
+			return nil, fmt.Errorf("bad --dial-ports entry %q", p)
+		}
+		out = append(out, uint32(n))
+	}
+	if len(out) == 0 {
+		// An empty list would fall back to the default ports.
+		return nil, fmt.Errorf("--dial-ports %q names no port", s)
+	}
+	return out, nil
 }
 
 // setupEgress makes a fresh node signing key, attaches the relay to the
@@ -238,6 +306,32 @@ func checkRanges(f flags) error {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)
 	}
 	return nil
+}
+
+// checkListen rejects a TCP listener without its TLS files, TLS flags
+// without a listener, and a Dial cap under 1.
+func checkListen(f flags) error {
+	tls := f.tlsCert != "" || f.tlsKey != "" || f.clientCA != "" || f.clientSANs != ""
+	if f.listen == "" && tls {
+		return errors.New("--tls-cert, --tls-key, --client-ca and --client-allowed-sans need --listen")
+	}
+	if f.listen != "" && (f.tlsCert == "" || f.tlsKey == "" || f.clientCA == "") {
+		return errors.New("--listen needs --tls-cert, --tls-key and --client-ca")
+	}
+	if f.dialMax < 1 {
+		return fmt.Errorf("--dial-max-streams %d must be 1 or more", f.dialMax)
+	}
+	return nil
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, v := range strings.Split(s, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func checkSystemdRun(c jailer.Command) error {

@@ -34,6 +34,14 @@ service HostAgent {
   // api_server calls it in the daemon Init sequence after a restore, so that
   // pooled client connections in the guest fail fast and reconnect.
   rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
+
+  // Dial opens a byte stream to a vsock port of a running VM: the guest
+  // daemon or the app preview (3010). The first frame names sandbox_id and
+  // guest_port and may carry data; later frames carry data only. The
+  // response stream carries the guest's bytes and ends when the guest closes
+  // the connection. When the client ends its send side, the agent keeps
+  // reading until the guest closes (Firecracker vsock has no half-close).
+  rpc Dial(stream DialFrame) returns (stream DialFrame);
 }
 
 // The reason of a host agent error (google.rpc.ErrorInfo.reason).
@@ -65,7 +73,8 @@ enum ErrorReason {
   STALE_ATTEMPT = 11;
   // This node has no VM and no record of a stopped VM for the sandbox.
   SANDBOX_NOT_FOUND = 12;
-  // Stop: the attempt or the generation does not match the VM.
+  // Stop: the attempt or the generation does not match the VM. Dial: the
+  // running VM has another generation than the first frame asks for.
   INSTANCE_MISMATCH = 13;
   // The jailer, Firecracker or the snapshot restore failed.
   VMM_FAILED = 14;
@@ -76,6 +85,13 @@ enum ErrorReason {
   // failed start). Create and Stop fail until that process exits, or until an
   // operator fixes the journal record and restarts the agent.
   SANDBOX_IN_DOUBT = 16;
+  // Dial: the guest port is not on the agent's allow-list.
+  PORT_NOT_ALLOWED = 17;
+  // Dial: nothing in the VM accepted the connection on that port.
+  GUEST_UNREACHABLE = 18;
+  // Dial: the VM already has the most open Dial streams that the agent
+  // allows (--dial-max-streams).
+  DIAL_LIMIT = 20;
 }
 
 enum VMState {
@@ -154,6 +170,17 @@ message CloseConnectionsRequest {
   string sandbox_id = 1;
   uint64 attempt = 2;
   uint64 generation = 3;
+}
+
+message DialFrame {
+  // First frame only.
+  string sandbox_id = 1;
+  // First frame only.
+  uint32 guest_port = 2;
+  bytes data = 3;
+  // First frame only. If set, Dial fails with INSTANCE_MISMATCH unless the
+  // running VM has this generation. 0 means any running VM.
+  uint64 generation = 4;
 }
 
 message CloseConnectionsResponse {

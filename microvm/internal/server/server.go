@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 
 	"google.golang.org/grpc"
@@ -22,6 +23,14 @@ import (
 type Service struct {
 	pb.UnimplementedHostAgentServer
 	M *agent.Manager
+	// DialPorts are the guest ports Dial allows. Nil means DefaultDialPorts.
+	DialPorts []uint32
+	// MaxDialsPerVM caps the open Dial streams of one VM. 0 means
+	// DefaultMaxDialsPerVM.
+	MaxDialsPerVM int
+
+	dialMu sync.Mutex
+	dials  map[string]int
 }
 
 // Create implements pb.HostAgentServer.
@@ -126,7 +135,12 @@ func ListenUnix(path string) (net.Listener, error) {
 
 // New returns a gRPC server with the HostAgent service.
 func New(m *agent.Manager, opts ...grpc.ServerOption) *grpc.Server {
+	return NewServer(&Service{M: m}, opts...)
+}
+
+// NewServer returns a gRPC server for svc.
+func NewServer(svc *Service, opts ...grpc.ServerOption) *grpc.Server {
 	s := grpc.NewServer(opts...)
-	pb.RegisterHostAgentServer(s, &Service{M: m})
+	pb.RegisterHostAgentServer(s, svc)
 	return s
 }

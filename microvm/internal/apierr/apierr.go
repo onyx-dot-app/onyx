@@ -48,8 +48,13 @@ func Code(r pb.ErrorReason) codes.Code {
 	case pb.ErrorReason_TEMPLATE_INCOMPATIBLE, pb.ErrorReason_ATTEMPT_CONFLICT,
 		pb.ErrorReason_STALE_ATTEMPT, pb.ErrorReason_INSTANCE_MISMATCH, pb.ErrorReason_SANDBOX_IN_DOUBT:
 		return codes.FailedPrecondition
-	case pb.ErrorReason_CAPACITY_MEMORY, pb.ErrorReason_CAPACITY_DISK, pb.ErrorReason_CAPACITY_VM_SLOTS:
+	case pb.ErrorReason_CAPACITY_MEMORY, pb.ErrorReason_CAPACITY_DISK, pb.ErrorReason_CAPACITY_VM_SLOTS,
+		pb.ErrorReason_DIAL_LIMIT:
 		return codes.ResourceExhausted
+	case pb.ErrorReason_PORT_NOT_ALLOWED:
+		return codes.PermissionDenied
+	case pb.ErrorReason_GUEST_UNREACHABLE:
+		return codes.Unavailable
 	default:
 		return codes.Internal
 	}
