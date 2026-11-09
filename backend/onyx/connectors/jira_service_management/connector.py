@@ -230,7 +230,8 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                 raise RuntimeError(f"JSM API error HTTP {status_code}: {payload}")
 
             token_val = payload.get("nextPageToken")
-            if next_page_token is not None and token_val == next_page_token:
+            is_last = bool(payload.get("isLast", False))
+            if not is_last and next_page_token is not None and token_val == next_page_token:
                 raise RuntimeError(
                     f"Infinite JSM pagination loop detected with unchanged nextPageToken: {token_val}"
                 )
@@ -245,7 +246,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             if batch:
                 yield batch
 
-            is_last = bool(payload.get("isLast", False))
             if is_last or not isinstance(token_val, str) or not token_val:
                 break
             next_page_token = token_val
