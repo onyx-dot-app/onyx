@@ -18,8 +18,6 @@ from typing import Protocol
 _MAX_N = (1 << 31) - 1
 _MIN_READ_SIZE = 4096
 _MAX_SEEK_READ = 1 << 24
-# APPNOTE 4.4.4: the end-of-stream marker bit for LZMA.
-_LZMA_END_MARKER = 1 << 1
 _LZMA_PROPERTY_SIZE = 5
 _LZMA_MAX_PROPERTY_BYTE = (4 * 5 + 4) * 9 + 8
 _LZMA_MAX_LITERAL_BITS = 4
@@ -56,13 +54,17 @@ def lzma1_properties(properties: bytes) -> dict[str, int]:
     }
 
 
-class _LzmaDecompressor:
+class _LzmaDecompressor(_Decompressor):
     """APPNOTE 5.8.8: a version, a properties size and properties, then LZMA1."""
 
     def __init__(self) -> None:
         self._decompressor: lzma.LZMADecompressor | None = None
         self._header = b""
-        self.eof = False
+        self._eof = False
+
+    @property
+    def eof(self) -> bool:
+        return self._eof
 
     @property
     def needs_input(self) -> bool:
@@ -85,7 +87,7 @@ class _LzmaDecompressor:
             data = self._header[4 + size :]
             self._header = b""
         result = self._decompressor.decompress(data, max_length)
-        self.eof = self._decompressor.eof
+        self._eof = self._decompressor.eof
         return result
 
 
