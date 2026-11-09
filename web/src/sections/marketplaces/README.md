@@ -1,6 +1,6 @@
 # Shared marketplaces
 
-These components are not wired to product pages yet. S9 still needs page integration and browser acceptance.
+Both Skills pages mount the shared list and dialog. Browser acceptance and retired-skill management remain pending.
 
 ## SyncFromGitHubDialog
 
@@ -11,15 +11,48 @@ Repository owner, name, ref and folder are separate fields. Ref is required; sla
 Input changes invalidate previews. Closing unmounts the request session, so stale responses cannot populate another session.
 Creation disables submission and user dismissal until the request finishes.
 
-The optional `company` contract contains:
+Company scope appears only for global `MANAGE_SKILLS` holders.
+The dialog owns `useCompanyMarketplaceAccess(DEFAULT_COMPANY_MARKETPLACE_ACCESS)` in its open session.
+It submits source and access defaults in one `createMarketplace` request. There is no follow-up access PATCH.
+Closing resets the company draft. The host does not supply a creator or access controls.
 
-- `controls`: the host's existing sharing controls.
-- `ready`: whether the selected defaults are valid and ready to save.
-- `create(source)`: an atomic creator that saves the company source and selected defaults together.
+## CompanyMarketplaceAccessControls
 
-Company scope appears only with this contract and global `MANAGE_SKILLS` authority.
-Do not implement `company.create` as create followed by an access PATCH.
-Personal creation uses the shared client directly. Reset the host's sharing draft when starting a new dialog session.
+Mount `useCompanyMarketplaceAccess(initialDraft)` in the host's creation session.
+Pass its result as `<CompanyMarketplaceAccessControls access={access} disabled={saving} />`.
+The hook owns a complete `MarketplaceAccessDraft`; subsequent initial values do not replace user edits.
+Unmount or key the session on close/reopen. Keep controls disabled throughout creation.
+
+`DEFAULT_COMPANY_MARKETPLACE_ACCESS` explicitly selects organization Viewer access, Available installation, and no groups.
+The controls display that choice before creation. Hosts can supply another explicit initial draft.
+Switching to private and back restores the session's last organization permission.
+`marketplaceAccessDraft(snapshot)` converts snapshot `user_group_id` values to request `group_id` values, retaining group policies.
+
+The shared dialog uses `access.ready` and submits `createMarketplace({ ...source, personal: false, access: access.draft })`.
+Never create first and PATCH defaults afterward. No direct-user grants are supported.
+
+Readiness requires global `MANAGE_SKILLS` and loaded settings with a known tier.
+Community permits organization Viewer access without groups. Incompatible stored defaults stay visible and cannot be saved.
+Settings errors disable edits and save; they never imply Community.
+Group lookup failures disable additions. Existing IDs and group policies remain in the draft and submission.
+Users can explicitly edit or remove an unresolved group grant on a paid plan.
+
+## CompanyMarketplaceAccessModal
+
+Supply `marketplaceId`, `open`, `onClose`, and optional `onSaved(marketplace)`.
+Use the list/detail `onConfigureAccess(row)` callback to select the ID and open this modal.
+Only global `MANAGE_SKILLS` holders can load defaults. Personal sources cannot use this modal.
+
+Each opening uses a session SWR key and waits for a fresh detail read before copying defaults into the draft.
+Background refresh never overwrites edits. Close/reopen or a different ID starts a new session.
+Load failures disable save. PATCH failures retain the draft and show the server error inline.
+Saving disables the controls, duplicate submits, Cancel, Escape, outside dismissal, and the header close action.
+
+A successful save calls `updateMarketplaceAccess({ id, access: draft })` once, then revalidates
+`SWR_KEYS.marketplaces` and `SWR_KEYS.marketplace(id)` through the current SWR provider.
+It calls `onSaved(savedMarketplace)` and `onClose()` only after PATCH succeeds.
+The host must set `open=false` in `onClose` and refresh Skills from `onSaved`.
+Failed saves do not invoke these callbacks or refresh source counts and active Skills.
 
 ## MarketplaceList
 
@@ -30,8 +63,8 @@ Polling only reads status; it never requests another sync.
 - `filter(row)` selects shared marketplace rows using kind data the host actually has.
 - `getCountLabel(row)` overrides skill counts. Return `null` to hide unsupported counts.
 - `onSyncFromGitHub` optionally supplies the list's creation action. Omit it when the page menu owns that action.
-- `onChanged` refreshes host resources after accepted mutations, sync completion, source removal, or revision/count changes.
-- `onConfigureAccess(row)` opens existing sharing controls for company defaults.
+- `onChanged` refreshes host resources after accepted mutations, completed work, source removal, and revision or count changes.
+- `onConfigureAccess(row)` closes detail before the host opens `CompanyMarketplaceAccessModal` for company defaults.
 
 The current API has skill counts only. There are no plugin endpoints or inferred plugin counts.
 Keep pending and failed sources visible when defining filters, including sources with zero imported skills.
@@ -40,7 +73,7 @@ Keep pending and failed sources visible when defining filters, including sources
 
 The list opens this dialog; hosts can also mount it with `marketplaceId`, `open` and `onClose`.
 It supports the same count, change and access callbacks as the list.
-After saving access, the host must revalidate `SWR_KEYS.marketplace(id)` and `SWR_KEYS.marketplaces`.
+`CompanyMarketplaceAccessModal` revalidates detail and list caches after saving. Custom access UIs must do the same.
 
 Retirement review snapshots the proposal's revision and IDs, with names from current detail.
 Missing names prevent confirmation. A changed or rejected proposal requires another explicit review.
