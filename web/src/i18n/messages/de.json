@@ -17630,7 +17630,11 @@
       "groupsError": "Gruppen konnten nicht geladen werden. Bestehende Berechtigungen bleiben erhalten.",
       "unknownGroup": "Gruppe #{id}",
       "groupPermission": "Zugriff für {name}",
-      "installationDescription": "Wählen Sie, wie synchronisierte Skills für alle Zugriffsberechtigten installiert werden."
+      "installationDescription": "Wählen Sie, wie synchronisierte Skills für alle Zugriffsberechtigten installiert werden.",
+      "title": "Vorgaben des Unternehmens-Marketplace",
+      "loadError": "Die Marketplace-Vorgaben konnten nicht geladen werden. Ihre Änderungen bleiben erhalten.",
+      "companyOnly": "Zugriffsvorgaben sind nur für Unternehmens-Marketplaces verfügbar.",
+      "save": "Vorgaben speichern"
     }
   }
 }

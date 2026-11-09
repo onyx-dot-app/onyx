@@ -17630,7 +17630,11 @@
       "groupsError": "No se pudieron cargar los grupos. Se conservan los permisos existentes.",
       "unknownGroup": "Grupo #{id}",
       "groupPermission": "Acceso para {name}",
-      "installationDescription": "Elige cómo se instalan las habilidades sincronizadas para quienes tienen acceso."
+      "installationDescription": "Elige cómo se instalan las habilidades sincronizadas para quienes tienen acceso.",
+      "title": "Valores Predeterminados del Marketplace de la Empresa",
+      "loadError": "No se pudieron cargar los valores del marketplace. Se conservan tus cambios.",
+      "companyOnly": "Los valores de acceso solo están disponibles para marketplaces de empresa.",
+      "save": "Guardar valores"
     }
   }
 }

@@ -83,7 +83,9 @@ async function ready() {
 }
 async function chooseMenu(label: string, option: string) {
   const user = setupUser();
-  await user.click(screen.getByRole("button", { name: label }));
+  await user.click(
+    screen.getByRole(label === scope ? "combobox" : "button", { name: label })
+  );
   await user.click(screen.getByRole("option", { name: option }));
 }
 const stored = marketplaceAccessDraft({
@@ -99,7 +101,7 @@ it("presents the chosen creation defaults and changes visibility, permissions an
   const user = setupUser();
   render(<Harness onSubmit={onSubmit} />);
   await ready();
-  expect(screen.getByRole("button", { name: scope })).toHaveTextContent(
+  expect(screen.getByRole("combobox", { name: scope })).toHaveValue(
     organization
   );
   expect(screen.getByRole("combobox", { name: "Installation" })).toHaveValue(
@@ -192,30 +194,33 @@ it("retains grants while groups load or fail and can retry their names", async (
   expect(screen.getByText("Group #99")).toBeInTheDocument();
 });
 
-it("does not interpret settings loading or failure as Community or change stored private access", async () => {
-  const pending = Promise.withResolvers<Response>();
-  fetchSpy.mockImplementation(async (path) =>
-    path === SWR_KEYS.settings ? pending.promise : respond(path)
-  );
-  const onSubmit = jest.fn();
-  const user = setupUser();
-  render(<Harness initial={stored} onSubmit={onSubmit} />);
-  expect(screen.getByText("Loading access settings…")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
-  await act(async () => pending.resolve(new Response("{}", { status: 503 })));
-  expect(
-    await screen.findByText(/Could not load access settings/)
-  ).toBeInTheDocument();
-  expect(screen.queryByText(/The Free plan/)).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: scope })).toHaveTextContent(
-    privateScope
-  );
-  fetchSpy.mockImplementation(async (path) => respond(path));
-  await user.click(screen.getByRole("button", { name: "Refresh" }));
-  await ready();
-  await user.click(screen.getByRole("button", { name: "Submit" }));
-  expect(onSubmit).toHaveBeenCalledWith(stored);
-});
+it.each([SWR_KEYS.settings, SWR_KEYS.enterpriseSettings])(
+  "preserves private defaults when %s is loading or unavailable",
+  async (failedPath) => {
+    const pending = Promise.withResolvers<Response>();
+    fetchSpy.mockImplementation(async (path) =>
+      path === failedPath ? pending.promise : respond(path)
+    );
+    const onSubmit = jest.fn();
+    const user = setupUser();
+    render(<Harness initial={stored} onSubmit={onSubmit} />);
+    expect(screen.getByText("Loading access settings…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
+    await act(async () => pending.resolve(new Response("{}", { status: 503 })));
+    expect(
+      await screen.findByText(/Could not load access settings/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/The Free plan/)).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: scope })).toHaveValue(
+      privateScope
+    );
+    fetchSpy.mockImplementation(async (path) => respond(path));
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(onSubmit).toHaveBeenCalledWith(stored);
+  }
+);
 
 it("restricts Community sharing but permits its installation settings", async () => {
   tier = "community";
@@ -224,7 +229,7 @@ it("restricts Community sharing but permits its installation settings", async ()
   render(<Harness onSubmit={onSubmit} />);
   await ready();
   expect(screen.getByText(/The Free plan supports/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: scope })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: scope })).toBeDisabled();
   expect(screen.getByRole("button", { name: orgPermission })).toBeDisabled();
   expect(
     screen.queryByRole("combobox", { name: "Find a group to add" })
@@ -244,7 +249,7 @@ it("preserves stored private and group access on a Community workspace", async (
   expect(
     await screen.findByText(/These saved defaults require/)
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: scope })).toHaveTextContent(
+  expect(screen.getByRole("combobox", { name: scope })).toHaveValue(
     privateScope
   );
   expect(screen.getByText("Group #99")).toBeInTheDocument();
@@ -261,6 +266,20 @@ it.each([{ capabilities: [] }, { capabilities: [Permission.MANAGE_SKILLS] }])(
       await screen.findByText(/Global skill management permission/)
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: scope })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: scope })).toBeDisabled();
   }
 );
+
+it("blocks saving when settings omit the tier", async () => {
+  fetchSpy.mockImplementation(async (path) =>
+    path === SWR_KEYS.settings
+      ? new Response(JSON.stringify({ ee_features_enabled: false }))
+      : respond(path)
+  );
+  render(<Harness initial={stored} onSubmit={jest.fn()} />);
+  expect(
+    await screen.findByText(/Could not load access settings/)
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
+  expect(screen.queryByText(/The Free plan/)).not.toBeInTheDocument();
+});

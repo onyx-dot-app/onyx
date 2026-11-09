@@ -17630,7 +17630,11 @@
       "groupsError": "Could not load groups. Existing grants are preserved.",
       "unknownGroup": "Group #{id}",
       "groupPermission": "Access for {name}",
-      "installationDescription": "Choose how synced skills are installed for everyone with access."
+      "installationDescription": "Choose how synced skills are installed for everyone with access.",
+      "title": "Company Marketplace Defaults",
+      "loadError": "Could not load marketplace defaults. Your edits are preserved.",
+      "companyOnly": "Access defaults are available only for company marketplaces.",
+      "save": "Save defaults"
     }
   }
 }

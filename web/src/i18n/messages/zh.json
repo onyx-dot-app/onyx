@@ -17630,7 +17630,11 @@
       "groupsError": "无法加载群组。现有权限将保留。",
       "unknownGroup": "群组 #{id}",
       "groupPermission": "{name} 的访问权限",
-      "installationDescription": "选择如何为所有有访问权限的用户安装已同步技能。"
+      "installationDescription": "选择如何为所有有访问权限的用户安装已同步技能。",
+      "title": "公司市场默认设置",
+      "loadError": "无法加载市场默认设置。您的编辑将保留。",
+      "companyOnly": "访问默认设置仅适用于公司市场。",
+      "save": "保存默认设置"
     }
   }
 }

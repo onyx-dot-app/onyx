@@ -17630,7 +17630,11 @@
       "groupsError": "그룹을 불러올 수 없습니다. 기존 권한은 유지됩니다.",
       "unknownGroup": "그룹 #{id}",
       "groupPermission": "{name}의 액세스",
-      "installationDescription": "액세스 권한이 있는 모든 사용자에게 동기화된 스킬을 설치하는 방법을 선택하세요."
+      "installationDescription": "액세스 권한이 있는 모든 사용자에게 동기화된 스킬을 설치하는 방법을 선택하세요.",
+      "title": "회사 마켓플레이스 기본값",
+      "loadError": "마켓플레이스 기본값을 불러올 수 없습니다. 편집 내용은 유지됩니다.",
+      "companyOnly": "액세스 기본값은 회사 마켓플레이스에서만 사용할 수 있습니다.",
+      "save": "기본값 저장"
     }
   }
 }

@@ -682,8 +682,12 @@ The library preview of an external-app skill calls the same renderer
     without inferring unsupported plugin data. Detail polls pending work while
     visible. Retirement confirmation sends the reviewed revision and IDs only;
     names come from detail. A rejected proposal needs a fresh review. Removal
-    and login replacement require confirmation. Access configuration belongs
-    to the host sharing UI. `CompanyMarketplaceAccessControls` and
+    and login replacement require confirmation. Host access callbacks open
+    `CompanyMarketplaceAccessModal`, which loads a fresh draft per opening,
+    preserves edits across refreshes, and blocks dismissal while saving. A failed
+    PATCH retains edits and the server error. Only success revalidates list and
+    detail caches and calls the host to refresh Skills.
+    `CompanyMarketplaceAccessControls` and
     `useCompanyMarketplaceAccess` provide a session-owned company draft.
     Creation submits it atomically. Readiness requires global MANAGE_SKILLS and
     known settings; a settings failure never implies Community. Community allows

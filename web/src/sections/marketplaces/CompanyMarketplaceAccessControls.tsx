@@ -86,17 +86,24 @@ export default function CompanyMarketplaceAccessControls({
           height="auto"
           gap={2}
         >
-          <SharePermissionMenu
-            ariaLabel={shared("scopeMenu.ariaLabel")}
+          <InputSingleSelect
+            placeholder={shared("scopeMenu.ariaLabel")}
             value={draft.public_permission === null ? "PRIVATE" : "PUBLIC"}
-            options={scopeOptions}
+            defaultOption="PUBLIC"
+            options={scopeOptions.map(({ value, label, icon }) => ({
+              value,
+              title: label,
+              icon,
+            }))}
             disabled={locked || !paid}
-            onChange={(scope) =>
-              setDraft({
-                ...draft,
-                public_permission: scope === "PUBLIC" ? "VIEWER" : null,
-              })
-            }
+            onValueChange={(scope) => {
+              if (scope === "PUBLIC" || scope === "PRIVATE") {
+                setDraft({
+                  ...draft,
+                  public_permission: scope === "PUBLIC" ? "VIEWER" : null,
+                });
+              }
+            }}
           />
           {draft.public_permission !== null && (
             <SharePermissionMenu

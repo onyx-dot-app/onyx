@@ -13,7 +13,7 @@ Creation disables submission and user dismissal until the request finishes.
 
 The optional `company` contract contains:
 
-- `controls`: the host's existing sharing controls.
+- `controls`: the host's `CompanyMarketplaceAccessControls` instance.
 - `ready`: whether the selected defaults are valid and ready to save.
 - `create(source)`: an atomic creator that saves the company source and selected defaults together.
 
@@ -42,6 +42,23 @@ Settings errors disable edits and save; they never imply Community.
 Group lookup failures disable additions. Existing IDs and group policies remain in the draft and submission.
 Users can explicitly edit or remove an unresolved group grant on a paid plan.
 
+## CompanyMarketplaceAccessModal
+
+Supply `marketplaceId`, `open`, `onClose`, and optional `onSaved(marketplace)`.
+Use the list/detail `onConfigureAccess(row)` callback to select the ID and open this modal.
+Only global `MANAGE_SKILLS` holders can load defaults. Personal sources cannot use this modal.
+
+Each opening uses a session SWR key and waits for a fresh detail read before copying defaults into the draft.
+Background refresh never overwrites edits. Close/reopen or a different ID starts a new session.
+Load failures disable save. PATCH failures retain the draft and show the server error inline.
+Saving disables the controls, duplicate submits, Cancel, Escape, outside dismissal, and the header close action.
+
+A successful save calls `updateMarketplaceAccess({ id, access: draft })` once, then revalidates
+`SWR_KEYS.marketplaces` and `SWR_KEYS.marketplace(id)` through the current SWR provider.
+It calls `onSaved(savedMarketplace)` and `onClose()` only after PATCH succeeds.
+The host must set `open=false` in `onClose` and refresh Skills from `onSaved`.
+Failed saves do not invoke these callbacks or refresh source counts and active Skills.
+
 ## MarketplaceList
 
 The list owns its SWR read. Mount it above the host's resource list.
@@ -52,7 +69,7 @@ Polling only reads status; it never requests another sync.
 - `getCountLabel(row)` overrides skill counts. Return `null` to hide unsupported counts.
 - `onSyncFromGitHub` optionally supplies the list's creation action. Omit it when the page menu owns that action.
 - `onChanged` refreshes host resources after accepted mutations, sync completion, source removal, or revision/count changes.
-- `onConfigureAccess(row)` opens existing sharing controls for company defaults.
+- `onConfigureAccess(row)` opens `CompanyMarketplaceAccessModal` for company defaults.
 
 The current API has skill counts only. There are no plugin endpoints or inferred plugin counts.
 Keep pending and failed sources visible when defining filters, including sources with zero imported skills.
@@ -61,7 +78,7 @@ Keep pending and failed sources visible when defining filters, including sources
 
 The list opens this dialog; hosts can also mount it with `marketplaceId`, `open` and `onClose`.
 It supports the same count, change and access callbacks as the list.
-After saving access, the host must revalidate `SWR_KEYS.marketplace(id)` and `SWR_KEYS.marketplaces`.
+`CompanyMarketplaceAccessModal` revalidates detail and list caches after saving. Custom access UIs must do the same.
 
 Retirement review snapshots the proposal's revision and IDs, with names from current detail.
 Missing names prevent confirmation. A changed or rejected proposal requires another explicit review.

@@ -17630,7 +17630,11 @@
       "groupsError": "Não foi possível carregar os grupos. As permissões existentes são preservadas.",
       "unknownGroup": "Grupo #{id}",
       "groupPermission": "Acesso de {name}",
-      "installationDescription": "Escolha como as habilidades sincronizadas são instaladas para quem tem acesso."
+      "installationDescription": "Escolha como as habilidades sincronizadas são instaladas para quem tem acesso.",
+      "title": "Definições do Marketplace da Empresa",
+      "loadError": "Não foi possível carregar as definições do marketplace. As suas alterações são preservadas.",
+      "companyOnly": "As definições de acesso estão disponíveis apenas para marketplaces de empresa.",
+      "save": "Guardar definições"
     }
   }
 }

@@ -17630,7 +17630,11 @@
       "groupsError": "Impossible de charger les groupes. Les autorisations existantes sont conservées.",
       "unknownGroup": "Groupe n°{id}",
       "groupPermission": "Accès de {name}",
-      "installationDescription": "Choisissez comment les compétences synchronisées sont installées pour les personnes autorisées."
+      "installationDescription": "Choisissez comment les compétences synchronisées sont installées pour les personnes autorisées.",
+      "title": "Paramètres par défaut du marketplace de l’entreprise",
+      "loadError": "Impossible de charger les paramètres du marketplace. Vos modifications sont conservées.",
+      "companyOnly": "Les paramètres d’accès sont disponibles uniquement pour les marketplaces d’entreprise.",
+      "save": "Enregistrer les paramètres"
     }
   }
 }
