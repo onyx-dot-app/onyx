@@ -15,16 +15,9 @@ from onyx.server.features.skill.models import GitHubSkillsImportRequest
 from onyx.skills.bundle import build_skill_md
 from onyx.skills.models import GitHubRepository, GitHubSkillBundle
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 _REVISION = "a" * 40
-
-
-@pytest.fixture
-def import_user(db_session: Session) -> User:
-    user = make_user(db_session, standard_account=True)
-    db_session.commit()
-    return user
 
 
 def _bundle(name: str) -> bytes:
@@ -59,7 +52,7 @@ def _delete_bundles(db_session: Session, name: str) -> list[Skill]:
 
 def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     db_session: Session,
-    import_user: User,
+    standard_user: User,
     initialize_file_store: None,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
@@ -70,11 +63,11 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     existing = make_skill(
         db_session,
         name=conflict_name,
-        author_user_id=import_user.id,
+        author_user_id=standard_user.id,
     )
     db_session.add(
         UserSkillPreference(
-            user_id=import_user.id,
+            user_id=standard_user.id,
             skill_id=existing.id,
             name=existing.name,
         )
@@ -132,7 +125,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
                 "skills/pptx",
             ],
         ),
-        user=import_user,
+        user=standard_user,
         db_session=db_session,
     )
 
@@ -144,7 +137,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     assert [(item.name, item.reason) for item in response.not_imported] == [
         ("pptx", "A built-in Onyx skill already uses this name.")
     ]
-    assert pushed_user_ids == [{import_user.id}]
+    assert pushed_user_ids == [{standard_user.id}]
 
     created_ids = [result.skill.id for result in response.imported]
     created_rows = list(
@@ -153,12 +146,12 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     enabled_names = set(
         db_session.scalars(
             select(UserSkillPreference.name).where(
-                UserSkillPreference.user_id == import_user.id
+                UserSkillPreference.user_id == standard_user.id
             )
         )
     )
     assert enabled_names == {conflict_name, unique_name}
-    assert all(row.author_user_id == import_user.id for row in created_rows)
+    assert all(row.author_user_id == standard_user.id for row in created_rows)
 
     file_store = get_default_file_store()
     for row in created_rows:
@@ -173,7 +166,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
 
 def test_import_enables_only_first_new_skill_with_each_name(
     db_session: Session,
-    import_user: User,
+    standard_user: User,
     initialize_file_store: None,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
@@ -219,7 +212,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
             revision=_REVISION,
             paths=[f"first/{name}", f"second/{name}"],
         ),
-        user=import_user,
+        user=standard_user,
         db_session=db_session,
     )
 
