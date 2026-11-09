@@ -15296,6 +15296,27 @@
         "reloadFailed": "Échec du rechargement de la session"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "Ignorer"
+      },
+      "item": {
+        "bytesLabel": "{name} : {size}",
+        "filesLabel": "{name} : {size}, {files, plural, one {# fichier} other {# fichiers}}",
+        "directoriesLabel": "{name} : {size} — dépasse la limite de {limit, number} dossiers par session",
+        "pathsLabel": "{name} : {size} — le chemin dépasse {limit, number} octets UTF-8, ou un nom de fichier ou de dossier dépasse {componentLimit, number} octets"
+      },
+      "list": {
+        "label": "Skills non chargés"
+      },
+      "manage": {
+        "button": "Gérer les skills"
+      },
+      "toast": {
+        "description": "Vos skills doivent tenir dans {maxSize} et {maxFiles, plural, one {# fichier} other {# fichiers}}. Ces skills ne tenaient pas, l’agent ne peut donc pas les utiliser dans cette session.",
+        "title": "{count, plural, one {# skill n’a pas été chargé} other {# skills n’ont pas été chargés}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "Sous-agent introuvable."

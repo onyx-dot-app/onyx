@@ -15296,6 +15296,27 @@
         "reloadFailed": "فشل إعادة تحميل الجلسة"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "تجاهل"
+      },
+      "item": {
+        "bytesLabel": "{name}: {size}",
+        "filesLabel": "{name}: {size}، {files, plural, one {ملف واحد (#)} other {# ملفات}}",
+        "directoriesLabel": "{name}: {size} — يتجاوز حد الجلسة البالغ {limit, number} مجلدات",
+        "pathsLabel": "{name}: {size} — يتجاوز المسار {limit, number} بايت بترميز UTF-8، أو يتجاوز اسم ملف أو مجلد {componentLimit, number} بايت"
+      },
+      "list": {
+        "label": "المهارات التي لم يتم تحميلها"
+      },
+      "manage": {
+        "button": "إدارة المهارات"
+      },
+      "toast": {
+        "description": "يجب أن تتسع مهاراتك في {maxSize} و{maxFiles, plural, one {ملف واحد (#)} other {# ملفات}}. لم تتسع هذه المهارات، لذا لا يمكن للوكيل استخدامها في هذه الجلسة.",
+        "title": "{count, plural, one {لم يتم تحميل مهارة واحدة (#)} other {لم يتم تحميل # مهارات}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "لم يتم العثور على الوكيل الفرعي."

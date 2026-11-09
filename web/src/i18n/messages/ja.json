@@ -15296,6 +15296,27 @@
         "reloadFailed": "セッションを再読み込みできませんでした"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "閉じる"
+      },
+      "item": {
+        "bytesLabel": "{name}: {size}",
+        "filesLabel": "{name}: {size}、{files, plural, one {# ファイル} other {# ファイル}}",
+        "directoriesLabel": "{name}: {size} — セッションのフォルダー数の上限（{limit, number}）を超えています",
+        "pathsLabel": "{name}: {size} — パスがUTF-8で{limit, number}バイト、またはファイル名やフォルダー名が{componentLimit, number}バイトを超えています"
+      },
+      "list": {
+        "label": "読み込めなかったスキル"
+      },
+      "manage": {
+        "button": "スキルを管理"
+      },
+      "toast": {
+        "description": "スキルは {maxSize} かつ {maxFiles, plural, one {# ファイル} other {# ファイル}} 以内に収める必要があります。これらのスキルは収まらなかったため、このセッションではエージェントが使用できません。",
+        "title": "{count, plural, one {# 件のスキルを読み込めませんでした} other {# 件のスキルを読み込めませんでした}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "サブエージェントが見つかりません。"

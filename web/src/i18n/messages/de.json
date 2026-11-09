@@ -15296,6 +15296,27 @@
         "reloadFailed": "Sitzung konnte nicht neu geladen werden"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "Schließen"
+      },
+      "item": {
+        "bytesLabel": "{name}: {size}",
+        "filesLabel": "{name}: {size}, {files, plural, one {# Datei} other {# Dateien}}",
+        "directoriesLabel": "{name}: {size} — überschreitet das Sitzungslimit von {limit, number} Ordnern",
+        "pathsLabel": "{name}: {size} — Pfad überschreitet {limit, number} UTF-8-Bytes oder ein Datei- oder Ordnername überschreitet {componentLimit, number} Bytes"
+      },
+      "list": {
+        "label": "Nicht geladene Skills"
+      },
+      "manage": {
+        "button": "Skills verwalten"
+      },
+      "toast": {
+        "description": "Ihre Skills müssen in {maxSize} und {maxFiles, plural, one {# Datei} other {# Dateien}} passen. Diese Skills passten nicht, daher kann der Agent sie in dieser Sitzung nicht verwenden.",
+        "title": "{count, plural, one {# Skill wurde nicht geladen} other {# Skills wurden nicht geladen}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "Subagent nicht gefunden."

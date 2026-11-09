@@ -15296,6 +15296,27 @@
         "reloadFailed": "Failed to reload session"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "Dismiss"
+      },
+      "item": {
+        "bytesLabel": "{name}: {size}",
+        "filesLabel": "{name}: {size}, {files, plural, one {# file} other {# files}}",
+        "directoriesLabel": "{name}: {size} — exceeds the session limit of {limit, number} folders",
+        "pathsLabel": "{name}: {size} — path exceeds {limit, number} UTF-8 bytes, or a file or folder name exceeds {componentLimit, number} bytes"
+      },
+      "list": {
+        "label": "Skills that did not load"
+      },
+      "manage": {
+        "button": "Manage skills"
+      },
+      "toast": {
+        "description": "Your skills must fit in {maxSize} and {maxFiles, plural, one {# file} other {# files}}. These skills did not fit, so the agent cannot use them in this session.",
+        "title": "{count, plural, one {# skill did not load} other {# skills did not load}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "Subagent not found."

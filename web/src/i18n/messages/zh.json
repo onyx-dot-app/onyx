@@ -15296,6 +15296,27 @@
         "reloadFailed": "重新加载会话失败"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "关闭"
+      },
+      "item": {
+        "bytesLabel": "{name}：{size}",
+        "filesLabel": "{name}：{size}，{files, plural, one {# 个文件} other {# 个文件}}",
+        "directoriesLabel": "{name}：{size} — 超过会话的 {limit, number} 个文件夹上限",
+        "pathsLabel": "{name}：{size} — 路径超过 {limit, number} 个 UTF-8 字节，或文件名或文件夹名超过 {componentLimit, number} 个字节"
+      },
+      "list": {
+        "label": "未加载的技能"
+      },
+      "manage": {
+        "button": "管理技能"
+      },
+      "toast": {
+        "description": "您的技能必须在 {maxSize} 和 {maxFiles, plural, one {# 个文件} other {# 个文件}} 以内。这些技能超出限制，因此代理无法在此会话中使用它们。",
+        "title": "{count, plural, one {# 个技能未加载} other {# 个技能未加载}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "未找到子代理。"

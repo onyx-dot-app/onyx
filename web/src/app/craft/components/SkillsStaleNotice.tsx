@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, MessageCard } from "@opal/components";
 import { SvgRefreshCw } from "@opal/icons";
@@ -22,20 +22,52 @@ export default function SkillsStaleNotice({
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
   );
+  const request = useRef(0);
+  useEffect(() => {
+    setReloading(false);
+    return () => {
+      request.current += 1;
+    };
+  }, [sessionId]);
   const reload = async () => {
+    const owner = useBuildSessionStore.getState().sessions.get(sessionId);
+    if (!owner) return;
+    const attempt = ++request.current;
+    const revision = owner.skillsStaleRevision + 1;
+    updateSessionData(sessionId, {
+      skillsStale: owner.skillsStale,
+      skillsReloadRevision: revision,
+    });
+    const isCurrent = () => {
+      const current = useBuildSessionStore.getState().sessions.get(sessionId);
+      return (
+        request.current === attempt &&
+        current?.instanceId === owner.instanceId &&
+        current.turnGeneration === owner.turnGeneration &&
+        current.skillsStaleRevision === revision
+      );
+    };
     setReloading(true);
     try {
       const state = await reloadSessionSkills(sessionId);
+      if (!isCurrent()) return;
       updateSessionData(sessionId, {
         skillsStale: state.skills_stale,
         skillRuntimeNotice: state.skill_runtime_notice,
       });
     } catch (error) {
+      if (!isCurrent()) return;
       toast.error(
         error instanceof Error ? error.message : t("toast.reloadFailed")
       );
     } finally {
-      setReloading(false);
+      const current = useBuildSessionStore.getState().sessions.get(sessionId);
+      if (
+        current?.instanceId === owner.instanceId &&
+        current.skillsReloadRevision === revision
+      )
+        updateSessionData(sessionId, { skillsReloadRevision: null });
+      if (request.current === attempt) setReloading(false);
     }
   };
 
