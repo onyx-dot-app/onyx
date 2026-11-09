@@ -101,6 +101,8 @@ codeInterpreter:
 
 configMap:
   ENABLE_CRAFT: "true"
+  # Code mode: the model calls tools from a Python program in the Monty sandbox.
+  CODE_MODE_ENABLED: "true"
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:dev"
   SANDBOX_IMAGE_PULL_POLICY: "IfNotPresent"
   # Allow the local API to start without USER_AUTH_SECRET.
