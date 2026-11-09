@@ -20,7 +20,7 @@ or external app is a single ``_REGISTRY`` entry plus its on-disk
 ``builtin/<skill_id>/`` directory.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Final, Literal
 
@@ -36,6 +36,19 @@ from onyx.skills.models import SKILL_NAME_PATTERN
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
 # to sandboxes at session setup; not baked into the sandbox image.
 BUILTIN_SKILLS_PATH: Final[Path] = Path(__file__).parent / "builtin"
+
+
+def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
+    """Yield source files, excluding hidden paths and Python caches."""
+    for path in sorted(source_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(
+            part == "__pycache__" or part.startswith(".")
+            for part in path.relative_to(source_dir).parts
+        ):
+            continue
+        yield path
 
 
 def _always_available(_: Session) -> bool:

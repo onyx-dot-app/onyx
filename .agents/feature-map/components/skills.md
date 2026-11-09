@@ -221,7 +221,35 @@ The library preview of an external-app skill calls the same renderer
 
 ---
 
-**Runtime payload preparation.** `UserSkillsPayload` carries files, app guidance and omission records through session assembly. Selection currently leaves omissions empty. Bulk refresh builds and sends one user's payload at a time, releases it before building the next, and records only successful hashes. A user's build or transport error does not discard earlier successful states or stop later users. This avoids retaining one complete fileset per sandbox.
+**Runtime payload preparation.** `UserSkillsPayload` carries files, app guidance and omission records through session assembly. Bulk refresh builds and sends one user's payload at a time, releases it before building the next, and records only successful hashes. A user's build or transport error does not discard earlier successful states or stop later users. This avoids retaining one complete fileset per sandbox.
+
+**Runtime limit.** `skills/push.py:_assemble_fileset` keeps whole Skills
+within `SKILL_RUNTIME_MAX_BYTES` (900 MiB) and `SKILL_RUNTIME_MAX_FILES`
+(10,000). Each rendered file costs at least 4 KiB. The keep order comes from
+`db/skill.py:_runtime_skill_priorities` in one query: built-in, effective
+Required, explicitly enabled (a re-enabled Default counts), then Default.
+Inside a class, the newest `enabled_at` or grant `created_at` comes first,
+unknown dates last, then name and id. Name precedence and fallback order do
+not change. A name is processed at the best rank that any remaining candidate
+can deliver. When the delivered candidate ranks after another pending name,
+its files are dropped and it renders again at its own rank. A delivered
+candidate that does not fit is an omission; no hidden duplicate replaces it.
+Smaller later Skills still load. `UserSkillsPayload.omissions` and
+`ManagedContentPayload.skill_omissions` record the Skill id, name, charged
+bytes, file count and failed limit (`db/skill_runtime_models.py`).
+Selection also counts unique implied folders (10,000 maximum) and checks each
+rendered path (4,021 UTF-8 bytes maximum, 255 bytes per component).
+The shared path validator reserves the full extraction directory prefix under
+Linux PATH_MAX. Skill selection also reserves the longer session symlink prefix,
+so delivered files can be opened from the session. Other mounts derive their own remaining path budget. It leaves out the whole Skill that
+exceeds either bound and tries smaller later Skills. The sender checks the same
+bounds before writing the archive. Folder parents count once.
+Kubernetes push transport accepts the same 900 MiB and 10,000 files
+(`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py`
+`PUSH_MAX_*`) and fails closed above them, so
+omissions happen here, not in transport. Push archives use a dedicated temporary
+folder. The next authenticated push clears files left by a killed sidecar while
+holding the push lock; snapshot archives use separate paths.
 
 ## Contracts and traps
 

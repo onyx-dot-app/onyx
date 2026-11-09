@@ -1,6 +1,7 @@
 """Push skill bundles to running sandboxes."""
 
 import hashlib
+import heapq
 from collections.abc import Iterable
 from dataclasses import dataclass
 from uuid import UUID
@@ -10,21 +11,31 @@ from sqlalchemy.orm import Session
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
+    RuntimeSkillCandidate,
     SkillValidityUpdate,
     affected_user_ids_for_skill,
-    list_runtime_skills_for_user,
+    list_runtime_skill_candidates_for_user,
     persist_skill_validity,
 )
-from onyx.db.skill_runtime_models import SkillRuntimeOmission
+from onyx.db.skill_runtime_models import SkillRuntimeLimit, SkillRuntimeOmission
 from onyx.file_processing.zip_index import ZipIndex
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
     lock_sandbox_skills_hashes,
     set_sandbox_skills_hashes__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    PUSH_MAX_DIRECTORIES,
+    PUSH_VERSION_NAME_BYTES,
+    push_parent_directories,
+    push_path_byte_limit,
+    push_version_directory,
+    validate_push_path,
+)
 from onyx.server.features.build.sandbox.models import FileSet
+from onyx.server.features.build.sandbox.session_workspace import SESSIONS_ROOT
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
@@ -33,9 +44,9 @@ from onyx.skills.built_in import (
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
+    iter_builtin_skill_files,
 )
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
-from onyx.skills.content import iter_builtin_skill_files
 from onyx.skills.rendering import (
     CLAUDE_SKILL_DIR_PLACEHOLDER,
     render_company_search_skill,
@@ -51,6 +62,52 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
+SKILL_RUNTIME_MAX_PATH_BYTES = min(
+    push_path_byte_limit(
+        str(push_version_directory(SKILLS_MOUNT_PATH, "0" * PUSH_VERSION_NAME_BYTES))
+    ),
+    # Files must also open through the session's longer symlink path.
+    push_path_byte_limit(f"{SESSIONS_ROOT}/{UUID(int=0)}/.opencode/skills"),
+)
+
+# Runtime skill disk budget, in binary units as the bundle limits use.
+SKILL_RUNTIME_MAX_BYTES = 900 * 1024 * 1024
+SKILL_RUNTIME_MAX_FILES = 10_000
+# Each rendered file uses at least one 4 KiB filesystem block.
+SKILL_RUNTIME_MIN_FILE_CHARGE_BYTES = 4 * 1024
+
+
+class _OverLimitFileSet(dict[str, bytes]):
+    """A candidate with more files than any runtime payload accepts.
+
+    It keeps SKILL.md and SKILL_RUNTIME_MAX_FILES files, and only counts the
+    rest, so the omission reports the same totals without their contents.
+    """
+
+    counted_files = 0
+    counted_bytes = 0
+
+
+def _charged_bytes(candidate_files: FileSet) -> int:
+    charged = sum(
+        max(len(content), SKILL_RUNTIME_MIN_FILE_CHARGE_BYTES)
+        for content in candidate_files.values()
+    )
+    if isinstance(candidate_files, _OverLimitFileSet):
+        charged += candidate_files.counted_bytes
+    return charged
+
+
+def _file_count(candidate_files: FileSet) -> int:
+    if isinstance(candidate_files, _OverLimitFileSet):
+        return len(candidate_files) + candidate_files.counted_files
+    return len(candidate_files)
+
+
+@dataclass(frozen=True)
+class RuntimeSkillSelection:
+    files: FileSet
+    omissions: tuple[SkillRuntimeOmission, ...]
 
 
 @dataclass(frozen=True)
@@ -124,12 +181,26 @@ def _render_template(
     )
 
 
-def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
+def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> FileSet:
+    """Add a normalized bundle, whose paths are unique, to ``files``."""
+    skill_md_path = f"{skill.name}/{SKILL_MD_NAME}"
     with ZipIndex(bundle_bytes) as zf:
         for info in zf.infos():
-            if not info.is_dir():
-                with zf.open(info) as source:
-                    files[f"{skill.name}/{info.filename}"] = source.read()
+            if info.is_dir():
+                continue
+            path = f"{skill.name}/{info.filename}"
+            with zf.open(info) as source:
+                content = source.read()
+            if len(files) < SKILL_RUNTIME_MAX_FILES or path == skill_md_path:
+                files[path] = content
+                continue
+            if not isinstance(files, _OverLimitFileSet):
+                files = _OverLimitFileSet(files)
+            files.counted_files += 1
+            files.counted_bytes += max(
+                len(content), SKILL_RUNTIME_MIN_FILE_CHARGE_BYTES
+            )
+    return files
 
 
 def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
@@ -146,115 +217,194 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
         ).encode("utf-8")
 
 
-def _assemble_fileset(
-    skills: Iterable[Skill],
+def _render_candidate(
+    skill: Skill,
     user: User,
     db_session: Session,
-) -> FileSet:
-    """Publish the first complete candidate for each name in resolver order.
+    file_store: FileStore,
+    validity_updates: dict[UUID, SkillValidityUpdate],
+) -> FileSet | None:
+    """Render one complete candidate, or return None so delivery tries the next.
 
     Stage each candidate separately so read, unpack, or render failures cannot
     reserve a name or leak partial files into the next candidate's bundle.
     """
-    seen_names: set[str] = set()
+    candidate_files: FileSet = {}
+    try:
+        if skill.built_in_skill_id is None:
+            version = skill.current_version
+            if version is None or version.is_valid is False:
+                return None
+
+            if version.is_valid is None:
+                validation = validate_stored_custom_skill(skill, file_store)
+                if validation.is_valid is not None:
+                    validity_updates[version.id] = SkillValidityUpdate(
+                        skill_id=skill.id,
+                        version_id=version.id,
+                        bundle_file_id=version.bundle_file_id,
+                        is_valid=validation.is_valid,
+                    )
+                if validation.normalized_bundle is None:
+                    logger.warning(
+                        "Skipping unvalidated skill %s: %s",
+                        skill.id,
+                        validation.detail,
+                    )
+                    return None
+                bundle_bytes = validation.normalized_bundle
+            else:
+                if version.bundle_file_id is None:
+                    return None
+                bundle_bytes = load_stored_custom_skill_bundle(
+                    version.bundle_file_id,
+                    file_store,
+                ).content
+            candidate_files = _add_bundle_bytes(candidate_files, skill, bundle_bytes)
+        else:
+            definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+            if definition is None:
+                logger.warning(
+                    "Skill row %s references unknown built-in %s; skipping",
+                    skill.name,
+                    skill.built_in_skill_id,
+                )
+                return None
+            _add_static_builtin(candidate_files, skill, definition)
+            if definition.has_template:
+                _render_template(candidate_files, skill, definition, db_session, user)
+
+        if f"{skill.name}/{SKILL_MD_NAME}" not in candidate_files:
+            logger.warning("Skipping skill %s without instructions", skill.id)
+            return None
+        _resolve_skill_dirs(candidate_files, [skill.name])
+    except Exception:
+        logger.warning("Failed to assemble skill %s; skipping", skill.id, exc_info=True)
+        return None
+    return candidate_files
+
+
+def _assemble_fileset(
+    candidates: Iterable[RuntimeSkillCandidate],
+    user: User,
+    db_session: Session,
+) -> RuntimeSkillSelection:
+    """Deliver the first complete candidate for each name within the runtime limit.
+
+    Names are processed by the best keep rank any remaining candidate could
+    deliver. If the delivered candidate ranks after another pending name, its
+    files are dropped and the name is rendered again at its real rank. Only
+    the selected files and one candidate are in memory at a time. A delivered
+    candidate that does not fit is omitted whole; no duplicate replaces it.
+    """
+    pending: dict[str, list[RuntimeSkillCandidate]] = {}
+    for candidate in candidates:
+        pending.setdefault(candidate.skill.name, []).append(candidate)
+    queue = [
+        (min(c.keep_rank for c in name_candidates), name)
+        for name, name_candidates in pending.items()
+    ]
+    heapq.heapify(queue)
+
     files: FileSet = {}
-    validity_updates: list[SkillValidityUpdate] = []
+    omissions: list[SkillRuntimeOmission] = []
+    charged_bytes = 0
+    file_count = 0
+    directories: set[str] = set()
+    validity_updates: dict[UUID, SkillValidityUpdate] = {}
     file_store = get_default_file_store()
 
-    for skill in skills:
-        if skill.name in seen_names:
-            continue
-        candidate_files: FileSet = {}
-        try:
-            if skill.built_in_skill_id is None:
-                version = skill.current_version
-                if version is None or version.is_valid is False:
-                    continue
-
-                if version.is_valid is None:
-                    validation = validate_stored_custom_skill(skill, file_store)
-                    if validation.is_valid is not None:
-                        validity_updates.append(
-                            SkillValidityUpdate(
-                                skill_id=skill.id,
-                                version_id=version.id,
-                                bundle_file_id=version.bundle_file_id,
-                                is_valid=validation.is_valid,
-                            )
-                        )
-                    if validation.normalized_bundle is None:
-                        logger.warning(
-                            "Skipping unvalidated skill %s: %s",
-                            skill.id,
-                            validation.detail,
-                        )
-                        continue
-                    bundle_bytes = validation.normalized_bundle
-                else:
-                    if version.bundle_file_id is None:
-                        continue
-                    bundle_bytes = load_stored_custom_skill_bundle(
-                        version.bundle_file_id,
-                        file_store,
-                    ).content
-                _add_bundle_bytes(candidate_files, skill, bundle_bytes)
-            else:
-                definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
-                if definition is None:
-                    logger.warning(
-                        "Skill row %s references unknown built-in %s; skipping",
-                        skill.name,
-                        skill.built_in_skill_id,
-                    )
-                    continue
-                _add_static_builtin(candidate_files, skill, definition)
-                if definition.has_template:
-                    _render_template(
-                        candidate_files, skill, definition, db_session, user
-                    )
-
-            if f"{skill.name}/{SKILL_MD_NAME}" not in candidate_files:
-                logger.warning("Skipping skill %s without instructions", skill.id)
-                continue
-            _resolve_skill_dirs(candidate_files, [skill.name])
-        except Exception:
-            logger.warning(
-                "Failed to assemble skill %s; skipping", skill.id, exc_info=True
+    while queue:
+        _, name = heapq.heappop(queue)
+        remaining = pending[name]
+        while remaining:
+            candidate = remaining[0]
+            candidate_files = _render_candidate(
+                candidate.skill, user, db_session, file_store, validity_updates
             )
+            if candidate_files is not None:
+                break
+            remaining.pop(0)
+        else:
             continue
-        files.update(candidate_files)
-        seen_names.add(skill.name)
+        if queue and queue[0][0] < candidate.keep_rank:
+            del candidate_files
+            heapq.heappush(queue, (candidate.keep_rank, name))
+            continue
+
+        skill_bytes = _charged_bytes(candidate_files)
+        skill_files = _file_count(candidate_files)
+        failed_limit: SkillRuntimeLimit | None = None
+        if charged_bytes + skill_bytes > SKILL_RUNTIME_MAX_BYTES:
+            failed_limit = SkillRuntimeLimit.BYTES
+        elif file_count + skill_files > SKILL_RUNTIME_MAX_FILES:
+            failed_limit = SkillRuntimeLimit.FILES
+        skill_directories: set[str] = set()
+        if failed_limit is None:
+            for path in candidate_files:
+                try:
+                    validate_push_path(path, SKILL_RUNTIME_MAX_PATH_BYTES)
+                except ValueError:
+                    failed_limit = SkillRuntimeLimit.PATHS
+                    break
+                for directory in push_parent_directories(path):
+                    if directory in directories or directory in skill_directories:
+                        break
+                    skill_directories.add(directory)
+                    if len(directories) + len(skill_directories) > PUSH_MAX_DIRECTORIES:
+                        failed_limit = SkillRuntimeLimit.DIRECTORIES
+                        break
+                if failed_limit is not None:
+                    break
+        if failed_limit is None:
+            files.update(candidate_files)
+            charged_bytes += skill_bytes
+            file_count += skill_files
+            directories.update(skill_directories)
+        else:
+            omissions.append(
+                SkillRuntimeOmission(
+                    skill_id=candidate.skill.id,
+                    name=name,
+                    charged_bytes=skill_bytes,
+                    file_count=skill_files,
+                    failed_limit=failed_limit,
+                )
+            )
+        del candidate_files
 
     try:
-        persist_skill_validity(validity_updates)
+        persist_skill_validity(list(validity_updates.values()))
     except Exception:
         logger.exception("Failed to persist skill validity classifications")
-    return files
+    return RuntimeSkillSelection(files=files, omissions=tuple(omissions))
 
 
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
-    """Return a flat ``{path: bytes}`` map of every skill the user can see."""
-    skills = list_runtime_skills_for_user(
-        user=user, db_session=db_session, include_fallbacks=True
+    """Return the ``{path: bytes}`` map that fits the user's runtime limit."""
+    candidates = list_runtime_skill_candidates_for_user(
+        user=user, db_session=db_session
     )
-    return _assemble_fileset(skills, user, db_session)
+    return _assemble_fileset(candidates, user, db_session).files
 
 
 def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayload:
-    """Return the connectable-apps section and skill fileset.
+    """Return the skill files within the runtime limit, omissions and app guidance.
 
     The connectable-apps section lists org apps the user has not connected yet,
     so the agent can offer to set one up through the connect tool.
     """
-    skills = list_runtime_skills_for_user(
-        user=user, db_session=db_session, include_fallbacks=True
+    candidates = list_runtime_skill_candidates_for_user(
+        user=user, db_session=db_session
     )
-    files = _assemble_fileset(skills, user, db_session)
+    selection = _assemble_fileset(candidates, user, db_session)
     connectable_apps_section = build_connectable_apps_list(
         get_connectable_apps_for_user(db_session, user)
     )
     return UserSkillsPayload(
-        files=files, omissions=(), connectable_apps_section=connectable_apps_section
+        files=selection.files,
+        omissions=selection.omissions,
+        connectable_apps_section=connectable_apps_section,
     )
 
 

@@ -237,6 +237,18 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
   Review every script and file before uploading a bundle you did not create.
 </Warning>
 
+## Session limits
+
+Craft loads whole Skills within 900 MiB, 10,000 files, and 10,000 folders per session.
+Each file counts as at least 4 KiB. A file path can use at most 4,021 UTF-8 bytes.
+Each file or folder name can use at most 255 UTF-8 bytes.
+
+Craft keeps built-in Skills first, then Required Skills, then Skills you enabled, then Skills installed by default.
+Within each group, more recent choices or grants come first. Skills with unknown dates come last.
+If a Skill does not fit, Craft leaves it out and tries the remaining Skills.
+Stored content and your saved choices stay unchanged. Turn off Skills you do not need, or reduce their size,
+then reload or start a session.
+
 ## Troubleshooting
 
 <AccordionGroup>
