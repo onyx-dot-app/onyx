@@ -27,6 +27,7 @@ from onyx.db.skill import (
     skill_user_states,
     transfer_skill_ownership,
 )
+from onyx.db.skill_version import prepare_skill_version_write
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import BundleMetadata
@@ -595,19 +596,21 @@ def test_installation_policies_preserve_choices_through_updates(
     set_skill_enabled_for_user(
         skill_id=skill.id, enabled=False, user=user, db_session=db_session
     )
+    db_session.commit()
+    ingested = IngestedBundle(
+        skill.name,
+        "updated-bundle",
+        "new-hash",
+        "Updated",
+        BundleMetadata(content_digest="a" * 64, unpacked_size_bytes=1, file_count=1),
+    )
+    prepared = prepare_skill_version_write(skill, ingested, db_session)
     replace_skill_bundle(
         skill=skill,
-        ingested=IngestedBundle(
-            skill.name,
-            "updated-bundle",
-            "new-hash",
-            "Updated",
-            BundleMetadata(
-                content_digest="a" * 64, unpacked_size_bytes=1, file_count=1
-            ),
-        ),
+        ingested=ingested,
         creator_id=user.id,
         db_session=db_session,
+        prepared=prepared,
     )
     assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled
     assert skill_user_states(newcomer, [skill.id], db_session)[skill.id].enabled
@@ -857,15 +860,15 @@ def test_creation_serializes_with_toggle_preference_writes(db_session: Session) 
     db_session.commit()
     new = make_skill(db_session, name=existing.name, author_user_id=user.id)
     assert enable_new_skill_if_name_available__no_commit(new, user.id, db_session)
-    # A toggle cannot pass its user lock while creation's preference is uncommitted.
+    # A toggle cannot pass the shared lock while creation's preference is uncommitted.
     with Session(bind=db_session.get_bind()) as toggle_session:
-        toggle_session.execute(text("SET LOCAL lock_timeout = '100ms'"))
-        with pytest.raises(OperationalError, match="lock timeout") as locked:
+        toggle_session.execute(text("SET LOCAL statement_timeout = '1s'"))
+        with pytest.raises(OperationalError, match="statement timeout") as locked:
             set_skill_enabled_for_user(
                 skill_id=existing.id, enabled=True, user=user, db_session=toggle_session
             )
         assert locked.value.statement is not None
-        assert "FOR NO KEY UPDATE" in locked.value.statement
+        assert "pg_advisory_xact_lock" in locked.value.statement
     db_session.commit()
     with Session(bind=db_session.get_bind()) as toggle_session:
         with pytest.raises(OnyxError) as error:
