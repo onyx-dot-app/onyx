@@ -64,6 +64,37 @@ cleanup. A newer attempt for that sandbox gets `VMM_FAILED` until a Stop succeed
 the agent cannot confirm that the Firecracker process is gone, the agent keeps the chroot and does not
 give the jailer UID to another VM.
 
+### Journal and agent restart
+
+VMs keep running when the agent stops. A new agent process re-adopts them from the journal,
+`<data-dir>/journal/<sandbox_id>.json`: one JSON record per sandbox with the attempt, generation,
+state, PID and PID start time, jailer UID, chroot, socket paths and template. Each write goes to a
+temporary file, which is synced and renamed over the record; then the directory is synced.
+
+| Record | Written | At start-up |
+|---|---|---|
+| `starting` | before the launch | Create never returned: remove the VM (if any) and the record. If the record keeps the stopped attempt that the start replaced, it becomes that tombstone again |
+| `running` | after the launch, before Create returns | Adopt if the PID is still our Firecracker (same start time, comm, VM scope, `--id`) and `GET /` reports `Running`. Gone: `EXITED`. Same process but no API answer: adopt and log an error |
+| `stopped` | after Stop | Tombstone (24 h): a repeat Stop succeeds, an old attempt gets `STALE_ATTEMPT` |
+
+- A Firecracker process or chroot in the agent's layout with no record is an orphan. The agent kills it.
+- If a record cannot be read, the agent logs it and leaves that VM alone. If the process scan fails, the
+  agent removes nothing. It never kills on doubt.
+- A sandbox is in doubt when the agent keeps its Firecracker running without a verified record: the
+  record cannot be read, `Adopt` cannot verify the process, a live process belongs to a stopped or gone
+  VM, or a failed start may have left the process running. The agent keeps the jailer UID of that
+  process reserved (from `/proc/<pid>/status`). `Create` and `Stop` for the sandbox return
+  `SANDBOX_IN_DOUBT`, and the agent does not change or remove its record.
+- A doubt clears by itself: before `Create` or `Stop` returns `SANDBOX_IN_DOUBT`, the agent scans the
+  processes again. If no Firecracker of the sandbox runs, the agent removes its leftover chroot, frees
+  its UIDs and continues. An operator can also fix or remove the record and restart the agent, which
+  then applies the rules above again (a VM with no record is an orphan and is killed).
+- If the process scan fails at start-up, the UIDs of the kept VMs are not known. `Create` then returns
+  `CAPACITY_VM_SLOTS` until a scan works.
+- A failed tombstone write fails the Stop. The VM shows as `EXITED`, and a repeat Stop writes it again.
+- The API serves only after recovery. While the agent restarts, new calls fail for a few seconds (5.5 s
+  in the KVM test, 7 s in T6). VMs and their programs keep running.
+
 ### Node requirements
 
 - Linux, root, `/dev/kvm`, cgroup v2, systemd on the host.
@@ -127,4 +158,7 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 # On the host, as root. Defaults: KVM_DATA_DIR=/var/lib/craft-fc, KVM_IMG_DIR=/opt/craft-fc-test/img
 # (vmlinux, rootfs.ext4, scratch-empty.ext4), KVM_ARTIFACTS_DIR=/opt/craft-fc, KVM_VMS=20.
 ./hostagent-kvm.test -test.v -test.run TestCoreKVM
+# Agent restart: runs the agent binary (KVM_AGENT_BIN, default /opt/agent/host-agent) in a privileged
+# --pid=host --cgroupns=host container (KVM_AGENT_IMAGE, default debian:trixie-slim) and restarts it.
+./hostagent-kvm.test -test.v -test.run TestRestartKVM
 ```

@@ -28,7 +28,7 @@ type fakeProc struct {
 	failKills atomic.Int32
 }
 
-func (p *fakeProc) PID() int              { return p.pid }
+func (p *fakeProc) Info() ProcInfo        { return ProcInfo{PID: p.pid, PIDStart: uint64(p.pid) * 10} }
 func (p *fakeProc) Done() <-chan struct{} { return p.done }
 func (p *fakeProc) exit()                 { p.once.Do(func() { close(p.done) }) }
 func (p *fakeProc) Kill(context.Context) error {

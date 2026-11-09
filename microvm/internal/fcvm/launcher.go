@@ -13,6 +13,9 @@ import (
 type Launcher struct {
 	Cmd jailer.Command
 	Log *slog.Logger
+	// ProcFS is the proc file system that Adopt and Scan read. Empty means
+	// /proc. Tests use a fake process table.
+	ProcFS string
 }
 
 // FileSource is a file to put in a VM chroot.
