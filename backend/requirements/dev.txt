@@ -1382,15 +1382,15 @@ platformdirs==4.5.0 \
     # via
     #   jupyter-core
     #   virtualenv
-playwright==1.58.0 \
-    --hash=sha256:185e0132578733d02802dfddfbbc35f42be23a45ff49ccae5081f25952238117 \
-    --hash=sha256:1e03be090e75a0fabbdaeab65ce17c308c425d879fa48bb1d7986f96bfad0b99 \
-    --hash=sha256:32ffe5c303901a13a0ecab91d1c3f74baf73b84f4bedbb6b935f5bc11cc98e1b \
-    --hash=sha256:70c763694739d28df71ed578b9c8202bb83e8fe8fb9268c04dd13afe36301f71 \
-    --hash=sha256:8f9999948f1ab541d98812de25e3a8c410776aa516d948807140aff797b4bffa \
-    --hash=sha256:96e3204aac292ee639edbfdef6298b4be2ea0a55a16b7068df91adac077cc606 \
-    --hash=sha256:a2bf639d0ce33b3ba38de777e08697b0d8f3dc07ab6802e4ac53fb65e3907af8 \
-    --hash=sha256:c95568ba1eda83812598c1dc9be60b4406dffd60b149bc1536180ad108723d6b
+playwright==1.64.1 \
+    --hash=sha256:29453ff76e25c17d0b45658cacd6b92e9eec46e8db21e134fb3b7143df50f013 \
+    --hash=sha256:577b8d88778c245cfbd145ae17cf53044f084b1b46c55c69081d4069d56057e2 \
+    --hash=sha256:59f7b041284ce8d1b72098ae50ca48a2d83692eec25154ab5ba79d4b6b4fe8a9 \
+    --hash=sha256:5e240a79464434c9260957b9ef59a5808e02e96e3fcabdc717fd7485260b9730 \
+    --hash=sha256:6a6f99adad1ae40e6ee62efe89785db861ce7ddd57651521cb31894183cc4ae3 \
+    --hash=sha256:983ccd085453ea5a7588193657fc349a6ffbf7bf7ba663fd58dc81e4aa3af9d9 \
+    --hash=sha256:a29fda44725e11b0b625c4bff6458a1f6dbee97b88c9788d12e18a8344458c2d \
+    --hash=sha256:d3c48b31da426c2f3562d0919cb9ea4e5415f6dbd29d7211fa4d66cca24fbd2f
     # via pytest-playwright
 pluggy==1.6.0 \
     --hash=sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3 \
