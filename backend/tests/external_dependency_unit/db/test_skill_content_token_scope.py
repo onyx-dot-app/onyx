@@ -251,9 +251,14 @@ def test_storage_recheck_does_not_fall_back_to_management(
         file_store: FileStore,
         *,
         expected_name: str | None = None,
+        reject_plugins: bool = True,
     ) -> IngestedBundle:
         ingested = ingest(
-            bundle_bytes, filename, file_store, expected_name=expected_name
+            bundle_bytes,
+            filename,
+            file_store,
+            expected_name=expected_name,
+            reject_plugins=reject_plugins,
         )
         session.delete(grant)
         session.commit()

@@ -193,6 +193,14 @@ The upload is rejected when the bundle has unsafe paths, symbolic links, files e
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
 or a slug reserved by a built-in Skill or App.
 
+Plugin ZIP upload is not supported yet. Skill uploads reject `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`,
+or `plugin.json` at the package root, including inside one enclosing folder.
+These paths identify a plugin even when the manifest is malformed or the package also contains `SKILL.md`.
+Manifest files inside a Skill's reference or example folders remain supporting files. You can read, edit,
+and restore previously saved Skills that contain root plugin manifests.
+New uploads and replacement bundles cannot add plugin manifests. The Plugins page connects apps and services;
+it does not accept plugin ZIPs.
+
 ### Skill limit per user
 
 Each user can have up to 500 MiB and 5,000 files of Skills. The total counts the Skills that Craft loads for the user:

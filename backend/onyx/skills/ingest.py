@@ -61,6 +61,7 @@ def ingest_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
+    reject_plugins: bool = True,
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
 
@@ -73,8 +74,15 @@ def ingest_skill_bundle(
 
     Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
     automatically if the caller's transaction fails.
+    Only edits and restores of stored content may disable plugin rejection;
+    file edits must reject newly supplied plugin files before merging them.
     """
-    prepared = prepare_skill_bundle(bundle_bytes, filename, expected_name=expected_name)
+    prepared = prepare_skill_bundle(
+        bundle_bytes,
+        filename,
+        expected_name=expected_name,
+        reject_plugins=reject_plugins,
+    )
     bundle_file_id = save_skill_bundle_bytes(
         prepared.content,
         display_name=f"{prepared.canonical_name}.zip",
@@ -94,13 +102,14 @@ def prepare_skill_bundle(
     filename: str | None,
     *,
     expected_name: str | None = None,
+    reject_plugins: bool = False,
 ) -> PreparedSkillBundle:
-    """Validate and hash without storage I/O, so storage faults remain fatal."""
+    """Validate and hash; direct ingestion rejects plugins, marketplace skills do not."""
     is_standalone_skill_md = filename is not None and filename.lower() == "skill.md"
     if is_standalone_skill_md:
         bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
 
-    normalized = normalize_custom_bundle(bundle_bytes)
+    normalized = normalize_custom_bundle(bundle_bytes, reject_plugins=reject_plugins)
     with ZipIndex(normalized.content) as bundle_zip:
         raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
     document = parse_skill_document(

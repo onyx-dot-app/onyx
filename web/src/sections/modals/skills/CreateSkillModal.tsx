@@ -16,7 +16,7 @@ import {
   serializeSkillSharing,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
-import type { GitHubSkillsImportResult } from "@/lib/skills/types";
+import type { SkillImportResult } from "@/lib/skills/types";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
@@ -61,7 +61,7 @@ export function CreateSkillModalContent({
     Permission.MANAGE_SKILLS
   );
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
-  const [result, setResult] = useState<GitHubSkillsImportResult | null>(null);
+  const [result, setResult] = useState<SkillImportResult | null>(null);
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
   const [sharingOpen, setSharingOpen] = useState(false);
   const sharingDraft =

@@ -88,7 +88,7 @@
   Synced Skills show their source revision and have no local restore action.
   Marketplace detail exposes retired history to its personal owner or a token-capped global Skill manager.
   Former editors and viewers cannot read retired history. Restore remains refused, and retired rows stay out of libraries.
-- **Access at import.** GitHub import and multiple-ZIP upload accept one set
+- **Access at import.** Multiple-ZIP upload accepts one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
 - **In a running Craft session**, a skill change does not reach the agent at
@@ -135,6 +135,8 @@ When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
   `.template` file is rejected with a message. A bundle over a size or file
   count limit is rejected with a 413 that names the limit.
+- A plugin ZIP fails preview and upload with "This is a plugin. Plugin upload is
+  not supported yet." Existing Plugins pages connect services; they do not accept artifact ZIPs.
 - Turning on a skill whose name another enabled skill uses returns a name
   conflict. The client can retry with `replace_conflict` to switch skills.
 - A required skill rejects a toggle.
@@ -148,8 +150,8 @@ When it fails:
 
 This component owns the skill row and version snapshots, its shares,
 installation policy and user preferences; bundle parsing and validation;
-built-in skill definitions; per-user rendering of templates; GitHub import
-and marketplace storage and provider adapters;
+built-in skill definitions; per-user rendering of templates; marketplace
+storage and provider adapters;
 the push of a user's skill files into a sandbox; and the skills library UI.
 
 Neighbours own the rest:
@@ -495,6 +497,18 @@ from current usage.
    close, and keeps entry metadata on disk. A refused close with an open member
    keeps that metadata until the member closes and the caller retries. Editor/history responses
    and sandbox file maps still allocate per file; only directory parsing is bounded.
+   Fresh ingestion and upload preview opt into `reject_plugins` in the
+   same normalizer, after path and file-count checks but before requiring SKILL.md.
+   Package-root `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and
+   `plugin.json` identify a plugin regardless of JSON validity or a sibling SKILL.md.
+   One wrapper must contain all meaningful files; root SKILL.md prevents unwrapping
+   reference files. Ignored metadata and nested examples do not classify the package.
+   Root plugin.json is reserved, matching the marketplace reader's unsupported format.
+   Marketplace preview and sync prepare reader-approved skills without upload-only
+   plugin rejection, including skills at a Claude or Codex plugin root.
+   Stored readers, content edits and version restores preserve legacy files at these paths.
+   File additions reject plugin markers in the incoming upload before merging with saved files.
+   Full bundle replacements keep plugin rejection, even when the saved bundle contains a marker.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
@@ -599,7 +613,7 @@ from current usage.
     associations, omit retired rows; internal history and recipient capture retain them.
     New access entry points must use the
     adapter function, not `db/skill.py:replace_skill_shares`.
-    `POST /skills/custom/batch` and GitHub import create each bundle through
+    `POST /skills/custom/batch` creates each bundle through
     `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
     so a bad bundle or a live name conflict in the destination library lands
     in `not_imported` and the other skills still import.
@@ -820,7 +834,8 @@ from current usage.
     Unique manifest bytes share a 25 MiB budget, and parsed configs are reused by path.
     Invalid YAML, including excessive nesting, blocks only the affected skill.
     See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
-    This pure reader does not change the one-time GitHub import.
+    Marketplace sync replaces the one-time GitHub import. Its old routes are removed;
+    previously imported skills remain ordinary editable custom skills.
 22. `marketplace-reconciliation` **Only complete reads can retire entries.**
     `db/marketplace.py:reconcile_marketplace__no_commit` takes S2 results and staged
     `IngestedBundle` values. It does no provider or FileStore I/O. Failed reads
@@ -1077,7 +1092,7 @@ from current usage.
   Company inheritance/reset and personal owner audience controls are wired in the
   skill sharing dialog. Source creation/list pages are wired. Retired deletion is wired; live browser acceptance remains pending.
 
-- **GitHub import checks a skill's shape, not its content.** Import enforces
+- **Marketplace sync checks a skill's shape, not its content.** Sync enforces
   archive size and member limits, path safety and frontmatter rules. Nothing
   inspects the instructions or bundled scripts. A harmful skill is contained
   only by the sandbox and its egress proxy ([[craft-sandboxes]],
@@ -1104,7 +1119,7 @@ from current usage.
 - [[craft-sessions]]: the stale check and the reload that apply a push to a
   live runtime.
 - [[craft-external-apps]]: app readiness and action policy views. GitHub
-  import and preview authenticate with the user's GitHub app credential
+  marketplace sync and preview authenticate with the user's GitHub app credential
   (`skills/github_auth.py:github_authorization_header`).
 - [[authorization]]: `MANAGE_SKILLS` and the scoped-manager group check
   (`assert_within_scope`).

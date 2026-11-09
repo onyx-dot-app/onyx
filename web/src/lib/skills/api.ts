@@ -12,8 +12,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 import type {
   CustomSkill,
-  GitHubSkillsImportResult,
-  GitHubSkillsPreview,
+  SkillImportResult,
   Skill,
   SkillBundleContents,
   SkillEditableDetail,
@@ -50,44 +49,14 @@ async function handle<T>(res: Response): Promise<T> {
 // Mutations
 // ---------------------------------------------------------------------------
 
-export async function previewGitHubSkills(
-  repository: string
-): Promise<GitHubSkillsPreview> {
-  const res = await fetch("/api/skills/github/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repository }),
-  });
-  return handle<GitHubSkillsPreview>(res);
-}
-
-export async function importGitHubSkills(
-  preview: Pick<GitHubSkillsPreview, "repository" | "revision" | "subpath">,
-  paths: string[],
-  sharing?: SkillShareUpdatePayload
-): Promise<GitHubSkillsImportResult> {
-  const res = await fetch("/api/skills/github/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      repository: preview.repository,
-      revision: preview.revision,
-      subpath: preview.subpath,
-      paths,
-      sharing,
-    }),
-  });
-  return handle<GitHubSkillsImportResult>(res);
-}
-
 export async function uploadSkillBundles(
   bundles: File[],
   sharing?: SkillShareUpdatePayload
-): Promise<GitHubSkillsImportResult> {
+): Promise<SkillImportResult> {
   const form = new FormData();
   for (const bundle of bundles) form.append("bundles", bundle);
   if (sharing) form.append("sharing", JSON.stringify(sharing));
-  return handle<GitHubSkillsImportResult>(
+  return handle<SkillImportResult>(
     await fetch("/api/skills/custom/batch", { method: "POST", body: form })
   );
 }

@@ -66,13 +66,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.skill.models import (
-    GitHubImportedSkill,
-    GitHubSkillNotImported,
-    GitHubSkillPreview,
-    GitHubSkillsImportRequest,
-    GitHubSkillsImportResponse,
-    GitHubSkillsPreviewRequest,
-    GitHubSkillsPreviewResponse,
+    ImportedSkill,
     SkillBulkActionRequest,
     SkillBulkFailure,
     SkillBulkResponse,
@@ -81,7 +75,9 @@ from onyx.server.features.skill.models import (
     SkillCreateRequest,
     SkillEditableDetailResponse,
     SkillEnableRequest,
+    SkillImportResponse,
     SkillLimitUserUsage,
+    SkillNotImported,
     SkillPatchRequest,
     SkillPreviewResponse,
     SkillResponse,
@@ -109,18 +105,15 @@ from onyx.skills.bundle import (
     update_custom_bundle_files,
 )
 from onyx.skills.content import read_custom_skill_bundle_bytes
-from onyx.skills.github_auth import github_authorization_header
 from onyx.skills.ingest import (
     IngestedBundle,
     delete_bundle_blob,
     ingest_skill_bundle,
 )
-from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 from onyx.skills.limits import SkillUsageSummary
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
 from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
-from shared_configs.contextvars import get_current_tenant_id
 
 user_router = APIRouter(prefix="/skills")
 
@@ -142,14 +135,14 @@ class _BundleSource(NamedTuple):
 
 def _import_skill_bundles(
     sources: list[_BundleSource],
-    not_imported: list[GitHubSkillNotImported],
+    not_imported: list[SkillNotImported],
     change: SkillSharingChange | None,
     auto_enable: bool,
     user: User,
     db_session: Session,
     *,
     allow_management: bool,
-) -> GitHubSkillsImportResponse:
+) -> SkillImportResponse:
     """Stage bundles before access locks; create skills with per-item savepoints.
 
     Commit once, then clean rejected uploads and push. An uncertain commit leaves
@@ -167,7 +160,7 @@ def _import_skill_bundles(
                 ingested = source.ingest(file_store)
             except OnyxError as exc:
                 not_imported.append(
-                    GitHubSkillNotImported(
+                    SkillNotImported(
                         path=source.path, name=source.name, reason=exc.detail
                     )
                 )
@@ -194,7 +187,7 @@ def _import_skill_bundles(
             except OnyxError as exc:
                 rejected.append(ingested.bundle_file_id)
                 not_imported.append(
-                    GitHubSkillNotImported(
+                    SkillNotImported(
                         path=source.path, name=source.name, reason=exc.detail
                     )
                 )
@@ -226,17 +219,17 @@ def _import_skill_bundles(
 
 def _import_response(
     created: list[tuple[Skill, bool]],
-    not_imported: list[GitHubSkillNotImported],
+    not_imported: list[SkillNotImported],
     auto_enable: bool,
     user: User,
     db_session: Session,
     *,
     allow_management: bool,
-) -> GitHubSkillsImportResponse:
+) -> SkillImportResponse:
     states = skill_user_states(user, [skill.id for skill, _ in created], db_session)
-    return GitHubSkillsImportResponse(
+    return SkillImportResponse(
         imported=[
-            GitHubImportedSkill(
+            ImportedSkill(
                 skill=skill_response_for_user(
                     skill,
                     user,
@@ -293,10 +286,15 @@ def _commit_skill_bundle(
     db_session: Session,
     *,
     expected_name: str | None = None,
+    reject_plugins: bool = True,
 ) -> Iterator[IngestedBundle]:
     """Commit references before cleanup; uncertain commits leave blobs for the sweep."""
     ingested = ingest_skill_bundle(
-        bundle_bytes, filename, file_store, expected_name=expected_name
+        bundle_bytes,
+        filename,
+        file_store,
+        expected_name=expected_name,
+        reject_plugins=reject_plugins,
     )
     commit_attempted = False
     try:
@@ -356,6 +354,7 @@ def _replace_skill_bundle_from_editor(
         file_store,
         db_session,
         expected_name=skill.name,
+        reject_plugins=False,
     ) as ingested:
         prepared = prepare_skill_version_write(skill, ingested, db_session)
         skill, user = _lock_skill_after_storage(
@@ -623,7 +622,7 @@ def create_custom_skills_batch(
     db_session: Session = Depends(get_session),
     *,
     http_request: Request,
-) -> GitHubSkillsImportResponse:
+) -> SkillImportResponse:
     allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
     if not 1 <= len(bundles) <= GITHUB_SKILL_MAX_COUNT:
         raise OnyxError(
@@ -648,97 +647,6 @@ def create_custom_skills_batch(
         [],
         share_request.to_change() if share_request is not None else None,
         auto_enable,
-        user,
-        db_session,
-        allow_management=allow_management,
-    )
-
-
-@user_router.post("/github/preview")
-def preview_github_skills(
-    request: GitHubSkillsPreviewRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> GitHubSkillsPreviewResponse:
-    repository, skills = fetch_github_skill_bundles(
-        request.repository,
-        github_authorization_header(get_current_tenant_id(), user.id),
-    )
-    return GitHubSkillsPreviewResponse(
-        repository=f"{repository.owner}/{repository.repo}",
-        revision=repository.revision,
-        subpath=repository.subpath,
-        skills=[
-            GitHubSkillPreview(
-                path=skill.path,
-                name=skill.name,
-                description=skill.description,
-                unavailable_reason=skill.unavailable_reason,
-            )
-            for skill in skills
-        ],
-    )
-
-
-@user_router.post("/github/import")
-def import_github_skills(
-    request: GitHubSkillsImportRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-    *,
-    http_request: Request,
-) -> GitHubSkillsImportResponse:
-    allow_management = token_allows_permission(http_request, Permission.MANAGE_SKILLS)
-    _, discovered_skills = fetch_github_skill_bundles(
-        request.repository,
-        github_authorization_header(get_current_tenant_id(), user.id),
-        revision=request.revision,
-        subpath=request.subpath,
-        selected_paths=set(request.paths),
-    )
-    skills_by_path = {skill.path: skill for skill in discovered_skills}
-    not_imported: list[GitHubSkillNotImported] = []
-    sources: list[_BundleSource] = []
-    for path in dict.fromkeys(request.paths):
-        selected_skill = skills_by_path.get(path)
-        if selected_skill is None:
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=path,
-                    name=path.rsplit("/", maxsplit=1)[-1],
-                    reason="This skill was not found in the previewed revision.",
-                )
-            )
-            continue
-        if (
-            selected_skill.bundle_bytes is None
-            or selected_skill.unavailable_reason is not None
-        ):
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=path,
-                    name=selected_skill.name,
-                    reason=selected_skill.unavailable_reason
-                    or "This skill cannot be imported.",
-                )
-            )
-            continue
-        sources.append(
-            _BundleSource(
-                path=path,
-                name=selected_skill.name,
-                ingest=lambda file_store, skill=selected_skill: ingest_skill_bundle(
-                    skill.bundle_bytes or b"",
-                    f"{skill.name}.zip",
-                    file_store,
-                    expected_name=skill.name,
-                ),
-            )
-        )
-    return _import_skill_bundles(
-        sources,
-        not_imported,
-        request.sharing.to_change() if request.sharing is not None else None,
-        True,
         user,
         db_session,
         allow_management=allow_management,
@@ -931,7 +839,7 @@ def _inspect_skill_bundle(
     normalized = (
         normalize_custom_bundle(bundle_bytes, zip_max_bytes=None, max_file_count=None)
         if stored
-        else normalize_custom_bundle(bundle_bytes)
+        else normalize_custom_bundle(bundle_bytes, reject_plugins=True)
     )
     with ZipIndex(normalized.content) as bundle_zip:
         document = parse_skill_document(
@@ -1267,6 +1175,7 @@ def patch_current_user_skill(
                 f"{skill.name}.zip",
                 file_store,
                 expected_name=skill.name,
+                reject_plugins=False,
             )
             new_bundle_file_id = ingested.bundle_file_id
             prepared = prepare_skill_version_write(skill, ingested, db_session)

@@ -173,9 +173,14 @@ def test_creation_rechecks_authority_after_storage(
         file_store: FileStore,
         *,
         expected_name: str | None = None,
+        reject_plugins: bool = True,
     ) -> IngestedBundle:
         result = original_ingest(
-            content, filename, file_store, expected_name=expected_name
+            content,
+            filename,
+            file_store,
+            expected_name=expected_name,
+            reject_plugins=reject_plugins,
         )
         staged.append(result.bundle_file_id)
         revoke(actor_id, revocation)
