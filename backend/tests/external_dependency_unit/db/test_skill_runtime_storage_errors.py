@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from azure.core.exceptions import ResourceNotFoundError
 from botocore.exceptions import ClientError
+from fastapi import Request
 from google.api_core.exceptions import NotFound
 from sqlalchemy.orm import Session
 
@@ -41,6 +42,7 @@ def test_runtime_cloud_404_requires_confirmed_absence(
         True,
         user,
         session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -95,6 +97,7 @@ def test_runtime_definitive_storage_errors(
         True,
         user,
         session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None

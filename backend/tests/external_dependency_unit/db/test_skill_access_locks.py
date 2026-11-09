@@ -62,12 +62,20 @@ def test_content_storage_does_not_hold_membership(
     user = make_user(db_session, is_admin=True)
     db_session.commit()
     response = api.create_custom_skill(
-        upload(bundle(f"locks-{uuid4().hex}")), False, user, db_session
+        upload(bundle(f"locks-{uuid4().hex}")),
+        False,
+        user,
+        db_session,
+        http_request=Request({"type": "http"}),
     )
     skill = db_session.get(Skill, response.id)
     assert skill is not None and skill.current_version_id is not None
     api.upload_current_user_skill_files(
-        skill.id, upload(b"support", "notes.txt"), user, db_session
+        skill.id,
+        upload(b"support", "notes.txt"),
+        user,
+        db_session,
+        http_request=Request({"type": "http"}),
     )
     store = get_default_file_store()
     original_read, original_ingest = store.read_file, api.ingest_skill_bundle
@@ -208,7 +216,11 @@ def test_staged_patch_rechecks_content_and_access(
     )
     db_session.commit()
     response = api.create_custom_skill(
-        upload(bundle(f"race-{uuid4().hex}")), False, owner, db_session
+        upload(bundle(f"race-{uuid4().hex}")),
+        False,
+        owner,
+        db_session,
+        http_request=Request({"type": "http"}),
     )
     skill = db_session.get(Skill, response.id)
     assert skill is not None
@@ -361,7 +373,13 @@ def test_commit_ack_failure_keeps_referenced_upload(
     name = f"ack-{uuid4().hex}"
     initial = None
     if operation in {"patch", "bundle", "upload"}:
-        initial = api.create_custom_skill(upload(bundle(name)), False, user, db_session)
+        initial = api.create_custom_skill(
+            upload(bundle(name)),
+            False,
+            user,
+            db_session,
+            http_request=Request({"type": "http"}),
+        )
     commit = db_session.commit
 
     def lose_ack() -> None:
@@ -387,7 +405,13 @@ def test_commit_ack_failure_keeps_referenced_upload(
                     http_request=Request({"type": "http"}),
                 )
             elif operation == "create":
-                api.create_custom_skill(upload(bundle(name)), False, user, db_session)
+                api.create_custom_skill(
+                    upload(bundle(name)),
+                    False,
+                    user,
+                    db_session,
+                    http_request=Request({"type": "http"}),
+                )
             elif operation == "editor":
                 api.create_custom_skill_from_editor(
                     name,
@@ -399,16 +423,25 @@ def test_commit_ack_failure_keeps_referenced_upload(
                     sharing=None,
                     user=user,
                     db_session=db_session,
+                    http_request=Request({"type": "http"}),
                 )
             elif operation == "bundle":
                 assert initial is not None
                 api.replace_current_user_skill_bundle(
-                    initial.id, upload(bundle(name, "Committed")), user, db_session
+                    initial.id,
+                    upload(bundle(name, "Committed")),
+                    user,
+                    db_session,
+                    http_request=Request({"type": "http"}),
                 )
             elif operation == "upload":
                 assert initial is not None
                 api.upload_current_user_skill_files(
-                    initial.id, upload(b"committed", "extra.txt"), user, db_session
+                    initial.id,
+                    upload(b"committed", "extra.txt"),
+                    user,
+                    db_session,
+                    http_request=Request({"type": "http"}),
                 )
             else:
                 api.create_custom_skills_batch(
@@ -417,6 +450,7 @@ def test_commit_ack_failure_keeps_referenced_upload(
                     sharing=None,
                     user=user,
                     db_session=db_session,
+                    http_request=Request({"type": "http"}),
                 )
         cleanup.assert_not_called()
     skill = db_session.scalar(select(Skill).where(Skill.name == name))
@@ -437,7 +471,13 @@ def test_create_conflict_releases_locks_before_blob_cleanup(
     user = make_user(db_session, is_admin=True)
     db_session.commit()
     name = f"conflict-{uuid4().hex}"
-    existing = api.create_custom_skill(upload(bundle(name)), True, user, db_session)
+    existing = api.create_custom_skill(
+        upload(bundle(name)),
+        True,
+        user,
+        db_session,
+        http_request=Request({"type": "http"}),
+    )
     before = stored_bundles(db_session)
     db_session.commit()
     store = get_default_file_store()

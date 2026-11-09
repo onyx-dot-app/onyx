@@ -146,7 +146,10 @@ def mutate_resource_access[Resource](
                     )
                     if not owner_grant:
                         if not allow_management:
-                            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+                            raise OnyxError(
+                                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                                f"API token lacks {adapter.permission.value} scope.",
+                            )
                         assert_within_scope(
                             user,
                             db_session,

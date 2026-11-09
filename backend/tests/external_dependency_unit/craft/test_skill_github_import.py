@@ -5,6 +5,7 @@ import zipfile
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -127,6 +128,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
         ),
         user=standard_user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     imported_by_name = {result.skill.name: result for result in response.imported}
@@ -214,6 +216,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
         ),
         user=standard_user,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     assert [result.skill.enabled for result in response.imported] == [True, False]
@@ -278,14 +281,24 @@ def test_import_applies_shared_access_before_publication(
     basic_user = make_test_user("import-basic")
     admin = make_test_user("import-admin", is_admin=True)
     try:
-        denied = import_github_skills(request, user=basic_user, db_session=db_session)
+        denied = import_github_skills(
+            request,
+            user=basic_user,
+            db_session=db_session,
+            http_request=Request({"type": "http"}),
+        )
         assert denied.imported == []
         assert [item.reason for item in denied.not_imported] == [
             "Company access changes require global manage-skills permission."
         ]
         assert published == []
 
-        result = import_github_skills(request, user=admin, db_session=db_session)
+        result = import_github_skills(
+            request,
+            user=admin,
+            db_session=db_session,
+            http_request=Request({"type": "http"}),
+        )
         assert result.not_imported == []
         assert len(result.imported) == 1
         assert published == [SkillSharePermission.VIEWER]
@@ -340,6 +353,7 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
         ),
         user=admin,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     try:
