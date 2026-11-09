@@ -77,11 +77,13 @@ from onyx.db.scoped_permissions import (
 )
 from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
 from onyx.db.skill_version import (
+    PreparedSkillVersionWrite,
     persist_skill_version_validity,
     save_skill_version,
     skill_bundle_file_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.db.users import lock_group_membership
 from onyx.db.utils import is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -437,6 +439,7 @@ def add_new_skill__no_commit(
 
 
 def _lock_user_skill_preferences(user_id: UUID, db_session: Session) -> None:
+    lock_group_membership(db_session)
     # Serialize preference changes without blocking foreign-key reads from sharing.
     db_session.execute(
         select(User.__table__.c.id)
@@ -483,11 +486,14 @@ def replace_skill_bundle(
     ingested: IngestedBundle,
     creator_id: UUID,
     db_session: Session,
+    prepared: PreparedSkillVersionWrite | None = None,
 ) -> list[str]:
     """Keep history and legacy columns; return the files to delete after commit."""
     if not skill.is_custom:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Built-in skills have no bundle.")
-    return save_skill_version(skill, ingested, creator_id, db_session)
+    return save_skill_version(
+        skill, ingested, creator_id, db_session, prepared=prepared
+    )
 
 
 def create_skill_from_ingested_bundle(
