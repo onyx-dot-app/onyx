@@ -127,7 +127,7 @@ class _MemberReader(io.BufferedIOBase):
             if size > MEMBER_CALL_MAX_BYTES:
                 raise ArchiveLimitError("Archive member lines exceed the call limit")
             lines.append(line)
-            if hint is not None and 0 < hint < size:
+            if hint is not None and 0 < hint <= size:
                 break
         return lines
 
@@ -310,7 +310,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
         _require_tar_end_marker(archive)
         # Directories named like files must not silently select a fallback manifest.
         for path in directories:
-            if path.endswith((".json", "/SKILL.md")):
+            if path == "SKILL.md" or path.endswith((".json", "/SKILL.md")):
                 files[path] = None
         if buffered is not None:
             buffered.metadata_reads = False

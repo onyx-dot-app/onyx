@@ -445,8 +445,28 @@ def test_readlines_preserves_binary_lines_and_bounds_hints(
         with large() as stream:
             assert stream.readlines(1) == [b"1234567\n"]
             assert stream.read() == b"1234567\n"
+        with large() as stream:
+            assert stream.readlines(8) == io.BytesIO(b"1234567\n" * 2).readlines(8)
+            assert stream.read() == b"1234567\n"
         with large() as stream, pytest.raises(archives.ArchiveLimitError):
-            stream.readlines(8)
+            stream.readlines(9)
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar"])
+@pytest.mark.parametrize("path", ["SKILL.md", "nested/SKILL.md", "manifest.json"])
+def test_definition_directories_are_unreadable(kind: str, path: str) -> None:
+    output = io.BytesIO()
+    if kind == "zip":
+        with zipfile.ZipFile(output, "w") as archive:
+            archive.mkdir(path + "/")
+    else:
+        with tarfile.open(fileobj=output, mode="w:gz") as archive:
+            info = tarfile.TarInfo(path + "/")
+            info.type = tarfile.DIRTYPE
+            archive.addfile(info)
+    with archives.archive_files(output.getvalue()) as files:
+        with pytest.raises(ValueError, match="Unreadable archive member"):
+            archives.require_regular_path(files, path)
 
 
 @pytest.mark.parametrize(

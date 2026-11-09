@@ -320,7 +320,8 @@ The library preview of an external-app skill calls the same renderer
     the larger configured total or ZIP allowance. Expansion counts actual
     per-file and total bytes. No upload ZIP or file-count cap applies to history.
     Current-content reads verify expansion before inspection or editing.
-    Stored-byte and expansion limits return 400 through the ValueError handler.
+    Stored-byte failures and current-content expansion failures return 400 through
+    the ValueError handler. Historical expansion failures retain 413.
     Metadata hashes original entries without normalization. Built-ins have
     no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
