@@ -29,6 +29,10 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes the VM's egress relay connections (see Egress relay). |
 | `Dial(sandbox_id, guest_port, generation)` | Byte stream to a guest vsock port (see below). |
 | `craft.sandboxd.v1.Sandboxd/*` | Any guest daemon call, forwarded to the VM named by `x-sandbox-id` (see Guest daemon pass-through). |
+| `CaptureSession(sandbox_id, attempt, generation, sandboxd_key, session_id, ...)` | Calls the daemon's `CaptureSession` and spools the archive on the node. Returns `capture_id`, `size_bytes` and `sha256` (see Session saves). |
+| `UploadCapture(capture_id, request)` | Sends a spooled capture with a presigned PUT. Deletes the spool on success. |
+| `DiscardCapture(capture_id)` | Deletes a spooled capture. |
+| `RestoreSession(sandbox_id, attempt, generation, sandboxd_key, session_id, request, size_bytes, sha256, ...)` | Streams a presigned GET into the daemon's `RestoreSession`. |
 
 Errors are typed. Each error is a gRPC status with one `google.rpc.ErrorInfo` detail: the domain is
 `hostagent.craft.onyx.app` and the reason is an `ErrorReason` name, for example `CAPACITY_MEMORY`,
@@ -111,6 +115,33 @@ messages, so a new daemon call needs no agent change (`internal/server/passthrou
 - A message can be at most 16 MiB in each direction.
 - After an agent restart, the first call opens a new connection. Commands in the VM keep running; a
   client re-attaches with `Stream(execution_id, offsets)`.
+
+### Session saves
+
+The agent moves session archives (ENG-4572) between the guest daemon and object storage. The api_server
+signs each request for one object and one method (FileStore `presign_upload` / `presign_download`). The
+agent sends it with exactly the signed headers. It has no storage credentials, and the guest never sees
+a URL (`internal/server/saves.go`, `internal/transfer`).
+
+- Each call names the VM instance (`sandbox_id`, `attempt`, `generation`; `INSTANCE_MISMATCH` otherwise)
+  and sends the guest daemon key again: the agent does not keep it. Daemon errors pass through with the
+  daemon's domain (for example `LIMIT_EXCEEDED`, `FILE_NOT_FOUND`).
+- `CaptureSession` spools the daemon's tar + zstd stream to `<data-dir>/captures/<capture_id>`. It
+  reserves `--capture-max-bytes` (default 1 GiB) of disk first and keeps `--min-free-disk-gib` free
+  (`CAPACITY_DISK`). A larger archive fails with `CAPTURE_TOO_LARGE`. The response has the size and the
+  SHA-256 that `presign_upload` needs. A spool that is not uploaded is deleted after `--capture-ttl`
+  (default 15 min); the agent also deletes all spools at start.
+- `UploadCapture` fails with `ARCHIVE_MISMATCH` if the signed `Content-Length` is not the spool size, and
+  with `TRANSFER_FAILED` on a network error or a non-2xx status. The spool stays for a retry with a new
+  URL. On success the agent deletes it. `CAPTURE_NOT_FOUND`: capture again.
+- `RestoreSession` streams the GET body into the daemon in 1 MiB messages and hashes it. The daemon
+  extracts into a staging directory and replaces the session's capture roots only after the size and
+  SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
+  does not change.
+- URLs must be `https`, unless `--transfer-allow-http` (a test object store). `--transfer-timeout`
+  (default 10 min) bounds one request. Errors and logs show the URL without its query string.
+- Order for the api_server: `CaptureSession` → `presign_upload(size_bytes, sha256)` → `UploadCapture` →
+  `finalize_presigned_upload` → commit the new archive → only then delete old archives.
 
 ### Agent restart
 
@@ -601,6 +632,10 @@ KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.tes
 # --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m"; balloon on restores, reclaim on KVM_VMS
 # idle VMs, scope limits and a guest memory hog, fill the node to CAPACITY_MEMORY, manual drain.
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestMemAdmissionKVM
+# Files and session saves through the agent over mTLS (ENG-4572): file calls through the pass-through,
+# capture → presigned PUT → restore into a fresh VM, with a test S3 bucket (KVM_S3_BUCKET; AWS
+# credentials on the host sign the URLs, the agent never sees them). Results: results/daemon-files.md.
+KVM_IMG_DIR=/opt/craft-fc-test/img3 KVM_S3_BUCKET=<bucket> ./hostagent-kvm.test -test.v -test.run TestSavesKVM
 ```
 
 The KVM tests take the template version from the build (`KVM_TEMPLATE` is no longer used).

@@ -39,6 +39,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
 	"github.com/onyx-dot-app/onyx/microvm/internal/tplbuild"
+	"github.com/onyx-dot-app/onyx/microvm/internal/transfer"
 )
 
 // version is set with -ldflags "-X main.version=...".
@@ -94,6 +95,10 @@ type flags struct {
 	drainTaints   string
 	drainPoll     time.Duration
 	advertise     string
+	captureTTL    time.Duration
+	captureMax    int64
+	transferTO    time.Duration
+	transferHTTP  bool
 }
 
 func main() {
@@ -144,6 +149,10 @@ func main() {
 	flag.StringVar(&f.drainTaints, "drain-taints", strings.Join(nodewatch.DefaultTaintKeys, ","), "comma-separated taint keys that drain the node")
 	flag.DurationVar(&f.drainPoll, "drain-poll-interval", 10*time.Second, "how often --watch-node-drain reads the Node")
 	flag.StringVar(&f.advertise, "advertise-address", "", "host:port the api_server dials for --listen, sent with the node key registration (default $POD_IP:<--listen port>)")
+	flag.DurationVar(&f.captureTTL, "capture-ttl", server.DefaultCaptureTTL, "delete a spooled session capture that is not uploaded after this long")
+	flag.Int64Var(&f.captureMax, "capture-max-bytes", server.DefaultCaptureMaxBytes, "largest session archive (stored bytes) that CaptureSession spools")
+	flag.DurationVar(&f.transferTO, "transfer-timeout", 10*time.Minute, "limit for one presigned upload or download")
+	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs (test object stores only)")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -288,8 +297,17 @@ func run(f flags, log *slog.Logger) error {
 	if err := mstore.CleanStaging(managed.Unmount); err != nil {
 		return err
 	}
+	stats := hostinfo.Stats{DataDir: f.dataDir}
+	saves, err := server.NewSaves(&server.Saves{
+		M: m, PT: pt, Dir: filepath.Join(f.dataDir, "captures"), TTL: f.captureTTL, MaxBytes: f.captureMax,
+		MinFreeBytes: f.minFreeDiskGB * uint64(scratch.GiB), FreeBytes: stats.DiskFreeBytes,
+		Transfer: &transfer.Client{Timeout: f.transferTO, AllowHTTP: f.transferHTTP}, Log: log,
+	})
+	if err != nil {
+		return fmt.Errorf("capture spool: %w", err)
+	}
 	m.UseManagedGuest(server.DaemonManaged{Port: uint32(f.daemonPort)}, f.swapTimeout)
-	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt, Managed: &server.ManagedImages{Store: mstore, Keep: f.managedKeep}, Log: log}
+	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt, Managed: &server.ManagedImages{Store: mstore, Keep: f.managedKeep}, Saves: saves, Log: log}
 	if caSrc != nil {
 		svc.EgressCA = &egressca.Cached{Src: caSrc, TTL: egressCACacheTTL, MaxAge: egressCAMaxAge}
 	} else {

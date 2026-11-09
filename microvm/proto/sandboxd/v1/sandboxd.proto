@@ -511,7 +511,7 @@ message WriteFileRequest {
   oneof part {
     // The first message.
     WriteFileHeader header = 1;
-    // Later messages: the next bytes (at most 4 MiB each).
+    // Later messages: the next bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
     bytes data = 2;
   }
 }
@@ -672,7 +672,7 @@ message RestoreSessionRequest {
   oneof part {
     // The first message.
     RestoreSessionHeader header = 1;
-    // Later messages: the archive bytes (at most 4 MiB each).
+    // Later messages: the archive bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
     bytes data = 2;
   }
 }

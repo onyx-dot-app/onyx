@@ -2534,7 +2534,7 @@ type WriteFileRequest_Header struct {
 }
 
 type WriteFileRequest_Data struct {
-	// Later messages: the next bytes (at most 4 MiB each).
+	// Later messages: the next bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
 	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
 }
 
@@ -3781,7 +3781,7 @@ type RestoreSessionRequest_Header struct {
 }
 
 type RestoreSessionRequest_Data struct {
-	// Later messages: the archive bytes (at most 4 MiB each).
+	// Later messages: the archive bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
 	Data []byte `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
 }
 
