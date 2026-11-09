@@ -343,7 +343,8 @@ new names get separate proposal variants; only acceptance reserves the name.
 Saved duplicate names use the winner ranks from accepted variants in that same
 snapshot. A hidden update cannot charge or refund the original winner twice.
 A validity change committed before the statement must affect every decision.
-A change during it is outside that statement's snapshot.
+A change during it is outside that statement's snapshot. The concurrency tests
+check both boundaries; the old mixed per-entry timing is not a snapshot contract.
 Accepted pointers publish atomically. Refused staged versions are deleted; old
 pointers and history remain. Accepted history is pruned through the existing
 version helper. Refused bundle files remain unused and eligible for cleanup.
