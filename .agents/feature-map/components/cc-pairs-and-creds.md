@@ -266,7 +266,9 @@ status page reads the same builders across every pair the caller can read
     [[billing]]) change it. A new path must call
     `connectors/pairing_access.py:validate_pairing_access`
     first, unless it only widens to public, and must mark the pair's documents
-    for sync, or the index keeps the old chunk ACLs.
+    for sync, or the index keeps the old chunk ACLs. A path that moves a pair out
+    of `private` or `sync_restricted` deletes its data-access rows before the
+    type changes: their `(cc_pair_id, access_type)` foreign key rejects it.
 13. `google-oauth-callback-by-route` **The Google OAuth callback picks Gmail or
     Drive from its `[connector]` route parameter.**
     `web/src/app/admin/connectors/[connector]/auth/callback/route.ts` accepts
