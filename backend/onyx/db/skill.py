@@ -36,11 +36,13 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    true,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, contains_eager, selectinload
+from sqlalchemy.sql.selectable import CTE
 
 from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
@@ -206,13 +208,26 @@ def _is_owned_custom_skill(user: User) -> ColumnElement[bool]:
 
 
 def skill_visible_to_user(
-    user: User, *, include_retired: bool = False
+    user: User,
+    *,
+    include_retired: bool = False,
+    installation_policy: ColumnElement[str] | None = None,
 ) -> ColumnElement[bool]:
+    policy = (
+        installation_policy
+        if installation_policy is not None
+        else _effective_skill_policy(user.id)
+    )
     visible = or_(
-        Skill.public_permission.isnot(None),
         _is_shared_with_user(user),
-        _is_shared_with_user_group(user),
         _is_owned_custom_skill(user),
+        and_(
+            policy != SkillInstallationPolicy.NOT_AVAILABLE,
+            or_(
+                Skill.public_permission.is_not(None),
+                _is_shared_with_user_group(user),
+            ),
+        ),
     )
 
     return visible if include_retired else and_(Skill.retired_at.is_(None), visible)
@@ -235,15 +250,131 @@ def _is_editable_by_user(
     return editable
 
 
-def _is_required_for_user(user: User) -> ColumnElement[bool]:
-    return and_(
-        Skill.installation_policy == SkillInstallationPolicy.REQUIRED,
-        skill_visible_to_user(user),
+def _group_skill_policy_rank() -> ColumnElement[int]:
+    policy = func.coalesce(
+        Skill__UserGroup.installation_policy, Skill.installation_policy
+    )
+    return case(
+        (policy == SkillInstallationPolicy.REQUIRED, 3),
+        (policy == SkillInstallationPolicy.DEFAULT, 2),
+        (policy == SkillInstallationPolicy.AVAILABLE, 1),
+        else_=0,
     )
 
 
-def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
-    policy = Skill.installation_policy
+def _skill_policy_from_rank(rank: ColumnElement[int]) -> ColumnElement[str]:
+    return case(
+        {
+            3: SkillInstallationPolicy.REQUIRED.value,
+            2: SkillInstallationPolicy.DEFAULT.value,
+            1: SkillInstallationPolicy.AVAILABLE.value,
+            0: SkillInstallationPolicy.NOT_AVAILABLE.value,
+        },
+        value=rank,
+        else_=Skill.installation_policy,
+    )
+
+
+def _effective_skill_policy(user_id: UUID | ColumnElement[UUID]) -> ColumnElement[str]:
+    group_rank = (
+        select(func.max(_group_skill_policy_rank()))
+        .select_from(Skill__UserGroup)
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
+        )
+        .where(
+            Skill__UserGroup.skill_id == Skill.id, User__UserGroup.user_id == user_id
+        )
+        .correlate(Skill, User)
+        .scalar_subquery()
+    )
+    return _skill_policy_from_rank(group_rank)
+
+
+def _skill_installation_policy_rows(
+    user_ids: Collection[UUID], skill_ids: Collection[UUID] | None = None
+) -> CTE:
+    groups = (
+        select(
+            User__UserGroup.user_id,
+            Skill__UserGroup.skill_id,
+            func.max(_group_skill_policy_rank()).label("rank"),
+        )
+        .select_from(Skill__UserGroup)
+        .join(Skill, Skill.id == Skill__UserGroup.skill_id)
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
+        )
+        .where(User__UserGroup.user_id.in_(user_ids))
+        .group_by(User__UserGroup.user_id, Skill__UserGroup.skill_id)
+    )
+    if skill_ids is not None:
+        groups = groups.where(Skill.id.in_(skill_ids))
+    group_rows = groups.subquery()
+    user_id = User.__table__.c.id
+    rows = (
+        select(
+            user_id.label("user_id"),
+            Skill.id.label("skill_id"),
+            _skill_policy_from_rank(group_rows.c.rank).label("installation_policy"),
+        )
+        .select_from(User)
+        .join(Skill, true())
+        .outerjoin(
+            group_rows,
+            and_(group_rows.c.user_id == user_id, group_rows.c.skill_id == Skill.id),
+        )
+        .where(user_id.in_(user_ids))
+    )
+    if skill_ids is not None:
+        rows = rows.where(Skill.id.in_(skill_ids))
+    return rows.cte()
+
+
+def resolve_skill_installation_policies(
+    user_ids: Collection[UUID],
+    skill_ids: Collection[UUID],
+    db_session: Session,
+) -> dict[tuple[UUID, UUID], SkillInstallationPolicy]:
+    """Resolve requested live user/skill pairs in one query, without changing preferences."""
+    if not user_ids or not skill_ids:
+        return {}
+    policies = _skill_installation_policy_rows(user_ids, skill_ids)
+    rows = db_session.execute(
+        select(policies.c.user_id, policies.c.skill_id, policies.c.installation_policy)
+        .join(Skill, Skill.id == policies.c.skill_id)
+        .where(Skill.retired_at.is_(None))
+    )
+    return {
+        (user_id, skill_id): SkillInstallationPolicy(policy)
+        for user_id, skill_id, policy in rows
+    }
+
+
+def _is_required_for_user(
+    user: User, installation_policy: ColumnElement[str] | None = None
+) -> ColumnElement[bool]:
+    policy = (
+        installation_policy
+        if installation_policy is not None
+        else _effective_skill_policy(user.id)
+    )
+    return and_(
+        policy == SkillInstallationPolicy.REQUIRED,
+        skill_visible_to_user(user, installation_policy=policy),
+    )
+
+
+def _is_enabled_for_user(
+    user: User, installation_policy: ColumnElement[str] | None = None
+) -> ColumnElement[bool]:
+    policy = (
+        installation_policy
+        if installation_policy is not None
+        else _effective_skill_policy(user.id)
+    )
     preference = (
         select(UserSkillPreference.enabled)
         .where(
@@ -253,7 +384,7 @@ def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
         .correlate(Skill)
         .scalar_subquery()
     )
-    visible = skill_visible_to_user(user)
+    visible = skill_visible_to_user(user, installation_policy=policy)
     enabled = or_(
         Skill.built_in_skill_id.isnot(None),
         policy == SkillInstallationPolicy.REQUIRED,
@@ -264,20 +395,25 @@ def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
         ),
     )
 
-    return and_(Skill.retired_at.is_(None), visible, enabled)
+    return and_(
+        Skill.retired_at.is_(None),
+        policy != SkillInstallationPolicy.NOT_AVAILABLE,
+        visible,
+        enabled,
+    )
 
 
 def _available_built_in_skills(db_session: Session) -> ColumnElement[bool]:
-    """Hide built-ins whose codified ``is_available(db)`` returns False.
+    """Keep custom rows and known built-ins whose ``is_available(db)`` is true.
     User-facing reads use this; admin reads don't (admins see all rows)."""
-    unavailable = [
+    available = [
         d.built_in_skill_id
         for d in BUILT_IN_SKILLS.values()
-        if not d.is_available(db_session)
+        if d.is_available(db_session)
     ]
     return or_(
         Skill.built_in_skill_id.is_(None),
-        Skill.built_in_skill_id.notin_(unavailable),
+        Skill.built_in_skill_id.in_(available),
     )
 
 
@@ -320,7 +456,14 @@ def _skill_select_for_management_policy(
         )
         if allow_management and has_global_permission(user, Permission.MANAGE_SKILLS):
             return stmt
-        stmt = stmt.where(skill_visible_to_user(user, include_retired=include_retired))
+        policies = _skill_installation_policy_rows([user.id])
+        stmt = stmt.join(policies, policies.c.skill_id == Skill.id).where(
+            skill_visible_to_user(
+                user,
+                include_retired=include_retired,
+                installation_policy=policies.c.installation_policy,
+            )
+        )
         return stmt.where(_available_built_in_skills(db_session))
 
     if policy == SkillManagementPolicy.EDIT:
@@ -429,6 +572,8 @@ def _runtime_name_winners(
         if dependency.ready
     ]
     library_owner = skill_library_owner()
+    policies = _skill_installation_policy_rows([user.id])
+    policy = policies.c.installation_policy
     priority = case(
         (library_owner.is_(None), 0),
         (library_owner == user.id, 1),
@@ -444,9 +589,11 @@ def _runtime_name_winners(
         )
         .outerjoin(Skill.current_version)
         .outerjoin(Marketplace, Skill.marketplace_id == Marketplace.id)
+        .join(policies, policies.c.skill_id == Skill.id)
         .where(
-            skill_visible_to_user(user),
-            or_(_is_enabled_for_user(user), Skill.id == include_skill_id),
+            skill_visible_to_user(user, installation_policy=policy),
+            policy != SkillInstallationPolicy.NOT_AVAILABLE,
+            or_(_is_enabled_for_user(user, policy), Skill.id == include_skill_id),
             or_(
                 ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
                 Skill.id.in_(ready_external_app_skill_ids),
@@ -460,7 +607,7 @@ def _runtime_name_winners(
     )
     if required_only:
         stmt = stmt.where(
-            or_(_is_required_for_user(user), Skill.id == include_skill_id)
+            or_(_is_required_for_user(user, policy), Skill.id == include_skill_id)
         )
     return stmt
 
@@ -684,19 +831,27 @@ def skill_user_states(
     winners = resolve_skill_runtime_names(
         user, db_session, dependencies=external_app_dependencies
     )
+    policies = _skill_installation_policy_rows([user.id], requested_ids)
+    policy = policies.c.installation_policy
     rows = db_session.execute(
         select(
             Skill.id,
-            _is_enabled_for_user(user).label("enabled"),
-            skill_visible_to_user(user).label("visible"),
+            _is_enabled_for_user(user, policy).label("enabled"),
+            skill_visible_to_user(user, installation_policy=policy).label("visible"),
             and_(
                 Skill.built_in_skill_id.is_(None),
                 SkillVersion.id.is_not(None),
                 SkillVersion.is_valid.is_not(False),
-                Skill.installation_policy != SkillInstallationPolicy.REQUIRED,
+                policy.not_in(
+                    [
+                        SkillInstallationPolicy.REQUIRED,
+                        SkillInstallationPolicy.NOT_AVAILABLE,
+                    ]
+                ),
             ).label("supports_preference"),
         )
         .outerjoin(Skill.current_version)
+        .join(policies, policies.c.skill_id == Skill.id)
         .where(Skill.id.in_(requested_ids), Skill.retired_at.is_(None))
     )
     return {
@@ -768,7 +923,7 @@ def set_skill_enabled_for_user(
                 Skill.name == skill.name,
                 Skill.id != skill.id,
                 _is_enabled_for_user(user),
-                Skill.installation_policy != SkillInstallationPolicy.REQUIRED,
+                _effective_skill_policy(user.id) != SkillInstallationPolicy.REQUIRED,
             )
         ).all()
         if conflicts:

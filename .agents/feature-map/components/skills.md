@@ -222,7 +222,9 @@ The library preview of an external-app skill calls the same renderer
    or a disable still pushes to the users who had the skill. The delete route
    reads the audience before it deletes. The share, transfer and edit routes
    push to the union of the audience before and after. A new mutation must do
-   the same, or a user who loses access keeps the files.
+   the same, or a user who loses access keeps the files. Group membership
+   routes (user groups and SCIM) capture the delta under the membership lock,
+   commit even no-op mutations, then push to the changed members.
 3. `shared-read-predicates` **Every new read path must use the shared
    predicates.** Reads use `db/skill.py:skill_visible_to_user`. Edits use
    `db/skill.py:_is_editable_by_user`, through
@@ -232,6 +234,16 @@ The library preview of an external-app skill calls the same renderer
    row.** Use `db/skill.py:_is_enabled_for_user`. Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
+   `db/skill.py:_skill_installation_policy_rows` resolves applicable group shares: null
+   inherits the company setting; Required wins over Default, Available, and
+   Not available, in that order. With no applicable shares, use the company setting.
+   `resolve_skill_installation_policies` resolves many user/skill pairs in one query.
+   Library, runtime and state queries join the grouped policy result once. Pass
+   that column into shared predicates; repeated scalar policy queries cause
+   expensive subplans and JIT compilation on large libraries.
+   Not available prevents runtime use and toggling without changing preferences.
+   Owners and direct recipients retain visibility; public and group access alone do not.
+   Management visibility still lets managers inspect these skills.
    An explicit enable clears saved choices for other skills with the same name,
    including hidden skills, after checking visible conflicts under the user lock.
 5. `name-uniqueness-in-db` **Resolve names after runtime eligibility.**
@@ -240,8 +252,8 @@ The library preview of an external-app skill calls the same renderer
    win within a library; UUID breaks equal timestamps. `skill_library_owner`
    also defines marketplace reconciliation's library identity. A personal
    marketplace remains personal when one of its skills becomes public.
-   `SkillUserState.hidden_by_skill_id` names the winner for losing candidates.
-   Reads must resolve against
+   The library and detail response report `hidden_by_skill_id` and
+   `hidden_reason="same_name"` for losing candidates. Reads must resolve against
    all eligible skills, even when the caller requests one row.
    Invalid, unavailable, retired, disabled and disconnected-app skills cannot
    hide a usable competitor. `list_runtime_skills_for_user` returns only winners,
@@ -422,9 +434,10 @@ The library preview of an external-app skill calls the same renderer
     those scripts changes PDF and PowerPoint thumbnails in the output panel
     ([[craft-sandboxes]]).
 14. `built-in-removal-needs-migration` **Removing a built-in needs a
-    migration that deletes its rows.** `_assemble_fileset` skips, with a
-    warning, a `skill` row whose `built_in_skill_id` is not in
-    `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
+    migration that deletes its rows.** User listings and runtime resolution exclude
+    unknown `built_in_skill_id` values, so stale rows cannot hide custom skills.
+    Management reads retain these rows until a migration deletes them.
+    `_assemble_fileset` also skips unknown definitions defensively.
 15. `version-rollout-reads` **Custom readers use `Skill.current_version`.**
     History rows and their current-version markers come from one SQL statement,
     so an edit after authorization cannot mark an older version as current.
@@ -822,8 +835,6 @@ The library preview of an external-app skill calls the same renderer
   drops every failure ([[#push-holds-row-locks]]), so the change commits
   anyway. If that commit fails, the sandboxes hold files that the database
   does not.
-- **Membership changes do not push.** A user added to a group that a skill is
-  shared with gets it at the next push, session start or reload.
 
 ---
 

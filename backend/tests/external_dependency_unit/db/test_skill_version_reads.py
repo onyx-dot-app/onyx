@@ -137,9 +137,9 @@ def test_backfilled_equal_ids_and_builtin_outer_join(
     skill.current_version_id = skill.id
     builtin = Skill(
         id=uuid4(),
-        name="pdf",
+        name="pptx",
         description="Built in",
-        built_in_skill_id="pdf",
+        built_in_skill_id="pptx",
         public_permission=SkillSharePermission.VIEWER,
     )
     session.add(builtin)

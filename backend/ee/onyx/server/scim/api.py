@@ -70,8 +70,13 @@ from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
-from onyx.db.users import assign_user_to_default_groups__no_commit, user_is_admin
+from onyx.db.users import (
+    assign_user_to_default_groups__no_commit,
+    lock_group_membership,
+    user_is_admin,
+)
 from onyx.db.utils import is_unique_violation
+from onyx.skills.push import push_skills_for_users
 from onyx.utils.audit import (
     AuditAction,
     AuditActor,
@@ -1323,6 +1328,7 @@ def create_group(
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | ScimJSONResponse:
     """Create a new group from a SCIM provisioning request."""
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1401,6 +1407,7 @@ def replace_group(
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | ScimJSONResponse:
     """Replace a group entirely (RFC 7644 §3.5.1)."""
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1442,6 +1449,8 @@ def replace_group(
     recompute_user_permissions__no_commit(removed_ids, db_session)
 
     dal.commit()
+    push_skills_for_users(old_member_ids ^ set(member_uuids), db_session)
+    db_session.commit()
 
     added_ids = sorted(set(member_uuids) - old_member_ids)
     _emit_scim_group_update(
@@ -1471,6 +1480,7 @@ def patch_group(
 
     Handles member add/remove operations from Okta and Azure AD.
     """
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1534,6 +1544,8 @@ def patch_group(
 
     dal.sync_group_external_id(group.id, patched.externalId)
     dal.commit()
+    push_skills_for_users(set(affected_uuids), db_session)
+    db_session.commit()
 
     # Report the validated sets that were applied, not the raw added_ids /
     # removed_ids from the request, which can contain entries that were rejected.
@@ -1559,6 +1571,7 @@ def delete_group(
     db_session: Session = Depends(get_session),
 ) -> Response | ScimJSONResponse:
     """Delete a group (RFC 7644 §3.6)."""
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1585,6 +1598,8 @@ def delete_group(
     recompute_user_permissions__no_commit(affected_user_ids, db_session)
 
     dal.commit()
+    push_skills_for_users(set(affected_user_ids), db_session)
+    db_session.commit()
 
     emit_audit_event(
         AuditAction.USER_GROUP_DELETE,
