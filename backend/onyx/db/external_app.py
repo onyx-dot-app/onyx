@@ -1,10 +1,10 @@
 import re
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, any_, delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
@@ -28,7 +28,7 @@ from onyx.db.models import (
 )
 from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
 from onyx.db.users import lock_group_membership
-from onyx.db.utils import UNSET, UnsetType, is_set
+from onyx.db.utils import UNSET, UnsetType, is_set, uuid_array
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import PROVIDERS, get_provider_for_app
@@ -130,15 +130,82 @@ def is_user_authenticated_for_app(
     """True iff the user has supplied every credential parameter the app's
     ``auth_template`` requires that the org hasn't pre-filled. Apps with no
     user-required keys need no credential row."""
-    required = required_user_credential_keys(
+    return _has_user_credentials(
+        _required_user_keys(app),
+        user_cred.user_credentials if user_cred is not None else None,
+    )
+
+
+def _required_user_keys(app: ExternalApp) -> list[str]:
+    return required_user_credential_keys(
         app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
+
+
+def _has_user_credentials(
+    required: Collection[str], stored: SensitiveValue[dict[str, Any]] | None
+) -> bool:
     if not required:
         return True
-    if user_cred is None:
+    if stored is None:
         return False
-    stored = user_cred.user_credentials.get_value(apply_mask=False)
-    return all(k in stored for k in required)
+    values = stored.get_value(apply_mask=False)
+    return all(k in values for k in required)
+
+
+def is_external_app_ready_for_user(
+    app: ExternalApp, user_cred: ExternalAppUserCredential | None
+) -> bool:
+    return app.enabled and is_user_authenticated_for_app(app, user_cred)
+
+
+def get_ready_external_app_ids_for_users(
+    db_session: Session,
+    user_ids: Collection[UUID],
+    *,
+    skill_names: Collection[str] | None = None,
+) -> dict[UUID, set[int]]:
+    """Map each user to the skill apps they can use, in two queries for any user count.
+
+    ``skill_names`` limits the apps to those linked to Skills with those names.
+    """
+    ready: dict[UUID, set[int]] = {user_id: set() for user_id in user_ids}
+    if not ready:
+        return ready
+    linked = exists().where(ExternalApp__Skill.external_app_id == ExternalApp.id)
+    if skill_names is not None:
+        linked = linked.where(
+            Skill.id == ExternalApp__Skill.skill_id, Skill.name.in_(skill_names)
+        )
+    # Enabled apps only, so readiness is the credential check alone.
+    needs_credentials: dict[int, list[str]] = {}
+    for app in db_session.scalars(
+        select(ExternalApp)
+        .where(ExternalApp.enabled.is_(True), linked)
+        # Load stored credentials as encrypted values, not pending plain dicts.
+        .execution_options(populate_existing=True)
+    ):
+        required = _required_user_keys(app)
+        if not required:
+            for app_ids in ready.values():
+                app_ids.add(app.id)
+        else:
+            needs_credentials[app.id] = required
+    if needs_credentials:
+        # Columns, not entities: each row reads the stored, encrypted value.
+        for user_id, app_id, stored in db_session.execute(
+            select(
+                ExternalAppUserCredential.user_id,
+                ExternalAppUserCredential.external_app_id,
+                ExternalAppUserCredential.user_credentials,
+            ).where(
+                ExternalAppUserCredential.external_app_id.in_(needs_credentials),
+                ExternalAppUserCredential.user_id == any_(uuid_array(ready)),
+            )
+        ):
+            if _has_user_credentials(needs_credentials[app_id], stored):
+                ready[user_id].add(app_id)
+    return ready
 
 
 def get_external_app_by_id(
@@ -242,7 +309,7 @@ def get_skill_external_app_dependencies(
             external_app_id=app.id,
             name=app.name,
             enabled=app.enabled,
-            ready=app.enabled and is_user_authenticated_for_app(app, credential),
+            ready=is_external_app_ready_for_user(app, credential),
         )
         for skill_id, app, credential in rows
     }

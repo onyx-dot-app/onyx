@@ -43,7 +43,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, contains_eager, selectinload
+from sqlalchemy.orm import (
+    InstrumentedAttribute,
+    Session,
+    contains_eager,
+    selectinload,
+)
 from sqlalchemy.sql.selectable import CTE
 
 from onyx.auth.permissions import has_global_permission, has_permission
@@ -176,14 +181,18 @@ def skill_marketplace_sources(
     }
 
 
+# A literal user, or a user column of an enclosing multi-user query.
+UserIdRef = UUID | ColumnElement[UUID] | InstrumentedAttribute[UUID]
+
+
 def _is_shared_with_user(
-    user: User,
+    user_id: UserIdRef,
     permission: SkillSharePermission | None = None,
 ) -> ColumnElement[bool]:
     stmt = (
         select(Skill__User.skill_id)
         .where(Skill__User.skill_id == Skill.id)
-        .where(Skill__User.user_id == user.id)
+        .where(Skill__User.user_id == user_id)
     )
     if permission is not None:
         stmt = stmt.where(Skill__User.permission == permission)
@@ -191,7 +200,7 @@ def _is_shared_with_user(
 
 
 def _is_shared_with_user_group(
-    user: User,
+    user_id: UserIdRef,
     permission: SkillSharePermission | None = None,
 ) -> ColumnElement[bool]:
     stmt = (
@@ -201,7 +210,7 @@ def _is_shared_with_user_group(
             User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
         )
         .where(Skill__UserGroup.skill_id == Skill.id)
-        .where(User__UserGroup.user_id == user.id)
+        .where(User__UserGroup.user_id == user_id)
     )
     if permission is not None:
         stmt = stmt.where(Skill__UserGroup.permission == permission)
@@ -221,16 +230,16 @@ def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool
     )
 
 
-def _is_owned_custom_skill(user: User) -> ColumnElement[bool]:
+def _is_owned_custom_skill(user_id: UserIdRef) -> ColumnElement[bool]:
     return and_(
         Skill.author_user_id.is_not(None),
-        Skill.author_user_id == user.id,
+        Skill.author_user_id == user_id,
         Skill.built_in_skill_id.is_(None),
     )
 
 
 def skill_visible_to_user(
-    user: User,
+    user_id: UserIdRef,
     *,
     include_retired: bool = False,
     installation_policy: ColumnElement[str] | None = None,
@@ -238,16 +247,16 @@ def skill_visible_to_user(
     policy = (
         installation_policy
         if installation_policy is not None
-        else _effective_skill_policy(user.id)
+        else _effective_skill_policy(user_id)
     )
     visible = or_(
-        _is_shared_with_user(user),
-        _is_owned_custom_skill(user),
+        _is_shared_with_user(user_id),
+        _is_owned_custom_skill(user_id),
         and_(
             policy != SkillInstallationPolicy.NOT_AVAILABLE,
             or_(
                 Skill.public_permission.is_not(None),
-                _is_shared_with_user_group(user),
+                _is_shared_with_user_group(user_id),
             ),
         ),
     )
@@ -259,9 +268,9 @@ def _is_editable_by_user(
     user: User, *, allow_management: bool = True
 ) -> ColumnElement[bool]:
     editable = or_(
-        _is_owned_custom_skill(user),
-        _is_shared_with_user(user, SkillSharePermission.EDITOR),
-        _is_shared_with_user_group(user, SkillSharePermission.EDITOR),
+        _is_owned_custom_skill(user.id),
+        _is_shared_with_user(user.id, SkillSharePermission.EDITOR),
+        _is_shared_with_user_group(user.id, SkillSharePermission.EDITOR),
         Skill.public_permission == SkillSharePermission.EDITOR,
     )
     if (
@@ -297,7 +306,7 @@ def _skill_policy_from_rank(rank: ColumnElement[int]) -> ColumnElement[str]:
     )
 
 
-def _effective_skill_policy(user_id: UUID | ColumnElement[UUID]) -> ColumnElement[str]:
+def _effective_skill_policy(user_id: UserIdRef) -> ColumnElement[str]:
     group_rank = (
         select(func.max(_group_skill_policy_rank()))
         .select_from(Skill__UserGroup)
@@ -308,7 +317,7 @@ def _effective_skill_policy(user_id: UUID | ColumnElement[UUID]) -> ColumnElemen
         .where(
             Skill__UserGroup.skill_id == Skill.id, User__UserGroup.user_id == user_id
         )
-        .correlate(Skill, User)
+        .correlate_except(Skill__UserGroup, User__UserGroup)
         .scalar_subquery()
     )
     return _skill_policy_from_rank(group_rank)
@@ -376,37 +385,37 @@ def resolve_skill_installation_policies(
 
 
 def _is_required_for_user(
-    user: User, installation_policy: ColumnElement[str] | None = None
+    user_id: UserIdRef, installation_policy: ColumnElement[str] | None = None
 ) -> ColumnElement[bool]:
     policy = (
         installation_policy
         if installation_policy is not None
-        else _effective_skill_policy(user.id)
+        else _effective_skill_policy(user_id)
     )
     return and_(
         policy == SkillInstallationPolicy.REQUIRED,
-        skill_visible_to_user(user, installation_policy=policy),
+        skill_visible_to_user(user_id, installation_policy=policy),
     )
 
 
 def _is_enabled_for_user(
-    user: User, installation_policy: ColumnElement[str] | None = None
+    user_id: UserIdRef, installation_policy: ColumnElement[str] | None = None
 ) -> ColumnElement[bool]:
     policy = (
         installation_policy
         if installation_policy is not None
-        else _effective_skill_policy(user.id)
+        else _effective_skill_policy(user_id)
     )
     preference = (
         select(UserSkillPreference.enabled)
         .where(
-            UserSkillPreference.user_id == user.id,
+            UserSkillPreference.user_id == user_id,
             UserSkillPreference.skill_id == Skill.id,
         )
-        .correlate(Skill)
+        .correlate_except(UserSkillPreference)
         .scalar_subquery()
     )
-    visible = skill_visible_to_user(user, installation_policy=policy)
+    visible = skill_visible_to_user(user_id, installation_policy=policy)
     enabled = or_(
         Skill.built_in_skill_id.isnot(None),
         policy == SkillInstallationPolicy.REQUIRED,
@@ -425,7 +434,7 @@ def _is_enabled_for_user(
     )
 
 
-def _available_built_in_skills(db_session: Session) -> ColumnElement[bool]:
+def available_built_in_skills(db_session: Session) -> ColumnElement[bool]:
     """Keep custom rows and known built-ins whose ``is_available(db)`` is true.
     User-facing reads use this; admin reads don't (admins see all rows)."""
     available = [
@@ -481,12 +490,12 @@ def _skill_select_for_management_policy(
         policies = _skill_installation_policy_rows([user.id])
         stmt = stmt.join(policies, policies.c.skill_id == Skill.id).where(
             skill_visible_to_user(
-                user,
+                user.id,
                 include_retired=include_retired,
                 installation_policy=policies.c.installation_policy,
             )
         )
-        return stmt.where(_available_built_in_skills(db_session))
+        return stmt.where(available_built_in_skills(db_session))
 
     if policy == SkillManagementPolicy.EDIT:
         stmt = stmt.where(Skill.built_in_skill_id.is_(None))
@@ -508,6 +517,16 @@ def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
     )
 
 
+def _skill_reaches_user(user_id: UserIdRef) -> ColumnElement[bool]:
+    """Any grant that can show the skill to the user, before installation policy."""
+    return or_(
+        Skill.public_permission.is_not(None),
+        Skill.author_user_id == user_id,
+        _is_shared_with_user(user_id),
+        _is_shared_with_user_group(user_id),
+    )
+
+
 def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
     return affected_user_ids_for_skills([skill.id], db_session).get(skill.id, set())
 
@@ -518,33 +537,13 @@ def affected_user_ids_for_skills(
     recipients: dict[UUID, set[UUID]] = {}
     if not skill_ids:
         return recipients
-    direct = exists().where(
-        Skill__User.skill_id == Skill.id, Skill__User.user_id == Sandbox.user_id
-    )
-    group = (
-        select(Skill__UserGroup.skill_id)
-        .join(
-            User__UserGroup,
-            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
-        )
-        .where(
-            Skill__UserGroup.skill_id == Skill.id,
-            User__UserGroup.user_id == Sandbox.user_id,
-        )
-        .exists()
-    )
     rows = db_session.execute(
         select(Skill.id, Sandbox.user_id)
         .join(
             Sandbox,
             and_(
                 Sandbox.status == SandboxStatus.RUNNING,
-                or_(
-                    Skill.public_permission.is_not(None),
-                    Skill.author_user_id == Sandbox.user_id,
-                    direct,
-                    group,
-                ),
+                _skill_reaches_user(Sandbox.user_id),
             ),
         )
         .where(Skill.id.in_(skill_ids))
@@ -571,6 +570,47 @@ def list_skills(
     return list(db_session.scalars(stmt))
 
 
+def _runtime_candidate_order(
+    user_id: UserIdRef,
+) -> tuple[
+    ColumnElement[int], InstrumentedAttribute[datetime], InstrumentedAttribute[UUID]
+]:
+    """Company library, the user's library, then others; the caller joins Marketplace."""
+    library_owner = skill_library_owner()
+    priority = case(
+        (library_owner.is_(None), 0),
+        (library_owner == user_id, 1),
+        else_=2,
+    )
+    return priority, Skill.created_at, Skill.id
+
+
+def _runtime_eligibility(
+    user_id: UserIdRef,
+    policy: ColumnElement[str],
+    *,
+    app_ready: ColumnElement[bool],
+    built_in_available: ColumnElement[bool],
+    include_skill_id: UUID | None = None,
+) -> list[ColumnElement[bool]]:
+    """Runtime gate for one user or a user column; the caller joins current versions.
+
+    ``app_ready`` is true for an app-linked skill whose app the user can use.
+    ``built_in_available`` is ``available_built_in_skills``.
+    """
+    return [
+        skill_visible_to_user(user_id, installation_policy=policy),
+        policy != SkillInstallationPolicy.NOT_AVAILABLE,
+        or_(_is_enabled_for_user(user_id, policy), Skill.id == include_skill_id),
+        or_(~exists().where(ExternalApp__Skill.skill_id == Skill.id), app_ready),
+        or_(
+            Skill.built_in_skill_id.isnot(None),
+            and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
+        ),
+        built_in_available,
+    ]
+
+
 def _runtime_name_winners(
     user: User,
     db_session: Session,
@@ -590,15 +630,9 @@ def _runtime_name_winners(
         for skill_id, dependency in external_app_dependencies.items()
         if dependency.ready
     ]
-    library_owner = skill_library_owner()
     policies = _skill_installation_policy_rows([user.id])
     policy = policies.c.installation_policy
-    priority = case(
-        (library_owner.is_(None), 0),
-        (library_owner == user.id, 1),
-        else_=2,
-    )
-    candidate_order = (priority, Skill.created_at, Skill.id)
+    candidate_order = _runtime_candidate_order(user.id)
     stmt = (
         select(
             Skill.id.label("skill_id"),
@@ -613,23 +647,18 @@ def _runtime_name_winners(
         .outerjoin(Marketplace, Skill.marketplace_id == Marketplace.id)
         .join(policies, policies.c.skill_id == Skill.id)
         .where(
-            skill_visible_to_user(user, installation_policy=policy),
-            policy != SkillInstallationPolicy.NOT_AVAILABLE,
-            or_(_is_enabled_for_user(user, policy), Skill.id == include_skill_id),
-            or_(
-                ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
-                Skill.id.in_(ready_external_app_skill_ids),
-            ),
-            or_(
-                Skill.built_in_skill_id.isnot(None),
-                and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
-            ),
-            _available_built_in_skills(db_session),
+            *_runtime_eligibility(
+                user.id,
+                policy,
+                app_ready=Skill.id.in_(ready_external_app_skill_ids),
+                built_in_available=available_built_in_skills(db_session),
+                include_skill_id=include_skill_id,
+            )
         )
     )
     if required_only:
         stmt = stmt.where(
-            or_(_is_required_for_user(user, policy), Skill.id == include_skill_id)
+            or_(_is_required_for_user(user.id, policy), Skill.id == include_skill_id)
         )
     return stmt
 
@@ -851,7 +880,7 @@ def enable_new_skill_if_name_available__no_commit(
             select(Skill.id).where(
                 Skill.name == skill.name,
                 Skill.id != skill.id,
-                _is_enabled_for_user(user),
+                _is_enabled_for_user(user.id),
             )
         )
         is not None
@@ -1000,8 +1029,8 @@ def skill_user_states(
         select(
             Skill.id,
             policy,
-            _is_enabled_for_user(user, policy).label("enabled"),
-            skill_visible_to_user(user, installation_policy=policy).label("visible"),
+            _is_enabled_for_user(user.id, policy).label("enabled"),
+            skill_visible_to_user(user.id, installation_policy=policy).label("visible"),
             and_(
                 Skill.built_in_skill_id.is_(None),
                 SkillVersion.id.is_not(None),
@@ -1087,7 +1116,7 @@ def set_skill_enabled_for_user(
             select(Skill.id).where(
                 Skill.name == skill.name,
                 Skill.id != skill.id,
-                _is_enabled_for_user(user),
+                _is_enabled_for_user(user.id),
                 _effective_skill_policy(user.id) != SkillInstallationPolicy.REQUIRED,
             )
         ).all()
