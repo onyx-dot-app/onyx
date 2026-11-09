@@ -154,6 +154,8 @@ export interface SettingsHeaderProps {
    * `key`, as in any list.
    */
   actions?: React.ReactNode[];
+  /** Override whether the header stays visible while the page scrolls. */
+  sticky?: boolean;
   stackActionsOnMobile?: boolean;
   /**
    * Renders a secondary Cancel as the first action. `true` goes back within
@@ -167,8 +169,7 @@ export interface SettingsHeaderProps {
 
 /**
  * Sticky header for settings pages. Shows a scroll shadow when the page
- * has scrolled. Headers with a Cancel or any `actions` are sticky; others
- * are not.
+ * has scrolled. Headers with a Cancel or any `actions` are sticky by default.
  */
 function SettingsHeader({
   icon: Icon,
@@ -181,6 +182,7 @@ function SettingsHeader({
   onTitleChange,
   children,
   actions,
+  sticky,
   stackActionsOnMobile = false,
   cancel = false,
   divider,
@@ -212,7 +214,7 @@ function SettingsHeader({
                 : "/") as Route
             );
   const hasActions = !!onCancel || (!!actions && actions.length > 0);
-  const isSticky = hasActions;
+  const isSticky = sticky ?? hasActions;
 
   useEffect(() => {
     if (!isSticky) return;

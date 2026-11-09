@@ -8,8 +8,23 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
+import { Permission } from "@/lib/types";
 import type { BulkSkillResult } from "@/lib/skills/api";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
+
+let mockPermissions: string[] = [];
+let mockAdminCapabilities: string[] = [];
+
+jest.mock("@/providers/UserProvider", () => ({
+  ...jest.requireActual<typeof import("@/providers/UserProvider")>(
+    "@/providers/UserProvider"
+  ),
+  useUser: () => ({
+    isAdmin: false,
+    permissions: mockPermissions,
+    adminCapabilities: mockAdminCapabilities,
+  }),
+}));
 
 const mockSetSkillEnabled = jest.fn();
 const mockBulkUpdateSkills = jest.fn();
@@ -17,6 +32,7 @@ const mockDeleteUserSkill = jest.fn();
 const mockRefresh = jest.fn();
 const mockMutate = jest.fn();
 const mockToastError = jest.fn();
+const mockToastSuccess = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockUseUserSkills = jest.fn();
 const mockStageSkillCreationDraft = jest.fn();
@@ -57,7 +73,7 @@ jest.mock("@/lib/skills/api", () => ({
 jest.mock("@opal/layouts/toast/store", () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
-    success: jest.fn(),
+    success: (...args: unknown[]) => mockToastSuccess(...args),
   },
 }));
 
@@ -184,6 +200,22 @@ function builtinSkill(): SkillsList["builtins"][number] {
 
 describe("SkillsPage preference toggles", () => {
   let skillsData: SkillsList;
+  const scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "scrollIntoView"
+  );
+
+  afterEach(() => {
+    if (scrollIntoViewDescriptor) {
+      Object.defineProperty(
+        Element.prototype,
+        "scrollIntoView",
+        scrollIntoViewDescriptor
+      );
+    } else {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    }
+  });
 
   function enabledCustomAt(index: number): CustomSkill {
     return {
@@ -194,6 +226,10 @@ describe("SkillsPage preference toggles", () => {
   }
 
   beforeEach(() => {
+    mockPermissions = [];
+    mockAdminCapabilities = [];
+    Element.prototype.scrollIntoView = jest.fn();
+    mockToastSuccess.mockClear();
     skillsData = {
       builtins: [],
       customs: [
@@ -326,6 +362,13 @@ describe("SkillsPage preference toggles", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows one empty-library message without a zero count", () => {
+    skillsData.customs = [];
+    render(<SkillsPage admin />);
+    expect(screen.getByText("No custom skills yet")).toBeVisible();
+    expect(screen.queryByText("0 skills")).not.toBeInTheDocument();
+  });
+
   it("shows the admin description on the admin page", () => {
     render(<SkillsPage admin />);
     expect(
@@ -451,6 +494,125 @@ describe("SkillsPage preference toggles", () => {
     ).not.toBeChecked();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(within(controls).queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Action failed for 1 skill"
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "second-skill: Unavailable"
+    );
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+      block: "nearest",
+    });
+  });
+
+  it("lists each failed skill separately", async () => {
+    mockBulkUpdateSkills.mockResolvedValueOnce({
+      succeeded: [],
+      failed: [
+        { skill_id: "first-id", detail: "Skill not found" },
+        { skill_id: "second-id", detail: "Unavailable" },
+      ],
+    });
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+    );
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+    const alert = await screen.findByRole("alert");
+    const failures = within(alert).getAllByRole("listitem");
+    expect(alert).toHaveFocus();
+    expect(failures).toHaveLength(2);
+    expect(failures[0]).toHaveTextContent("first-skill: Skill not found");
+    expect(failures[1]).toHaveTextContent("second-skill: Unavailable");
+  });
+
+  it.each([
+    { top: 696, listTop: 865, scroll: true },
+    { top: -279, listTop: -110, scroll: true },
+    { top: 304, listTop: 473, scroll: false },
+  ])(
+    "reveals a tall failure heading at $top without moving a visible heading",
+    async ({ top, listTop, scroll }) => {
+      const rect = jest.spyOn(Element.prototype, "getBoundingClientRect");
+      const height = jest.replaceProperty(window, "innerHeight", 700);
+      rect.mockImplementation(function (this: Element) {
+        if (this.getAttribute("role") === "alert") {
+          return new DOMRect(0, top, 320, 1163);
+        }
+        if (this.tagName === "UL" && this.closest('[role="alert"]')) {
+          return new DOMRect(0, listTop, 320, 994);
+        }
+        return new DOMRect();
+      });
+      try {
+        mockBulkUpdateSkills.mockResolvedValueOnce({
+          succeeded: [],
+          failed: [{ skill_id: "first-id", detail: "Unavailable" }],
+        });
+        render(<SkillsPage admin />);
+        const user = setupUser();
+        await user.click(
+          screen.getByRole("checkbox", { name: "Select first-skill" })
+        );
+        await user.click(screen.getByRole("button", { name: "More actions" }));
+        await user.click(
+          screen.getByRole("menuitem", { name: "Enable for me" })
+        );
+        expect(await screen.findByRole("alert")).toHaveFocus();
+        if (scroll) {
+          expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+            block: "start",
+          });
+        } else {
+          expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+        }
+      } finally {
+        rect.mockRestore();
+        height.restore();
+      }
+    }
+  );
+
+  it("announces an entirely failed bulk action and clears the error after a successful retry", async () => {
+    const retry = deferred<BulkSkillResult>();
+    mockBulkUpdateSkills
+      .mockResolvedValueOnce({
+        succeeded: [],
+        failed: [{ skill_id: "first-id", detail: "Unavailable" }],
+      })
+      .mockReturnValueOnce(retry.promise);
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Select first-skill",
+    });
+    await user.click(checkbox);
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "first-skill: Unavailable"
+    );
+    expect(checkbox).toBeChecked();
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "first-skill: Unavailable"
+    );
+    await act(async () => {
+      retry.resolve({ succeeded: ["first-id"], failed: [] });
+    });
+    await waitFor(() =>
+      expect(mockToastSuccess).toHaveBeenCalledWith("1 skill updated")
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
+    expect(
+      screen.getByRole("searchbox", { name: "Search skills..." })
+    ).toHaveFocus();
   });
 
   it("locks the pending admin switch and bulk actions without opening a preview", async () => {
@@ -616,9 +778,7 @@ describe("SkillsPage preference toggles", () => {
           skill_ids: ["first-id", "second-id"],
         })
       );
-      expect(
-        screen.getByText("1 skill could not be updated")
-      ).toBeInTheDocument();
+      expect(screen.getByText("Action failed for 1 skill")).toBeInTheDocument();
       expect(
         screen.getByRole("checkbox", { name: "Select second-skill" })
       ).toBeChecked();
@@ -708,6 +868,58 @@ describe("SkillsPage preference toggles", () => {
       ).toBeEnabled()
     );
   });
+
+  it.each([
+    { authority: "owner", global: false, scoped: false },
+    { authority: "scoped manager", global: false, scoped: true },
+    { authority: "global nonadmin", global: true, scoped: false },
+  ])(
+    "keeps required-skill deletion and organization sharing bounded for a $authority",
+    async ({ global, scoped }) => {
+      mockPermissions = global ? [Permission.MANAGE_SKILLS] : [];
+      mockAdminCapabilities =
+        global || scoped ? [Permission.MANAGE_SKILLS] : [];
+      skillsData.customs = [
+        {
+          ...customSkill("required-id", "required-skill"),
+          installation_policy: "REQUIRED",
+          can_toggle: false,
+          user_permission: global || scoped ? "EDITOR" : "OWNER",
+        },
+      ];
+      const user = setupUser();
+      render(<SkillsPage admin />);
+      const row = screen.getByRole("row", { name: "required-skill" });
+      await user.click(
+        within(row).getByRole("button", {
+          name: "More actions for required-skill",
+        })
+      );
+      if (global) {
+        expect(
+          screen.getByRole("menuitem", { name: "Delete skill" })
+        ).toBeEnabled();
+      } else {
+        expect(
+          screen.queryByRole("menuitem", { name: "Delete skill" })
+        ).not.toBeInTheDocument();
+      }
+      await user.keyboard("{Escape}");
+      await user.click(within(row).getByRole("checkbox"));
+      await user.click(screen.getByRole("button", { name: "More actions" }));
+      const bulkDelete = screen.getByRole("menuitem", { name: "Delete" });
+      if (global)
+        expect(bulkDelete).not.toHaveAttribute("aria-disabled", "true");
+      else expect(bulkDelete).toHaveAttribute("aria-disabled", "true");
+      await user.keyboard("{Escape}");
+      await user.click(screen.getByRole("button", { name: "Share" }));
+      const organizationAccess = screen.getByRole("button", {
+        name: "Who can access",
+      });
+      if (global) expect(organizationAccess).toBeEnabled();
+      else expect(organizationAccess).toBeDisabled();
+    }
+  );
 
   it("locks organization access in bulk sharing when an app skill is selected", async () => {
     skillsData.customs[1] = {
