@@ -387,10 +387,23 @@ def _clip(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
 
 
+# Characters to write as escapes: control characters other than tab and newline
+# (NUL is a parse error; a carriage return reads as a newline), and lone
+# surrogates, which have no UTF-8 encoding.
+_UNWRITABLE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\ud800-\udfff]")
+
+
+def _escape_unwritable(match: re.Match[str]) -> str:
+    code = ord(match.group())
+    return f"\\x{code:02x}" if code <= 0xFF else f"\\u{code:04x}"
+
+
 def _docstring_text(text: str) -> str:
-    """`text` escaped to sit between triple quotes: backslashes, and each quote
-    that starts a run of three or ends the text."""
-    return re.sub(r'"(?=""|\Z)', r'\\"', text.replace("\\", "\\\\"))
+    """`text` escaped to sit between triple quotes: backslashes, characters that
+    source text cannot hold, and each quote that starts a run of three or ends
+    the text."""
+    escaped = _UNWRITABLE.sub(_escape_unwritable, text.replace("\\", "\\\\"))
+    return re.sub(r'"(?=""|\Z)', r'\\"', escaped)
 
 
 def _object_keys_summary(schema: JsonValue) -> str:

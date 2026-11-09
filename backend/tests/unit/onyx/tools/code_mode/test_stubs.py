@@ -441,6 +441,21 @@ def test_docstring_text_cannot_end_the_docstring() -> None:
     ] == ['Ends with "a quote"']
 
 
+@pytest.mark.parametrize("name", ["\x00", "a\rb", "\ud800"])
+def test_control_characters_in_a_tool_name_keep_the_stubs_valid(name: str) -> None:
+    stubs = build_tool_stubs([FakeTool(name, _unused), FakeTool("plain", _unused)])
+
+    module = ast.parse(_full_text(stubs))
+
+    docstrings = [
+        ast.get_docstring(node, clean=False)
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef)
+    ]
+    assert any(f"Tool name: {name}\n" in (text or "") for text in docstrings)
+    assert "plain" in stubs.functions
+
+
 def test_an_invalid_schema_type_renders_as_any_without_failing_other_tools() -> None:
     odd = FakeTool(
         "odd",
