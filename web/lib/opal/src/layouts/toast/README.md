@@ -2,7 +2,9 @@
 
 **Import:** `import { ToastProvider, useToast } from "@opal/layouts";` (imperative API: `import { toast } from "@opal/layouts";`)
 
-Top-centre toast stack, 0.5rem from the top. Toasts render as `MessageCard`s driven by a module-level store, so `toast(...)` works from anywhere: components, hooks, or plain TypeScript. A title stays on one line; when that line cuts it off, a chevron beside the close button shows and hides the full message, and expanding restarts auto-dismiss at 30s for auto-dismissing toasts. Persistent toasts stay persistent.
+Top-centre toast stack, 0.5rem from the top. Toasts render as `MessageCard`s driven by a module-level store, so `toast(...)` works from anywhere: components, hooks, or plain TypeScript. A title stays on one line; when that line cuts it off, a chevron beside the close button shows and hides the full message, and expanding restarts auto-dismiss at 30s for auto-dismissing toasts. Persistent toasts stay persistent. Toasts with `children` wrap the title; their caller bounds the content height.
+
+On mobile, plain titles use at most two lines and controls sit below the message. Truncated titles offer an expansion with a bounded, keyboard-scrollable message. Plain error messages use an alert region; other plain messages use a status region. Rich `children` keep their caller's announcement behavior.
 
 ```tsx
 // Once, at the app root:
@@ -21,7 +23,7 @@ toast.warning("Reindexing", { duration: Infinity });
 | Export                                                                    | Description                                                                                                                                 |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ToastProvider`                                                           | Renders children plus the stack. `errorAppendix` is appended to every error toast's description (e.g. a support link).                      |
-| `toast(options)` / `.success` / `.error` / `.warning` / `.info`           | Fire a toast, returns its id. Options: `description`, `duration` (ms, `Infinity` = persistent, default 4000), `dismissible` (default true), `id` (a live toast with the same id is replaced in place), `action` (`{ icon, label, onClick }`: an icon button left of the close button, `label` as its tooltip; a click runs it and the toast stays, so an action that should close it calls `toast.dismiss(id)`). |
+| `toast(options)` / `.success` / `.error` / `.warning` / `.info`           | Fire a toast, returns its id. Options: `description`, `duration` (ms, `Infinity` = persistent, default 4000), `dismissible` (default true), `id` (a live toast with the same id is replaced in place), `action` (`{ icon, label, onClick }`: an icon button left of the close button, `label` as its tooltip; a click runs it and the toast stays, so an action that should close it calls `toast.dismiss(id)`), `children` (content below the description, such as a list or links; the caller bounds its height). |
 | `toast.dismiss(id)` / `toast.clearAll()` / `toast.setAutoDismiss(id, ms)` | Imperative controls. `dismiss` animates the toast out, as the close button and a timeout do; `clearAll` removes every toast at once. |
 | `useToast()`                                                              | Hook returning `{ toast, dismiss, clearAll }`, subscribes the caller to store changes.                                                      |
 | `useToastFromQuery(messages)`                                             | Fires a toast from a `?message=<key>` query param on mount and strips the param.                                                            |

@@ -1,10 +1,10 @@
 "use client";
 
-import { cn } from "@opal/utils";
+import { cn, findScrollParent } from "@opal/utils";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import useScreenSize from "@opal/hooks/useScreenSize";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -23,6 +23,7 @@ import {
   ConfirmationModalLayout,
   IllustrationContent,
   SettingsLayouts,
+  StickyBox,
   CardGrid,
   Content,
   Section,
@@ -126,6 +127,51 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     useState<SkillCardItem | null>(null);
   const switchModal = useCreateModal();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const adminControlsRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const bulkFailureRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const alert = bulkFailureRef.current;
+    if (bulkFailures.length === 0 || !alert) return;
+    alert.focus({ preventScroll: true });
+    const viewport = findScrollParent(alert)?.getBoundingClientRect();
+    const margin =
+      Number.parseFloat(getComputedStyle(alert).scrollMarginTop) || 0;
+    const visibleTop = (viewport?.top ?? 0) + margin;
+    const visibleBottom = viewport?.bottom ?? window.innerHeight;
+    const bounds = alert.getBoundingClientRect();
+    if (bounds.height > visibleBottom - visibleTop) {
+      const headingBottom =
+        alert.querySelector("ul")?.getBoundingClientRect().top ?? bounds.bottom;
+      if (bounds.top < visibleTop || headingBottom > visibleBottom) {
+        alert.scrollIntoView({ block: "start" });
+      }
+    } else {
+      alert.scrollIntoView({
+        block: bounds.top < visibleTop ? "start" : "nearest",
+      });
+    }
+  }, [bulkFailures]);
+
+  useEffect(() => {
+    const controls = adminControlsRef.current;
+    const body = bodyRef.current;
+    if (!admin || !controls || !body) return;
+    const publishOffset = () => {
+      body.style.setProperty(
+        "--skills-focus-offset",
+        `${controls.offsetHeight + 8}px`
+      );
+    };
+    publishOffset();
+    const observer = new ResizeObserver(publishOffset);
+    observer.observe(controls);
+    return () => {
+      observer.disconnect();
+      body.style.removeProperty("--skills-focus-offset");
+    };
+  }, [admin]);
 
   useOnMount(() => {
     searchInputRef.current?.focus();
@@ -427,7 +473,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     const pool = action === "delete" ? bulkDeleteTargets : selectedItems;
     if (bulkLocked || pool.length === 0) return;
     setBulkBusy(true);
-    setBulkFailures([]);
     try {
       // Delete acts on exactly the skills its confirm listed.
       const targets =
@@ -453,7 +498,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           detail: failure.detail,
         }))
       );
-      if (result.succeeded.length)
+      if (result.failed.length === 0 && result.succeeded.length > 0)
         toast.success(bulkCopy("updated", { count: result.succeeded.length }));
       setBulkSharingOpen(false);
       bulkDeleteModal.toggle(false);
@@ -461,6 +506,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         revalidateSkills(),
         mutate(SWR_KEYS.buildExternalAppsAdmin),
       ]);
+      if (result.failed.length === 0) {
+        searchInputRef.current?.focus({ preventScroll: true });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : bulkCopy("failed"));
     } finally {
@@ -531,8 +579,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       aria-label={t("page.browse.title")}
       flexDirection="row"
       justifyContent="between"
-      height={admin ? 1.75 : 2.25}
+      height="auto"
+      wrap
       gap={2}
+      className={admin ? "min-h-7" : "min-h-9"}
     >
       <Section
         flexDirection="row"
@@ -558,12 +608,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             }
           />
         )}
-        {!isLoading && !error && (
+        {!isLoading && !error && (!admin || selectableItems.length > 0) && (
           <Text
             font={
               admin && selectedItems.length > 0
-                ? "secondary-action"
-                : "secondary-body"
+                ? "main-ui-action"
+                : admin
+                  ? "main-ui-body"
+                  : "secondary-body"
             }
             color={admin && selectedItems.length > 0 ? "text-05" : "text-03"}
           >
@@ -589,12 +641,12 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           justifyContent="start"
           aria-hidden={admin && selectedItems.length === 0 ? true : undefined}
           className={cn(
-            "min-w-0 overflow-x-auto",
+            "ms-auto",
             admin && selectedItems.length === 0 && "invisible"
           )}
         >
           <Button
-            size={admin ? "sm" : "md"}
+            size="md"
             prominence="secondary"
             icon={SvgShare}
             disabled={bulkLocked || !canManageSelected}
@@ -602,10 +654,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           >
             {bulkCopy("share")}
           </Button>
-          <Dropdown align="end" disabled={bulkLocked}>
+          <Dropdown align="end" width={70} disabled={bulkLocked}>
             <Dropdown.Trigger asChild>
               <Button
-                size={admin ? "sm" : "md"}
+                size="md"
                 prominence="tertiary"
                 icon={SvgMoreHorizontal}
                 aria-label={bulkCopy("moreActions")}
@@ -655,6 +707,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       data-testid="SkillsPage/container"
     >
       <SettingsLayouts.Header
+        sticky={admin ? false : undefined}
         icon={admin && isMobile ? undefined : SvgBlocks}
         title={t("page.header.title")}
         description={
@@ -713,136 +766,174 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         {!admin && searchInput}
       </SettingsLayouts.Header>
 
-      <SettingsLayouts.Body gap={admin ? 1 : 8}>
-        {admin && (
-          <Section height="auto" gap={1}>
-            {searchInput}
-            {selectionControls}
-          </Section>
-        )}
-        {bulkFailures.length > 0 && (
-          <MessageCard
-            variant="error"
-            title={bulkCopy("partialFailure", { count: bulkFailures.length })}
-            description={bulkFailures
-              .map((failure) => `${failure.name}: ${failure.detail}`)
-              .join("\n")}
-          />
-        )}
-
-        {focusedAppName && (
-          <MessageCard
-            variant="info"
-            title={t("page.focusedApp.title", { appName: focusedAppName })}
-            description={t("page.focusedApp.description", {
-              appName: focusedAppName,
-            })}
-            rightChildren={
-              <Button
-                prominence="secondary"
-                {...navigation.linkTo("/craft/v1/skills")}
-              >
-                {t("page.focusedApp.showAll.label")}
-              </Button>
-            }
-          />
-        )}
-
-        {isLoading && <IconLoader />}
-
-        {error && !isLoading && (
-          <MessageCard
-            variant="error"
-            title={t("page.loadError.title")}
-            description={t("page.loadError.description")}
-          />
-        )}
-
-        {!isLoading && !error && (
-          <>
-            {visibleItems.length === 0 ? (
-              <IllustrationContent
-                illustration={SvgNoResult}
-                title={
-                  items.length === 0
-                    ? t("page.empty.noSkills.title")
-                    : t("page.empty.noMatches.title")
-                }
-                description={
-                  items.length === 0
-                    ? t("page.empty.noSkills.description")
-                    : t("page.empty.noMatches.description")
+      <StickyBox.Root ref={bodyRef}>
+        <SettingsLayouts.Body gap={admin ? 4 : 8}>
+          {admin && (
+            <StickyBox.Item stick="top" shadow ref={adminControlsRef}>
+              <Section height="auto" gap={1} className="bg-background-tint-01">
+                {searchInput}
+                {selectionControls}
+              </Section>
+            </StickyBox.Item>
+          )}
+          {bulkFailures.length > 0 && (
+            <div
+              ref={bulkFailureRef}
+              role="alert"
+              tabIndex={-1}
+              className="w-full scroll-mt-[calc(var(--settings-header-height,0px)+var(--skills-focus-offset,8px))]"
+            >
+              <MessageCard
+                variant="error"
+                title={bulkCopy("partialFailure", {
+                  count: bulkFailures.length,
+                })}
+                bottomChildren={
+                  <ul className="w-full list-disc space-y-2 py-2 ps-7 pe-2">
+                    {bulkFailures.map((failure, index) => (
+                      <Text
+                        key={index}
+                        as="li"
+                        font="main-ui-body"
+                        color="text-04"
+                        wordWrap="wrap-anywhere"
+                      >
+                        {`${failure.name}: ${failure.detail}`}
+                      </Text>
+                    ))}
+                  </ul>
                 }
               />
-            ) : (
-              <>
-                {selectableItems.length > 0 ? (
-                  <>
-                    <Section height="auto" gap={2} alignItems="stretch">
-                      {!admin && selectionControls}
-                      {admin ? (
-                        <SkillsTable
-                          items={selectableItems}
-                          selectedIds={selectedIds}
-                          selectionDisabled={bulkBusy}
-                          onSelectionChange={(values) =>
-                            setSelectedIds(new Set(values))
-                          }
-                          getItemProps={getItemProps}
+            </div>
+          )}
+
+          {focusedAppName && (
+            <MessageCard
+              variant="info"
+              title={t("page.focusedApp.title", { appName: focusedAppName })}
+              description={t("page.focusedApp.description", {
+                appName: focusedAppName,
+              })}
+              rightChildren={
+                <Button
+                  prominence="secondary"
+                  {...navigation.linkTo("/craft/v1/skills")}
+                >
+                  {t("page.focusedApp.showAll.label")}
+                </Button>
+              }
+            />
+          )}
+
+          {isLoading && <IconLoader />}
+
+          {error && !isLoading && (
+            <MessageCard
+              variant="error"
+              title={t("page.loadError.title")}
+              description={t("page.loadError.description")}
+            />
+          )}
+
+          {!isLoading && !error && (
+            <>
+              {visibleItems.length === 0 ? (
+                <IllustrationContent
+                  illustration={SvgNoResult}
+                  title={
+                    items.length === 0
+                      ? t("page.empty.noSkills.title")
+                      : t("page.empty.noMatches.title")
+                  }
+                  description={
+                    items.length === 0
+                      ? t("page.empty.noSkills.description")
+                      : t("page.empty.noMatches.description")
+                  }
+                />
+              ) : (
+                <>
+                  {selectableItems.length > 0 ? (
+                    <>
+                      <Section
+                        height="auto"
+                        gap={2}
+                        alignItems="stretch"
+                        className={
+                          admin
+                            ? "[&_*]:scroll-mt-[var(--skills-focus-offset)]"
+                            : undefined
+                        }
+                      >
+                        {!admin && selectionControls}
+                        {admin ? (
+                          <SkillsTable
+                            items={selectableItems}
+                            selectedIds={selectedIds}
+                            selectionDisabled={bulkBusy}
+                            onSelectionChange={(values) =>
+                              setSelectedIds(new Set(values))
+                            }
+                            getItemProps={getItemProps}
+                          />
+                        ) : (
+                          <CardGrid>
+                            {selectableItems.map((item) => (
+                              <SkillCard
+                                key={item.id}
+                                {...getItemProps(item)}
+                              />
+                            ))}
+                          </CardGrid>
+                        )}
+                      </Section>
+                      {!admin && (
+                        <TextSeparator
+                          count={selectableItems.length}
+                          text={t("page.countSeparator.label", {
+                            count: selectableItems.length,
+                          })}
                         />
-                      ) : (
-                        <CardGrid>
-                          {selectableItems.map((item) => (
-                            <SkillCard key={item.id} {...getItemProps(item)} />
-                          ))}
-                        </CardGrid>
                       )}
-                    </Section>
-                    {!admin && (
-                      <TextSeparator
-                        count={selectableItems.length}
-                        text={t("page.countSeparator.label", {
-                          count: selectableItems.length,
-                        })}
-                      />
-                    )}
-                  </>
-                ) : !searchQuery.trim() ? (
-                  <IllustrationContent
-                    illustration={SvgNoResult}
-                    title={t("page.empty.noSkills.title")}
-                    description={t("page.empty.noSkills.description")}
-                  />
-                ) : null}
-                {visibleBuiltins.length > 0 && (
-                  <Collapsible
-                    title={t("page.builtins.title", {
-                      count: visibleBuiltins.length,
-                    })}
-                    open={
-                      builtinsOpen ||
-                      (searchQuery.trim() !== "" && visibleBuiltins.length > 0)
-                    }
-                    onOpenChange={setBuiltinsOpen}
-                  >
-                    <CardGrid>
-                      {visibleBuiltins.map((item) => (
-                        <SkillCard
-                          key={item.id}
-                          item={item}
-                          onClick={(skill) =>
-                            setSkillDialog({ item: skill, tab: "details" })
-                          }
-                        />
-                      ))}
-                    </CardGrid>
-                  </Collapsible>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </SettingsLayouts.Body>
+                    </>
+                  ) : !searchQuery.trim() ? (
+                    <IllustrationContent
+                      illustration={SvgNoResult}
+                      title={t("page.empty.noSkills.title")}
+                      description={t("page.empty.noSkills.description")}
+                    />
+                  ) : null}
+                  {visibleBuiltins.length > 0 && (
+                    <Collapsible
+                      title={t("page.builtins.title", {
+                        count: visibleBuiltins.length,
+                      })}
+                      open={
+                        builtinsOpen ||
+                        (searchQuery.trim() !== "" &&
+                          visibleBuiltins.length > 0)
+                      }
+                      onOpenChange={setBuiltinsOpen}
+                    >
+                      <CardGrid>
+                        {visibleBuiltins.map((item) => (
+                          <SkillCard
+                            key={item.id}
+                            item={item}
+                            onClick={(skill) =>
+                              setSkillDialog({ item: skill, tab: "details" })
+                            }
+                          />
+                        ))}
+                      </CardGrid>
+                    </Collapsible>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </SettingsLayouts.Body>
+      </StickyBox.Root>
 
       <BulkSkillSharingModal
         count={selectedItems.length}
