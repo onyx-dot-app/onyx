@@ -56,6 +56,31 @@ def github() -> Generator[GitHub, None, None]:
         yield upstream
 
 
+@pytest.mark.parametrize(
+    "manifest", [".claude-plugin/plugin.json", ".codex-plugin/plugin.json"]
+)
+def test_preview_accepts_a_skill_at_the_plugin_root(
+    db_session: Session, github: GitHub, manifest: str
+) -> None:
+    actor = make_user(db_session, standard_account=True)
+    db_session.commit()
+    github.archive = _archive(
+        {
+            CLAUDE: _catalog(source="./solo"),
+            f"solo/{manifest}": b'{"name":"solo"}',
+            "solo/SKILL.md": _md("solo"),
+        }
+    )
+    with client_for(actor, db_session) as client:
+        response = client.post("/marketplaces/preview", json=SOURCE)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["status"] == "complete"
+    assert [(entry["status"], entry.get("name")) for entry in data["entries"]] == [
+        ("ok", "solo")
+    ]
+
+
 def test_preview_reads_one_commit_without_writes(
     db_session: Session, github: GitHub
 ) -> None:

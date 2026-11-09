@@ -79,6 +79,78 @@ def test_plugin_preview_and_upload_refused(
     assert set(session.scalars(select(FileRecord.file_id))) == before_files
 
 
+@pytest.mark.parametrize("wrapper", ["", "upload-guidance/"])
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {},
+        {f"references/{path}": b"{}" for path in MANIFESTS},
+        {f"examples/{path}": b"invalid JSON" for path in MANIFESTS},
+        {"__MACOSX/.claude-plugin/plugin.json": b"{}", "._plugin.json": b"{}"},
+    ],
+)
+def test_skill_preview_and_upload_accept_support_files(
+    session: Session, user: User, wrapper: str, extra: dict[str, bytes]
+) -> None:
+    data = archive({"SKILL.md": SKILL_MD, **extra}, wrapper)
+    preview = api.inspect_custom_skill_bundle_upload(upload(data), user)
+    assert preview.name == "upload-guidance"
+    skill = api.create_custom_skill(
+        upload(data), False, user, session, http_request=Request({"type": "http"})
+    )
+    assert skill.name == preview.name
+    saved = api.fetch_custom_skill_for_edit(
+        skill.id, user, session, http_request=Request({"type": "http"})
+    )
+    assert saved.instructions_markdown == preview.instructions_markdown
+    assert saved.files == preview.files
+
+
+def test_batch_upload_rejects_plugin_without_partial_skill_import(
+    session: Session, user: User
+) -> None:
+    result = api.create_custom_skills_batch(
+        [
+            upload(archive({"SKILL.md": SKILL_MD}), "skill.zip"),
+            upload(
+                archive({"SKILL.md": SKILL_MD, ".claude-plugin/plugin.json": b"{}"}),
+                "plugin.zip",
+            ),
+        ],
+        False,
+        None,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
+    assert len(result.imported) == 1
+    assert len(result.not_imported) == 1
+    assert result.not_imported[0].reason == GUIDANCE
+    assert len(list(session.scalars(select(Skill)))) == 1
+    assert len(list(session.scalars(select(SkillVersion)))) == 1
+    assert len(list(session.scalars(select(FileRecord)))) == 1
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {"outer/inner/.claude-plugin/plugin.json": b"{}"},
+        {"package/.codex-plugin/plugin.json": b"{}", "README.md": b"outside"},
+        {"__MACOSX/.claude-plugin/plugin.json": b"{}"},
+        {".claude-plugin/plugin.json/": b""},
+    ],
+)
+def test_preview_does_not_infer_plugin_from_non_package_markers(
+    user: User, files: dict[str, bytes]
+) -> None:
+    with pytest.raises(OnyxError) as error:
+        api.inspect_custom_skill_bundle_upload(upload(archive(files)), user)
+    assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert error.value.detail == (
+        "SKILL.md missing at bundle root or directly inside one top-level directory"
+    )
+
+
 @pytest.mark.parametrize("manifest", MANIFESTS)
 def test_legacy_stored_plugin_marker_remains_readable(
     session: Session, user: User, manifest: str
