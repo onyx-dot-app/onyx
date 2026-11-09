@@ -294,3 +294,33 @@ def test_get_drive_list_id_caches_and_falls_back_on_error() -> None:
         assert connector._get_drive_list_id(None) is None
 
     assert mock_graph_get.call_count == 2
+
+
+@patch(
+    "onyx.connectors.sharepoint.connector.get_sharepoint_hierarchy_node_external_access"
+)
+def test_folder_permission_failure_does_not_stop_hierarchy(
+    mock_get_access: MagicMock,
+) -> None:
+    access = ExternalAccess.empty()
+    mock_get_access.side_effect = [RuntimeError("401 Unauthorized"), access]
+    connector = SharepointConnector()
+    connector._graph_client = MagicMock()
+
+    with patch.object(
+        connector, "_create_rest_client_context", return_value=MagicMock()
+    ):
+        nodes = list(
+            connector._yield_folder_hierarchy_nodes(
+                SITE_URL,
+                DRIVE_URL,
+                "Shared Documents",
+                "Plans/Q1",
+                SharepointConnectorCheckpoint(has_more=True),
+                include_permissions=True,
+            )
+        )
+
+    assert [node.display_name for node in nodes] == ["Plans", "Q1"]
+    assert nodes[0].external_access is None
+    assert nodes[1].external_access is access
