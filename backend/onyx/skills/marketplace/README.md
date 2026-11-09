@@ -6,14 +6,21 @@ its provider adapter and reader.
 ## Webhook setup transport
 
 The GitHub adapter resolves an exact branch or tag for registration. `HEAD` uses
-the current default branch. Pinned commits and ambiguous branch/tag names cannot
+the default branch at setup time; run setup again after that branch changes.
+Pinned commits and ambiguous branch/tag names cannot
 register. Explicit `refs/heads/` or `refs/tags/` names resolve ambiguity.
 Registration lists hooks by the exact callback URL and updates an existing hook.
 This also recovers a lost creation response. Hooks use signed JSON with certificate
 verification. GitHub errors use controlled messages; credentials and provider
 response bodies are not returned. API setup must save signing state before calling
 GitHub, then recheck authority and source identity before saving the hook ID.
-Registration controls remain disabled until the management API is connected.
+Only a saved hook ID enables push syncs or delivery timestamps. Signed pings can arrive before that save,
+including from a replacement hook. Only pings matching the saved hook ID update
+the verified delivery time. A failed initial setup cannot queue push syncs.
+`POST /marketplaces/{id}/webhook` performs this sequence on self-hosted installs.
+Setup errors leave Sync now available. The API reuses signing intent on retries;
+it exposes registration and delivery status without the secret. UI controls follow
+in a separate layer.
 
 ## Resource limits
 

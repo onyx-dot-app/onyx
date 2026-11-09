@@ -17,6 +17,7 @@ from onyx.utils.github import (
     download_github_archive,
     resolve_github_revision,
 )
+from shared_configs.configs import MULTI_TENANT
 
 
 class _Repository(BaseModel):
@@ -59,8 +60,9 @@ class GitHubMarketplaceAdapter(MarketplaceProviderAdapter):
 
     @property
     def supports_webhooks(self) -> bool:
-        # Registration and its management UI are not enabled yet.
-        return False
+        return not MULTI_TENANT and not bool(
+            GITHUB_COMMIT_SHA_PATTERN.fullmatch(self.marketplace.provider_config.ref)
+        )
 
     def verify_webhook(
         self, raw_body: bytes, *, signature: str, event: str, hook_id: str

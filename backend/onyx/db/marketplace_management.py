@@ -37,10 +37,13 @@ from onyx.skills.marketplace.models import (
     MarketplaceManagementSnapshot,
     MarketplaceProvider,
     MarketplaceRemovalResult,
+    MarketplaceWebhookRemoval,
 )
+from onyx.skills.marketplace.provider import get_marketplace_adapter
+from shared_configs.contextvars import get_current_tenant_id
 
 
-def _lock_managed_marketplace(
+def lock_managed_marketplace(
     marketplace_id: UUID,
     user: User,
     db_session: Session,
@@ -64,7 +67,7 @@ def _lock_managed_marketplace(
     return row
 
 
-def _assert_connected_login(
+def assert_connected_marketplace_login(
     user_id: UUID | None, provider: MarketplaceProvider, db_session: Session
 ) -> None:
     # Check stored facts after provider I/O, without loading or refreshing secrets.
@@ -102,6 +105,10 @@ def _management_snapshots(
     for row in rows:
         snapshot = MarketplaceManagementSnapshot.model_validate(row)
         snapshot.sync_pending = row.sync_requested or row.sync_owner is not None
+        snapshot.webhook_available = get_marketplace_adapter(
+            row, get_current_tenant_id()
+        ).supports_webhooks
+        snapshot.webhook_enabled = row.webhook_id is not None
         snapshot.live_skill_count, snapshot.retired_skill_count = counts.get(
             row.id, (0, 0)
         )
@@ -169,7 +176,7 @@ def create_marketplace__no_commit(
     actor = lock_resource_access_user(user.id, db_session)
     if not personal:
         assert_global(actor, permission=Permission.MANAGE_SKILLS)
-    _assert_connected_login(actor.id, provider, db_session)
+    assert_connected_marketplace_login(actor.id, provider, db_session)
     row = Marketplace(
         name=name,
         provider=provider,
@@ -191,10 +198,10 @@ def create_marketplace__no_commit(
 def request_managed_marketplace_sync__no_commit(
     marketplace_id: UUID, user: User, db_session: Session
 ) -> None:
-    row = _lock_managed_marketplace(
+    row = lock_managed_marketplace(
         marketplace_id, user, db_session, global_personal=True
     )
-    _assert_connected_login(row.login_user_id, row.provider, db_session)
+    assert_connected_marketplace_login(row.login_user_id, row.provider, db_session)
     request_marketplace_sync__no_commit(row.id, db_session)
 
 
@@ -202,10 +209,10 @@ def replace_marketplace_login__no_commit(
     marketplace_id: UUID, user: User, db_session: Session
 ) -> None:
     """Use only the actor's prevalidated connected identity; fence older staged work."""
-    row = _lock_managed_marketplace(
+    row = lock_managed_marketplace(
         marketplace_id, user, db_session, global_personal=True
     )
-    _assert_connected_login(user.id, row.provider, db_session)
+    assert_connected_marketplace_login(user.id, row.provider, db_session)
     row.login_user_id = user.id
     row.sync_owner = None
     row.sync_lease_expires_at = row.sync_started_at = None
@@ -235,7 +242,7 @@ def set_marketplace_default_access__no_commit(
 def remove_marketplace__no_commit(
     marketplace_id: UUID, user: User, db_session: Session
 ) -> MarketplaceRemovalResult:
-    row = _lock_managed_marketplace(
+    row = lock_managed_marketplace(
         marketplace_id, user, db_session, global_personal=True
     )
     skills = list(
@@ -253,6 +260,16 @@ def remove_marketplace__no_commit(
     result = MarketplaceRemovalResult(
         cleanup_file_ids=skill_bundle_file_ids_for_skills(skills, db_session),
         affected_user_ids=set().union(*audiences.values()),
+        webhook=(
+            MarketplaceWebhookRemoval(
+                provider=row.provider,
+                provider_config=row.provider_config,
+                login_user_id=row.login_user_id,
+                webhook_id=row.webhook_id,
+            )
+            if row.webhook_id is not None
+            else None
+        ),
     )
     db_session.execute(delete(Marketplace).where(Marketplace.id == row.id))
     return result

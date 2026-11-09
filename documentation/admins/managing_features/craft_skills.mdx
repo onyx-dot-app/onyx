@@ -480,6 +480,65 @@ Creating a Skill for an App also requires full-admin token scope.
 A Basic-only token retains the user's ownership and explicit editor grants.
 It cannot use the user's admin or group-manager role to change installation settings or company access.
 
+### Self-hosted push updates
+
+Self-hosted installations can register GitHub push updates through `POST /api/marketplaces/{id}/webhook`.
+The caller must own the source or have global Manage skills permission.
+A restricted API token must allow that permission when the caller manages another owner's source or a company source.
+
+Set `WEBHOOK_PUBLIC_URL` to the public HTTPS address that routes `/webhook/` to the webhook server.
+Setup uses the source's connected GitHub login, including when a workspace admin enables it.
+That login must have permission to manage repository webhooks. Setup returns an error if GitHub refuses access.
+Manual sync remains available, and retrying setup reuses the callback's hook.
+
+Push updates support branches and tags, including the default branch selected by `HEAD`. For `HEAD`,
+repeat setup if the default branch changes or is renamed. Pinned commits cannot receive push updates.
+Use `refs/heads/` or `refs/tags/` when a branch and tag have the same name.
+Marketplace responses include the registered ref and last verified delivery time. Cloud installations keep manual sync.
+Initial setup must finish before pushes can request a sync or update the delivery time.
+The receiver accepts bodies up to 5 MiB. If a larger push is rejected, select **Sync now**.
+
+Removing a marketplace also attempts to remove its registered GitHub webhook.
+If GitHub is unavailable or the login has lost permission,
+remove the remaining hook in the repository's webhook settings. The removed marketplace no longer accepts deliveries,
+even if the hook remains on GitHub.
+
+#### Route GitHub deliveries
+
+The webhook server is separate from the API server. Keep the existing Craft and HTTPS settings when enabling it.
+
+<Steps>
+  <Step title="Enable the receiver">
+    For Docker Compose, add `--profile webhook` to your existing `docker compose up -d` command.
+    Keep the same Compose files and overrides. The included nginx configuration routes `/webhook/` to the receiver.
+
+    For Helm, set `webhookServer.enabled: true` in your values file. Keep `webhookServer.ingressPath: /webhook`.
+    The chart's nginx ingress strips this prefix before forwarding requests. If you use your own ingress,
+    route `/webhook/` to the webhook service on port `8091` and strip the prefix.
+  </Step>
+
+  <Step title="Set the public address">
+    Set `WEBHOOK_PUBLIC_URL` to your public HTTPS origin, such as `https://onyx.example.com`, without `/webhook`.
+    For Compose, use the deployment's `.env` file. For Helm, use `configMap.WEBHOOK_PUBLIC_URL`.
+    Apply the configuration to the API and webhook services.
+    GitHub must reach this address with a valid TLS certificate.
+  </Step>
+
+  <Step title="Check the route and enable push updates">
+    From outside your deployment network, check the receiver:
+
+    ```bash
+    curl --fail https://onyx.example.com/webhook/health
+    ```
+
+    The response identifies `webhook_server` as healthy.
+    Register push updates with `POST /api/marketplaces/{id}/webhook`. Push a change to the registered branch or tag.
+    Check that the last verified delivery time and applied revision advance.
+    A setup ping received before registration finishes does not update the delivery time.
+    A health response alone does not prove that GitHub can deliver a signed push.
+  </Step>
+</Steps>
+
 ## Manage marketplaces through the API
 
 Management responses include `sync_pending` while work is queued or claimed by a worker.
