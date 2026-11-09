@@ -200,9 +200,8 @@ def test_skill_constraints_and_group_null(
     assert grant.installation_policy is None
     db_session.expire(marketplace)
     assert marketplace.provider_config.ref == "main"
-    version = SkillVersion(skill_id=skill.id, version_number=1)
-    db_session.add(version)
-    db_session.flush()
+    version = skill.current_version
+    assert version is not None
     db_session.execute(delete(Marketplace).where(Marketplace.id == marketplace.id))
     assert db_session.scalar(select(Skill.id).where(Skill.id == skill.id)) is None
     assert (
@@ -235,10 +234,9 @@ def test_login_and_version_creator_deletion(
     login = make_user(db_session)
     marketplace.login_user_id = login.id
     skill = make_skill(db_session, is_public=True)
-    version = SkillVersion(
-        skill_id=skill.id, version_number=1, created_by_user_id=login.id
-    )
-    db_session.add(version)
+    version = skill.current_version
+    assert version is not None
+    version.created_by_user_id = login.id
     db_session.flush()
     if raw_delete:
         db_session.execute(delete(User).where(User.__table__.c.id == login.id))

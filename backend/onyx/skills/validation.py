@@ -79,7 +79,8 @@ def validate_stored_custom_skill(
             normalized_bundle=None,
             detail="persisted skill name is reserved for a built-in skill",
         )
-    if skill.bundle_file_id is None:
+    version = skill.current_version
+    if version is None or version.bundle_file_id is None:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
@@ -88,7 +89,7 @@ def validate_stored_custom_skill(
 
     try:
         normalized = load_stored_custom_skill_bundle(
-            skill.bundle_file_id,
+            version.bundle_file_id,
             file_store,
         )
     except Exception as exc:

@@ -61,15 +61,8 @@ def test_skill_snapshot_preserves_version_history(
     db_session: Session, delete: bool
 ) -> None:
     skill = make_skill(db_session, is_public=True)
-    version = SkillVersion(
-        skill_id=skill.id,
-        version_number=1,
-        bundle_file_id=skill.bundle_file_id,
-        bundle_sha256=skill.bundle_sha256,
-    )
-    db_session.add(version)
-    db_session.flush()
-    skill.current_version_id = version.id
+    version = skill.current_version
+    assert version is not None
     db_session.commit()
     skill_id, version_id = skill.id, version.id
     snapshot = snapshot_skill_tables(db_session)
@@ -96,7 +89,8 @@ def test_skill_snapshot_preserves_version_history(
     )
     assert len(history) == 1
     assert history[0].id == version_id
-    assert history[0].bundle_file_id == restored.bundle_file_id
+    assert restored.current_version is not None
+    assert history[0].bundle_file_id == restored.current_version.bundle_file_id
 
 
 def _group_share_permissions(
@@ -119,7 +113,8 @@ def test_skill_user_states_resolve_defaults_and_visibility(
         is_public=True,
         name=f"invalid-{uuid4().hex[:8]}",
     )
-    invalid_custom.is_valid = False
+    assert invalid_custom.current_version is not None
+    invalid_custom.current_version.is_valid = False
     built_in = make_built_in_skill_row(
         db_session,
         built_in_skill_id=f"built-in-{uuid4().hex[:8]}",

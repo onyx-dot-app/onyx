@@ -40,7 +40,8 @@ def _mark_skill_invalid(skill_id: UUID) -> None:
     with get_session_with_current_tenant() as db_session:
         skill = db_session.get(Skill, skill_id)
         assert skill is not None
-        skill.is_valid = False
+        assert skill.current_version is not None
+        skill.current_version.is_valid = False
         db_session.commit()
 
 
@@ -183,9 +184,10 @@ def test_create_skill_201_persists_row_group_shares_bundle(
     assert row is not None, "skill row missing after create"
     assert row.name == name
     assert row.public_permission is None
-    assert row.bundle_file_id, "skill row has no bundle_file_id"
-    assert _bundle_blob_exists(row.bundle_file_id), (
-        f"bundle blob {row.bundle_file_id} not present in file store after create"
+    assert row.current_version is not None
+    assert row.current_version.bundle_file_id, "current version has no bundle"
+    assert _bundle_blob_exists(row.current_version.bundle_file_id), (
+        f"bundle blob {row.current_version.bundle_file_id} not present in file store after create"
     )
 
 
