@@ -321,6 +321,35 @@ unlinked Skill across users. Reconnect clears previous blocks before its checkin
 savepoint, so a failed check retains the connection without restoring stale blocks.
 Token refresh does not run the check, because it does
 not change readiness.
+Sync (`db/marketplace.py:reconcile_marketplace__no_commit`) stages versions under
+membership, marketplace, library-name and Skill locks, after provider and storage
+I/O. Existing pointers stay unchanged. New custom rows need a pointer for the
+source constraint; decision overrides model their before-state as absent. New
+company followers receive defaults before the decision.
+`db/marketplace_limits.py:marketplace_version_decisions` reads one SQL decision
+snapshot through `db/skill.py:skill_usage_statement`. It reuses the runtime winner
+query, including both shared-winner and small-input shapes. Version overrides
+supply proposals; compressed per-name results preserve fallback winners.
+SQL eligibility, validity, metadata, pointers, grants, blocks and audience come
+from that statement. Readiness and built-in availability are separate captured
+inputs immediately before it. If the statement finds an uncaptured audience user,
+the whole capture repeats with their readiness and user lock. Three incomplete
+captures abort publication with a retryable error. Replay reads no
+refreshed decision inputs. This is not serializable isolation: unchecked writers
+can change eligibility or usage after the snapshot.
+Replay accepts entries in input order. It applies every accepted name delta,
+including shrinkage, to the snapshot totals. Refusal checks only growth. Duplicate
+new names get separate proposal variants; only acceptance reserves the name.
+Saved duplicate names use the winner ranks from accepted variants in that same
+snapshot. A hidden update cannot charge or refund the original winner twice.
+A validity change committed before the statement must affect every decision.
+A change during it is outside that statement's snapshot.
+Accepted pointers publish atomically. Refused staged versions are deleted; old
+pointers and history remain. Accepted history is pruned through the existing
+version helper. Refused bundle files remain unused and eligible for cleanup.
+Limit refusals retain `SKILL_LIMIT_BLOCK_REASON` and `Marketplace.skill_limit_blocks`
+with failed limit and user count. `skills/sync.py` fetches again while blocks exist,
+so the next sync retries the same revision.
 
 ## Contracts and traps
 

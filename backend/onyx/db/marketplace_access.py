@@ -93,21 +93,28 @@ def _copy_access(
 
 
 def materialize_marketplace_access__no_commit(
-    marketplace_id: UUID, db_session: Session
+    marketplace_id: UUID,
+    db_session: Session,
+    *,
+    skill_ids: Collection[UUID] | None = None,
 ) -> set[UUID]:
-    """Copy stored defaults to live company followers; return changed skill ids."""
+    """Copy stored defaults to live company followers; return changed skill ids.
+
+    ``skill_ids`` limits the copy to those followers.
+    """
     marketplace = _lock_marketplace(marketplace_id, db_session)
     if marketplace.owner_user_id is not None:
         return set()
+    followers = select(Skill).where(
+        Skill.marketplace_id == marketplace_id,
+        Skill.retired_at.is_(None),
+        Skill.follows_marketplace_access.is_(True),
+    )
+    if skill_ids is not None:
+        followers = followers.where(Skill.id.in_(skill_ids))
     skills = list(
         db_session.scalars(
-            select(Skill)
-            .where(
-                Skill.marketplace_id == marketplace_id,
-                Skill.retired_at.is_(None),
-                Skill.follows_marketplace_access.is_(True),
-            )
-            .order_by(Skill.id)
+            followers.order_by(Skill.id)
             .with_for_update(of=Skill)
             .options(selectinload(Skill.user_shares), selectinload(Skill.group_shares))
             .execution_options(populate_existing=True)

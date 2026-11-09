@@ -63,6 +63,9 @@ def session(isolated_engine: Engine) -> Generator[Session, None, None]:
             "external_app__skill",
             "user__user_group",
             "user_skill_preference",
+            "user_skill_limit_block",
+            "external_app_user_credential",
+            "image_generation_config",
             "oauth_account",
             "user__pinned_persona",
         )

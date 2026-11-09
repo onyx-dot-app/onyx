@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Final
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, RootModel
 
 from onyx.skills.bundle import DEFAULT_MAX_FILE_COUNT, DEFAULT_TOTAL_MAX_BYTES
 
@@ -127,3 +127,13 @@ class SkillLimitViolation(BaseModel):
     failed_limit: SkillLimit
     affected_user_count: int
     usage: SkillUsageSummary | None = None
+
+
+# The reason in ``Marketplace.blocked_entries`` for an entry the limit blocked.
+SKILL_LIMIT_BLOCK_REASON: Final[str] = "skill limit"
+
+
+class SkillLimitBlocks(RootModel[dict[str, SkillLimitViolation]]):
+    """Marketplace entry keys that the last sync blocked for the limit."""
+
+    root: dict[str, SkillLimitViolation] = {}

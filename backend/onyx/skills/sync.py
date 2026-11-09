@@ -106,7 +106,9 @@ def _sync_marketplace(
         or not _bundle_available(version, file_store)
     )
     archive = get_marketplace_adapter(marketplace, tenant_id).fetch_if_changed(
-        force=any(
+        # Entries blocked by the Skill limit retry on every sync.
+        force=bool(marketplace.skill_limit_blocks.root)
+        or any(
             key not in marketplace.blocked_entries
             and key.split("/", 1)[0] not in marketplace.blocked_entries
             for key in recovery_keys
