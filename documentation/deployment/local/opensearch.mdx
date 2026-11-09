@@ -63,7 +63,9 @@ auth:
 
 On a self-hosted OpenSearch, Onyx creates the document index with the `index.store.preload` setting.
 When OpenSearch starts, it reads the vector, graph, and keyword files of the index into memory.
-The index accepts searches after this read is complete. Search then runs at full speed from the first query.
+The index accepts searches after this read is complete. Until then, searches return an error. After the read,
+most of the data a search uses is already in memory, so early searches are close to normal speed.
+Stored text is not preloaded. A search still reads the text of its top results from disk.
 
 Without the preload, the index accepts searches sooner,
 but each early search reads its own parts of the index from disk. On a large index,
