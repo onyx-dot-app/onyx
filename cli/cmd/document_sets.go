@@ -59,8 +59,8 @@ machine-readable output.`,
 				if ds.Description != nil {
 					desc = *ds.Description
 				}
-				if len(desc) > 60 {
-					desc = desc[:57] + "..."
+				if r := []rune(desc); len(r) > 60 {
+					desc = string(r[:57]) + "..."
 				}
 				fmt.Fprintf(w, "%d\t%s\t%s\n", ds.ID, sanitize.Line(ds.Name), sanitize.Line(desc))
 			}
