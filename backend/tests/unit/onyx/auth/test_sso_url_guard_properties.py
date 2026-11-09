@@ -25,6 +25,8 @@ _DNS = {
     "metadata.google.internal": "169.254.169.254",
 }
 
+_AWS_IPV6_METADATA = ipaddress.ip_address("fd00:ec2::254")
+
 _AddrInfo = list[
     tuple[socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int]]
 ]
@@ -105,11 +107,13 @@ def _blocked(address: str, level: SSRFProtectionLevel) -> bool:
     ip = ipaddress.ip_address(address)
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         ip = ip.ipv4_mapped
+    # Cloud metadata stays blocked at every level. The AWS IPv6 metadata
+    # address is private, not link-local.
+    always_blocked = ip.is_link_local or ip.is_unspecified or ip == _AWS_IPV6_METADATA
     if level == SSRFProtectionLevel.DISABLED:
-        # Cloud metadata stays blocked at every level.
-        return ip.is_link_local or ip.is_unspecified
+        return always_blocked
     if level == SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK:
-        return ip.is_loopback or ip.is_link_local or ip.is_unspecified
+        return always_blocked or ip.is_loopback
     return not ip.is_global or ip.is_multicast
 
 
@@ -241,3 +245,17 @@ def test_every_internal_host_is_blocked_in_its_plain_form(host: str) -> None:
         _blocked(address, SSRFProtectionLevel.VALIDATE_ALL) for address in targets
     )
     assert not _passes(f"https://{host}/", SSRFProtectionLevel.VALIDATE_ALL)
+
+
+@pytest.mark.parametrize("host", ["169.254.169.254", "[fd00:ec2::254]"])
+@pytest.mark.parametrize(
+    "level",
+    [SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK, SSRFProtectionLevel.DISABLED],
+)
+def test_cloud_metadata_is_blocked_at_relaxed_levels(
+    host: str, level: SSRFProtectionLevel
+) -> None:
+    url = f"https://{host}/"
+    targets = _client_targets(url)
+    assert targets and all(_blocked(address, level) for address in targets)
+    assert not _passes(url, level)
