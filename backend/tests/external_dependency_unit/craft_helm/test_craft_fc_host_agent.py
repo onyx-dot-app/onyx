@@ -18,6 +18,13 @@ _TEMPLATE = "templates/craft-fc-host-agent.yaml"
 _CONFIGMAP_TEMPLATE = "templates/configmap.yaml"
 _PROXY_POLICY_TEMPLATE = "templates/sandbox-proxy/networkpolicy.yaml"
 _PODTEMPLATE_TEMPLATE = "templates/sandbox-podtemplate.yaml"
+# The pods that call the agents get the mTLS client certificate.
+_CLIENT_TEMPLATES = [
+    "templates/api-deployment.yaml",
+    "templates/celery-worker-heavy.yaml",
+    "templates/celery-worker-scheduled-tasks.yaml",
+]
+_CLIENT_DIR = "/etc/onyx/craft-fc-agent-client"
 _AGENT_NS = "onyx-sandbox-runtime"
 _FIRECRACKER = [
     "--set",
@@ -26,6 +33,8 @@ _FIRECRACKER = [
     "craft.hostAgent.image.tag=0.1.0",
     "--set-string",
     "craft.hostAgent.tls.existingSecret=host-agent-tls",
+    "--set-string",
+    "craft.hostAgent.client.existingSecret=agent-client",
     "--set",
     "auth.sandboxNodeRegistration.enabled=true",
     "--set-string",
@@ -138,6 +147,11 @@ def test_agent_pod_spec() -> None:
     assert "--uid-count=65536" in args
     assert "--dial-ports=52,3010" in args
     assert "--relay-max-conns=256" in args
+    assert "--dial-max-streams=64" in args
+    assert not [a for a in args if a.startswith("--client-allowed-sans")]
+    # The agent registers its pod IP, so the api_server can dial it.
+    assert "--advertise-address=$(POD_IP):7443" in args
+    assert env["POD_IP"]["valueFrom"]["fieldRef"]["fieldPath"] == "status.podIP"
     assert "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8080" in args
     assert any(a.startswith("--api-server-url=http") for a in args)
     assert env["NODE_NAME"]["valueFrom"]["fieldRef"]["fieldPath"] == "spec.nodeName"
@@ -245,6 +259,12 @@ def test_agent_overrides() -> None:
             "craft.hostAgent.relayMaxConns=64",
             "--set-string",
             "craft.hostAgent.apiServerUrl=https://api.example",
+            "--set",
+            "craft.hostAgent.dialMaxStreams=8",
+            "--set-string",
+            "craft.hostAgent.clientAllowedSans=spiffe://onyx/api-server",
+            "--set-string",
+            "craft.hostAgent.advertiseAddress=agent.example:7443",
         ]
     )
     spec = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
@@ -255,6 +275,9 @@ def test_agent_overrides() -> None:
     assert "--uid-base=2000000" in args
     assert "--relay-max-conns=64" in args
     assert "--api-server-url=https://api.example" in args
+    assert "--dial-max-streams=8" in args
+    assert "--client-allowed-sans=spiffe://onyx/api-server" in args
+    assert "--advertise-address=agent.example:7443" in args
 
 
 def test_headless_service_targets_agent_pods() -> None:
@@ -281,7 +304,7 @@ def test_agent_pods_reach_sandbox_proxy() -> None:
     assert len(sources) == 2
 
 
-def test_only_api_server_reaches_agent_listener() -> None:
+def test_only_agent_clients_reach_agent_listener() -> None:
     policy = _by_kind(_render(_FIRECRACKER), "NetworkPolicy")
     rule = policy["spec"]["ingress"][0]
 
@@ -292,8 +315,13 @@ def test_only_api_server_reaches_agent_listener() -> None:
             "namespaceSelector": {
                 "matchLabels": {"kubernetes.io/metadata.name": "onyx"}
             },
-            "podSelector": {"matchLabels": {"app": "api-server"}},
+            "podSelector": {"matchLabels": {"app": app}},
         }
+        for app in (
+            "api-server",
+            "celery-worker-heavy",
+            "celery-worker-scheduled-tasks",
+        )
     ]
     assert rule["ports"] == [{"protocol": "TCP", "port": 7443}]
 
@@ -320,6 +348,10 @@ def test_only_api_server_reaches_agent_listener() -> None:
             "craft.hostAgent.namespace",
         ),
         (["--set", "craft.sandboxRuntime=kata"], "craft.sandboxRuntime"),
+        (
+            ["--set-string", "craft.hostAgent.client.existingSecret="],
+            "craft.hostAgent.client.existingSecret",
+        ),
     ],
 )
 def test_firecracker_fails_closed(extra_args: list[str], message: str) -> None:
@@ -370,3 +402,76 @@ def test_image_pull_secrets_come_from_agent_values() -> None:
         "DaemonSet",
     )["spec"]["template"]["spec"]
     assert agent["imagePullSecrets"] == [{"name": "agent-cred"}]
+
+
+def _client_container(
+    extra_args: list[str], template: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(pod spec, first container) of a Deployment template."""
+    spec = _render(extra_args, template)[0]["spec"]["template"]["spec"]
+    return spec, spec["containers"][0]
+
+
+@pytest.mark.parametrize("template", _CLIENT_TEMPLATES)
+def test_agent_clients_get_mtls_files(template: str) -> None:
+    """The env names match backend/onyx/microvm/configs.py; the files come
+    from craft.hostAgent.client.existingSecret."""
+    spec, container = _client_container(
+        [
+            *_FIRECRACKER,
+            "--set-string",
+            "craft.hostAgent.client.tlsServerName=agent.onyx.internal",
+        ],
+        template,
+    )
+    env = {e["name"]: e.get("value") for e in container["env"]}
+    mounts = {m["name"]: m for m in container["volumeMounts"]}
+    volumes = {v["name"]: v for v in spec["volumes"]}
+
+    assert env["SANDBOX_FC_AGENT_CLIENT_CERT_PATH"] == f"{_CLIENT_DIR}/tls.crt"
+    assert env["SANDBOX_FC_AGENT_CLIENT_KEY_PATH"] == f"{_CLIENT_DIR}/tls.key"
+    assert env["SANDBOX_FC_AGENT_CA_PATH"] == f"{_CLIENT_DIR}/ca.crt"
+    assert env["SANDBOX_FC_AGENT_TLS_SERVER_NAME"] == "agent.onyx.internal"
+    assert mounts["craft-fc-agent-client"] == {
+        "name": "craft-fc-agent-client",
+        "mountPath": _CLIENT_DIR,
+        "readOnly": True,
+    }
+    assert volumes["craft-fc-agent-client"]["secret"]["secretName"] == "agent-client"
+
+
+@pytest.mark.parametrize("template", _CLIENT_TEMPLATES)
+def test_agent_client_keeps_pod_volumes(template: str) -> None:
+    values = template.removeprefix("templates/").removesuffix(".yaml")
+    key = {
+        "api-deployment": "api",
+        "celery-worker-heavy": "celery_worker_heavy",
+        "celery-worker-scheduled-tasks": "celery_worker_scheduled_tasks",
+    }[values]
+    spec, container = _client_container(
+        [
+            *_FIRECRACKER,
+            "--set",
+            f"{key}.volumes[0].name=extra",
+            "--set",
+            f"{key}.volumes[0].emptyDir.medium=Memory",
+            "--set",
+            f"{key}.volumeMounts[0].name=extra",
+            "--set",
+            f"{key}.volumeMounts[0].mountPath=/extra",
+        ],
+        template,
+    )
+    assert {"extra", "craft-fc-agent-client"} <= {v["name"] for v in spec["volumes"]}
+    assert {"extra", "craft-fc-agent-client"} <= {
+        m["name"] for m in container["volumeMounts"]
+    }
+
+
+@pytest.mark.parametrize("template", _CLIENT_TEMPLATES)
+def test_pod_runtime_has_no_agent_client(template: str) -> None:
+    spec, container = _client_container([], template)
+    env_names = {e["name"] for e in container.get("env", [])}
+
+    assert not {n for n in env_names if n.startswith("SANDBOX_FC_AGENT_")}
+    assert "craft-fc-agent-client" not in {v["name"] for v in spec.get("volumes", [])}

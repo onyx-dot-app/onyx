@@ -6,6 +6,8 @@ placement in the tenant cache, both with TTLs their writers refresh.
   `NODE_SIGNING_KEY_TTL_SECONDS`, so a dead node's keys expire on their own.
 - Placement: the Firecracker lifecycle writes it at VM start, refreshes it on
   heartbeat and clears it at stop.
+- Agent addresses: the registration carries the agent's mTLS listener, so the
+  api_server knows how to reach every node that registered a live key.
 """
 
 import base64
@@ -21,6 +23,9 @@ _KEY_PREFIX = "sandbox_fc:signing_key:"
 _NODE_KIDS_PREFIX = "sandbox_fc:node_kids:"
 _NODE_LOCK_PREFIX = "sandbox_fc:node_lock:"
 _PLACEMENT_PREFIX = "sandbox_fc:placement:"
+_NODE_ADDRESS_PREFIX = "sandbox_fc:node_address:"
+_NODES_KEY = "sandbox_fc:nodes"
+_MAX_NODES = 10_000
 _LOCK_WAIT_SECONDS = 10.0
 
 
@@ -131,3 +136,43 @@ def get_sandbox_placement(
         return None
     record = json.loads(raw)
     return SandboxPlacement(node_id=record["node"], generation=record["gen"])
+
+
+class RegisteredNode(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    node_id: str
+    # host:port of the agent's mTLS listener.
+    address: str
+
+
+def set_node_agent_address(
+    shared_cache: CacheBackend, *, node_id: str, address: str
+) -> None:
+    """Record the agent listener of a node. Expires with the node's keys."""
+    shared_cache.set(
+        _NODE_ADDRESS_PREFIX + node_id, address, ex=NODE_SIGNING_KEY_TTL_SECONDS
+    )
+    shared_cache.set_add(_NODES_KEY, node_id)
+
+
+def get_registered_node(
+    shared_cache: CacheBackend, node_id: str
+) -> RegisteredNode | None:
+    raw = shared_cache.get(_NODE_ADDRESS_PREFIX + node_id)
+    if raw is None:
+        return None
+    return RegisteredNode(node_id=node_id, address=raw.decode())
+
+
+def list_registered_nodes(shared_cache: CacheBackend) -> list[RegisteredNode]:
+    """Nodes whose agent registered within the key TTL, sorted by id."""
+    nodes: list[RegisteredNode] = []
+    for member in shared_cache.set_members(_NODES_KEY, limit=_MAX_NODES):
+        node_id = member.decode()
+        node = get_registered_node(shared_cache, node_id)
+        if node is None:
+            shared_cache.set_remove(_NODES_KEY, node_id)
+            continue
+        nodes.append(node)
+    return sorted(nodes, key=lambda n: n.node_id)

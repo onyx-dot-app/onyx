@@ -235,13 +235,26 @@ With `firecracker`, the chart:
 - puts the agent in its own namespace (`craft.hostAgent.namespace`) with Pod
   Security `privileged`;
 - adds a headless Service for the agent port (7443);
-- lets only api_server pods reach the agent port, and lets the agent pods reach
-  the sandbox-proxy port.
+- lets only the agent clients (api_server, heavy and scheduled-tasks workers)
+  reach the agent port, and lets the agent pods reach the sandbox-proxy port;
+- starts the agent with `--advertise-address=$(POD_IP):7443`, so the agent
+  registers its pod IP with its node key.
 
 The agent needs a TLS Secret in the agent namespace. It holds the agent
 certificate (`tls.crt`, `tls.key`) and the CA of the api_server client
 certificates (`ca.crt`). The chart does not make certificates. Until the Secret
 exists, the agent pods stay in `ContainerCreating`.
+
+The agent clients need a second Secret, in the release namespace
+(`craft.hostAgent.client.existingSecret`). It holds the client certificate
+(`tls.crt`, `tls.key`, signed by the CA in the agent `ca.crt`) and the CA of the
+agent certificates (`ca.crt`). The chart mounts it in the api_server, heavy and
+scheduled-tasks pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
+`SANDBOX_FC_AGENT_CLIENT_KEY_PATH` and `SANDBOX_FC_AGENT_CA_PATH`. The clients
+dial agent pod IPs. If the agent certificates do not carry the pod IPs, set
+`craft.hostAgent.client.tlsServerName` (`SANDBOX_FC_AGENT_TLS_SERVER_NAME`) to
+a DNS name in the agent certificate. To accept only some client certificates,
+set `craft.hostAgent.clientAllowedSans`.
 
 ```yaml
 craft:
@@ -251,6 +264,9 @@ craft:
       tag: "<host agent version>"
     tls:
       existingSecret: craft-fc-host-agent-tls
+    client:
+      existingSecret: craft-fc-agent-client-tls
+      tlsServerName: craft-fc-host-agent
 auth:
   sandboxNodeRegistration:
     enabled: true

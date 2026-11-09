@@ -10,6 +10,7 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
@@ -19,9 +20,12 @@ from onyx.db.models import Sandbox
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm.registry import (
+    RegisteredNode,
     SandboxPlacement,
     clear_sandbox_placement,
     get_node_signing_key,
+    get_registered_node,
+    list_registered_nodes,
     set_sandbox_placement,
 )
 from onyx.sandbox_proxy.addons.gate import GateAddon
@@ -344,3 +348,78 @@ def test_registration_rejects_key_id_claimed_by_other_node(
     assert conflict.value.error_code is OnyxErrorCode.CONFLICT
     registered = get_node_signing_key(get_shared_cache_backend(), key_id)
     assert registered is not None and registered.node_id == node_id
+
+
+def _cleanup_node(node_id: str, key_ids: list[str]) -> None:
+    cache = get_shared_cache_backend()
+    for key_id in key_ids:
+        cache.delete(f"sandbox_fc:signing_key:{key_id}")
+    cache.delete(f"sandbox_fc:node_kids:{node_id}")
+    cache.delete(f"sandbox_fc:node_address:{node_id}")
+    cache.set_remove("sandbox_fc:nodes", node_id)
+
+
+def test_registration_records_agent_address() -> None:
+    """The agent sends its listener with the key; older agents send none."""
+    cache = get_shared_cache_backend()
+    node_id = f"node-{uuid4().hex[:12]}"
+    other_id = f"{node_id}-old"
+    private_key = Ed25519PrivateKey.generate()
+    try:
+        register_sandbox_node_signing_key(
+            SandboxNodeSigningKeyRegistration(
+                node_id=node_id,
+                key_id=f"{node_id}-1",
+                public_key=_public_b64(private_key),
+                agent_address="10.0.3.7:7443",
+            )
+        )
+        _register(other_id, f"{other_id}-1", Ed25519PrivateKey.generate())
+
+        node = RegisteredNode(node_id=node_id, address="10.0.3.7:7443")
+        assert get_registered_node(cache, node_id) == node
+        assert node in list_registered_nodes(cache)
+        assert get_registered_node(cache, other_id) is None
+
+        # A rejected registration does not move the node.
+        with pytest.raises(OnyxError):
+            register_sandbox_node_signing_key(
+                SandboxNodeSigningKeyRegistration(
+                    node_id=node_id,
+                    key_id=f"{node_id}-1",
+                    public_key=_public_b64(Ed25519PrivateKey.generate()),
+                    agent_address="10.0.9.9:7443",
+                )
+            )
+        assert get_registered_node(cache, node_id) == node
+    finally:
+        _cleanup_node(node_id, [f"{node_id}-1"])
+        _cleanup_node(other_id, [f"{other_id}-1"])
+
+
+@pytest.mark.parametrize(
+    "address, valid",
+    [
+        ("10.0.3.7:7443", True),
+        ("[fd00::7]:7443", True),
+        ("agent-0.onyx.svc:7443", True),
+        ("10.0.3.7", False),
+        ("fd00::7:7443", False),
+        ("http://10.0.3.7:7443/", False),
+        (":7443", False),
+    ],
+)
+def test_registration_validates_agent_address(address: str, valid: bool) -> None:
+    def build() -> SandboxNodeSigningKeyRegistration:
+        return SandboxNodeSigningKeyRegistration(
+            node_id="node-a",
+            key_id="node-a-1",
+            public_key=_public_b64(Ed25519PrivateKey.generate()),
+            agent_address=address,
+        )
+
+    if valid:
+        assert build().agent_address == address
+        return
+    with pytest.raises(ValidationError):
+        build()
