@@ -729,3 +729,28 @@ def test_cleanup_lease_loss_on_last_resource_aborts_without_retry(
         )
     manager.delete_resource.assert_not_called()
     cache.set.assert_not_called()
+
+
+def test_cleanup_idle_sandboxes_task_skips_when_manager_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.background.celery.tasks.build import tasks
+
+    redis = MagicMock()
+    cache = MagicMock()
+    cache.lock.return_value.acquire.return_value = True
+
+    monkeypatch.setattr(tasks, "get_redis_client", lambda **_kwargs: redis)
+    monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
+    monkeypatch.setattr(
+        tasks,
+        "get_sandbox_manager",
+        MagicMock(
+            side_effect=RuntimeError(
+                "Failed to load Kubernetes configuration: Invalid kube-config file. No configuration found."
+            )
+        ),
+    )
+
+    # Should exit cleanly without raising RuntimeError or unhandled Exception
+    tasks.cleanup_idle_sandboxes_task.run(tenant_id="tenant-a")  # ty: ignore[invalid-argument-type]
