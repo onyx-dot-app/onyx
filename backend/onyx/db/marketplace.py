@@ -1,14 +1,18 @@
 """Apply a complete read using staged bundles; the caller owns commit and cleanup."""
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
+from onyx.db.enums import Permission
 from onyx.db.marketplace_access import materialize_marketplace_access__no_commit
-from onyx.db.models import Marketplace, Skill, SkillVersion, UserSkillPreference
+from onyx.db.marketplace_sync import request_marketplace_sync__no_commit
+from onyx.db.models import Marketplace, Skill, SkillVersion, User, UserSkillPreference
+from onyx.db.resource_access import lock_resource_access_user
 from onyx.db.resource_version import prune_resource_bundles, write_resource_version
 from onyx.db.skill import affected_user_ids_for_skills
 from onyx.db.skill_version import SkillVersionAdapter
@@ -16,7 +20,11 @@ from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.ingest import IngestedBundle
-from onyx.skills.marketplace.models import ReconciliationResult
+from onyx.skills.marketplace.models import (
+    MarketplaceRetirementProposal,
+    MarketplaceSyncStatus,
+    ReconciliationResult,
+)
 from onyx.skills.marketplace.read_models import (
     BlockedSkill,
     CompleteMarketplace,
@@ -24,6 +32,7 @@ from onyx.skills.marketplace.read_models import (
     ReadySkill,
     UnsupportedPlugin,
 )
+from shared_configs.contextvars import get_current_tenant_id
 
 
 def fetch_marketplace_sync_state(
@@ -44,6 +53,49 @@ def fetch_marketplace_sync_state(
     }
     db_session.expunge_all()
     return marketplace, current
+
+
+def confirm_marketplace_retirement__no_commit(
+    marketplace_id: UUID,
+    *,
+    expected_revision: str,
+    expected_skill_ids: Collection[UUID],
+    user: User,
+    db_session: Session,
+) -> None:
+    """Approve only the locked proposal using the authenticated actor's current rights.
+
+    Persist approval and sync intent together. The caller dispatches after commit.
+    This helper neither commits nor performs provider or storage I/O.
+    """
+    actor = lock_resource_access_user(user.id, db_session)
+    marketplace = db_session.scalar(
+        select(Marketplace)
+        .where(Marketplace.id == marketplace_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if marketplace is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found")
+    if marketplace.owner_user_id != actor.id and not has_global_permission(
+        actor, Permission.MANAGE_SKILLS
+    ):
+        raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+    proposal = marketplace.retirement_proposal
+    if (
+        proposal is None
+        or proposal.revision != expected_revision
+        or proposal.skill_ids != tuple(sorted(expected_skill_ids))
+    ):
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Retirement proposal has changed")
+    if marketplace.sync_status != MarketplaceSyncStatus.NEEDS_CONFIRMATION:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Sync the marketplace again before confirming retirement",
+        )
+    marketplace.retirement_proposal = proposal.model_copy(update={"approved": True})
+    db_session.flush()
+    request_marketplace_sync__no_commit(marketplace_id, db_session)
 
 
 def reconcile_marketplace__no_commit(
@@ -101,7 +153,7 @@ def reconcile_marketplace__no_commit(
             select(
                 func.pg_advisory_xact_lock(
                     func.hashtextextended(
-                        func.current_schema() + ":skill-library:" + library, 0
+                        get_current_tenant_id() + ":skill-library:" + library, 0
                     )
                 )
             )
@@ -131,7 +183,17 @@ def reconcile_marketplace__no_commit(
             for key, skill in live.items()
             if key not in present and (key or "").split("/", 1)[0] not in unsupported
         ]
-        if len(missing) > 5 and len(missing) * 2 > len(live):
+        proposal = MarketplaceRetirementProposal(
+            revision=revision, skill_ids=tuple(sorted(skill.id for skill in missing))
+        )
+        approved = proposal.model_copy(update={"approved": True})
+        if (
+            len(missing) > 5
+            and len(missing) * 2 > len(live)
+            and marketplace.retirement_proposal != approved
+        ):
+            marketplace.retirement_proposal = proposal
+            marketplace.sync_status = MarketplaceSyncStatus.NEEDS_CONFIRMATION
             marketplace.last_error = "needs confirmation"
             db_session.flush()
             return ReconciliationResult(
@@ -246,6 +308,7 @@ def reconcile_marketplace__no_commit(
             for user_id in before.get(skill_id, set()) | after.get(skill_id, set())
         }
         marketplace.blocked_entries = blocked
+        marketplace.retirement_proposal = None
         marketplace.last_error = None
         marketplace.last_synced_revision = revision
         marketplace.last_synced_at = now

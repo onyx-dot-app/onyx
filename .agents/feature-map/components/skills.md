@@ -462,7 +462,9 @@ The library preview of an external-app skill calls the same renderer
     has a separate ceiling, including nested paths. Mixed plugins are unsupported.
     Completed entries form an immutable snapshot. Present catalog metadata must
     be an object. Empty declarations cannot hide agent or command Markdown files.
-    Tar reads require an end marker, including when gzip itself is intact.
+    Tar reads require two zero end blocks and only zero padding afterward,
+    including when gzip itself is intact. A nested plugin root that loses its
+    definition keeps its blocked key while other files remain.
     Missing explicit skill definitions keep their keys as blocked entries.
     Plugin manifest skill paths participate in discovery; Claude paths add to
     defaults, while Codex compatibility paths replace defaults. Entry paths
@@ -488,17 +490,33 @@ The library preview of an external-app skill calls the same renderer
     keep their versions; `Marketplace.blocked_entries` stores reasons for the later UI.
     More than five retirements AND more than half the live marketplace sets
     `last_error` to "needs confirmation" and leaves skills and synced revision intact.
+    `Marketplace.retirement_proposal` persists the exact source revision and sorted
+    missing live skill ids. `db/marketplace.py:confirm_marketplace_retirement__no_commit`
+    refreshes the actor under the membership lock before locking the marketplace.
+    A personal owner or global `MANAGE_SKILLS` actor can approve. Confirmation
+    requires NEEDS_CONFIRMATION status and compares the caller's revision and ids
+    with the locked proposal. Reconciliation bypasses the guard only for that exact approved pair.
+    A changed pair replaces the proposal without approval. Successful reconciliation
+    clears it in the content transaction; rollback preserves both approval and content.
+    Failed reads at the same revision preserve the proposal, but confirmation
+    requires a new sync to restore NEEDS_CONFIRMATION status. A fenced sync that
+    resolves a different revision clears it before bundle validation or staging,
+    including a no-op revert to the last synced revision. A storage failure or
+    stopped worker cannot preserve approval for the old revision. Consumed approval
+    cannot authorize a later replay.
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.
+    Its namespace uses tenant context, not PostgreSQL search_path, because schema
+    translation can leave current_schema() identical across tenants.
     G3 must use that same lock for manual name checks. S5 owns job
     freshness. Retirement releases enabled preferences and automatic-policy names.
     Access materialization and audience
     capture share the reconciliation transaction without tier lookups or external I/O.
-    No API or worker calls the sync service yet.
+    No management API calls the sync service yet.
 23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**
-    `skills/sync.py:sync_marketplace` owns the sessions and commit. Call it in the
-    target tenant context after authorization. A detached current-version snapshot
+    `skills/sync.py:sync_marketplace` owns the tenant context, sessions and commit.
+    Callers must authorize access first. A detached current-version snapshot
     uses object metadata to detect missing bundles without reading their content.
     Source changes trigger bounded content verification; unchanged sources do not
     detect corruption in existing blobs. Unknown size falls back to bounded verification.
@@ -507,14 +525,62 @@ The library preview of an external-app skill calls the same renderer
     Ingestion preparation runs before upload; validation failures become blocked
     entries with their original keys. Storage failures abort the entire sync.
     Each attempted upload uses a fresh tracked file id. The sync caller commits all
-    skill, version and revision changes together. Before a commit attempt, failure
+    skill, version, revision and completion status together. Ownership release and
+    pending-request reads share that transaction. Before a commit attempt, failure
     cleanup checks only this run's ids. After a commit attempt fails, defer cleanup
     to the aged orphan sweep: the server may still commit. Success cleanup also
     checks pruned ids. Cleanup preserves version and legacy references.
-    After commit, one push covers users affected by content, retirement, or access changes.
+    After commit, lease renewal stops before cleanup and sandbox I/O.
+    One push covers users affected by content, retirement, or access changes.
+    A failed push is logged; it cannot change the committed sync result.
     V3 retries failed cleanup and removes aged uploads left by a stopped worker.
-    S5 must serialize the full read/upload/write operation and reject stale revisions.
-    S8 owns the retirement confirmation override. Neither is implemented here.
+    `db/marketplace_sync.py` owns durable requests and per-marketplace leases.
+    The shared heartbeat renews each lease for at most five minutes. Publication
+    checks ownership and expiry before reconciliation, with membership before
+    marketplace locks. `MarketplaceSyncPublication` binds completion to the transaction
+    that holds that row lock. Lease expiry during reconciliation does not revoke it;
+    the five-minute operation deadline still applies. Commit or rollback invalidates
+    the publication object. Unfenced expired workers cannot publish or clear another owner.
+    Finalization releases ownership and reads pending work under the same row lock.
+    After two passes, recovery dispatches any remaining request. An unchanged repeat
+    preserves the last nonempty result; a later failure or confirmation result takes precedence.
+    Temporary upstream
+    failures and expired workers share a three-attempt budget, with 60/120-second
+    backoff. Other exceptions, failed reads and confirmation guards are terminal.
+    Explicit requests reset the budget and delay, including during a running attempt.
+    Lost login errors survive completion; publication checks the login under the row lock.
+    An unchanged success clears the prior error. Errors contain no provider bodies.
+    The next worker layer adds request dispatch
+    after authorization and commit. It persists intent before transport I/O. Recovery
+    retries requested work, expired queue reservations and expired owners; it never
+    polls idle sources. Cloud recovery skips gated tenants and uses tenant activity
+    gating. Request, claim and retry paths mark activity outside database locks;
+    reaping marks activity even when backoff postpones dispatch. Idle recovery does
+    not mark activity. Single-tenant deployments skip activity flag reads and writes,
+    so Lite does not need Redis for sync. The cloud scheduler stretches the recovery interval, so
+    60/120 seconds are minimum retry delays, not dispatch guarantees. Both recovery
+    and sync messages live for 15 minutes; database claims reject duplicates and enforce retry delays.
+    Celery uses the heavy worker's sandbox queue. Lite dispatches
+    through a bounded background thread path, outside the periodic poller thread.
+    Recovery errors do not prevent the Lite file drains from running.
+    Exact retirement confirmation is persisted by the database prerequisite.
+    The confirmation helper records approval and requested work in one transaction.
+    The management endpoint must commit before dispatch.
+
+
+24. `marketplace-sync-ownership` **Bound each durable request and fence its owner.**
+    `db/marketplace_sync.py` stores requested work and per-marketplace leases.
+    Claim, renewal, completion and recovery lock the marketplace row. Publication
+    fences take membership first, then the marketplace lock. Expired owners cannot
+    enter publication. A fenced publication can complete while it retains that lock,
+    until the five-minute operation deadline. A released transaction cannot reuse
+    its publication object. A lease lasts at most five minutes from its claim.
+    Temporary failures and expired owners share three attempts with 60/120-second
+    backoff. Explicit requests reset the budget and delay without replacing a live
+    owner. Completion preserves a request made during the run and a deleted login's
+    error. Queue reservations expire separately from retry delays.
+    The background worker uses these transitions for all sync attempts.
+
 
 ---
 

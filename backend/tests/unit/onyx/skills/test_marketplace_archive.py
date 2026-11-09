@@ -117,6 +117,26 @@ def test_truncated_trailer_fails(trim: int) -> None:
         pass
 
 
+@pytest.mark.parametrize("damage", ["one_end_block", "hidden_member", "trailing_data"])
+def test_tar_end_marker_cannot_hide_archive_contents(damage: str) -> None:
+    expanded = gzip.decompress(_archive(_files(), "tar"))
+    with tarfile.open(fileobj=io.BytesIO(expanded), mode="r:") as archive:
+        members = archive.getmembers()
+    last = members[-1]
+    end = last.offset_data + ((last.size + 511) // 512) * 512
+    if damage == "one_end_block":
+        expanded = expanded[:end] + b"\0" * 512
+    elif damage == "hidden_member":
+        expanded = expanded[: last.offset] + b"\0" * 512 + expanded[last.offset + 512 :]
+    else:
+        expanded += b"unexpected data"
+    with (
+        pytest.raises(ValueError, match="end marker"),
+        archives.archive_files(gzip.compress(expanded)),
+    ):
+        pass
+
+
 @pytest.mark.parametrize("header_type", [tarfile.XHDTYPE, tarfile.XGLTYPE])
 @pytest.mark.parametrize("count,records", [(1, 420_000), (8, 200)])
 def test_valid_pax_metadata_is_bounded_before_member_returns(

@@ -210,8 +210,11 @@ def _require_tar_end_marker(archive: zipfile.ZipFile | tarfile.TarFile) -> None:
         return
     # tarfile silently stops at a damaged header after the first member.
     archive.fileobj.seek(archive.offset)
-    if archive.fileobj.read(tarfile.BLOCKSIZE) != b"\0" * tarfile.BLOCKSIZE:
+    if archive.fileobj.read(2 * tarfile.BLOCKSIZE) != b"\0" * (2 * tarfile.BLOCKSIZE):
         raise ValueError("Tar archive has no valid end marker")
+    while trailing := archive.fileobj.read(64 * 1024):
+        if trailing.strip(b"\0"):
+            raise ValueError("Tar archive has content after its end marker")
 
 
 @contextmanager
@@ -307,11 +310,11 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                 files[path] = partial(_open_member, archive, member, budget)
             else:
                 files[path] = None
+        if buffered is not None:
+            buffered.metadata_reads = False
         _require_tar_end_marker(archive)
         # Directories named like files must not silently select a fallback manifest.
         for path in directories:
             if path == "SKILL.md" or path.endswith((".json", "/SKILL.md")):
                 files[path] = None
-        if buffered is not None:
-            buffered.metadata_reads = False
         yield files
