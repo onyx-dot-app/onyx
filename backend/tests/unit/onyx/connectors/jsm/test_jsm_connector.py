@@ -22,6 +22,7 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.connectors.jsm.client import build_jsm_session
 from onyx.connectors.jsm.connector import (
     JiraServiceManagementConnector,
@@ -58,6 +59,7 @@ def _issue_payload(
     key: str = _ISSUE_KEY,
     issue_id: str = _ISSUE_ID,
     summary: str = "Laptop will not start",
+    project_key: str = "HELP",
 ) -> dict[str, Any]:
     return {
         "id": issue_id,
@@ -70,7 +72,7 @@ def _issue_payload(
             "status": {"name": "Open"},
             "priority": {"name": "High"},
             "issuetype": {"name": "Service Request"},
-            "project": {"key": "HELP", "name": "Help Desk"},
+            "project": {"key": project_key, "name": "Help Desk"},
             "reporter": {
                 "displayName": "Ada Reporter",
                 "emailAddress": "ada@example.com",
@@ -117,6 +119,13 @@ def connector(mock_jira_client: MagicMock) -> JiraServiceManagementConnector:
         service_desk_id="10",
     )
     connector._jira_client = mock_jira_client
+    # The desk resolves: tests below exercise indexing and permissions, not
+    # the desk lookup (the fail-closed tests override it and mock the API).
+    connector._desk_project_key_cache = "100"
+    connector._desk_project_key_resolved = True
+    # The perm-sync paths resolve permissions through the Jira gateway built
+    # in load_credentials; tests stub it directly.
+    connector._source_operations = MagicMock(spec=JiraSourceOperations)
     return connector
 
 
@@ -388,7 +397,8 @@ def test_checkpoint_output_wrapper_streaming() -> None:
 
 class TestJsmConnectorFixes:
     """Regression tests for the review fixes: desk scoping, poll bounds,
-    perm-sync access, ADF comments, slim skips and validation errors."""
+    fail-closed desk resolution, per-issue perm-sync access, ADF comments,
+    slim skips and validation errors."""
 
     @staticmethod
     def _capture_jql(connector: JiraServiceManagementConnector) -> list[str]:
@@ -411,6 +421,8 @@ class TestJsmConnectorFixes:
         self,
         connector: JiraServiceManagementConnector,
     ) -> None:
+        connector._desk_project_key_cache = None
+        connector._desk_project_key_resolved = False
         connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
         jqls = self._capture_jql(connector)
 
@@ -428,11 +440,15 @@ class TestJsmConnectorFixes:
         assert jqls, "expected the checkpoint query to run"
         assert 'project = "100"' in jqls[0]
 
-    def test_unresolvable_service_desk_polls_unscoped(
+    def test_unresolvable_service_desk_fails_closed(
         self,
         connector: JiraServiceManagementConnector,
     ) -> None:
+        """A configured desk that cannot be resolved must not widen the poll
+        to every project the credential can see: the sync fails closed."""
         connector.service_desk_id = "404"
+        connector._desk_project_key_cache = None
+        connector._desk_project_key_resolved = False
         connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
         jqls = self._capture_jql(connector)
 
@@ -441,13 +457,53 @@ class TestJsmConnectorFixes:
                 f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/404",
                 status=404,
             )
-            list(
-                connector.load_from_checkpoint(
-                    0, 10, connector.build_dummy_checkpoint()
+            with pytest.raises(ConnectorValidationError, match="404"):
+                list(
+                    connector.load_from_checkpoint(
+                        0, 10, connector.build_dummy_checkpoint()
+                    )
                 )
-            )
 
-        assert jqls and "project =" not in jqls[0]
+        # No poll may run on the unscoped window.
+        assert not jqls
+
+    def test_unresolvable_service_desk_fails_closed_on_slim_path(
+        self,
+        connector: JiraServiceManagementConnector,
+    ) -> None:
+        connector.service_desk_id = "404"
+        connector._desk_project_key_cache = None
+        connector._desk_project_key_resolved = False
+        connector._jsm_session = build_jsm_session({"jira_api_token": "token"})
+        jqls = self._capture_jql(connector)
+
+        with responses.RequestsMock() as rsps:
+            rsps.get(
+                f"{_JSM_BASE}/rest/servicedeskapi/servicedesk/404",
+                status=404,
+            )
+            with pytest.raises(ConnectorValidationError, match="404"):
+                list(connector.retrieve_all_slim_docs_perm_sync())
+
+        assert not jqls
+
+    def test_jql_only_mode_polls_without_desk_scope(
+        self,
+        mock_jira_client: MagicMock,
+    ) -> None:
+        """No service_desk_id configured: JQL-only mode must keep working."""
+        connector = JiraServiceManagementConnector(
+            jsm_base_url=_JSM_BASE,
+            jql_query='issuetype = "Service Request"',
+        )
+        connector._jira_client = mock_jira_client
+        jqls = self._capture_jql(connector)
+
+        list(connector.load_from_checkpoint(0, 10, connector.build_dummy_checkpoint()))
+
+        assert jqls
+        assert 'issuetype = "Service Request"' in jqls[0]
+        assert "project =" not in jqls[0]
 
     # ---- P1-4: poll bounds ----
 
@@ -478,7 +534,7 @@ class TestJsmConnectorFixes:
         assert "updated >= 1000500" in jqls[0]
         assert "updated <= 2000250" in jqls[0]
 
-    # ---- P1-5: perm-sync external access ----
+    # ---- P1-5: perm-sync external access (per issue) ----
 
     def test_perm_sync_full_path_attaches_external_access(
         self,
@@ -490,18 +546,30 @@ class TestJsmConnectorFixes:
             external_user_group_ids=set(),
             is_public=False,
         )
+        seen_kwargs: list[dict[str, Any]] = []
+
+        def fake_get_project_permissions(**kwargs: Any) -> ExternalAccess:
+            seen_kwargs.append(kwargs)
+            return external_access
+
         monkeypatch.setattr(
             jsm_connector_module,
             "get_project_permissions",
-            lambda **_kwargs: external_access,
+            fake_get_project_permissions,
         )
-        connector._desk_project_key_cache = "100"
 
         _mock_search_issues(connector, [_issue_payload()])
 
         perm_docs = _documents_from_perm_sync(connector)
         assert perm_docs
         assert all(doc.external_access is external_access for doc in perm_docs)
+        # The project comes from the issue's own fields, and the Jira gateway
+        # (not a jira client) resolves the permissions.
+        assert seen_kwargs
+        assert all(
+            kwargs["jira_project"] == "HELP" and "source_operations" in kwargs
+            for kwargs in seen_kwargs
+        )
 
         # The non-perm path must NOT stamp access.
         _mock_search_issues(connector, [_issue_payload()])
@@ -524,12 +592,15 @@ class TestJsmConnectorFixes:
             external_user_group_ids={"group-1"},
             is_public=False,
         )
+
+        def fake_get_project_permissions(**_kwargs: Any) -> ExternalAccess:
+            return external_access
+
         monkeypatch.setattr(
             jsm_connector_module,
             "get_project_permissions",
-            lambda **_kwargs: external_access,
+            fake_get_project_permissions,
         )
-        connector._desk_project_key_cache = "100"
 
         _mock_search_issues(connector, [_issue_payload()])
         perm_batches = list(connector.retrieve_all_slim_docs_perm_sync())
@@ -542,6 +613,109 @@ class TestJsmConnectorFixes:
         plain_docs = [doc for batch in plain_batches for doc in batch]
         assert plain_docs
         assert all(doc.external_access is None for doc in plain_docs)
+
+    def test_perm_sync_resolves_permissions_per_issue_project(
+        self,
+        connector: JiraServiceManagementConnector,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A JQL scope spanning several projects stamps each issue with its
+        own project's permissions, not one desk project's for every issue."""
+        permissions_by_project = {
+            "HELP": ExternalAccess(
+                external_user_emails={"help@example.com"},
+                external_user_group_ids=set(),
+                is_public=False,
+            ),
+            "OPS": ExternalAccess(
+                external_user_emails={"ops@example.com"},
+                external_user_group_ids=set(),
+                is_public=False,
+            ),
+        }
+
+        def fake_get_project_permissions(**kwargs: Any) -> ExternalAccess:
+            return permissions_by_project[kwargs["jira_project"]]
+
+        monkeypatch.setattr(
+            jsm_connector_module,
+            "get_project_permissions",
+            fake_get_project_permissions,
+        )
+
+        _mock_search_issues(
+            connector,
+            [
+                _issue_payload(key="HELP-1", project_key="HELP"),
+                _issue_payload(key="OPS-1", issue_id="10002", project_key="OPS"),
+            ],
+        )
+
+        perm_docs = _documents_from_perm_sync(connector)
+        assert [doc.id for doc in perm_docs] == [
+            f"{_JSM_BASE}/browse/HELP-1",
+            f"{_JSM_BASE}/browse/OPS-1",
+        ]
+        assert perm_docs[0].external_access is permissions_by_project["HELP"]
+        assert perm_docs[1].external_access is permissions_by_project["OPS"]
+
+    def test_perm_sync_issues_without_project_fall_back_to_private(
+        self,
+        connector: JiraServiceManagementConnector,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An issue whose project cannot be read gets the private fallback,
+        so the permission sync never sees a missing access value."""
+        calls: list[str] = []
+
+        def fake_get_project_permissions(**kwargs: Any) -> ExternalAccess:
+            calls.append(kwargs["jira_project"])
+            return ExternalAccess.public()
+
+        monkeypatch.setattr(
+            jsm_connector_module,
+            "get_project_permissions",
+            fake_get_project_permissions,
+        )
+
+        no_project = _issue_payload()
+        del no_project["fields"]["project"]
+        _mock_search_issues(connector, [no_project])
+
+        perm_docs = _documents_from_perm_sync(connector)
+        assert perm_docs
+        assert all(doc.external_access == ExternalAccess.empty() for doc in perm_docs)
+        assert not calls, "no permission resolution without a project key"
+
+        # The same fallback applies on the slim perm-sync path.
+        _mock_search_issues(connector, [no_project])
+        perm_batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        perm_docs = [doc for batch in perm_batches for doc in batch]
+        assert perm_docs
+        assert all(doc.external_access == ExternalAccess.empty() for doc in perm_docs)
+
+    def test_perm_sync_slim_path_issues_without_project_fall_back_to_private(
+        self,
+        connector: JiraServiceManagementConnector,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def fake_get_project_permissions(**_kwargs: Any) -> ExternalAccess | None:
+            return None
+
+        monkeypatch.setattr(
+            jsm_connector_module,
+            "get_project_permissions",
+            fake_get_project_permissions,
+        )
+
+        no_project = _issue_payload()
+        no_project["fields"]["project"] = {}
+        _mock_search_issues(connector, [no_project])
+
+        perm_batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        perm_docs = [doc for batch in perm_batches for doc in batch]
+        assert perm_docs
+        assert all(doc.external_access == ExternalAccess.empty() for doc in perm_docs)
 
     # ---- P2-1: ADF comment bodies ----
 
@@ -607,3 +781,62 @@ class TestJsmConnectorFixes:
             )
             with pytest.raises(ConnectorValidationError, match="JQL"):
                 connector.validate_connector_settings()
+
+
+class TestJsmConfigFieldPolicies:
+    """The JSM scope fields carry field policies so config edits can plan
+    reconciliation (desk: single-item include scope, JQL: opaque scope)."""
+
+    def test_service_desk_id_is_a_single_item_scope(self) -> None:
+        from onyx.connectors.field_policy import FieldClass, ScopeInclude
+        from onyx.connectors.jsm.config import JiraServiceManagementConnectorConfig
+
+        policy = JiraServiceManagementConnectorConfig.model_fields[
+            "service_desk_id"
+        ].metadata
+        field_policies = [
+            item for item in policy if item.__class__.__name__ == "FieldPolicy"
+        ]
+        assert len(field_policies) == 1
+        assert field_policies[0].field_class == FieldClass.SCOPE
+        scope = field_policies[0].scope
+        assert isinstance(scope, ScopeInclude)
+        assert scope.empty_means_all is True
+        assert scope.split_on_commas is False
+
+    def test_base_url_is_identity_and_batch_size_cosmetic(self) -> None:
+        from onyx.connectors.field_policy import FieldClass
+        from onyx.connectors.jsm.config import (
+            JiraServiceManagementConnectorBinding,
+            JiraServiceManagementConnectorConfig,
+        )
+
+        binding_policy = JiraServiceManagementConnectorBinding.model_fields[
+            "jsm_base_url"
+        ].metadata
+        binding_field_policies = [
+            item for item in binding_policy if item.__class__.__name__ == "FieldPolicy"
+        ]
+        assert len(binding_field_policies) == 1
+        assert binding_field_policies[0].field_class == FieldClass.IDENTITY
+
+        batch_policy = JiraServiceManagementConnectorConfig.model_fields[
+            "batch_size"
+        ].metadata
+        batch_field_policies = [
+            item for item in batch_policy if item.__class__.__name__ == "FieldPolicy"
+        ]
+        assert len(batch_field_policies) == 1
+        assert batch_field_policies[0].field_class == FieldClass.COSMETIC
+
+    def test_jql_query_is_an_opaque_scope(self) -> None:
+        from onyx.connectors.field_policy import FieldClass, ScopeOpaque
+        from onyx.connectors.jsm.config import JiraServiceManagementConnectorConfig
+
+        policy = JiraServiceManagementConnectorConfig.model_fields["jql_query"].metadata
+        field_policies = [
+            item for item in policy if item.__class__.__name__ == "FieldPolicy"
+        ]
+        assert len(field_policies) == 1
+        assert field_policies[0].field_class == FieldClass.SCOPE
+        assert isinstance(field_policies[0].scope, ScopeOpaque)

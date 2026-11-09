@@ -12,12 +12,15 @@ import copy
 from datetime import datetime, timedelta
 from typing import Any
 
+import requests
 from jira import JIRA
 from jira.exceptions import JIRAError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
 )
@@ -36,7 +39,11 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.jira.access import get_project_permissions
-from onyx.connectors.jira.utils import build_jira_client
+from onyx.connectors.jira.source_operations import JiraSourceOperations
+from onyx.connectors.jira.utils import (
+    JIRA_CLOUD_API_VERSION,
+    JIRA_SERVER_API_VERSION,
+)
 from onyx.connectors.jsm.client import (
     build_jsm_session,
     fetch_service_desk,
@@ -64,6 +71,28 @@ _JSM_PAGE_SIZE = 50
 _JSL_MAX_RESULTS = 5000
 
 
+def _build_jira_client(credentials: dict[str, Any], jira_base: str) -> JIRA:
+    """The indexing client for the Jira platform API, with the Jira
+    connector's credential handling: an email + API token is Atlassian Cloud
+    basic auth on REST v3, a bare token is a Data Center personal access
+    token bearer on REST v2. The gateway refactor (#15770) moved the shared
+    helper behind JiraSourceOperations, which this connector does not use for
+    searching, so the client is built here.
+    """
+    api_token = credentials["jira_api_token"]
+    if "jira_user_email" in credentials:
+        return JIRA(
+            basic_auth=(credentials["jira_user_email"], api_token),
+            server=jira_base,
+            options={"rest_api_version": JIRA_CLOUD_API_VERSION},
+        )
+    return JIRA(
+        token_auth=api_token,
+        server=jira_base,
+        options={"rest_api_version": JIRA_SERVER_API_VERSION},
+    )
+
+
 class JsmConnectorCheckpoint(ConnectorCheckpoint):
     offset: int | None = None
 
@@ -87,6 +116,8 @@ class JiraServiceManagementConnector(
         self._jira_client: JIRA | None = None
         self._jsm_session: Any = None
         self._desk_project_key_cache: str | None = None
+        self._desk_project_key_resolved: bool = False
+        self._source_operations: JiraSourceOperations | None = None
         self._project_permissions_cache: dict[str, ExternalAccess | None] = {}
 
     @property
@@ -96,11 +127,22 @@ class JiraServiceManagementConnector(
         return self._jira_client
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self._jira_client = build_jira_client(
+        self._jira_client = _build_jira_client(
             credentials=credentials,
             jira_base=self.jsm_base,
         )
         self._jsm_session = build_jsm_session(credentials)
+        # JSM permissions are the Jira project permissions, so the EE layer
+        # reads them through the Jira gateway, like the Jira connector does.
+        self._source_operations = JiraSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.JIRA.value, credentials
+            ),
+            connector_specific_config={
+                "jira_base_url": self.jsm_base,
+                "scoped_token": False,
+            },
+        )
         return None
 
     def _get_jql_query(
@@ -122,13 +164,14 @@ class JiraServiceManagementConnector(
             # as a project clause (project matches key, name, or id).
             project_key = self._service_desk_project_key()
             if project_key is None:
-                logger.warning(
-                    "Could not resolve service desk %s to a Jira project; "
-                    "polling the unscoped time window.",
-                    self.service_desk_id,
+                # Fail closed: a configured desk that cannot be resolved must
+                # not widen the poll to every project the credential can see.
+                raise ConnectorValidationError(
+                    f"Service desk {self.service_desk_id} could not be resolved "
+                    f"to a Jira project. Check that the service desk ID exists "
+                    f"and is accessible to the credential."
                 )
-            else:
-                scopes.append(f'project = "{project_key}"')
+            scopes.append(f'project = "{project_key}"')
 
         if not scopes:
             return time_jql
@@ -137,10 +180,12 @@ class JiraServiceManagementConnector(
 
     def _service_desk_project_key(self) -> str | None:
         """The Jira project id backing the configured service desk, resolved
-        once per connector instance. Best effort: without the mapping the
-        poll stays on the unscoped window rather than failing the sync."""
-        if self._desk_project_key_cache is not None:
+        once per connector instance. None when no desk is configured, the
+        lookup fails, or the desk has no project; callers decide whether that
+        fails the sync (polling) or falls back per issue (permissions)."""
+        if self._desk_project_key_resolved:
             return self._desk_project_key_cache
+        self._desk_project_key_resolved = True
         if not (self._jsm_session and self.service_desk_id):
             return None
         try:
@@ -148,31 +193,37 @@ class JiraServiceManagementConnector(
                 self._jsm_session, self.jsm_base, self.service_desk_id
             )
         except Exception:
-            logger.exception(
-                "Failed to fetch service desk %s; polling without the desk scope.",
-                self.service_desk_id,
-            )
+            logger.exception("Failed to fetch service desk %s.", self.service_desk_id)
             return None
         project_id = desk.get("projectId") if desk else None
         if project_id:
             self._desk_project_key_cache = str(project_id)
         return self._desk_project_key_cache
 
-    def _get_project_permissions(self, project_key: str, add_prefix: bool) -> Any:
-        """External access for the Jira project backing a service desk.
+    def _get_project_permissions(
+        self, project_key: str, add_prefix: bool
+    ) -> ExternalAccess | None:
+        """External access for a Jira project.
 
         JSM permissions are the Jira project permissions; reuses the Jira
-        connector's EE resolution (returns None outside EE, in which case the
-        document keeps its default visibility). Cached per project/prefix.
+        connector's EE resolution through the Jira gateway (returns None
+        outside EE, in which case the document keeps its default visibility).
+        Cached per project/prefix.
         """
         cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
         if cache_key not in self._project_permissions_cache:
             self._project_permissions_cache[cache_key] = get_project_permissions(
-                jira_client=self.jira_client,
+                source_operations=self.source_operations,
                 jira_project=project_key,
                 add_prefix=add_prefix,
             )
         return self._project_permissions_cache[cache_key]
+
+    @property
+    def source_operations(self) -> JiraSourceOperations:
+        if self._source_operations is None:
+            raise ConnectorMissingCredentialError("Jira Service Management")
+        return self._source_operations
 
     def _search_issues(
         self, jql: str, start: int, max_results: int
@@ -257,8 +308,6 @@ class JiraServiceManagementConnector(
             _JSM_PAGE_SIZE,
         )
 
-        project_key = self._service_desk_project_key() if include_permissions else None
-
         for issue in issues:
             issue_key = issue.get("key", "")
             try:
@@ -267,10 +316,13 @@ class JiraServiceManagementConnector(
                     issue=issue,
                     session=self._jsm_session,
                 ):
-                    if include_permissions and project_key is not None:
-                        # Indexing path: prefix group ids with the source type
-                        document.external_access = self._get_project_permissions(
-                            project_key, add_prefix=True
+                    if include_permissions:
+                        # Indexing path: prefix group ids with the source type.
+                        # The project comes from the issue itself so a JQL
+                        # scope spanning several projects stamps each issue
+                        # with its own project's permissions.
+                        document.external_access = self._issue_external_access(
+                            issue, add_prefix=True
                         )
                     yield document
             except Exception as e:
@@ -287,6 +339,28 @@ class JiraServiceManagementConnector(
         new_checkpoint.offset = current_offset
         new_checkpoint.has_more = len(issues) == _JSM_PAGE_SIZE
         return new_checkpoint
+
+    def _issue_project_key(self, issue: dict[str, Any]) -> str | None:
+        """The Jira project key of one issue, read from its fields."""
+        fields = issue.get("fields") or {}
+        project = fields.get("project") or {} if isinstance(fields, dict) else {}
+        project_key = project.get("key") if isinstance(project, dict) else None
+        return str(project_key) if project_key else None
+
+    def _issue_external_access(
+        self, issue: dict[str, Any], add_prefix: bool
+    ) -> ExternalAccess | None:
+        """Permissions for one issue, resolved from its own project.
+
+        Falls back to private (``ExternalAccess.empty``) when the issue names
+        no resolvable project, so the permission sync never sees a missing
+        access value. A resolved project with no restrictions keeps ``None``
+        (default visibility), like the Jira connector.
+        """
+        project_key = self._issue_project_key(issue)
+        if not project_key:
+            return ExternalAccess.empty()
+        return self._get_project_permissions(project_key, add_prefix=add_prefix)
 
     @override
     def retrieve_all_slim_docs(
@@ -325,7 +399,6 @@ class JiraServiceManagementConnector(
         start = start if start is not None else 0
         end = end if end is not None else datetime.now().timestamp() + one_day
 
-        project_key = self._service_desk_project_key() if include_permissions else None
         offset = 0
         slim_doc_batch: list[SlimDocument] = []
 
@@ -343,10 +416,11 @@ class JiraServiceManagementConnector(
                     self.jsm_base,
                     issue,
                     # Permission sync path: don't prefix; the upsert path
-                    # handles prefixing.
+                    # handles prefixing. An issue whose permissions cannot be
+                    # determined falls back to private (ExternalAccess.empty).
                     external_access=(
-                        self._get_project_permissions(project_key, add_prefix=False)
-                        if include_permissions and project_key is not None
+                        self._issue_external_access(issue, add_prefix=False)
+                        if include_permissions
                         else None
                     ),
                 ):
@@ -426,11 +500,11 @@ class JiraServiceManagementConnector(
                 f"Invalid JQL query or service desk. JQL error: {e.text}"
             )
 
-        status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
-        if status_code is None:
-            response = getattr(e, "response", None)
-            if response is not None:
-                status_code = response.status_code
+        status_code: int | None = None
+        if isinstance(e, JIRAError):
+            status_code = e.status_code
+        elif isinstance(e, requests.RequestException) and e.response is not None:
+            status_code = e.response.status_code
 
         if status_code == 401:
             raise CredentialExpiredError(

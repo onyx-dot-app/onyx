@@ -375,6 +375,10 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: SvgJsm,
     displayName: "Jira Service Management",
     category: SourceCategory.TicketingAndTaskManagement,
+    // TODO: link a Jira Service Management-specific setup page when one
+    // exists under documentation/admins/connectors/official/; the Jira
+    // guide is the closest page today but does not cover the JSM service
+    // desk scope.
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
   },
   zendesk: {
