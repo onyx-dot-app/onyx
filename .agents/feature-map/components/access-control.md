@@ -20,8 +20,10 @@ access, hierarchy filtering and post-query censoring.
   message says "you cannot see this".
 - **An anonymous visitor** sees public documents only.
 - **An admin** controls visibility through connector access types (public,
-  private to groups, or synced from the source), user groups, and document
-  sets. A document set narrows what an agent searches. It never grants access
+  private to groups, owner-only (`personal`, Business+), or synced from the
+  source), user groups, and document sets. `private` always names at least one
+  group on create and edit; owner-only is its own type, so the edit form can
+  tell the two apart. A document set narrows what an agent searches. It never grants access
   to a document the user could not already see.
 - **A user who asks for a document set they cannot access** gets a 403
   `INSUFFICIENT_PERMISSIONS`, not an empty answer.

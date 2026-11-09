@@ -124,7 +124,7 @@ def test_acl_enforcement(
     blocked_user = UserManager.create()
 
     restricted_cc_pair = CCPairManager.create_from_scratch(
-        access_type=AccessType.PRIVATE,
+        access_type=AccessType.PERSONAL,
         user_performing_action=admin_user,
     )
 

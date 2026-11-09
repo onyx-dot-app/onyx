@@ -794,6 +794,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           specificGroupsRequired: t(
             "settings.documentAccess.specificGroups.required"
           ),
+          restrictionGroupsRequired: t(
+            "settings.documentAccess.sync.restrictionRequired"
+          ),
           stringPairEmptyKey: keyValueT("emptyKey"),
           stringPairDuplicateKey: keyValueT("duplicateKey"),
         },

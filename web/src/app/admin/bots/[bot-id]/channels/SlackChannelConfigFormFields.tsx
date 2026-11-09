@@ -75,7 +75,8 @@ export function SlackChannelConfigFormFields({
   // Helper function to check if a document set contains private connectors
   const documentSetContainsPrivate = (documentSet: DocumentSetSummary) => {
     return documentSet.cc_pair_summaries.some(
-      (summary) => summary.access_type === "private"
+      (summary) =>
+        summary.access_type === "private" || summary.access_type === "personal"
     );
   };
 
@@ -110,7 +111,8 @@ export function SlackChannelConfigFormFields({
       const ccPairSummaries = getCcPairSummaries(ds);
       ccPairSummaries.forEach((summary: any) => {
         if (
-          summary.access_type === "private" &&
+          (summary.access_type === "private" ||
+            summary.access_type === "personal") &&
           !uniqueDescriptors.has(summary.id)
         ) {
           uniqueDescriptors.set(summary.id, summary);

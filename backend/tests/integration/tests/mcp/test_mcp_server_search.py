@@ -172,7 +172,7 @@ def test_mcp_search_respects_acl_filters(
 
     api_key = APIKeyManager.create(user_performing_action=admin_user)
     restricted_cc_pair = CCPairManager.create_from_scratch(
-        access_type=AccessType.PRIVATE,
+        access_type=AccessType.PERSONAL,
         user_performing_action=admin_user,
     )
     # A second, public source so the blocked user has *some* visible source —

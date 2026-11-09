@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
-import { useField } from "formik";
+import { useField, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect, type SelectOption } from "@opal/components";
 import {
@@ -11,7 +11,7 @@ import {
   useTierLockedOptions,
 } from "@/lib/tiers/hooks";
 import { InputHorizontal, Section } from "@opal/layouts";
-import { SvgOrganization, SvgUserSync, SvgUsers } from "@opal/icons";
+import { SvgOrganization, SvgUser, SvgUserSync, SvgUsers } from "@opal/icons";
 import { AccessType, Permission } from "@/lib/types";
 import {
   ValidAutoSyncSource,
@@ -60,6 +60,10 @@ export default function DocumentAccessField({
   const plans = usePlans();
   const [accessType, accessTypeMeta, accessTypeHelpers] =
     useField<AccessType>("access_type");
+  // An owner-only pair keeps its option when edited; without it the field
+  // would move to another access type on save.
+  const { initialValues } = useFormikContext<{ access_type?: AccessType }>();
+  const wasPersonal = initialValues.access_type === "personal";
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
@@ -111,8 +115,16 @@ export default function DocumentAccessField({
       description: t("specificGroups.description"),
       icon: SvgUsers,
     });
+    if (wasPersonal) {
+      built.push({
+        value: "personal",
+        title: t("onlyMe.title"),
+        description: t("onlyMe.description"),
+        icon: SvgUser,
+      });
+    }
     return built;
-  }, [isSyncDisabledByAuth, connector, t, appName]);
+  }, [isSyncDisabledByAuth, connector, t, appName, wasPersonal]);
   // A scoped manager's authority stops at the groups they manage, so the
   // backend rejects a public connector from them. Offering it would only
   // produce a 403 on submit.

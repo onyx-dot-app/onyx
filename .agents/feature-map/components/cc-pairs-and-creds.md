@@ -13,8 +13,8 @@
 
 - **An admin adds a connector.** The admin picks a source, fills in its config,
   and authenticates: pastes a secret, uploads a key file, or goes through an
-  OAuth redirect. The admin picks who can see the documents (public, private,
-  or a perm-synced type) and saves. The pair starts `SCHEDULED`, and the status
+  OAuth redirect. The admin picks who can see the documents (public, private to
+  groups, owner-only, or a perm-synced type) and saves. The pair starts `SCHEDULED`, and the status
   page shows it move through `INITIAL_INDEXING` to `ACTIVE`, with its runs and
   errors.
 - **An admin manages a pair.** The admin can pause and resume it, rename it,

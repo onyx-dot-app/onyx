@@ -150,7 +150,7 @@ def test_reindex_port_preserves_acls(
     blocked_user = UserManager.create(name="port-acl-blocked")
 
     restricted_cc_pair = CCPairManager.create_from_scratch(
-        access_type=AccessType.PRIVATE,
+        access_type=AccessType.PERSONAL,
         user_performing_action=admin_user,
     )
     user_group = UserGroupManager.create(

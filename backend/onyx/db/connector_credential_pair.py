@@ -1125,6 +1125,18 @@ def _relate_data_access_groups_to_cc_pair__no_commit(
         )
 
 
+def ensure_personal_credential_owner(
+    access_type: AccessType, credential_user_id: UUID | None
+) -> None:
+    """A PERSONAL pair is read by its credential's owner only, so the
+    credential must have one."""
+    if access_type == AccessType.PERSONAL and credential_user_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "An owner-only connector needs a credential that belongs to a user.",
+        )
+
+
 def add_credential_to_connector(
     db_session: Session,
     user: User,
@@ -1169,6 +1181,7 @@ def add_credential_to_connector(
             status_code=401,
             detail=error_msg,
         )
+    ensure_personal_credential_owner(access_type, credential.user_id)
 
     existing_association = (
         db_session.query(ConnectorCredentialPair)
@@ -1208,14 +1221,21 @@ def add_credential_to_connector(
     if access_type == AccessType.PRIVATE:
         # Callers that set only manage groups keep today's meaning: the
         # manage groups also get data access.
+        private_group_ids = (
+            data_access_group_ids
+            if data_access_group_ids is not None
+            else list(manage_access)
+        )
+        # Owner-only is PERSONAL; a groups choice needs a group.
+        if not private_group_ids:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "A connector shared with specific groups needs at least one group.",
+            )
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
-            user_group_ids=(
-                data_access_group_ids
-                if data_access_group_ids is not None
-                else list(manage_access)
-            ),
+            user_group_ids=private_group_ids,
         )
     elif access_type == AccessType.SYNC_RESTRICTED:
         # With no data-access group the pair would be visible to nobody.

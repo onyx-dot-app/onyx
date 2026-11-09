@@ -2621,8 +2621,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Alle behalten den aus der Quelle synchronisierten Zugriff.",
-          "title": "Keine Beschränkung, bis Gruppen hinzugefügt werden"
+          "description": "Eine Einschränkung braucht eine Gruppe. Schalte sie aus, um den aus der Quelle synchronisierten Zugriff zu behalten.",
+          "title": "Wähle mindestens eine Gruppe aus"
         },
         "loadError": "Gruppen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
         "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
@@ -2968,6 +2968,7 @@
           "sync": "Dokumentzugriff **mit {source} synchronisiert**",
           "managedByAdmins": "Verwaltet von **Admins**",
           "managedByGroups": "Verwaltet von **{count, plural, one {# Gruppe} other {# Gruppen}}**",
+          "onlyMe": "Dokumente sichtbar für **nur den Kontoinhaber**",
           "syncRestricted": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **{count, plural, one {# Gruppe} other {# Gruppen}}**",
           "groupsPending": "Dokumente freigegeben für **bestimmte Gruppen**",
           "syncRestrictedPending": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **bestimmte Gruppen**"
@@ -3751,6 +3752,10 @@
             "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation verfügbar.",
             "title": "Alle in Ihrer Organisation"
           },
+          "onlyMe": {
+            "description": "Nur die Person, deren Konto dieser Connector verwendet, kann seine Dokumente sehen.",
+            "title": "Nur ich"
+          },
           "specificGroups": {
             "description": "Benennen Sie Gruppen, die auf Dokumente dieses Konnektors zugreifen können.",
             "required": "Wählen Sie mindestens eine Gruppe aus.",
@@ -3759,7 +3764,8 @@
           "sync": {
             "description": "{appName} synchronisiert Berechtigungen mit der Quelle. Nutzer können nur durchsuchen, was sie in der Quelle sehen können.",
             "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechseln Sie zu einer unterstützten Authentifizierungsmethode.",
-            "title": "Mit {source} synchronisieren"
+            "title": "Mit {source} synchronisieren",
+            "restrictionRequired": "Wähle mindestens eine Gruppe aus oder schalte die Einschränkung aus."
           },
           "title": "Dokumentzugriff"
         },
@@ -7496,7 +7502,8 @@
           "public": "Öffentlich für Ihre Organisation",
           "private": "{count, plural, =0 {Privat} one {Mit # Gruppe geteilt} other {Mit # Gruppen geteilt}}",
           "sync": "Automatische Berechtigungssynchronisierung",
-          "sync_restricted": "Automatische Berechtigungssynchronisierung"
+          "sync_restricted": "Automatische Berechtigungssynchronisierung",
+          "personal": "Nur ich"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.}} in der Warteschlange",
