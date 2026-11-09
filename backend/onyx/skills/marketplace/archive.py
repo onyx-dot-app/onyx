@@ -282,8 +282,13 @@ def _require_complete_catalog(
                 pass
     else:
         archive.fileobj.seek(archive.offset)
-        if archive.fileobj.read(tarfile.BLOCKSIZE) != b"\0" * tarfile.BLOCKSIZE:
+        if archive.fileobj.read(2 * tarfile.BLOCKSIZE) != b"\0" * (
+            2 * tarfile.BLOCKSIZE
+        ):
             raise ValueError("Tar archive has no valid end marker")
+        while trailing := archive.fileobj.read(64 * 1024):
+            if trailing.strip(b"\0"):
+                raise ValueError("Tar archive has content after its end marker")
 
 
 @contextmanager
@@ -385,11 +390,11 @@ def archive_files(
                 files[path] = partial(_open_member, archive, member, budget)
             else:
                 files[path] = None
+        if buffered is not None:
+            buffered.metadata_reads = False
         _require_complete_catalog(archive, data, required=require_complete)
         # Directories named like files must not silently select a fallback manifest.
         for path in directories:
             if path == "SKILL.md" or path.endswith((".json", "/SKILL.md")):
                 files[path] = None
-        if buffered is not None:
-            buffered.metadata_reads = False
         yield files

@@ -319,7 +319,6 @@ def _plugin_skills(
     elif (
         "skills" not in plugin
         and root
-        and _join(root, SKILL_MD_NAME) in files
         and not any(p == target or p.startswith(target + "/") for p in files)
     ):
         skill_paths = [root]
