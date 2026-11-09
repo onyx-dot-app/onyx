@@ -2968,7 +2968,7 @@
           "sync": "Dokumentzugriff **mit {source} synchronisiert**",
           "managedByAdmins": "Verwaltet von **Admins**",
           "managedByGroups": "Verwaltet von **{count, plural, one {# Gruppe} other {# Gruppen}}**",
-          "onlyMe": "Dokumente sichtbar für **nur den Inhaber der Anmeldedaten**",
+          "onlyMe": "Dokumente über diesen Connector sichtbar für **nur seinen Inhaber**",
           "syncRestricted": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **{count, plural, one {# Gruppe} other {# Gruppen}}**",
           "groupsPending": "Dokumente freigegeben für **bestimmte Gruppen**",
           "syncRestrictedPending": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **bestimmte Gruppen**"
@@ -3753,7 +3753,7 @@
             "title": "Alle in Ihrer Organisation"
           },
           "onlyMe": {
-            "description": "Nur der Benutzer, dem die Anmeldedaten dieses Connectors gehören, kann seine Dokumente sehen.",
+            "description": "Nur der Inhaber der Anmeldedaten dieses Connectors erhält darüber Zugriff; bei einer Quelle ohne Anmeldedaten nur du.",
             "title": "Nur ich"
           },
           "specificGroups": {
