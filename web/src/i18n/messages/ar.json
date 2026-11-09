@@ -17526,5 +17526,17 @@
     "jvmMemoryTitle": "ذاكرة JVM",
     "vectorMemoryTitle": "ذاكرة المتجهات",
     "viewDetails": "عرض التفاصيل"
+  },
+  "marketplaces": {
+    "retry": "تحديث",
+    "connectionError": "تعذر التحقق من اتصال GitHub.",
+    "previewFailed": "تعذرت قراءة السوق",
+    "sampleTitle": "إضافة ملف السوق",
+    "sampleDescription": "احفظ هذا باسم .claude-plugin/marketplace.json في المجلد المحدد. ضع المهارات في team-skills/skills/example/SKILL.md، ثم عاين مجددًا.",
+    "copySample": "نسخ المثال",
+    "emptyPreview": "لا توجد عناصر في هذا الكتالوج.",
+    "ok": "جاهز",
+    "blocked": "محظور",
+    "not_supported": "غير مدعوم"
   }
 }
