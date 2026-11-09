@@ -69,6 +69,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.db.skill_version import save_skill_version
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -457,39 +458,32 @@ def enable_new_skill_if_name_available__no_commit(
 def replace_skill_bundle(
     *,
     skill: Skill,
-    new_bundle_file_id: str,
-    new_bundle_sha256: str,
-    new_description: str,
+    ingested: IngestedBundle,
+    creator_id: UUID,
     db_session: Session,
-) -> str:
-    """Swap a skill's bundle blob and refresh its description.
-
-    Returns the old bundle file id so the caller can delete the old blob from
-    FileStore after the transaction commits.
-
-    Rejects built-in rows — they have no bundle.
-    """
+) -> bool:
+    """Keep history and legacy columns; return whether the staged blob is used."""
     if not skill.is_custom:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.name}' is a built-in and has no bundle.",
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Built-in skills have no bundle.")
+    return save_skill_version(skill, ingested, creator_id, db_session)
 
-    # Custom rows always have a bundle (XOR check constraint), but guard
-    # explicitly rather than assert so a corrupt row fails loud, not silent.
-    if skill.bundle_file_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.name}' has no bundle to replace.",
-        )
 
-    old_bundle_file_id = skill.bundle_file_id
-    skill.bundle_file_id = new_bundle_file_id
-    skill.bundle_sha256 = new_bundle_sha256
-    skill.description = new_description
-    skill.is_valid = True
-    db_session.flush()
-    return old_bundle_file_id
+def create_skill_from_ingested_bundle(
+    ingested: IngestedBundle, creator_id: UUID, db_session: Session
+) -> Skill:
+    skill = add_new_skill__no_commit(
+        Skill(
+            name=ingested.canonical_name,
+            description=ingested.description,
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            is_valid=True,
+            author_user_id=creator_id,
+        ),
+        db_session,
+    )
+    save_skill_version(skill, ingested, creator_id, db_session, initial=True)
+    return skill
 
 
 def set_skill_public_permission(
@@ -947,17 +941,7 @@ def create_skill_from_bundle__no_commit(
     conflict or a rejected access change rolls back this skill only. Returns
     the skill, whether it was enabled for the user, and the affected users."""
     with db_session.begin_nested():
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=ingested.canonical_name,
-                description=ingested.description,
-                bundle_file_id=ingested.bundle_file_id,
-                bundle_sha256=ingested.bundle_sha256,
-                is_valid=True,
-                author_user_id=user.id,
-            ),
-            db_session,
-        )
+        skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         affected: set[UUID] = set()
         if change is not None:
             affected = share_skill__no_commit(skill, change, user, db_session)

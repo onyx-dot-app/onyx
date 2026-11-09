@@ -5,9 +5,11 @@ from contextlib import contextmanager
 from typing import NamedTuple
 
 from onyx.configs.constants import FileOrigin
+from onyx.db.resource_version import compute_bundle_metadata
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
+from onyx.file_store.models import BundleMetadata
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
@@ -26,6 +28,7 @@ class IngestedBundle(NamedTuple):
     bundle_file_id: str
     bundle_sha256: str
     description: str
+    metadata: BundleMetadata
 
 
 def save_skill_bundle_bytes(
@@ -86,6 +89,7 @@ def ingest_skill_bundle(
             f"skill name '{name}' is reserved",
         )
     sha = compute_bundle_sha256(normalized.content)
+    metadata = compute_bundle_metadata(normalized.content)
 
     bundle_file_id = save_skill_bundle_bytes(
         normalized.content,
@@ -97,6 +101,7 @@ def ingest_skill_bundle(
         bundle_file_id=bundle_file_id,
         bundle_sha256=sha,
         description=description,
+        metadata=metadata,
     )
 
 
