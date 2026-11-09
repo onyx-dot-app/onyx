@@ -191,7 +191,7 @@ def test_policy_null_override_and_reset(
 def test_personal_sync_preserves_owner_shares(
     session: Session, marketplace: Marketplace
 ) -> None:
-    owner = make_user(session)
+    owner = make_user(session, standard_account=True)
     other = make_user(session)
     marketplace.owner_user_id = owner.id
     marketplace.public_permission = Share.EDITOR  # Personal defaults never propagate.
@@ -387,7 +387,7 @@ def test_reset_endpoint_pushes_once_after_commit_and_rejects_retired(
 
     with (
         patch(
-            "onyx.db.marketplace_access.lock_group_membership",
+            "onyx.db.resource_access.lock_group_membership",
             side_effect=lock_after_revocation,
         ),
         patch(

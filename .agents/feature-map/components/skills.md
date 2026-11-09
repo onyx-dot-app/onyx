@@ -24,7 +24,8 @@
   GitHub connection in Craft; without it the import is anonymous. Owners and editors
   can share uploaded skills with users or groups as viewer or editor, subject to group scope.
   Owners can transfer ownership; global `MANAGE_SKILLS` holders can transfer skills
-  with vacant ownership. Publishing requires global `MANAGE_SKILLS`.
+  with vacant ownership. Synced skills keep their source ownership.
+  Publishing requires global `MANAGE_SKILLS`.
 - **Global skill managers** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
   and the user cannot turn it off). Global manage-skills permission is required to delete a required skill.
@@ -50,7 +51,8 @@
   reload restarts the agent's runtime with the current skills.
 - **Version history API.** Owners, editors and admins can list custom skill
   versions with their creator and timestamp, preview retained content, and
-  restore it. Viewers can preview current instructions but cannot read history.
+  restore uploaded content. Synced content changes in GitHub and cannot be restored locally.
+  Viewers can preview current instructions but cannot read history.
   History returns at most 50 rows. The positive `before_version` cursor excludes
   that version and loads older rows without shifting when a new version is saved.
   Restore creates a new version unless its content equals the current version.
@@ -244,8 +246,10 @@ The library preview of an external-app skill calls the same renderer
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.
     Access and preference writes acquire the membership lock before resource/user locks.
     Content and metadata preparation holds no Skill row or membership lock.
-    The final write takes membership then Skill and checks a freshly loaded request-session user.
-    Authentication uses a separate session; later access writes must use the fresh actor.
+    `db/resource_access.py:lock_resource_access_user` reloads active authority after acquiring membership.
+    Authentication uses a separate session. Skill writes and their response permissions use the refreshed request-session actor.
+    Creation and import recheck authority after staging, even when auto-enable and sharing are omitted.
+    The final content write takes membership then Skill.
     Derived edits compare their observed content; a changed snapshot returns a retryable conflict.
     Full replacements append on stale observations without reusing unverified content.
     Metadata repair refreshes each batch row before staging reads without locks.
@@ -261,7 +265,6 @@ The library preview of an external-app skill calls the same renderer
     receive defaults; personal shares and company overrides survive sync. Reset clears
     individual grants and restores following. Membership locks precede resource locks,
     including reset's marketplace-before-skill order and preference user locks.
-    Reset checks freshly loaded authority after acquiring the membership lock.
     Scoped managers may preserve but cannot change direct-user grants on company skills. MIT-only company
     followers are public. Licensed builds copy stored defaults even during license
     failures. A Community access write may preserve existing groups but cannot
