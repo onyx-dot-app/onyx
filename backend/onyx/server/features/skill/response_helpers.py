@@ -58,6 +58,8 @@ def user_permission_for_skill(
     user: User,
     user_group_ids: set[int],
     managed_user_group_ids: set[int] | None = None,
+    *,
+    allow_management: bool = True,
 ) -> SkillAccessLevel | None:
     """Read-side mirror of ``_is_editable_by_user``; the two must agree or the UI
     offers actions the write path rejects."""
@@ -67,7 +69,7 @@ def user_permission_for_skill(
     if skill.author_user_id == user.id:
         return SkillAccessLevel.OWNER
 
-    if has_global_permission(user, Permission.MANAGE_SKILLS):
+    if allow_management and has_global_permission(user, Permission.MANAGE_SKILLS):
         return SkillAccessLevel.EDITOR
 
     direct_permissions = {
@@ -86,7 +88,8 @@ def user_permission_for_skill(
     # Same rule as within_managed_scope_clause: non-public, in >=1 managed group,
     # and no group outside the manager's scope.
     is_manager_managed = (
-        not is_org_shared
+        allow_management
+        and not is_org_shared
         and bool(group_share_ids)
         and bool(managed_user_group_ids)
         and group_share_ids <= (managed_user_group_ids or set())
@@ -113,6 +116,7 @@ def skill_response_for_user(
     user_group_ids: set[int] | None = None,
     managed_user_group_ids: set[int] | None = None,
     include_share_details: bool = False,
+    allow_management: bool = True,
 ) -> SkillResponse:
     if state is None:
         state = skill_user_states(user, [skill.id], db_session).get(skill.id)
@@ -147,6 +151,7 @@ def skill_response_for_user(
             user,
             user_group_ids,
             managed_user_group_ids,
+            allow_management=allow_management,
         ),
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
@@ -157,6 +162,8 @@ def skills_list_response_for_user(
     rows: list[Skill],
     user: User,
     db_session: Session,
+    *,
+    allow_management: bool = True,
 ) -> SkillsList:
     builtins: list[SkillResponse] = []
     customs: list[SkillResponse] = []
@@ -189,6 +196,7 @@ def skills_list_response_for_user(
             state=state,
             user_group_ids=user_group_ids,
             managed_user_group_ids=managed_user_group_ids,
+            allow_management=allow_management,
         )
         (customs if skill.is_custom else builtins).append(response)
 

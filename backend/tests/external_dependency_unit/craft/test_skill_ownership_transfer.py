@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -67,6 +68,7 @@ def test_owner_transfers_to_active_user(
         TransferSkillOwnershipRequest(new_owner_user_id=new_owner.id),
         user=owner,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     db_session.refresh(skill)
 
@@ -94,6 +96,7 @@ def test_transfer_pushes_previous_and_new_owner_sandboxes(
         TransferSkillOwnershipRequest(new_owner_user_id=new_owner.id),
         user=owner,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
 
     assert push_calls == [{owner.id, new_owner.id}]
@@ -120,6 +123,7 @@ def test_non_owner_sharee_cannot_transfer(
             TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=sharee,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
@@ -145,6 +149,7 @@ def test_transfer_rejects_inactive_target(
             TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=owner,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
@@ -173,6 +178,7 @@ def test_transfer_rejects_unsupported_target_account_type(
             TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=owner,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
@@ -196,6 +202,7 @@ def test_admin_transfers_vacant_public_skill(
         TransferSkillOwnershipRequest(new_owner_user_id=target.id),
         user=admin,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     db_session.refresh(skill)
 
@@ -221,6 +228,7 @@ def test_admin_cannot_transfer_owned_skill(
             TransferSkillOwnershipRequest(new_owner_user_id=target.id),
             user=admin,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
@@ -243,6 +251,7 @@ def test_transfer_rejects_missing_target(
             TransferSkillOwnershipRequest(new_owner_user_id=uuid4()),
             user=owner,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND

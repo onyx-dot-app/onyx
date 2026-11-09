@@ -303,12 +303,13 @@ The library preview of an external-app skill calls the same renderer
     deletion explicitly allows retirement only for the personal owner or global
     `MANAGE_SKILLS`. Single and bulk routes cap that global authority by token scopes.
     Reset requires manage-skills token scope as well as refreshed global authority.
-    Sharing reads, single/bulk sharing writes and PATCH cap management authority
-    by the request token. The capped EDIT query still permits ownership and
+    Library reads, sharing, content/version routes, enable, transfer and deletion
+    cap management authority by the request token. Response permissions use the
+    same cap as selection. Required-skill deletion also requires that scope. The capped EDIT query still permits ownership and
     explicit editor grants, but neither global nor scoped management fallback.
     The access adapter carries the same cap through the locked write. Internal
     database callers retain their own authority; this is not a claim that every
-    legacy skill endpoint enforces token scopes inside its handler.
+    creation/import endpoint enforces token scopes inside its handler.
     Active synced skills reject content changes,
     restore, ownership transfer, and deletion through shared database guards.
     Content routes check before storage and again at publication. Access and personal
