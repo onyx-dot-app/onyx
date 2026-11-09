@@ -648,8 +648,8 @@ result sets pass through whole.`,
 	}
 
 	cmd.Flags().StringVar(&searchSources, "source", "", "Filter by source type (comma-separated: slack,google_drive)")
-	cmd.Flags().StringSliceVar(&searchDocumentSets, "document-set", nil,
-		"Filter by document set name (comma-separated or repeated; list names with onyx-cli document-sets)")
+	cmd.Flags().StringArrayVar(&searchDocumentSets, "document-set", nil,
+		"Filter by document set name (repeat the flag for more than one; list names with onyx-cli document-sets)")
 	cmd.Flags().IntVar(&searchDays, "days", 0, "Only return results from the last N days")
 	cmd.Flags().IntVar(&searchAgentID, "agent-id", 0, "Agent ID for scoped search")
 	cmd.Flags().StringVar(&searchAgentName, "agent-name", "", "Agent name for scoped search (exact or unique substring)")

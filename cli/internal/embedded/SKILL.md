@@ -93,7 +93,7 @@ onyx-cli search --no-query-expansion "exact error message text"
 | Flag                    | Type   | Description                                                      |
 | ----------------------- | ------ | ---------------------------------------------------------------- |
 | `--source`              | string | Filter by source type (comma-separated: slack,google_drive)      |
-| `--document-set`        | string | Filter by document set name (comma-separated or repeated). Replaces the default agent's knowledge scope; cannot be combined with `--agent-id` or `--agent-name` |
+| `--document-set`        | string | Filter by document set name. Repeat the flag for more than one set; commas are part of the name. Replaces the default agent's knowledge scope; cannot be combined with `--agent-id` or `--agent-name` |
 | `--days`                | int    | Only return results from the last N days                         |
 | `--agent-id`            | int    | Agent ID for scoped search (inherits filters, document sets)     |
 | `--agent-name`          | string | Agent name for scoped search (exact or unique substring)         |

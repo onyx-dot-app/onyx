@@ -869,11 +869,11 @@ func TestSearch_DocumentSetSentToServer(t *testing.T) {
 
 	ios, _, _ := testutil.TestIOStreams()
 	cmd := newSearchCmd(ios)
-	cmd.SetArgs([]string{"--document-set", "Engineering Wiki,Sales", "--document-set", "HR", "query"})
+	cmd.SetArgs([]string{"--document-set", "Engineering Wiki", "--document-set", "Sales, EMEA", "--document-set", "HR", "query"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	want := []string{"Engineering Wiki", "Sales", "HR"}
+	want := []string{"Engineering Wiki", "Sales, EMEA", "HR"}
 	if !slices.Equal(got.DocumentSets, want) {
 		t.Errorf("document_sets = %v, want %v", got.DocumentSets, want)
 	}
