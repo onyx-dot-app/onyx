@@ -110,6 +110,7 @@ class MarketplaceManagementSnapshot(BaseModel):
     installation_policy: SkillInstallationPolicy
     group_shares: list[MarketplaceGroupAccess]
     sync_requested: bool
+    sync_pending: bool = False
     sync_status: MarketplaceSyncStatus | None
     last_synced_revision: str | None
     last_synced_at: datetime | None

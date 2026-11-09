@@ -19,6 +19,7 @@ from onyx.db.marketplace_sync import (
     MarketplaceSyncLeaseLost,
     claim_marketplace_sync,
     fence_marketplace_sync,
+    finish_marketplace_sync,
 )
 from onyx.db.models import (
     ExternalApp,
@@ -45,6 +46,7 @@ from onyx.skills.marketplace.models import (
     GitHubMarketplaceConfig,
     MarketplaceProvider,
     MarketplaceRetirementProposal,
+    MarketplaceSyncStatus,
 )
 from onyx.skills.marketplace.read_models import ReadySkill
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -186,6 +188,38 @@ def test_create_defaults_and_rollback(
     company = create(session, admin, personal=False)
     assert company.owner_user_id is None and company.login_user_id == admin.id
     assert company.public_permission == (None if enterprise else Share.VIEWER)
+
+
+@pytest.mark.parametrize(
+    "status", [MarketplaceSyncStatus.APPLIED, MarketplaceSyncStatus.FAILED]
+)
+def test_pending_status_covers_claimed_work(
+    session: Session, status: MarketplaceSyncStatus
+) -> None:
+    user = make_user(session, standard_account=True)
+    connect(session, user)
+    row = create(session, user)
+    session.commit()
+
+    def snapshot() -> None:
+        detail = management.fetch_managed_marketplace(row.id, user, session).marketplace
+        listed = next(
+            item
+            for item in management.list_managed_marketplaces(user, session)
+            if item.id == row.id
+        )
+        assert detail.sync_pending and listed.sync_pending
+        assert "sync_owner" not in detail.model_dump()
+
+    snapshot()
+    worker = claim_marketplace_sync(row.id, session)
+    assert worker is not None
+    assert not row.sync_requested
+    snapshot()
+    finish_marketplace_sync(row.id, worker, session, status=status)
+    detail = management.fetch_managed_marketplace(row.id, user, session).marketplace
+    assert not detail.sync_pending and detail.sync_status == status
+    assert not management.list_managed_marketplaces(user, session)[0].sync_pending
 
 
 def test_safe_batched_reads_include_retired(session: Session) -> None:

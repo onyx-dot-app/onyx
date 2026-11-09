@@ -587,6 +587,15 @@ The library preview of an external-app skill calls the same renderer
     sync, replace logins and remove personal sources, including deactivated owners' sources.
     Scoped group authority does not permit company source management.
     List/detail return safe typed snapshots with batched live/retired counts.
+    Snapshots expose `sync_pending` for queued or claimed work; claiming clears
+    `sync_requested`, so clients must not use it to stop polling.
+    `server/features/skill/marketplace_api.py` exposes these reads and source preview.
+    Preview uses the provider adapter and reader, then ingestion validation without
+    saving bundles or rows. It checks active authority before and after provider I/O,
+    outside database locks, and returns descriptions/statuses rather than bundle bytes.
+    Token scopes cap company previews and management reads through the shared
+    `auth/permissions.py:token_allows_permission` check. A Basic-only token sees only
+    its owner's personal sources, even when that owner has global manage-skills.
     Creation and login replacement follow caller provider validation and recheck
     stored active login, enabled app and credential presence without network calls.
     The login is always the actor; company sources have no owner. MIT-only creation
@@ -617,9 +626,10 @@ The library preview of an external-app skill calls the same renderer
 
 ## Known issues
 
-- **Marketplace management endpoints remain pending.** The management database
-  service and skill reset endpoint are available. S8 must validate providers before
-  database locks, commit service writes, then dispatch, push and clean files.
+- **Marketplace mutation endpoints remain pending.** Preview and management reads,
+  the management database service, and skill reset are available. S8 must validate
+  providers before database locks, commit service writes, then dispatch, push and
+  clean files.
   Plugin membership is not modeled
   yet; its access guard belongs in `SkillAccessAdapter.load`.
   S9 must expose personal synced owner audience controls and hide sharing actions

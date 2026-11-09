@@ -342,6 +342,41 @@ Creating a Skill for an App also requires full-admin token scope.
 A Basic-only token retains the user's ownership and explicit editor grants.
 It cannot use the user's admin or group-manager role to change installation settings or company access.
 
+## Preview and read marketplaces through the API
+
+Management responses include `sync_pending` while work is queued or claimed by a worker.
+Use this field to keep polling until the sync finishes. `sync_requested` becomes false when a worker claims the request.
+
+Use `POST /api/marketplaces/preview` to check a source before adding it. Connect your GitHub account first.
+For a personal source, send:
+
+```json
+{
+  "provider": "github",
+  "provider_config": {
+    "owner": "acme",
+    "repo": "agent-tools",
+    "ref": "main",
+    "folder": "catalog"
+  },
+  "personal": true
+}
+```
+
+Omit `folder` when the marketplace file is at the repository root. The ref can be a branch, tag, or commit.
+Set `personal` to `false` for a company source. Company previews require global permission to manage Skills.
+
+A complete preview returns the resolved revision and entries marked `ok`, `blocked`, or `not_supported`.
+Ready entries include a name and description. Other entries include a reason.
+A missing or invalid marketplace file returns `status: "failed"` with a reason.
+Preview does not save a marketplace or upload bundles. It validates source content;
+sync still checks library name conflicts and the source's current revision.
+
+Use `GET /api/marketplaces` to list sources you can manage. Use `GET /api/marketplaces/{marketplace_id}` for its Skills,
+including retired Skills. Owners can read personal sources. Global manage-skills users can read all sources.
+A token restricted to Basic access can read only its owner's personal sources. Responses include sync status,
+blocked entries, default access, and live and retired Skill counts. They exclude credentials.
+
 ## Marketplace sync recovery
 
 Marketplace sync runs in the background. A request made during a sync triggers another check,

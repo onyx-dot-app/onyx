@@ -100,6 +100,7 @@ def _management_snapshots(
     result = []
     for row in rows:
         snapshot = MarketplaceManagementSnapshot.model_validate(row)
+        snapshot.sync_pending = row.sync_requested or row.sync_owner is not None
         snapshot.live_skill_count, snapshot.retired_skill_count = counts.get(
             row.id, (0, 0)
         )
