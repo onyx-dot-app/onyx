@@ -5,6 +5,7 @@ import pytest
 from onyx.db.enums import SkillSharePermission
 from onyx.server.features.skill.models import (
     SkillBulkResponse,
+    SkillResponse,
     SkillUserShareRequest,
 )
 from tests.integration.common_utils.constants import ADMIN_USER_NAME, API_SERVER_URL
@@ -57,28 +58,46 @@ def test_bulk_failure_does_not_undo_other_skills(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
+    recipient = UserManager.create(name=f"bulk_recipient_{uuid4().hex[:8]}")
     own_skill = SkillManager.create_custom(basic_user)
     other_skill = SkillManager.create_custom(admin_user)
+    # A basic owner may share its own skill with a user, but not another user's skill.
     response = client.post(
         f"{API_SERVER_URL}/skills/bulk",
         headers=basic_user.headers,
         json={
             "skill_ids": [str(own_skill.id), str(other_skill.id)],
             "action": "share",
-            "sharing": {"public_permission": "VIEWER"},
+            "sharing": {
+                "user_shares": [{"user_id": recipient.id, "permission": "VIEWER"}]
+            },
         },
     )
     response.raise_for_status()
     result = SkillBulkResponse.model_validate(response.json())
     assert result.succeeded == [own_skill.id]
-    assert [failure.skill_id for failure in result.failed] == [other_skill.id]
-    assert (
-        SkillManager.get_for_user(own_skill.id, admin_user).public_permission
-        == "VIEWER"
+    assert [(failure.skill_id, failure.detail) for failure in result.failed] == [
+        (other_skill.id, "Skill not found")
+    ]
+
+    def saved_user_shares(skill_id: UUID) -> set[tuple[str, SkillSharePermission]]:
+        response = client.get(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/share",
+            headers=admin_user.headers,
+        )
+        response.raise_for_status()
+        sharing = SkillResponse.model_validate(response.json())
+        return {(str(share.user.id), share.permission) for share in sharing.user_shares}
+
+    assert saved_user_shares(own_skill.id) == {
+        (recipient.id, SkillSharePermission.VIEWER)
+    }
+    assert saved_user_shares(other_skill.id) == set()
+    assert SkillManager.get_for_user(own_skill.id, recipient).id == own_skill.id
+    hidden = client.get(
+        f"{API_SERVER_URL}/skills/{other_skill.id}", headers=recipient.headers
     )
-    assert (
-        SkillManager.get_for_user(other_skill.id, admin_user).public_permission is None
-    )
+    assert hidden.status_code == 404
 
 
 def test_bulk_failure_after_write_rolls_back_only_that_skill(
