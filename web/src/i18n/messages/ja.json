@@ -17478,7 +17478,7 @@
       "previewVersion": "バージョン {version} をプレビュー",
       "restore": "復元",
       "restoreVersion": "バージョン {version} を復元",
-      "back": "バージョン一覧に戻る",
+      "back": "戻る",
       "cancel": "キャンセル",
       "confirmTitle": "バージョン {version} を復元しますか？",
       "confirmDescription": "現在の内容を置き換えます。内容が異なる場合、新しいバージョンが作成されます。共有設定は変わりません。",

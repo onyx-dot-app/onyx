@@ -17478,7 +17478,7 @@
       "previewVersion": "버전 {version} 미리보기",
       "restore": "복원",
       "restoreVersion": "버전 {version} 복원",
-      "back": "버전 목록으로 돌아가기",
+      "back": "뒤로",
       "cancel": "취소",
       "confirmTitle": "버전 {version}을 복원할까요?",
       "confirmDescription": "현재 내용을 교체합니다. 내용이 다르면 새 버전이 생성됩니다. 공유 설정은 유지됩니다.",

@@ -17478,7 +17478,7 @@
       "previewVersion": "Aperçu de la version {version}",
       "restore": "Restaurer",
       "restoreVersion": "Restaurer la version {version}",
-      "back": "Retour aux versions",
+      "back": "Retour",
       "cancel": "Annuler",
       "confirmTitle": "Restaurer la version {version} ?",
       "confirmDescription": "Le contenu actuel sera remplacé. Un contenu différent crée une nouvelle version. Les paramètres de partage restent identiques.",

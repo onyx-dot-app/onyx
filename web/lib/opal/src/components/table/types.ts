@@ -298,6 +298,8 @@ export interface DataTableProps<TData> {
   footer?: boolean | DataTableFooterConfig;
   /** Each body row's height in rem: `2.25` (36px) or `2.75` (44px). @default 2.75 */
   size?: TableSize;
+  /** Allow body rows to grow to fit their content. @default "fixed" */
+  rowHeight?: "fixed" | "content";
   /**
    * The rows' surface: `"primary"` rests on `background-tint-00` (white),
    * `"secondary"` on `background-tint-01` (grey). Every row is an

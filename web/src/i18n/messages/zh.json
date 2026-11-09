@@ -17478,7 +17478,7 @@
       "previewVersion": "预览版本 {version}",
       "restore": "恢复",
       "restoreVersion": "恢复版本 {version}",
-      "back": "返回版本列表",
+      "back": "返回",
       "cancel": "取消",
       "confirmTitle": "恢复版本 {version}？",
       "confirmDescription": "这将替换当前内容。如果内容不同，将创建新版本。共享设置保持不变。",

@@ -17478,7 +17478,7 @@
       "previewVersion": "Vorschau von Version {version}",
       "restore": "Wiederherstellen",
       "restoreVersion": "Version {version} wiederherstellen",
-      "back": "Zurück zu Versionen",
+      "back": "Zurück",
       "cancel": "Abbrechen",
       "confirmTitle": "Version {version} wiederherstellen?",
       "confirmDescription": "Dies ersetzt den aktuellen Inhalt. Geänderter Inhalt erstellt eine neue Version. Freigabeeinstellungen bleiben gleich.",
