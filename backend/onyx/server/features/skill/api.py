@@ -226,6 +226,8 @@ def _replace_skill_bundle_from_editor(
     bundle_bytes: bytes,
     user: User,
     db_session: Session,
+    *,
+    stored: bool = False,
 ) -> SkillEditableDetailResponse:
     file_store = get_default_file_store()
     with ingested_skill_bundle(
@@ -233,6 +235,7 @@ def _replace_skill_bundle_from_editor(
         f"{skill.name}.zip",
         file_store,
         expected_name=skill.name,
+        stored=stored,
     ) as ingested:
         stale_file_ids = replace_skill_bundle(
             skill=skill,
@@ -682,10 +685,10 @@ def list_custom_skill_versions(
                 if creator is not None
                 else None
             ),
-            is_current=version.id == skill.current_version_id,
+            is_current=is_current,
             has_bundle=version.bundle_file_id is not None,
         )
-        for version, creator in list_skill_versions(
+        for version, creator, is_current in list_skill_versions(
             skill, db_session, before_version=before_version
         )
     ]
@@ -740,6 +743,7 @@ def restore_custom_skill_version(
         ),
         user,
         db_session,
+        stored=True,
     )
 
 

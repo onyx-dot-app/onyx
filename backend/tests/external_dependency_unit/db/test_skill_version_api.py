@@ -1,5 +1,7 @@
 """History reads and restore failure paths with real PostgreSQL and FileStore."""
 
+import io
+import zipfile
 from typing import Never
 
 import pytest
@@ -9,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import GrantSource, Permission
 from onyx.db.models import (
     FileRecord,
@@ -20,11 +22,13 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.resource_version import VERSION_FILES_NOT_KEPT
+from onyx.db.skill_version import repair_skill_version
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill import api
-from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES
+from onyx.skills import ingest
+from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES, build_skill_md
 from onyx.skills.ingest import save_skill_bundle_bytes
 from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.db.test_skill_version_writes import bundle, upload
@@ -179,7 +183,12 @@ def test_stored_read_boundaries(
             return api.preview_custom_skill_version(skill.id, version.id, user, session)
         return api.restore_custom_skill_version(skill.id, version.id, user, session)
 
-    if offset < 0:
+    if offset < 0 and reader == "current":
+        with pytest.raises(OnyxError) as error:
+            read()
+        assert error.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+        assert f"{limits.max_stored_bytes}-byte read limit" in error.value.detail
+    elif offset < 0:
         with pytest.raises(FileSizeLimitExceeded):
             read()
     else:
@@ -322,3 +331,135 @@ def test_history_pages_keep_older_rows_stable_during_new_writes(
             assert (
                 client.get(path, params={"before_version": invalid}).status_code == 422
             )
+
+
+def test_history_current_marker_includes_edit_after_authorization(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = api.create_custom_skill(
+        upload(bundle("history-concurrent-edit")), False, user, session
+    )
+    list_versions = api.list_skill_versions
+
+    def edit_before_history_query(
+        authorized: Skill, db_session: Session, *, before_version: int | None = None
+    ) -> list[tuple[SkillVersion, User | None, bool]]:
+        with get_session_with_current_tenant() as writer:
+            writer_user = writer.get(User, user.id)
+            assert writer_user is not None
+            api.replace_current_user_skill_bundle(
+                skill.id,
+                upload(bundle(skill.name, "Concurrent edit")),
+                writer_user,
+                writer,
+            )
+        return list_versions(authorized, db_session, before_version=before_version)
+
+    monkeypatch.setattr(api, "list_skill_versions", edit_before_history_query)
+    history = api.list_custom_skill_versions(skill.id, user, session)
+    assert [(version.version_number, version.is_current) for version in history] == [
+        (2, True),
+        (1, False),
+    ]
+
+
+def test_history_without_current_pointer_has_no_current_marker(
+    session: Session, user: User
+) -> None:
+    created = api.create_custom_skill(
+        upload(bundle("history-missing-pointer")), False, user, session
+    )
+    skill = session.get(Skill, created.id)
+    assert skill is not None
+    skill.current_version_id = None
+    session.commit()
+    history = api.list_custom_skill_versions(created.id, user, session)
+    assert [(version.version_number, version.is_current) for version in history] == [
+        (1, False)
+    ]
+
+
+def test_restore_legacy_file_count_preserves_upload_limit(
+    session: Session, user: User
+) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "SKILL.md",
+            build_skill_md(
+                name="legacy-count",
+                description="Legacy",
+                instructions_markdown="Original",
+            ),
+        )
+        for number in range(500):
+            archive.writestr(f"notes/{number}.txt", "legacy")
+    content = output.getvalue()
+    with pytest.raises(OnyxError) as caught:
+        api.create_custom_skill(upload(content), False, user, session)
+    assert caught.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+    assert list(session.scalars(select(FileRecord.file_id))) == []
+    file_id = save_skill_bundle_bytes(
+        content, display_name="legacy.zip", file_store=get_default_file_store()
+    )
+    skill = Skill(
+        name="legacy-count",
+        description="Legacy",
+        author_user_id=user.id,
+        bundle_file_id=file_id,
+        is_valid=True,
+    )
+    session.add(skill)
+    session.commit()
+    original = repair_skill_version(skill, session)
+    session.commit()
+    api.replace_current_user_skill_bundle(
+        skill.id, upload(bundle(skill.name, "New")), user, session
+    )
+    restored = api.restore_custom_skill_version(skill.id, original.id, user, session)
+    assert restored.instructions_markdown == "Original"
+    assert len(restored.files) == 500
+    history = api.list_custom_skill_versions(skill.id, user, session)
+    assert [(item.version_number, item.is_current) for item in history] == [
+        (3, True),
+        (2, False),
+        (1, False),
+    ]
+
+
+@pytest.mark.parametrize("damage", ["name", "path", "stored_bytes"])
+def test_stored_restore_preserves_admission_safety(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch, damage: str
+) -> None:
+    created = api.create_custom_skill(
+        upload(bundle("restore-safety")), False, user, session
+    )
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "SKILL.md",
+            build_skill_md(
+                name="other-name" if damage == "name" else created.name,
+                description="History",
+                instructions_markdown="Old",
+            ),
+        )
+        archive.writestr("../escape.txt" if damage == "path" else "note.txt", "old")
+    content = output.getvalue()
+    file_id = save_skill_bundle_bytes(
+        content, display_name="old.zip", file_store=get_default_file_store()
+    )
+    historical = SkillVersion(
+        skill_id=created.id, version_number=2, bundle_file_id=file_id
+    )
+    session.add(historical)
+    session.commit()
+    before_files = set(session.scalars(select(FileRecord.file_id)))
+    before_history = api.list_custom_skill_versions(created.id, user, session)
+    if damage == "stored_bytes":
+        monkeypatch.setattr(ingest, "DEFAULT_STORED_ZIP_MAX_BYTES", len(content) - 1)
+    with pytest.raises(OnyxError):
+        api.restore_custom_skill_version(created.id, historical.id, user, session)
+    session.rollback()
+    assert set(session.scalars(select(FileRecord.file_id))) == before_files
+    assert api.list_custom_skill_versions(created.id, user, session) == before_history

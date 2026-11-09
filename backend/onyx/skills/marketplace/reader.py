@@ -369,7 +369,7 @@ def read_marketplace_archive(
     """
     try:
         folder = archive_path(folder or "")
-        with archive_files(data) as files:
+        with archive_files(data, require_tar_end=True) as files:
             # Providers may wrap a repository in one commit-named directory.
             if not any(_join(folder, p) in files for p in _MANIFESTS):
                 roots = {p.split("/", 1)[0] for p in files}

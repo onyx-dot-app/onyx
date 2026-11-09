@@ -143,6 +143,18 @@ The library preview of an external-app skill calls the same renderer
 
 ## Contracts and traps
 
+Version history selects the current marker in the same SQL snapshot as its rows.
+Restores use stored-data admission, including the stored-byte ceiling and
+expanded-byte checks. Upload file-count limits do not reject retained versions.
+
+Metadata repair recovers retained history before clearing old bundle links.
+This keeps digest, size, and count after retention deletes the files.
+Versions with incomplete metadata keep their links and remain repair candidates.
+Only confirmed absence clears a non-current link; transient failures retain it.
+Background repair isolates each skill in a savepoint. Both scan phases advance
+through failures and retry pending work after the cursor wraps. User saves
+still propagate unexpected storage errors.
+
 1. `rendering-input-changes-hash` **A new rendering input must change the
    hash.** If a value that changes the rendered files is not in the bytes that
    `skills/push.py:compute_skill_runtime_hash` reads, an edit never re-pushes and sessions
@@ -189,6 +201,9 @@ The library preview of an external-app skill calls the same renderer
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the observed version and bundle. The skill lock serializes
    this update with replacement; the legacy validity column is dual-written.
+   Runtime and history use the same missing-object classification. Ambiguous cloud
+   404s need a physical metadata check before runtime persists invalidity. Unknown
+   metadata or storage outages leave validity unclassified so later reads can retry.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
@@ -197,7 +212,12 @@ The library preview of an external-app skill calls the same renderer
    skip the upload ZIP-size and file-count limits. Their separate
    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
    Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
+   Current-content reads return 413 with the stored read limit when that allowance is exceeded.
    Stored reads retain the existing per-file and expanded-total limits.
+   Version metadata repair also bounds compressed reads at the storage backend
+   and expanded work per file and in total, without applying upload file counts.
+   Skill deletion collects every retained bundle before cascading version deletion.
+   Cleanup runs after commit and checks both legacy and version references.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
@@ -282,22 +302,29 @@ The library preview of an external-app skill calls the same renderer
     Identical user saves verify the existing bundle before reusing it. A missing,
     changed or corrupt current file creates a fresh version from the upload.
     Unexpected storage errors abort the save and keep the current version.
-    Missing, corrupt or oversized historical files retain unknown metadata.
+    Repair checks physical object metadata for complete history without downloading
+    its payload. Incomplete metadata still needs a bounded bundle read.
+    Confirmed missing historical objects lose their file links; current links remain
+    recoverable. Missing primary buckets, containers, and uncertain errors keep the links.
+    A confirmed primary object miss plus an absent legacy bucket confirms absence.
+    Historical failures use separate savepoints so current pointer recovery can commit.
     Repair receives `skills/bundle.py:STORED_BUNDLE_LIMITS`: stored bytes use
-    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. Expansion counts actual
-    per-file and total bytes. No upload ZIP or file-count cap applies to history.
+    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. Expansion counts actual per-file and total bytes.
+    No upload ZIP or file-count cap applies to history.
     Current-content reads verify expansion before inspection or editing.
-    Stored-byte failures and current-content expansion failures return 400 through
-    the ValueError handler. Historical expansion failures retain 413.
-    Metadata hashes original entries without normalization. Built-ins have
-    no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
+    Current-content stored-byte limits return a specific 413; its expansion failures
+    return 400 through the ValueError handler. History preview and restore retain
+    their structured 413 responses for stored-byte and expansion limits.
+    Metadata hashes original entries without normalization.
+    Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
     interval is five minutes; cloud uses the standard beat multiplier (eight
     by default). Repair prunes bundle links under the skill lock, then deletes
     unreferenced files after commit, with the same retention rule as saves.
     The deadline is cooperative between skills;
     a single skill's blob reads can exceed it. Each skill commits before its
-    UUID cursor advances. Transient reads fail without advancing progress.
+    UUID cursor advances, including failed attempts. Failed work remains eligible
+    for retry after the cursor wraps.
     Progress reloads from PostgreSQL because KV caching precedes its commit.
     After the initial scan, `db/skill_version.py:skill_version_repair_batch`
     checks pointer, file, hash and validity drift with an outer join and
@@ -310,7 +337,12 @@ The library preview of an external-app skill calls the same renderer
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
-    placeholder. The sent bytes feed the runtime hash. OpenCode adds the base
+    placeholder. Before substitution, the push checks the predicted instruction
+    size against both the configured file limit and the receiver file limit.
+    Expansion must also fit the receiver total, including other Skills. An
+    oversized expansion skips that whole Skill, logs a warning and continues.
+    Files without placeholders keep their previous delivery behavior.
+    The sent bytes feed the runtime hash. OpenCode adds the base
     folder line and the relative-path rule itself, so the push adds neither.
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
     `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
@@ -370,7 +402,8 @@ The library preview of an external-app skill calls the same renderer
     list through `SkillBundleInspectResponse`; it validates expansion before inspection.
     Restore locks the skill, then reads the selected version and calls
     `server/features/skill/api.py:_replace_skill_bundle_from_editor`.
-    Ingestion validates current upload limits and stages a new blob. The shared
+    Ingestion uses stored-bundle limits and stages a new blob. It preserves legacy
+    file counts while checking bytes, paths, and names. The shared
     replacement refreshes the description and applies digest equality and retention.
     Never reuse the historical blob: this restore can prune its source version.
     Cleanup stays after the content commit and before the sandbox push.
@@ -378,12 +411,18 @@ The library preview of an external-app skill calls the same renderer
     `skills/marketplace/archive.py:archive_files` bounds gzip expansion and member
     reads separately from skill limits. Every supported stream read charges the
     shared byte budget. ZIP metadata reads are bounded before directory parsing;
-    only stored and deflated members are supported. Path depth, path bytes and
+    only stored and deflated members without encryption or patched-data flags are
+    supported. ZIP member streams
+    reject seeking, which could otherwise bypass the decompression budget. TAR
+    streams can seek within the already expanded spool. Path depth, path bytes and
     the aggregate parent index
     are bounded before retained path allocations can grow without limit.
     The index budget also counts each retained TAR PAX dictionary and its text
     objects; global headers must not multiply retained metadata without a limit.
-    TAR enumeration also charges all metadata reads before a member returns.
+    TAR enumeration propagates parser-detected header errors, including failures
+    inside extension chains. Normal zero-header and member-boundary EOF endings
+    remain accepted; TAR cannot distinguish those endings from all lost data.
+    Enumeration also charges metadata reads before a member returns.
     Each member also has its own metadata budget, so chained headers and sparse
     maps stop before large allocation or deep parser recursion. Sparse members
     fail the read. `read`, `readline` and `readlines` fail above
@@ -396,7 +435,10 @@ The library preview of an external-app skill calls the same renderer
     has a separate ceiling, including nested paths. Mixed plugins are unsupported.
     Completed entries form an immutable snapshot. Present catalog metadata must
     be an object. Empty declarations cannot hide agent or command Markdown files.
-    Tar reads require an end marker, including when gzip itself is intact.
+    Marketplace discovery enables `archive_files(require_tar_end=True)`: missing
+    TAR end markers fail discovery even when gzip itself is intact. General archive
+    reads retain member-boundary EOF support. Truncated sparse extensions become
+    parsing errors, so the reader returns a failed result instead of raising IndexError.
     Missing explicit skill definitions keep their keys as blocked entries.
     Plugin manifest skill paths participate in discovery; Claude paths add to
     defaults, while Codex compatibility paths replace defaults. Entry paths
