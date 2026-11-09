@@ -618,6 +618,7 @@ describe("SkillEditorPage", () => {
         personal: false,
         folder: "skills/report-writer",
         follows_access: true,
+        can_share: true,
       },
       files: [{ path: "scripts/report.py", size: 32 }],
     });

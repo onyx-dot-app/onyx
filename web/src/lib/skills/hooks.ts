@@ -87,9 +87,7 @@ export function useSkillPresentation(
     dependencyStatus,
     tooltip,
     canEdit,
-    canShare:
-      item.source === "custom" &&
-      canShareSkill({ skill: item.skill, canManageCompanySkills }),
+    canShare: item.source === "custom" && canShareSkill({ skill: item.skill }),
     canDelete:
       item.source === "custom" &&
       canDeleteSkill({ skill: item.skill, canManageCompanySkills }),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import {
@@ -26,18 +26,17 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import GitHubConnection from "@/sections/marketplaces/GitHubConnection";
 import MarketplacePreview from "@/sections/marketplaces/MarketplacePreview";
+import CompanyMarketplaceAccessControls from "@/sections/marketplaces/CompanyMarketplaceAccessControls";
+import {
+  DEFAULT_COMPANY_MARKETPLACE_ACCESS,
+  useCompanyMarketplaceAccess,
+} from "@/lib/marketplaces/hooks";
 
 export interface SyncFromGitHubDialogProps {
   open: boolean;
   onClose: () => void;
   /** Called after acceptance. Imported content may still be pending. */
   onSyncRequested: (marketplace: Marketplace) => void;
-  /** Host owns sharing controls and an atomic create with these defaults. */
-  company?: {
-    controls: ReactNode;
-    ready: boolean;
-    create: (source: MarketplaceCreate) => Promise<Marketplace>;
-  };
 }
 
 type State =
@@ -51,14 +50,13 @@ export default function SyncFromGitHubDialog(props: SyncFromGitHubDialogProps) {
   return props.open ? <SyncSession {...props} /> : null;
 }
 
-function SyncSession({
-  onClose,
-  onSyncRequested,
-  company,
-}: SyncFromGitHubDialogProps) {
+function SyncSession({ onClose, onSyncRequested }: SyncFromGitHubDialogProps) {
   const t = useTranslations("marketplaces");
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_SKILLS);
   const { mutate } = useSWRConfig();
+  const access = useCompanyMarketplaceAccess(
+    DEFAULT_COMPANY_MARKETPLACE_ACCESS
+  );
   const [fields, setFields] = useState({
     name: "",
     owner: "",
@@ -78,7 +76,7 @@ function SyncSession({
   );
   const creating = state.kind === "creating";
   const pending = creating || state.kind === "previewing";
-  const canCreateCompany = isGlobalHolder && company !== undefined;
+  const canCreateCompany = isGlobalHolder;
   const valid =
     fields.name.trim() &&
     fields.owner.trim() &&
@@ -101,7 +99,7 @@ function SyncSession({
     if (
       pending ||
       !valid ||
-      (!personal && (!canCreateCompany || !company?.ready))
+      (!personal && (!canCreateCompany || !access.ready))
     )
       return;
     const source: MarketplaceCreate = {
@@ -131,11 +129,11 @@ function SyncSession({
         if (ticket === request.current)
           setState({ kind: "preview", preview: result });
       } else {
-        if (!personal && !company) return;
-        const result =
-          !personal && company
-            ? await company.create(source)
-            : await createMarketplace(source);
+        const result = await createMarketplace(
+          personal
+            ? source
+            : { ...source, personal: false, access: access.draft }
+        );
         if (ticket !== request.current) return;
         void mutate(SWR_KEYS.marketplaces);
         setState({ kind: "requested" });
@@ -235,7 +233,12 @@ function SyncSession({
                     {!canCreateCompany && personal && (
                       <Text font="secondary-body">{t("personalHelp")}</Text>
                     )}
-                    {!personal && company?.controls}
+                    {!personal && (
+                      <CompanyMarketplaceAccessControls
+                        access={access}
+                        disabled={pending}
+                      />
+                    )}
                   </Section>
                 </Card>
                 {state.kind === "error" && (
@@ -262,7 +265,7 @@ function SyncSession({
               disabled={
                 pending ||
                 !valid ||
-                (!personal && (!canCreateCompany || !company?.ready))
+                (!personal && (!canCreateCompany || !access.ready))
               }
               onClick={() => void submit()}
             >
