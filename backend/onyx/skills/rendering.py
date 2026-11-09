@@ -13,6 +13,7 @@ from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
+from onyx.db.document_set import fetch_all_document_sets_for_user
 from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
 from onyx.db.external_app import get_external_app_by_skill_id
 from onyx.db.models import ExternalApp, Skill, User
@@ -100,19 +101,43 @@ def build_available_sources_section(
     return "\n".join(lines)
 
 
+def build_available_document_sets_section(
+    db_session: Session,
+    user: User,
+) -> str:
+    """Build the document sets section for the company-search SKILL.md."""
+    document_sets = fetch_all_document_sets_for_user(
+        db_session, user, get_editable=False
+    )
+    if not document_sets:
+        return "No document sets available for this user."
+
+    lines: list[str] = []
+    for document_set in sorted(document_sets, key=lambda ds: ds.name):
+        description = (document_set.description or "").strip()
+        line = f"- `{document_set.name}`"
+        if description:
+            line += f" — {description}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def render_company_search_skill(
     db_session: Session,
     user: User,
     skills_dir: Path,
 ) -> str:
-    """Render the company-search SKILL.md with the user's available sources.
+    """Render the company-search SKILL.md with the user's sources and document sets.
 
     ``skills_dir`` is the parent directory of ``company-search/``.
     """
     template_path = skills_dir / "company-search" / "SKILL.md.template"
     template = template_path.read_text()
     sources_section = build_available_sources_section(db_session, user)
-    return template.replace("{{AVAILABLE_SOURCES_SECTION}}", sources_section)
+    document_sets_section = build_available_document_sets_section(db_session, user)
+    return template.replace("{{AVAILABLE_SOURCES_SECTION}}", sources_section).replace(
+        "{{AVAILABLE_DOCUMENT_SETS_SECTION}}", document_sets_section
+    )
 
 
 def build_action_availability_section(

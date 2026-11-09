@@ -1,14 +1,24 @@
-"""Tests for build_available_sources_section() and company-search skill rendering."""
+"""Tests for the company-search skill sections and rendering."""
 
 from __future__ import annotations
+
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import User
-from onyx.skills.rendering import build_available_sources_section
+from onyx.db.models import DocumentSet, User
+from onyx.skills.built_in import COMPANY_SEARCH
+from onyx.skills.rendering import (
+    build_available_document_sets_section,
+    build_available_sources_section,
+    render_company_search_skill,
+)
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
+
+COMPANY_SEARCH_TEMPLATE = COMPANY_SEARCH.source_dir / "SKILL.md.template"
 
 
 class TestBuildAvailableSourcesSection:
@@ -82,3 +92,45 @@ class TestBuildAvailableSourcesSection:
         result = build_available_sources_section(db_session, test_user)
         assert result.startswith("- `")
         assert "` — " in result
+
+
+class TestBuildAvailableDocumentSetsSection:
+    def test_lists_only_document_sets_the_user_can_read(
+        self,
+        db_session: Session,
+        test_user: User,
+    ) -> None:
+        suffix = uuid4().hex[:8]
+        public_name = f"Engineering Wiki {suffix}"
+        private_name = f"Board Minutes {suffix}"
+        db_session.add_all(
+            [
+                DocumentSet(name=public_name, description="Runbooks", is_public=True),
+                DocumentSet(name=private_name, description=None, is_public=False),
+            ]
+        )
+        db_session.flush()
+
+        result = build_available_document_sets_section(db_session, test_user)
+        assert f"- `{public_name}` — Runbooks" in result.split("\n")
+        assert private_name not in result
+
+    def test_rendered_skill_documents_the_flag_and_sets(
+        self,
+        db_session: Session,
+        test_user: User,
+        tmp_path: Path,
+    ) -> None:
+        name = f"Sales Playbooks {uuid4().hex[:8]}"
+        db_session.add(DocumentSet(name=name, description="", is_public=True))
+        db_session.flush()
+        skill_dir = tmp_path / "company-search"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md.template").write_text(
+            COMPANY_SEARCH_TEMPLATE.read_text()
+        )
+
+        rendered = render_company_search_skill(db_session, test_user, tmp_path)
+        assert "{{AVAILABLE_DOCUMENT_SETS_SECTION}}" not in rendered
+        assert f"- `{name}`\n" in rendered
+        assert "--document-set" in rendered
