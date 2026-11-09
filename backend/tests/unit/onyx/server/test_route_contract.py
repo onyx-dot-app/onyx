@@ -26,7 +26,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import APIRouter, Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute, APIWebSocketRoute
 from sqlalchemy.orm import Session
@@ -346,6 +346,7 @@ def test_skill_history_requires_edit_access(app: FastAPI, route: str) -> None:
         with pytest.raises(OnyxError):
             kwargs = {
                 "skill_id": MagicMock(),
+                "http_request": Request({"type": "http"}),
                 "user": MagicMock(),
                 "db_session": MagicMock(),
             }
@@ -353,6 +354,7 @@ def test_skill_history_requires_edit_access(app: FastAPI, route: str) -> None:
                 kwargs["version_id"] = MagicMock()
             handler(**kwargs)
     assert fetch.call_args.kwargs["policy"] == SkillManagementPolicy.EDIT
+    assert fetch.call_args.kwargs["allow_management"] is True
     if route.endswith("/restore"):
         assert fetch.call_args.kwargs.get("lock_for_update", False) is False
 

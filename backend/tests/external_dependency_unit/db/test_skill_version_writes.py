@@ -224,19 +224,37 @@ def test_all_writers(creation: str, session: Session, user: User) -> None:
     assert first.created_by_user_id == user.id
     assert first.file_count == 1
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(name, "Replaced")), user, session
+        skill.id,
+        upload(bundle(name, "Replaced")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert len(versions(skill, session)) == 2
     api.upload_current_user_skill_files(
-        skill.id, upload(b"support", "notes.txt"), user, session
+        skill.id,
+        upload(b"support", "notes.txt"),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert len(versions(skill, session)) == 3
     assert versions(skill, session)[0].file_count == 2
     api.upload_current_user_skill_files(
-        skill.id, upload(b"support", "notes.txt"), user, session
+        skill.id,
+        upload(b"support", "notes.txt"),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert len(versions(skill, session)) == 3
-    api.remove_current_user_skill_file(skill.id, "notes.txt", user, session)
+    api.remove_current_user_skill_file(
+        skill.id,
+        "notes.txt",
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert len(versions(skill, session)) == 4
     request = SkillPatchRequest(instructions_markdown="Edited instructions")
     api.patch_current_user_skill(
@@ -281,7 +299,11 @@ def test_rezip_noop(session: Session, user: User) -> None:
     skill = session.get(Skill, response.id)
     assert skill is not None
     api.upload_current_user_skill_files(
-        skill.id, upload(b"support", "notes.txt"), user, session
+        skill.id,
+        upload(b"support", "notes.txt"),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     old = versions(skill, session)[0]
     assert old.bundle_file_id is not None
@@ -300,7 +322,11 @@ def test_rezip_noop(session: Session, user: User) -> None:
     assert output.getvalue() != original
     file_count = session.scalar(select(func.count()).select_from(FileRecord))
     api.replace_current_user_skill_bundle(
-        skill.id, upload(output.getvalue()), user, session
+        skill.id,
+        upload(output.getvalue()),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert session.scalar(select(func.count()).select_from(FileRecord)) == file_count
     assert len(versions(skill, session)) == 2
@@ -597,7 +623,11 @@ def test_corrupt_legacy_bundle_does_not_block_repair_or_replace(
     session.expire_all()
     assert len(versions(skill, session)) == 2
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "Fixed")), user, session
+        skill.id,
+        upload(bundle(skill.name, "Fixed")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert len(versions(skill, session)) == 3
     assert versions(skill, session)[0].content_digest is not None
@@ -645,7 +675,13 @@ def test_identical_reupload_repairs_damaged_current_bundle(
             "application/zip",
             file_id=lost_file,
         )
-    api.replace_current_user_skill_bundle(skill.id, upload(content), user, session)
+    api.replace_current_user_skill_bundle(
+        skill.id,
+        upload(content),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert len(versions(skill, session)) == 2
     assert skill.bundle_file_id != lost_file
     with store.read_file(skill.bundle_file_id) as source:
@@ -662,7 +698,11 @@ def test_noop_cleans_staged_bundle_before_push_failure(
         upload(bundle("noop-push")), False, user, session
     )
     api.upload_current_user_skill_files(
-        response.id, upload(b"notes", "notes.txt"), user, session
+        response.id,
+        upload(b"notes", "notes.txt"),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.bundle_file_id is not None
@@ -680,16 +720,28 @@ def test_noop_cleans_staged_bundle_before_push_failure(
         with pytest.raises(RuntimeError, match="push failed"):
             if writer == "replace":
                 api.replace_current_user_skill_bundle(
-                    skill.id, upload(original), user, session
+                    skill.id,
+                    upload(original),
+                    user,
+                    session,
+                    http_request=Request({"type": "http"}),
                 )
             elif writer == "editor":
                 api.upload_current_user_skill_files(
-                    skill.id, upload(b"notes", "notes.txt"), user, session
+                    skill.id,
+                    upload(b"notes", "notes.txt"),
+                    user,
+                    session,
+                    http_request=Request({"type": "http"}),
                 )
             elif writer == "restore":
                 assert skill.current_version_id is not None
                 api.restore_custom_skill_version(
-                    skill.id, skill.current_version_id, user, session
+                    skill.id,
+                    skill.current_version_id,
+                    user,
+                    session,
+                    http_request=Request({"type": "http"}),
                 )
             else:
                 api.patch_current_user_skill(
@@ -737,7 +789,11 @@ def skill_with_versions(session: Session, user: User, count: int) -> Skill:
     response = api.create_custom_skill(upload(bundle(name)), False, user, session)
     for number in range(2, count + 1):
         api.replace_current_user_skill_bundle(
-            response.id, upload(bundle(name, f"Version {number}")), user, session
+            response.id,
+            upload(bundle(name, f"Version {number}")),
+            user,
+            session,
+            http_request=Request({"type": "http"}),
         )
     skill = session.get(Skill, response.id)
     assert skill is not None
@@ -775,7 +831,11 @@ def test_eleventh_version_prunes_oldest_bundle(session: Session, user: User) -> 
     oldest_file = oldest.bundle_file_id
     assert oldest_file is not None and len(stored_bundles(session)) == 10
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "Eleventh")), user, session
+        skill.id,
+        upload(bundle(skill.name, "Eleventh")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     history = versions(skill, session)
     assert [version.version_number for version in history] == list(range(11, 0, -1))
@@ -810,7 +870,11 @@ def test_concurrent_writes_keep_ten_bundles(
                 writer_user = writer.get(User, user_id)
                 assert writer_user is not None
                 api.replace_current_user_skill_bundle(
-                    skill_id, upload(bundle(name, body)), writer_user, writer
+                    skill_id,
+                    upload(bundle(name, body)),
+                    writer_user,
+                    writer,
+                    http_request=Request({"type": "http"}),
                 )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -1009,7 +1073,11 @@ def test_pruning_does_not_load_cleared_history(session: Session, user: User) -> 
     event.listen(session, "loaded_as_persistent", record_load)
     try:
         api.replace_current_user_skill_bundle(
-            skill_id, upload(bundle(name, "Next version")), writer, session
+            skill_id,
+            upload(bundle(name, "Next version")),
+            writer,
+            session,
+            http_request=Request({"type": "http"}),
         )
     finally:
         event.remove(session, "loaded_as_persistent", record_load)
@@ -1216,6 +1284,7 @@ def test_repair_refreshes_later_batch_skill_after_completed_edit(
                     upload(bundle(later.name, "Edited before repair")),
                     actor,
                     writer,
+                    http_request=Request({"type": "http"}),
                 )
         return repair(skill, db_session, file_store)
 
@@ -1543,7 +1612,11 @@ def test_background_repair_rejects_oversized_entry(
     assert version.unpacked_size_bytes is None
     assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name)), user, session
+        skill.id,
+        upload(bundle(skill.name)),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert len(versions(skill, session)) == 2
     assert versions(skill, session)[0].content_digest is not None
@@ -1588,7 +1661,11 @@ def test_legacy_byte_limits(
         assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
     else:
         api.replace_current_user_skill_bundle(
-            skill.id, upload(bundle(skill.name)), user, session
+            skill.id,
+            upload(bundle(skill.name)),
+            user,
+            session,
+            http_request=Request({"type": "http"}),
         )
     history = versions(skill, session)
     old = history[-1]
@@ -1599,7 +1676,11 @@ def test_legacy_byte_limits(
         assert old.file_count == 2
     elif background:
         api.replace_current_user_skill_bundle(
-            skill.id, upload(bundle(skill.name)), user, session
+            skill.id,
+            upload(bundle(skill.name)),
+            user,
+            session,
+            http_request=Request({"type": "http"}),
         )
     if failure != "exact" or not background:
         assert len(versions(skill, session)) == 2
@@ -1761,6 +1842,7 @@ def test_replacement_preserves_history_on_unexpected_read_failure(
             upload(content),
             user,
             session,
+            http_request=Request({"type": "http"}),
         )
     assert caught.value is error
     session.rollback()

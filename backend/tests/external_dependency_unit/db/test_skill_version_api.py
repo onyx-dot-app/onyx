@@ -3,7 +3,7 @@
 from typing import Never
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -59,11 +59,17 @@ def test_history_current_marker_includes_edit_after_authorization(
                 upload(bundle(skill.name, "Concurrent edit")),
                 writer_user,
                 writer,
+                http_request=Request({"type": "http"}),
             )
         return list_versions(authorized, db_session, before_version=before_version)
 
     monkeypatch.setattr(api, "list_skill_versions", edit_before_history_query)
-    history = api.list_custom_skill_versions(skill.id, user, session)
+    history = api.list_custom_skill_versions(
+        skill.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert [(version.version_number, version.is_current) for version in history] == [
         (2, True),
         (1, False),
@@ -80,7 +86,12 @@ def test_history_without_current_pointer_has_no_current_marker(
     assert skill is not None
     skill.current_version_id = None
     session.commit()
-    history = api.list_custom_skill_versions(created.id, user, session)
+    history = api.list_custom_skill_versions(
+        created.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert [(version.version_number, version.is_current) for version in history] == [
         (1, False)
     ]
@@ -93,9 +104,18 @@ def test_unreadable_history_refuses_preview_and_restore(
     skill = api.create_custom_skill(
         upload(bundle("history-damage")), False, user, session
     )
-    original_id = api.list_custom_skill_versions(skill.id, user, session)[0].id
+    original_id = api.list_custom_skill_versions(
+        skill.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )[0].id
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "Current instructions")), user, session
+        skill.id,
+        upload(bundle(skill.name, "Current instructions")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     original = session.get(SkillVersion, original_id)
     assert original is not None and original.bundle_file_id is not None
@@ -116,22 +136,46 @@ def test_unreadable_history_refuses_preview_and_restore(
         )
     session.commit()
     before_files = set(session.scalars(select(FileRecord.file_id)))
-    before_history = api.list_custom_skill_versions(skill.id, user, session)
+    before_history = api.list_custom_skill_versions(
+        skill.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     for operation in (
         api.preview_custom_skill_version,
         api.restore_custom_skill_version,
     ):
         with pytest.raises(OnyxError) as error:
-            operation(skill.id, original_id, user, session)
+            operation(
+                skill.id,
+                original_id,
+                user,
+                session,
+                http_request=Request({"type": "http"}),
+            )
         if damage == "oversized":
             assert error.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
         elif damage != "corrupt":
             assert error.value.detail == VERSION_FILES_NOT_KEPT
         session.rollback()
-    assert api.list_custom_skill_versions(skill.id, user, session) == before_history
+    assert (
+        api.list_custom_skill_versions(
+            skill.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )
+        == before_history
+    )
     assert set(session.scalars(select(FileRecord.file_id))) == before_files
     assert (
-        api.fetch_custom_skill_for_edit(skill.id, user, session).instructions_markdown
+        api.fetch_custom_skill_for_edit(
+            skill.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        ).instructions_markdown
         == "Current instructions"
     )
 
@@ -143,11 +187,25 @@ def test_failed_restore_commit_defers_cleanup(
     skill = api.create_custom_skill(
         upload(bundle("restore-rollback")), False, user, session
     )
-    original = api.list_custom_skill_versions(skill.id, user, session)[0]
+    original = api.list_custom_skill_versions(
+        skill.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )[0]
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "Current instructions")), user, session
+        skill.id,
+        upload(bundle(skill.name, "Current instructions")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
-    before_history = api.list_custom_skill_versions(skill.id, user, session)
+    before_history = api.list_custom_skill_versions(
+        skill.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     before_files = set(session.scalars(select(FileRecord.file_id)))
     commit = session.commit
 
@@ -161,8 +219,19 @@ def test_failed_restore_commit_defers_cleanup(
     with monkeypatch.context() as patch:
         patch.setattr(session, "commit", fail_commit)
         with pytest.raises(RuntimeError, match="commit rejected"):
-            api.restore_custom_skill_version(skill.id, original.id, user, session)
-    history = api.list_custom_skill_versions(skill.id, user, session)
+            api.restore_custom_skill_version(
+                skill.id,
+                original.id,
+                user,
+                session,
+                http_request=Request({"type": "http"}),
+            )
+    history = api.list_custom_skill_versions(
+        skill.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert len(history) == len(before_history) + int(committed)
     if not committed:
         assert history == before_history
@@ -177,13 +246,20 @@ def test_failed_restore_commit_defers_cleanup(
         after_files if committed else before_files
     )
     assert api.fetch_custom_skill_for_edit(
-        skill.id, user, session
+        skill.id,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     ).instructions_markdown == (
         "First instructions" if committed else "Current instructions"
     )
     assert (
         api.preview_custom_skill_version(
-            skill.id, original.id, user, session
+            skill.id,
+            original.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
         ).instructions_markdown
         == "First instructions"
     )
@@ -196,20 +272,45 @@ def test_history_without_creator_and_builtin_refusal(
         upload(bundle("unknown-creator")), False, user, session
     )
     version = session.get(
-        SkillVersion, api.list_custom_skill_versions(skill.id, user, session)[0].id
+        SkillVersion,
+        api.list_custom_skill_versions(
+            skill.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )[0].id,
     )
     assert version is not None
     version.created_by_user_id = None
     builtin = Skill(name="pdf", description="Built in", built_in_skill_id="pdf")
     session.add(builtin)
     session.commit()
-    assert api.list_custom_skill_versions(skill.id, user, session)[0].created_by is None
     assert (
-        api.preview_custom_skill_version(skill.id, version.id, user, session).name
+        api.list_custom_skill_versions(
+            skill.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )[0].created_by
+        is None
+    )
+    assert (
+        api.preview_custom_skill_version(
+            skill.id,
+            version.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        ).name
         == skill.name
     )
     with pytest.raises(OnyxError, match="Skill not found"):
-        api.list_custom_skill_versions(builtin.id, user, session)
+        api.list_custom_skill_versions(
+            builtin.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )
 
 
 @pytest.mark.parametrize("offset", [-1, 0, 1])
@@ -249,8 +350,20 @@ def test_stored_read_boundaries(
         if reader == "validation":
             return validation.load_stored_custom_skill_bundle(bundle_file_id, store)
         if reader == "preview":
-            return api.preview_custom_skill_version(skill.id, version.id, user, session)
-        return api.restore_custom_skill_version(skill.id, version.id, user, session)
+            return api.preview_custom_skill_version(
+                skill.id,
+                version.id,
+                user,
+                session,
+                http_request=Request({"type": "http"}),
+            )
+        return api.restore_custom_skill_version(
+            skill.id,
+            version.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )
 
     if offset < 0:
         with pytest.raises(FileSizeLimitExceeded):
@@ -258,7 +371,17 @@ def test_stored_read_boundaries(
     else:
         assert read() is not None
     session.rollback()
-    assert len(api.list_custom_skill_versions(skill.id, user, session)) == 1
+    assert (
+        len(
+            api.list_custom_skill_versions(
+                skill.id,
+                user,
+                session,
+                http_request=Request({"type": "http"}),
+            )
+        )
+        == 1
+    )
 
 
 def test_current_editor_rejects_expansion_before_inspection(
@@ -283,7 +406,12 @@ def test_current_editor_rejects_expansion_before_inspection(
         raising=False,
     )
     with pytest.raises(FileSizeLimitExceeded):
-        api.fetch_custom_skill_for_edit(response.id, user, session)
+        api.fetch_custom_skill_for_edit(
+            response.id,
+            user,
+            session,
+            http_request=Request({"type": "http"}),
+        )
 
 
 def test_legacy_current_and_preview_keep_stored_allowances(
@@ -321,9 +449,27 @@ def test_legacy_current_and_preview_keep_stored_allowances(
         load_stored_custom_skill_bundle(version.bundle_file_id, store).content
         == output.getvalue()
     )
-    assert len(api.fetch_custom_skill_for_edit(skill.id, user, session).files) == 501
     assert (
-        len(api.preview_custom_skill_version(skill.id, version.id, user, session).files)
+        len(
+            api.fetch_custom_skill_for_edit(
+                skill.id,
+                user,
+                session,
+                http_request=Request({"type": "http"}),
+            ).files
+        )
+        == 501
+    )
+    assert (
+        len(
+            api.preview_custom_skill_version(
+                skill.id,
+                version.id,
+                user,
+                session,
+                http_request=Request({"type": "http"}),
+            ).files
+        )
         == 501
     )
 
@@ -383,9 +529,13 @@ def test_legacy_large_central_directory_stays_readable(
 
     if not wrapped:
         # The editor reads root SKILL.md, so it has never opened wrapped bundles.
-        editable = api.fetch_custom_skill_for_edit(skill.id, user, session)
+        editable = api.fetch_custom_skill_for_edit(
+            skill.id, user, session, http_request=Request({"type": "http"})
+        )
         assert len(editable.files) == 90
-    preview = api.preview_custom_skill_version(skill.id, version.id, user, session)
+    preview = api.preview_custom_skill_version(
+        skill.id, version.id, user, session, http_request=Request({"type": "http"})
+    )
     assert [file.path for file in preview.files][:2] == ["refs/0.md", "refs/1.md"]
     assert len(preview.files) == 90
     validation = validate_stored_custom_skill(skill, store)

@@ -6,6 +6,7 @@ from queue import Queue
 from typing import Literal
 
 import pytest
+from fastapi import Request
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -101,11 +102,16 @@ def test_waiting_edit_reads_committed_version(
                             upload(b"second", "second.txt"),
                             second_user,
                             writer,
+                            http_request=Request({"type": "http"}),
                         )
                     assert conflict.value.status_code == 409
                     writer.rollback()
                     api.upload_current_user_skill_files(
-                        skill_id, upload(b"second", "second.txt"), second_user, writer
+                        skill_id,
+                        upload(b"second", "second.txt"),
+                        second_user,
+                        writer,
+                        http_request=Request({"type": "http"}),
                     )
                 elif operation == "associate":
                     associate_custom_skill_with_external_app__no_commit(
@@ -154,10 +160,15 @@ def test_waiting_edit_reads_committed_version(
                     ),
                     user,
                     session,
+                    http_request=Request({"type": "http"}),
                 )
             else:
                 api.upload_current_user_skill_files(
-                    skill_id, upload(b"first", "first.txt"), user, session
+                    skill_id,
+                    upload(b"first", "first.txt"),
+                    user,
+                    session,
+                    http_request=Request({"type": "http"}),
                 )
         finally:
             session.rollback()
