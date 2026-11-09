@@ -1,7 +1,6 @@
 # Shared marketplaces
 
-The shared list and dialogs are available for hosts. Skills pages still use the one-time GitHub import.
-Marketplace page integration, browser acceptance and retired-skill management remain pending.
+Both Skills pages mount the shared list and dialog. Browser acceptance and retired-skill management remain pending.
 
 ## SyncFromGitHubDialog
 
@@ -12,11 +11,10 @@ Repository owner, name, ref and folder are separate fields. Ref is required; sla
 Input changes invalidate previews. Closing unmounts the request session, so stale responses cannot populate another session.
 Creation disables submission and user dismissal until the request finishes.
 
-Company scope appears for global `MANAGE_SKILLS` holders when the host supplies `company`.
-The host owns `useCompanyMarketplaceAccess(DEFAULT_COMPANY_MARKETPLACE_ACCESS)` for each creation session.
-Supply `company.controls`, `company.ready`, and an atomic `company.create` callback.
-The callback submits source and access defaults in one `createMarketplace` request. Never PATCH defaults after creation.
-Reset the host's company draft when the dialog closes.
+Company scope appears only for global `MANAGE_SKILLS` holders.
+The dialog owns `useCompanyMarketplaceAccess(DEFAULT_COMPANY_MARKETPLACE_ACCESS)` in its open session.
+It submits source and access defaults in one `createMarketplace` request. There is no follow-up access PATCH.
+Closing resets the company draft. The host does not supply a creator or access controls.
 
 ## CompanyMarketplaceAccessControls
 
@@ -30,7 +28,7 @@ The controls display that choice before creation. Hosts can supply another expli
 Switching to private and back restores the session's last organization permission.
 `marketplaceAccessDraft(snapshot)` converts snapshot `user_group_id` values to request `group_id` values, retaining group policies.
 
-Pass `access.ready` as `company.ready`. Have `company.create` submit `createMarketplace({ ...source, personal: false, access: access.draft })`.
+The shared dialog uses `access.ready` and submits `createMarketplace({ ...source, personal: false, access: access.draft })`.
 Never create first and PATCH defaults afterward. No direct-user grants are supported.
 
 Readiness requires global `MANAGE_SKILLS` and loaded settings with a known tier.
@@ -66,8 +64,7 @@ Polling only reads status; it never requests another sync.
 - `getCountLabel(row)` overrides skill counts. Return `null` to hide unsupported counts.
 - `onSyncFromGitHub` optionally supplies the list's creation action. Omit it when the page menu owns that action.
 - `onChanged` refreshes host resources after accepted mutations, completed work, source removal, and revision or count changes.
-- `onConfigureAccess(row)` requests company defaults. The list forwards this callback without closing detail.
-  Hosts must arrange dismissal before opening `CompanyMarketplaceAccessModal`. A directly mounted detail dialog exposes `onClose` for that handoff.
+- `onConfigureAccess(row)` closes detail before the host opens `CompanyMarketplaceAccessModal` for company defaults.
 
 The current API has skill counts only. There are no plugin endpoints or inferred plugin counts.
 Keep pending and failed sources visible when defining filters, including sources with zero imported skills.

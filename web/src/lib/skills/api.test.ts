@@ -1,11 +1,9 @@
 import {
   bulkUpdateSkills,
   createCustomSkillFromEditor,
-  importGitHubSkills,
   isSkillNameConflict,
   resetSkillMarketplaceAccess,
 } from "@/lib/skills/api";
-import type { GitHubSkillsPreview } from "@/lib/skills/types";
 
 describe("skills API", () => {
   const fetchMock = jest.fn();
@@ -70,35 +68,6 @@ describe("skills API", () => {
     const body = fetchMock.mock.calls[0]![1]!.body as FormData;
     expect(body.get("external_app_id")).toBe("17");
     expect(body.get("auto_enable")).toBe("false");
-  });
-
-  it("sends only the pinned repository identity and selected paths when importing", async () => {
-    const preview: GitHubSkillsPreview = {
-      repository: "anthropics/skills",
-      revision: "a".repeat(40),
-      subpath: "skills",
-      skills: [
-        {
-          path: "skills/research",
-          name: "research",
-          description: "Research a topic.",
-          unavailable_reason: null,
-        },
-      ],
-    };
-
-    await importGitHubSkills(preview, ["skills/research"]);
-
-    expect(fetchMock).toHaveBeenCalledWith("/api/skills/github/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        repository: "anthropics/skills",
-        revision: "a".repeat(40),
-        subpath: "skills",
-        paths: ["skills/research"],
-      }),
-    });
   });
 
   it("recognizes only the dedicated skill-name conflict", () => {
