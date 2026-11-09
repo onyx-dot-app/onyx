@@ -313,12 +313,19 @@ def _try_run_periodic_task(task_def: _PeriodicTaskDef) -> None:
 
 
 def _run_drain_loops(tenant_id: str) -> None:
+    from onyx.background.celery.tasks.marketplace_sync.tasks import (
+        recover_marketplace_syncs,
+    )
     from onyx.background.task_utils import (
         drain_delete_loop,
         drain_processing_loop,
         drain_project_sync_loop,
     )
 
+    try:
+        recover_marketplace_syncs.run(tenant_id=tenant_id)
+    except Exception:
+        logger.warning("Marketplace recovery failed; continuing file drains")
     drain_processing_loop(tenant_id)
     drain_delete_loop(tenant_id)
     drain_project_sync_loop(tenant_id)
