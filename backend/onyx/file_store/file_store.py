@@ -41,6 +41,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_for_update,
@@ -427,7 +428,8 @@ class FileStore(ABC):
         self, file_id: str, db_session: Session | None = None
     ) -> int | None:
         """
-        Get the size of a file in bytes.
+        Check physical object existence and return its size, or None if unknown.
+        Raise FileNotFoundError only for confirmed missing objects or file records.
         Optionally provide a db_session for database access.
         """
 
@@ -1002,12 +1004,23 @@ class S3BackedFileStore(PresignableFileStore):
                     file_id=file_id, db_session=db_session
                 )
 
-            response = self._with_legacy_fallback(
-                lambda client: client.head_object(
-                    Bucket=file_record.bucket_name, Key=file_record.object_key
-                )
-            )
-            return response.get("ContentLength")
+            def head_size(client: "S3Client") -> int | None:
+                try:
+                    return client.head_object(
+                        Bucket=file_record.bucket_name, Key=file_record.object_key
+                    ).get("ContentLength")
+                except ClientError as exc:
+                    if s3_error_code(exc) in ("404", "NotFound"):
+                        # HEAD omits the error body, including NoSuchBucket.
+                        try:
+                            client.head_bucket(Bucket=file_record.bucket_name)
+                        except ClientError:
+                            return None
+                    raise
+
+            return self._with_legacy_fallback(head_size)
+        except FileRecordNotFoundError as e:
+            raise FileNotFoundError(f"File record {file_id} does not exist") from e
         except ClientError as e:
             if is_missing_object(e):
                 raise FileNotFoundError(

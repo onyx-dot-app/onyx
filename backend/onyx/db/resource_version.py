@@ -17,6 +17,7 @@ from onyx.file_store.file_store import (
     FileSizeLimitExceeded,
     FileStore,
     is_missing_object,
+    s3_error_code,
 )
 from onyx.file_store.models import BundleLimits, BundleMetadata
 from onyx.utils.bundle import compute_bundle_metadata
@@ -61,14 +62,22 @@ def read_version_bundle(
     except (
         FileRecordNotFoundError,
         FileNotFoundError,
-        ResourceNotFoundError,
-        NotFound,
     ) as exc:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
-    except ClientError as exc:
-        if not is_missing_object(exc):
-            raise
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
+    except (ResourceNotFoundError, NotFound, ClientError) as exc:
+        if isinstance(exc, ClientError):
+            if not is_missing_object(exc):
+                raise
+            if s3_error_code(exc) in ("NoSuchKey", "NoSuchObject"):
+                raise OnyxError(
+                    OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT
+                ) from exc
+        # A provider 404 can name the bucket/container, not the object.
+        try:
+            file_store.get_file_size(version.bundle_file_id)
+        except FileNotFoundError:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
+        raise
 
 
 def repair_version_metadata(
@@ -77,29 +86,35 @@ def repair_version_metadata(
     *,
     limits: BundleLimits,
     verify_bundle: bool = False,
+    clear_missing_bundle: bool = False,
 ) -> bool:
     if version.bundle_file_id is None:
         return False
-    if not verify_bundle and all(
+    metadata_complete = all(
         value is not None
         for value in (
             version.content_digest,
             version.unpacked_size_bytes,
             version.file_count,
         )
-    ):
-        return True
+    )
     try:
+        if metadata_complete and not verify_bundle:
+            if clear_missing_bundle:
+                return file_store.get_file_size(version.bundle_file_id) is not None
+            return True
         bundle_bytes = read_version_bundle(
             version, file_store, max_bytes=limits.max_stored_bytes
         )
     except FileSizeLimitExceeded:
         logger.warning("Version bundle exceeds stored byte limit: %s", version.id)
         return False
-    except OnyxError as exc:
-        if exc.error_code != OnyxErrorCode.NOT_FOUND:
+    except (FileNotFoundError, OnyxError) as exc:
+        if isinstance(exc, OnyxError) and exc.error_code != OnyxErrorCode.NOT_FOUND:
             raise
         logger.warning("Version bundle is missing: %s", version.id)
+        if clear_missing_bundle:
+            version.bundle_file_id = None
         return False
     try:
         metadata = compute_bundle_metadata(bundle_bytes, limits=limits)
@@ -132,6 +147,10 @@ def prune_resource_bundles[Version: BundleVersionMixin](
         version_model.version_number < cutoff.version_number,
         version_model.bundle_file_id.is_not(None),
         version_model.id != current.id,
+        # Keep the only recovery source until metadata is complete.
+        version_model.content_digest.is_not(None),
+        version_model.unpacked_size_bytes.is_not(None),
+        version_model.file_count.is_not(None),
     )
     pruned: list[str] = []
     for version in db_session.scalars(candidates):
