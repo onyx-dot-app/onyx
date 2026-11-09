@@ -1,0 +1,224 @@
+"""Unit tests for the separate per-version skill bundle limits."""
+
+from __future__ import annotations
+
+import io
+import os
+import random
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+import pytest
+
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.skills import bundle as bundle_module
+from onyx.skills.bundle import (
+    SkillBundleLimit,
+    normalize_custom_bundle,
+    read_bundle_file,
+    update_custom_bundle_files,
+)
+
+_MIB = 1024 * 1024
+_SKILL_MD = b"---\nname: limits\ndescription: Limit checks\n---\n\n# Instructions\n"
+
+
+@pytest.mark.parametrize("upload_limit,expected", [(8192, 4096), (1024, 1024)])
+def test_upload_limit_cannot_exceed_stored_allowance(
+    upload_limit: int,
+    expected: int,
+) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from onyx.skills.bundle import DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES; print(DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES)",
+        ],
+        env={
+            **os.environ,
+            "PYTHONPATH": str(Path(__file__).resolve().parents[4]),
+            "SKILL_BUNDLE_ZIP_MAX_BYTES": str(upload_limit),
+            "SKILL_BUNDLE_STORED_ZIP_MAX_BYTES": "4096",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    assert result.stdout.strip() == f"{expected} 4096"
+
+
+def _build_zip(
+    entries: list[tuple[str, bytes]],
+    *,
+    compression: int = zipfile.ZIP_DEFLATED,
+) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w") as zf:
+        for path, data in entries:
+            info = zipfile.ZipInfo(path, date_time=(2026, 1, 1, 0, 0, 0))
+            info.compress_type = compression
+            zf.writestr(info, data)
+    return buf.getvalue()
+
+
+def _assert_limit_error(
+    exc: OnyxError, limit: SkillBundleLimit, limit_value: int
+) -> None:
+    assert exc.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+    assert exc.status_code == 413
+    assert exc.extra == {"limit": limit, "limit_value": limit_value}
+
+
+def test_read_bundle_file_refuses_26_mib_upload() -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        read_bundle_file(io.BytesIO(b"\x00" * (26 * _MIB)))
+
+    _assert_limit_error(exc_info.value, "zip_bytes", 25 * _MIB)
+
+
+def test_read_bundle_file_accepts_upload_at_limit() -> None:
+    assert len(read_bundle_file(io.BytesIO(b"\x00" * (25 * _MIB)))) == 25 * _MIB
+
+
+def test_normalizer_refuses_26_mib_zip_inside_extracted_limits() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("SKILL.md", _SKILL_MD),
+            ("a.bin", os.urandom(13 * _MIB)),
+            ("b.bin", os.urandom(13 * _MIB)),
+        ],
+        compression=zipfile.ZIP_STORED,
+    )
+    assert len(zip_bytes) > 26 * _MIB
+
+    with pytest.raises(OnyxError) as exc_info:
+        normalize_custom_bundle(zip_bytes)
+
+    _assert_limit_error(exc_info.value, "zip_bytes", 25 * _MIB)
+
+
+def test_normalizer_zip_limit_boundary() -> None:
+    zip_bytes = _build_zip([("SKILL.md", _SKILL_MD)])
+
+    normalize_custom_bundle(zip_bytes, zip_max_bytes=len(zip_bytes))
+    with pytest.raises(OnyxError) as exc_info:
+        normalize_custom_bundle(zip_bytes, zip_max_bytes=len(zip_bytes) - 1)
+
+    _assert_limit_error(exc_info.value, "zip_bytes", len(zip_bytes) - 1)
+
+
+def test_normalizer_refuses_501_files() -> None:
+    zip_bytes = _build_zip(
+        [("SKILL.md", _SKILL_MD)] + [(f"refs/{index}.md", b"x") for index in range(500)]
+    )
+
+    with pytest.raises(OnyxError, match="more than 500 files") as exc_info:
+        normalize_custom_bundle(zip_bytes)
+
+    _assert_limit_error(exc_info.value, "file_count", 500)
+
+
+def test_normalizer_accepts_500_files_without_counting_folders() -> None:
+    zip_bytes = _build_zip(
+        [("limits/", b""), ("limits/SKILL.md", _SKILL_MD), ("limits/refs/", b"")]
+        + [(f"limits/refs/{index}.md", b"x") for index in range(499)]
+    )
+
+    normalized = normalize_custom_bundle(zip_bytes)
+
+    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle:
+        assert sum(not info.is_dir() for info in bundle.infolist()) == 500
+
+
+@pytest.mark.parametrize("path", ["__MACOSX/._file", ".DS_Store", "Thumbs.db"])
+def test_ignored_files_count_toward_archive_limit(path: str) -> None:
+    zip_bytes = _build_zip([("SKILL.md", _SKILL_MD), (path, b"x")])
+    with pytest.raises(OnyxError) as exc_info:
+        normalize_custom_bundle(zip_bytes, max_file_count=1)
+    _assert_limit_error(exc_info.value, "file_count", 1)
+
+
+def test_supporting_file_archive_counts_ignored_entries() -> None:
+    upload = _build_zip(
+        [("reference.txt", b"x")]
+        + [(f"__MACOSX/._{index}", b"x") for index in range(500)]
+    )
+    with pytest.raises(OnyxError) as exc_info:
+        update_custom_bundle_files(
+            _build_zip([("SKILL.md", _SKILL_MD)]), upload, filename="files.zip"
+        )
+    _assert_limit_error(exc_info.value, "file_count", 500)
+
+
+def test_normalized_zip_must_also_fit_zip_limit() -> None:
+    block = random.Random(1).randbytes(64 * 1024)
+    upload = _build_zip(
+        [("limits/SKILL.md", _SKILL_MD), ("limits/data.bin", block * 2)],
+        compression=zipfile.ZIP_LZMA,
+    )
+    assert len(upload) < 100 * 1024
+    with pytest.raises(OnyxError) as exc_info:
+        normalize_custom_bundle(upload, zip_max_bytes=100 * 1024)
+    _assert_limit_error(exc_info.value, "zip_bytes", 100 * 1024)
+    assert len(normalize_custom_bundle(upload, zip_max_bytes=None).content) > 100 * 1024
+
+
+@pytest.mark.parametrize("filename", ["SKILL.md", "reference.txt"])
+def test_raw_upload_uses_file_limit(
+    filename: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(bundle_module, "DEFAULT_ZIP_MAX_BYTES", 1024)
+    monkeypatch.setattr(bundle_module, "DEFAULT_PER_FILE_MAX_BYTES", 2048)
+    data = b"a" * 2048
+    assert read_bundle_file(io.BytesIO(data), filename=filename) == data
+    with pytest.raises(OnyxError) as exc_info:
+        read_bundle_file(io.BytesIO(data + b"x"), filename=filename)
+    _assert_limit_error(exc_info.value, "file_bytes", 2048)
+
+
+def test_normalizer_refuses_small_zip_that_unpacks_past_100_mib() -> None:
+    zip_bytes = _build_zip(
+        [("SKILL.md", _SKILL_MD)]
+        + [(f"data/{index}.bin", b"\x00" * (21 * _MIB)) for index in range(5)]
+    )
+    assert len(zip_bytes) < _MIB
+
+    with pytest.raises(OnyxError, match="uncompressed") as exc_info:
+        normalize_custom_bundle(zip_bytes)
+
+    _assert_limit_error(exc_info.value, "total_bytes", 100 * _MIB)
+
+
+def test_normalizer_refuses_26_mib_file() -> None:
+    zip_bytes = _build_zip(
+        [("SKILL.md", _SKILL_MD), ("big.bin", b"\x00" * (26 * _MIB))]
+    )
+
+    with pytest.raises(OnyxError, match="big.bin") as exc_info:
+        normalize_custom_bundle(zip_bytes)
+
+    _assert_limit_error(exc_info.value, "file_bytes", 25 * _MIB)
+
+
+def test_normalizer_accepts_bundle_at_every_limit() -> None:
+    big_files = [(f"data/{index}.bin", b"\x00" * (25 * _MIB)) for index in range(3)]
+    big_files.append(("data/3.bin", b"\x00" * (25 * _MIB - len(_SKILL_MD))))
+    small_files = [(f"refs/{index}.md", b"") for index in range(495)]
+    zip_bytes = _build_zip([("SKILL.md", _SKILL_MD), *big_files, *small_files])
+    assert len(zip_bytes) <= 25 * _MIB
+
+    assert normalize_custom_bundle(zip_bytes).content is zip_bytes
+
+
+def test_skipped_limits_allow_bundles_saved_before_them() -> None:
+    zip_bytes = _build_zip(
+        [("SKILL.md", _SKILL_MD)] + [(f"refs/{index}.md", b"x") for index in range(600)]
+    )
+
+    with pytest.raises(OnyxError):
+        normalize_custom_bundle(zip_bytes)
+    normalize_custom_bundle(zip_bytes, zip_max_bytes=None, max_file_count=None)
