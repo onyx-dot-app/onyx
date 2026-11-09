@@ -28,10 +28,13 @@ def enqueue_marketplace_sync(marketplace_id: UUID, *, tenant_id: str) -> None:
     maybe_mark_tenant_active(tenant_id, caller="marketplace_sync")
     with get_session_with_tenant(tenant_id=tenant_id) as session:
         request_marketplace_sync(marketplace_id, session)
-    _dispatch(tenant_id, marketplace_id)
+    dispatch_marketplace_sync(tenant_id, marketplace_id)
 
 
-def _dispatch(tenant_id: str, marketplace_id: UUID | None = None) -> None:
+def dispatch_marketplace_sync(
+    tenant_id: str, marketplace_id: UUID | None = None
+) -> None:
+    """Dispatch committed intent. Recovery retries reservations after transport failure."""
     with get_session_with_tenant(tenant_id=tenant_id) as session:
         ids, active = reserve_marketplace_dispatches(session, marketplace_id)
     if active:
@@ -83,4 +86,4 @@ def sync_marketplace_task(*, marketplace_id: str, tenant_id: str) -> None:
 
 @shared_task(name=OnyxCeleryTask.RECOVER_MARKETPLACE_SYNCS, ignore_result=True)
 def recover_marketplace_syncs(*, tenant_id: str) -> None:
-    _dispatch(tenant_id)
+    dispatch_marketplace_sync(tenant_id)
