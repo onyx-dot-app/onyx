@@ -4,11 +4,11 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.marketplace_access import materialize_marketplace_access__no_commit
-from onyx.db.models import Marketplace, Skill, SkillVersion
+from onyx.db.models import Marketplace, Skill, SkillVersion, UserSkillPreference
 from onyx.db.resource_version import prune_resource_bundles, write_resource_version
 from onyx.db.skill import affected_user_ids_for_skills
 from onyx.db.skill_version import SkillVersionAdapter
@@ -145,6 +145,14 @@ def reconcile_marketplace__no_commit(
         now = datetime.now(timezone.utc)
         for skill in missing:
             skill.retired_at = now
+        if missing:
+            db_session.execute(
+                update(UserSkillPreference)
+                .where(
+                    UserSkillPreference.skill_id.in_([skill.id for skill in missing])
+                )
+                .values(enabled=False)
+            )
         db_session.flush()
         library_owner = case(
             (Skill.marketplace_id.is_not(None), Marketplace.owner_user_id),

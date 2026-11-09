@@ -317,7 +317,22 @@ Onyx keeps files for the newest ten versions, including a newly restored version
 false`. Preview and restore return `404` with "The files of this version are no longer kept." if the bundle is absent.
 A version ID from another Skill also returns `404`.
 
+## Synced marketplace Skills
+
+Change a synced Skill's instructions and files in its GitHub repository. Onyx rejects manual content changes,
+version restores, ownership transfers, and deletion while the synced Skill remains active.
+You can still change permitted sharing settings and enable the Skill for yourself. Required Skills cannot be disabled.
+
+When sync retires a Skill, it disappears from libraries, App skill lists, and future sandbox skill payloads.
+Its name becomes available for another Skill. Existing sessions use the normal reload flow to receive skill changes.
+Retirement preserves version history for internal retention and cleanup.
+Retired Skills reject all user changes except deletion.
+
 ## Reset marketplace Skill access through the API
+
+Company marketplace Skills remain when their author or GitHub login user is deleted.
+If the deleted user supplied the source's GitHub login, replace it to resume syncing.
+Remove a user's personal marketplaces and transfer or delete their private uploaded Skills before deleting that user.
 
 For a Skill from a company marketplace,
 use `POST /api/skills/custom/{skill_id}/reset-marketplace-access` with no request body.

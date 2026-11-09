@@ -44,6 +44,7 @@ from onyx.db.skill import (
     share_skill__no_commit,
     transfer_skill_ownership,
 )
+from onyx.db.skill_mutation import assert_skill_content_editable, assert_skill_mutable
 from onyx.db.skill_version import (
     SkillContentSnapshot,
     delete_unreferenced_skill_bundles,
@@ -782,10 +783,10 @@ def list_custom_skill_versions(
                 if creator is not None
                 else None
             ),
-            is_current=version.id == skill.current_version_id,
+            is_current=is_current,
             has_bundle=version.bundle_file_id is not None,
         )
-        for version, creator in list_skill_versions(
+        for version, creator, is_current in list_skill_versions(
             skill, db_session, before_version=before_version
         )
     ]
@@ -826,9 +827,11 @@ def restore_custom_skill_version(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
+        allow_retired=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    assert_skill_content_editable(skill)
     version = fetch_skill_version(skill, version_id, db_session)
     source = (version.id, version.bundle_file_id)
     return _replace_skill_bundle_from_editor(
@@ -856,9 +859,11 @@ def replace_current_user_skill_bundle(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
+        allow_retired=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    assert_skill_content_editable(skill)
 
     file_store = get_default_file_store()
     with _commit_skill_bundle(
@@ -902,9 +907,11 @@ def upload_current_user_skill_files(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
+        allow_retired=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    assert_skill_content_editable(skill)
 
     expected_content = skill_content_snapshot(skill)
     existing_bundle_bytes = read_custom_skill_bundle_bytes(skill)
@@ -930,9 +937,11 @@ def remove_current_user_skill_file(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
+        allow_retired=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    assert_skill_content_editable(skill)
     if not path:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Skill file path cannot be empty")
 
@@ -958,9 +967,13 @@ def patch_current_user_skill(
         policy=SkillManagementPolicy.EDIT,
         user=user,
         db_session=db_session,
+        allow_retired=True,
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    assert_skill_mutable(skill)
+    if patch_req.has_details_update:
+        assert_skill_content_editable(skill)
     if (
         "public_permission" in patch_req.model_fields_set
         and patch_req.public_permission != skill.public_permission
@@ -1151,6 +1164,7 @@ def transfer_current_user_skill_ownership(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    assert_skill_content_editable(skill)
     if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

@@ -76,7 +76,12 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
-from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
+from onyx.db.skill_mutation import (
+    assert_skill_content_editable,
+    assert_skill_deletable,
+    assert_skill_mutable,
+    is_company_marketplace_skill,
+)
 from onyx.db.skill_version import (
     PreparedSkillVersionWrite,
     persist_skill_version_validity,
@@ -165,13 +170,17 @@ def _is_owned_custom_skill(user: User) -> ColumnElement[bool]:
     )
 
 
-def skill_visible_to_user(user: User) -> ColumnElement[bool]:
-    return or_(
+def skill_visible_to_user(
+    user: User, *, include_retired: bool = False
+) -> ColumnElement[bool]:
+    visible = or_(
         Skill.public_permission.isnot(None),
         _is_shared_with_user(user),
         _is_shared_with_user_group(user),
         _is_owned_custom_skill(user),
     )
+
+    return visible if include_retired else and_(Skill.retired_at.is_(None), visible)
 
 
 def _is_editable_by_user(user: User) -> ColumnElement[bool]:
@@ -215,7 +224,7 @@ def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
     required_name = Skill.name.in_(
         select(Skill.name).where(_is_required_for_user(user)).correlate(None)
     )
-    return or_(
+    enabled = or_(
         Skill.built_in_skill_id.isnot(None),
         _is_required_for_user(user),
         and_(
@@ -231,6 +240,8 @@ def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
             ),
         ),
     )
+
+    return and_(Skill.retired_at.is_(None), enabled)
 
 
 def _exclude_unavailable_built_in_skills(
@@ -275,8 +286,11 @@ def _skill_select_for_management_policy(
     db_session: Session,
     user: User,
     order_by_name: bool,
+    include_retired: bool = False,
 ) -> Select[tuple[Skill]]:
     stmt = _skill_select_with_eager_load(order_by_name=order_by_name)
+    if not include_retired:
+        stmt = stmt.where(Skill.retired_at.is_(None))
     if policy == SkillManagementPolicy.VIEW:
         # Associated custom skills are first-class; provider-owned built-ins
         # remain represented only through the Apps surfaces.
@@ -288,7 +302,7 @@ def _skill_select_for_management_policy(
         )
         if has_global_permission(user, Permission.MANAGE_SKILLS):
             return stmt
-        stmt = stmt.where(skill_visible_to_user(user))
+        stmt = stmt.where(skill_visible_to_user(user, include_retired=include_retired))
         return _exclude_unavailable_built_in_skills(stmt, db_session)
 
     if policy == SkillManagementPolicy.EDIT:
@@ -419,6 +433,7 @@ def fetch_skill(
         db_session=db_session,
         user=user,
         order_by_name=False,
+        include_retired=lock_for_update or allow_retired,
     ).where(Skill.id == skill_id)
     if lock_for_update:
         stmt = stmt.with_for_update(of=Skill).execution_options(populate_existing=True)
@@ -521,6 +536,7 @@ def set_skill_public_permission(
     public_permission: SkillSharePermission | None,
     db_session: Session,
 ) -> None:
+    assert_skill_mutable(skill)
     is_associated = db_session.scalar(
         select(
             exists().where(
@@ -579,7 +595,7 @@ def skill_user_states(
             ).label("supports_preference"),
         )
         .outerjoin(Skill.current_version)
-        .where(Skill.id.in_(requested_ids))
+        .where(Skill.id.in_(requested_ids), Skill.retired_at.is_(None))
     )
     return {
         skill_id: SkillUserState(
@@ -689,6 +705,7 @@ def set_skill_installation_policy(
     policy: SkillInstallationPolicy,
     db_session: Session,
 ) -> None:
+    assert_skill_mutable(skill)
     if policy == SkillInstallationPolicy.NOT_AVAILABLE:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -730,6 +747,7 @@ def replace_skill_shares(
     group_installation_policies: Mapping[int, SkillInstallationPolicy | None]
     | None = None,
 ) -> None:
+    assert_skill_mutable(skill)
     if user_shares is not None:
         db_session.execute(delete(Skill__User).where(Skill__User.skill_id == skill.id))
         for user_id, permission in user_shares.items():
@@ -769,6 +787,7 @@ def transfer_skill_ownership(
     new_owner_user_id: UUID,
     db_session: Session,
 ) -> None:
+    assert_skill_content_editable(skill)
     if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -948,8 +967,10 @@ def delete_skill_for_user__no_commit(
 ) -> tuple[set[UUID], list[str]]:
     """Delete a skill the user may edit. Returns the affected users and the
     bundle file ids for cleanup after commit."""
+    assert_skill_deletable(skill)
     if (
-        skill.installation_policy == SkillInstallationPolicy.REQUIRED
+        skill.retired_at is None
+        and skill.installation_policy == SkillInstallationPolicy.REQUIRED
         and not has_global_permission(user, Permission.MANAGE_SKILLS)
     ):
         raise OnyxError(

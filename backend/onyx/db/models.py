@@ -5606,7 +5606,9 @@ class Skill(Base):
             "uq_skill_automatic_name",
             "name",
             unique=True,
-            postgresql_where=text("installation_policy <> 'AVAILABLE'"),
+            postgresql_where=text(
+                "installation_policy <> 'AVAILABLE' AND retired_at IS NULL"
+            ),
         ),
         CheckConstraint(
             "marketplace_id IS NULL OR marketplace_entry_key IS NOT NULL",
