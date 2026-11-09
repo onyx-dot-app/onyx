@@ -17,6 +17,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
+	"google.golang.org/grpc"
+
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/files"
@@ -24,6 +27,9 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/vsock"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
+
+// windowBytes is the HTTP/2 flow-control window of the gRPC server.
+const windowBytes = 16 << 20
 
 // version is set with -ldflags "-X main.version=...".
 var version = "dev"
@@ -61,7 +67,13 @@ func main() {
 	flag.Int64Var(&fc.Limits.StoredBytes, "capture-max-stored-bytes", files.DefaultLimits.StoredBytes, "largest session archive (zstd bytes)")
 	flag.Int64Var(&fc.Limits.ExpandedBytes, "capture-max-expanded-bytes", files.DefaultLimits.ExpandedBytes, "largest total file size of a session archive")
 	flag.Int64Var(&fc.Limits.Entries, "capture-max-entries", files.DefaultLimits.Entries, "most files and directories in a session archive")
+	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
 	flag.Parse()
+	var ok bool
+	if ok, fc.ZstdLevel = zstd.EncoderLevelFromString(*zlevel); !ok {
+		fmt.Fprintf(os.Stderr, "bad --capture-zstd-level %q\n", *zlevel)
+		os.Exit(2)
+	}
 	fc.ReadLinkRoots = splitList(*readLinks)
 	fc.CaptureRoots = splitList(*captureDirs)
 	fc.CaptureExclude = splitList(*captureExclude)
@@ -199,7 +211,10 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 	if err != nil {
 		return err
 	}
-	gs := srv.NewGRPCServer()
+	// Large static flow-control windows: vsock has almost no latency, and
+	// session restores and file writes stream hundreds of MiB to the guest.
+	gs := srv.NewGRPCServer(grpc.InitialWindowSize(windowBytes), grpc.InitialConnWindowSize(windowBytes),
+		grpc.ReadBufferSize(1<<20), grpc.WriteBufferSize(1<<20))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

@@ -42,7 +42,8 @@ off), `--managed-dev-a` (`/dev/vdc`), `--managed-dev-b` (`/dev/vdf`), `--ca-anch
 empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
 (`/usr/bin/certutil`), the file flags (`--sessions-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
-`--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`; see Files), `--listen`
+`--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
+`--capture-zstd-level`; see Files), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
@@ -148,7 +149,8 @@ Files (ENG-4572, `internal/guestd/files`):
 Session saves:
 
 - `CaptureSession` archives the capture roots `--capture-dirs` (default `outputs,attachments`) of the
-  session as PAX tar + zstd (level 3, all CPUs), and leaves out `--capture-exclude` names at any depth
+  session as PAX tar + zstd (`--capture-zstd-level`, default `fastest`: in a 2 vCPU VM it encodes at
+  ~2 GB/s against ~220 MB/s for `default`, and the T2 archive was not larger), and leaves out `--capture-exclude` names at any depth
   (`node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, caches, ...) and every directory with
   `pyvenv.cfg`. Symlinks and special files are skipped. The request can set its own roots and exclude
   list. The last message is the summary with the stream's SHA-256. Limits (A6): 1 GiB stored, 4 GiB of

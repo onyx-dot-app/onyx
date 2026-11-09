@@ -246,7 +246,7 @@ func newPTAgent(t *testing.T, mtls bool, uds map[string]string, opts ...func(*Se
 		clientCreds = insecure.NewCredentials()
 	}
 	saves, err := NewSaves(&Saves{M: m, PT: pt, Dir: filepath.Join(dir, "captures"), Log: log,
-		Transfer: &transfer.Client{AllowHTTP: true}})
+		Transfer: &transfer.Client{AllowHTTP: true, Parallel: 4, PartBytes: 1 << 20}})
 	if err != nil {
 		t.Fatal(err)
 	}

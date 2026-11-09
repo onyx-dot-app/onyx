@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -75,11 +76,15 @@ func (f sendWriter) Write(p []byte) (int, error) {
 type dataReader struct {
 	recv func() ([]byte, bool, error)
 	buf  []byte
+	// wait is the time spent waiting for messages.
+	wait time.Duration
 }
 
 func (d *dataReader) Read(p []byte) (int, error) {
 	for len(d.buf) == 0 {
+		t0 := time.Now()
 		b, isData, err := d.recv()
+		d.wait += time.Since(t0)
 		if err != nil {
 			return 0, err
 		}
@@ -247,6 +252,7 @@ func (s *Server) RestoreSession(stream pb.Sandboxd_RestoreSessionServer) error {
 		_, isData := m.GetPart().(*pb.RestoreSessionRequest_Data)
 		return m.GetData(), isData, nil
 	}}
+	start := time.Now()
 	sum, err := s.files.Restore(stream.Context(), files.RestoreSpec{
 		SessionID: h.GetSessionId(), Size: h.GetSizeBytes(), SHA256: h.GetSha256(), Roots: h.GetRoots(),
 		Limits: toLimits(h.GetLimits()),
@@ -256,7 +262,7 @@ func (s *Server) RestoreSession(stream pb.Sandboxd_RestoreSessionServer) error {
 		return fileError(err)
 	}
 	s.cfg.Log.Info("restore", "session_id", h.GetSessionId(), "files", sum.Files, "expanded_bytes", sum.ExpandedBytes,
-		"roots", sum.Roots)
+		"roots", sum.Roots, "ms", time.Since(start).Milliseconds(), "recv_wait_ms", data.wait.Milliseconds())
 	return stream.SendAndClose(&pb.RestoreSessionResponse{
 		Files: sum.Files, Directories: sum.Directories, ExpandedBytes: sum.ExpandedBytes, Roots: sum.Roots,
 	})

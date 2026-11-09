@@ -1,13 +1,16 @@
 package transfer
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestPutSendsSignedHeaders(t *testing.T) {
@@ -90,4 +93,45 @@ func TestGetLength(t *testing.T) {
 	if string(b) != "abc" {
 		t.Fatalf("body %q", b)
 	}
+}
+
+func TestGetRanges(t *testing.T) {
+	data := make([]byte, 1<<20+123)
+	for i := range data {
+		data[i] = byte(i * 31)
+	}
+	var mu sync.Mutex
+	ranges := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") != "" {
+			mu.Lock()
+			ranges++
+			mu.Unlock()
+		}
+		http.ServeContent(w, r, "o", time.Time{}, bytes.NewReader(data))
+	}))
+	defer srv.Close()
+	c := &Client{AllowHTTP: true, Parallel: 4, PartBytes: 100 << 10}
+	body, err := c.Get(context.Background(), Request{URL: srv.URL, Method: "GET"}, int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(body)
+	_ = body.Close()
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("ranged get: %d bytes, %v", len(got), err)
+	}
+	if ranges != 11 {
+		t.Fatalf("%d range requests, want 11", ranges)
+	}
+	// The object is bigger than expected: Content-Range shows it.
+	body, _ = c.Get(context.Background(), Request{URL: srv.URL, Method: "GET"}, int64(len(data))-1)
+	if _, err := io.ReadAll(body); !errors.Is(err, ErrMismatch) {
+		t.Fatalf("size mismatch: %v", err)
+	}
+	_ = body.Close()
+	// Closing early stops the workers.
+	body, _ = c.Get(context.Background(), Request{URL: srv.URL, Method: "GET"}, int64(len(data)))
+	_, _ = io.ReadFull(body, make([]byte, 10))
+	_ = body.Close()
 }

@@ -18,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"unicode/utf8"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 // Errors of this package. Calls wrap them; test with errors.Is.
@@ -91,6 +93,9 @@ type Config struct {
 	// Limits are the daemon's own capture and restore limits. A request may
 	// only lower them.
 	Limits Limits
+	// ZstdLevel of a capture. 0 means zstd.SpeedFastest (about zstd -1): on
+	// 2 vCPUs it is ~9x faster than SpeedDefault and only a few percent larger.
+	ZstdLevel zstd.EncoderLevel
 }
 
 // Store runs the file calls.
@@ -134,6 +139,9 @@ func New(cfg Config) (*Store, error) {
 	}
 	if len(cfg.CaptureRoots) == 0 {
 		return nil, errors.New("no capture roots")
+	}
+	if cfg.ZstdLevel == 0 {
+		cfg.ZstdLevel = zstd.SpeedFastest
 	}
 	if cfg.Limits.StoredBytes == 0 {
 		cfg.Limits.StoredBytes = DefaultLimits.StoredBytes

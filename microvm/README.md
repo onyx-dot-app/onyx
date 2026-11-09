@@ -112,7 +112,7 @@ messages, so a new daemon call needs no agent change (`internal/server/passthrou
 - The agent keeps one gRPC connection per VM instance (sandbox and generation) and shares it between
   calls. It closes the connection when the VM stops or exits; calls on it end with `VM_NOT_RUNNING`. An
   idle connection closes after 10 min and opens again on the next call.
-- A message can be at most 16 MiB in each direction.
+- A message can be at most 16 MiB in each direction. The vsock connection uses 16 MiB HTTP/2 windows.
 - After an agent restart, the first call opens a new connection. Commands in the VM keep running; a
   client re-attaches with `Stream(execution_id, offsets)`.
 
@@ -134,7 +134,10 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
 - `UploadCapture` fails with `ARCHIVE_MISMATCH` if the signed `Content-Length` is not the spool size, and
   with `TRANSFER_FAILED` on a network error or a non-2xx status. The spool stays for a retry with a new
   URL. On success the agent deletes it. `CAPTURE_NOT_FOUND`: capture again.
-- `RestoreSession` streams the GET body into the daemon in 1 MiB messages and hashes it. The daemon
+- `RestoreSession` downloads with `--transfer-parallel` (default 8) range GETs of `--transfer-part-bytes`
+  (default 8 MiB) at once, in order, and streams the bytes into the daemon in 1 MiB messages while it
+  hashes them. One S3 stream gives about 100 MB/s; 8 ranges made the 1 GiB restore 9.3 s → 5.7 s (KVM).
+  A restore holds at most `--transfer-parallel` + 1 parts in memory. The daemon
   extracts into a staging directory and replaces the session's capture roots only after the size and
   SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
   does not change.

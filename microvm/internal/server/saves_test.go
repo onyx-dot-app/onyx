@@ -68,7 +68,7 @@ func (f *fakeStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "NoSuchKey", http.StatusNotFound)
 			return
 		}
-		_, _ = w.Write(b)
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(b))
 	}
 }
 

@@ -103,7 +103,7 @@ func (s *Store) Capture(ctx context.Context, spec CaptureSpec, w io.Writer) (Cap
 	defer func() { _ = root.Close() }()
 
 	lw := &limitWriter{w: w, h: sha256.New(), max: lim.StoredBytes}
-	zw, err := zstd.NewWriter(lw, zstd.WithEncoderLevel(zstd.SpeedDefault),
+	zw, err := zstd.NewWriter(lw, zstd.WithEncoderLevel(s.cfg.ZstdLevel),
 		zstd.WithEncoderConcurrency(runtime.GOMAXPROCS(0)))
 	if err != nil {
 		return sum, err

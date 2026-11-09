@@ -448,24 +448,29 @@ func (s *Saves) Restore(ctx context.Context, r *pb.RestoreSessionRequest) (*pb.R
 	}
 	h := sha256.New()
 	var n int64
+	var readWait, sendWait time.Duration
 	buf := make([]byte, restoreChunk)
 	for {
+		t0 := time.Now()
 		k, rerr := io.ReadFull(body, buf)
+		readWait += time.Since(t0)
 		if k > 0 {
 			n += int64(k)
 			if n > size {
 				return nil, apierr.New(pb.ErrorReason_ARCHIVE_MISMATCH, "the object has more than %d bytes", size)
 			}
 			h.Write(buf[:k])
+			t1 := time.Now()
 			if err := stream.Send(&sdpb.RestoreSessionRequest{Part: &sdpb.RestoreSessionRequest_Data{Data: buf[:k]}}); err != nil {
 				return nil, s.restoreSendErr(ctx, u, r.GetSandboxId(), stream, err)
 			}
+			sendWait += time.Since(t1)
 		}
 		if errors.Is(rerr, io.EOF) || errors.Is(rerr, io.ErrUnexpectedEOF) {
 			break
 		}
 		if rerr != nil {
-			return nil, apierr.New(pb.ErrorReason_TRANSFER_FAILED, "GET %s: %v", transfer.Redacted(pr.GetUrl()), rerr)
+			return nil, transferErr(rerr)
 		}
 	}
 	if got := hex.EncodeToString(h.Sum(nil)); n != size || got != want {
@@ -479,7 +484,8 @@ func (s *Saves) Restore(ctx context.Context, r *pb.RestoreSessionRequest) (*pb.R
 	}
 	ms := time.Since(start).Milliseconds()
 	s.Log.Info("session restored", "sandbox_id", r.GetSandboxId(), "session_id", r.GetSessionId(), "bytes", size,
-		"files", resp.GetFiles(), "url", transfer.Redacted(pr.GetUrl()), "ms", ms)
+		"files", resp.GetFiles(), "url", transfer.Redacted(pr.GetUrl()), "ms", ms,
+		"download_wait_ms", readWait.Milliseconds(), "send_wait_ms", sendWait.Milliseconds())
 	return &pb.RestoreSessionResponse{Files: resp.GetFiles(), Directories: resp.GetDirectories(),
 		ExpandedBytes: resp.GetExpandedBytes(), Roots: resp.GetRoots(), RestoreMs: uint64(ms)}, nil
 }

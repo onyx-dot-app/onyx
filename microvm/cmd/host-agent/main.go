@@ -99,6 +99,8 @@ type flags struct {
 	captureMax    int64
 	transferTO    time.Duration
 	transferHTTP  bool
+	transferPar   int
+	transferPart  int64
 }
 
 func main() {
@@ -153,6 +155,8 @@ func main() {
 	flag.Int64Var(&f.captureMax, "capture-max-bytes", server.DefaultCaptureMaxBytes, "largest session archive (stored bytes) that CaptureSession spools")
 	flag.DurationVar(&f.transferTO, "transfer-timeout", 10*time.Minute, "limit for one presigned upload or download")
 	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs (test object stores only)")
+	flag.IntVar(&f.transferPar, "transfer-parallel", 8, "range GETs at once for a session restore download (1: one plain GET)")
+	flag.Int64Var(&f.transferPart, "transfer-part-bytes", 8<<20, "bytes per range GET; a restore holds up to --transfer-parallel of them in memory")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -301,7 +305,8 @@ func run(f flags, log *slog.Logger) error {
 	saves, err := server.NewSaves(&server.Saves{
 		M: m, PT: pt, Dir: filepath.Join(f.dataDir, "captures"), TTL: f.captureTTL, MaxBytes: f.captureMax,
 		MinFreeBytes: f.minFreeDiskGB * uint64(scratch.GiB), FreeBytes: stats.DiskFreeBytes,
-		Transfer: &transfer.Client{Timeout: f.transferTO, AllowHTTP: f.transferHTTP}, Log: log,
+		Transfer: &transfer.Client{Timeout: f.transferTO, AllowHTTP: f.transferHTTP, Parallel: f.transferPar, PartBytes: f.transferPart},
+		Log:      log,
 	})
 	if err != nil {
 		return fmt.Errorf("capture spool: %w", err)
