@@ -29,6 +29,15 @@ class SkillGroupShare(BaseModel):
     group_id: int
     group_name: str
     permission: SkillSharePermission
+    # None inherits the skill-wide policy.
+    installation_policy: SkillInstallationPolicy | None = None
+
+
+class SkillGroupSummary(BaseModel):
+    group_id: int
+    group_name: str
+    installation_policy: SkillInstallationPolicy | None
+    source: Literal["direct", "marketplace"]
 
 
 class SkillExternalAppDependencyResponse(BaseModel):
@@ -71,6 +80,7 @@ class SkillResponse(BaseModel):
     updated_at: datetime.datetime | None = None
     user_shares: list[SkillUserShare] = Field(default_factory=list)
     group_shares: list[SkillGroupShare] = Field(default_factory=list)
+    group_summaries: list[SkillGroupSummary] = Field(default_factory=list)
     public_permission: SkillSharePermission | None = None
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
@@ -135,6 +145,7 @@ class SkillResponse(BaseModel):
                 group_id=share.user_group_id,
                 group_name=share.user_group.name,
                 permission=share.permission,
+                installation_policy=share.installation_policy,
             )
             for share in skill.group_shares
             if share.user_group is not None

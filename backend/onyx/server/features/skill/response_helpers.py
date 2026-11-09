@@ -30,6 +30,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (
     SkillExternalAppDependencyResponse,
+    SkillGroupSummary,
     SkillMarketplaceResponse,
     SkillPreviewResponse,
     SkillResponse,
@@ -200,7 +201,7 @@ def skill_response_for_user(
                 and user_permission in {SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR}
             ),
         )
-    return SkillResponse.from_custom(
+    response = SkillResponse.from_custom(
         skill,
         enabled=state.enabled,
         can_toggle=state.can_toggle,
@@ -211,6 +212,31 @@ def skill_response_for_user(
         external_app=_dependency_response(state.external_app_dependency),
         marketplace=marketplace,
     )
+    visible_group_ids = user_group_ids | (managed_user_group_ids or set())
+    response.group_summaries = sorted(
+        (
+            SkillGroupSummary(
+                group_id=share.user_group_id,
+                group_name=share.user_group.name,
+                installation_policy=share.installation_policy,
+                source=(
+                    "marketplace"
+                    if marketplace is not None
+                    and not marketplace.personal
+                    and marketplace.follows_access
+                    else "direct"
+                ),
+            )
+            for share in skill.group_shares
+            if share.user_group is not None
+            and (
+                user_permission in {SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR}
+                or share.user_group_id in visible_group_ids
+            )
+        ),
+        key=lambda group: (group.group_name.casefold(), group.group_id),
+    )
+    return response
 
 
 def skills_list_response_for_user(

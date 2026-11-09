@@ -17266,7 +17266,9 @@
           "availableDescription": "Users can install or uninstall anytime.",
           "defaultDescription": "Installed automatically. Users can disable or uninstall anytime.",
           "requiredDescription": "Installed automatically. Users cannot disable or uninstall.",
-          "description": "Choose how this skill is installed for everyone with access."
+          "description": "Choose how this skill is installed for everyone with access.",
+          "notAvailable": "Not available",
+          "notAvailableDescription": "Hidden from the library and the agent. Owners and people with a direct share still see it."
         },
         "description": "Choose who can use this skill and how it is installed.",
         "accessTitle": "Who can access",

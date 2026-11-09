@@ -17266,7 +17266,9 @@
           "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
           "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
           "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
-          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
+          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès.",
+          "notAvailable": "Non disponible",
+          "notAvailableDescription": "Masquée dans la bibliothèque et pour l'agent. Les propriétaires et les personnes avec un partage direct la voient toujours."
         },
         "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
         "accessTitle": "Qui peut accéder",

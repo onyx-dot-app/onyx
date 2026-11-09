@@ -25,7 +25,10 @@ import type {
   CustomSkillCardItem,
   SkillCardProps,
 } from "@/sections/cards/SkillCard";
-import { useSkillPresentation } from "@/lib/skills/hooks";
+import {
+  useInstallationPolicyOptions,
+  useSkillPresentation,
+} from "@/lib/skills/hooks";
 import SkillVersionLabel from "@/sections/skills/SkillVersionLabel";
 import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
@@ -206,6 +209,7 @@ export default function SkillsTable({
   const t = useTranslations("skills");
   const cards = useTranslations("cards");
   const { isMobile } = useScreenSize();
+  const installationOptions = useInstallationPolicyOptions();
   const duplicateNames = useMemo(() => {
     const seen = new Set<string>();
     const duplicates = new Set<string>();
@@ -284,13 +288,11 @@ export default function SkillsTable({
             maxLines={1}
             overflowTooltip
           >
-            {t(
-              skill.installation_policy === "REQUIRED"
-                ? "modals.share.installation.required"
-                : skill.installation_policy === "DEFAULT"
-                  ? "modals.share.installation.default"
-                  : "modals.share.installation.available"
-            )}
+            {
+              installationOptions.find(
+                ({ value }) => value === skill.installation_policy
+              )?.label
+            }
           </Text>
         ),
       },
@@ -304,7 +306,7 @@ export default function SkillsTable({
         cell: (props) => <SkillActions {...props} />,
       },
     ],
-    [t, cards, isMobile]
+    [t, cards, isMobile, installationOptions]
   );
   const visibleColumns = useMemo(
     () =>

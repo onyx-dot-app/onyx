@@ -17266,7 +17266,9 @@
           "availableDescription": "Os usuários podem instalar ou desinstalar a qualquer momento.",
           "defaultDescription": "Instalado automaticamente. Os usuários podem desativar ou desinstalar a qualquer momento.",
           "requiredDescription": "Instalado automaticamente. Os usuários não podem desativar nem desinstalar.",
-          "description": "Escolha como esta habilidade é instalada para quem tem acesso."
+          "description": "Escolha como esta habilidade é instalada para quem tem acesso.",
+          "notAvailable": "Não disponível",
+          "notAvailableDescription": "Oculta na biblioteca e para o agente. Proprietários e pessoas com compartilhamento direto ainda a veem."
         },
         "description": "Escolha quem pode usar esta habilidade e como ela é instalada.",
         "accessTitle": "Quem pode acessar",

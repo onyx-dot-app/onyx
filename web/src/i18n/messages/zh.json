@@ -17266,7 +17266,9 @@
           "availableDescription": "用户可以随时安装或卸载。",
           "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
           "requiredDescription": "自动安装。用户无法禁用或卸载。",
-          "description": "选择此技能对所有有访问权限的用户的安装方式。"
+          "description": "选择此技能对所有有访问权限的用户的安装方式。",
+          "notAvailable": "不可用",
+          "notAvailableDescription": "在技能库和代理中隐藏。所有者和直接共享的用户仍可看到。"
         },
         "description": "选择谁可以使用此技能及其安装方式。",
         "accessTitle": "谁可以访问",

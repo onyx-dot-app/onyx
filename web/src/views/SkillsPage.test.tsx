@@ -183,6 +183,7 @@ function customSkill(id: string, name: string): CustomSkill {
     enabled: false,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    effective_installation_policy: "AVAILABLE",
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },
@@ -194,6 +195,7 @@ function customSkill(id: string, name: string): CustomSkill {
     updated_at: null,
     user_shares: [],
     group_shares: [],
+    group_summaries: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
     external_app: null,
@@ -707,6 +709,30 @@ describe("SkillsPage preference toggles", () => {
     await waitFor(() =>
       expect(toggle).not.toHaveAttribute("aria-disabled", "true")
     );
+  });
+
+  it("labels each company installation policy without falling back to Available", () => {
+    skillsData.customs = [
+      {
+        ...customSkill("hidden-id", "hidden-skill"),
+        installation_policy: "NOT_AVAILABLE",
+      },
+      {
+        ...customSkill("required-id", "required-skill"),
+        installation_policy: "REQUIRED",
+      },
+    ];
+    render(<SkillsPage admin />);
+    const hidden = screen.getByRole("row", { name: "hidden-skill" });
+    expect(within(hidden).getByText("Not available")).toBeVisible();
+    expect(
+      within(hidden).queryByText("Available to install")
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("row", { name: "required-skill" })).getByText(
+        "Required"
+      )
+    ).toBeVisible();
   });
 
   it("shows server access and group names and keeps invalid skills manageable", async () => {

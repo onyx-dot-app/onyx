@@ -50,8 +50,12 @@
   Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal. The table shows
-  groups only when supplied. Owner identity is not an access grant. The list
-  currently omits share details. The Enable for me column controls personal use.
+  groups only when supplied. Owner identity is not an access grant. List and detail
+  expose read-only `group_summaries`, separate from editable `group_shares`. Owners
+  and editors see all sharing groups; other users see only membership or managed
+  groups. Management authority respects the request token cap. Summaries carry
+  nullable group installation settings and distinguish company marketplace followers
+  from direct or overridden grants. The Enable for me column controls personal use.
   Narrow tables use two lines for names without descriptions. Duplicate names use one line and keep their descriptions; warnings remain visible.
   Mobile Create stays beside the title, and the personal-use column is labeled For me.
   Sharing settings stay in the dialog. Access badges have an outline, and keyboard focus uses a rounded neutral outline.
@@ -278,6 +282,7 @@ The library preview of an external-app skill calls the same renderer
    setting before writing a preference; Required keeps opt-outs, and Not available writes nothing.
    Responses keep the company setting in `installation_policy` and return the
    user's setting in `effective_installation_policy`, from the batched state query.
+   Personal cards use this effective setting for the Required badge, including group overrides.
    Every write that enables a preference first
    takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
    lock on the user row. The lock orders concurrent enables of one name, so
