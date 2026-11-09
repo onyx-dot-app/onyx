@@ -69,7 +69,7 @@ import {
   setSkillEnabled,
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
-import { canDeleteSkill } from "@/lib/skills/permissions";
+import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -427,10 +427,8 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   );
   const canManageSelected =
     selectedItems.length > 0 &&
-    selectedItems.every(
-      (item) =>
-        item.skill.user_permission === "OWNER" ||
-        item.skill.user_permission === "EDITOR"
+    selectedItems.every((item) =>
+      canShareSkill({ skill: item.skill, canManageCompanySkills })
     );
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
   // A card toggle still in flight must settle before a bulk action may race it.

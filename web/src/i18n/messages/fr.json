@@ -17350,7 +17350,20 @@
         "peopleTitle": "Personnes ayant accès",
         "manageIndividualAccess": "Gérer les accès individuels",
         "individualAccessTitle": "Accès individuels",
-        "ownershipTitle": "Propriété"
+        "ownershipTitle": "Propriété",
+        "marketplace": {
+          "personal": "Marketplace personnel",
+          "personalDescription": "Seul le propriétaire peut modifier l’accès à cette compétence de {name}. Les gestionnaires peuvent modifier les paramètres d’installation.",
+          "following": "Suit l’accès du marketplace",
+          "followingDescription": "L’accès et l’installation suivent {name}. Enregistrer des modifications ici crée des paramètres propres.",
+          "overridden": "Accès personnalisé",
+          "overriddenDescription": "Cette compétence utilise ses propres paramètres d’accès et d’installation au lieu des valeurs de {name}.",
+          "reset": "Rétablir l’accès du marketplace",
+          "resetDescription": "Cette action remplace l’accès et l’installation par les valeurs de {name}. Elle supprime les autorisations individuelles et ignore les modifications non enregistrées. Les futurs changements d’accès du marketplace s’appliqueront à cette compétence.",
+          "confirmReset": "Réinitialiser l’accès",
+          "resetSuccess": "Accès du marketplace rétabli",
+          "resetError": "Impossible de réinitialiser l’accès. Réessayez."
+        }
       },
       "placeholders": {
         "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
