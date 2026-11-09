@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import SkillSharePermission
 from onyx.db.models import FileContent, Marketplace, Skill, SkillVersion
 from onyx.db.skill_version import delete_orphan_skill_bundles
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -34,6 +35,7 @@ from onyx.skills import sync
 from onyx.skills.ingest import IngestedBundle, PreparedSkillBundle
 from onyx.skills.marketplace.models import ReconciliationResult
 from onyx.skills.marketplace.read_models import CompleteMarketplace, FailedMarketplace
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
     marketplace as marketplace,
 )
@@ -602,3 +604,30 @@ def test_unrepairable_bundle_does_not_repeat_archive_download(
     github.revision = "b" * 40
     github.archive = catalog_bytes("alpha", "beta")
     assert run(marketplace, tenant).changed_skill_ids == [skill.id]
+
+
+def test_push_observes_committed_creation_and_retirement(
+    session: Session, marketplace: Marketplace, tenant: str, github: GitHub
+) -> None:
+    user = make_user(session)
+    make_sandbox(session, user)
+    marketplace.public_permission = SkillSharePermission.VIEWER
+    session.commit()
+
+    def pushed(recipients: set[UUID], push_session: Session) -> None:
+        assert recipients == {user.id}
+        assert not push_session.in_transaction()
+        with sync.get_session_with_current_tenant() as observer:
+            stored = list(observer.scalars(select(Skill)))
+            assert len(stored) == 2
+            assert sum(row.retired_at is not None for row in stored) == retired
+
+    retired = 0
+    with patch.object(sync, "push_skills_for_users", side_effect=pushed) as push:
+        run(marketplace, tenant)
+        push.assert_called_once()
+        github.revision = "b" * 40
+        github.archive = catalog_bytes("alpha")
+        retired = 1
+        run(marketplace, tenant)
+        assert push.call_count == 2
