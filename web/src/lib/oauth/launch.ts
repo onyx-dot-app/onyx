@@ -7,8 +7,17 @@ export type OAuthLaunchFailure =
   | "failed"
   | "request_failed";
 
+/** What the callback page showed for a failed attempt, so the waiting page can show it too. */
+export interface OAuthFailureDetail {
+  title: string;
+  description: string;
+}
+
 export class OAuthLaunchError extends Error {
-  constructor(readonly reason: OAuthLaunchFailure) {
+  constructor(
+    readonly reason: OAuthLaunchFailure,
+    readonly detail?: OAuthFailureDetail
+  ) {
     super(reason);
     this.name = "OAuthLaunchError";
   }
@@ -24,6 +33,8 @@ export interface OAuthLaunchOptions {
 export const DESKTOP_STATE_SUFFIX = ".desktop";
 export const DESKTOP_OAUTH_RETURN_URL = "onyx://oauth-callback";
 const LAUNCH_TIMEOUT_MS = 10 * 60 * 1000;
+// A claimed callback that never reports must not leave a spinner running.
+const CLAIMED_CALLBACK_TIMEOUT_MS = 60 * 1000;
 // Marks a tab that `launchOAuth` opened, so only its callback closes itself.
 const LAUNCHED_TAB_KEY = "onyx:oauth-launch";
 const completionType = "onyx:oauth-complete";
@@ -32,6 +43,13 @@ const completionSchema = yup.object({
   state: yup.string().defined(),
   ok: yup.boolean().defined(),
   redirectPath: yup.string().optional(),
+  error: yup
+    .object({
+      title: yup.string().defined(),
+      description: yup.string().defined(),
+    })
+    .optional()
+    .default(undefined),
 });
 
 /** What the callback page reported; `redirectPath` is where it would have redirected. */
@@ -42,6 +60,8 @@ export interface OAuthCompletion {
 interface DesktopBridge {
   oauthInBrowser?: boolean;
   oauthCallbackWindow?: boolean;
+  /** Called by the shell with a deep-linked callback URL; true when this page completes it. */
+  claimOAuthCallback?: (callbackUrl: string) => boolean;
 }
 
 interface TauriInternals {
@@ -100,9 +120,22 @@ function openCompletionChannel(state: string): BroadcastChannel | null {
 export function notifyOAuthComplete(
   state: string,
   ok = true,
-  redirectPath?: string
+  redirectPath?: string,
+  error?: OAuthFailureDetail
 ): void {
-  const message = { type: completionType, state, ok, redirectPath };
+  // Copy only the fields: callers may pass objects with functions, which
+  // postMessage cannot clone.
+  const failure = error && {
+    title: error.title,
+    description: error.description,
+  };
+  const message = {
+    type: completionType,
+    state,
+    ok,
+    redirectPath,
+    error: failure,
+  };
   try {
     window.opener?.postMessage(message, window.location.origin);
   } catch {}
@@ -132,6 +165,54 @@ export function closeOAuthCallbackWindow(state: string, ok = true): boolean {
   }
   window.close();
   return true;
+}
+
+// Desktop attempts waiting in this page, keyed by state.
+const pendingDesktopCallbacks = new Map<string, (callback: URL) => void>();
+
+function claimDesktopOAuthCallback(callbackUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(callbackUrl);
+  } catch {
+    return false;
+  }
+  if (url.origin !== window.location.origin) return false;
+  const state = url.searchParams.get("state");
+  const complete =
+    state === null ? undefined : pendingDesktopCallbacks.get(state);
+  if (state === null || !complete) return false;
+  pendingDesktopCallbacks.delete(state);
+  complete(url);
+  return true;
+}
+
+/**
+ * Lets the desktop shell complete this attempt in a hidden frame of the
+ * waiting page instead of a separate window. Returns the unregister function.
+ */
+function awaitDesktopCallback(
+  state: string,
+  complete: (callback: URL) => void
+): () => void {
+  pendingDesktopCallbacks.set(state, complete);
+  window.__ONYX_DESKTOP__ = Object.assign(window.__ONYX_DESKTOP__ ?? {}, {
+    claimOAuthCallback: claimDesktopOAuthCallback,
+  });
+  return () => {
+    if (pendingDesktopCallbacks.get(state) === complete) {
+      pendingDesktopCallbacks.delete(state);
+    }
+  };
+}
+
+/**
+ * Leaves a callback page. A desktop callback window closes, because the app's
+ * main window already holds the page the user came from.
+ */
+export function leaveOAuthCallback(navigate: () => void): void {
+  if (window.__ONYX_DESKTOP__?.oauthCallbackWindow) window.close();
+  else navigate();
 }
 
 function parseAuthorizationUrl(raw: string): URL | null {
@@ -167,9 +248,15 @@ export function launchOAuth(
     let settled = false;
     let channel: BroadcastChannel | null = null;
     let state: string | null = null;
+    let callbackFrame: HTMLIFrameElement | null = null;
+    let claimTimeout: number | undefined;
+    let releaseDesktopCallback: (() => void) | null = null;
     function finish(error?: Error, completion: OAuthCompletion = {}) {
       if (settled) return;
       settled = true;
+      releaseDesktopCallback?.();
+      callbackFrame?.remove();
+      window.clearTimeout(claimTimeout);
       window.removeEventListener("message", receiveCompletion);
       signal?.removeEventListener("abort", cancel);
       channel?.removeEventListener("message", receiveBroadcastCompletion);
@@ -190,7 +277,7 @@ export function launchOAuth(
         if (state === null || message.state !== state) return;
         if (message.ok)
           finish(undefined, { redirectPath: message.redirectPath });
-        else finish(new OAuthLaunchError("failed"));
+        else finish(new OAuthLaunchError("failed", message.error));
       } catch {}
     }
     function receiveCompletion(event: MessageEvent<unknown>) {
@@ -230,6 +317,19 @@ export function launchOAuth(
           onOpened?.();
           return;
         }
+        releaseDesktopCallback = awaitDesktopCallback(rawState, (callback) => {
+          if (settled) return;
+          // Same origin, so the frame runs the callback page with this
+          // session and reports through the completion channel.
+          callbackFrame = document.createElement("iframe");
+          callbackFrame.hidden = true;
+          callbackFrame.src = callback.href;
+          document.body.appendChild(callbackFrame);
+          claimTimeout = window.setTimeout(
+            () => finish(new OAuthLaunchError("failed")),
+            CLAIMED_CALLBACK_TIMEOUT_MS
+          );
+        });
         url.searchParams.set("state", rawState + DESKTOP_STATE_SUFFIX);
         try {
           await tauriInternals()?.invoke("plugin:shell|open", {
@@ -264,10 +364,11 @@ export function needsDesktopOAuthHandoff(state: string | null): boolean {
 export function reportOAuthCallback(
   state: string,
   ok: boolean,
-  redirectPath?: string
+  redirectPath?: string,
+  error?: OAuthFailureDetail
 ): boolean {
   const attemptState = stripDesktopOAuthState(state);
-  notifyOAuthComplete(attemptState, ok, redirectPath);
+  notifyOAuthComplete(attemptState, ok, redirectPath, error);
   return closeOAuthCallbackWindow(attemptState, ok);
 }
 
@@ -299,4 +400,9 @@ export function isSilentOAuthOutcome(error: unknown): boolean {
     error instanceof OAuthLaunchError &&
     (error.reason === "cancelled" || error.reason === "timed_out")
   );
+}
+
+/** The callback page's own explanation of a failed attempt, when it sent one. */
+export function oauthFailureDetail(error: unknown): OAuthFailureDetail | null {
+  return error instanceof OAuthLaunchError ? (error.detail ?? null) : null;
 }

@@ -9,6 +9,7 @@ import { Button, MessageCard, Modal, Tabs } from "@opal/components";
 import { toast } from "@opal/layouts";
 import {
   isSilentOAuthOutcome,
+  oauthFailureDetail,
   openOAuthAuthorization,
 } from "@/lib/oauth/launch";
 import { SvgServer } from "@opal/icons";
@@ -290,7 +291,10 @@ export default function MCPServerDetailPage({
         },
         (error: unknown) => {
           if (isSilentOAuthOutcome(error)) return;
-          toast.error(t("mcpAuthModal.errors.oauthFailed"));
+          const detail = oauthFailureDetail(error);
+          if (detail)
+            toast.error(detail.title, { description: detail.description });
+          else toast.error(t("mcpAuthModal.errors.oauthFailed"));
         }
       )
       .finally(() => setAuthorizing(false));

@@ -18,6 +18,7 @@ import {
 import { InputVertical, Section, toast } from "@opal/layouts";
 import {
   isSilentOAuthOutcome,
+  oauthFailureDetail,
   openOAuthAuthorization,
 } from "@/lib/oauth/launch";
 import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
@@ -405,7 +406,13 @@ function MCPSetupSession({
                         },
                         (error: unknown) => {
                           if (isSilentOAuthOutcome(error)) return;
-                          toast.error(t("mcpAuthModal.errors.oauthFailed"));
+                          const detail = oauthFailureDetail(error);
+                          if (detail)
+                            toast.error(detail.title, {
+                              description: detail.description,
+                            });
+                          else
+                            toast.error(t("mcpAuthModal.errors.oauthFailed"));
                         }
                       );
                       onClose();

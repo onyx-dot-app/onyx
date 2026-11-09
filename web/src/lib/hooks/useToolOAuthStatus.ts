@@ -4,7 +4,7 @@ import { toast } from "@opal/layouts";
 import { useTranslations } from "next-intl";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
-import { isSilentOAuthOutcome } from "@/lib/oauth/launch";
+import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
 import { OAuthTokenStatus, ToolSnapshot } from "@/lib/tools/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -95,7 +95,10 @@ export function useToolOAuthStatus(agentId?: number) {
       } catch (error) {
         if (isSilentOAuthOutcome(error)) return;
         console.error("[useToolOAuthStatus] OAuth initiation failed");
-        toast.error(t("genericError.description"));
+        const detail = oauthFailureDetail(error);
+        if (detail)
+          toast.error(detail.title, { description: detail.description });
+        else toast.error(t("genericError.description"));
       }
     },
     [t, mutate]

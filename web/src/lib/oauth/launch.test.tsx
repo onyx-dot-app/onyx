@@ -3,6 +3,7 @@ import {
   desktopOAuthReturnUrl,
   launchOAuth,
   notifyOAuthComplete,
+  oauthFailureDetail,
   reportOAuthCallback,
   stripDesktopOAuthState,
 } from "@/lib/oauth/launch";
@@ -99,6 +100,25 @@ test("resolves from a BroadcastChannel completion and rejects a failed one", asy
   await expect(failed).rejects.toMatchObject({ reason: "failed" });
 });
 
+test("a failed completion carries the callback page's explanation", async () => {
+  openPopup();
+  const failed = launchOAuth(async () => authUrl);
+  await flush();
+  const detail = {
+    title: "Token exchange failed",
+    description: "Check the client credentials.",
+  };
+  // Callback pages pass richer objects; a function would break structured clone.
+  reportOAuthCallback("abc_123", false, undefined, {
+    ...detail,
+    illustration: () => null,
+  } as typeof detail);
+  const error: unknown = await failed.catch((e: unknown) => e);
+  expect(error).toMatchObject({ reason: "failed" });
+  expect(oauthFailureDetail(error)).toEqual(detail);
+  expect(oauthFailureDetail(new Error("other"))).toBeNull();
+});
+
 test("rejects non-http authorization URLs and URLs without state", async () => {
   const { popup } = openPopup();
   await expect(
@@ -140,6 +160,55 @@ test("desktop opens the system browser with a marked state", async () => {
   });
   notifyOAuthComplete("abc_123");
   await promise;
+});
+
+test("desktop completes a claimed callback in a hidden frame of the waiting page", async () => {
+  window.__TAURI_INTERNALS__ = {
+    invoke: jest.fn().mockResolvedValue(undefined),
+  };
+  window.__ONYX_DESKTOP__ = { oauthInBrowser: true };
+  const promise = launchOAuth(async () => authUrl);
+  await flush();
+  const claim = window.__ONYX_DESKTOP__?.claimOAuthCallback;
+  const callback = `${window.location.origin}/mcp/oauth/callback?code=c1&state=abc_123`;
+  expect(claim?.("https://evil.example/mcp/oauth/callback?state=abc_123")).toBe(
+    false
+  );
+  expect(
+    claim?.(`${window.location.origin}/mcp/oauth/callback?state=other`)
+  ).toBe(false);
+  expect(claim?.(callback)).toBe(true);
+  const frame = document.querySelector("iframe");
+  expect(frame?.hidden).toBe(true);
+  expect(frame?.src).toBe(callback);
+  expect(claim?.(callback)).toBe(false);
+  notifyOAuthComplete("abc_123");
+  await promise;
+  expect(document.querySelector("iframe")).toBeNull();
+  expect(claim?.(callback)).toBe(false);
+});
+
+test("a claimed desktop callback that fails or never reports rejects", async () => {
+  jest.useFakeTimers();
+  window.__TAURI_INTERNALS__ = {
+    invoke: jest.fn().mockResolvedValue(undefined),
+  };
+  window.__ONYX_DESKTOP__ = { oauthInBrowser: true };
+  const callback = `${window.location.origin}/mcp/oauth/callback?state=abc_123`;
+
+  const failed = launchOAuth(async () => authUrl);
+  await flush();
+  window.__ONYX_DESKTOP__?.claimOAuthCallback?.(callback);
+  notifyOAuthComplete("abc_123", false);
+  await expect(failed).rejects.toMatchObject({ reason: "failed" });
+
+  const silent = launchOAuth(async () => authUrl);
+  await flush();
+  window.__ONYX_DESKTOP__?.claimOAuthCallback?.(callback);
+  jest.advanceTimersByTime(60 * 1000);
+  await expect(silent).rejects.toMatchObject({ reason: "failed" });
+  expect(document.querySelector("iframe")).toBeNull();
+  expect(jest.getTimerCount()).toBe(0);
 });
 
 test("older desktop builds without the flag keep the in-app tab", async () => {

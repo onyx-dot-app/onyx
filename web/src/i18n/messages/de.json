@@ -353,7 +353,7 @@
         "clientMetadataRejected": "Der Anbieter konnte das Client-Metadatendokument nicht verwenden. Wenn diese Instanz nicht über das öffentliche Internet erreichbar ist, deaktivieren Sie „Client-Metadatendokument verwenden“ und verbinden Sie sich erneut.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
         "connectionFailed": "Der Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
-        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut.",
+        "oauthFailed": "Die OAuth-Anmeldung ist fehlgeschlagen. Versuchen Sie es erneut oder prüfen Sie die OAuth-Einstellungen des Servers.",
         "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}"
       },
       "header": {

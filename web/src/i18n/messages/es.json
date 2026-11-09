@@ -353,7 +353,7 @@
         "clientMetadataRejected": "El proveedor no pudo usar el documento de metadatos del cliente. Si esta instancia no es accesible desde internet, desactiva «Usar el documento de metadatos del cliente» y vuelve a conectar.",
         "discoveryFailed": "No se encontraron los ajustes de inicio de sesión OAuth. Comprueba la URL del servidor o introduce los endpoints de tu proveedor.",
         "connectionFailed": "No se pudo acceder al servidor. Comprueba la URL del servidor e inténtalo de nuevo.",
-        "oauthFailed": "No se pudo iniciar la sesión OAuth. Comprueba los ajustes de tu cliente e inténtalo de nuevo.",
+        "oauthFailed": "No se pudo iniciar sesión con OAuth. Inténtalo de nuevo o revisa la configuración de OAuth del servidor.",
         "oauthInitFailed": "No se pudo iniciar OAuth: {detail}"
       },
       "header": {

@@ -3,7 +3,7 @@
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
 import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
-import { reportOAuthCallback } from "@/lib/oauth/launch";
+import { leaveOAuthCallback, reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { SvgCheck, SvgAlertTriangle } from "@opal/icons";
@@ -100,11 +100,14 @@ function OAuthCallbackPageContent({ config }: OAuthCallbackPageProps) {
     const handleOAuthCallback = async () => {
       // Handle OAuth error from provider
       if (error) {
-        if (state && reportOAuthCallback(state, false)) return;
-        setStatusMessage(config.errorMessage || t("authorizationFailed.title"));
-        setStatusDetails(
-          errorDescription || t("authorizationFailed.description")
-        );
+        const failure = {
+          title: config.errorMessage || t("authorizationFailed.title"),
+          description: errorDescription || t("authorizationFailed.description"),
+        };
+        if (state && reportOAuthCallback(state, false, undefined, failure))
+          return;
+        setStatusMessage(failure.title);
+        setStatusDetails(failure.description);
         setIsError(true);
         setIsLoading(false);
         return;
@@ -195,11 +198,16 @@ function OAuthCallbackPageContent({ config }: OAuthCallbackPageProps) {
         setIsLoading(false);
       } catch (error) {
         console.error("OAuth callback error:", error);
-        if (reportOAuthCallback(state, false)) return;
-        setStatusMessage(config.errorMessage || t("genericError.title"));
-        setStatusDetails(
-          error instanceof Error ? error.message : t("genericError.description")
-        );
+        const failure = {
+          title: config.errorMessage || t("genericError.title"),
+          description:
+            error instanceof Error
+              ? error.message
+              : t("genericError.description"),
+        };
+        if (reportOAuthCallback(state, false, undefined, failure)) return;
+        setStatusMessage(failure.title);
+        setStatusDetails(failure.description);
         setIsError(true);
         setIsLoading(false);
       }
@@ -267,11 +275,15 @@ function OAuthCallbackPageContent({ config }: OAuthCallbackPageProps) {
               {isError && (
                 <div className="flex flex-col space-y-2">
                   <Button
-                    onClick={() => {
-                      const target =
-                        redirectPath || config.defaultRedirectPath || "/app";
-                      navigation.go(target as Route);
-                    }}
+                    onClick={() =>
+                      leaveOAuthCallback(() =>
+                        navigation.go(
+                          (redirectPath ||
+                            config.defaultRedirectPath ||
+                            "/app") as Route
+                        )
+                      )
+                    }
                     width="full"
                   >
                     {config.backButtonText || t("backButton.label")}

@@ -12,7 +12,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { completeExternalAppOAuthCallback } from "@/app/craft/services/externalAppsService";
 import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
 import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
-import { notifyOAuthComplete, reportOAuthCallback } from "@/lib/oauth/launch";
+import {
+  leaveOAuthCallback,
+  notifyOAuthComplete,
+  reportOAuthCallback,
+} from "@/lib/oauth/launch";
 
 type Status = "exchanging" | "success" | "error";
 
@@ -36,8 +40,17 @@ function ExternalAppsOAuthCallbackPageContent() {
     // missing `code` and `state` are not an error.
     if (hasExchanged.current) return;
     if (slackError) {
+      const description = t("errors.cancelled", { reason: slackError });
+      if (
+        state &&
+        reportOAuthCallback(state, false, undefined, {
+          title: t("errors.failed"),
+          description,
+        })
+      )
+        return;
       setStatus("error");
-      setErrorMessage(t("errors.cancelled", { reason: slackError }));
+      setErrorMessage(description);
       return;
     }
     if (!code || !state) {
@@ -91,9 +104,16 @@ function ExternalAppsOAuthCallbackPageContent() {
           800
         );
       } catch (e) {
-        if (reportOAuthCallback(state, false)) return;
+        const description = e instanceof Error ? e.message : String(e);
+        if (
+          reportOAuthCallback(state, false, undefined, {
+            title: t("errors.failed"),
+            description,
+          })
+        )
+          return;
         setStatus("error");
-        setErrorMessage(e instanceof Error ? e.message : String(e));
+        setErrorMessage(description);
       }
     }
 
@@ -125,7 +145,11 @@ function ExternalAppsOAuthCallbackPageContent() {
                   </Text>
                 )}
                 <div className="pt-2">
-                  <Button onClick={() => navigation.go(CRAFT_PLUGINS_PATH)}>
+                  <Button
+                    onClick={() =>
+                      leaveOAuthCallback(() => navigation.go(CRAFT_PLUGINS_PATH))
+                    }
+                  >
                     {t("backButton")}
                   </Button>
                 </div>

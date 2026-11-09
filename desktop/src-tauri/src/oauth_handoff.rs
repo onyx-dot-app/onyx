@@ -4,6 +4,11 @@
 //! module loads that callback on the configured server, where the app's own
 //! session completes it.
 
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
+
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, Wry};
 use tauri_plugin_deep_link::DeepLinkExt;
 use url::Url;
@@ -16,6 +21,8 @@ const SCHEME: &str = "onyx";
 const HOST: &str = "oauth-callback";
 const DESKTOP_STATE_SUFFIX: &str = ".desktop";
 const CALLBACK_WINDOW_SIZE: (f64, f64) = (650.0, 760.0);
+const CLAIM_TIMEOUT: Duration = Duration::from_secs(2);
+const REMEMBERED_CALLBACKS: usize = 32;
 const CALLBACK_WINDOW_SCRIPT: &str = "window.__ONYX_DESKTOP__ = Object.assign(window.__ONYX_DESKTOP__ || {}, { oauthCallbackWindow: true });";
 
 const EXACT_PATHS: &[&str] = &[
@@ -121,9 +128,80 @@ pub fn handle_deep_link(app: &AppHandle, deep_link: &Url) {
         return;
     };
     focus_main_window(app);
-    if let Err(e) = open_callback_window(app, url) {
-        log_backend_error(app, &format!("Failed to open OAuth callback: {e}"));
+    // The handoff page can send the same link twice; its code is single-use.
+    if !first_delivery(&url) {
+        return;
     }
+    offer_to_main_window(app, &url);
+}
+
+fn first_delivery(url: &Url) -> bool {
+    static SEEN: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
+    let Ok(mut seen) = SEEN.get_or_init(Mutex::default).lock() else {
+        return true;
+    };
+    if seen.iter().any(|known| known == url.as_str()) {
+        return false;
+    }
+    if seen.len() == REMEMBERED_CALLBACKS {
+        seen.pop_front();
+    }
+    seen.push_back(url.to_string());
+    true
+}
+
+fn claim_script(url: &Url) -> Option<String> {
+    let url = serde_json::to_string(url.as_str()).ok()?;
+    Some(format!(
+        "window.__ONYX_DESKTOP__?.claimOAuthCallback?.({url}) === true"
+    ))
+}
+
+/// Lets the page that started the attempt complete it in place. Falls back to
+/// a callback window when that page is gone, declines, or does not answer.
+fn offer_to_main_window(app: &AppHandle, url: &Url) {
+    let decided = Arc::new(AtomicBool::new(false));
+    let fallback = {
+        let app = app.clone();
+        let url = url.clone();
+        let decided = Arc::clone(&decided);
+        move || {
+            if decided.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            let app = app.clone();
+            let url = url.clone();
+            // Never build a window inside the eval callback or a listener.
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = open_callback_window(&app, url) {
+                    log_backend_error(&app, &format!("Failed to open OAuth callback: {e}"));
+                }
+            });
+        }
+    };
+    let (Some(main), Some(script)) = (app.get_webview_window("main"), claim_script(url)) else {
+        fallback();
+        return;
+    };
+    let on_result = {
+        let decided = Arc::clone(&decided);
+        let fallback = fallback.clone();
+        move |result: String| {
+            if result.trim() == "true" {
+                decided.store(true, Ordering::SeqCst);
+            } else {
+                fallback();
+            }
+        }
+    };
+    if main.eval_with_callback(script, on_result).is_err() {
+        fallback();
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(CLAIM_TIMEOUT).await;
+        fallback();
+    });
 }
 
 // The single-instance plugin passes owned arguments. Its `deep-link` feature
@@ -183,6 +261,24 @@ mod tests {
 
     fn link(path: &str) -> Url {
         link_from("https://onyx.example.com", path)
+    }
+
+    #[test]
+    fn repeated_callbacks_are_delivered_once() {
+        let url =
+            Url::parse("https://onyx.example.com/mcp/oauth/callback?code=once&state=s9").unwrap();
+        assert!(first_delivery(&url));
+        assert!(!first_delivery(&url));
+    }
+
+    #[test]
+    fn claim_script_quotes_the_callback_url() {
+        let url =
+            Url::parse("https://onyx.example.com/mcp/oauth/callback?code=a%22b&state=s1").unwrap();
+        assert_eq!(
+            claim_script(&url).unwrap(),
+            "window.__ONYX_DESKTOP__?.claimOAuthCallback?.(\"https://onyx.example.com/mcp/oauth/callback?code=a%22b&state=s1\") === true"
+        );
     }
 
     #[test]

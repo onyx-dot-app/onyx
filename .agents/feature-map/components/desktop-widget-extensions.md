@@ -148,9 +148,12 @@ panel picks up the new session when the user returns.
    They open the provider in the system browser with a `.desktop` state
    suffix. The browser-side callback page opens
    `onyx://oauth-callback?path=...&origin=...`, and
-   `desktop/src-tauri/src/oauth_handoff.rs` loads that callback in an app
-   window on the configured server only. It accepts only allowlisted callback
-   paths. The callback then reports completion through `BroadcastChannel`.
+   `desktop/src-tauri/src/oauth_handoff.rs` accepts only allowlisted callback
+   paths on the configured server. It first offers the callback to the main
+   window (`__ONYX_DESKTOP__.claimOAuthCallback`): a page still waiting on that
+   state runs it in a hidden same-origin iframe. If no page claims it within
+   2s, the shell loads it in an app window. Either way the callback reports
+   completion through `BroadcastChannel`.
    Older OAuth flows still open `about:blank` inside the click, navigate it,
    and wait for a `postMessage`.
    `desktop/tests/webdriver_smoke.py` drives the real binary through these

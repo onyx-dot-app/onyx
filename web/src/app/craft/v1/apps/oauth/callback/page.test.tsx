@@ -74,7 +74,15 @@ test("rejects an external return URL without signalling success", async () => {
   expect(replace).not.toHaveBeenCalled();
   expect(window.opener.postMessage).toHaveBeenCalledTimes(1);
   expect(window.opener.postMessage).toHaveBeenCalledWith(
-    { type: "onyx:oauth-complete", state: "state", ok: false },
+    {
+      type: "onyx:oauth-complete",
+      state: "state",
+      ok: false,
+      error: {
+        title: "Connection failed.",
+        description: "Missing code or state in callback URL.",
+      },
+    },
     window.location.origin
   );
 });

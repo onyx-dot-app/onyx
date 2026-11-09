@@ -15,7 +15,7 @@ import {
 import type { IconFunctionComponent } from "@opal/types";
 import { completeMCPUserOAuth } from "@/lib/mcp/svc";
 import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
-import { reportOAuthCallback } from "@/lib/oauth/launch";
+import { leaveOAuthCallback, reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 
 const AUTO_REDIRECT_DELAY_MS = 2000;
@@ -147,15 +147,20 @@ function MCPOAuthCallbackPageContent() {
 
     // The provider redirected back with an error (e.g. the user cancelled)
     if (providerError) {
-      if (stateParam) {
-        void completeMCPUserOAuth(null, stateParam, providerError).catch(
-          (error: unknown) => {
-            console.error("Failed to cancel MCP OAuth attempt:", error);
-          }
-        );
+      const error = cancelledError(t, errorDescription);
+      if (!stateParam) {
+        setState({ phase: "error", error });
+        return;
       }
-      if (stateParam && reportOAuthCallback(stateParam, false)) return;
-      setState({ phase: "error", error: cancelledError(t, errorDescription) });
+      // Finish the cancel request first: reporting can close this tab, which aborts it.
+      void completeMCPUserOAuth(null, stateParam, providerError)
+        .catch((cancelError: unknown) => {
+          console.error("Failed to cancel MCP OAuth attempt:", cancelError);
+        })
+        .then(() => {
+          if (reportOAuthCallback(stateParam, false, undefined, error)) return;
+          setState({ phase: "error", error });
+        });
       return;
     }
 
@@ -177,16 +182,15 @@ function MCPOAuthCallbackPageContent() {
           redirectPath,
         });
       } catch (error) {
-        if (reportOAuthCallback(stateParam, false)) return;
-        setState({
-          phase: "error",
-          error: classifyCallbackError(
-            t,
-            error instanceof Error
-              ? error.message
-              : t("mcpOauthCallback.genericError.fallbackDetail")
-          ),
-        });
+        const callbackError = classifyCallbackError(
+          t,
+          error instanceof Error
+            ? error.message
+            : t("mcpOauthCallback.genericError.fallbackDetail")
+        );
+        if (reportOAuthCallback(stateParam, false, undefined, callbackError))
+          return;
+        setState({ phase: "error", error: callbackError });
       }
     };
 
@@ -234,7 +238,11 @@ function MCPOAuthCallbackPageContent() {
                 />
                 <Button
                   width="full"
-                  onClick={() => navigation.go(state.redirectPath as Route)}
+                  onClick={() =>
+                    leaveOAuthCallback(() =>
+                      navigation.go(state.redirectPath as Route)
+                    )
+                  }
                 >
                   {t("mcpOauthCallback.continueButton.label")}
                 </Button>
@@ -255,7 +263,9 @@ function MCPOAuthCallbackPageContent() {
                 />
                 <Button
                   width="full"
-                  onClick={() => navigation.go(DEFAULT_REDIRECT_PATH)}
+                  onClick={() =>
+                    leaveOAuthCallback(() => navigation.go(DEFAULT_REDIRECT_PATH))
+                  }
                 >
                   {t("mcpOauthCallback.backToChatButton.label")}
                 </Button>
