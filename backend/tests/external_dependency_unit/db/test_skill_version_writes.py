@@ -9,8 +9,10 @@ from typing import Never
 from uuid import UUID, uuid4
 
 import pytest
+from azure.core.exceptions import ResourceNotFoundError
 from botocore.exceptions import ClientError
 from fastapi import UploadFile
+from google.api_core.exceptions import NotFound
 from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
@@ -35,6 +37,7 @@ from onyx.db.resource_version import (
     VERSION_FILES_NOT_KEPT,
     read_version_bundle,
     repair_version_metadata,
+    write_resource_version,
 )
 from onyx.db.skill import (
     SkillValidityUpdate,
@@ -57,10 +60,7 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.key_value_store.store import REDIS_KEY_PREFIX
 from onyx.server.features.skill import api
-from onyx.server.features.skill.models import (
-    SkillBulkActionRequest,
-    SkillPatchRequest,
-)
+from onyx.server.features.skill.models import SkillBulkActionRequest, SkillPatchRequest
 from onyx.skills.bundle import (
     STORED_BUNDLE_LIMITS,
     build_single_file_bundle,
@@ -524,7 +524,7 @@ def test_metadata_repair_classifies_object_store_errors(
         raise ClientError({"Error": {"Code": code}}, "GetObject")
 
     monkeypatch.setattr(store, "read_file", failed_read)
-    if code == "AccessDenied":
+    if code in ("AccessDenied", "404", "NotFound"):
         with pytest.raises(ClientError):
             repair_version_metadata(
                 version, store, limits=STORED_BUNDLE_LIMITS, verify_bundle=True
@@ -1117,16 +1117,15 @@ def test_transient_read_keeps_repair_pending(
     with monkeypatch.context() as patch:
         patch.setattr(repair_tasks, "get_default_file_store", lambda: store)
         patch.setattr(store, "read_file", unavailable)
-        with pytest.raises(ConnectionError):
-            repair_skill_versions.run(tenant_id=tenant)
+        repair_skill_versions.run(tenant_id=tenant)
     session.refresh(skill)
     assert skill.current_version_id is None
     if completed:
         assert get_kv_store().load(PROGRESS_KEY) == "completed"
     else:
-        with pytest.raises(KvKeyNotFoundError):
-            get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
+        assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
     assert not get_cache_backend().lock(PROGRESS_KEY, timeout=300).owned()
+    repair_skill_versions.run(tenant_id=tenant)
     repair_skill_versions.run(tenant_id=tenant)
     assert versions(skill, session)[0].content_digest is not None
 
@@ -1457,7 +1456,7 @@ def test_storage_bounds_actual_reads(
     assert session.is_active
 
 
-def test_backend_stream_failure_keeps_background_progress_pending(
+def test_backend_stream_failure_remains_retryable_after_progress(
     tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from collections.abc import Callable
@@ -1484,13 +1483,14 @@ def test_backend_stream_failure_keeps_background_progress_pending(
             "read_file_to_buffer",
             failed_copy,
         )
-        with pytest.raises(ConnectionError, match="storage stream disconnected"):
-            repair_skill_versions.run(tenant_id=tenant)
+        repair_skill_versions.run(tenant_id=tenant)
     session.refresh(skill)
     assert skill.current_version_id is None
-    with pytest.raises(KvKeyNotFoundError):
-        get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
+    assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
     repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == "completed"
+    repair_skill_versions.run(tenant_id=tenant)
+    session.expire_all()
     assert versions(skill, session)[0].content_digest is not None
 
 
@@ -1499,6 +1499,8 @@ def test_backend_stream_failure_keeps_background_progress_pending(
     [
         ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject"),
         RuntimeError("unexpected read failure"),
+        ResourceNotFoundError("container unavailable"),
+        NotFound("bucket unavailable"),
     ],
 )
 def test_replacement_preserves_history_on_unexpected_read_failure(
@@ -1523,3 +1525,49 @@ def test_replacement_preserves_history_on_unexpected_read_failure(
     assert skill.current_version_id == original_id
     assert len(versions(skill, session)) == 1
     assert set(session.scalars(select(FileRecord.file_id))) == file_ids
+
+
+def test_metadata_repair_preserves_history_before_pruning(
+    session: Session, user: User
+) -> None:
+    skill = skill_with_versions(session, user, 10)
+    oldest = versions(skill, session)[-1]
+    original_metadata = (
+        oldest.content_digest,
+        oldest.unpacked_size_bytes,
+        oldest.file_count,
+    )
+    oldest_file = oldest.bundle_file_id
+    assert oldest_file is not None
+    store = get_default_file_store()
+    # Model a legacy backlog with eleven retained bundles.
+    with ingested_skill_bundle(
+        bundle(skill.name, "Eleventh"), "skill.zip", store
+    ) as added:
+        write_resource_version(
+            SkillVersionAdapter(skill),
+            bundle_file_id=added.bundle_file_id,
+            bundle_sha256=added.bundle_sha256,
+            is_valid=True,
+            metadata=added.metadata,
+            created_by_user_id=user.id,
+            db_session=session,
+        )
+        session.commit()
+    oldest.content_digest = None
+    oldest.unpacked_size_bytes = None
+    oldest.file_count = None
+    session.commit()
+    pruned = skill_version.repair_skill_version_metadata(skill, session, store)
+    session.commit()
+    session.refresh(oldest)
+    assert (
+        oldest.content_digest,
+        oldest.unpacked_size_bytes,
+        oldest.file_count,
+    ) == original_metadata
+    assert oldest.bundle_file_id is None
+    assert pruned == [oldest_file]
+    assert len(versions(skill, session)) == 11
+    with store.read_file(oldest_file) as content:
+        assert content.read().startswith(b"PK")
