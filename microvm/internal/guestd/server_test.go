@@ -742,6 +742,9 @@ func TestOutputGap(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := st.GetStarted().GetExecutionId()
+	// A live stream can attach between the two writes; replay after the end.
+	first, _ := c.Stream(ctx, &pb.StreamRequest{ExecutionId: id})
+	collect(t, first)
 	s, _ := c.Stream(ctx, &pb.StreamRequest{ExecutionId: id})
 	r := collect(t, s)
 	if r.result.GetStdoutBytes() != 53 {
