@@ -5,7 +5,7 @@ from typing import Never
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -20,13 +20,13 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.resource_version import VERSION_FILES_NOT_KEPT
-from onyx.db.skill_version import delete_orphan_skill_bundles
+from onyx.db.skill_version import PreparedSkillVersionWrite, delete_orphan_skill_bundles
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill import api
 from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES, compute_bundle_sha256
-from onyx.skills.ingest import save_skill_bundle_bytes
+from onyx.skills.ingest import IngestedBundle, save_skill_bundle_bytes
 from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     bundle,
@@ -187,6 +187,70 @@ def test_unreadable_history_refuses_preview_and_restore(
             user,
             session,
             http_request=Request({"type": "http"}),
+        ).instructions_markdown
+        == "Current instructions"
+    )
+
+
+def test_restore_rechecks_historical_bundle_after_storage(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = api.create_custom_skill(
+        upload(bundle("restore-pruned-source")),
+        False,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
+    original = api.list_custom_skill_versions(
+        skill.id, user, session, http_request=Request({"type": "http"})
+    )[0]
+    api.replace_current_user_skill_bundle(
+        skill.id,
+        upload(bundle(skill.name, "Current instructions")),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
+    before_files = set(session.scalars(select(FileRecord.file_id)))
+    prepare = api.prepare_skill_version_write
+
+    def prune_after_preparation(
+        source: Skill, ingested: IngestedBundle, db_session: Session
+    ) -> PreparedSkillVersionWrite:
+        prepared = prepare(source, ingested, db_session)
+        with get_session_with_current_tenant() as writer:
+            writer.execute(
+                update(SkillVersion)
+                .where(SkillVersion.id == original.id)
+                .values(bundle_file_id=None)
+            )
+            writer.commit()
+        return prepared
+
+    with monkeypatch.context() as patch:
+        patch.setattr(api, "prepare_skill_version_write", prune_after_preparation)
+        with pytest.raises(OnyxError, match="Version files changed") as caught:
+            api.restore_custom_skill_version(
+                skill.id,
+                original.id,
+                user,
+                session,
+                http_request=Request({"type": "http"}),
+            )
+    assert caught.value.error_code == OnyxErrorCode.CONFLICT
+    assert (
+        len(
+            api.list_custom_skill_versions(
+                skill.id, user, session, http_request=Request({"type": "http"})
+            )
+        )
+        == 2
+    )
+    assert set(session.scalars(select(FileRecord.file_id))) == before_files
+    assert (
+        api.fetch_custom_skill_for_edit(
+            skill.id, user, session, http_request=Request({"type": "http"})
         ).instructions_markdown
         == "Current instructions"
     )

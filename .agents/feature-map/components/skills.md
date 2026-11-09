@@ -427,8 +427,9 @@ The library preview of an external-app skill calls the same renderer
     a younger file can be live. A version preview or restore must read through
     `read_version_bundle` with the resource's stored-byte limit. It gives NOT_FOUND "The files of this version are
     no longer kept." for a pruned bundle, also when pruning wins a race. A
-    restore stages the old bytes before locking, then checks that its source bundle
-    is still retained before publishing the copy.
+    restore stages the old bytes before locking. Then
+    `db/skill_version.py:assert_skill_version_bundle_unchanged` reloads the historical
+    version and rejects a changed bundle reference before publishing the copy.
 20. `history-requires-edit` **History uses EDIT access, including its reads.**
     The `/skills/custom/{skill_id}/versions` family calls `fetch_skill` with
     `SkillManagementPolicy.EDIT` before listing or reading any history.

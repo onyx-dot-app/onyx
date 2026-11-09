@@ -46,6 +46,7 @@ from onyx.db.skill import (
 from onyx.db.skill_mutation import assert_skill_content_editable, assert_skill_mutable
 from onyx.db.skill_version import (
     SkillContentSnapshot,
+    assert_skill_version_bundle_unchanged,
     delete_unreferenced_skill_bundles,
     fetch_skill_version,
     list_skill_versions,
@@ -342,12 +343,9 @@ def _replace_skill_bundle_from_editor(
             allow_management=allow_management,
         )
         if restored_version is not None:
-            version = fetch_skill_version(skill, restored_version[0], db_session)
-            db_session.refresh(version)
-            if version.bundle_file_id != restored_version[1]:
-                raise OnyxError(
-                    OnyxErrorCode.CONFLICT, "Version files changed. Retry this request."
-                )
+            assert_skill_version_bundle_unchanged(
+                skill, restored_version[0], restored_version[1], db_session
+            )
         stale_file_ids = replace_skill_bundle(
             skill=skill,
             ingested=ingested,
