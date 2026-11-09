@@ -34,13 +34,21 @@
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
-  stay selected. Search changes clear selection.
+  stay selected. Search changes clear selection. The admin table header selects all filtered
+  custom skills. It uses Opal multi-selection, disabled during bulk requests. Row activation
+  opens the preview; checkbox activation changes selection without opening it.
+  Admin search spans the table width. A compact row below it anchors the count at the start and bulk actions at the end.
+  The count appears only after a successful load and changes from the filtered total to the selection count.
+  Hidden actions and a reserved loading-icon slot keep search, count and table positions fixed during selection and bulk requests.
+  The loading icon sits beside the count for every bulk action. The personal toolbar stays separate.
   Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
   be hidden, so empty arrays do not mean a skill is personal. The table shows
   groups only when supplied. Owner identity is not an access grant. The list
   currently omits share details. The Enable for me column controls personal use.
-  Narrow tables keep names and actions; sharing settings stay in the dialog.
+  Narrow tables use two lines for names without descriptions. Duplicate names use one line and keep their descriptions; warnings remain visible.
+  Mobile Create stays beside the title, and the personal-use column is labeled For me.
+  Sharing settings stay in the dialog. Access badges have an outline, and keyboard focus uses a rounded neutral outline.
   The table keeps page ordering and all filtered rows without pagination.
   `web/src/lib/skills/hooks.ts` is shared by cards and rows for permission, dependency,
   validity and toggle presentation.

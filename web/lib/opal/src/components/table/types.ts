@@ -285,6 +285,11 @@ export interface DataTableProps<TData> {
   values?: ReadonlySet<string>;
   /** Called with the next selection. */
   onSelectionChange?: (values: ReadonlySet<string>) => void;
+  /** Prevents selection changes without disabling row actions or pagination. */
+  selectionDisabled?: boolean;
+  /** Accessible checkbox labels. Opal supplies localized defaults. */
+  selectAllLabel?: string;
+  getRowSelectionLabel?: (row: TData) => string;
   /** When true AND `values` is non-empty at mount, start in view-selected mode. @default false */
   initialViewSelected?: boolean;
   /** Enable drag-and-drop row reordering. */

@@ -7,7 +7,6 @@ import {
   Badge,
   Button,
   Dropdown,
-  InputCheckbox,
   InputSwitch,
   Table,
   Text,
@@ -22,16 +21,26 @@ import type {
 } from "@/sections/cards/SkillCard";
 import { useSkillPresentation } from "@/lib/skills/hooks";
 
-type SkillTableItem = SkillCardProps & { item: CustomSkillCardItem };
+type SkillTableItem = SkillCardProps & {
+  item: CustomSkillCardItem;
+  showDescription: boolean;
+};
 
 interface SkillsTableProps {
   items: CustomSkillCardItem[];
   selectedIds: ReadonlySet<string>;
+  onSelectionChange: (values: ReadonlySet<string>) => void;
+  selectionDisabled: boolean;
   getItemProps: (item: CustomSkillCardItem) => SkillCardProps;
 }
 
-function SkillName({ item, hasEnabledNameConflict }: SkillCardProps) {
+function SkillName({
+  item,
+  hasEnabledNameConflict,
+  showDescription,
+}: SkillTableItem) {
   const t = useTranslations("cards");
+  const { isMobile } = useScreenSize();
   const { isInvalid, dependencyStatus, tooltip } = useSkillPresentation(
     item,
     hasEnabledNameConflict
@@ -48,23 +57,29 @@ function SkillName({ item, hasEnabledNameConflict }: SkillCardProps) {
         font="main-ui-body"
         color="text-05"
         as="p"
-        maxLines={1}
+        maxLines={
+          isMobile && !showDescription && !isInvalid && !dependencyStatus
+            ? 2
+            : 1
+        }
         overflowTooltip
       >
         {item.name}
       </Text>
-      <Text
-        font="secondary-body"
-        color={isInvalid ? "status-warning-05" : "text-03"}
-        as="p"
-        maxLines={1}
-        overflowTooltip
-        tooltip={tooltip}
-      >
-        {isInvalid
-          ? t("skill.invalid.description")
-          : (dependencyStatus ?? item.description)}
-      </Text>
+      {(!isMobile || showDescription || isInvalid || dependencyStatus) && (
+        <Text
+          font="secondary-body"
+          color={isInvalid ? "status-warning-05" : "text-03"}
+          as="p"
+          maxLines={1}
+          overflowTooltip
+          tooltip={tooltip}
+        >
+          {isInvalid
+            ? t("skill.invalid.description")
+            : (dependencyStatus ?? item.description)}
+        </Text>
+      )}
     </Section>
   );
 }
@@ -119,7 +134,7 @@ function SkillActions({
   return (
     <Section
       flexDirection="row"
-      gap={2}
+      gap={1}
       height="auto"
       justifyContent="end"
       onClick={(event) => event.stopPropagation()}
@@ -159,41 +174,30 @@ function SkillActions({
 export default function SkillsTable({
   items,
   selectedIds,
+  onSelectionChange,
+  selectionDisabled,
   getItemProps,
 }: SkillsTableProps) {
   const t = useTranslations("skills");
   const cards = useTranslations("cards");
   const { isMobile } = useScreenSize();
+  const duplicateNames = useMemo(() => {
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+    for (const item of items) {
+      if (seen.has(item.name)) duplicates.add(item.name);
+      seen.add(item.name);
+    }
+    return duplicates;
+  }, [items]);
   const columns = useMemo<TableColumn<SkillTableItem>[]>(
     () => [
-      {
-        kind: "display",
-        id: "selection",
-        width: { fixed: 36 },
-        hideable: false,
-        cell: ({ item, selection }) => {
-          return (
-            selection && (
-              <Section
-                width="auto"
-                height="auto"
-                padding={2}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <InputCheckbox
-                  {...selection}
-                  aria-label={t("bulk.selectSkill", { name: item.name })}
-                />
-              </Section>
-            )
-          );
-        },
-      },
+      { kind: "qualifier", content: "checkbox" },
       {
         kind: "display",
         id: "skill",
         title: t("page.header.title"),
-        width: { weight: 48, minWidth: isMobile ? 96 : 160 },
+        width: { weight: 48, minWidth: isMobile ? 88 : 160 },
         hideable: false,
         cell: (props) => <SkillName {...props} />,
       },
@@ -211,16 +215,23 @@ export default function SkillsTable({
             width={0}
             className="min-w-full"
           >
-            <Badge
-              size={5}
-              title={cards(
-                skill.public_permission !== null
-                  ? "skill.tags.organization.label"
-                  : skill.is_personal
-                    ? "skill.tags.personal.label"
-                    : "skill.tags.shared.label"
-              )}
-            />
+            <Section
+              width="auto"
+              height="auto"
+              className="rounded-04 border border-border-02"
+            >
+              <Badge
+                size={5}
+                titleColor="text-04"
+                title={cards(
+                  skill.public_permission !== null
+                    ? "skill.tags.organization.label"
+                    : skill.is_personal
+                      ? "skill.tags.personal.label"
+                      : "skill.tags.shared.label"
+                )}
+              />
+            </Section>
             {skill.group_shares.length > 0 && (
               <Text
                 font="secondary-body"
@@ -261,8 +272,8 @@ export default function SkillsTable({
       {
         kind: "display",
         id: "actions",
-        title: t("bulk.enable"),
-        width: { fixed: 104 },
+        title: t(isMobile ? "bulk.personalSetting" : "bulk.enable"),
+        width: { fixed: isMobile ? 80 : 104 },
         hideable: false,
         alignment: "right",
         cell: (props) => <SkillActions {...props} />,
@@ -284,10 +295,21 @@ export default function SkillsTable({
   return (
     <Table
       label={t("page.header.title")}
-      items={items.map((item) => ({ ...getItemProps(item), item }))}
+      items={items.map((item) => ({
+        ...getItemProps(item),
+        item,
+        showDescription: duplicateNames.has(item.name),
+      }))}
       columns={visibleColumns}
       getRowId={({ item }) => item.id}
       values={selectedIds}
+      selectionBehavior="multi-select"
+      selectionDisabled={selectionDisabled}
+      onSelectionChange={onSelectionChange}
+      selectAllLabel={t("bulk.selectAll")}
+      getRowSelectionLabel={({ item }) =>
+        t("bulk.selectSkill", { name: item.name })
+      }
       pageSize={false}
       onRowClick={({ item, onClick }) => onClick?.(item)}
       getRowLabel={({ item }) => item.name}
