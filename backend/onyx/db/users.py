@@ -169,11 +169,20 @@ def _membership_lock_id(tenant_id: str) -> int:
     return struct.unpack("q", digest[:8])[0]
 
 
-def lock_group_membership(db_session: Session) -> None:
+def lock_group_membership(db_session: Session, *, nowait: bool = False) -> None:
     """One lock for every membership write, admin access included, released on the
     caller's commit. Take it before reading state the write depends on: a stale read
     misses a concurrent add, and two removals each see the other survive. Splitting it
     per class would only buy a lock order to get wrong."""
+    if nowait:
+        if not db_session.scalar(
+            text("SELECT pg_try_advisory_xact_lock(:lock_id)"),
+            {"lock_id": _membership_lock_id(get_current_tenant_id())},
+        ):
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT, "Access is being changed. Retry this request."
+            )
+        return
     # Bounded wait: a wedged holder should fail fast, not hang the request.
     db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
     db_session.execute(
@@ -693,7 +702,11 @@ def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
 
 
 def fetch_user_by_id(
-    db_session: Session, user_id: UUID, for_update: bool = False
+    db_session: Session,
+    user_id: UUID,
+    for_update: bool = False,
+    *,
+    refresh: bool = False,
 ) -> User | None:
     """``for_update`` adds ``SELECT ... FOR UPDATE``, serializing concurrent
     transactions that use the user row as a reservation boundary (e.g. Craft
@@ -701,6 +714,8 @@ def fetch_user_by_id(
     query = db_session.query(User).filter(
         User.id == user_id  # ty: ignore[invalid-argument-type]
     )
+    if refresh:
+        query = query.populate_existing()
     if for_update:
         # oauth_accounts is lazy="joined"; Postgres forbids FOR UPDATE on the
         # nullable side of an outer join, so defer it when locking.
