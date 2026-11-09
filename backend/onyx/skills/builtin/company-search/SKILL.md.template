@@ -29,8 +29,8 @@ the search fail. `--document-set` replaces the default agent's knowledge scope,
 so use it only when the user asks for specific document sets.
 
 If `onyx-cli` reports `document-sets` or `--document-set` as unknown, this
-sandbox has an older CLI. Search without the flag and tell the user that
-document set filtering is not available in this session.
+sandbox has an older CLI. Tell the user that document set filtering is not
+available in this session, and ask before you search without the filter.
 
 ## Usage
 
