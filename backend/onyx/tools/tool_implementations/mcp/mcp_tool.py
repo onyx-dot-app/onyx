@@ -294,15 +294,14 @@ class MCPTool(Tool):
             tool_result_dict = {
                 "tool_result": _tool_result_value(process_mcp_result(tool_result))
             }
-            content = json.dumps(tool_result_dict)
-
             response = ToolResult(
                 details=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
                     tool_result=tool_result_dict,
+                    structured_result=tool_result.structuredContent,
                 ),
-                content=content,
+                content=json.dumps(tool_result_dict),
             )
             outcome = MCPToolCallStatus.SUCCESS
             return response

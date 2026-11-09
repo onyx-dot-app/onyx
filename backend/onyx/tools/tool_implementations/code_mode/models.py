@@ -293,3 +293,64 @@ class StoreSnapshot(BaseModel):
     last_ordinal: int = 0
     # The ordinal of the last commit that `values` include; 0 for none.
     last_applied: int = 0
+
+
+class StubParameter(BaseModel):
+    """One argument of a tool function stub."""
+
+    model_config = ConfigDict(frozen=True)
+
+    python_name: str
+    annotation: str
+    # The schema requires the argument.
+    required: bool
+    # The schema accepts null for it. A required nullable argument is optional
+    # in the stub and sent as null when a program leaves it out.
+    nullable: bool
+    description: str
+
+    @property
+    def has_default(self) -> bool:
+        return not self.required or self.nullable
+
+
+class StubResultType(BaseModel):
+    """The return annotation of a tool function stub and the declarations of
+    the types it names."""
+
+    model_config = ConfigDict(frozen=True)
+
+    annotation: str
+    declarations: tuple[str, ...]
+
+
+class SchemaRefBudget(BaseModel):
+    """`$ref` resolutions spent while one stub types a JSON Schema."""
+
+    total: int = 0
+
+
+class SchemaType(BaseModel):
+    """A JSON Schema as a Python type annotation, and whether it accepts null.
+
+    One walk decides both, so a stub's type and how a call sends None agree.
+    An annotation of Any can still accept null.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    annotation: str
+    nullable: bool
+
+
+class SearchableFunction(BaseModel):
+    """A deferred function as tool_search() matches and returns it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    description: str
+    # The function's stub with the declarations of its result types.
+    stub: str
+    # Text that the search matches: the name (weighted), namespace and description.
+    text: str

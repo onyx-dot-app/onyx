@@ -177,6 +177,10 @@ _SYNC_SLEEP = "system.sleep"
 # The module that also holds every function of a program, so
 # `from functions import f` and `functions.f(...)` work like the globals.
 FUNCTIONS_MODULE = "functions"
+# Global names the sandbox gives every program; tool functions must not shadow them.
+SANDBOX_NAMES: frozenset[str] = frozenset(
+    {*IMPORTABLE_MODULES, FUNCTIONS_MODULE, YIELD_CONTROL_FUNCTION}
+)
 # OS calls of an import: the type checker's stub request and the import itself.
 # Monty answers them from the session's external modules.
 _IMPORT_CALLS: frozenset[str] = frozenset({"import", "import_stubs"})
