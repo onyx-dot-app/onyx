@@ -22,6 +22,7 @@ from onyx.db.external_app import (
     associate_custom_skill_with_external_app__no_commit,
     get_external_app_by_id,
 )
+from onyx.db.marketplace_access import reset_marketplace_skill_access__no_commit
 from onyx.db.models import Skill, User
 from onyx.db.resource_access import mutate_resource_access
 from onyx.db.resource_version import read_version_bundle
@@ -1119,6 +1120,19 @@ def share_current_user_skill(
         db_session,
         include_share_details=True,
     )
+
+
+@user_router.post("/custom/{skill_id}/reset-marketplace-access")
+def reset_current_skill_marketplace_access(
+    skill_id: UUID,
+    user: User = Depends(require_permission(Permission.MANAGE_SKILLS)),
+    db_session: Session = Depends(get_session),
+) -> SkillResponse:
+    affected = reset_marketplace_skill_access__no_commit(skill_id, user, db_session)
+    db_session.commit()
+    push_skills_for_users(affected, db_session)
+    db_session.commit()
+    return fetch_custom_skill_sharing(skill_id, user, db_session)
 
 
 @user_router.post("/custom/{skill_id}/transfer-ownership")

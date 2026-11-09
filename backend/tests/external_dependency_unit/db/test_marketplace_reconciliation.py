@@ -55,6 +55,12 @@ def session(isolated_engine: Engine) -> Generator[Session, None, None]:
             "skill",
             "skill_version",
             "marketplace",
+            "marketplace__user_group",
+            "skill__user",
+            "skill__user_group",
+            "sandbox",
+            "external_app__skill",
+            "user__user_group",
             "oauth_account",
             "user__pinned_persona",
         )

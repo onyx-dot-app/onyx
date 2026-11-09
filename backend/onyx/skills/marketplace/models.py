@@ -68,3 +68,4 @@ class ReconciliationResult(BaseModel):
     retired_skill_ids: list[UUID] = Field(default_factory=list)
     blocked_entries: dict[str, str] = Field(default_factory=dict)
     cleanup_file_ids: set[str] = Field(default_factory=set)
+    affected_user_ids: set[UUID] = Field(default_factory=set)
