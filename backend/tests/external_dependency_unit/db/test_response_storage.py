@@ -57,6 +57,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.response import response_record, response_snapshot
+from onyx.chat.tool_results import tool_result_sources
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
@@ -487,6 +488,115 @@ def test_metadata_sources_survive_storage_without_search_results(
             ),
             child,
         )
+
+
+def _source_doc(document_id: str) -> SearchDoc:
+    return SearchDoc(
+        document_id=document_id,
+        chunk_ind=0,
+        semantic_identifier=document_id,
+        link=f"https://example.com/{document_id}",
+        blurb=document_id,
+        source_type=DocumentSource.WEB,
+        boost=0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "details"),
+    [
+        (
+            SearchTool.NAME,
+            SearchDocsResponse(
+                queries=["query"],
+                search_docs=[_source_doc("alpha"), _source_doc("beta")],
+                displayed_docs=[_source_doc("beta")],
+                citation_mapping={1: "alpha", 2: "beta"},
+            ),
+        ),
+        (
+            "research_agent",
+            ResearchAgentCallResult(
+                intermediate_report="Report",
+                citation_mapping={3: _source_doc("gamma")},
+            ),
+        ),
+    ],
+)
+def test_tool_result_sources_survive_save_and_reload(
+    db_session: Session,
+    conversation: ChatSession,
+    tool_record: Tool,
+    tool_name: str,
+    details: BaseModel,
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="call", name=tool_name, arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="call",
+                tool_name=tool_name,
+                content="Found",
+                details=details,
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    live = tool_result_sources(details)
+    assert live is not None and live.citations
+    projected = project_response(
+        response_snapshot(record), tool_ids={tool_name: tool_record.id}
+    )
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=response,
+        emitted_citations=set(),
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+
+    history = capture_chat_history([response], {}, len)
+    [restored] = [
+        message
+        for message in history[0].response_messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    sources = tool_result_sources(restored.details)
+    assert sources is not None
+    assert {number: doc.document_id for number, doc in sources.citations.items()} == {
+        number: doc.document_id for number, doc in live.citations.items()
+    }
+    assert [doc.document_id for doc in sources.documents] == [
+        doc.document_id for doc in live.documents
+    ]
+    assert {
+        number: doc.document_id
+        for number, doc in message_citation_sources(restored).items()
+    } == {number: doc.document_id for number, doc in live.citations.items()}
+    tool = db_session.scalar(
+        select(StoredToolCall).where(
+            StoredToolCall.parent_chat_message_id == response.id
+        )
+    )
+    assert tool is not None
+    assert [doc.document_id for doc in tool.search_docs] == [
+        doc.document_id for doc in live.displayed or []
+    ]
 
 
 def test_thinking_preserves_signed_content_and_final_display_text(

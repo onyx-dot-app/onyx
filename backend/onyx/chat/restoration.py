@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 from onyx.agents.models import ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
-from onyx.chat.models import ChatFeatureState, ChatSearchResult
+from onyx.chat.models import ChatFeatureState, StagedChatFiles
 from onyx.configs.constants import FileOrigin
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.models import DeepResearchFeatureState, ResearchFeatureState
@@ -129,7 +129,7 @@ def persist_checkpoint_files(
         file.content = None
 
     def payload(value: BaseModel | None) -> None:
-        if isinstance(value, ChatSearchResult):
+        if isinstance(value, StagedChatFiles):
             for staged in value.staged_files:
                 file = SavedChatFile.capture(staged)
                 save(file)

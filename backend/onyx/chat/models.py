@@ -446,8 +446,22 @@ class SearchParams(BaseModel):
     search_usage: SearchToolUsage
 
 
-class ChatSearchResult(SearchDocsResponse):
-    """Search documents with files staged before the tool result is committed."""
+class ResultSources(BaseModel):
+    """Documents carried by one tool result and the citation numbers it gave them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The documents the result carries: every search result, or only the cited
+    # documents of a research result.
+    documents: list[SearchDoc]
+    # The documents to show for the call; a search can select a subset. None when
+    # the call shows no documents of its own.
+    displayed: list[SearchDoc] | None
+    citations: dict[int, SearchDoc]
+
+
+class StagedChatFiles(BaseModel):
+    """Files of a tool result's documents, staged before the result is committed."""
 
     staged_files: list[ChatFile]
 
@@ -466,6 +480,10 @@ class ChatSearchResult(SearchDocsResponse):
             else SavedChatFile.model_validate(file).restore()
             for file in value
         ]
+
+
+class ChatSearchResult(StagedChatFiles, SearchDocsResponse):
+    """Search documents with their files staged."""
 
 
 class ToolHistorySnapshot(BaseModel):

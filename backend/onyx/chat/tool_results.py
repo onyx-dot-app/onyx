@@ -1,0 +1,110 @@
+"""The contract of tool results that carry documents.
+
+Each function here handles every result type that carries documents: how to read
+its sources, its saved form, its restored form, and the type that stages its
+files. Callers do not branch on result types; a new type changes only this module.
+"""
+
+from collections.abc import Callable, Mapping, Sequence
+
+from pydantic import BaseModel
+
+from onyx.chat.citation_processor import cited_documents
+from onyx.chat.models import ChatSearchResult, ResultSources, StagedChatFiles
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.tools.models import ChatFile
+from onyx.utils.pydantic_util import as_base, shallow_model_dump
+
+
+def _by_id(documents: Sequence[SearchDoc]) -> dict[str, SearchDoc]:
+    """Documents by id; the first of a repeated id wins."""
+    found: dict[str, SearchDoc] = {}
+    for document in documents:
+        found.setdefault(document.document_id, document)
+    return found
+
+
+def tool_result_sources(details: BaseModel | None) -> ResultSources | None:
+    """The documents and citations of any tool result; None if it carries none."""
+    if isinstance(details, ResearchAgentCallResult):
+        return ResultSources(
+            documents=list(details.citation_mapping.values()),
+            displayed=None,
+            citations=dict(details.citation_mapping),
+        )
+    if isinstance(details, SearchDocsResponse):
+        return ResultSources(
+            documents=list(details.search_docs),
+            displayed=list(
+                details.displayed_docs
+                if details.displayed_docs is not None
+                else details.search_docs
+            ),
+            citations=cited_documents(
+                details.citation_mapping, _by_id(details.search_docs)
+            ),
+        )
+    return None
+
+
+def saved_result_details(details: BaseModel | None) -> BaseModel | None:
+    """The form of a result that a saved response keeps.
+
+    Documents are saved through the tool call relation, so search results keep
+    only their citation numbers. Staged files stay in execution state.
+    """
+    if isinstance(details, SearchDocsResponse):
+        return as_base(details, SearchDocsResponse).model_copy(
+            update={
+                "search_docs": [],
+                "displayed_docs": [] if details.displayed_docs == [] else None,
+            }
+        )
+    return details
+
+
+def restored_result_details[T: BaseModel](
+    details: T, documents: Mapping[str, SearchDoc]
+) -> T:
+    """Refill the documents that a saved result keeps only as citation numbers.
+
+    Each cited document comes back once, in citation order.
+    """
+    if isinstance(details, SearchDocsResponse):
+        cited = cited_documents(details.citation_mapping, documents)
+        return details.model_copy(
+            update={"search_docs": list(_by_id(list(cited.values())).values())}
+        )
+    return details
+
+
+def staged_result_details(
+    details: BaseModel | None,
+    known_file_ids: set[str],
+    read_files: Callable[[list[SearchDoc]], list[ChatFile]],
+) -> BaseModel | None:
+    """The result with the files of its documents staged for later Python calls.
+
+    `read_files` reads the files of documents. Files that the result already
+    stages, or that are in `known_file_ids`, are not read again.
+    """
+    staged_type: type[StagedChatFiles]
+    if isinstance(details, SearchDocsResponse):
+        staged_type = ChatSearchResult
+    else:
+        return details
+    sources = tool_result_sources(details)
+    staged = list(details.staged_files) if isinstance(details, StagedChatFiles) else []
+    staged_ids = {file.file_id for file in staged}
+    added = [
+        doc
+        for doc in (sources.documents if sources is not None else [])
+        if doc.file_id not in staged_ids and doc.file_id not in known_file_ids
+    ]
+    if isinstance(details, StagedChatFiles) and not added:
+        return details
+    staged.extend(read_files(added))
+    fields = shallow_model_dump(details)
+    fields.pop("staged_files", None)
+    return staged_type(**fields, staged_files=staged)

@@ -23,7 +23,6 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatMessageMetadata,
@@ -42,13 +41,10 @@ from onyx.chat.renderer import (
     ToolRenderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.chat.tool_results import tool_result_sources
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.models import (
-    ResearchAgentCallResult,
-    ResearchMessageMetadata,
-    ResearchPhase,
-)
+from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.server.query_and_chat.placement import Placement
@@ -105,15 +101,12 @@ def _collect_tool_history(
                     index,
                 )
             )
-            if result is None:
+            sources = tool_result_sources(result.details) if result else None
+            if sources is None:
                 continue
-            if isinstance(result.details, SearchDocsResponse):
-                for document in result.details.search_docs:
-                    documents.setdefault(document.document_id, document)
-            if isinstance(result.details, ResearchAgentCallResult):
-                for document in result.details.citation_mapping.values():
-                    documents.setdefault(document.document_id, document)
-            citations.update_citation_mapping(message_citation_sources(result))
+            for document in sources.documents:
+                documents.setdefault(document.document_id, document)
+            citations.update_citation_mapping(sources.citations)
     for child in snapshot.child_runs:
         child_history = _collect_tool_history(child, tool_ids)
         records.extend(child_history.tool_calls)
@@ -135,10 +128,7 @@ def _tool_record(
     index: int,
 ) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
-    search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
-    displayed_docs = (
-        data.displayed_docs if isinstance(data, SearchDocsResponse) else None
-    )
+    sources = tool_result_sources(data)
     generated_images = None
     if isinstance(data, FinalImageGenerationResponse):
         generated_images = data.generated_images
@@ -166,7 +156,7 @@ def _tool_record(
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
         tool_call_arguments=tool_arguments_for_display(tool_call),
         tool_call_response=tool_response.text if tool_response else "",
-        search_docs=displayed_docs if displayed_docs is not None else search_docs,
+        search_docs=sources.displayed if sources is not None else None,
         generated_images=generated_images,
         generated_files=generated_files,
         generated_file_ids=generated_file_ids,
