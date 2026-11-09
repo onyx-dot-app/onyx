@@ -195,10 +195,15 @@ the stored token on each request, so a new token takes effect at once.
 `backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
 - `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
   agent (stubs in `backend/onyx/microvm/generated/`).
+- `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
+  the agent pass-through. Every call but Health sends `x-sandboxd-key`.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
-  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason.
-- `backend/onyx/microvm/lifecycle.py`: wake on the first tool call, idle
-  sleep, stop only after a saved checkpoint.
+  free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Each attempt
+  gets a random daemon key, stored encrypted in the tenant cache before
+  Create. A rejected or lost key stops the VM and creates the next attempt;
+  the caller must store the returned attempt.
+- `backend/onyx/microvm/lifecycle.py`: wake on the first tool call, Init,
+  idle sleep, stop only after a saved checkpoint.
 - `backend/onyx/microvm/reconcile.py`: the cluster-wide reconcile pass, run by
   `backend/onyx/background/celery/tasks/microvm/tasks.py`.
 

@@ -5,8 +5,9 @@ One pass, cluster-wide, run by the `microvm_reconcile` beat task under a lease:
 - A live VM whose record matches: refresh the record TTL, then apply the idle
   sleep rules.
 - A live VM without a record, whose sandbox row is at that attempt and still
-  PROVISIONING or RUNNING: write the record (adopt it). Placement can lose the
-  record write after Create, for example on a crash.
+  PROVISIONING or RUNNING, and whose guest daemon key is stored: write the
+  record (adopt it). Placement can lose the record write after Create, for
+  example on a crash.
 - Any other live VM is an orphan: mark it. Stop it only after a saved
   checkpoint and a second liveness check. Without checkpoint support
   (before ENG-4580) orphans are only marked.
@@ -46,6 +47,7 @@ from onyx.microvm.placement import (
 from onyx.microvm.registry import (
     RegisteredNode,
     SandboxPlacement,
+    get_sandbox_daemon_key,
     get_sandbox_placement,
     list_indexed_placements,
     list_registered_nodes,
@@ -198,6 +200,9 @@ class _Pass:
             and row is not None
             and row.status in _ADOPTABLE_STATUSES
             and row.attempt == vm.attempt
+            # Without the key nothing can use the VM.
+            and get_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=vm.attempt)
+            is not None
         ):
             with sandbox_placement_lock(
                 tenant_cache, sandbox_id, blocking=False

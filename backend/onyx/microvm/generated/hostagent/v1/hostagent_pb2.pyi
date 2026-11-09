@@ -1,5 +1,5 @@
-# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob 1e1655dfe4a2feaad467cf99dcc667932dcd24a8)
-# at commit a56a338966 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob 141d38cc444960eaf251a9542a2d1d963e990389)
+# at commit 46d3937602 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -34,6 +34,9 @@ class ErrorReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PORT_NOT_ALLOWED: _ClassVar[ErrorReason]
     GUEST_UNREACHABLE: _ClassVar[ErrorReason]
     VM_NOT_RUNNING: _ClassVar[ErrorReason]
+    DIAL_LIMIT: _ClassVar[ErrorReason]
+    METHOD_NOT_ALLOWED: _ClassVar[ErrorReason]
+    GUEST_KEY_REJECTED: _ClassVar[ErrorReason]
 
 class VMState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -61,13 +64,16 @@ SANDBOX_IN_DOUBT: ErrorReason
 PORT_NOT_ALLOWED: ErrorReason
 GUEST_UNREACHABLE: ErrorReason
 VM_NOT_RUNNING: ErrorReason
+DIAL_LIMIT: ErrorReason
+METHOD_NOT_ALLOWED: ErrorReason
+GUEST_KEY_REJECTED: ErrorReason
 VM_STATE_UNSPECIFIED: VMState
 VM_STATE_STARTING: VMState
 VM_STATE_RUNNING: VMState
 VM_STATE_EXITED: VMState
 
 class CreateRequest(_message.Message):
-    __slots__ = ("sandbox_id", "attempt", "template", "vcpus", "mem_mib", "scratch_gib", "tenant_id")
+    __slots__ = ("sandbox_id", "attempt", "template", "vcpus", "mem_mib", "scratch_gib", "tenant_id", "sandboxd_key")
     SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
     ATTEMPT_FIELD_NUMBER: _ClassVar[int]
     TEMPLATE_FIELD_NUMBER: _ClassVar[int]
@@ -75,6 +81,7 @@ class CreateRequest(_message.Message):
     MEM_MIB_FIELD_NUMBER: _ClassVar[int]
     SCRATCH_GIB_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    SANDBOXD_KEY_FIELD_NUMBER: _ClassVar[int]
     sandbox_id: str
     attempt: int
     template: str
@@ -82,7 +89,8 @@ class CreateRequest(_message.Message):
     mem_mib: int
     scratch_gib: int
     tenant_id: str
-    def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., template: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., tenant_id: _Optional[str] = ...) -> None: ...
+    sandboxd_key: str
+    def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., template: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., tenant_id: _Optional[str] = ..., sandboxd_key: _Optional[str] = ...) -> None: ...
 
 class CreateResponse(_message.Message):
     __slots__ = ("vm", "created")
@@ -157,14 +165,16 @@ class CloseConnectionsRequest(_message.Message):
     def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., generation: _Optional[int] = ...) -> None: ...
 
 class DialFrame(_message.Message):
-    __slots__ = ("sandbox_id", "guest_port", "data")
+    __slots__ = ("sandbox_id", "guest_port", "data", "generation")
     SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
     GUEST_PORT_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
     sandbox_id: str
     guest_port: int
     data: bytes
-    def __init__(self, sandbox_id: _Optional[str] = ..., guest_port: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
+    generation: int
+    def __init__(self, sandbox_id: _Optional[str] = ..., guest_port: _Optional[int] = ..., data: _Optional[bytes] = ..., generation: _Optional[int] = ...) -> None: ...
 
 class CloseConnectionsResponse(_message.Message):
     __slots__ = ("closed",)

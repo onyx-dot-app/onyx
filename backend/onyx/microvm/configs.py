@@ -33,6 +33,12 @@ SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS = float(
     os.environ.get("SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS", "45")
 )
 
+# Create retries (same attempt and key) when the guest daemon did not take
+# the key in time (GUEST_UNREACHABLE).
+SANDBOX_FC_CREATE_GUEST_RETRIES = max(
+    0, int(os.environ.get("SANDBOX_FC_CREATE_GUEST_RETRIES", "2"))
+)
+
 # Placement samples this many nodes per round and tries them by free memory.
 SANDBOX_FC_PLACEMENT_CANDIDATES = max(
     1, int(os.environ.get("SANDBOX_FC_PLACEMENT_CANDIDATES", "3"))

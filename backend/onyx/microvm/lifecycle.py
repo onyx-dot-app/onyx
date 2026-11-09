@@ -8,6 +8,9 @@
   again right before the Stop call.
 - Idle sleep: after `SANDBOX_FC_IDLE_TIMEOUT_SECONDS` without a heartbeat (P4),
   and only when nothing runs in the sandbox (P7).
+- Init: `initialize_sandbox_vm` closes the VM's relay connections and runs the
+  guest daemon Init with the VM's key. A daemon without the key makes the VM
+  unusable: it is stopped, and the caller wakes the next attempt.
 
 Until session saves (ENG-4580) and the daemon's execution report (ENG-4575)
 exist, the defaults (`NoCheckpointSupport`, `UnknownActivity`) keep every VM.
@@ -27,9 +30,15 @@ from onyx.microvm.agent_client import (
     HostAgentErrorReason,
 )
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
+from onyx.microvm.daemon_client import (
+    DaemonInitResult,
+    SandboxDaemonClient,
+    SandboxDaemonError,
+)
 from onyx.microvm.placement import (
     PlacedVm,
     VmRequest,
+    discard_unusable_vm,
     find_vm,
     forget_placement,
     place_sandbox_vm,
@@ -103,6 +112,71 @@ def wake_sandbox_vm(
     tool call that needs the sandbox. Errors: see `place_sandbox_vm`.
     """
     return place_sandbox_vm(shared_cache, tenant_cache, client_factory, request, rng)
+
+
+class SandboxVmUnusableError(Exception):
+    """The guest daemon has no key or another key. The VM is stopped; wake
+    the sandbox again with `attempt` (the next attempt)."""
+
+    def __init__(self, sandbox_id: UUID, attempt: int, reason: str) -> None:
+        super().__init__(f"sandbox {sandbox_id} VM is unusable ({reason})")
+        self.sandbox_id = sandbox_id
+        self.attempt = attempt
+        self.reason = reason
+
+
+def sandbox_daemon(
+    client_factory: HostAgentClientFactory, placed: PlacedVm
+) -> SandboxDaemonClient:
+    """The guest daemon of a placed VM, through its agent's pass-through."""
+    return SandboxDaemonClient(
+        client_factory.client(placed.node.address).channel,
+        sandbox_id=placed.vm.sandbox_id,
+        sandboxd_key=placed.sandboxd_key,
+    )
+
+
+def initialize_sandbox_vm(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: HostAgentClientFactory,
+    placed: PlacedVm,
+    *,
+    tenant_id: str,
+    env: dict[str, str],
+    session_ids: list[str],
+) -> DaemonInitResult:
+    """Run after every boot or restore: CloseConnections, then daemon Init.
+
+    Raises SandboxVmUnusableError (after stopping the VM) when the daemon has
+    no key or another key, SandboxDaemonError and HostAgentError otherwise.
+    """
+    vm = placed.vm
+    client_factory.client(placed.node.address).close_connections(
+        sandbox_id=vm.sandbox_id, attempt=vm.attempt, generation=vm.generation
+    )
+    try:
+        return sandbox_daemon(client_factory, placed).init(
+            generation=vm.generation,
+            scratch_gib=vm.scratch_gib,
+            env=env,
+            session_ids=session_ids,
+        )
+    except SandboxDaemonError as e:
+        if not e.vm_unusable:
+            raise
+        sandbox_id = UUID(vm.sandbox_id)
+        with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=True):
+            discard_unusable_vm(
+                shared_cache,
+                tenant_cache,
+                client_factory,
+                tenant_id=tenant_id,
+                node=placed.node,
+                vm=vm,
+                why=e.reason.value,
+            )
+        raise SandboxVmUnusableError(sandbox_id, vm.attempt + 1, e.reason.value) from e
 
 
 def refresh_sandbox_placement(

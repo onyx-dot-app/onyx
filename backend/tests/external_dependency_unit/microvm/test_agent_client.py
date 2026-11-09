@@ -19,6 +19,7 @@ from onyx.microvm.agent_client import (
     HostAgentErrorReason,
     MtlsHostAgentClientFactory,
     VmState,
+    new_sandboxd_key,
 )
 from tests.external_dependency_unit.microvm.fake_agent import (
     FakeHostAgent,
@@ -52,6 +53,7 @@ def test_calls_return_typed_results(running: RunningFakeAgent) -> None:
         mem_mib=2048,
         scratch_gib=4,
         tenant_id="public",
+        sandboxd_key=new_sandboxd_key(),
     )
     assert created.created
     assert created.vm.state is VmState.RUNNING
@@ -82,6 +84,7 @@ def test_error_info_reason_is_typed(running: RunningFakeAgent) -> None:
             mem_mib=2048,
             scratch_gib=4,
             tenant_id="public",
+            sandboxd_key=new_sandboxd_key(),
         )
     assert exc.value.reason is HostAgentErrorReason.CAPACITY_MEMORY
     assert exc.value.code is grpc.StatusCode.RESOURCE_EXHAUSTED

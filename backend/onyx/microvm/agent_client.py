@@ -1,11 +1,17 @@
 """Typed client for the Firecracker host agent API (`craft.hostagent.v1.HostAgent`).
 
 The agent API is `microvm/proto/hostagent/v1/hostagent.proto`; the stubs in
-`generated/` come from it. Every agent error carries one `google.rpc.ErrorInfo`
-with domain `hostagent.craft.onyx.app`; `HostAgentError.reason` is its reason.
+`generated/` come from it (`generated/regenerate.sh`). Every agent error carries
+one `google.rpc.ErrorInfo` with domain `hostagent.craft.onyx.app`;
+`HostAgentError.reason` is its reason, and some reasons have their own subclass.
+
+Guest daemon key: each Create sends a new random key (`new_sandboxd_key`) in
+`CreateRequest.sandboxd_key`. The agent installs it in the guest daemon before
+Create returns. Never log the key.
 """
 
 import abc
+import secrets
 import threading
 from datetime import datetime, timezone
 from enum import Enum
@@ -14,7 +20,7 @@ from types import TracebackType
 
 import grpc
 from google.rpc import error_details_pb2, status_pb2
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SecretStr
 
 from onyx.microvm.configs import (
     SANDBOX_FC_AGENT_CA_PATH,
@@ -28,6 +34,13 @@ from onyx.microvm.generated.hostagent.v1 import hostagent_pb2, hostagent_pb2_grp
 
 HOST_AGENT_ERROR_DOMAIN = "hostagent.craft.onyx.app"
 _STATUS_DETAILS_KEY = "grpc-status-details-bin"
+# The daemon accepts 32 to 512 printable ASCII bytes; hex of 32 random bytes.
+_SANDBOXD_KEY_BYTES = 32
+
+
+def new_sandboxd_key() -> SecretStr:
+    """A new random guest daemon key for one Create attempt."""
+    return SecretStr(secrets.token_hex(_SANDBOXD_KEY_BYTES))
 
 
 class HostAgentErrorReason(str, Enum):
@@ -52,6 +65,9 @@ class HostAgentErrorReason(str, Enum):
     PORT_NOT_ALLOWED = "PORT_NOT_ALLOWED"
     GUEST_UNREACHABLE = "GUEST_UNREACHABLE"
     VM_NOT_RUNNING = "VM_NOT_RUNNING"
+    DIAL_LIMIT = "DIAL_LIMIT"
+    METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
+    GUEST_KEY_REJECTED = "GUEST_KEY_REJECTED"
 
 
 class HostAgentError(Exception):
@@ -77,6 +93,42 @@ class HostAgentError(Exception):
     @property
     def reached_agent(self) -> bool:
         return self.reason is not None
+
+
+class GuestKeyRejectedError(HostAgentError):
+    """Create: the guest daemon refused the key. Stop the VM and create a new
+    attempt with a new key."""
+
+
+class GuestUnreachableError(HostAgentError):
+    """Nothing in the VM accepted the connection. On Create the VM runs:
+    retry the same attempt with the same key."""
+
+
+class VmNotRunningError(HostAgentError):
+    """The sandbox has a VM on the node, but it is not running."""
+
+
+class InstanceMismatchError(HostAgentError):
+    """The attempt or generation does not match the node's VM."""
+
+
+class DialLimitError(HostAgentError):
+    """The VM has the most open Dial streams that the agent allows."""
+
+
+class MethodNotAllowedError(HostAgentError):
+    """Only the agent may call this daemon method (SetKey)."""
+
+
+_REASON_ERRORS: dict[HostAgentErrorReason, type[HostAgentError]] = {
+    HostAgentErrorReason.GUEST_KEY_REJECTED: GuestKeyRejectedError,
+    HostAgentErrorReason.GUEST_UNREACHABLE: GuestUnreachableError,
+    HostAgentErrorReason.VM_NOT_RUNNING: VmNotRunningError,
+    HostAgentErrorReason.INSTANCE_MISMATCH: InstanceMismatchError,
+    HostAgentErrorReason.DIAL_LIMIT: DialLimitError,
+    HostAgentErrorReason.METHOD_NOT_ALLOWED: MethodNotAllowedError,
+}
 
 
 class VmState(str, Enum):
@@ -171,26 +223,42 @@ def _vm_from_proto(vm: hostagent_pb2.VM) -> AgentVm:
     )
 
 
-def _error_from_rpc(err: grpc.RpcError) -> HostAgentError:
-    # Every RpcError a channel raises is also a grpc.Call.
+def error_info(err: grpc.RpcError) -> error_details_pb2.ErrorInfo | None:
+    """The first google.rpc.ErrorInfo detail of a failed call."""
     if not isinstance(err, grpc.Call):
-        return HostAgentError(grpc.StatusCode.UNKNOWN, str(err), None)
-    code = err.code()
-    message = err.details() or ""
+        return None
     for key, value in err.trailing_metadata() or ():
         if key != _STATUS_DETAILS_KEY or not isinstance(value, bytes):
             continue
         status = status_pb2.Status.FromString(value)
         for detail in status.details:
             info = error_details_pb2.ErrorInfo()
-            if not detail.Unpack(info) or info.domain != HOST_AGENT_ERROR_DOMAIN:
-                continue
-            try:
-                reason: HostAgentErrorReason | None = HostAgentErrorReason(info.reason)
-            except ValueError:
-                reason = HostAgentErrorReason.INTERNAL
-            return HostAgentError(code, message, reason, dict(info.metadata))
-    return HostAgentError(code, message, None)
+            if detail.Unpack(info):
+                return info
+    return None
+
+
+def host_agent_error(
+    err: grpc.RpcError, info: error_details_pb2.ErrorInfo | None
+) -> HostAgentError:
+    """The typed error of a failed agent call (or pass-through call)."""
+    # Every RpcError a channel raises is also a grpc.Call.
+    if not isinstance(err, grpc.Call):
+        return HostAgentError(grpc.StatusCode.UNKNOWN, str(err), None)
+    code = err.code()
+    message = err.details() or ""
+    if info is None or info.domain != HOST_AGENT_ERROR_DOMAIN:
+        return HostAgentError(code, message, None)
+    try:
+        reason = HostAgentErrorReason(info.reason)
+    except ValueError:
+        reason = HostAgentErrorReason.INTERNAL
+    cls = _REASON_ERRORS.get(reason, HostAgentError)
+    return cls(code, message, reason, dict(info.metadata))
+
+
+def _error_from_rpc(err: grpc.RpcError) -> HostAgentError:
+    return host_agent_error(err, error_info(err))
 
 
 class HostAgentClient:
@@ -214,6 +282,11 @@ class HostAgentClient:
     def close(self) -> None:
         self._channel.close()
 
+    @property
+    def channel(self) -> grpc.Channel:
+        """The agent channel. The guest daemon pass-through shares it."""
+        return self._channel
+
     def create(
         self,
         *,
@@ -224,7 +297,15 @@ class HostAgentClient:
         mem_mib: int,
         scratch_gib: int,
         tenant_id: str,
+        sandboxd_key: SecretStr,
     ) -> CreateResult:
+        """Start (or return) the VM of (sandbox_id, attempt) and install
+        `sandboxd_key` in its guest daemon.
+
+        Raises GuestUnreachableError when the daemon did not take the key in
+        time (retry with the same attempt and key) and GuestKeyRejectedError
+        when it refused the key (stop the VM, create a new attempt).
+        """
         request = hostagent_pb2.CreateRequest(
             sandbox_id=sandbox_id,
             attempt=attempt,
@@ -233,6 +314,7 @@ class HostAgentClient:
             mem_mib=mem_mib,
             scratch_gib=scratch_gib,
             tenant_id=tenant_id,
+            sandboxd_key=sandboxd_key.get_secret_value(),
         )
         try:
             response: hostagent_pb2.CreateResponse = self._stub.Create(

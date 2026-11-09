@@ -10,15 +10,20 @@ placement in the tenant cache, both with TTLs their writers refresh.
   api_server knows how to reach every node that registered a live key.
 - Placement index: per node, the (tenant, sandbox) pairs placed on it, so the
   cluster-wide reconcile loop can find placement records in tenant caches.
+- Guest daemon key: per sandbox, the key of one attempt, encrypted with the
+  app encryption key. Placement writes it before Create and it lives as long
+  as the placement record. A lost key makes the VM unusable: placement then
+  replaces the VM with a new attempt.
 """
 
 import base64
 import json
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SecretStr
 
 from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLockAcquisitionError
+from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 
 NODE_SIGNING_KEY_TTL_SECONDS = 3600
 _KEY_PREFIX = "sandbox_fc:signing_key:"
@@ -28,6 +33,7 @@ _PLACEMENT_PREFIX = "sandbox_fc:placement:"
 _NODE_ADDRESS_PREFIX = "sandbox_fc:node_address:"
 _NODES_KEY = "sandbox_fc:nodes"
 _NODE_PLACEMENTS_PREFIX = "sandbox_fc:node_placements:"
+_DAEMON_KEY_PREFIX = "sandbox_fc:daemon_key:"
 _MAX_NODES = 10_000
 _MAX_NODE_PLACEMENTS = 100_000
 _LOCK_WAIT_SECONDS = 10.0
@@ -222,3 +228,43 @@ def list_indexed_placements(
             IndexedPlacement(tenant_id=tenant_id, sandbox_id=UUID(sandbox_id))
         )
     return placements
+
+
+def set_sandbox_daemon_key(
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    *,
+    attempt: int,
+    key: SecretStr,
+    ttl_seconds: int,
+) -> None:
+    """Store the guest daemon key of one attempt; it replaces any other."""
+    sealed = encrypt_string_to_bytes(key.get_secret_value())
+    tenant_cache.set(
+        _DAEMON_KEY_PREFIX + str(sandbox_id),
+        json.dumps({"attempt": attempt, "key": base64.b64encode(sealed).decode()}),
+        ex=ttl_seconds,
+    )
+
+
+def get_sandbox_daemon_key(
+    tenant_cache: CacheBackend, sandbox_id: UUID, *, attempt: int
+) -> SecretStr | None:
+    """The guest daemon key of this attempt, or None."""
+    raw = tenant_cache.get(_DAEMON_KEY_PREFIX + str(sandbox_id))
+    if raw is None:
+        return None
+    record = json.loads(raw)
+    if record["attempt"] != attempt:
+        return None
+    return SecretStr(decrypt_bytes_to_string(base64.b64decode(record["key"])))
+
+
+def refresh_sandbox_daemon_key(
+    tenant_cache: CacheBackend, sandbox_id: UUID, ttl_seconds: int
+) -> None:
+    tenant_cache.expire(_DAEMON_KEY_PREFIX + str(sandbox_id), ttl_seconds)
+
+
+def clear_sandbox_daemon_key(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
+    tenant_cache.delete(_DAEMON_KEY_PREFIX + str(sandbox_id))

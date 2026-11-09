@@ -1,4 +1,5 @@
-"""In-process fake of the Firecracker host agent gRPC server."""
+"""In-process fake of the Firecracker host agent gRPC server, with a fake guest
+daemon behind its pass-through."""
 
 import threading
 from concurrent import futures
@@ -12,7 +13,14 @@ from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentErrorReason,
 )
+from onyx.microvm.daemon_client import (
+    SANDBOX_ID_HEADER,
+    SANDBOXD_ERROR_DOMAIN,
+    SANDBOXD_KEY_HEADER,
+    SandboxDaemonErrorReason,
+)
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2, hostagent_pb2_grpc
+from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
 
 _REASON_CODES: dict[HostAgentErrorReason, grpc.StatusCode] = {
     HostAgentErrorReason.CAPACITY_MEMORY: grpc.StatusCode.RESOURCE_EXHAUSTED,
@@ -21,21 +29,47 @@ _REASON_CODES: dict[HostAgentErrorReason, grpc.StatusCode] = {
     HostAgentErrorReason.ATTEMPT_CONFLICT: grpc.StatusCode.ALREADY_EXISTS,
     HostAgentErrorReason.SANDBOX_NOT_FOUND: grpc.StatusCode.NOT_FOUND,
     HostAgentErrorReason.INSTANCE_MISMATCH: grpc.StatusCode.FAILED_PRECONDITION,
+    HostAgentErrorReason.GUEST_UNREACHABLE: grpc.StatusCode.UNAVAILABLE,
+    HostAgentErrorReason.METHOD_NOT_ALLOWED: grpc.StatusCode.PERMISSION_DENIED,
+    HostAgentErrorReason.DIAL_LIMIT: grpc.StatusCode.RESOURCE_EXHAUSTED,
 }
+
+
+def _abort(
+    context: grpc.ServicerContext,
+    code: grpc.StatusCode,
+    domain: str,
+    reason: str,
+    message: str,
+) -> None:
+    status = status_pb2.Status(code=code.value[0], message=message)
+    status.details.add().Pack(error_details_pb2.ErrorInfo(reason=reason, domain=domain))
+    context.set_trailing_metadata(
+        (("grpc-status-details-bin", status.SerializeToString()),)
+    )
+    context.abort(code, message)
 
 
 def abort_with_reason(
     context: grpc.ServicerContext, reason: HostAgentErrorReason, message: str
 ) -> None:
     code = _REASON_CODES.get(reason, grpc.StatusCode.FAILED_PRECONDITION)
-    status = status_pb2.Status(code=code.value[0], message=message)
-    status.details.add().Pack(
-        error_details_pb2.ErrorInfo(reason=reason.value, domain=HOST_AGENT_ERROR_DOMAIN)
+    _abort(context, code, HOST_AGENT_ERROR_DOMAIN, reason.value, message)
+
+
+def abort_daemon(
+    context: grpc.ServicerContext, reason: SandboxDaemonErrorReason, message: str
+) -> None:
+    code = (
+        grpc.StatusCode.UNAUTHENTICATED
+        if reason
+        in (
+            SandboxDaemonErrorReason.UNAUTHENTICATED,
+            SandboxDaemonErrorReason.KEY_NOT_SET,
+        )
+        else grpc.StatusCode.FAILED_PRECONDITION
     )
-    context.set_trailing_metadata(
-        (("grpc-status-details-bin", status.SerializeToString()),)
-    )
-    context.abort(code, message)
+    _abort(context, code, SANDBOXD_ERROR_DOMAIN, reason.value, message)
 
 
 class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
@@ -65,6 +99,13 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.next_generation = 1_000
         self.create_calls = 0
         self.stop_calls: list[tuple[str, int, int]] = []
+        # (sandbox_id, attempt, sandboxd_key) of every Create.
+        self.create_requests: list[tuple[str, int, str]] = []
+        # The key each guest daemon holds (its SetKey state).
+        self.daemon_keys: dict[str, str] = {}
+        # The next N key installs time out (GUEST_UNREACHABLE).
+        self.guest_unreachable_creates = 0
+        self.init_requests: list[tuple[sandboxd_pb2.InitRequest, str]] = []
 
     def add_vm(
         self,
@@ -73,8 +114,11 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         tenant_id: str,
         attempt: int,
         state: hostagent_pb2.VMState = hostagent_pb2.VM_STATE_RUNNING,
+        daemon_key: str | None = None,
     ) -> hostagent_pb2.VM:
         with self.lock:
+            if daemon_key is not None:
+                self.daemon_keys[sandbox_id] = daemon_key
             self.next_generation += 1
             vm = hostagent_pb2.VM(
                 sandbox_id=sandbox_id,
@@ -96,11 +140,15 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
     ) -> hostagent_pb2.CreateResponse:
         with self.lock:
             self.create_calls += 1
+            self.create_requests.append(
+                (request.sandbox_id, request.attempt, request.sandboxd_key)
+            )
             if self.refuse_create is not None:
                 abort_with_reason(context, self.refuse_create, "refused by the test")
             existing = self.vms.get(request.sandbox_id)
             if existing is not None and existing.state != hostagent_pb2.VM_STATE_EXITED:
                 if existing.attempt == request.attempt:
+                    self._install_key(context, request)
                     return hostagent_pb2.CreateResponse(vm=existing, created=False)
                 abort_with_reason(
                     context, HostAgentErrorReason.ATTEMPT_CONFLICT, "other attempt"
@@ -124,7 +172,27 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             )
             self.vms[request.sandbox_id] = vm
             self.mem_available_mib -= request.mem_mib
+            # A new VM boots a new daemon with no key.
+            self.daemon_keys.pop(request.sandbox_id, None)
+            self._install_key(context, request)
             return hostagent_pb2.CreateResponse(vm=vm, created=True)
+
+    def _install_key(
+        self, context: grpc.ServicerContext, request: hostagent_pb2.CreateRequest
+    ) -> None:
+        """The agent's SetKey over vsock: the first key stays."""
+        if not request.sandboxd_key:
+            return
+        if self.guest_unreachable_creates > 0:
+            self.guest_unreachable_creates -= 1
+            abort_with_reason(
+                context, HostAgentErrorReason.GUEST_UNREACHABLE, "daemon not ready"
+            )
+        held = self.daemon_keys.setdefault(request.sandbox_id, request.sandboxd_key)
+        if held != request.sandboxd_key:
+            abort_with_reason(
+                context, HostAgentErrorReason.GUEST_KEY_REJECTED, "KEY_ALREADY_SET"
+            )
 
     def Stop(  # noqa: N802
         self, request: hostagent_pb2.StopRequest, context: grpc.ServicerContext
@@ -144,6 +212,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                     context, HostAgentErrorReason.INSTANCE_MISMATCH, "other instance"
                 )
             del self.vms[request.sandbox_id]
+            self.daemon_keys.pop(request.sandbox_id, None)
             self.mem_available_mib += vm.mem_mib
             return hostagent_pb2.StopResponse(already_stopped=False)
 
@@ -181,6 +250,72 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         return hostagent_pb2.CloseConnectionsResponse(closed=3)
 
 
+class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
+    """The guest daemons behind the agent pass-through (x-sandbox-id routing)."""
+
+    def __init__(self, agent: FakeHostAgent) -> None:
+        self.agent = agent
+
+    def _route(self, context: grpc.ServicerContext) -> tuple[str, str | None]:
+        md = dict(context.invocation_metadata())
+        sandbox_id = md.get(SANDBOX_ID_HEADER)
+        if not isinstance(sandbox_id, str):
+            abort_with_reason(
+                context, HostAgentErrorReason.INVALID_ARGUMENT, "no x-sandbox-id"
+            )
+            raise AssertionError("unreachable")
+        vm = self.agent.vms.get(sandbox_id)
+        if vm is None or vm.state != hostagent_pb2.VM_STATE_RUNNING:
+            abort_with_reason(
+                context, HostAgentErrorReason.VM_NOT_RUNNING, "no running VM"
+            )
+        key = md.get(SANDBOXD_KEY_HEADER)
+        return sandbox_id, key if isinstance(key, str) else None
+
+    def _check_key(
+        self, context: grpc.ServicerContext, sandbox_id: str, key: str | None
+    ) -> None:
+        held = self.agent.daemon_keys.get(sandbox_id)
+        if held is None:
+            abort_daemon(context, SandboxDaemonErrorReason.KEY_NOT_SET, "no key")
+        if key != held:
+            abort_daemon(context, SandboxDaemonErrorReason.UNAUTHENTICATED, "bad key")
+
+    def Health(  # noqa: N802
+        self,
+        request: sandboxd_pb2.HealthRequest,  # noqa: ARG002
+        context: grpc.ServicerContext,
+    ) -> sandboxd_pb2.HealthResponse:
+        with self.agent.lock:
+            sandbox_id, _ = self._route(context)
+            return sandboxd_pb2.HealthResponse(
+                version="fake",
+                sandbox_id=sandbox_id,
+                key_set=sandbox_id in self.agent.daemon_keys,
+            )
+
+    def SetKey(  # noqa: N802
+        self,
+        request: sandboxd_pb2.SetKeyRequest,  # noqa: ARG002
+        context: grpc.ServicerContext,
+    ) -> sandboxd_pb2.SetKeyResponse:
+        abort_with_reason(
+            context, HostAgentErrorReason.METHOD_NOT_ALLOWED, "only the agent"
+        )
+        raise AssertionError("unreachable")
+
+    def Init(  # noqa: N802
+        self, request: sandboxd_pb2.InitRequest, context: grpc.ServicerContext
+    ) -> sandboxd_pb2.InitResponse:
+        with self.agent.lock:
+            sandbox_id, key = self._route(context)
+            self._check_key(context, sandbox_id, key)
+            self.agent.init_requests.append((request, sandbox_id))
+            return sandboxd_pb2.InitResponse(
+                version="fake", attached=True, relay_reset=True
+            )
+
+
 class RunningFakeAgent:
     def __init__(
         self,
@@ -190,6 +325,9 @@ class RunningFakeAgent:
         self.agent = agent
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
         hostagent_pb2_grpc.add_HostAgentServicer_to_server(agent, self.server)
+        sandboxd_pb2_grpc.add_SandboxdServicer_to_server(
+            FakeSandboxd(agent), self.server
+        )
         if server_credentials is None:
             port = self.server.add_insecure_port("127.0.0.1:0")
         else:

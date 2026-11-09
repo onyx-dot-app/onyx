@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from onyx.cache.interface import CacheBackend
 from onyx.db.enums import SandboxStatus
-from onyx.microvm.agent_client import AgentVm
+from onyx.microvm.agent_client import AgentVm, new_sandboxd_key
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
@@ -20,6 +20,7 @@ from onyx.microvm.registry import (
     SandboxPlacement,
     get_sandbox_placement,
     list_indexed_placements,
+    set_sandbox_daemon_key,
 )
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
@@ -111,6 +112,10 @@ def test_vm_without_record_is_adopted_when_the_row_matches(
     node = add_node(node_id)
     sandbox = make_db_sandbox(status=SandboxStatus.RUNNING, attempt=3)
     vm = node.agent.add_vm(sandbox_id=str(sandbox.id), tenant_id=TENANT_ID, attempt=3)
+    # Placement stores the attempt's key before Create.
+    set_sandbox_daemon_key(
+        tenant_cache, sandbox.id, attempt=3, key=new_sandboxd_key(), ttl_seconds=60
+    )
 
     report = _reconcile(shared_cache, client_factory)
 
@@ -244,3 +249,27 @@ def test_reconcile_sleeps_idle_quiet_vm_with_checkpoint(
     assert report.slept == [str(idle.id)]
     assert list(node.agent.vms) == [str(fresh.id)]
     assert get_sandbox_placement(tenant_cache, idle.id) is None
+
+
+def test_vm_without_its_daemon_key_is_not_adopted(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    make_db_sandbox: MakeSandbox,
+) -> None:
+    node = add_node(_node("nokey"))
+    sandbox = make_db_sandbox(status=SandboxStatus.RUNNING, attempt=2)
+    node.agent.add_vm(sandbox_id=str(sandbox.id), tenant_id=TENANT_ID, attempt=2)
+    # A key of another attempt does not count.
+    set_sandbox_daemon_key(
+        tenant_cache, sandbox.id, attempt=1, key=new_sandboxd_key(), ttl_seconds=60
+    )
+
+    report = _reconcile(shared_cache, client_factory)
+
+    assert report.adopted == []
+    assert report.orphans_marked == [str(sandbox.id)]
+    assert get_sandbox_placement(tenant_cache, sandbox.id) is None
+    # No checkpoint support: the orphan is only marked.
+    assert node.agent.stop_calls == []
