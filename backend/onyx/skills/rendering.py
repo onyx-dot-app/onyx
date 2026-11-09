@@ -54,6 +54,17 @@ _CLOUD_DESCRIPTION_RE = re.compile(
 )
 _DESCRIPTION_RE = re.compile(r"^description:[^\n]*\n", re.MULTILINE)
 
+# Claude Code replaces this in a skill's text with the skill's folder. OpenCode
+# does not, so bash expands it to an empty string.
+CLAUDE_SKILL_DIR_PLACEHOLDER = "${CLAUDE_SKILL_DIR}"
+# The two lines OpenCode's skill tool adds after the skill text
+# (packages/opencode/src/tool/skill.ts at the pinned OPENCODE_VERSION).
+SKILL_BASE_DIR_PREFIX = "Base directory for this skill: "
+SKILL_RELATIVE_PATH_RULE = (
+    "Relative paths in this skill (e.g., scripts/, reference/) are relative "
+    "to this base directory."
+)
+
 
 def build_available_sources_section(
     db_session: Session,
@@ -137,6 +148,28 @@ def build_action_availability_section(
         return ""
     header = "These actions are unavailable and should not be attempted:"
     return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
+
+
+def resolve_skill_dir_placeholder(skill_md: str, skill_dir: str) -> str:
+    """Replace each ``${CLAUDE_SKILL_DIR}`` with the skill's absolute folder."""
+    return skill_md.replace(CLAUDE_SKILL_DIR_PLACEHOLDER, skill_dir)
+
+
+def render_skill_for_model(skill_md: str, skill_dir: str) -> str:
+    """Return the skill text a harness gives the model when it loads a skill.
+
+    Follows Claude Code for ``${CLAUDE_SKILL_DIR}`` and OpenCode and Codex for
+    the base folder and the relative-path rule. The OpenCode sandbox adds the
+    two lines itself, so its push resolves only the placeholder.
+    """
+    return "\n".join(
+        [
+            resolve_skill_dir_placeholder(skill_md, skill_dir).strip(),
+            "",
+            f"{SKILL_BASE_DIR_PREFIX}{skill_dir}",
+            SKILL_RELATIVE_PATH_RULE,
+        ]
+    )
 
 
 def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
