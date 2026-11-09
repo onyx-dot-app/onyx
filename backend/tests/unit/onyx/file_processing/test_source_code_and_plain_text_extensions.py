@@ -130,6 +130,7 @@ def test_file_to_document_with_source_code_and_fallback() -> None:
         stage=None,
     )
     assert len(docs_java) == 1
+    assert docs_java[0].sections[0].text is not None
     assert "package com.example;" in docs_java[0].sections[0].text
 
     # Unrecognized extension with valid plain text content
@@ -144,6 +145,7 @@ def test_file_to_document_with_source_code_and_fallback() -> None:
         stage=None,
     )
     assert len(docs_unknown) == 1
+    assert docs_unknown[0].sections[0].text is not None
     assert "rule custom_rule" in docs_unknown[0].sections[0].text
 
     # Unrecognized extension with binary content should be rejected
