@@ -21,6 +21,7 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [SelectButton](./buttons/select-button/)                          | Stateful button: toggles, dropdown triggers (chevron) and filters         | [README](./buttons/select-button/README.md)                   |
 | [RowAction](./buttons/row-action/)                                | A row's value or action: button, dropdown trigger, link or static         | [README](./buttons/row-action/README.md)                      |
 | [Badge](./badge/)                                                 | Small colored label for status/category metadata                          | [README](./badge/README.md)                                   |
+| [BadgeButton](./badge-button/)                                    | A clickable Badge: a button or a filter toggle                            | [README](./badge-button/README.md)                            |
 | [Tag](./tag/)                                                     | Gray removable or clickable pill (tag fields, tag lists)                   | [README](./tag/README.md)                                   |
 | [InputDateRangePicker](./inputs/chrono/input-date-range-picker/)  | Preset date-range strip with a custom-range calendar popover              | [README](./inputs/chrono/input-date-range-picker/README.md)   |
 | [InputSingleUpload](./inputs/uploads/input-single-upload/)        | Upload control in the input chrome: pick, drop or paste                   | [README](./inputs/uploads/input-single-upload/README.md)      |

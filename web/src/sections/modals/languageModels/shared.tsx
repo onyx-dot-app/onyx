@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Formik, Form, getIn, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
-import { cn } from "@opal/utils";
+import { cn, countryCodeToFlag } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -42,8 +42,11 @@ import {
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
-import { getProvider, modelDisplayName } from "@/lib/languageModels/utils";
-import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { getProvider } from "@/lib/languageModels/utils";
+import {
+  useAdminLanguageModels,
+  useModelDisplayName,
+} from "@/lib/languageModels/hooks";
 import { useProviderNames } from "@/lib/languageModels/useProviderNames";
 import { useSWRConfig } from "swr";
 import {
@@ -59,9 +62,10 @@ import {
   SvgX,
 } from "@opal/icons";
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
-import { Card, EmptyMessageCard, Badge, Tooltip } from "@opal/components";
+import { Card, EmptyMessageCard, type BadgeProps } from "@opal/components";
+import { useModelTypeBadge } from "@/lib/badges/components";
 import { ContentAction } from "@opal/layouts";
-import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
+import type { ContentEditHandle } from "@opal/layouts";
 import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
@@ -331,13 +335,12 @@ export function ModelAccessField() {
 
             <Card color="background-tint-01" border="none" padding={2}>
               <ContentAction
+                font="main-ui-action"
                 icon={SvgUserManage}
                 title={t("access.admin.title")}
                 description={t("access.memberCount.label", {
                   count: adminCount,
                 })}
-                sizePreset="main-ui"
-                variant="section"
                 rightChildren={
                   <Text font="secondary-body" color="text-03">
                     {t("access.admin.sharedNote")}
@@ -359,13 +362,12 @@ export function ModelAccessField() {
                         padding={2}
                       >
                         <ContentAction
+                          font="main-ui-action"
                           icon={SvgUsers}
                           title={group?.name ?? t("access.group.name", { id })}
                           description={t("access.memberCount.label", {
                             count: memberCount,
                           })}
-                          sizePreset="main-ui"
-                          variant="section"
                           rightChildren={
                             <Button
                               size="sm"
@@ -398,6 +400,7 @@ export function ModelAccessField() {
                         padding={2}
                       >
                         <ContentAction
+                          font="main-ui-action"
                           icon={
                             agent
                               ? () => <AgentAvatar agent={agent} size={20} />
@@ -405,8 +408,6 @@ export function ModelAccessField() {
                           }
                           title={agent?.name ?? t("access.agent.name", { id })}
                           description={t("access.agentOption.description")}
-                          sizePreset="main-ui"
-                          variant="section"
                           rightChildren={
                             <Button
                               size="sm"
@@ -426,11 +427,10 @@ export function ModelAccessField() {
             ) : (
               <div className="w-full p-2">
                 <Content
+                  font="main-ui-action"
                   icon={SvgOnyxOctagon}
                   title={t("access.noAgents.title")}
                   description={t("access.noAgents.description")}
-                  variant="section"
-                  sizePreset="main-ui"
                 />
               </div>
             )}
@@ -505,21 +505,6 @@ function formatContextSize(tokens: number | null | undefined): string {
   return String(tokens);
 }
 
-// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
-// whose regional-indicator sequence actually has a flag glyph.
-const COUNTRY_CODE_ALIASES: Record<string, string> = {
-  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
-};
-
-function countryCodeToFlag(code: string | null | undefined): string {
-  if (!code || code.length !== 2) return "";
-  const upper = code.toUpperCase();
-  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
-  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
-  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
-  return String.fromCodePoint(first, second);
-}
-
 /** Models that ship extra picker metadata (e.g. Nebius TokenFactory). Most
  *  providers do not, and the row description then has no metadata. */
 function hasModelMetadata(model: ModelConfiguration): boolean {
@@ -530,9 +515,6 @@ function hasModelMetadata(model: ModelConfiguration): boolean {
   );
 }
 
-/** Row description. Several ids can share one title, so the model id comes
- *  first when the title is not the id. Metadata such as
- *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
 /** Selected models first. Providers that ship rich metadata (Nebius
  *  TokenFactory) sort by id so refetches keep the order. */
 function inherentOrder(models: ModelConfiguration[]): string[] {
@@ -565,8 +547,15 @@ function foldedLayout(models: ModelConfiguration[]): ModelListLayout {
   };
 }
 
-function buildModelDescription(model: ModelConfiguration): string | undefined {
-  const id = modelDisplayName(model) === model.name ? undefined : model.name;
+/** Row description. Several ids can share one title, so the model id comes
+ *  first when the title is not the id. Metadata such as
+ *  "128K · 🇫🇮 · fp8 · tools, reasoning" follows when the model has any. */
+
+function buildModelDescription(
+  model: ModelConfiguration,
+  displayName: string
+): string | undefined {
+  const id = displayName === model.name ? undefined : model.name;
   if (!hasModelMetadata(model)) return id;
   const parts: string[] = id ? [id] : [];
   const context = formatContextSize(model.max_input_tokens);
@@ -580,24 +569,11 @@ function buildModelDescription(model: ModelConfiguration): string | undefined {
   return parts.length > 0 ? parts.join("  ·  ") : undefined;
 }
 
-/** Eye marker for vision models, shown on the right of the picker row. */
-function modelRightChildren(
-  model: ModelConfiguration,
-  visionTitle: string
-): React.ReactNode {
-  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
-  return (
-    <Text font="secondary-body" color="text-03" title={visionTitle}>
-      👁
-    </Text>
-  );
-}
-
 interface ModelRowProps {
   model: ModelConfiguration;
   isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
-  onRename: (value: string | undefined) => void;
+  onRename: (value: string | null) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
   onSetDefaultModel?: () => void;
 }
@@ -623,11 +599,29 @@ function ModelRow({
   onSetDefaultModel,
 }: ModelRowProps) {
   const t = useTranslations("admin.languageModels.modals");
-  const editHandle = useRef<ContentMdEditHandle>(null);
+  const editHandle = useRef<ContentEditHandle>(null);
   // Keeps the hover-revealed actions visible while the settings popover,
   // which is portaled outside the row, is open.
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const displayName = modelDisplayName(model);
+  const displayName = useModelDisplayName()(model);
+  const description = buildModelDescription(model, displayName);
+  const decisionBadge = useModelTypeBadge("decision");
+  const visionBadge = useModelTypeBadge("vision");
+  const modelTypeBadges: BadgeProps[] = [
+    ...(model.supports_decisions
+      ? [
+          {
+            ...decisionBadge,
+            tooltip: t(
+              model.supports_chat === false
+                ? "models.row.decisionTag.decisionOnly"
+                : "models.row.decisionTag.chatAndDecision"
+            ),
+          },
+        ]
+      : []),
+    ...(model.supports_image_input ? [visionBadge] : []),
+  ];
   const isSelected = model.is_visible;
   const toggleVisibility = () => onToggleVisibility(!model.is_visible);
   // A click that blurs and commits an inline rename reaches the row after the
@@ -657,7 +651,7 @@ function ModelRow({
         onPointerDownCapture={(e: React.PointerEvent) => {
           // Scoped to the title row: the checkbox also owns a hidden input.
           renamingAtPointerDown.current =
-            e.currentTarget.querySelector(".opal-content-md-title-row input") !=
+            e.currentTarget.querySelector(".opal-content-title-row input") !=
             null;
         }}
         onClick={toggleFromRow}
@@ -675,15 +669,15 @@ function ModelRow({
         }}
       >
         <Interactive.Container width="full" size="fit" rounding={3}>
-          <div className="w-full p-1.5">
+          <OpalSection alignItems="stretch" height="auto" padding={1.5}>
             <ContentAction
+              font="main-ui-action"
               color="interactive"
-              variant="section"
-              sizePreset="main-ui"
               center
               icon={() => <InputCheckbox checked={isSelected} />}
               title={displayName}
-              description={buildModelDescription(model)}
+              description={description}
+              badge={modelTypeBadges}
               rightChildren={
                 <OpalSection
                   flexDirection="row"
@@ -691,25 +685,6 @@ function ModelRow({
                   height="auto"
                   gap={1}
                 >
-                  {model.supports_decisions && (
-                    <Tooltip
-                      tooltip={t(
-                        model.supports_chat === false
-                          ? "models.row.decisionTag.decisionOnly"
-                          : "models.row.decisionTag.chatAndDecision"
-                      )}
-                      side="top"
-                    >
-                      <Badge
-                        color="default"
-                        title={t("models.row.decisionTag.label")}
-                      />
-                    </Tooltip>
-                  )}
-                  {modelRightChildren(
-                    model,
-                    t("models.row.visionMarker.title")
-                  )}
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
                     <OpalSection
                       flexDirection="row"
@@ -749,11 +724,12 @@ function ModelRow({
                     </OpalSection>
                   </Hoverable.Item>
                   {isDefaultModel && (
-                    <span className="px-1.5 py-1 text-action-selection-05">
+                    <span className="px-1.5">
                       <Text
+                        as="p"
                         font="secondary-action"
                         wordWrap="whitespace-nowrap"
-                        color="inherit"
+                        color="action-selection-05"
                       >
                         {t("models.row.defaultLabel")}
                       </Text>
@@ -763,10 +739,10 @@ function ModelRow({
               }
               editable
               editHandle={editHandle}
-              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              onTitleChange={(newTitle) => onRename(newTitle || null)}
               padding={0}
             />
-          </div>
+          </OpalSection>
         </Interactive.Container>
       </Interactive.Stateful>
     </Hoverable.Root>
@@ -791,6 +767,7 @@ export function ModelSelectionField({
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { mutate } = useSWRConfig();
   const { defaultText } = useAdminLanguageModels();
+  const resolveDisplayName = useModelDisplayName();
   const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -866,12 +843,14 @@ export function ModelSelectionField({
     await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
-  function setCustomDisplayName(modelName: string, value: string | undefined) {
-    const updated = models.map((m) =>
-      m.name === modelName
-        ? { ...m, custom_display_name: value || undefined }
-        : m
-    );
+  // A cleared name is null, as the API sends it, so clearing a new name is
+  // not a change.
+  function setCustomDisplayName(modelName: string, value: string | null) {
+    const updated = models.map((m) => {
+      if (m.name !== modelName) return m;
+      const renamed = { ...m, custom_display_name: value || null };
+      return { ...renamed, effectiveDisplayName: resolveDisplayName(renamed) };
+    });
     formikProps.setFieldValue("model_configurations", updated);
   }
 
@@ -967,8 +946,7 @@ export function ModelSelectionField({
                     >
                       <Interactive.Container type="button" width="full">
                         <Content
-                          sizePreset="secondary"
-                          variant="body"
+                          font="secondary-body"
                           title={
                             isExpanded
                               ? t("models.foldButton.label")

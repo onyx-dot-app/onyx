@@ -48,6 +48,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 
 if TYPE_CHECKING:
     from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
+    from ee.onyx.external_permissions.models import SyncEntityFailure  # noqa
     from onyx.access.models import DocExternalAccess, ElementExternalAccess  # noqa
     from onyx.context.search.models import InferenceChunk  # noqa
     from onyx.db.models import ConnectorCredentialPair  # noqa
@@ -89,7 +90,7 @@ def _lazy_checkpointed_doc_sync(
 def _lazy_group_sync(load: Callable[[], GroupSyncFuncType]) -> GroupSyncFuncType:
     def run(
         tenant_id: str, cc_pair: "ConnectorCredentialPair"
-    ) -> Generator["ExternalUserGroup", None, None]:
+    ) -> Generator["ExternalUserGroup | SyncEntityFailure", None, None]:
         return load()(tenant_id, cc_pair)
 
     return run

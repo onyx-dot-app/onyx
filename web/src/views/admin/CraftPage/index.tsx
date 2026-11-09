@@ -95,8 +95,7 @@ export default function CraftPage() {
         weight: 44,
         cell: (email, row) => (
           <Content
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             title={row.personal_name ?? email}
             description={row.personal_name ? email : undefined}
           />
@@ -216,8 +215,7 @@ export default function CraftPage() {
 
         <Section alignItems="stretch" gap={3}>
           <Content
-            sizePreset="main-content"
-            variant="section"
+            font="main-content-emphasis"
             title={t("perUserAccess.title")}
             description={t("perUserAccess.description")}
           />

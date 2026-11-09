@@ -1,0 +1,14 @@
+@reference "#reference.css";
+
+/* ReverseContent: the title, then the icon, 0.25rem apart. items-start keeps
+   the icon on a wrapped title's first line. */
+.opal-reverse-content {
+  @apply flex flex-row items-start w-fit;
+  gap: 0.25rem;
+}
+
+/* `secondary-*` and `figure-*` titles put the icon flush against the text,
+   as in `Content`. */
+.opal-reverse-content[data-flush] {
+  gap: 0;
+}

@@ -37,6 +37,17 @@ class FileReaderArguments(BaseModel):
     start_char: int = 0
     num_chars: int = FILE_READER_MAX_CHARS
 
+    @model_validator(mode="before")
+    @classmethod
+    def null_uses_defaults(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        return {
+            key: item
+            for key, item in value.items()
+            if item is not None or key not in {"start_char", "num_chars"}
+        }
+
 
 class FileReadResult(BaseModel):
     type: Literal["file_read_result"] = "file_read_result"

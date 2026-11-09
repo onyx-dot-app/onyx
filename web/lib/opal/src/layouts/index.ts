@@ -1,10 +1,20 @@
 /* Content */
 export {
   Content,
+  ContentIndent,
   type ContentProps,
-  type SizePreset,
-  type ContentVariant,
+  type ContentIndentProps,
+  type ContentOrientation,
+  type ContentBadge,
+  type ContentBadges,
+  type ContentEditHandle,
 } from "@opal/layouts/content/components";
+
+/* ReverseContent */
+export {
+  ReverseContent,
+  type ReverseContentProps,
+} from "@opal/layouts/reverse-content/components";
 
 /* ContentAction */
 export {

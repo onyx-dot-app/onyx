@@ -100,13 +100,24 @@ local disk inside one docprocessing task, so a large batch is never in memory.
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
 decides which documents to re-chunk. Gate 1 skips a document whose
 `doc_updated_at` did not advance. Gate 2 skips one whose `content_hash()` is
-unchanged. An ACL change bypasses both. Docprocessing turns gate 1 off, because
-the connector already filtered by time. A FUTURE attempt turns gate 2 off.
+unchanged. An ACL change bypasses both, and so does a reported source type or
+size that differs from the stored one. That type and size, like the content
+hash, reach an existing row only after the index write, so a failed write is
+retried on the next sync. Docprocessing turns gate 1 off, because
+the connector already filtered by time. A FUTURE attempt turns gate 2 off. A
+NULL hash never matches: a reindex swap nulls the hash of what FUTURE may lack
+so the next poll re-indexes it ([[document-index#swap-clears-what-future-missed]]);
+a document a FUTURE attempt failed on needs Retry, and a load-only connector a
+manual run, since no poll fetches those.
 `force_update` turns both off, for the per-document retry and the tabular
 re-chunk migration. A document written without `doc_updated_at` takes the
 stored one, so a write that an ACL change or a FUTURE attempt forces keeps the
-date in the chunks. `post_index` does not write that copied date back to the
-row, where it could overwrite a newer date another run stored meanwhile.
+date in the chunks. After the write, the hash is stamped only if the settings
+the batch wrote into are still PRESENT at commit, read under a share lock
+(`indexing/indexing_pipeline.py:_written_settings_are_present`), so a batch
+that lands after a swap wrote into a retired index and leaves the row alone.
+`post_index` does not write the copied date back to the row, where it could
+overwrite a newer date another run stored meanwhile.
 
 **The write.** The enricher bakes access, document sets, boost, cc-pair IDs and
 hierarchy ancestors into each chunk. A later permission change reaches the index
@@ -200,7 +211,9 @@ the error type on purpose in auth code.
 1. `one-index-per-batch` **A batch writes to one index only:** the index of its
    attempt's own `SearchSettings`. During a REINDEX or ACTIVE_ONLY reindex,
    `background/celery/tasks/docprocessing/tasks.py:check_for_indexing` creates
-   attempts for both generations; an INSTANT reindex creates none for FUTURE.
+   attempts for both generations, except a full run or backfill on PRESENT,
+   which waits until after the swap (`_kickoff_indexing_tasks`,
+   `_try_creating_pending_backfill`); an INSTANT reindex creates none for FUTURE.
    Do not make docprocessing write both: the port fills FUTURE, and a second
    writer would race its create-only copy.
 2. `document-written-whole` **A document's chunks go to `DocumentIndex.index()`
@@ -249,9 +262,18 @@ the error type on purpose in auth code.
    ID, and the content hash cannot see that.
    `connectors/models.py:DocumentBase.content_hash` walks text and image
    sections only, so a changed spreadsheet looks unchanged to gate 2.
-9. `future-ignores-content-hash` **A FUTURE write must not read or stamp the
-   content hash.** The hash column is shared and belongs to PRESENT. If FUTURE
-   uses it, the two generations suppress each other's writes during a reindex.
+9. `future-ignores-content-hash` **A FUTURE write must not read the content
+   hash, and a write stamps it only if its settings are PRESENT at commit.**
+   The hash column describes what PRESENT holds. `get_docs_to_update` turns
+   gate 2 off for `index_to_secondary`; `index_doc_batch` stamps under
+   `_written_settings_are_present`, a share lock on the written settings row,
+   so a FUTURE write stamps nothing unless the swap promoted its index
+   meanwhile, and a PRESENT batch that lands after a swap stamps nothing
+   either. `run_indexing_pipeline` takes `written_search_settings_id` from its
+   caller: pass the id resolved when the batch started, never a fresh lookup,
+   because a batch can straddle a swap. Multipass and contextual-RAG settings
+   come from that row too, so a batch chunks for the index it writes. A
+   targeted re-index never stamps (`stamp_content_hash=False`).
 10. `targeted-reindex-outside-fence` **The attempt fence excludes targeted
    reindex on purpose.**
    `db/indexing_coordination.py:IndexingCoordination.try_create_index_attempt`
@@ -259,7 +281,10 @@ the error type on purpose in auth code.
    crawl run at the same time. The per-document row lock in
    `backend/onyx/db/document.py:prepare_to_modify_documents` keeps their writes
    apart. The heartbeat check skips these attempts too; the targeted-reindex
-   job owns their lifecycle.
+   job owns their lifecycle. Each pair's attempt ends FAILED when every target
+   of the pair failed again and SUCCESS otherwise. Each document that failed
+   again gets a new error row on the attempt, and its first error stays open.
+   A document that lands closes every open error it has on the pair.
 11. `chunk-text-second-copy` **The chunk text recipe has a second copy.**
     `indexing/port_reembed.py` rebuilds the embedding input from stored chunks
     for the reindex port. A change to title prefix, metadata suffix or
@@ -326,11 +351,6 @@ the error type on purpose in auth code.
 
 ## Known issues
 
-- **A PRESENT attempt can chunk with FUTURE settings.**
-  `run_indexing_pipeline` takes multipass and contextual-RAG settings from the
-  FUTURE `SearchSettings` whenever one exists, but `docprocessing_task` embeds
-  with the attempt's own. It is unconfirmed as a bug; check before you rely on
-  either behaviour.
 - **Index-time LLM steps skip the provider cost limit.** Contextual RAG
   (`llm/factory.py:get_llm_for_contextual_rag`) and image summarization
   (`llm/factory.py:get_default_llm_with_vision`) do not call
@@ -375,7 +395,9 @@ the error type on purpose in auth code.
   text, change `indexing/port_reembed.py` too ([[#chunk-text-second-copy]]).
 - `pipeline-caller` **A new caller of `run_indexing_pipeline`.** Copy
   `background/indexing/run_targeted_reindex.py`. Pass the right gate flags
-  ([[#dedup-gate-order]], [[#future-ignores-content-hash]]) and an adapter. Pass
+  ([[#dedup-gate-order]], [[#future-ignores-content-hash]]), an adapter, and
+  `written_search_settings_id`: the id of the settings the document index was
+  built from, resolved when the batch started. Pass
   `skip_spreadsheet_content` only for connector content. List the callers with
   `git grep -l 'run_indexing_pipeline(' backend/onyx backend/ee`.
 - `tabular-chunking-change` **A change to tabular chunking.** Change the profile

@@ -88,7 +88,7 @@ function PlanCard({
         {/* Title */}
         <Section flexDirection="column" alignItems="start" gap={1} width="full">
           <Icon size={24} />
-          <Text font="heading-h3" color="text-04">
+          <Text font="heading-section" color="text-04">
             {title}
           </Text>
         </Section>
@@ -102,7 +102,7 @@ function PlanCard({
           height="auto"
         >
           {pricing && (
-            <Text font="heading-h2" color="text-04">
+            <Text font="heading-headline" color="text-04">
               {pricing}
             </Text>
           )}

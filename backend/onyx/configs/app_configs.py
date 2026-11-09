@@ -1768,10 +1768,6 @@ LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
 
-PROMPT_CACHE_CHAT_HISTORY = (
-    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
-)
-
 # Opt-in cap on outgoing image-count for Azure providers (any model_provider
 # starting with "azure"). When enabled, requests are capped at 50 images each
 # (matching the documented Azure OpenAI ceiling) to avoid raw 400s from the
@@ -1964,6 +1960,12 @@ MCP_SERVER_CORS_ORIGINS = [
     for origin in os.environ.get("MCP_SERVER_CORS_ORIGINS", "").split(",")
     if origin.strip()
 ]
+
+# Run every MCP document search in retrieval-only mode (no LLM calls), whatever
+# the client asks for.
+MCP_SERVER_SEARCH_RETRIEVAL_ONLY = (
+    os.environ.get("MCP_SERVER_SEARCH_RETRIEVAL_ONLY", "").lower() == "true"
+)
 
 
 POD_NAME = os.environ.get("POD_NAME")

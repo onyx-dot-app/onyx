@@ -294,19 +294,17 @@ export default function HookFormModal({
                 <Modal.Body>
                   {/* Hook point section header */}
                   <ContentAction
-                    sizePreset="main-ui"
-                    variant="section"
+                    font="main-ui-action"
                     padding={0}
                     title={hookPointDisplayName}
                     description={pointDescription}
                     rightChildren={
                       <div className="flex flex-col items-end gap-1">
                         <Content
-                          sizePreset="secondary"
-                          variant="body"
+                          font="secondary-body"
                           icon={SvgShareWebhook}
                           title={t("form.hookPoint.label")}
-                          color="muted"
+                          titleColor="text-03"
                           width="fit"
                         />
                         {docsUrl && (

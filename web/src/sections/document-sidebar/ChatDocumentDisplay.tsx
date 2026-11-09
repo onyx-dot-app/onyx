@@ -1,4 +1,4 @@
-import { Text, OverflowText } from "@opal/components";
+import { Text } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/types";
 import { SvgTag } from "@opal/icons";
@@ -92,7 +92,8 @@ export default function ChatDocumentDisplay({
         ) : (
           <SourceIcon sourceType={document.source_type} iconSize={18} />
         )}
-        <OverflowText
+        <Text
+          overflowTooltip
           as="p"
           textPosition="text-start"
           font="main-ui-body"
@@ -101,7 +102,7 @@ export default function ChatDocumentDisplay({
           wordWrap="break-all"
         >
           {title}
-        </OverflowText>
+        </Text>
       </div>
 
       {hasMetadata && (

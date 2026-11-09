@@ -11,7 +11,6 @@ import {
 import { cn } from "@opal/utils";
 import {
   Badge,
-  OverflowText,
   Text,
   Tooltip as OpalTooltip,
   type TextFont,
@@ -210,7 +209,7 @@ interface QueryTextProps {
  * - Clicking expands to full width
  *
  * **Expanded mode**:
- * - Text displays at full width using `OverflowText`
+ * - Text displays at full width, clamped with an overflow tooltip
  * - Provides its own overflow handling with tooltip
  *
  * @param props.expanded - Whether text is in expanded (full-width) mode
@@ -238,9 +237,9 @@ const QueryText = ({
           colorClass
         )}
       >
-        <OverflowText as="p" font={font} color="inherit">
+        <Text maxLines={1} overflowTooltip as="p" font={font} color="inherit">
           {displayName}
-        </OverflowText>
+        </Text>
       </div>
     );
   }
@@ -291,7 +290,7 @@ export interface SourceTagProps {
   /** Additional CSS classes */
   className?: string;
 
-  /** When true, removes icon background and wraps displayName with OverflowText */
+  /** When true, removes icon background and clamps displayName with an overflow tooltip */
   isQuery?: boolean;
 
   /** When true, hides icon, removes background, shows bg-background-tint-02 on hover */

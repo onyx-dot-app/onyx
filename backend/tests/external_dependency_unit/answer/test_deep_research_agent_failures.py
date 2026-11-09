@@ -18,6 +18,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolChoiceOptions,
     ToolResultMessage,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
@@ -106,7 +107,10 @@ class DeepResearchScriptLLM(FakeModelClient):
                 if not cancelled.wait(10):
                     raise AssertionError("Research deadline did not cancel the child")
             signal.check()
-        if GENERATE_REPORT_TOOL_NAME in recorded.tool_names:
+        if (
+            GENERATE_REPORT_TOOL_NAME in recorded.tool_names
+            and request.options.tool_choice != ToolChoiceOptions.NONE
+        ):
             return AssistantMessage(
                 content=[
                     ToolCall(

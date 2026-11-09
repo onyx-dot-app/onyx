@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "검색 소스 선택"
+      },
+      "preference": {
+        "tooltip": "{description}\n이 채팅에서 이 도구를 우선 사용합니다. 에이전트가 도구 없이 답변할 수도 있습니다."
       }
     },
     "addMcpModal": {
@@ -186,7 +189,6 @@
           "description": "관리하는 그룹을 하나 이상 선택하세요."
         },
         "retainedUsers": "{count, plural, other {사용자 #명과도 직접 공유됩니다.}}",
-        "planTag": "Business",
         "planNote": "그룹 액세스에는 Business 요금제가 필요합니다."
       },
       "defaultChat": {
@@ -2649,7 +2651,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "삭제"
+          "label": "커넥터 삭제",
+          "description": "인덱싱된 모든 문서를 영구적으로 제거합니다."
         },
         "reIndex": {
           "tooltip": {
@@ -2688,7 +2691,7 @@
         },
         "syncPermissions": {
           "label": "권한 동기화",
-          "description": "각 문서를 읽을 수 있는 사용자를 지금 소스에서 가져옵니다.",
+          "description": "소스에서 문서 권한을 가져옵니다.",
           "tooltip": {
             "syncing": "권한 동기화가 이미 대기 중이거나 실행 중입니다"
           }
@@ -2815,20 +2818,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "분당 {speed}개 문서",
-        "indexingSpeedTooltip": "커넥터 생성 이후 분당 인덱싱된 문서 수",
         "lastIndexed": {
           "value": "마지막 인덱싱 {when}"
         },
+        "deletionStarted": {
+          "value": "시작 {when}"
+        },
         "documents": {
           "totalLabel": "전체 인덱싱 완료 문서",
-          "recentLabel": "최근 처리된 문서",
-          "syncedPermissionsLabel": "동기화된 권한",
-          "syncedMembershipsLabel": "동기화된 그룹 멤버십"
+          "recentLabel": "최근에 처리된 문서",
+          "indexedLabel": "인덱싱된 문서"
         },
         "throughput": {
           "ariaLabel": "시간별 인덱싱된 문서",
           "tooltip": "{count, plural, one {문서 #개} other {문서 #개}}",
+          "lineTooltip": "{failures, plural, one {실패 #건} other {실패 #건}}, {errors, plural, one {오류 #건} other {오류 #건}}",
+          "barLabel": "{count, plural, one {문서 #개} other {문서 #개}}, {range}",
           "loadError": "차트를 불러올 수 없습니다.",
           "rangeFilter": "차트의 이 구간에 생성된 실행"
         },
@@ -2844,13 +2849,33 @@
         "title": "인덱싱 상태",
         "sync": {
           "permissionsTitle": "권한 동기화 상태",
-          "groupsTitle": "그룹 멤버십 동기화 상태",
           "last": "마지막 동기화 {when}",
           "never": "아직 동기화되지 않음",
-          "neverTooltip": "인덱싱된 문서는 권한이 동기화될 때까지 검색되지 않을 수 있습니다.",
-          "waitingForFirstIndex": "첫 인덱싱 대기 중"
+          "neverTooltip": "인덱싱된 문서는 권한이 동기화될 때까지 검색되지 않습니다.",
+          "waitingForFirstIndex": "첫 인덱싱 대기 중",
+          "docsLabel": "권한이 동기화된 문서",
+          "groupsLabel": "그룹 멤버십"
         },
-        "accessTitle": "커넥터 문서 액세스"
+        "actions": {
+          "showActivities": "활동 표시",
+          "hideActivities": "활동 숨기기",
+          "viewDetails": "세부 정보 보기",
+          "hideDetails": "세부 정보 숨기기",
+          "viewIndexingRun": "인덱싱 실행 보기",
+          "viewPruningRun": "정리 실행 보기",
+          "viewChecksRun": "검사 실행 보기"
+        },
+        "types": {
+          "count": "{count, plural, other {문서 유형}}",
+          "header": "문서 유형",
+          "indexed": "인덱싱됨",
+          "size": "크기",
+          "other": "기타",
+          "countWithSize": "{count} ({size})",
+          "bytes": "바이트",
+          "loadError": "문서 유형을 불러오지 못했습니다.",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "전체 재인덱싱을 시작했습니다",
@@ -2980,6 +3005,7 @@
           "all": "모든 유형",
           "indexing": "문서 인덱스",
           "backfill": "문서 백필",
+          "retry": "문서 인덱스 - 재시도",
           "doc_permission_sync": "권한 동기화",
           "group_sync": "그룹 멤버십 동기화",
           "pruning": "문서 정리",
@@ -2987,9 +3013,10 @@
         },
         "detail": {
           "queued": "대기 중",
+          "starting": "동기화 시작 중",
           "running": "실행 중",
           "rate": "분당 {rate}개 문서",
-          "finished": "{time} ({duration})",
+          "runtime": "실행 시간 {duration}",
           "rateFinished": "분당 {rate}개 문서 ({duration})",
           "membershipRate": "{rate} 멤버십/분",
           "membershipRateFinished": "{rate} 멤버십/분 ({duration})"
@@ -2998,6 +3025,7 @@
           "stages": "단계별 지표 보기",
           "cancel": "취소",
           "logs": "로그 보기",
+          "noLogs": "기록된 로그 없음",
           "checks": "검사 결과 보기"
         },
         "warnings": {
@@ -3032,16 +3060,12 @@
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}",
           "syncedDocs": "{count, plural, other {문서 #개 동기화됨}}"
         },
-        "search": {
-          "placeholder": "실행 오류 검색…"
-        },
         "window": {
           "label": "기간",
           "all": "전체 기간",
           "h1": "최근 1시간",
           "h24": "최근 24시간",
-          "d7": "최근 7일",
-          "d30": "최근 30일"
+          "d7": "최근 7일"
         },
         "statusGroups": {
           "label": "상태",
@@ -3052,14 +3076,13 @@
           "canceled": "취소됨"
         },
         "loadError": {
-          "title": "실행 목록을 불러오지 못했습니다."
+          "title": "실행 목록을 불러오지 못했습니다.",
+          "retry": "다시 시도"
         },
         "empty": {
           "title": "최근 인덱싱 실행이 없습니다",
           "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
           "pastRuns": "{count, plural, other {지난 실행 #개}}",
-          "view": "보기",
-          "viewAria": "{count, plural, other {지난 실행 #개 보기}}",
           "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
         },
         "units": "{count, plural, other {실행}}",
@@ -3094,15 +3117,24 @@
           "all": "전체 수준",
           "failures": "실패",
           "errors": "오류",
-          "other": "기타",
+          "running": "실행 중",
+          "success": "성공",
+          "canceled": "취소됨",
           "resolved": "해결됨",
-          "toggle": "필터"
+          "connectors": "커넥터",
+          "connectorsLoading": "커넥터 불러오는 중…",
+          "connectorsLoadError": "커넥터를 불러올 수 없습니다.",
+          "connectorsRetry": "다시 시도",
+          "toggleShow": "필터 표시",
+          "toggleHide": "필터 숨기기"
         },
         "groups": {
           "failures": "{count, plural, =0 {실패} other {실패 #개}}",
           "errors": "{count, plural, =0 {오류} other {오류 #개}}",
-          "other": "기타",
-          "resolved": "{count, plural, other {해결됨 #개}}"
+          "running": "실행 중 {count, number}개",
+          "resolved": "해결됨",
+          "success": "성공",
+          "canceled": "취소됨"
         },
         "title": {
           "indexing": {
@@ -3113,9 +3145,8 @@
             "errors": "오류와 함께 인덱싱 완료.",
             "resolved": "인덱싱 오류 해결됨.",
             "succeeded": "인덱싱이 성공적으로 완료됨.",
-            "queued": "인덱싱 대기 중.",
             "inProgress": "인덱싱 진행 중.",
-            "canceled": "인덱싱 중지됨."
+            "canceled": "인덱싱 취소됨."
           },
           "doc_permission_sync": {
             "failed": "권한 동기화 실패.",
@@ -3125,9 +3156,8 @@
             "errors": "오류와 함께 권한 동기화됨.",
             "resolved": "권한 동기화 오류 해결됨.",
             "succeeded": "권한 동기화가 성공적으로 완료됨.",
-            "queued": "권한 동기화 대기 중.",
             "inProgress": "권한 동기화 중.",
-            "canceled": "권한 동기화 중지됨."
+            "canceled": "권한 동기화 취소됨."
           },
           "group_sync": {
             "failed": "그룹 멤버십 동기화 실패.",
@@ -3137,9 +3167,8 @@
             "errors": "오류와 함께 그룹 멤버십 동기화됨.",
             "resolved": "그룹 멤버십 동기화 오류 해결됨.",
             "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨.",
-            "queued": "그룹 멤버십 동기화 대기 중.",
             "inProgress": "그룹 멤버십 동기화 중.",
-            "canceled": "그룹 동기화 중지됨."
+            "canceled": "그룹 동기화 취소됨."
           },
           "pruning": {
             "failed": "정리 실패.",
@@ -3149,9 +3178,8 @@
             "errors": "오류와 함께 정리 완료됨.",
             "resolved": "정리 오류 해결됨.",
             "succeeded": "정리가 성공적으로 완료됨.",
-            "queued": "정리 대기 중.",
             "inProgress": "정리 진행 중.",
-            "canceled": "정리 중지됨."
+            "canceled": "정리 취소됨."
           },
           "checks": {
             "failed": "커넥터 검사 실패.",
@@ -3161,9 +3189,8 @@
             "errors": "오류와 함께 커넥터 검사 완료됨.",
             "resolved": "커넥터 검사 오류 해결됨.",
             "succeeded": "커넥터 검사 통과.",
-            "queued": "커넥터 검사 대기 중.",
             "inProgress": "커넥터 검사 진행 중.",
-            "canceled": "커넥터 검사 중지됨."
+            "canceled": "커넥터 검사 취소됨."
           }
         },
         "description": {
@@ -3178,22 +3205,18 @@
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
           "indexingItems": "{count, plural, other {항목 #개 실패}}",
-          "doc_permission_sync": "{count, plural, other {문서 #개의 권한 동기화 실패}}",
-          "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
           "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
           "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
+          "users": "{count, plural, one {사용자 #명 동기화 실패} other {사용자 #명 동기화 실패}}",
+          "groups": "{count, plural, one {그룹 #개 동기화 실패} other {그룹 #개 동기화 실패}}",
           "resolved": "해결됨",
-          "resolvedDocs": "{count, plural, other {항목 #개 해결됨}}",
           "superseded": "대체됨"
         },
         "more": "더 보기",
         "empty": {
           "title": "최근 활동이 없습니다",
-          "resolved": "해결된 실행이 없습니다",
-          "filtered": "이 검색과 일치하는 항목이 없습니다.",
-          "failures": "실패가 없습니다",
-          "errors": "오류가 없습니다",
-          "other": "다른 실행이 없습니다"
+          "past": "이전 활동",
+          "filtered": "이 검색과 일치하는 항목이 없습니다."
         },
         "loadError": {
           "title": "활동을 불러올 수 없습니다."
@@ -3201,19 +3224,32 @@
         "docs": {
           "title": "실패한 항목",
           "search": {
-            "placeholder": "항목 검색…"
+            "placeholder": "문서 검색…"
           },
-          "resolveAll": "모두 다시 시도",
-          "resolveAllTooltip": "이 실행에서 실패한 모든 문서를 다시 색인",
-          "resolveAllUnsupported": "이 커넥터는 개별 문서를 다시 색인할 수 없습니다. 다시 시도하려면 커넥터를 다시 색인하세요.",
-          "resolveOne": "이 문서 다시 시도",
-          "retry": "{count, plural, other {문서 #개 다시 시도}}",
+          "resolveAll": "모든 문서 재시도",
+          "resolveOne": "문서 재시도",
+          "resolveWithoutRetry": "재시도 없이 해결",
           "more": "더 보기",
           "less": "접기",
           "unknownDocument": "알 수 없는 문서",
-          "empty": "미해결 오류가 없습니다",
+          "empty": "실패한 문서가 없습니다",
           "loadError": "실패한 항목을 불러올 수 없습니다.",
-          "open": "문서 열기"
+          "open": "문서 열기",
+          "resolvedGroup": "해결된 오류",
+          "resolvedWithoutRetry": "재시도 없이 해결됨",
+          "resolvedByLaterRun": "이후 실행에서 해결됨"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "실패한 사용자",
+            "search": "사용자 검색…",
+            "empty": "실패한 사용자가 없습니다"
+          },
+          "groups": {
+            "title": "실패한 그룹",
+            "search": "그룹 검색…",
+            "empty": "실패한 그룹이 없습니다"
+          }
         },
         "trace": {
           "header": "스택 트레이스 • 실행 ID: {id}",
@@ -3221,17 +3257,18 @@
           "runId": "실행 ID: {id}"
         },
         "actions": {
-          "resolve": "해결"
+          "resolve": "해결",
+          "resolveWithoutRetry": "재시도 없이 해결",
+          "retryDocs": "문서 재시도"
         },
         "resolveAll": {
-          "button": "표시된 항목 모두 해결",
-          "title": "표시된 실행을 모두 해결할까요?",
-          "description": "현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
-          "fleetDescription": "관리 권한이 있는 커넥터에서 현재 필터와 일치하는 {count, plural, other {실행 #개}}를 해결됨으로 표시합니다. 상태는 그대로 유지되며 해결됨 아래로 이동합니다.",
+          "button": "모두 해결",
+          "title": "표시된 활동 모두 해결",
+          "body": "{count, plural, other {현재 필터와 일치하는 활동 #개({failures}, {errors})를 해결합니다. Onyx는 실패한 항목을 재시도하지 않습니다. 활동은 상태를 유지한 채 해결됨으로 이동합니다.}}",
+          "body2": "아직 실행 중인 실행은 새 오류를 보고할 수 있으며, 이 오류는 다시 열린 상태로 표시됩니다. 해결된 문서는 나중에 실패한 문서 목록에서 재시도할 수 있습니다.",
+          "failures": "{count, plural, =0 {실패 없음} other {실패 #개}}",
+          "errors": "{count, plural, =0 {오류가 있는 실행 없음} other {오류가 있는 실행 #개}}",
           "confirm": "모두 해결"
-        },
-        "resolved": {
-          "label": "해결됨"
         }
       },
       "stageDetails": {
@@ -3243,10 +3280,22 @@
         "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
+        "noDocs": "인덱싱을 완료한 문서가 없습니다",
+        "laterCanceled": "이후 단계가 취소됨",
+        "retry": "다시 시도",
         "uneven": {
           "tooltip": "이 단계의 배치 시간 편차가 큽니다"
         },
         "close": "단계 세부 정보 닫기"
+      },
+      "tabs": {
+        "configurations": "커넥터 구성",
+        "indexing": "인덱싱",
+        "indexingDisabled": "첫 실행이 시작되면 사용할 수 있습니다."
+      },
+      "indexingTab": {
+        "chartHeading": "문서 인덱싱",
+        "runsHeading": "인덱싱 실행"
       }
     },
     "connectorTitle": {
@@ -6258,13 +6307,6 @@
           "title": "그룹 권한"
         }
       },
-      "permissionsChanged": {
-        "description": "이제 {appName}는 그룹 기반 권한을 사용합니다. 접근 권한은 그룹별로 설정하므로, 사용자의 권한은 그 사용자가 속한 모든 그룹의 권한을 합친 것입니다.",
-        "learnMore": {
-          "label": "자세히 알아보기"
-        },
-        "title": "권한이 변경되었습니다."
-      },
       "sharedResources": {
         "agent": {
           "description": "에이전트"
@@ -6616,9 +6658,6 @@
       },
       "connectedModels": {
         "title": "연결된 모델"
-      },
-      "defaultTag": {
-        "label": "기본값"
       },
       "deselectError": {
         "message": "선택 해제에 실패했습니다"
@@ -7082,7 +7121,6 @@
           "tag": "GPU 권장"
         },
         "legacy": {
-          "tag": "레거시",
           "tooltip": "이 모델은 새 인덱스에 선택할 수 없습니다. 모델을 변경하기 전까지는 계속 작동합니다."
         },
         "selectButton": {
@@ -7135,9 +7173,6 @@
       "multipass": {
         "description": "문서를 다양한 크기의 청크로 인덱싱하여 관련 소스를 더 정확하게 찾습니다.",
         "disabledTooltip": "멀티패스 인덱싱은 일시적으로 사용할 수 없으며 추후 제공될 예정입니다.",
-        "tag": {
-          "label": "일시적으로 사용 불가"
-        },
         "title": "멀티패스 인덱싱"
       },
       "openaiCompatible": {
@@ -7418,37 +7453,26 @@
       }
     },
     "indexing": {
+      "addConnector": "커넥터 추가",
       "connectorCreated": {
         "toast": "커넥터를 생성했습니다"
       },
       "overview": {
-        "connectors": {
-          "caption": "인덱싱 중 / 활성",
-          "label": "커넥터"
-        },
-        "documents": {
-          "caption": "인덱스에 있음",
-          "label": "문서",
-          "tooltip": "각 커넥터의 문서 수를 더하므로 두 커넥터에 있는 문서는 두 번 계산됩니다."
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "개요를 불러올 수 없습니다.",
-        "processed": {
-          "caption": "기간 내 처리됨",
-          "label": "문서",
-          "tooltip": "추정치입니다. 각 실행의 수는 실행 시간 전체에 고르게 나누어집니다. 문서는 실행이 처리할 때마다 계산되며 실패한 문서도 포함되므로 인덱스에 있는 문서 수보다 많을 수 있습니다."
-        }
+        "activeConnectors": "활성 커넥터",
+        "pausedConnectors": "일시 중지된 커넥터",
+        "indexingConnectors": "인덱싱 중인 커넥터",
+        "loadError": "개요를 불러올 수 없습니다."
       },
       "activities": {
         "title": "활동",
-        "history": "전체 활동 기록",
-        "viewLogs": "로그 보기",
         "panel": {
-          "title": "활동 기록",
+          "title": "활동",
           "close": "패널 닫기",
           "pairTitle": "{name} 활동 기록"
+        },
+        "panelButton": {
+          "show": "활동 표시",
+          "hide": "활동 숨기기"
         }
       },
       "list": {
@@ -7457,21 +7481,22 @@
         },
         "statusFilter": {
           "label": "상태",
-          "all": "모든 상태"
+          "all": "모든 상태",
+          "running": "진행 중"
         },
         "counts": {
           "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",
-          "indexing": "{count, plural, other {커넥터 #개 인덱싱 중}}",
+          "running": "{indexing, plural, other {인덱싱 중 #개}}, {syncing, plural, other {동기화 중 #개}}",
           "failed": "{count, plural, other {커넥터 #개 실패}}",
           "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}",
           "scheduled": "{count, plural, other {커넥터 #개 예약됨}}",
           "deleting": "{count, plural, other {커넥터 #개 삭제 중}}"
         },
         "access": {
-          "public": "조직",
-          "private": "비공개",
-          "sync": "자동 동기화",
-          "sync_restricted": "자동 동기화(제한됨)"
+          "public": "조직 전체에 공개",
+          "private": "{count, plural, =0 {비공개} other {그룹 #개와 공유됨}}",
+          "sync": "권한 자동 동기화",
+          "sync_restricted": "권한 자동 동기화"
         },
         "detail": {
           "queued": "대기열 {position, selectordinal, other {#}}번째",
@@ -7480,7 +7505,7 @@
         },
         "docs": {
           "label": "문서",
-          "processed": "{count, number}개 처리됨",
+          "processed": "최근 {count, number}개 처리됨",
           "processedTooltip": {
             "running": "현재 실행이 지금까지 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되므로 커넥터의 문서 수보다 많을 수 있습니다.",
             "finished": "마지막 실행이 처리한 문서 수이며 실패한 문서도 포함됩니다. 실행이 두 번 처리한 문서는 두 번 계산되고 그 후 삭제된 문서는 커넥터 수에서 빠지므로 커넥터의 문서 수보다 많을 수 있습니다."
@@ -7491,6 +7516,8 @@
           "manageFederated": "페더레이션 커넥터 관리",
           "expand": "세부 정보 보기",
           "collapse": "세부 정보 숨기기",
+          "viewErrors": "오류 보기",
+          "viewAllRuns": "모든 실행 보기",
           "pause": "일시 중지",
           "resume": "재개"
         },
@@ -7503,7 +7530,8 @@
           "filteredTitle": "이 필터와 일치하는 커넥터가 없습니다."
         },
         "loadError": "커넥터를 불러올 수 없습니다.",
-        "units": "{count, plural, other {개 커넥터}}"
+        "units": "{count, plural, other {개 커넥터}}",
+        "sourceGroup": "{source} ({count, number})"
       },
       "title": "커넥터 인덱싱 상태"
     },
@@ -7809,7 +7837,6 @@
           "row": {
             "defaultLabel": "기본 모델",
             "decisionTag": {
-              "label": "판단",
               "decisionOnly": "판단 모델입니다. 채팅 모델 선택기에는 표시되지 않습니다.",
               "chatAndDecision": "채팅과 판단 작업을 모두 지원합니다."
             },
@@ -7818,9 +7845,6 @@
             },
             "setDefaultButton": {
               "label": "기본으로 설정"
-            },
-            "visionMarker": {
-              "title": "비전"
             }
           },
           "selectAllButton": {
@@ -8016,9 +8040,6 @@
         "title": "채팅을 시작하려면 LLM 제공자를 설정하세요."
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "기본"
-        },
         "deleteButton": {
           "ariaLabel": "{provider} 삭제"
         },
@@ -10218,13 +10239,6 @@
           "label": "사용자 초대"
         },
         "title": "사용자 및 요청"
-      },
-      "permissionsNotice": {
-        "description": "{appName}는 이제 그룹 기반 권한을 사용합니다. Curator와 Global Curator 역할은 구성 가능한 그룹 권한으로 대체되었으며, 그룹별 관리자가 제한된 범위에서 관리합니다.",
-        "learnMoreButton": {
-          "label": "자세히 알아보기"
-        },
-        "title": "권한이 변경되었습니다"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -14273,10 +14287,7 @@
       "upgrade": {
         "label": "플랜 업그레이드"
       },
-      "availableFor": "{plan}에서 사용 가능",
-      "beta": {
-        "title": "베타"
-      }
+      "availableFor": "{plan}에서 사용 가능"
     },
     "placeholders": {
       "email": "ireum@hoesa.com",
@@ -14325,6 +14336,23 @@
     "gridSearch": {
       "itemPlaceholder": "{item} 검색 또는 \"/\"를 눌러 포커스...",
       "placeholder": "검색하거나 \"/\"를 눌러 포커스..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "알파",
+        "beta": "베타",
+        "comingSoon": "출시 예정",
+        "deprecated": "지원 중단",
+        "temporarilyUnavailable": "일시적으로 사용 불가",
+        "legacy": "레거시"
+      },
+      "labels": {
+        "default": "기본"
+      },
+      "modelTypes": {
+        "decision": "판단",
+        "vision": "비전"
+      }
     }
   },
   "craft": {
@@ -14861,9 +14889,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "홈으로 돌아가기"
       },

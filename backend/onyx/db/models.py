@@ -98,6 +98,7 @@ from onyx.db.enums import (
     HookFailStrategy,
     HookPoint,
     IncognitoRecordMode,
+    IndexAttemptErrorResolvedReason,
     IndexingMode,
     IndexingStatus,
     IndexModelStatus,
@@ -126,6 +127,8 @@ from onyx.db.enums import (
     SkillSharePermission,
     SSOProviderType,
     SwitchoverType,
+    SyncAttemptErrorResolvedReason,
+    SyncEntityKind,
     SyncStatus,
     SyncType,
     SystemUsageAttribution,
@@ -1302,6 +1305,10 @@ class Document(Base):
     # First Section's link
     link: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
     file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # As the source reports them. Null for sources that report neither and for
+    # documents not re-indexed since the source started reporting them.
+    source_mime_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     # The updated time is also used as a measure of the last successful state of the doc
     # pulled from the source (to help skip reindexing already updated docs in case of
@@ -2833,6 +2840,7 @@ class IndexAttempt(Base):
         "IndexAttemptError",
         back_populates="index_attempt",
         cascade="all, delete-orphan",
+        foreign_keys="IndexAttemptError.index_attempt_id",
     )
 
     stage_metrics: Mapped[list["IndexAttemptStageMetric"]] = relationship(
@@ -3174,6 +3182,24 @@ class IndexAttemptError(Base):
 
     failure_message: Mapped[str] = mapped_column(Text)
     is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Null while open and on rows older than the column.
+    resolved_reason: Mapped[IndexAttemptErrorResolvedReason | None] = mapped_column(
+        Enum(
+            IndexAttemptErrorResolvedReason,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    # The run that closed the error, null when an admin resolved it. SET NULL,
+    # since the error belongs to its own attempt and outlives the closing one.
+    resolved_by_index_attempt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("index_attempt.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     error_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -3183,15 +3209,26 @@ class IndexAttemptError(Base):
     )
 
     # This is the reverse side of the relationship
-    index_attempt = relationship("IndexAttempt", back_populates="error_rows")
+    index_attempt = relationship(
+        "IndexAttempt",
+        back_populates="error_rows",
+        foreign_keys=[index_attempt_id],
+    )
 
-    # Each docprocessing batch resolves its documents' open errors.
     __table_args__ = (
+        # Each docprocessing batch resolves its documents' open errors.
         Index(
             "ix_index_attempt_errors_unresolved_cc_pair_document",
             "connector_credential_pair_id",
             "document_id",
             postgresql_where=text("NOT is_resolved"),
+        ),
+        # Backs the SET NULL when an attempt is deleted. Partial, since open and
+        # admin-resolved rows hold null.
+        Index(
+            "ix_index_attempt_errors_resolved_by_index_attempt_id",
+            "resolved_by_index_attempt_id",
+            postgresql_where=text("resolved_by_index_attempt_id IS NOT NULL"),
         ),
     )
 
@@ -6762,6 +6799,62 @@ class ExternalGroupPermissionSyncAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+
+class SyncAttemptError(Base):
+    """A user or group that a group sync skipped whole because the source
+    could not read it."""
+
+    __tablename__ = "sync_attempt_error"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_group_sync_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("external_group_permission_sync_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Copied from the attempt so a pair's errors read from one index.
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    entity_kind: Mapped[SyncEntityKind] = mapped_column(
+        Enum(
+            SyncEntityKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    entity_id: Mapped[str] = mapped_column(String, nullable=False)
+    entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_message: Mapped[str] = mapped_column(Text, nullable=False)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    is_resolved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    resolved_reason: Mapped[SyncAttemptErrorResolvedReason | None] = mapped_column(
+        Enum(
+            SyncAttemptErrorResolvedReason,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_sync_attempt_error_cc_pair_attempt",
+            "connector_credential_pair_id",
+            "external_group_sync_attempt_id",
+        ),
+        # The feed, its counts and run resolve read by attempt alone.
+        Index("ix_sync_attempt_error_attempt", "external_group_sync_attempt_id"),
+    )
 
 
 class License(Base):

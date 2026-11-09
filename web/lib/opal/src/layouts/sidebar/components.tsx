@@ -13,9 +13,9 @@ import {
 } from "react";
 import { usePathname } from "@opal/navigation/next";
 import {
+  Text,
   Button,
   Divider,
-  OverflowText,
   ShadowDiv,
   Spacer,
   Badge,
@@ -426,9 +426,14 @@ function SidebarSection({
               {/* One line: a title too long for the row is cut, and shows
                   in full in a tooltip. */}
               <div className="opal-sidebar-section__title">
-                <OverflowText font="secondary-body" color="text-02">
+                <Text
+                  maxLines={1}
+                  overflowTooltip
+                  font="secondary-body"
+                  color="text-02"
+                >
                   {title}
-                </OverflowText>
+                </Text>
               </div>
               {tag && (
                 <div className="opal-sidebar-section__tag">

@@ -10,13 +10,13 @@ A card header layout with a main content slot and a full-width `bottomChildren` 
 
 ### Why Card.Header?
 
-`Card.Header` is layout-only — it provides `children` for the main content area plus `bottomChildren` for a secondary slot. For the typical icon/title/description + right-action pattern, pass a `<ContentAction />` into `children` with `rightChildren` for the action button.
+`Card.Header` is layout-only — it provides `children` for the main content area plus `bottomChildren` for a secondary slot. For the typical icon/title/description + right-action pattern, pass a `<ContentAction font="main-ui-action" />` into `children` with `rightChildren` for the action button.
 
 ### Props
 
 | Prop             | Type        | Default     | Description                                                                  |
 | ---------------- | ----------- | ----------- | ---------------------------------------------------------------------------- |
-| `children`       | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction />` block. |
+| `children`       | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction font="heading-headline" orientation="stacked" />` block. |
 | `bottomChildren` | `ReactNode` | `undefined` | Content rendered below the entire header, spanning the full width.           |
 
 ### Layout Structure
@@ -44,12 +44,10 @@ import { Button } from "@opal/components";
 import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
 
 <Card.Header>
-  <ContentAction
+  <ContentAction font="main-ui-action"
     icon={SvgGlobe}
     title="Google Search"
     description="Web search provider"
-    sizePreset="main-ui"
-    variant="section"
     padding={0}
     rightChildren={
       <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
@@ -64,12 +62,10 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
 
 ```tsx
 <Card.Header>
-  <ContentAction
+  <ContentAction font="main-ui-action"
     icon={SvgCloud}
     title="OpenAI"
     description="Not configured"
-    sizePreset="main-ui"
-    variant="section"
     padding={0}
     rightChildren={
       <Button rightIcon={SvgArrowExchange} prominence="tertiary">
@@ -84,12 +80,10 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
 
 ```tsx
 <Card.Header bottomChildren={<SearchBar placeholder="Search tools..." />}>
-  <ContentAction
+  <ContentAction font="main-ui-action"
     icon={SvgServer}
     title="MCP Server"
     description="12 tools available"
-    sizePreset="main-ui"
-    variant="section"
     padding={0}
     rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
   />
@@ -100,12 +94,10 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
 
 ```tsx
 <Card.Header>
-  <ContentAction
+  <ContentAction font="main-content-emphasis"
     icon={SvgInfo}
     title="Section Header"
     description="Description text"
-    sizePreset="main-content"
-    variant="section"
     padding={0}
   />
 </Card.Header>

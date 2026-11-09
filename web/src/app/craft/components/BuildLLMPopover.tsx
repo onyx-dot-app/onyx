@@ -52,10 +52,6 @@ interface ModelOption {
   isRecommended: boolean;
 }
 
-function modelDisplayName(model: ModelConfiguration): string {
-  return model.effectiveDisplayName || model.display_name || model.name;
-}
-
 // Keyed by provider id, unlike the main app's `groupLlmOptions`, so two
 // providers sharing a display name stay distinct.
 function craftGroupKey(
@@ -122,7 +118,7 @@ export function BuildLLMPopover({
               ? providerDisplayName
               : `${providerDisplayName}/${vendor}`,
           modelName: model.name,
-          displayName: modelDisplayName(model),
+          displayName: model.effectiveDisplayName,
           isRecommended: isCraftRecommendedModel(model),
         });
       });
@@ -264,8 +260,7 @@ export function BuildLLMPopover({
         ref={isSelected ? selectedItemRef : undefined}
       >
         <LineItemButton
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           state={isSelected ? "selected" : "empty"}
           description={description}
           icon={rowIcon !== groupIcon ? rowIcon : undefined}

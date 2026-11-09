@@ -389,11 +389,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     return (
       <Section gap={6} height="auto" alignItems="stretch">
         <Section gap={3} height="auto" alignItems="stretch">
-          <Content
-            title={t("share.accessTitle")}
-            sizePreset="main-ui"
-            variant="section"
-          />
+          <Content font="main-ui-action" title={t("share.accessTitle")} />
           <Card border="solid" padding={2}>
             <Section
               flexDirection="row"
@@ -444,10 +440,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         {isAdmin && (
           <Section gap={3} height="auto" alignItems="stretch">
             <Content
+              font="main-ui-action"
               title={t("share.installation.title")}
               description={t("share.installation.description")}
-              sizePreset="main-ui"
-              variant="section"
             />
             <Section
               role="group"
@@ -533,13 +528,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         {(!effectiveState.isPublic || showIndividualAccess) && (
           <Section gap={3} height="auto" alignItems="stretch">
             <Content
+              font="main-ui-action"
               title={t(
                 effectiveState.isPublic
                   ? "share.individualAccessTitle"
                   : "share.peopleTitle"
               )}
-              sizePreset="main-ui"
-              variant="section"
             />
             {canEditShares ? (
               <AddPeoplePicker
@@ -639,11 +633,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           </Section>
         )}
         <Section gap={3} height="auto" alignItems="stretch">
-          <Content
-            title={t("share.ownershipTitle")}
-            sizePreset="main-ui"
-            variant="section"
-          />
+          <Content font="main-ui-action" title={t("share.ownershipTitle")} />
           <Card border="solid" padding={2}>
             {skill.owner ? (
               <ShareAccessRow
@@ -702,7 +692,6 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         height={props.mode === "edit" && view !== "transfer" ? "lg" : "fit"}
         width={view === "transfer" ? "sm" : "lg"}
         maxHeight="80dvh"
-        position="top"
       >
         <Modal.Header
           icon={view === "transfer" ? SvgArrowExchange : SvgBlocks}

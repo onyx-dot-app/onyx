@@ -502,8 +502,10 @@ class OpenURLTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     URLS_FIELD: {
                         "type": "array",

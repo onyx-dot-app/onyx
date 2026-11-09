@@ -538,8 +538,7 @@ export default function LimitCard({
       <Section gap={0} alignItems="start" padding={2} height="auto">
         <Section gap={0} alignItems="start" height="auto" className="max-w-120">
           <Content
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={icon}
             title={title}
             description={description}

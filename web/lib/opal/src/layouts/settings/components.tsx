@@ -87,6 +87,8 @@ interface SettingsRootProps extends WithoutStyles<
    * `loading`. @default false
    */
   error?: SettingsPageError;
+  /** Below 816 px of page width, the header and body keep 8 px side gutters in place of 16. @default false */
+  narrowGutters?: boolean;
 }
 
 /**
@@ -99,6 +101,7 @@ function SettingsRoot({
   animateEnter = true,
   loading = false,
   error = false,
+  narrowGutters = false,
   ...props
 }: SettingsRootProps) {
   // The header reports its title here, so the body's error state can name
@@ -108,11 +111,18 @@ function SettingsRoot({
     <SettingsPageContext.Provider
       value={{ animateEnter, loading, error, pageTitle, setPageTitle }}
     >
+      {/* Both gutters stay reserved, so the centered page does not shift when content grows a scrollbar. */}
       <div
         id="page-wrapper-scroll-container"
-        className="w-full h-full flex flex-col items-center overflow-y-auto"
+        className="w-full h-full flex flex-col items-center overflow-y-auto [scrollbar-gutter:stable_both-edges]"
       >
-        <div className={cn("h-full", widthClasses[width])}>
+        <div
+          className={cn(
+            "h-full",
+            widthClasses[width],
+            narrowGutters && "@container/settings-page"
+          )}
+        >
           <div {...props} />
         </div>
       </div>
@@ -131,8 +141,6 @@ export interface SettingsHeaderProps {
   moreIcon2?: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
-  /** Badge inline after the description, e.g. a status. */
-  descriptionTag?: BadgeProps;
   /** The title can be edited in place, as `Content` does it. */
   editable?: boolean;
   /** When the editable title shows its pencil: on hover, or at rest too. Default: `"hover"`. */
@@ -168,7 +176,6 @@ function SettingsHeader({
   moreIcon2,
   title,
   description,
-  descriptionTag,
   editable,
   editButton,
   onTitleChange,
@@ -266,7 +273,7 @@ function SettingsHeader({
     >
       <Spacer rem={3.25} />
 
-      <div className="flex flex-col gap-6 px-4">
+      <div className="flex flex-col gap-6 px-4 @max-[51rem]/settings-page:px-2">
         <div
           className={cn(
             "flex w-full items-start justify-between gap-4",
@@ -275,17 +282,16 @@ function SettingsHeader({
         >
           <div aria-label="admin-page-title">
             <Content
+              font="heading-headline"
+              orientation="stacked"
               icon={Icon}
               moreIcon1={moreIcon1}
               moreIcon2={moreIcon2}
               title={title}
               description={description}
-              descriptionTag={descriptionTag}
               editable={editable}
               editButton={editButton}
               onTitleChange={onTitleChange}
-              sizePreset="headline"
-              variant="heading"
             />
           </div>
           {hasActions && (
@@ -360,7 +366,7 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
   );
   const body = (
     <div
-      className="pt-6 pb-18 px-4 flex flex-col w-full"
+      className="pt-6 pb-18 px-4 @max-[51rem]/settings-page:px-2 flex flex-col w-full"
       style={{ gap: spacingToRem(gap) }}
       {...props}
     >

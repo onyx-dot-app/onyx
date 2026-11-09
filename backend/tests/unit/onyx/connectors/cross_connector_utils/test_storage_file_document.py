@@ -179,3 +179,69 @@ def test_onyx_metadata_overrides_the_storage_fields() -> None:
         BasicExpertInfo(display_name="bob@example.com")
     ]
     assert document.metadata == {"team": "search"}
+
+
+def test_text_file_reports_its_mime_type_and_size() -> None:
+    document = _build("notes.txt", b"  hello storage  ")
+
+    assert document is not None
+    assert document.source_mime_type == "text/plain"
+    assert document.source_size_bytes == 17
+
+
+def test_image_file_reports_its_mime_type_and_size() -> None:
+    image_section = ImageSection(image_file_id="s3_bucket_dir_image", link=LINK)
+    with patch(
+        f"{MODULE}.store_image_and_create_section",
+        return_value=(image_section, None),
+    ):
+        document = _build("square.png", b"png-bytes")
+
+    assert document is not None
+    assert document.source_mime_type == "image/png"
+    assert document.source_size_bytes == 9
+
+
+def test_tabular_file_reports_its_mime_type_and_size() -> None:
+    document = _build("table.csv", b"name,value\nalpha,1\n", raw_file_callback=_stage)
+
+    assert document is not None
+    assert document.source_mime_type == "text/csv"
+    assert document.source_size_bytes == 19
+
+
+def test_unknown_extension_reports_size_without_a_mime_type() -> None:
+    extraction = ExtractionResult(text_content="body", embedded_images=[], metadata={})
+    with patch(f"{MODULE}.extract_text_and_images", return_value=extraction):
+        document = _build("notes.onyxunknown", b"body")
+
+    assert document is not None
+    assert document.source_mime_type is None
+    assert document.source_size_bytes == 4
+
+
+@pytest.mark.parametrize(
+    "file_name,expected_mime_type",
+    [
+        (
+            "report.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
+        (
+            "slides.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ),
+    ],
+)
+def test_office_file_reports_its_mime_type_without_system_mappings(
+    file_name: str, expected_mime_type: str
+) -> None:
+    extraction = ExtractionResult(text_content="body", embedded_images=[], metadata={})
+    with (
+        patch(f"{MODULE}.extract_text_and_images", return_value=extraction),
+        patch("mimetypes.guess_type", return_value=(None, None)),
+    ):
+        document = _build(file_name, b"body")
+
+    assert document is not None
+    assert document.source_mime_type == expected_mime_type

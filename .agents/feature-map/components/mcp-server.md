@@ -22,7 +22,25 @@
   results from the knowledge base, and `search_web` and `open_urls` for the
   web. It can read resources that list the indexed sources, the document sets
   and the agents that the user can use, so it can narrow a search before it
-  runs one. Results contain only documents the user can see in Onyx.
+  runs one. Results contain only documents the user can see in Onyx. The
+  server's connect-time instructions tell the model to call
+  `search_indexed_documents` before any other retrieval tool for questions
+  about the user's organization.
+- **A Claude Code or Codex user** installs the plugin in `extensions/agent-plugin/`
+  (one directory with a Claude Code manifest in `.claude-plugin/` and a
+  Codex manifest in `.codex-plugin/`, listed for Codex by the repo
+  marketplace in `.agents/plugins/`). In
+  Claude Code the plugin connects the MCP server with the user's token. In
+  Codex the user adds the server as `onyx` with `codex mcp add`. Through a
+  `UserPromptSubmit` hook the plugin tells
+  the model with every question prompt to call `search_indexed_documents`
+  before answering from company knowledge or any other search tool. With
+  strict retrieval on it denies other servers' search tools until Onyx has
+  been consulted. With prefetch on the hook posts the prompt to
+  `/api/search/raw` and injects the top sections with rules for when the full
+  search tool is still worth a call, and with strict retrieval nudges one when
+  a question turn ends on the prefetch alone.
+  `extensions/agent-plugin/README.md` is the user-facing description.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key
   gets a 401 for every rejection, including an API server outage. An OAuth
   token that the API server refuses for scope gets a 403 `insufficient_scope`
@@ -73,6 +91,7 @@ MCP client --bearer--> /mcp  (nginx or ingress)  --> mcp_server process (port 80
     _resolve_filters -> /manage/indexed-sources, /manage/document-set, /persona
     POST /search  (same bearer)  -> require_permission(READ_SEARCH)
                                  -> SearchTool(user=caller, emitter=NullEmitter())
+    POST /search/raw  (retrieval_only, same bearer and permission)
 ```
 
 **No state of its own.** Nothing in `backend/onyx/mcp_server/` opens a
@@ -145,10 +164,15 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
    unknown source, document set or agent, because a dropped filter widens the
    search with no sign. `agent` and `document_set_names` are mutually exclusive: explicit document sets
    replace an agent's knowledge scope instead of narrowing it.
-7. `search-is-metered` **Search spends LLM tokens and is metered.**
+7. `search-is-metered` **Search is metered, and it spends LLM tokens unless it
+   is retrieval-only.**
    `tools/tool_implementations/search/search_tool.py:SearchTool.run` makes LLM
    calls, and `/search` runs the token, API-call and cloud cost checks
-   ([[rate-and-usage-limits]]). Keep a new LLM-calling tool behind the same checks.
+   ([[rate-and-usage-limits]]). A `retrieval_only` search calls `/search/raw`,
+   which makes no LLM calls and runs only the API-call check
+   ([[internal-search#retrieval-only-makes-no-model-calls]]).
+   `MCP_SERVER_SEARCH_RETRIEVAL_ONLY` forces it for every search from this server.
+   Keep a new LLM-calling tool behind the same checks.
 8. `oauth-callback-not-this-server` **`/mcp/oauth/callback` is a web page, not
    this server.** It is the MCP client OAuth callback of
    [[mcp-and-custom-tools]]. Nginx has an exact `location` for it, and Helm has

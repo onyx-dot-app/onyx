@@ -93,6 +93,7 @@ In this example, we'll index local files with the Ingestion API.
     | `metadata` | Key-value pairs. Values are strings or lists of strings. They are searchable as tags. |
     | `doc_updated_at` / `doc_created_at` | ISO 8601 timestamps. `doc_updated_at` drives time filters and recency. |
     | `primary_owners` / `secondary_owners` | People associated with the document. Any of `display_name`, `first_name`, `middle_initial`, `last_name`, `email` can be set. |
+    | `source_mime_type` / `source_size_bytes` | Optional. The original file's MIME type and size in bytes. The connector page counts indexed documents by type with them. |
 
     Image sections reference a file you uploaded first with [POST
     /user/projects/file/upload](/developers/api_reference/projects/upload_user_files).

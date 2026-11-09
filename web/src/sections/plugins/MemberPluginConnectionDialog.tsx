@@ -126,7 +126,6 @@ export function MemberPluginConnectionContent({
         close();
       }}
       width="sm"
-      position="top"
       preventAccidentalClose={false}
       skipOverlay={skipOverlay}
     >

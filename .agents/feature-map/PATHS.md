@@ -168,6 +168,7 @@ covers new files that match it.
 | `backend/onyx/redis/redis_connector_prune.py`, `backend/onyx/redis/redis_connector_delete.py`, `backend/onyx/redis/redis_connector_stop.py` | background-jobs |
 | `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/utils/variable_functionality.py`, `backend/scripts/make_foss_repo.sh` | editions-and-gating |
 | `backend/ee/onyx/server/middleware/tier_gate.py`, `backend/ee/onyx/configs/license_enforcement_config.py`, `backend/onyx/server/settings/tier_order.py`, `web/src/lib/tiers/` | editions-and-gating |
+| `web/src/lib/badges/` | editions-and-gating |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
 | `backend/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
@@ -203,7 +204,7 @@ covers new files that match it.
 | `backend/onyx/onyxbot/discord/`, `backend/onyx/db/discord_bot.py`, `backend/onyx/server/manage/discord_bot/` | discord-bot |
 | `backend/onyx/server/onyx_api/` | onyx-api |
 | `backend/scripts/onyx_openapi_schema.py`, `backend/scripts/transform_openapi_for_docs.py`, `backend/scripts/api_inference_sample.py`, `documentation/scripts/generate.sh` | onyx-api |
-| `backend/onyx/mcp_server/`, `backend/onyx/mcp_server_main.py`, `backend/onyx/oauth_provider/auth.py` | mcp-server |
+| `backend/onyx/mcp_server/`, `backend/onyx/mcp_server_main.py`, `backend/onyx/oauth_provider/auth.py`, `extensions/agent-plugin/` | mcp-server |
 | `deployment/tests/test_oauth_proxy.py`, `deployment/tests/test_next_oauth_discovery.py`, `backend/tests/unit/onyx/oauth_provider/test_native_client_cleanup.py`, `backend/tests/unit/onyx/oauth_provider/test_codex_response_reader.py` | mcp-server |
 | `.github/workflows/mcp-compatibility.yml`, `.github/scripts/check-mcp-compatibility.py`, `deployment/tests/test_mcp_compatibility_probe.py` | mcp-server |
 | `deployment/docker_compose/docker-compose.mcp-ci.yml`, `deployment/docker_compose/mcp-ci-web.conf`, `deployment/tests/test_mcp_compose.py`, `deployment/tests/test_mcp_canary_workflow.py` | mcp-server |
@@ -261,6 +262,7 @@ covers new files that match it.
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
 | `web/src/app/app/components/files/`, `web/src/sections/modals/UserFilesModal.tsx`, `web/src/sections/cards/FileCard.tsx` | file-store-and-user-files |
 | `web/src/sections/modals/PreviewModal/` | chat-frontend |
+| `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/app/plugins/` | plugins, chat-frontend |
@@ -325,7 +327,7 @@ covers new files that match it.
 | `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/lib/oauth/`, `web/src/app/anonymous/` | auth-and-identity |
 | `web/src/app/oauth-provider/`, `web/src/sections/oauth-provider/`, `web/src/lib/oauth-provider/`, `web/src/lib/sso/`, `web/src/lib/users/`, `web/src/lib/auth/` | auth-and-identity |
 | `web/src/app/admin/agents/`, `web/src/lib/agents/`, `web/src/views/admin/AgentsPage.tsx`, `web/src/views/admin/AgentsPage/`, `web/src/app/ee/agents/stats/` | agents-personas |
-| `web/src/sections/modals/AddPeoplePicker.tsx`, `web/src/sections/modals/TransferOwnershipView.tsx` | agents-personas, skills |
+| `web/src/sections/modals/AddPeoplePicker.tsx`, `web/src/sections/modals/TransferOwnershipView.tsx`, `web/src/sections/modals/ShareAccessRow.tsx`, `web/src/sections/modals/ShareModalPermissionControls.tsx` | agents-personas, skills |
 | `web/src/app/admin/chat-preferences/` | chat-preferences |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
 | `web/src/app/admin/language-models/`, `web/src/views/admin/LanguageModelsPage.tsx`, `web/src/sections/modals/languageModels/`, `web/src/lib/languageModels/`, `web/src/lib/hooks/useLLMProviderOptions.ts` | llm-providers |

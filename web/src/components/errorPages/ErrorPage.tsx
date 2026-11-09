@@ -12,7 +12,7 @@ export default function Error() {
   return (
     <ErrorPageLayout>
       <div className="flex flex-row items-center gap-2">
-        <Text as="p" font="heading-h2" color="text-05">
+        <Text as="p" font="heading-headline" color="text-05">
           {t("configError.heading.title")}
         </Text>
         <SvgAlertCircle className="w-6 h-6 stroke-text-04" />

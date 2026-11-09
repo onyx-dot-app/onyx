@@ -312,46 +312,49 @@ describe("useChatController", () => {
     expect(result.current.messages[0]!.files).toEqual(files);
   });
 
-  it("threads toolOptions onto the send body (deep research / tools / sources)", async () => {
-    useChatSessionStore.getState().ensureSession("s-tools");
-    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+  it.each([false, true])(
+    "threads valid toolOptions onto the send body (deep research: %s)",
+    async (deepResearch) => {
+      useChatSessionStore.getState().ensureSession("s-tools");
+      streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
 
-    const { result } = renderHook(() => useChatController("s-tools"), {
-      wrapper,
-    });
-    await act(async () => {
-      await result.current.submit("hi", [], undefined, {
-        deepResearch: true,
-        allowedToolIds: [1, 3],
-        forcedToolId: 3,
-        internalSearchFilters: { source_type: ["web"] },
-        llmOverride: {
-          model_configuration_id: 7,
-          model_provider: "OpenAI Prod",
-          model_version: "gpt-6-sol",
-        },
+      const { result } = renderHook(() => useChatController("s-tools"), {
+        wrapper,
       });
-    });
+      await act(async () => {
+        await result.current.submit("hi", [], undefined, {
+          deepResearch,
+          allowedToolIds: [1, 3],
+          preferredToolId: deepResearch ? null : 3,
+          internalSearchFilters: { source_type: ["web"] },
+          llmOverride: {
+            model_configuration_id: 7,
+            model_provider: "OpenAI Prod",
+            model_version: "gpt-6-sol",
+          },
+        });
+      });
 
-    await waitFor(() => expect(result.current.chatState).toBe("input"));
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-    const body = streamMock.mock.calls[0]![0] as unknown as {
-      deep_research: boolean;
-      allowed_tool_ids: number[] | null;
-      forced_tool_id: number | null;
-      internal_search_filters: { source_type: string[] | null } | null;
-      llm_override: { model_configuration_id: number } | null;
-    };
-    expect(body.deep_research).toBe(true);
-    expect(body.allowed_tool_ids).toEqual([1, 3]);
-    expect(body.forced_tool_id).toBe(3);
-    expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
-    expect(body.llm_override).toEqual({
-      model_configuration_id: 7,
-      model_provider: "OpenAI Prod",
-      model_version: "gpt-6-sol",
-    });
-  });
+      const body = streamMock.mock.calls[0]![0] as unknown as {
+        deep_research: boolean;
+        allowed_tool_ids: number[] | null;
+        preferred_tool_id: number | null;
+        internal_search_filters: { source_type: string[] | null } | null;
+        llm_override: { model_configuration_id: number } | null;
+      };
+      expect(body.deep_research).toBe(deepResearch);
+      expect(body.allowed_tool_ids).toEqual([1, 3]);
+      expect(body.preferred_tool_id).toBe(deepResearch ? null : 3);
+      expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
+      expect(body.llm_override).toEqual({
+        model_configuration_id: 7,
+        model_provider: "OpenAI Prod",
+        model_version: "gpt-6-sol",
+      });
+    },
+  );
 
   it("defaults the tool fields when no toolOptions are passed (backwards compatible)", async () => {
     useChatSessionStore.getState().ensureSession("s-defaults");
@@ -369,13 +372,13 @@ describe("useChatController", () => {
     const body = streamMock.mock.calls[0]![0] as unknown as {
       deep_research: boolean;
       allowed_tool_ids: number[] | null;
-      forced_tool_id: number | null;
+      preferred_tool_id: number | null;
       internal_search_filters: unknown;
       llm_override: unknown;
     };
     expect(body.deep_research).toBe(false);
     expect(body.allowed_tool_ids).toBeNull();
-    expect(body.forced_tool_id).toBeNull();
+    expect(body.preferred_tool_id).toBeNull();
     expect(body.internal_search_filters).toBeNull();
     // Null, not omitted: the backend then runs the agent's own default model.
     expect(body.llm_override).toBeNull();

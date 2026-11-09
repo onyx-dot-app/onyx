@@ -34,6 +34,7 @@ import {
 } from "@/lib/mcp/types";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { usePlanBadge } from "@/lib/badges/components";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -526,6 +527,7 @@ export function MCPAccessControl({
   disabled = false,
 }: MCPAccessControlProps) {
   const t = useTranslations("actions.addMcpModal.access");
+  const businessBadge = usePlanBadge(Tier.BUSINESS);
   const { values, setValues } =
     useFormikContext<MCPServerConfigurationValues>();
   const options: SelectOption[] = [
@@ -542,7 +544,7 @@ export function MCPAccessControl({
       value: "groups",
       title: t("groups.label"),
       description: t("groups.description"),
-      tag: { title: t("planTag"), color: "info", size: 6 },
+      tag: businessBadge,
       disabled: !canRestrict,
       tooltip: !canRestrict ? t("planNote") : undefined,
     },

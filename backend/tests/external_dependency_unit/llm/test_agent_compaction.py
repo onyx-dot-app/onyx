@@ -16,6 +16,7 @@ from onyx.llm.models import (
 )
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.tracing.flows import LLMFlow
+from tests.common.models import CI_OPENAI_MODEL
 from tests.utils.secret_names import TestSecret
 
 
@@ -26,7 +27,7 @@ def test_compacted_tool_history_preserves_answer_and_source(
     model = LitellmLLM(
         api_key=test_secrets[TestSecret.OPENAI_API_KEY],
         model_provider="openai",
-        model_name="gpt-5-mini",
+        model_name=CI_OPENAI_MODEL,
         max_input_tokens=6000,
     )
     history: list[Message] = [

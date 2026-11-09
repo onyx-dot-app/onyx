@@ -104,36 +104,43 @@ class ImageGenerationTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     PROMPT_FIELD: {
                         "type": "string",
                         "description": "Prompt used to generate the image",
                     },
                     "shape": {
-                        "type": "string",
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [shape.value for shape in ImageShape],
+                            },
+                            {"type": "null"},
+                        ],
                         "description": (
-                            "Optional - only specify if you want a specific shape."
+                            "Use null for the default square shape."
                             " Image shape: 'square', 'portrait', or 'landscape'."
                         ),
-                        "enum": [shape.value for shape in ImageShape],
                     },
                     REFERENCE_IMAGE_FILE_IDS_FIELD: {
-                        "type": "array",
+                        "anyOf": [
+                            {"type": "array", "items": {"type": "string"}},
+                            {"type": "null"},
+                        ],
                         "description": (
                             "Optional file_ids of existing images to edit or use as reference;"
                             " the first is the primary edit source."
                             " Get file_ids from `[attached image — file_id: <id>]` tags on"
                             " user-attached images or from prior generate_image tool responses."
-                            " Omit for a fresh, unrelated generation."
+                            " Use null for a fresh, unrelated generation."
                         ),
-                        "items": {
-                            "type": "string",
-                        },
                     },
                 },
-                "required": [PROMPT_FIELD],
+                "required": [PROMPT_FIELD, "shape", REFERENCE_IMAGE_FILE_IDS_FIELD],
             },
         )
 

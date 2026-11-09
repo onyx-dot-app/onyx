@@ -447,6 +447,11 @@ def test_sharepoint_connector_poll(
         )
         doc = found_documents[0]
         assert doc.semantic_identifier == "test1.docx"
+        assert (
+            doc.source_mime_type
+            == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        assert doc.source_size_bytes is not None and doc.source_size_bytes > 0
         verify_document_content(
             doc,
             next(

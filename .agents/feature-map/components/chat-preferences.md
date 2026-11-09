@@ -167,7 +167,7 @@ paths read it; find them with `git grep -n load_settings backend`.
    `web/src/hooks/useUserPersonalization.ts` sends the full list on every save,
    even a toggle change.
 6. `prompt-section-explicit-position` **A new prompt section needs an explicit
-   position.** Add it in `chat/prompt_utils.py:_build_user_specific_section` at
+   position.** Add it in `chat/prompt_utils.py:build_user_information_prompt` at
    a chosen place, not at the end, and run a prompt eval ([[context-assembly]]).
 7. `settings-fields-public` **Every `Settings` field is public.**
    `backend/onyx/server/settings/api.py:fetch_settings` returns the whole
@@ -274,7 +274,7 @@ paths read it; find them with `git grep -n load_settings backend`.
   path with `git grep -n personal_role backend/onyx`. Add the `User` column and
   a writer in `db/user_preferences.py`, expose it in `server/manage/users.py`,
   carry it in `UserMemoryContext`, and place it in
-  `_build_user_specific_section` ([[#prompt-section-explicit-position]]).
+  `build_user_information_prompt` ([[#prompt-section-explicit-position]]).
 - `new-workspace-option` **A workspace option.** Copy `auto_detect_search_filters`: list its readers
   and writers with `git grep -n auto_detect_search_filters`. Add the field to
   `server/settings/models.py:Settings` with a default, and read it with

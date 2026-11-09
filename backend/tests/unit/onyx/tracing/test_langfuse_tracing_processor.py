@@ -138,7 +138,6 @@ def test_on_span_end_exports_cache_metadata_from_optional_mapping(
     client, observation = _make_client_with_observation()
     processor = LangfuseTracingProcessor(client=client)
     metadata: dict[str, str] = {
-        "prompt_cache_chat_history": "on",
         "cacheable_prefix_msgs": "2",
         "cacheable_prefix_tokens": "100",
         "history_msgs": "3",

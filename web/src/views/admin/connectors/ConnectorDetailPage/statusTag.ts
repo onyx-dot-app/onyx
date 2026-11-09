@@ -1,5 +1,5 @@
 import type { IconFunctionComponent } from "@opal/types";
-import type { StatusVariants } from "@opal/types";
+import type { StatusColor } from "@opal/types";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgAlertTriangle,
@@ -22,7 +22,7 @@ import type { ValidStatuses } from "@/lib/types";
 /** One pair or attempt state as its status tag shows it. */
 export interface StatusTag {
   icon: IconFunctionComponent;
-  color: StatusVariants;
+  color: StatusColor;
   /** Key under `admin.status.badges`. */
   labelKey:
     | "deleting"
@@ -76,6 +76,12 @@ const TAGS = {
   passed: { icon: SvgCheckCircle, color: "success", labelKey: "passed" },
   failedToRun: { icon: SvgXOctagon, color: "error", labelKey: "failedToRun" },
 } satisfies Record<StatusTag["labelKey"], StatusTag>;
+
+/** The warning look of an open error or warning count, on rows, run lines and the activity panel. */
+export const ERROR_COUNT_TAG = {
+  icon: SvgAlertTriangle,
+  color: "warning",
+} as const satisfies Pick<StatusTag, "icon" | "color">;
 
 /** The tag for the pair's own state, else the latest attempt's. A live attempt outranks repeated failures. */
 export function ccPairStatusTag(
@@ -224,9 +230,16 @@ export function attemptStatusTag(
   }
 }
 
-/** Key under `admin.connector.runs.kinds`. A backfill reads apart from the pair's regular indexing. */
-export function runKindLabelKey(run: CCPairRun): CCPairRunKind | "backfill" {
-  return run.kind === "indexing" && run.attempt.is_backfill
-    ? "backfill"
-    : run.kind;
+/** An index run that retries a pair's failed documents. */
+export function isRetryRun(run: CCPairRun): boolean {
+  return run.kind === "indexing" && run.is_retry === true;
+}
+
+/** Key under `admin.connector.runs.kinds`. Backfills and retries read apart from the pair's regular indexing. */
+export function runKindLabelKey(
+  run: CCPairRun
+): CCPairRunKind | "backfill" | "retry" {
+  if (run.kind !== "indexing") return run.kind;
+  if (isRetryRun(run)) return "retry";
+  return run.attempt.is_backfill ? "backfill" : run.kind;
 }

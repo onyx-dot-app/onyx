@@ -61,6 +61,7 @@ from onyx.llm.decisions.factory import (
     validate_zoom_voice_provider,
 )
 from onyx.llm.decisions.models import (
+    OPENAI_DECISIONS_MODEL_NAME,
     DecisionProvider,
     DecisionRequest,
     PredicateQuestion,
@@ -127,6 +128,7 @@ from onyx.server.manage.llm.models import (
     LMStudioModelsRequest,
     ModelConfigurationPage,
     ModelConfigurationUpsertRequest,
+    ModelDisplayNameCode,
     ModelRoutingUpdateRequest,
     NebiusTokenfactoryFinalModelResponse,
     NebiusTokenfactoryModelsRequest,
@@ -1402,6 +1404,10 @@ def get_decision_model_configuration(
             models[0].llm_provider, model_configurations=models, include_api_key=False
         )
         _mask_provider_credentials(view)
+        if view.provider == DecisionProvider.OPENAI:
+            for model_view in view.model_configurations:
+                if model_view.name == OPENAI_DECISIONS_MODEL_NAME:
+                    model_view.display_name_code = ModelDisplayNameCode.OPENAI_DECISIONS
         providers.append(view)
     return DecisionModelResponse(
         model=DefaultModel.from_model_config(

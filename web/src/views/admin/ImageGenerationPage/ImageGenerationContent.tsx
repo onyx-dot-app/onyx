@@ -3,6 +3,7 @@
 import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useLabelBadge } from "@/lib/badges/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -86,23 +87,19 @@ function ConnectedModelCard({
   onEdit,
 }: ConnectedModelCardProps) {
   const t = useTranslations("admin.imageGeneration");
+  const defaultBadge = useLabelBadge("default");
   const ariaTitle = typeof title === "string" ? title : title.raw;
   return (
     <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
-        tag={
-          isDefault
-            ? { title: t("defaultTag.label"), color: "info" }
-            : undefined
-        }
+        badge={isDefault ? defaultBadge : undefined}
         rightChildren={
           <Section flexDirection="row" width="fit" height="fit" gap={0}>
             <Button
@@ -147,13 +144,12 @@ function AvailableModelCard({
   return (
     <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
@@ -474,9 +470,8 @@ export default function ImageGenerationContent() {
             justifyContent="start"
           >
             <Content
+              font="main-content-emphasis"
               title={t("connectedModels.title")}
-              sizePreset="main-content"
-              variant="section"
             />
             <Section gap={2} height="fit" alignItems="stretch">
               {configs.map((config) => {
@@ -539,10 +534,9 @@ export default function ImageGenerationContent() {
           justifyContent="start"
         >
           <Content
+            font="main-content-emphasis"
             title={t("availableModels.title")}
             description={t("availableModels.description")}
-            sizePreset="main-content"
-            variant="section"
           />
           <Tabs
             variant="pill"

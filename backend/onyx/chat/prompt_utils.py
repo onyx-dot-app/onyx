@@ -48,7 +48,9 @@ from onyx.prompts.chat_prompts import (
     LAST_CYCLE_CITATION_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
-    TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+    TOOL_PREFERENCE_GUIDANCE,
+    TOOL_PREFERENCE_LAST_STEP_GUIDANCE,
+    TOOL_PREFERENCE_REMINDER,
 )
 from onyx.prompts.prompt_utils import (
     apply_prompt_placeholders,
@@ -102,6 +104,7 @@ def build_chat_reminder(
     previous_results: Sequence[ToolResultMessage],
     *,
     enabled: bool,
+    has_history_citations: bool = False,
 ) -> str | None:
     if not enabled:
         return context.persona_task_prompt
@@ -129,7 +132,8 @@ def build_chat_reminder(
         include_citation_reminder=any(
             result.tool_name in CITEABLE_TOOLS_NAMES for result in results
         )
-        or context.has_context_documents,
+        or context.has_context_documents
+        or has_history_citations,
         include_file_reminder=any(
             result.tool_name == PythonTool.NAME
             and isinstance(result.details, LlmPythonExecutionResult)
@@ -154,6 +158,8 @@ def build_chat_prompt(
     results: Sequence[ToolResultMessage],
     previous_results: Sequence[ToolResultMessage],
     is_last_step: bool,
+    has_history_citations: bool = False,
+    preferred_tool_id: int | None = None,
 ) -> ChatPrompt:
     """Select instructions and reminders before assembling conversation history."""
     values = memory.user_info.placeholder_values if memory else {}
@@ -167,23 +173,26 @@ def build_chat_prompt(
     context_documents = bool(files.use_as_search_filter or files.file_texts)
     cite = (
         reminders_enabled
-        and any(result.tool_name in CITEABLE_TOOLS_NAMES for result in results)
+        and (
+            has_history_citations
+            or any(result.tool_name in CITEABLE_TOOLS_NAMES for result in results)
+        )
     ) or context_documents
     datetime_aware = persona.datetime_aware if persona else True
 
     def render(
         text: str | None, append_datetime: bool = False, *, citations: bool = False
     ) -> str | None:
-        return (
-            process_prompt_template(
-                text,
-                datetime_aware=datetime_aware,
-                append_datetime_if_aware=append_datetime,
-                should_cite_documents=citations,
-            )
-            if text
-            else None
+        if not text:
+            return None
+        rendered, _ = apply_prompt_placeholders(
+            text,
+            datetime_aware=datetime_aware,
+            append_datetime_if_aware=append_datetime,
+            should_cite_documents=citations,
+            append_citation_if_missing=False,
         )
+        return rendered
 
     custom = render(custom_prompt)
     user_info = None
@@ -213,7 +222,19 @@ def build_chat_prompt(
         results,
         previous_results,
         enabled=reminders_enabled,
+        has_history_citations=has_history_citations,
     )
+    if preferred_tool_id is not None:
+        preferred_names = [tool.name for tool in tools if tool.id == preferred_tool_id]
+        if not preferred_names:
+            raise ValueError(f"Preferred tool {preferred_tool_id} is not available")
+        preference = TOOL_PREFERENCE_REMINDER.format(
+            operations=", ".join(preferred_names),
+            guidance=TOOL_PREFERENCE_LAST_STEP_GUIDANCE
+            if is_last_step
+            else TOOL_PREFERENCE_GUIDANCE,
+        )
+        reminder = "\n\n".join(part for part in (reminder, preference) if part)
     return ChatPrompt(
         system_prompt=SystemMessage(content=system) if system else None,
         user_info_prompt=SystemMessage(content=user_info) if user_info else None,
@@ -273,10 +294,7 @@ def calculate_reserved_tokens(
 
     custom_agent_prompt = persona_system_prompt or ""
 
-    reserved_token_count = token_counter(
-        # Annoying that the dict has no attributes now
-        custom_agent_prompt + " " + fake_system_prompt
-    )
+    reserved_token_count = token_counter(custom_agent_prompt + " " + fake_system_prompt)
 
     # Calculate total token count for files in the last message
     file_token_count = 0
@@ -313,10 +331,7 @@ def build_reminder_message(
     if is_last_cycle:
         reminder += "\n\n" + LAST_CYCLE_CITATION_REMINDER
     if include_citation_reminder:
-        # REQUIRE_CITATION_GUIDANCE and ANSWER_COVERAGE_GUIDANCE are the same
-        # blocks that used to be appended to the system prompt; they moved here
-        # so head prompts stay byte-stable across loop iterations for prompt
-        # caching.
+        # Keep citation guidance here so the system prompt stays stable across steps.
         # reminder_text may already carry the guidance when the task prompt
         # authored a {{CITATION_GUIDANCE}} tag — don't emit it twice. The tag
         # only injects REQUIRE_CITATION_GUIDANCE, so COVERAGE is appended
@@ -331,24 +346,6 @@ def build_reminder_message(
         reminder += "\n\n" + IMAGE_GEN_REMINDER
     reminder = reminder.strip()
     return reminder or None
-
-
-def process_prompt_template(
-    prompt_str: str,
-    *,
-    datetime_aware: bool,
-    append_datetime_if_aware: bool,
-    should_cite_documents: bool = False,
-) -> str:
-    """Apply standard prompt placeholders to any agent or task prompt."""
-    processed_prompt, _ = apply_prompt_placeholders(
-        prompt_str,
-        datetime_aware=datetime_aware,
-        append_datetime_if_aware=append_datetime_if_aware,
-        should_cite_documents=should_cite_documents,
-        append_citation_if_missing=False,
-    )
-    return processed_prompt
 
 
 def build_language_section(language: SupportedLanguage | None) -> str:
@@ -379,7 +376,7 @@ def _build_shared_user_information_section(company_context: str | None) -> str:
     return section
 
 
-def _build_user_specific_section(user_memory_context: UserMemoryContext | None) -> str:
+def build_user_information_prompt(user_memory_context: UserMemoryContext | None) -> str:
     """Per-user sub-sections, in order: Basic Info → Organization Profile →
     Language → Preferences → Memories."""
     sections: list[str] = []
@@ -440,15 +437,6 @@ def _build_user_specific_section(user_memory_context: UserMemoryContext | None) 
     return "\n".join(sections)
 
 
-def build_user_information_prompt(
-    user_memory_context: UserMemoryContext | None,
-) -> str:
-    """The per-user part of '# User Information' (identity, org profile,
-    language, preferences, memories), sent as its own system message after the
-    shared system prompt."""
-    return _build_user_specific_section(user_memory_context)
-
-
 def build_system_prompt(
     base_system_prompt: str,
     datetime_aware: bool = False,
@@ -476,7 +464,7 @@ def build_system_prompt(
 
     system_prompt += _build_shared_user_information_section(get_company_context())
     if include_user_info:
-        system_prompt += "\n" + _build_user_specific_section(user_memory_context)
+        system_prompt += "\n" + build_user_information_prompt(user_memory_context)
 
     # Append citation guidance after company context if placeholder was not present
     if should_append_citation_guidance:
@@ -510,35 +498,34 @@ def build_system_prompt(
 
         tool_guidance_sections: list[str] = []
 
-        if has_web_search or has_internal_search or include_all_guidance:
+        if has_web_search or has_internal_search:
             tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
 
         # These are not included at the Tool level because the ordering may matter.
-        if has_internal_search or include_all_guidance:
+        if has_internal_search:
             tool_guidance_sections.append(INTERNAL_SEARCH_GUIDANCE)
 
-        if has_web_search or include_all_guidance:
-            site_disabled_guidance = ""
-            if has_web_search:
-                web_search_tool = next(
-                    (t for t in tools if isinstance(t, WebSearchTool)), None
-                )
-                if web_search_tool and not web_search_tool.supports_site_filter:
-                    site_disabled_guidance = WEB_SEARCH_SITE_DISABLED_GUIDANCE
+        if has_web_search:
+            web_search_tool = next(t for t in tools if isinstance(t, WebSearchTool))
+            site_disabled_guidance = (
+                ""
+                if web_search_tool.supports_site_filter
+                else WEB_SEARCH_SITE_DISABLED_GUIDANCE
+            )
             tool_guidance_sections.append(
                 WEB_SEARCH_GUIDANCE.format(site_colon_disabled=site_disabled_guidance)
             )
 
-        if has_open_urls or include_all_guidance:
+        if has_open_urls:
             tool_guidance_sections.append(OPEN_URLS_GUIDANCE)
 
-        if has_python or include_all_guidance:
+        if has_python:
             tool_guidance_sections.append(PYTHON_TOOL_GUIDANCE)
 
-        if has_generate_image or include_all_guidance:
+        if has_generate_image:
             tool_guidance_sections.append(GENERATE_IMAGE_GUIDANCE)
 
-        if has_memory or include_all_guidance:
+        if has_memory:
             tool_guidance_sections.append(MEMORY_GUIDANCE)
 
         if tool_guidance_sections:
@@ -559,7 +546,6 @@ def _deduplicate_search_passages(messages: list[Message]) -> None:
         if (
             message.is_error
             or not isinstance(message.content, str)
-            or prompt_metadata(message).omit_tool_result_content
             or not isinstance(message.details, SearchDocsResponse)
             or not message.details.citation_mapping
         ):
@@ -599,6 +585,7 @@ def prepare_prompt(
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
     user_info_prompt: Message | None = None,
+    request_context_message: Message | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
@@ -611,30 +598,16 @@ def prepare_prompt(
     for message in history:
         metadata = prompt_metadata(message).model_copy()
         message.metadata = metadata
-        if isinstance(message, ToolResultMessage) and metadata.omit_tool_result_content:
-            # Keep stored evidence intact; later questions use the existing placeholder.
-            message.content = TOOL_CALL_RESPONSE_CROSS_MESSAGE
-            metadata.token_count = None
         metadata.token_count = count_message_tokens(message, token_counter)
         metadata.should_cache = not metadata.is_reminder
-    insertion = next(
-        (
-            index
-            for index in range(len(history) - 1, -1, -1)
-            if isinstance(history[index], UserMessage)
-            and not prompt_metadata(history[index]).is_reminder
-        ),
-        len(history),
-    )
     result: list[Message] = []
     if system_prompt is not None:
         result.append(system_prompt.model_copy())
     if user_info_prompt is not None:
         result.append(user_info_prompt.model_copy())
-    result.extend(history[:insertion])
     if custom_agent_prompt is not None:
         result.append(custom_agent_prompt.model_copy())
-    if context_files and context_files.file_texts:
+    if context_files and (context_files.file_texts or context_files.image_files):
         result.append(
             _create_context_files_message(context_files, context_file_citations)
         )
@@ -642,7 +615,18 @@ def prepare_prompt(
         message.metadata = prompt_metadata(message).model_copy(
             update={"should_cache": True}
         )
-    result.extend(history[insertion:])
+    result.extend(history)
+    if request_context_message is not None:
+        result.append(
+            request_context_message.model_copy(
+                update={
+                    "cacheable": False,
+                    "metadata": prompt_metadata(request_context_message).model_copy(
+                        update={"should_cache": False}
+                    ),
+                }
+            )
+        )
 
     # Tool-dependent file notices change between rounds, so keep them after
     # the stable history and before the reminder, outside the cacheable prefix.
@@ -783,10 +767,19 @@ def _create_context_files_message(
     documents_json = json.dumps(
         ContextDocuments(documents=documents).model_dump(exclude_none=True), indent=2
     )
-    message_content = f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
+    message_content = (
+        f"Here are some documents provided for context, they may not all be relevant:\n{documents_json}"
+        if documents
+        else "Here are images provided for context."
+    )
 
-    # Use pre-calculated token count from context_files
     return UserMessage(
         content=message_content,
-        metadata=PromptMetadata(token_count=context_files.total_token_count),
+        metadata=PromptMetadata(
+            token_count=context_files.total_token_count,
+            image_files=context_files.image_files or None,
+            image_token_count=sum(
+                image.token_count for image in context_files.image_files
+            ),
+        ),
     )
