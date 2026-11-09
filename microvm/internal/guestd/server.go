@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
@@ -46,6 +47,9 @@ type Config struct {
 	StateFile string
 	// BaseEnv is the env of every command, before the Init and command env.
 	BaseEnv map[string]string
+	// Browser runs the VM's browser (ENG-4573). Nil: the browser calls fail
+	// with BROWSER_NOT_AVAILABLE.
+	Browser *browser.Manager
 	Log     *slog.Logger
 }
 

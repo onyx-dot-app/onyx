@@ -508,9 +508,6 @@ func TestErrors(t *testing.T) {
 	if _, err := c.ListFiles(ctx, &pb.ListFilesRequest{}); status.Code(err) != codes.Unimplemented {
 		t.Fatalf("reserved call: %v", err)
 	}
-	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("reserved call: %v", err)
-	}
 }
 
 func TestInteract(t *testing.T) {

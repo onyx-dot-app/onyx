@@ -60,7 +60,8 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 - Both listeners serve the same API.
 
 `Dial(sandbox_id, guest_port, generation)` is a bidirectional stream of byte frames to a vsock port of a
-running VM, for example the app preview (3010). Only the ports in `--dial-ports` (default `3010`) are
+running VM, for example the app preview (3010) or the guest browser's CDP port (9222, ENG-4573; add it to
+`--dial-ports` to use the browser). Only the ports in `--dial-ports` (default `3010`) are
 allowed (`PORT_NOT_ALLOWED`). Dial always refuses the guest daemon port (`--daemon-port`) with
 `PORT_NOT_ALLOWED`, also if `--dial-ports` names it: use the pass-through. The agent does not start with
 an empty `--dial-ports`. If nothing in the VM accepts the connection, the call fails with

@@ -13,11 +13,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd"
+	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/browser"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/execs"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/sysops"
 	"github.com/onyx-dot-app/onyx/microvm/internal/guestd/vsock"
@@ -40,6 +42,17 @@ func main() {
 	outBudget := flag.Int64("output-budget", 256<<20, "output bytes kept by all executions; over it, ended ones lose their output first")
 	maxRunning := flag.Int("max-running", 64, "most running executions")
 	logLevel := flag.String("log-level", "info", "debug, info, warn or error")
+	var bf browserFlags
+	flag.StringVar(&bf.chrome, "browser-bin", "/opt/chrome/chrome,/usr/bin/chromium", "comma-separated Chromium binaries, first found wins (Chrome for Testing, then Debian); empty disables the browser calls")
+	flag.StringVar(&bf.xvfb, "browser-xvfb", "/usr/bin/Xvfb", "Xvfb binary")
+	flag.StringVar(&bf.user, "browser-user", "sandbox", "non-root user that runs Xvfb and Chromium (Chromium's sandbox needs it)")
+	flag.StringVar(&bf.profile, "browser-profile-dir", "/workspace/.craft/browser-profile", "saved browser profile (one per VM)")
+	flag.StringVar(&bf.work, "browser-work-dir", "/var/lib/craft-browser", "dir of the live browser profile")
+	flag.StringVar(&bf.cgroup, "browser-cgroup", "/sys/fs/cgroup/guestd-browser", "cgroup v2 dir of the browser; empty uses process groups and no memory limit")
+	flag.Int64Var(&bf.memMax, "browser-memory-max", 2<<30, "memory limit of the browser cgroup (Chromium and Xvfb), bytes")
+	flag.IntVar(&bf.cdpPort, "browser-cdp-port", 9222, "Chromium DevTools TCP port on 127.0.0.1")
+	flag.UintVar(&bf.vsockPort, "browser-vsock-port", 9222, "guest vsock port that forwards to the DevTools port (node agent Dial)")
+	flag.StringVar(&bf.screen, "browser-screen", "1280x800x24", "Xvfb screen, WxHxDepth")
 	flag.Parse()
 
 	var lvl slog.Level
@@ -62,7 +75,7 @@ func main() {
 	if pf := *relayPIDFile; pf != "" {
 		sys.ResetRelay = func() (bool, error) { return sysops.SignalPIDFile(pf) }
 	}
-	if err := run(log, sys, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
+	if err := run(log, sys, *port, *listen, *cgroupRoot, *stateFile, *growMounts, bf, execs.Config{
 		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
@@ -70,7 +83,55 @@ func main() {
 	}
 }
 
-func run(log *slog.Logger, sys guestd.System, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
+type browserFlags struct {
+	chrome, xvfb, user, profile, work, cgroup, screen string
+	memMax                                            int64
+	cdpPort                                           int
+	vsockPort                                         uint
+}
+
+// newBrowser returns the browser manager. Its cgroup is separate from the
+// executions' (Cancel, List and the output budget do not apply to it).
+func newBrowser(log *slog.Logger, bf browserFlags, daemonPort uint, listen string, useCgroups bool, env map[string]string) (*browser.Manager, error) {
+	var bins []string
+	for _, b := range strings.Split(bf.chrome, ",") {
+		if b = strings.TrimSpace(b); b != "" {
+			bins = append(bins, b)
+		}
+	}
+	if len(bins) == 0 {
+		return browser.New(browser.Config{Log: log})
+	}
+	if bf.vsockPort == 0 || bf.vsockPort == daemonPort || bf.vsockPort > 1<<32-1 {
+		return nil, fmt.Errorf("--browser-vsock-port %d must be set and differ from --port", bf.vsockPort)
+	}
+	cfg := browser.Config{
+		ChromeBins: bins, XvfbBin: bf.xvfb, User: bf.user, ProfileDir: bf.profile, WorkDir: bf.work,
+		Screen: bf.screen, CDPPort: bf.cdpPort, VsockPort: uint32(bf.vsockPort), MemoryMax: bf.memMax, Log: log,
+		Isolator: execs.ProcessGroups{},
+	}
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		cfg.Env = append(cfg.Env, k+"="+env[k])
+	}
+	if path, ok := strings.CutPrefix(listen, "unix:"); ok {
+		// Tests: the CDP port is a Unix socket next to the daemon's.
+		cfg.Listen = func(port uint32) (net.Listener, error) {
+			return net.Listen("unix", fmt.Sprintf("%s_%d", path, port))
+		}
+	} else {
+		cfg.Listen = vsock.Listen
+	}
+	if useCgroups && bf.cgroup != "" {
+		cg, err := execs.NewCgroups(bf.cgroup)
+		if err != nil {
+			return nil, fmt.Errorf("browser cgroup: %w", err)
+		}
+		cfg.Isolator, cfg.CgroupRoot = cg, bf.cgroup
+	}
+	return browser.New(cfg)
+}
+
+func run(log *slog.Logger, sys guestd.System, port uint, listen, cgroupRoot, stateFile, growMounts string, bf browserFlags, ecfg execs.Config) error {
 	if cgroupRoot != "" {
 		if err := sysops.EnsureCgroup2(filepath.Dir(cgroupRoot)); err != nil {
 			return fmt.Errorf("mount cgroup2: %w", err)
@@ -103,7 +164,11 @@ func run(log *slog.Logger, sys guestd.System, port uint, listen, cgroupRoot, sta
 			base[k] = v
 		}
 	}
-	srv, err := guestd.NewServer(guestd.Config{Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Log: log}, sys, m)
+	br, err := newBrowser(log, bf, port, listen, cgroupRoot != "", base)
+	if err != nil {
+		return err
+	}
+	srv, err := guestd.NewServer(guestd.Config{Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Browser: br, Log: log}, sys, m)
 	if err != nil {
 		return err
 	}
@@ -138,6 +203,14 @@ func run(log *slog.Logger, sys guestd.System, port uint, listen, cgroupRoot, sta
 	}()
 	log.Info("guest-daemon serving", "version", version, "addr", ln.Addr().String())
 	err = gs.Serve(ln)
+	// Stop the browser cleanly (it saves the profile), then the commands.
+	sctx, scancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if r, berr := br.Stop(sctx); berr != nil {
+		log.Warn("stop browser", "err", berr)
+	} else if r.WasRunning {
+		log.Info("browser stopped", "clean", r.Clean, "profile_saved", r.ProfileSaved)
+	}
+	scancel()
 	m.Shutdown()
 	if ctx.Err() != nil {
 		return nil

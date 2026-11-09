@@ -56,7 +56,9 @@ This component owns:
   in-guest egress relay inside each VM, and the node agent on each KVM node.
   The API server will reach a VM's guest daemon through the node agent: the
   agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
-  over mTLS and then vsock, without decoding it.
+  over mTLS and then vsock, without decoding it. The guest daemon also runs
+  the VM's one headful Chromium (`BrowserStart`/`BrowserStop`); its CDP port
+  is guest vsock 9222, reached with node agent `Dial`.
 
 Neighbours:
 - [[craft-sessions]]: sessions, turns and `SessionManager`, which call this
@@ -321,6 +323,10 @@ the stored token on each request, so a new token takes effect at once.
   reasoned from the code, not tested.
 - Agent browser state lives outside the session workspace and is lost on
   sleep. Saving it would put login cookies in FileStore snapshots.
+  The Firecracker guest daemon differs: a clean `BrowserStop` saves the
+  Chromium profile, cookies included, to `/workspace/.craft/browser-profile`
+  on the VM's scratch disk. Whether a session save copies it out of the VM
+  is still open (decision P3).
 - Docker mode mounts the host Docker socket in the API server and background
   worker. Only enable it on hosts you control (see the sandbox `README.md`).
 
