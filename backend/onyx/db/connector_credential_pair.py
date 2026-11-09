@@ -1260,12 +1260,6 @@ def add_credential_to_connector(
             if data_access_group_ids is not None
             else list(manage_access)
         )
-        # Owner-only is PERSONAL; a groups choice needs a group.
-        if not private_group_ids:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "A connector shared with specific groups needs at least one group.",
-            )
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,

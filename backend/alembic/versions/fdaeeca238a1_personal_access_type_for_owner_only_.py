@@ -1,10 +1,8 @@
 """personal access type for owner-only connectors
 
-A PRIVATE pair with no data-access group is read by its credential owner only.
-That state now has its own access type, PERSONAL, so PRIVATE always means a
-groups choice. Pairs on an ownerless credential stay PRIVATE. Data-access rows
-on types that take no groups are removed. creator_id becomes a foreign key
-to the user.
+Adds the PERSONAL access type. Existing pairs keep their access type.
+Data-access rows on types that take no groups are removed. creator_id becomes
+a foreign key to the user.
 
 Revision ID: fdaeeca238a1
 Revises: c0de5e7a91b2
@@ -26,26 +24,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
-        UPDATE connector_credential_pair
-        SET access_type = 'PERSONAL'
-        WHERE access_type = 'PRIVATE'
-          AND NOT EXISTS (
-            SELECT 1
-            FROM user_group__cc_pair_data_access AS data_access
-            WHERE data_access.cc_pair_id = connector_credential_pair.id
-          )
-          -- Ownerless credentials stay PRIVATE: nobody reads those pairs today,
-          -- and PERSONAL would give their creator access.
-          AND EXISTS (
-            SELECT 1
-            FROM credential
-            WHERE credential.id = connector_credential_pair.credential_id
-              AND credential.user_id IS NOT NULL
-          )
-        """
-    )
     op.execute(
         """
         DELETE FROM user_group__cc_pair_data_access AS data_access

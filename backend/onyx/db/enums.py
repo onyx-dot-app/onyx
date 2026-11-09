@@ -368,7 +368,7 @@ class AccessType(str, PyEnum):
     # Perm sync, narrowed to members of the connector's data-access groups.
     SYNC_RESTRICTED = "sync_restricted"
     # Only the credential owner reads the documents; takes no groups. Distinct
-    # from PRIVATE with no groups, which is a groups choice whose groups are gone.
+    # from PRIVATE with no groups.
     PERSONAL = "personal"
 
     def is_perm_synced(self) -> bool:

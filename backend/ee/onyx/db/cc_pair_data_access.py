@@ -106,9 +106,8 @@ def lock_cc_pairs_for_data_access__no_commit(
 def assert_restricted_cc_pairs_keep_a_group(
     db_session: Session, cc_pair_ids: Collection[int]
 ) -> None:
-    """A PRIVATE or SYNC_RESTRICTED pair is a groups choice, so an edit must
-    not remove its last data-access group (owner-only is PERSONAL). Deleting a
-    group may still leave one with none. The caller locks the pairs with
+    """A SYNC_RESTRICTED pair with no data-access group is visible to nobody,
+    so a write must not remove its last group. The caller locks the pairs with
     lock_cc_pairs_for_data_access__no_commit before it removes groups."""
     if not cc_pair_ids:
         return
@@ -121,7 +120,7 @@ def assert_restricted_cc_pairs_keep_a_group(
         db_session.scalars(
             select(ConnectorCredentialPair.id).where(
                 ConnectorCredentialPair.id.in_(cc_pair_ids),
-                ConnectorCredentialPair.access_type.in_(AccessType.data_access_types()),
+                ConnectorCredentialPair.access_type == AccessType.SYNC_RESTRICTED,
                 ~has_group,
             )
         )
@@ -129,8 +128,7 @@ def assert_restricted_cc_pairs_keep_a_group(
     if ungrouped_ids:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "A private or restricted connector needs at least one data-access "
-            "group: "
+            "A restricted connector needs at least one data-access group: "
             f"{ungrouped_ids}",
         )
 

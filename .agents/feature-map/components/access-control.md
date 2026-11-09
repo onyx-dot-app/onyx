@@ -21,9 +21,9 @@ access, hierarchy filtering and post-query censoring.
 - **An anonymous visitor** sees public documents only.
 - **An admin** controls visibility through connector access types (public,
   private to groups, owner-only (`personal`, Business+), or synced from the
-  source), user groups, and document sets. `private` always names at least one
-  group on create and edit; owner-only is its own type, so the edit form can
-  tell the two apart. Data-access rows copy their pair's access type, and a composite
+  source), user groups, and document sets. `private` may have no groups, and
+  owner-only is its own type: nothing converts one to the other, so the edit
+  form shows what the admin saved. Data-access rows copy their pair's access type, and a composite
   foreign key on `(cc_pair_id, access_type)` limits them to `private` and
   `sync_restricted`: leaving a group type must delete the rows first. A document set narrows what an agent searches. It never grants access
   to a document the user could not already see.

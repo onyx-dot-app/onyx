@@ -177,6 +177,8 @@ def test_state_builder_reads_the_pair(
     enable_ee: None,  # noqa: ARG001
 ) -> None:
     slack_pair.access_type = AccessType.PRIVATE
+    # The rows' foreign key needs the pair's new access type stored first.
+    db_session.flush()
     for group in reversed(groups):
         db_session.add(
             UserGroup__CCPairDataAccess(
