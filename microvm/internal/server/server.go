@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 
 	"google.golang.org/grpc"
@@ -24,6 +25,12 @@ type Service struct {
 	M *agent.Manager
 	// DialPorts are the guest ports Dial allows. Nil means DefaultDialPorts.
 	DialPorts []uint32
+	// MaxDialsPerVM caps the open Dial streams of one VM. 0 means
+	// DefaultMaxDialsPerVM.
+	MaxDialsPerVM int
+
+	dialMu sync.Mutex
+	dials  map[string]int
 }
 
 // Create implements pb.HostAgentServer.

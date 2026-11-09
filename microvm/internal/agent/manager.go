@@ -539,8 +539,9 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 	return StopResult{AlreadyStopped: exited}, nil
 }
 
-// DialTarget returns the vsock UDS of a running VM, for Dial.
-func (m *Manager) DialTarget(sandboxID string) (string, error) {
+// DialTarget returns the vsock UDS of a running VM, for Dial. A generation
+// other than 0 must match the running VM.
+func (m *Manager) DialTarget(sandboxID string, generation uint64) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e := m.vms[sandboxID]
@@ -549,6 +550,10 @@ func (m *Manager) DialTarget(sandboxID string) (string, error) {
 	}
 	if e.vm.State != pb.VMState_VM_STATE_RUNNING {
 		return "", apierr.New(pb.ErrorReason_SANDBOX_NOT_FOUND, "sandbox %s VM is %s", sandboxID, e.vm.State)
+	}
+	if generation != 0 && generation != e.vm.Generation {
+		return "", apierr.New(pb.ErrorReason_INSTANCE_MISMATCH,
+			"sandbox %s runs generation %d, not %d", sandboxID, e.vm.Generation, generation)
 	}
 	return e.proc.Info().VsockUDS, nil
 }

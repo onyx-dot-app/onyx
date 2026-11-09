@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
@@ -104,6 +106,12 @@ func (bigStats) DiskFreeBytes() (uint64, error)   { return 1 << 40, nil }
 // mtlsAgent serves a Manager with one running VM over mTLS on 127.0.0.1.
 func mtlsAgent(t *testing.T, ports ...uint32) (addr string, certs *testcerts.Set) {
 	t.Helper()
+	return mtlsAgentWith(t, &Service{DialPorts: ports}, nil)
+}
+
+// mtlsAgentWith is mtlsAgent with a Service setup and a client SAN allowlist.
+func mtlsAgentWith(t *testing.T, svc *Service, sans []string) (addr string, certs *testcerts.Set) {
+	t.Helper()
 	dir := t.TempDir()
 	tdir := filepath.Join(dir, "tpl", "t1")
 	if err := os.MkdirAll(tdir, 0o755); err != nil {
@@ -129,7 +137,8 @@ func mtlsAgent(t *testing.T, ports ...uint32) (addr string, certs *testcerts.Set
 	if err != nil {
 		t.Fatal(err)
 	}
-	creds, err := MTLSCredentials(certs.ServerCert, certs.ServerKey, certs.ClientCA)
+	creds, err := (&MTLS{CertFile: certs.ServerCert, KeyFile: certs.ServerKey, ClientCAFile: certs.ClientCA,
+		AllowedSANs: sans}).Credentials()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +146,8 @@ func mtlsAgent(t *testing.T, ports ...uint32) (addr string, certs *testcerts.Set
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := NewServer(&Service{M: m, DialPorts: ports}, grpc.Creds(creds))
+	svc.M = m
+	srv := NewServer(svc, grpc.Creds(creds))
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(srv.Stop)
 	return ln.Addr().String(), certs
@@ -342,5 +352,146 @@ func TestDialReturnsUploadErrors(t *testing.T) {
 	_, err = s.Recv()
 	if got := apierr.FromStatus(err); got != pb.ErrorReason_GUEST_UNREACHABLE {
 		t.Fatalf("reason %s, want GUEST_UNREACHABLE (%v)", got, err)
+	}
+}
+
+func TestMTLSAllowedSANs(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	addr, certs := mtlsAgentWith(t, &Service{}, []string{"spiffe://test/api_server"})
+	if _, err := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey)).List(ctx, &pb.ListRequest{}); err != nil {
+		t.Fatalf("allowed client: %v", err)
+	}
+	if _, err := dialClient(t, addr, clientTLS(t, certs, certs.OtherCert, certs.OtherKey)).List(ctx, &pb.ListRequest{}); err == nil {
+		t.Fatal("client with another SAN was accepted")
+	}
+	// No allowlist: any client of the CA.
+	addr, certs = mtlsAgent(t)
+	if _, err := dialClient(t, addr, clientTLS(t, certs, certs.OtherCert, certs.OtherKey)).List(ctx, &pb.ListRequest{}); err != nil {
+		t.Fatalf("no allowlist: %v", err)
+	}
+}
+
+func TestMTLSReloadsRotatedFiles(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	addr, old := mtlsAgent(t)
+	list := func(certs *testcerts.Set) error {
+		_, err := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey)).List(ctx, &pb.ListRequest{})
+		return err
+	}
+	if err := list(old); err != nil {
+		t.Fatal(err)
+	}
+	// A half-written rotation keeps the last good files.
+	future := time.Now().Add(time.Hour)
+	writeAt(t, old.ClientCA, []byte("not a PEM"), future)
+	if err := list(old); err != nil {
+		t.Fatalf("after a bad CA file: %v", err)
+	}
+
+	rotated, err := testcerts.Write(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for src, dst := range map[string]string{
+		rotated.ServerCert: old.ServerCert, rotated.ServerKey: old.ServerKey, rotated.ClientCA: old.ClientCA,
+	} {
+		raw, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeAt(t, dst, raw, future.Add(time.Minute))
+	}
+	// Clients of the new CA work; clients of the old CA do not.
+	if err := list(rotated); err != nil {
+		t.Fatalf("rotated client: %v", err)
+	}
+	if err := list(old); err == nil {
+		t.Fatal("old client accepted after the rotation")
+	}
+}
+
+func writeAt(t *testing.T, path string, data []byte, mod time.Time) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, mod, mod); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDialChecksGeneration(t *testing.T) {
+	addr, certs := mtlsAgent(t)
+	c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	l, err := c.List(ctx, &pb.ListRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gen := l.GetVms()[0].GetGeneration()
+	s, _ := c.Dial(ctx)
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52, Generation: gen + 1})
+	if _, err := s.Recv(); apierr.FromStatus(err) != pb.ErrorReason_INSTANCE_MISMATCH {
+		t.Fatalf("old generation: %v", err)
+	}
+	s, _ = c.Dial(ctx)
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52, Generation: gen, Data: []byte("ping\n")})
+	_ = s.CloseSend()
+	if got := readAll(t, s); got != "pong\n" {
+		t.Fatalf("daemon reply %q", got)
+	}
+}
+
+func TestDialCapPerVM(t *testing.T) {
+	addr, certs := mtlsAgentWith(t, &Service{MaxDialsPerVM: 1}, nil)
+	c := dialClient(t, addr, clientTLS(t, certs, certs.GoodCert, certs.GoodKey))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// A finished stream gives its slot back.
+	s, _ := c.Dial(ctx)
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52, Data: []byte("ping\n")})
+	_ = s.CloseSend()
+	if got := readAll(t, s); got != "pong\n" {
+		t.Fatalf("daemon reply %q", got)
+	}
+	// An open stream holds the only slot.
+	hold, _ := c.Dial(ctx)
+	_ = hold.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 3010, Data: []byte("x")})
+	if f, err := hold.Recv(); err != nil || string(f.GetData()) != "x" {
+		t.Fatalf("echo: %v %v", f, err)
+	}
+	s, _ = c.Dial(ctx)
+	_ = s.Send(&pb.DialFrame{SandboxId: sandbox, GuestPort: 52})
+	_, err := s.Recv()
+	if got := apierr.FromStatus(err); got != pb.ErrorReason_DIAL_LIMIT || status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("over the cap: %s %v", got, err)
+	}
+}
+
+func TestAcquireDial(t *testing.T) {
+	s := &Service{MaxDialsPerVM: 2}
+	r1, err := s.acquireDial(sandbox)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2, _ := s.acquireDial(sandbox)
+	if _, err := s.acquireDial(sandbox); apierr.ReasonOf(err) != pb.ErrorReason_DIAL_LIMIT {
+		t.Fatalf("third dial: %v", err)
+	}
+	if _, err := s.acquireDial("other"); err != nil {
+		t.Fatalf("other VM: %v", err)
+	}
+	r1()
+	r3, err := s.acquireDial(sandbox)
+	if err != nil {
+		t.Fatalf("after release: %v", err)
+	}
+	r2()
+	r3()
+	if n := s.dials[sandbox]; n != 0 {
+		t.Fatalf("count %d after release", n)
 	}
 }

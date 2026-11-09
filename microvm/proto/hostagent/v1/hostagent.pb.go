@@ -53,7 +53,8 @@ const (
 	ErrorReason_STALE_ATTEMPT ErrorReason = 11
 	// This node has no VM and no record of a stopped VM for the sandbox.
 	ErrorReason_SANDBOX_NOT_FOUND ErrorReason = 12
-	// Stop: the attempt or the generation does not match the VM.
+	// Stop: the attempt or the generation does not match the VM. Dial: the
+	// running VM has another generation than the first frame asks for.
 	ErrorReason_INSTANCE_MISMATCH ErrorReason = 13
 	// The jailer, Firecracker or the snapshot restore failed.
 	ErrorReason_VMM_FAILED ErrorReason = 14
@@ -68,6 +69,9 @@ const (
 	ErrorReason_PORT_NOT_ALLOWED ErrorReason = 17
 	// Dial: nothing in the VM accepted the connection on that port.
 	ErrorReason_GUEST_UNREACHABLE ErrorReason = 18
+	// Dial: the VM already has the most open Dial streams that the agent
+	// allows (--dial-max-streams).
+	ErrorReason_DIAL_LIMIT ErrorReason = 20
 )
 
 // Enum value maps for ErrorReason.
@@ -92,6 +96,7 @@ var (
 		16: "SANDBOX_IN_DOUBT",
 		17: "PORT_NOT_ALLOWED",
 		18: "GUEST_UNREACHABLE",
+		20: "DIAL_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -113,6 +118,7 @@ var (
 		"SANDBOX_IN_DOUBT":         16,
 		"PORT_NOT_ALLOWED":         17,
 		"GUEST_UNREACHABLE":        18,
+		"DIAL_LIMIT":               20,
 	}
 )
 
@@ -739,8 +745,11 @@ type DialFrame struct {
 	// First frame only.
 	SandboxId string `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
 	// First frame only.
-	GuestPort     uint32 `protobuf:"varint,2,opt,name=guest_port,json=guestPort,proto3" json:"guest_port,omitempty"`
-	Data          []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	GuestPort uint32 `protobuf:"varint,2,opt,name=guest_port,json=guestPort,proto3" json:"guest_port,omitempty"`
+	Data      []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	// First frame only. If set, Dial fails with INSTANCE_MISMATCH unless the
+	// running VM has this generation. 0 means any running VM.
+	Generation    uint64 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -794,6 +803,13 @@ func (x *DialFrame) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *DialFrame) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
 }
 
 type CloseConnectionsResponse struct {
@@ -1128,13 +1144,16 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\aattempt\x18\x02 \x01(\x04R\aattempt\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x03 \x01(\x04R\n" +
-	"generation\"]\n" +
+	"generation\"}\n" +
 	"\tDialFrame\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x1d\n" +
 	"\n" +
 	"guest_port\x18\x02 \x01(\rR\tguestPort\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"2\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x04 \x01(\x04R\n" +
+	"generation\"2\n" +
 	"\x18CloseConnectionsResponse\x12\x16\n" +
 	"\x06closed\x18\x01 \x01(\rR\x06closed\"\x11\n" +
 	"\x0fNodeInfoRequest\"\xf5\x02\n" +
@@ -1156,7 +1175,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vscratch_gib\x18\x04 \x01(\rR\n" +
 	"scratchGib\x12!\n" +
 	"\fguest_kernel\x18\x05 \x01(\tR\vguestKernel\x12/\n" +
-	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\xb4\x03\n" +
+	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\xc4\x03\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -1178,7 +1197,9 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\bINTERNAL\x10\x0f\x12\x14\n" +
 	"\x10SANDBOX_IN_DOUBT\x10\x10\x12\x14\n" +
 	"\x10PORT_NOT_ALLOWED\x10\x11\x12\x15\n" +
-	"\x11GUEST_UNREACHABLE\x10\x12*e\n" +
+	"\x11GUEST_UNREACHABLE\x10\x12\x12\x0e\n" +
+	"\n" +
+	"DIAL_LIMIT\x10\x14*e\n" +
 	"\aVMState\x12\x18\n" +
 	"\x14VM_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11VM_STATE_STARTING\x10\x01\x12\x14\n" +

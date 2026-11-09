@@ -23,7 +23,7 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
 | `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk, CPU model, Firecracker, host kernel and guest kernel versions. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes the VM's egress relay connections (see Egress relay). |
-| `Dial(sandbox_id, guest_port)` | Byte stream to a guest vsock port (see below). |
+| `Dial(sandbox_id, guest_port, generation)` | Byte stream to a guest vsock port (see below). |
 
 Errors are typed. Each error is a gRPC status with one `google.rpc.ErrorInfo` detail: the domain is
 `hostagent.craft.onyx.app` and the reason is an `ErrorReason` name, for example `CAPACITY_MEMORY`,
@@ -46,15 +46,24 @@ with `--listen`, on an mTLS TCP listener for the api_server (D2):
 - `--tls-cert`, `--tls-key`: the agent's certificate and key (PEM files; Helm mounts them, ENG-4583).
 - `--client-ca`: the api_server CA. The listener needs a client certificate that chains to it (TLS 1.3).
   A client with no certificate, or with one from another CA, fails the handshake.
+- `--client-allowed-sans`: optional comma-separated DNS or URI SANs. If set, the client certificate must
+  have one of them.
+- The agent reads the three files again on the first handshake after one of them changes, so a rotated
+  secret needs no restart. If the new files do not load (for example a half-written rotation), it keeps
+  the last good ones.
+- The agent does not start if `--listen` has no TLS files, or if TLS flags are set without `--listen`.
 - Both listeners serve the same API.
 
-`Dial(sandbox_id, guest_port)` is a bidirectional stream of byte frames to a vsock port of a running VM:
-the guest daemon port or the app preview (3010). Only the ports in `--dial-ports` (default `52,3010`; 52
-is the prototype daemon port until ENG-4571 fixes the daemon port) are allowed (`PORT_NOT_ALLOWED`). The
-agent does not start with an empty `--dial-ports`. If nothing in the VM accepts the connection, the call
-fails with `GUEST_UNREACHABLE`. A failed write to the guest also ends the call with `GUEST_UNREACHABLE`.
-When the client ends its send side, the agent keeps reading until the guest closes, because Firecracker
-turns a host half-close into a full close.
+`Dial(sandbox_id, guest_port, generation)` is a bidirectional stream of byte frames to a vsock port of a
+running VM: the guest daemon port or the app preview (3010). Only the ports in `--dial-ports` (default
+`52,3010`; 52 is the prototype daemon port until ENG-4571 fixes the daemon port) are allowed
+(`PORT_NOT_ALLOWED`). The agent does not start with an empty `--dial-ports`. If nothing in the VM
+accepts the connection, the call fails with `GUEST_UNREACHABLE`. A `generation` other than 0 must match
+the running VM, else the call fails with `INSTANCE_MISMATCH`. One VM can have at most
+`--dial-max-streams` open Dial streams (default 64); more fail with `DIAL_LIMIT` (`RESOURCE_EXHAUSTED`).
+A failed write to the guest also ends the call with `GUEST_UNREACHABLE`. When the client ends its send
+side, the agent keeps reading until the guest closes, because Firecracker turns a host half-close into a
+full close.
 
 While the agent restarts, new calls (including `Dial` and the egress relay) fail for a few seconds: 5.5 s
 in the KVM restart test, about 7 s in T6. Open `Dial` streams and relay connections end with the old

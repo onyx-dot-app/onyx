@@ -73,7 +73,8 @@ enum ErrorReason {
   STALE_ATTEMPT = 11;
   // This node has no VM and no record of a stopped VM for the sandbox.
   SANDBOX_NOT_FOUND = 12;
-  // Stop: the attempt or the generation does not match the VM.
+  // Stop: the attempt or the generation does not match the VM. Dial: the
+  // running VM has another generation than the first frame asks for.
   INSTANCE_MISMATCH = 13;
   // The jailer, Firecracker or the snapshot restore failed.
   VMM_FAILED = 14;
@@ -88,6 +89,9 @@ enum ErrorReason {
   PORT_NOT_ALLOWED = 17;
   // Dial: nothing in the VM accepted the connection on that port.
   GUEST_UNREACHABLE = 18;
+  // Dial: the VM already has the most open Dial streams that the agent
+  // allows (--dial-max-streams).
+  DIAL_LIMIT = 20;
 }
 
 enum VMState {
@@ -174,6 +178,9 @@ message DialFrame {
   // First frame only.
   uint32 guest_port = 2;
   bytes data = 3;
+  // First frame only. If set, Dial fails with INSTANCE_MISMATCH unless the
+  // running VM has this generation. 0 means any running VM.
+  uint64 generation = 4;
 }
 
 message CloseConnectionsResponse {

@@ -66,6 +66,8 @@ type flags struct {
 	tlsKey        string
 	clientCA      string
 	dialPorts     string
+	clientSANs    string
+	dialMax       int
 }
 
 func main() {
@@ -93,6 +95,8 @@ func main() {
 	flag.StringVar(&f.tlsKey, "tls-key", "", "server key file (PEM) for --listen")
 	flag.StringVar(&f.clientCA, "client-ca", "", "api_server client CA file (PEM); only clients it signed are accepted")
 	flag.StringVar(&f.dialPorts, "dial-ports", "52,3010", "guest vsock ports that Dial allows")
+	flag.StringVar(&f.clientSANs, "client-allowed-sans", "", "comma-separated DNS or URI SANs; a client cert must have one (empty: any cert from --client-ca)")
+	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -123,6 +127,9 @@ func run(f flags, log *slog.Logger) error {
 		return err
 	}
 	if err := checkRanges(f); err != nil {
+		return err
+	}
+	if err := checkListen(f); err != nil {
 		return err
 	}
 	uids, err := jailer.NewUIDPool(uint32(f.uidBase), uint32(f.uidCount))
@@ -164,7 +171,7 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	svc := &server.Service{M: m, DialPorts: ports}
+	svc := &server.Service{M: m, DialPorts: ports, MaxDialsPerVM: f.dialMax}
 	ln, err := server.ListenUnix(f.socket)
 	if err != nil {
 		return err
@@ -172,7 +179,9 @@ func run(f flags, log *slog.Logger) error {
 	servers := []*grpc.Server{server.NewServer(svc)}
 	listeners := []net.Listener{ln}
 	if f.listen != "" {
-		creds, err := server.MTLSCredentials(f.tlsCert, f.tlsKey, f.clientCA)
+		creds, err := (&server.MTLS{
+			CertFile: f.tlsCert, KeyFile: f.tlsKey, ClientCAFile: f.clientCA, AllowedSANs: splitList(f.clientSANs),
+		}).Credentials()
 		if err != nil {
 			return err
 		}
@@ -297,6 +306,32 @@ func checkRanges(f flags) error {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)
 	}
 	return nil
+}
+
+// checkListen rejects a TCP listener without its TLS files, TLS flags
+// without a listener, and a Dial cap under 1.
+func checkListen(f flags) error {
+	tls := f.tlsCert != "" || f.tlsKey != "" || f.clientCA != "" || f.clientSANs != ""
+	if f.listen == "" && tls {
+		return errors.New("--tls-cert, --tls-key, --client-ca and --client-allowed-sans need --listen")
+	}
+	if f.listen != "" && (f.tlsCert == "" || f.tlsKey == "" || f.clientCA == "") {
+		return errors.New("--listen needs --tls-cert, --tls-key and --client-ca")
+	}
+	if f.dialMax < 1 {
+		return fmt.Errorf("--dial-max-streams %d must be 1 or more", f.dialMax)
+	}
+	return nil
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, v := range strings.Split(s, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func checkSystemdRun(c jailer.Command) error {

@@ -16,6 +16,9 @@ import (
 // daemon (52) and the app preview (3010).
 var DefaultDialPorts = []uint32{52, 3010}
 
+// DefaultMaxDialsPerVM is the default cap on open Dial streams per VM.
+const DefaultMaxDialsPerVM = 64
+
 const (
 	dialTimeout = 5 * time.Second
 	dialChunk   = 32 << 10
@@ -31,10 +34,15 @@ func (s *Service) Dial(stream pb.HostAgent_DialServer) error {
 	if !s.dialAllowed(port) {
 		return toStatus(apierr.New(pb.ErrorReason_PORT_NOT_ALLOWED, "guest port %d is not allowed", port))
 	}
-	uds, err := s.M.DialTarget(first.GetSandboxId())
+	uds, err := s.M.DialTarget(first.GetSandboxId(), first.GetGeneration())
 	if err != nil {
 		return toStatus(err)
 	}
+	release, err := s.acquireDial(first.GetSandboxId())
+	if err != nil {
+		return toStatus(err)
+	}
+	defer release()
 	ctx := stream.Context()
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	conn, err := fcvm.DialVsock(dctx, uds, port)
@@ -106,6 +114,30 @@ func download(ctx context.Context, stream pb.HostAgent_DialServer, conn net.Conn
 			return err
 		}
 	}
+}
+
+// acquireDial takes one of the VM's Dial slots. The caller must call release.
+func (s *Service) acquireDial(sandboxID string) (release func(), err error) {
+	limit := s.MaxDialsPerVM
+	if limit <= 0 {
+		limit = DefaultMaxDialsPerVM
+	}
+	s.dialMu.Lock()
+	defer s.dialMu.Unlock()
+	if s.dials[sandboxID] >= limit {
+		return nil, apierr.New(pb.ErrorReason_DIAL_LIMIT, "sandbox %s has %d open Dial streams", sandboxID, limit)
+	}
+	if s.dials == nil {
+		s.dials = map[string]int{}
+	}
+	s.dials[sandboxID]++
+	return func() {
+		s.dialMu.Lock()
+		defer s.dialMu.Unlock()
+		if s.dials[sandboxID]--; s.dials[sandboxID] == 0 {
+			delete(s.dials, sandboxID)
+		}
+	}, nil
 }
 
 func (s *Service) dialAllowed(port uint32) bool {

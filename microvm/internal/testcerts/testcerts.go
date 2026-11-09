@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -46,7 +47,8 @@ func NewCA(name string) (*CA, error) {
 }
 
 // Leaf returns a certificate and key (PEM) signed by the CA. A server leaf
-// is valid for 127.0.0.1 and localhost.
+// is valid for 127.0.0.1 and localhost; a client leaf has the URI SAN
+// spiffe://test/<name>.
 func (c *CA) Leaf(name string, server bool) (certPEM, keyPEM []byte, err error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -56,6 +58,9 @@ func (c *CA) Leaf(name string, server bool) (certPEM, keyPEM []byte, err error) 
 		SerialNumber: big.NewInt(time.Now().UnixNano()), Subject: pkix.Name{CommonName: name},
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour),
 		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	if !server {
+		tpl.URIs = []*url.URL{{Scheme: "spiffe", Host: "test", Path: "/" + name}}
 	}
 	if server {
 		tpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
@@ -79,6 +84,8 @@ type Set struct {
 	ServerCert, ServerKey, ClientCA string
 	// Signed by the api_server CA.
 	GoodCert, GoodKey string
+	// Signed by the api_server CA, with another identity.
+	OtherCert, OtherKey string
 	// Signed by another CA.
 	BadCert, BadKey string
 	// The CA that signed the server certificate, for clients.
@@ -113,6 +120,10 @@ func Write(dir string) (*Set, error) {
 	if err != nil {
 		return nil, err
 	}
+	oc, ok, err := apiCA.Leaf("other-client", false)
+	if err != nil {
+		return nil, err
+	}
 	bc, bk, err := otherCA.Leaf("api_server", false)
 	if err != nil {
 		return nil, err
@@ -123,6 +134,8 @@ func Write(dir string) (*Set, error) {
 	add(&s.ServerCA, "node-ca.crt", nodeCA.PEM)
 	add(&s.GoodCert, "good.crt", gc)
 	add(&s.GoodKey, "good.key", gk)
+	add(&s.OtherCert, "other.crt", oc)
+	add(&s.OtherKey, "other.key", ok)
 	add(&s.BadCert, "bad.crt", bc)
 	add(&s.BadKey, "bad.key", bk)
 	for p, data := range files {
