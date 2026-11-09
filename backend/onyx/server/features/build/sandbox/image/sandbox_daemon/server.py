@@ -18,10 +18,11 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from sandbox_daemon.extract import MAX_BUNDLE_BYTES, safe_extract_then_atomic_swap
+from sandbox_daemon.extract import safe_extract_then_atomic_swap
 from sandbox_daemon.filesystem import FilesystemPathError, list_session_directory
 from sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
+    PUSH_MAX_ARCHIVE_BYTES,
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
@@ -276,7 +277,7 @@ async def push(
     if not mount_path.startswith("/"):
         raise HTTPException(status_code=400, detail="mount_path must be absolute")
 
-    _check_content_length(request, MAX_BUNDLE_BYTES)
+    _check_content_length(request, PUSH_MAX_ARCHIVE_BYTES)
 
     async with _push_lock:
         archive_path: Path | None = None
@@ -290,7 +291,7 @@ async def push(
             archive_path = await _spool_verified_archive(
                 request,
                 x_bundle_sha256,
-                max_bytes=MAX_BUNDLE_BYTES,
+                max_bytes=PUSH_MAX_ARCHIVE_BYTES,
                 directory=_PUSH_SPOOL_DIR,
             )
             await asyncio.to_thread(

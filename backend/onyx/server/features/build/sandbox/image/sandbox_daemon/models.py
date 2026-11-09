@@ -6,6 +6,7 @@ Dockerfile copies ``sandbox_daemon/`` to ``/workspace/sandbox_daemon/``); the
 api-server imports the full module path.
 """
 
+from collections.abc import Iterator
 from pathlib import PurePosixPath
 from uuid import UUID
 
@@ -27,10 +28,69 @@ SIDECAR_OPENCODE_HISTORY_RESTORE_PATH = "/opencode-history/restore"
 SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH = "/opencode-history/mark-restored"
 SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
 
+# Push limits. Runtime Skill selection (onyx/skills/push.py) leaves out whole
+# Skills to stay within content, file, folder and path limits; transport
+# checks the same bounds.
+PUSH_MAX_CONTENT_BYTES = 900 * 1024 * 1024
+PUSH_MAX_FILES = 10_000
+# Parent directories are implied by file paths, so they are counted apart.
+PUSH_MAX_DIRECTORIES = 10_000
+PUSH_MAX_PATH_BYTES = 4096
+PUSH_MAX_COMPONENT_BYTES = 255
+# Linux PATH_MAX includes the trailing NUL; reserve the extraction root too.
+_PUSH_MAX_ABSOLUTE_PATH_BYTES = 4095
+PUSH_VERSION_NAME_BYTES = 25
+# One tar entry: 512-byte header, up to 511 bytes of data padding, and a PAX
+# header plus records for a path of PUSH_MAX_PATH_BYTES (512 + 9 x 512).
+_TAR_ENTRY_OVERHEAD_BYTES = 6 * 1024
+# End-of-archive blocks plus padding to the 10 KiB tar record size.
+_TAR_END_OVERHEAD_BYTES = 20 * 1024
+PUSH_MAX_TAR_BYTES = (
+    PUSH_MAX_CONTENT_BYTES
+    + PUSH_MAX_FILES * _TAR_ENTRY_OVERHEAD_BYTES
+    + _TAR_END_OVERHEAD_BYTES
+)
+# zlib deflateBound for incompressible input, plus gzip header and trailer.
+PUSH_MAX_ARCHIVE_BYTES = (
+    PUSH_MAX_TAR_BYTES
+    + (PUSH_MAX_TAR_BYTES >> 12)
+    + (PUSH_MAX_TAR_BYTES >> 14)
+    + (PUSH_MAX_TAR_BYTES >> 25)
+    + 1024
+)
+
 
 def push_version_directory(mount_path: str, version: str) -> PurePosixPath:
     mount = PurePosixPath(mount_path)
     return mount.parent / ".versions" / mount.name / version
+
+
+def push_path_byte_limit(extraction_root: str) -> int:
+    return min(
+        PUSH_MAX_PATH_BYTES,
+        _PUSH_MAX_ABSOLUTE_PATH_BYTES - len(extraction_root.encode("utf-8")) - 1,
+    )
+
+
+def validate_push_path(path: str, max_path_bytes: int) -> None:
+    try:
+        encoded = path.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError("Non-UTF-8 path name") from exc
+    if len(encoded) > max_path_bytes:
+        raise ValueError(f"Path name longer than {max_path_bytes} bytes")
+    if any(
+        len(part.encode("utf-8")) > PUSH_MAX_COMPONENT_BYTES for part in path.split("/")
+    ):
+        raise ValueError(f"Path component longer than {PUSH_MAX_COMPONENT_BYTES} bytes")
+
+
+def push_parent_directories(path: str) -> Iterator[str]:
+    """Implied folders, nearest first; a known folder implies known ancestors."""
+    for parent in PurePosixPath(path).parents:
+        if parent == PurePosixPath("."):
+            break
+        yield str(parent)
 
 
 _HIDDEN_NAMES = frozenset(

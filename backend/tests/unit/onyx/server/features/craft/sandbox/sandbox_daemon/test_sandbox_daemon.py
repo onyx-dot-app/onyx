@@ -541,7 +541,7 @@ def test_push_over_size_cap_returns_413(
     # Use a small body but advertise a huge Content-Length. The daemon rejects
     # based on the header before reading the body.
     body = _build_targz_bytes({"x": b"x"})
-    huge = str(server_mod.MAX_BUNDLE_BYTES + 1)
+    huge = str(server_mod.PUSH_MAX_ARCHIVE_BYTES + 1)
     sha = hashlib.sha256(body).hexdigest()
     ts = str(int(time.time()))
     sig = _sign(priv, mount_path=mount_path, sha256_hex=sha, timestamp=ts)
@@ -667,7 +667,7 @@ def test_streamed_push_over_limit_returns_413_and_keeps_old_tree(
     mount_path = str(allowed_root / "skills")
     live = _push_live_tree(client, priv, mount_path)
     body = _build_targz_bytes({"big.bin": os.urandom(8192)})
-    monkeypatch.setattr(server_mod, "MAX_BUNDLE_BYTES", len(body) - 1)
+    monkeypatch.setattr(server_mod, "PUSH_MAX_ARCHIVE_BYTES", len(body) - 1)
 
     def chunks() -> Generator[bytes, None, None]:
         for start in range(0, len(body), 1000):
@@ -1838,3 +1838,44 @@ def test_output_manifest_client_and_daemon_contract(
     assert json.loads(bodies[0]) == expected_body
     assert result.entries[0].mtime_ns == (outputs / "deck.pptx").stat().st_mtime_ns
     assert result.entries[0].ctime_ns == (outputs / "deck.pptx").stat().st_ctime_ns
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="Needs the Linux PATH_MAX of 4096 bytes"
+)
+def test_push_filesystem_path_boundaries_keep_previous_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+) -> None:
+    from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+        PUSH_VERSION_NAME_BYTES,
+        push_path_byte_limit,
+        push_version_directory,
+    )
+
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    root = push_version_directory(mount_path, "0" * PUSH_VERSION_NAME_BYTES)
+    limit = push_path_byte_limit(str(root))
+    prefix = ("a" * 200 + "/") * ((limit - 1) // 201)
+    path = prefix + "b" * (limit - len(prefix))
+    body = _build_targz_bytes({path: b"boundary", "c" * 255: b"component"})
+    response = _push_request(client, priv=priv, mount_path=mount_path, body=body)
+    assert response.status_code == 200, response.text
+    live = Path(mount_path).resolve()
+    assert len(live.name.encode()) == PUSH_VERSION_NAME_BYTES
+    assert (live / path).read_bytes() == b"boundary"
+    for invalid in [path + "x", "c" * 256, "é" * 128]:
+        response = _push_request(
+            client,
+            priv=priv,
+            mount_path=mount_path,
+            body=_build_targz_bytes({invalid: b"invalid"}),
+        )
+        assert response.status_code == 400, response.text
+        assert "Path" in response.text
+        assert Path(mount_path).resolve() == live
+        assert (live / path).read_bytes() == b"boundary"
+        assert list(live.parent.iterdir()) == [live]
+        assert list(spool_dir.iterdir()) == []

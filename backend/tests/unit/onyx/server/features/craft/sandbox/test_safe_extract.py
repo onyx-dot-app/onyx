@@ -225,10 +225,81 @@ def test_oversized_bundle_rejected(
     tmp_path: Path, extract_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     mount_path = _make_mount_path(tmp_path)
-    monkeypatch.setattr(extract_mod, "MAX_BUNDLE_BYTES", 100)
+    monkeypatch.setattr(extract_mod, "PUSH_MAX_CONTENT_BYTES", 100)
     archive = _build_tar_gz(tmp_path, {"a.bin": b"x" * 60, "b.bin": b"y" * 60})
 
     with pytest.raises(ValueError, match="[Tt]otal.*size"):
+        extract_mod.safe_extract_then_atomic_swap(archive, mount_path)
+
+
+def test_content_exactly_at_limit_accepted(
+    tmp_path: Path, extract_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    monkeypatch.setattr(extract_mod, "PUSH_MAX_CONTENT_BYTES", 120)
+    monkeypatch.setattr(extract_mod, "PUSH_MAX_FILES", 2)
+    archive = _build_tar_gz(tmp_path, {"a.bin": b"x" * 60, "b.bin": b"y" * 60})
+
+    extract_mod.safe_extract_then_atomic_swap(archive, mount_path)
+
+    assert (_resolve(mount_path) / "b.bin").read_bytes() == b"y" * 60
+
+
+def test_too_many_files_rejected(
+    tmp_path: Path, extract_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    monkeypatch.setattr(extract_mod, "PUSH_MAX_FILES", 2)
+    archive = _build_tar_gz(tmp_path, {"a": b"", "b": b"", "c": b""})
+
+    with pytest.raises(ValueError, match="more than 2 files"):
+        extract_mod.safe_extract_then_atomic_swap(archive, mount_path)
+
+
+def test_implied_folders_count_against_folder_limit(
+    tmp_path: Path, extract_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    monkeypatch.setattr(extract_mod, "PUSH_MAX_DIRECTORIES", 3)
+    archive = _build_tar_gz(tmp_path, {"a/b/c/d/file.txt": b"deep"})
+
+    with pytest.raises(ValueError, match="more than 3 folders"):
+        extract_mod.safe_extract_then_atomic_swap(archive, mount_path)
+
+
+def test_long_path_rejected(
+    tmp_path: Path, extract_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    # The path limit lives in the shared models module that extract imports.
+    models_mod = importlib.import_module("sandbox_daemon.models")
+    monkeypatch.setattr(models_mod, "PUSH_MAX_PATH_BYTES", 10)
+    archive = _build_tar_gz(tmp_path, {"abcdefghijk.txt": b"x"})
+
+    with pytest.raises(ValueError, match="longer than 10 bytes"):
+        extract_mod.safe_extract_then_atomic_swap(archive, mount_path)
+
+
+def test_oversized_pax_header_rejected_before_it_is_read(
+    tmp_path: Path, extract_mod: ModuleType
+) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    info, data = _file("a.txt", b"x")
+    info.pax_headers = {"comment": "x" * (2 * 1024 * 1024)}
+    archive = _write_archive(tmp_path, [(info, data)])
+
+    with pytest.raises(ValueError, match="metadata entry too large"):
+        extract_mod.safe_extract_then_atomic_swap(archive, mount_path)
+
+
+def test_tar_stream_over_limit_rejected(
+    tmp_path: Path, extract_mod: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mount_path = _make_mount_path(tmp_path)
+    monkeypatch.setattr(extract_mod, "PUSH_MAX_TAR_BYTES", 2048)
+    archive = _build_tar_gz(tmp_path, {"a.bin": b"x" * 4096})
+
+    with pytest.raises(ValueError, match="Tar stream exceeds"):
         extract_mod.safe_extract_then_atomic_swap(archive, mount_path)
 
 
