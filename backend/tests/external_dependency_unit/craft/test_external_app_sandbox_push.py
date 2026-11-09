@@ -3,15 +3,16 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
-from onyx.db.enums import ExternalAppType
+from onyx.db.enums import ExternalAppType, SandboxStatus
 from onyx.db.external_app import (
     get_external_app_by_skill_id,
     get_external_app_user_credential,
 )
-from onyx.db.models import ExternalApp, Skill, User, UserSkillPreference
+from onyx.db.models import ExternalApp, Sandbox, Skill, User, UserSkillPreference
 from onyx.db.skill import list_runtime_skills_for_user, set_skill_enabled_for_user
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
@@ -213,6 +214,13 @@ def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
     app.associated_skills.append(second_skill)
     db_session.commit()
 
+    # A public Skill reaches every running sandbox, including earlier fixtures.
+    expected_users = set(
+        db_session.scalars(
+            select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
+        )
+    )
+    assert test_user.id in expected_users
     calls: list[set[UUID]] = []
     monkeypatch.setattr(api, "MULTI_TENANT", False)
     monkeypatch.setattr(
@@ -230,7 +238,7 @@ def test_admin_toggle_updates_app_and_refreshes_affected_sandboxes(
 
     assert response.enabled is False
     assert app.enabled is False
-    assert calls == [{test_user.id}]
+    assert calls == [expected_users]
 
 
 def test_delete_removes_provider_skill_and_refreshes_affected_users(
