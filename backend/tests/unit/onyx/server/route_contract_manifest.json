@@ -695,6 +695,7 @@
   "POST /skills/custom/bundle/inspect": "basic",
   "POST /skills/custom/editor": "basic",
   "POST /skills/custom/{skill_id}/files": "basic",
+  "POST /skills/custom/{skill_id}/reset-marketplace-access": "manage:skills",
   "POST /skills/custom/{skill_id}/transfer-ownership": "basic",
   "POST /skills/custom/{skill_id}/versions/{version_id}/restore": "basic",
   "POST /skills/github/import": "basic",
