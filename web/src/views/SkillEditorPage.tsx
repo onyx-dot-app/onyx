@@ -834,6 +834,8 @@ export default function SkillEditorPage({
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           onSaved={handleSharingSaved}
+          onRestored={syncEditableFields}
+          restoreDisabled={isDirty || fieldsLocked}
         />
       ) : null}
 

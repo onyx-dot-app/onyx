@@ -17483,11 +17483,11 @@
       "confirmTitle": "恢复版本 {version}？",
       "confirmDescription": "这将替换当前内容。如果内容不同，将创建新版本。共享设置保持不变。",
       "restoring": "正在恢复…",
-      "restored": "版本已恢复。",
-      "unchanged": "此内容已是当前内容。",
+      "restored": "所选版本的内容现已设为当前内容。",
       "loadError": "无法加载版本。",
       "previewError": "无法加载此版本。",
       "restoreError": "无法恢复此版本。",
+      "saveBeforeRestore": "恢复版本前，请保存或放弃编辑器中的更改。",
       "retry": "重试",
       "empty": "暂无版本。",
       "loading": "正在加载版本…",
@@ -17511,6 +17511,7 @@
     "viewDetails": "查看详情"
   },
   "marketplaces": {
+    "backToMarketplace": "返回市场",
     "retry": "刷新",
     "connectionError": "无法检查 GitHub 连接。",
     "previewFailed": "无法读取市场",

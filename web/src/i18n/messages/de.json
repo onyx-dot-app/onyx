@@ -17483,11 +17483,11 @@
       "confirmTitle": "Version {version} wiederherstellen?",
       "confirmDescription": "Dies ersetzt den aktuellen Inhalt. Geänderter Inhalt erstellt eine neue Version. Freigabeeinstellungen bleiben gleich.",
       "restoring": "Wird wiederhergestellt…",
-      "restored": "Version wiederhergestellt.",
-      "unchanged": "Dieser Inhalt ist bereits aktuell.",
+      "restored": "Der Inhalt der ausgewählten Version ist jetzt aktuell.",
       "loadError": "Versionen konnten nicht geladen werden.",
       "previewError": "Diese Version konnte nicht geladen werden.",
       "restoreError": "Diese Version konnte nicht wiederhergestellt werden.",
+      "saveBeforeRestore": "Speichern oder verwerfen Sie Ihre Änderungen im Editor, bevor Sie eine Version wiederherstellen.",
       "retry": "Erneut versuchen",
       "empty": "Noch keine Versionen.",
       "loading": "Versionen werden geladen…",
@@ -17511,6 +17511,7 @@
     "viewDetails": "Details anzeigen"
   },
   "marketplaces": {
+    "backToMarketplace": "Zurück zum Marktplatz",
     "retry": "Aktualisieren",
     "connectionError": "Die GitHub-Verbindung konnte nicht geprüft werden.",
     "previewFailed": "Marketplace kann nicht gelesen werden",

@@ -17483,11 +17483,11 @@
       "confirmTitle": "Restaurar a versão {version}?",
       "confirmDescription": "Isso substitui o conteúdo atual. Conteúdo diferente cria uma nova versão. As configurações de compartilhamento permanecem iguais.",
       "restoring": "Restaurando…",
-      "restored": "Versão restaurada.",
-      "unchanged": "Este conteúdo já é o atual.",
+      "restored": "O conteúdo da versão selecionada agora é o atual.",
       "loadError": "Não foi possível carregar as versões.",
       "previewError": "Não foi possível carregar esta versão.",
       "restoreError": "Não foi possível restaurar esta versão.",
+      "saveBeforeRestore": "Salve ou descarte as alterações do editor antes de restaurar uma versão.",
       "retry": "Tentar novamente",
       "empty": "Ainda não há versões.",
       "loading": "Carregando versões…",
@@ -17511,6 +17511,7 @@
     "viewDetails": "Ver detalhes"
   },
   "marketplaces": {
+    "backToMarketplace": "Voltar ao marketplace",
     "retry": "Atualizar",
     "connectionError": "Não foi possível verificar a conexão com o GitHub.",
     "previewFailed": "Não foi possível ler o marketplace",

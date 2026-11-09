@@ -23,6 +23,7 @@ import { canReadSkillHistory } from "@/lib/skills/permissions";
 import type {
   CustomSkill,
   SkillBundleContents,
+  SkillEditableDetail,
   SkillPreview,
   SkillVersion,
 } from "@/lib/skills/types";
@@ -35,7 +36,8 @@ type HistoryView =
 interface SkillVersionsProps {
   skill: CustomSkill;
   onBusyChange: (busy: boolean) => void;
-  onRestored: () => void;
+  onRestored: (skill: SkillEditableDetail) => void;
+  restoreDisabled?: boolean;
 }
 
 function VersionPreview({
@@ -102,6 +104,7 @@ export default function SkillVersions({
   skill,
   onBusyChange,
   onRestored,
+  restoreDisabled,
 }: SkillVersionsProps) {
   const t = useTranslations("skills.versions");
   const format = useFormatter();
@@ -184,6 +187,7 @@ export default function SkillVersions({
       requestPending.current ||
       !allowed ||
       skill.marketplace ||
+      restoreDisabled ||
       !version.has_bundle
     )
       return;
@@ -217,17 +221,10 @@ export default function SkillVersions({
         mutate(SWR_KEYS.userSkillPreview(skill.id), preview),
         mutate(SWR_KEYS.userSkills),
       ]);
-      setNotice(
-        t(
-          restored.current_version_number ===
-            versions?.find((entry) => entry.is_current)?.version_number
-            ? "unchanged"
-            : "restored"
-        )
-      );
+      setNotice(t("restored"));
       returning.current = true;
       setView({ kind: "list" });
-      onRestored();
+      onRestored(restored);
     } catch (error) {
       setRestoreError(
         error instanceof Error ? error.message : t("restoreError")
@@ -283,6 +280,7 @@ export default function SkillVersions({
         </Button>
         {!skill.marketplace && !version.is_current && (
           <Button
+            disabled={restoreDisabled}
             size="sm"
             prominence="secondary"
             aria-label={t("restoreVersion", {
@@ -384,7 +382,7 @@ export default function SkillVersions({
           </Button>
           {view.kind === "confirm" && (
             <Button
-              disabled={pending}
+              disabled={pending || restoreDisabled}
               onClick={() => void restore(view.version)}
             >
               {t(pending ? "restoring" : "restore")}
@@ -395,6 +393,9 @@ export default function SkillVersions({
     );
   return (
     <Section height="auto" alignItems="stretch" gap={3}>
+      {!skill.marketplace && restoreDisabled && (
+        <Text role="status">{t("saveBeforeRestore")}</Text>
+      )}
       <Text
         as="h2"
         font="heading-section"

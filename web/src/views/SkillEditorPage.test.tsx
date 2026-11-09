@@ -120,6 +120,26 @@ jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
       >
         Choose organization access
       </button>
+    ) : props.open && props.mode === "edit" ? (
+      <button
+        disabled={props.restoreDisabled}
+        onClick={() => {
+          const restored = existingSkill({
+            description: "Restored description",
+            instructions_markdown: "Restored instructions",
+            current_version_number: 3,
+          });
+          mockUseSWR.mockReturnValue({
+            data: restored,
+            mutate: mockRefreshSkill,
+          });
+          props.onRestored?.(restored);
+          props.onSaved();
+          props.onClose();
+        }}
+      >
+        Restore earlier content
+      </button>
     ) : null,
 }));
 
@@ -158,6 +178,46 @@ describe("SkillEditorPage", () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  it("replaces editor fields after restore without creating an unsaved edit", async () => {
+    const user = setupUser();
+    mockUseSWR.mockReturnValue({
+      data: existingSkill(),
+      mutate: mockRefreshSkill,
+    });
+    render(<SkillEditorPage skillId="existing-id" />);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore earlier content" })
+    );
+    expect(
+      screen.getByPlaceholderText("Write the skill instructions.")
+    ).toHaveValue("Restored instructions");
+    expect(
+      screen.getByPlaceholderText("What does this skill help with?")
+    ).toHaveValue("Restored description");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("keeps unsaved content and blocks restore from the sharing modal", async () => {
+    const user = setupUser();
+    mockUseSWR.mockReturnValue({
+      data: existingSkill(),
+      mutate: mockRefreshSkill,
+    });
+    render(<SkillEditorPage skillId="existing-id" />);
+    const instructions = screen.getByPlaceholderText(
+      "Write the skill instructions."
+    );
+    await user.type(instructions, " Unsaved change.");
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    expect(
+      screen.getByRole("button", { name: "Restore earlier content" })
+    ).toBeDisabled();
+    expect(instructions).toHaveValue(
+      "Write the requested report. Unsaved change."
+    );
+  });
 
   it.each([false, true])(
     "gates draft company sharing on global authority (%s)",

@@ -63,6 +63,15 @@
   sharing edits survive tab switches. Other recipients and built-in skills
   keep a preview-only dialog. The sharing endpoint requires EDIT; do not
   require that endpoint for a VIEW-only preview.
+- **Version history UI.** Custom Skills with OWNER or EDITOR permission expose
+  Versions in the sharing dialog or read-only preview. Viewers and built-ins make no history requests.
+  `web/src/sections/skills/SkillVersions.tsx` shares retained preview and confirmed restore.
+  Desktop history uses a table; narrow screens keep every field in compact entries.
+  Narrow dialog headings scroll with the body, and Versions hides the current description.
+  Pending restore blocks close and tab changes. Sharing drafts stay mounted and survive restore.
+  Successful restore refreshes history, current details, preview and the library.
+  The editor replaces its local fields from the restore response. Unsaved editor changes disable restore but keep preview available.
+  Synced Skills show their source revision and have no local restore action.
 - **Access at import.** GitHub import and multiple-ZIP upload accept one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.

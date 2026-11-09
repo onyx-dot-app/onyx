@@ -94,6 +94,31 @@ function showHistory(overrides: Partial<typeof skill> = {}) {
   return { onBusyChange, onRestored };
 }
 
+test("blocks restore for unsaved editor changes while keeping preview available", async () => {
+  const user = setupUser();
+  render(
+    <SkillVersions
+      skill={skill}
+      restoreDisabled
+      onBusyChange={jest.fn()}
+      onRestored={jest.fn()}
+    />
+  );
+  expect(
+    await screen.findByRole("button", { name: "Restore version 1" })
+  ).toBeDisabled();
+  expect(
+    screen.getByText(
+      "Save or discard your editor changes before restoring a version."
+    )
+  ).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Preview version 1" }));
+  expect(await screen.findByText("Earlier instructions")).toBeVisible();
+  expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+    false
+  );
+});
+
 test("shows loading, a retryable error and the empty state", async () => {
   const request = deferred<Response>();
   fetchMock.mockReturnValueOnce(request.promise);
@@ -218,7 +243,7 @@ test("confirms restore and preserves errors for retry without calling the parent
   fetchMock.mockResolvedValueOnce(response(restored));
   await user.click(screen.getByRole("button", { name: "Restore" }));
   expect(await screen.findByRole("status")).toHaveTextContent(
-    "Version restored."
+    "Selected version content is now current."
   );
   expect(onRestored).toHaveBeenCalledTimes(1);
 });
@@ -287,7 +312,7 @@ test.each([3, 4])(
     );
     await user.click(screen.getByRole("button", { name: "Restore" }));
     expect(await screen.findByRole("status")).toHaveTextContent(
-      number === 3 ? "This content is already current." : "Version restored."
+      "Selected version content is now current."
     );
     const current = screen.getByRole("region", { name: "Current content" });
     await waitFor(() =>
