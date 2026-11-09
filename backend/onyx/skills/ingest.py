@@ -34,17 +34,31 @@ class IngestedBundle(NamedTuple):
     metadata: BundleMetadata
 
 
+class PreparedSkillBundle(NamedTuple):
+    canonical_name: str
+    content: bytes
+    bundle_sha256: str
+    description: str
+    metadata: BundleMetadata
+
+
 def save_skill_bundle_bytes(
     bundle_bytes: bytes,
     *,
     display_name: str,
     file_store: FileStore,
+    file_id: str | None = None,
 ) -> str:
+    """Save a new bundle; a supplied file_id must be fresh.
+
+    Sync allocates the id before upload so failed writes can be cleaned up.
+    """
     return file_store.save_file(
         content=io.BytesIO(bundle_bytes),
         display_name=display_name,
         file_origin=FileOrigin.SKILL_BUNDLE,
         file_type="application/zip",
+        file_id=file_id,
     )
 
 
@@ -69,6 +83,31 @@ def ingest_skill_bundle(
     automatically if the caller's transaction fails.
     Only retained version restores may use stored-data admission.
     """
+    prepared = prepare_skill_bundle(
+        bundle_bytes, filename, expected_name=expected_name, stored=stored
+    )
+    bundle_file_id = save_skill_bundle_bytes(
+        prepared.content,
+        display_name=f"{prepared.canonical_name}.zip",
+        file_store=file_store,
+    )
+    return IngestedBundle(
+        canonical_name=prepared.canonical_name,
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=prepared.bundle_sha256,
+        description=prepared.description,
+        metadata=prepared.metadata,
+    )
+
+
+def prepare_skill_bundle(
+    bundle_bytes: bytes,
+    filename: str | None,
+    *,
+    expected_name: str | None = None,
+    stored: bool = False,
+) -> PreparedSkillBundle:
+    """Validate and hash without storage I/O, so storage faults remain fatal."""
     is_standalone_skill_md = filename is not None and filename.lower() == "skill.md"
     if is_standalone_skill_md:
         bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
@@ -100,14 +139,9 @@ def ingest_skill_bundle(
     sha = compute_bundle_sha256(normalized.content)
     metadata = compute_bundle_metadata(normalized.content)
 
-    bundle_file_id = save_skill_bundle_bytes(
-        normalized.content,
-        display_name=f"{name}.zip",
-        file_store=file_store,
-    )
-    return IngestedBundle(
+    return PreparedSkillBundle(
         canonical_name=name,
-        bundle_file_id=bundle_file_id,
+        content=normalized.content,
         bundle_sha256=sha,
         description=description,
         metadata=metadata,
