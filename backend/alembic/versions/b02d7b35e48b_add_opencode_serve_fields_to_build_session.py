@@ -5,7 +5,6 @@ Revises: 7f5b159041be
 Create Date: 2026-05-22 11:53:07.677442
 
 Adds ``opencode_session_id`` + ``agent_provider`` + ``agent_model``.
-See ``docs/craft/opencode-serve-migration.md``.
 """
 
 from alembic import op

@@ -19,6 +19,7 @@ from onyx.chat.incognito import (
     sweep_incognito_generated_files,
     sweep_stale_incognito_user_files,
 )
+from onyx.chat.incognito_context import retry_incognito_teardowns
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -49,6 +50,7 @@ from onyx.db.search_settings import (
     get_active_search_settings_list,
 )
 from onyx.db.user_file import (
+    consume_user_file_processing_attempt,
     fetch_user_files_with_access_relationships,
     mark_user_file_reconcile_pending,
 )
@@ -350,6 +352,8 @@ def _load_user_file_documents(
         file_names=[file_name] if file_name else None,
     )
     connector.load_credentials({})
+    # User files keep their spreadsheet content regardless of the setting.
+    connector.skip_spreadsheet_content = False
 
     # User files aren't attempt-scoped, so the docfetching staging reapers don't cover them.
     staging_callback, staged_csv_ids = build_tracking_raw_file_callback(
@@ -421,6 +425,7 @@ def _process_user_file_with_indexing(
                 document_batch=documents,
                 request_id=None,
                 adapter=adapter,
+                written_search_settings_id=current_search_settings.id,
             )
         except UserFileDeletingSkip:
             # File began deleting mid-pipeline — the delete owns removal; skip cleanly
@@ -503,6 +508,7 @@ def _index_user_file_to_secondary(
                 document_batch=documents,
                 request_id=None,
                 adapter=adapter,
+                written_search_settings_id=bound_secondary.id,
             )
         except UserFileDeletingSkip:
             # File began deleting mid-pipeline — skip cleanly so the caller doesn't flag it
@@ -629,8 +635,8 @@ def process_user_file_impl(
 
     documents: list[Document] = []
     try:
-        # Short read session: fetch what we need from UserFile then release the
-        # connection before the slow file-I/O and indexing pipeline phases.
+        # Short session: count the pickup and read what we need, then release
+        # the connection before the slow file-I/O and indexing pipeline phases.
         with get_session_with_current_tenant() as db_session:
             uf = db_session.get(UserFile, _as_uuid(user_file_id))
             if not uf:
@@ -645,6 +651,13 @@ def process_user_file_impl(
             ):
                 task_logger.info(
                     f"process_user_file_impl - Skipping id={user_file_id} status={uf.status}"
+                )
+                return
+
+            if not consume_user_file_processing_attempt(db_session, uf):
+                task_logger.error(
+                    f"process_user_file_impl - Marked FAILED id={user_file_id} "
+                    f"after {uf.processing_attempts - 1} pickups"
                 )
                 return
 
@@ -1171,7 +1184,7 @@ def process_single_user_file_project_sync(
     ignore_result=True,
 )
 def check_for_incognito_file_cleanup(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
-    """Retry deletion of tool-generated blobs whose teardown pass failed.
+    """Retry pending context teardown and deletion of tool-generated blobs.
 
     A blob's own record carries the session that produced it, and deleting the
     blob deletes the record, so anything still stamped is what a store failure
@@ -1184,6 +1197,7 @@ def check_for_incognito_file_cleanup(self: Task, *, tenant_id: str) -> None:  # 
     if not lock.acquire(blocking=False):
         return
     try:
+        retry_incognito_teardowns()
         with get_session_with_current_tenant() as db_session:
             sweep_incognito_generated_files(db_session)
     finally:

@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 from box_sdk_gen import BoxCCGAuth, BoxClient
+from box_sdk_gen.box.errors import BoxAPIError
+from box_sdk_gen.schemas.file import FilePathCollectionField
 from box_sdk_gen.schemas.file_full import FileFull
 from box_sdk_gen.schemas.folder_full import FolderFull
 from box_sdk_gen.schemas.folder_mini import FolderMini
@@ -29,11 +31,13 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
+    DocumentFailure,
     HierarchyNode,
     TextSection,
 )
 from tests.unit.onyx.connectors.box.fake_box_client import (
     FakeBoxClient,
+    FakeFilesManager,
     make_box_api_error,
 )
 
@@ -728,3 +732,78 @@ def test_overlapping_entry_folders_not_double_indexed() -> None:
     assert doc_ids.count("box-file-3") == 1
     assert node_ids.count("200") == 1
     assert node_ids.count("100") == 1
+
+
+def _file_in(file_id: str, name: str, folder_path: list[FolderMini]) -> FileFull:
+    return FileFull(
+        id=file_id,
+        name=name,
+        size=10,
+        modified_at=datetime(2024, 6, 2, tzinfo=timezone.utc),
+        created_at=datetime(2024, 6, 2, tzinfo=timezone.utc),
+        owned_by=_OWNER,
+        path_collection=FilePathCollectionField(
+            total_count=len(folder_path), entries=folder_path
+        ),
+    )
+
+
+def _reindex_failures(document_ids: list[str]) -> list[ConnectorFailure]:
+    return [
+        ConnectorFailure(
+            failed_document=DocumentFailure(document_id=document_id),
+            failure_message="synthetic",
+        )
+        for document_id in document_ids
+    ]
+
+
+_ROOT_PATH = [FolderMini(id="0", name="All Files"), FolderMini(id="100", name="Root")]
+_SUB_PATH = [*_ROOT_PATH, FolderMini(id="200", name="Sub")]
+
+
+def test_reindex_roots_nested_configured_folder_at_itself() -> None:
+    # Both Root and its child Sub are configured. The crawl seeds Sub as its
+    # own root, so reindex must give b.txt the same path and parent.
+    fake_client = _build_fake_client()
+    fake_client.files = FakeFilesManager({"3": _file_in("3", "b.txt", _SUB_PATH)})
+    connector = _make_connector(fake_client, folder_ids=["100", "200"])
+    crawled = {
+        o.id: o for o in _run_to_completion(connector) if isinstance(o, Document)
+    }
+
+    outputs = list(connector.reindex(_reindex_failures(["box-file-3"])))
+
+    docs = [o for o in outputs if isinstance(o, Document)]
+    nodes = [o for o in outputs if isinstance(o, HierarchyNode)]
+    assert [d.id for d in docs] == ["box-file-3"]
+    assert docs[0].metadata == crawled["box-file-3"].metadata == {"path": "Sub"}
+    assert docs[0].parent_hierarchy_raw_node_id == "200"
+    assert [(n.raw_node_id, n.raw_parent_id) for n in nodes] == [("200", None)]
+
+
+def test_reindex_raises_credential_error_from_conversion() -> None:
+    fake_client = _build_fake_client()
+    fake_client.files = FakeFilesManager({"1": _file_in("1", "a.txt", _ROOT_PATH)})
+    connector = _make_connector(fake_client)
+    download = MagicMock(side_effect=make_box_api_error(401))
+    connector._download_file = download  # type: ignore[method-assign]
+
+    with pytest.raises(BoxAPIError):
+        list(connector.reindex(_reindex_failures(["box-file-1"])))
+
+
+def test_reindex_download_error_is_a_document_failure() -> None:
+    fake_client = _build_fake_client()
+    # No content for file 7, so the fake download returns HTTP 404.
+    fake_client.files = FakeFilesManager({"7": _file_in("7", "gone.txt", _ROOT_PATH)})
+    connector = _make_connector(fake_client)
+
+    outputs = list(connector.reindex(_reindex_failures(["box-file-7", "box-file-404"])))
+
+    failures = [o for o in outputs if isinstance(o, ConnectorFailure)]
+    assert [f.failed_document.document_id for f in failures if f.failed_document] == [
+        "box-file-7",
+        "box-file-404",
+    ]
+    assert not [o for o in outputs if isinstance(o, Document)]

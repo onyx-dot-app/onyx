@@ -281,11 +281,67 @@ A bucket with uniform access, public access prevention, versioning, and a
 lifecycle rule for old versions. It grants the workload identity principal
 object access and the narrow read that Onyx needs at startup.
 
+`create_kms_key` (default off) creates a Cloud KMS key ring and key named after
+the bucket, in the bucket's location, with 90-day rotation. It grants only the
+project's GCS service agent use of the key. Dots in the bucket name become
+hyphens in the key ring and key names. Cloud KMS never deletes key rings or
+keys, so the names stay taken after a destroy. To turn the option on again
+after a destroy, `terraform import` the key ring and key, or use a new bucket
+name. `expiration_days` (default off)
+deletes live objects after that many days.
+
+#### Sandbox archive bucket
+
+`onyx` creates a second `gcs` bucket when `enable_sandbox_archive_bucket` is
+true. It holds Craft sandbox session archives:
+
+- Its own Cloud KMS key (`create_kms_key = true`). The composition enables the
+  Cloud KMS API when `enable_project_apis` is on
+- Public access prevention, uniform access, versioning
+- Objects expire after `sandbox_archive_expiration_days` (default 30).
+  Noncurrent versions expire after `sandbox_archive_noncurrent_expiration_days`
+  (default 7)
+- No workload identity gets access. The api_server will hand out signed URLs
+- The plan fails if `sandbox_archive_bucket_name` equals the file store bucket
+  name, so the expiry rules cannot reach it
+- Turning `enable_sandbox_archive_bucket` off and on again fails on the key
+  ring create. Import the old ring and key, or set a new
+  `sandbox_archive_bucket_name`
+
+Outputs: `sandbox_archive_bucket_name`, `sandbox_archive_kms_key_name` (null
+when off).
+
 ### `cloud-armor`
 
 A backend security policy with the OWASP Core Rule Set at sensitivity 1, an API
 rate limit, a global rate limit and Adaptive Protection. It takes effect only on
 an L7 load balancer; see below.
+
+The rule sets are tuned the standard way, with request field exclusions, so
+they deny without breaking Onyx. Without the tuning, sensitivity 1 denies chat
+messages that hold code, shell commands or file paths, every upload, and the
+Google sign-in callback.
+
+- No rule set except `methodenforcement`, `scannerdetection` and
+  `sessionfixation` reads the values of the Onyx fields that carry chat text,
+  prompts, code, URLs and secrets, such as `message`, `system_prompt`,
+  `api_base` and `password`. A name covers the query string, a form body and
+  the top-level keys of a JSON body, on every path. A nested key is reached
+  only through its parent, so free-form objects such as a connector's
+  configuration are covered by prefix. Everything else in the request is still
+  checked: the path, the headers, the cookies, the other parameters, and the
+  parameter names.
+- The same rule sets skip an upload, a `POST`, `PUT` or `PATCH` with a
+  `multipart/form-data` body. Cloud Armor does not parse a multipart body and
+  reads the file content as parameter names, which no exclusion covers. The
+  header alone exempts nothing: a `GET` is checked in full whatever it sends.
+- `scannerdetection` and `sessionfixation` check every request in full.
+
+When a legitimate request gets a 403, the load balancer log names the
+signature and the request. Add the field to
+`cloud_armor_extra_uninspected_fields`, or its parent object to
+`cloud_armor_extra_uninspected_field_prefixes`. Both add to the module
+defaults. The rate limits apply to every request.
 
 ### `l7-ingress`
 
@@ -575,6 +631,45 @@ so these values need two GPUs and one pod stays pending. Give the GPU to one
 model server only, or use the `gke` module with `gpu_accelerator_count = 2`.
 Helm merges `resources` with the chart defaults, so the CPU and memory requests
 and limits stay.
+
+## Craft sandboxes on Firecracker
+
+`craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
+Firecracker microVMs, which need `/dev/kvm`. It does not change how Craft runs
+sandboxes: Craft still runs pods until its Firecracker backend ships. Set it
+when you create the pool:
+
+```hcl
+enable_sandbox_node_pool = true
+craft_sandbox_runtime    = "firecracker"
+```
+
+With `"firecracker"`, the `gke` module:
+
+- turns on nested virtualization for the sandbox pool;
+- sets `vm.max_map_count` to `1048576` (COS ships `65530`);
+- adds the label `onyx.app/kvm=true`;
+- keeps Shielded VM secure boot on.
+
+The default, `"pod"`, leaves the pool as it is. GCP turns on nested
+virtualization only when it creates a pool, so a change to
+`craft_sandbox_runtime` replaces the sandbox pool.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| Cluster | GKE Standard | GKE Autopilot |
+| Machine type | Intel `n2`, `c3` (default `n2-standard-8`) | `n2d`, `c2d`, `c3d`, `t2d` (AMD), `t2a` (Arm), `e2` |
+| Image | `COS_CONTAINERD` (fixed) | — |
+| Pool | — | `sandbox_gvisor_enabled = true` |
+
+The module refuses a blocked machine type, and gVisor with Firecracker on the
+same pool. These setups must keep `craft_sandbox_runtime = "pod"`:
+
+- Autopilot. It blocks privileged pods and nested virtualization.
+- AMD or Arm machine types. GCP gives them no nested virtualization.
+- gVisor pools. A gVisor pod gets no `/dev/kvm`.
 
 ## Serving through an L7 load balancer (Cloud Armor)
 

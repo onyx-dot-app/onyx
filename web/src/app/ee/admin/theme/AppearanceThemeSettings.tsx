@@ -9,7 +9,7 @@ import {
   InputTypeIn,
   InputSwitch,
   Tabs,
-  Tag,
+  Badge,
 } from "@opal/components";
 import Preview from "@/app/ee/admin/theme/Preview";
 import CharacterCount from "@/refresh-components/CharacterCount";
@@ -26,9 +26,9 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
-import { planTagProps } from "@/lib/tier-badge";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
+import { PlanTag } from "@/lib/tiers/components";
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;
@@ -530,16 +530,14 @@ export const AppearanceThemeSettings = forwardRef<
           >
             <FormField.Label>
               {t("helpLink.label")}
-              {!enterpriseTier && (
-                <Tag {...planTagProps("enterprise")} size="sm" />
-              )}
+              {!enterpriseTier && <PlanTag plan={Tier.ENTERPRISE} />}
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn
                 ref={customHelpLinkUrlInputRef}
                 data-label="custom-help-link-url-input"
                 clearButton
-                placeholder="https://docs.onyx.app"
+                placeholder={t("placeholders.helpUrl")}
                 variant={
                   !enterpriseTier
                     ? "disabled"

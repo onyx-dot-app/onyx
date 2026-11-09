@@ -3,12 +3,10 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
-import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
 import { clickOnKeyDown } from "@opal/utils";
@@ -68,17 +66,16 @@ function MemoryTagWithTooltip({
               height="auto"
             >
               <div className="p-1">
-                <Text as="p" secondaryBody text03>
+                <Text as="p" font="secondary-body" color="text-03">
                   {memoryText}
                 </Text>
               </div>
               <ContentAction
+                font="secondary-body"
                 icon={SvgAddLines}
                 title={operationLabel}
-                sizePreset="secondary"
                 padding={1}
-                variant="body"
-                color="muted"
+                titleColor="text-03"
                 rightChildren={
                   <Button
                     prominence="tertiary"
@@ -175,7 +172,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
 
   const summary = (
     <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" mainUiAction text03>
+      <Text as="p" font="main-ui-action" color="text-03">
         {isExpanded ? durationText : (imageText ?? durationText)}
       </Text>
       {memoryOperation && !isExpanded && (

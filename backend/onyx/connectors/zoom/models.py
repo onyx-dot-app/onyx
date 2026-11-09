@@ -54,24 +54,11 @@ class ZoomSessionDetails(BaseModel):
         return str(self.id)
 
 
-class ZoomInvitee(BaseModel):
-    """Both documented fields of one entry of `settings.meeting_invitees[]` from
-    `GET /meetings/{meetingId}`. Webinars have no equivalent field."""
-
-    email: str
-    internal_user: bool = False
-
-
-class ZoomMeetingSettings(BaseModel):
-    meeting_invitees: list[ZoomInvitee] = Field(default_factory=list)
-
-
 class ZoomMeetingDetails(BaseModel):
-    """Response of `GET /meetings/{meetingId}`. Read for a meeting's host when
-    pruning, and for its invitees when building an access list."""
+    """Response of `GET /meetings/{meetingId}`, read for a meeting's host when
+    pruning."""
 
     host_id: str | None = None
-    settings: ZoomMeetingSettings = Field(default_factory=ZoomMeetingSettings)
 
 
 class ZoomPastMeetingDetails(ZoomSessionDetails):
@@ -267,33 +254,6 @@ class ZoomRecordingPage(BaseModel):
     total_records: int | None = None
 
 
-class ZoomParticipant(BaseModel):
-    """Every documented field of one entry from
-    `GET /past_meetings/{meetingId}/participants` or
-    `GET /past_webinars/{webinarId}/participants`. Zoom describes the two
-    identically, so both validate here.
-
-    Zoom empties `user_email` for anyone outside the host's account, and `id`
-    for anyone who joined without logging in. It sends both fields either way,
-    so neither is optional.
-    """
-
-    duration: int
-    failover: bool
-    id: str
-    join_time: str
-    leave_time: str
-    name: str
-    status: str
-    user_email: str
-    user_id: str
-
-    internal_user: bool = False
-
-    # Zoom sends this only when the request asks for it through include_fields.
-    registrant_id: str | None = None
-
-
 # Zoom has no cancelled state: cancelling a registration sets the status to
 # "denied". The other values are "approved" and "pending".
 APPROVED_REGISTRANT_STATUS = "approved"
@@ -311,60 +271,6 @@ ZOOM_NOT_ENTITLED_CODE = "200"
 # Undocumented in the spec; the shape is a 400 with a message that lists the
 # missing scopes.
 ZOOM_MISSING_SCOPE_CODE = "4711"
-
-
-class ZoomRegistrant(BaseModel):
-    """Every documented scalar field of one entry from
-    `GET /meetings/{meetingId}/registrants` or
-    `GET /webinars/{webinarId}/registrants`. Zoom marks only `email` and
-    `first_name` as always sent; the rest are answers to a registration form
-    the host can shorten or skip. Zoom also returns `custom_questions`, the
-    host's own questions and their answers, which nothing here reads.
-    """
-
-    email: str
-    first_name: str
-
-    id: str | None = None
-    address: str | None = None
-    city: str | None = None
-    comments: str | None = None
-    country: str | None = None
-    create_time: str | None = None
-    industry: str | None = None
-    job_title: str | None = None
-    join_url: str | None = None
-    last_name: str | None = None
-    no_of_employees: str | None = None
-    org: str | None = None
-    phone: str | None = None
-    purchasing_time_frame: str | None = None
-    role_in_purchase_process: str | None = None
-    state: str | None = None
-    status: str | None = None
-    zip: str | None = None
-
-    # The webinar listing does not document this one.
-    participant_pin_code: int | None = None
-
-
-class ZoomPanelist(BaseModel):
-    """Every documented field of one entry from
-    `GET /webinars/{webinarId}/panelists` — a webinar speaker, who does not
-    necessarily register or appear as a participant. The name tag and virtual
-    background fields arrive only when the host set them up.
-    """
-
-    id: str
-    email: str
-    name: str
-    join_url: str
-
-    name_tag_description: str | None = None
-    name_tag_id: str | None = None
-    name_tag_name: str | None = None
-    name_tag_pronouns: str | None = None
-    virtual_background_id: str | None = None
 
 
 class ZoomShareRecording(str, Enum):

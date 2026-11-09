@@ -1,13 +1,16 @@
 import { renderHook, act } from "@testing-library/react";
+import {
+  type SourceMetadata,
+  ValidSources,
+} from "@/lib/connectors/types/source";
 import { useToolConfiguration } from "@/lib/tools/hooks";
+import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import {
   selectedSourcesFrom,
   buildFilters,
   toggleSourceSelection,
   normalizeSourceSelection,
 } from "@/lib/searchFilters/utils";
-import type { SourceMetadata } from "@/lib/search/types";
-import { ValidSources } from "@/lib/connectors/types/source";
 
 const CHAT_KEY = "onyx:tools:chat:abc";
 
@@ -15,7 +18,7 @@ const CHAT_KEY = "onyx:tools:chat:abc";
 // from what useAppPosition reports on each render.
 let mockChatId = "abc";
 
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
     chat: () => mockChatId,
     agent: () => null,
@@ -39,19 +42,36 @@ function source(internalName: ValidSources, uniqueKey: string): SourceMetadata {
 const NOTION = source(ValidSources.Notion, "notion");
 const SLACK = source(ValidSources.Slack, "slack");
 
-describe("useToolConfiguration — stored shapes", () => {
+describe("useToolConfiguration: stored shapes", () => {
   test("the pre-filters flat shape still reads as the tool map", () => {
     sessionStorage.setItem(
       CHAT_KEY,
-      JSON.stringify({ 1: "forced", 2: "disabled" })
+      JSON.stringify({ 1: "preferred", 2: "disabled" })
     );
     const { result } = renderHook(() => useToolConfiguration());
 
-    expect(result.current.forcedToolId).toBe(1);
+    expect(result.current.preferredToolId).toBe(1);
     expect(result.current.disabledToolIds).toEqual([2]);
     expect(result.current.filters.selectedSources).toBeNull();
     expect(result.current.filters.timeRange).toBeNull();
   });
+
+  test.each([false, true])(
+    "obsolete forced selections are dropped in stored shape (nested=%s)",
+    (nested) => {
+      sessionStorage.setItem(
+        CHAT_KEY,
+        JSON.stringify(
+          nested
+            ? { tools: { 1: "forced", 2: "disabled" } }
+            : { 1: "forced", 2: "disabled" }
+        )
+      );
+      const { result } = renderHook(() => useToolConfiguration());
+      expect(result.current.preferredToolId).toBeNull();
+      expect(result.current.disabledToolIds).toEqual([2]);
+    }
+  );
 
   test("filters ride the snapshot through storage", () => {
     const { result, unmount } = renderHook(() => useToolConfiguration());
@@ -68,7 +88,7 @@ describe("useToolConfiguration — stored shapes", () => {
   });
 });
 
-describe("useToolConfiguration — chat scoping", () => {
+describe("useToolConfiguration: chat scoping", () => {
   test("each chat keeps its own configuration", () => {
     const { result, rerender } = renderHook(() => useToolConfiguration());
     act(() => {
@@ -77,13 +97,13 @@ describe("useToolConfiguration — chat scoping", () => {
         selectedSources: ["notion"],
       }));
     });
-    act(() => result.current.toggleToolState(7, "forced"));
+    act(() => result.current.toggleToolState(7, "preferred"));
 
     // Another chat reads its own (neutral) configuration...
     mockChatId = "other";
     rerender();
     expect(result.current.filters.selectedSources).toBeNull();
-    expect(result.current.forcedToolId).toBeNull();
+    expect(result.current.preferredToolId).toBeNull();
 
     // ...and edits it without touching the first chat's.
     act(() => {
@@ -96,14 +116,14 @@ describe("useToolConfiguration — chat scoping", () => {
     mockChatId = "abc";
     rerender();
     expect(result.current.filters.selectedSources).toEqual(["notion"]);
-    expect(result.current.forcedToolId).toBe(7);
+    expect(result.current.preferredToolId).toBe(7);
   });
 });
 
-describe("useToolConfiguration — orthogonal axes", () => {
-  test("editing sources never touches a forced pin", () => {
+describe("useToolConfiguration: orthogonal axes", () => {
+  test("editing sources never touches a preferred pin", () => {
     const { result } = renderHook(() => useToolConfiguration());
-    act(() => result.current.toggleToolState(7, "forced"));
+    act(() => result.current.toggleToolState(7, "preferred"));
     act(() => {
       result.current.setFilters((current) => ({
         ...current,
@@ -117,7 +137,7 @@ describe("useToolConfiguration — orthogonal axes", () => {
       }));
     });
 
-    expect(result.current.forcedToolId).toBe(7);
+    expect(result.current.preferredToolId).toBe(7);
   });
 
   test("tool state changes never touch the source selection", () => {
@@ -128,15 +148,15 @@ describe("useToolConfiguration — orthogonal axes", () => {
         selectedSources: ["notion"],
       }));
     });
-    act(() => result.current.toggleToolState(7, "forced"));
-    act(() => result.current.toggleToolState(7, "forced"));
+    act(() => result.current.toggleToolState(7, "preferred"));
+    act(() => result.current.toggleToolState(7, "preferred"));
     act(() => result.current.toggleToolState(8, "disabled"));
 
     expect(result.current.filters.selectedSources).toEqual(["notion"]);
   });
 });
 
-describe("selectedSourcesFrom — positive-selection semantics", () => {
+describe("selectedSourcesFrom: positive-selection semantics", () => {
   const configured = [NOTION, SLACK];
 
   test("an untouched selection means no source filter at all", () => {
@@ -191,7 +211,7 @@ describe("selectedSourcesFrom — positive-selection semantics", () => {
   });
 });
 
-describe("toggleSourceSelection — edit-boundary normalization", () => {
+describe("toggleSourceSelection: edit-boundary normalization", () => {
   const keys = ["notion", "slack"];
 
   test("the first toggle materialises the untouched default", () => {
@@ -211,4 +231,44 @@ describe("toggleSourceSelection — edit-boundary normalization", () => {
     expect(normalizeSourceSelection(["notion"], keys)).toEqual(["notion"]);
     expect(normalizeSourceSelection([], keys)).toEqual([]);
   });
+});
+
+test("tool preference persists through chat handoff and reload", () => {
+  const { result, rerender, unmount } = renderHook(() =>
+    useToolConfiguration()
+  );
+  act(() => {
+    result.current.setToolState(1, () => "preferred");
+    result.current.setToolState(2, () => "disabled");
+  });
+  act(() => result.current.handOffTo("created"));
+  expect(result.current.preferredToolId).toBe(1);
+  mockChatId = "created";
+  rerender();
+  expect(result.current.preferredToolId).toBe(1);
+  expect(result.current.disabledToolIds).toEqual([2]);
+  unmount();
+  const reloaded = renderHook(() => useToolConfiguration());
+  expect(reloaded.result.current.preferredToolId).toBe(1);
+  act(() => reloaded.result.current.clearPreferredTool());
+  expect(reloaded.result.current.preferredToolId).toBeNull();
+});
+
+test("Deep Research and a tool preference are mutually exclusive", () => {
+  const { result } = renderHook(() => {
+    const configuration = useToolConfiguration();
+    const research = useDeepResearchToggle({
+      chatSessionId: "abc",
+      agentId: 1,
+      toolConfiguration: configuration,
+    });
+    return { configuration, research };
+  });
+  act(() => result.current.configuration.setToolState(1, () => "preferred"));
+  act(() => result.current.research.toggleDeepResearch());
+  expect(result.current.configuration.preferredToolId).toBeNull();
+  expect(result.current.research.deepResearchEnabled).toBe(true);
+  act(() => result.current.configuration.setToolState(2, () => "preferred"));
+  expect(result.current.research.deepResearchEnabled).toBe(false);
+  expect(result.current.configuration.preferredToolId).toBe(2);
 });

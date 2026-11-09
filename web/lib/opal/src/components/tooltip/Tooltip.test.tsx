@@ -39,6 +39,46 @@ it("shows nothing on hover while suppressed", async () => {
   });
 });
 
+it("keeps an enclosing tooltip open while hovering a suppressed one", async () => {
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <Tooltip tooltip="Outer">
+        <div>
+          <span>Edge</span>
+          <Tooltip tooltip="Inner" suppressed>
+            <span>Label</span>
+          </Tooltip>
+        </div>
+      </Tooltip>
+    </TooltipPrimitive.Provider>
+  );
+
+  await user.hover(screen.getByText("Edge"));
+  await screen.findByRole("tooltip");
+  await user.hover(screen.getByText("Label"));
+
+  await waitFor(() => {
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Outer");
+  });
+});
+
+it("uses the current theme for neutral tooltips", async () => {
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <Tooltip tooltip="Status" tone="neutral">
+        <button>Trigger</button>
+      </Tooltip>
+    </TooltipPrimitive.Provider>
+  );
+  await user.hover(screen.getByRole("button", { name: "Trigger" }));
+  const tooltip = await screen.findByRole("tooltip");
+  const surface = tooltip.closest(".opal-tooltip");
+  expect(surface).toHaveAttribute("data-tone", "neutral");
+  expect(surface).not.toHaveClass("dark");
+});
+
 it("does not reveal a hover the pointer already left when suppression lifts", async () => {
   const user = userEvent.setup();
 
@@ -62,5 +102,24 @@ it("does not reveal a hover the pointer already left when suppression lifts", as
 
   await waitFor(() => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+});
+
+it('keeps showing and tracking the pointer with align="follow"', async () => {
+  const user = userEvent.setup();
+  render(
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <Tooltip tooltip="Locked" align="follow">
+        <div>Block</div>
+      </Tooltip>
+    </TooltipPrimitive.Provider>
+  );
+  const block = screen.getByText("Block");
+
+  await user.hover(block);
+  await user.pointer({ target: block, coords: { clientX: 4, clientY: 40 } });
+
+  await waitFor(() => {
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
   });
 });

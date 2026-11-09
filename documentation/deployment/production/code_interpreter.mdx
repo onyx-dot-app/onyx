@@ -1,0 +1,265 @@
+---
+title: "Code Interpreter"
+description: "Run Code Interpreter on restricted clusters and OpenShift, with dedicated nodes and capacity limits"
+icon: "code"
+---
+
+[Code execution](/overview/core_features/code_interpreter)
+uses the Code Interpreter service ([python-sandbox](https://github.com/onyx-dot-app/python-sandbox) on GitHub).
+For each run, the service creates a short-lived executor pod that runs the user code.
+
+The Onyx Helm chart installs Code Interpreter as a subchart when `codeInterpreter.enabled` is `true`.
+Put subchart settings under the hyphenated `code-interpreter:` key. Helm ignores other keys under `codeInterpreter:`.
+
+```yaml values.yaml
+codeInterpreter:
+  enabled: true         # Turns the subchart on or off
+
+code-interpreter:       # Settings for the subchart
+  codeInterpreter:
+    kubernetesExecutor:
+      netAdminLockdown: false
+```
+
+## Chart versions
+
+The Onyx chart pins the Code Interpreter chart version.
+Onyx chart **0.9.2** and later pins Code Interpreter chart **0.4.9**. Onyx charts 0.8.37 to 0.9.1 pin 0.4.8.
+Earlier Onyx charts pin 0.4.7. You cannot change a subchart version with values.
+
+<Note>
+  Sections and keys marked **0.4.8** need Code Interpreter chart 0.4.8 or later (Onyx chart 0.8.37 or later).
+  With an older Onyx chart, install the Code Interpreter chart directly to use them.
+  Code Interpreter 0.4.7 ignores these settings.
+</Note>
+
+### Install the Code Interpreter chart directly
+
+<Steps>
+  <Step title="Install Code Interpreter as its own release">
+    ```bash
+    helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
+    helm repo update
+    helm upgrade --install code-interpreter code-interpreter/code-interpreter \
+      --namespace onyx \
+      --version 0.4.9 \
+      --values code-interpreter-values.yaml
+    ```
+
+    In a direct install, settings go at the top level of the values file, without the `code-interpreter:` key:
+
+    ```yaml code-interpreter-values.yaml
+    image:
+      tag: "0.4.9"     # The default is "latest" with pullPolicy Always
+    resources:         # The Onyx chart uses these values. The chart default memory limit is 512Mi.
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    codeInterpreter:
+      kubernetesExecutor:
+        image: "onyxdotapp/python-executor-sci:0.4.9"
+    ```
+  </Step>
+
+  <Step title="Point Onyx at the new release">
+    ```yaml values.yaml
+    codeInterpreter:
+      enabled: false
+    configMap:
+      CODE_INTERPRETER_BASE_URL: "http://code-interpreter:8000"
+    ```
+
+    The Service name is the release name. If Code Interpreter runs in a different namespace,
+    use `http://code-interpreter.<namespace>.svc.cluster.local:8000`.
+  </Step>
+</Steps>
+
+## Network isolation
+
+Executor pods always get a NetworkPolicy that denies all egress. By default,
+an init container also blocks egress with iptables before user code starts.
+This init container runs as root with the `NET_ADMIN` capability.
+
+```yaml values.yaml
+code-interpreter:
+  codeInterpreter:
+    kubernetesExecutor:
+      netAdminLockdown: false  # Remove the root NET_ADMIN init container
+```
+
+<Warning>
+  With `netAdminLockdown: false`, the NetworkPolicy is the only egress control for user code.
+  Your CNI must enforce NetworkPolicies.
+</Warning>
+
+## Restricted Pod Security and OpenShift (0.4.8)
+
+Executor pods meet the Kubernetes `restricted` Pod Security Standard when `netAdminLockdown` is `false`.
+
+OpenShift `restricted-v2` assigns user and group IDs from the namespace range, and rejects fixed IDs.
+Use `platform` mode, and let OpenShift assign the IDs of the service pod too:
+
+```yaml values.yaml
+code-interpreter:
+  podSecurityContext:
+    runAsUser: null
+    fsGroup: null
+  securityContext:
+    runAsUser: null
+  codeInterpreter:
+    kubernetesExecutor:
+      netAdminLockdown: false  # Required with platform mode
+      securityContext:
+        mode: platform         # The platform assigns the executor pod IDs
+        readOnlyRootFilesystem: true
+```
+
+- The chart fails to render `mode: platform` with `netAdminLockdown: true`.
+- `platform` mode needs an admission controller that assigns a user ID. The executor image runs as root by default.
+- On other clusters, keep `mode: fixed`. It uses `runAsUser`, `runAsGroup`, and `fsGroup` `65532`. Change the IDs if
+  your policy needs other values.
+- With `readOnlyRootFilesystem: true` (the default), user code can write only to `/workspace` and `/tmp`.
+
+## Images
+
+Both Code Interpreter images use `latest` by default. The service image uses pull policy `Always`.
+The executor image has no tag, so it also resolves to `latest` with pull policy `Always`,
+and each run checks the registry.
+
+Pin both images:
+
+```yaml values.yaml
+code-interpreter:
+  image:
+    tag: "0.4.7"  # Service image. Match the Code Interpreter chart version.
+  codeInterpreter:
+    kubernetesExecutor:
+      image: "onyxdotapp/python-executor-sci:0.4.7"
+      imagePullPolicy: IfNotPresent  # 0.4.8. Empty follows Kubernetes: IfNotPresent for a pinned tag.
+      readyTimeoutSec: 60            # 0.4.8. Time for the pod to start, including the image pull (1-600).
+```
+
+- Pin tags that exist on Docker Hub. Onyx does not publish the images for every chart version.
+- Use `IfNotPresent` or `Never` on nodes that cannot reach the registry.
+- With 0.4.8, a run fails at once on an image pull error. It fails after `readyTimeoutSec` if the pod stays `Pending`.
+
+## Dedicated node pool and resources (0.4.8)
+
+The top-level `nodeSelector`, `tolerations`, and `affinity` apply only to the service pod.
+Use `kubernetesExecutor.pod` to run user code on its own nodes:
+
+```bash
+kubectl label node <node> onyx.app/pool=sandbox
+kubectl taint node <node> onyx.app/sandbox=true:NoSchedule
+```
+
+```yaml values.yaml
+code-interpreter:
+  codeInterpreter:
+    memoryLimitMb: 256  # Memory limit of each executor pod
+    kubernetesExecutor:
+      pod:
+        nodeSelector:
+          onyx.app/pool: sandbox
+        tolerations:
+          - key: onyx.app/sandbox
+            operator: Exists
+            effect: NoSchedule
+        runtimeClassName: ""  # For example "gvisor" or "kata"
+      podResources:
+        requests:
+          cpu: 100m
+          memory: 64Mi  # Capped at memoryLimitMb
+        limits:
+          cpu: "1"      # Default "5". Lower it to put more pods on each node.
+      workspaceSizeLimit: 100Mi
+      tmpSizeLimit: 64Mi
+```
+
+- `pod` also accepts `affinity`, `topologySpreadConstraints`, `priorityClassName`, `labels`, and `annotations`.
+- Set the memory limit with `memoryLimitMb`. The chart ignores `podResources.limits.memory`.
+- The service does not start if these values are not valid.
+
+## Capacity and overload (0.4.8)
+
+Each replica runs at most `capacity.maxConcurrentExecutions` runs at a time.
+A request waits up to `capacity.queueTimeoutSec` for a free slot.
+
+```yaml values.yaml
+code-interpreter:
+  capacity:
+    maxConcurrentExecutions: 16
+    queueTimeoutSec: 30        # Keep below the Onyx client timeout (70 seconds by default)
+    retryAfterSec: 2           # Retry-After sent with 429
+    capacityRetryAfterSec: 10  # Retry-After sent with 503
+```
+
+| Status | Meaning |
+| --- | --- |
+| `429` with `Retry-After` | This replica has no free slot after the queue timeout. Another replica can take a retry. |
+| `503` with `Retry-After` | The cluster has no space for an executor pod: the ResourceQuota is full, or the pod cannot be scheduled. |
+
+At the default executor size, 16 runs need about 4 GiB of memory limits and 1.6 CPU of requests.
+Increase `maxConcurrentExecutions` only when the cluster can schedule that many executor pods for each replica.
+
+### Executor ResourceQuota
+
+To limit what executor pods can use, turn on the optional ResourceQuota. It counts every pod in its namespace,
+so use a dedicated executor namespace. The namespace must exist.
+
+```yaml values.yaml
+code-interpreter:
+  codeInterpreter:
+    kubernetesExecutor:
+      namespace: code-execution
+  executorResourceQuota:
+    enabled: true
+    hard:
+      pods: "32"
+      requests.cpu: "4"
+      requests.memory: 4Gi
+      limits.memory: 12Gi
+```
+
+- Each open session holds one pod for its full lifetime. Include sessions in `pods`.
+- The chart fails to render a quota in the release namespace unless you set
+  `executorResourceQuota.allowReleaseNamespace: true`.
+- If you add `ephemeral-storage` keys to `hard`, also set `executorResourceQuota.limitRange.enabled: true`.
+
+### Metrics
+
+The service serves Prometheus metrics at `/metrics` on its HTTP port. To create a ServiceMonitor,
+set `metrics.serviceMonitor.enabled` to `true`. This needs the Prometheus Operator CRDs.
+
+Useful metrics include `code_interpreter_executions_active`,
+`code_interpreter_executions_rejected_total` (by `status` and `reason`), and `code_interpreter_admission_wait_seconds`.
+
+## Health endpoints (0.4.8)
+
+| Endpoint | Probe | Behavior |
+| --- | --- | --- |
+| `/health` | Liveness | Answers from memory and does not call the Kubernetes API. Returns `503` only when the background check has stopped. |
+| `/ready` | Readiness | Checks that the service can create executor pods. Returns `503` when it cannot. |
+
+A busy replica stays ready and returns `429`. If you override `readinessProbe`, use `/ready`.
+
+## More than one replica (0.4.8)
+
+Each replica stores uploaded files and outputs on its own disk. Onyx uploads a file and runs code in separate requests.
+With more than one replica, the run can go to a replica that does not have the file, and the run fails.
+
+The chart fails to render `replicaCount` greater than `1` unless you set `fileStorage.shared: true`.
+Set it only after you do one of these:
+
+- Mount a `ReadWriteMany` volume at `FILE_STORAGE_DIR` (default `/tmp/code-interpreter-files`) on every replica.
+- Send each client to one replica (sticky sessions).
+
+```yaml values.yaml
+code-interpreter:
+  replicaCount: 2
+  fileStorage:
+    shared: true  # Only with shared storage or sticky sessions
+```

@@ -18,10 +18,22 @@ from shared_configs.enums import EmbeddingProvider
 
 CredentialsT = TypeVar("CredentialsT", covariant=True)
 
+# Gateways can front models without auth of their own.
+_OPTIONAL_API_KEY_PROVIDERS: frozenset[EmbeddingProvider] = frozenset(
+    {EmbeddingProvider.BIFROST, EmbeddingProvider.LITELLM}
+)
+
 
 class EmbeddingAuth(Protocol[CredentialsT]):
     @property
-    def requires_api_key(self) -> bool: ...
+    def uses_api_key(self) -> bool:
+        """Whether the stored API key column is meaningful for this auth."""
+        ...
+
+    @property
+    def requires_api_key(self) -> bool:
+        """Whether a key must be present before a request is made."""
+        ...
 
     def validate_configuration(self) -> None: ...
 
@@ -32,11 +44,13 @@ class EmbeddingAuth(Protocol[CredentialsT]):
 
 class ApiKeyEmbeddingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    provider: EmbeddingProvider
     api_key: SecretStr | None = None
 
 
 class ApiKeyEmbeddingCredentials(BaseModel):
-    api_key: SecretStr
+    # None only for providers in _OPTIONAL_API_KEY_PROVIDERS.
+    api_key: SecretStr | None
 
 
 class ApiKeyEmbeddingAuth(EmbeddingAuth[ApiKeyEmbeddingCredentials]):
@@ -44,20 +58,22 @@ class ApiKeyEmbeddingAuth(EmbeddingAuth[ApiKeyEmbeddingCredentials]):
         self.config = config
 
     @property
-    def requires_api_key(self) -> bool:
+    def uses_api_key(self) -> bool:
         return True
+
+    @property
+    def requires_api_key(self) -> bool:
+        return self.config.provider not in _OPTIONAL_API_KEY_PROVIDERS
 
     def validate_configuration(self) -> None:
         pass
 
     def validate_credentials(self) -> None:
-        if self.config.api_key is None:
+        if self.requires_api_key and self.config.api_key is None:
             raise ValueError("API key not provided for cloud model")
 
     def resolve_credentials(self) -> ApiKeyEmbeddingCredentials:
         self.validate_credentials()
-        if self.config.api_key is None:
-            raise ValueError("API key not provided for cloud model")
         return ApiKeyEmbeddingCredentials(api_key=self.config.api_key)
 
 
@@ -69,8 +85,12 @@ class VertexEmbeddingAuth(EmbeddingAuth[VertexEmbeddingCredentials]):
         self._api_key = api_key
 
     @property
-    def requires_api_key(self) -> bool:
+    def uses_api_key(self) -> bool:
         return self.config.auth_method == "service_account_json"
+
+    @property
+    def requires_api_key(self) -> bool:
+        return self.uses_api_key
 
     def validate_configuration(self) -> None:
         validate_vertex_embedding_config(self.config)
@@ -113,6 +133,8 @@ def build_embedding_auth(
             raise ValueError(
                 "Vertex configuration is only supported for Google embeddings."
             )
-        auth = ApiKeyEmbeddingAuth(ApiKeyEmbeddingConfig(api_key=secret))
+        auth = ApiKeyEmbeddingAuth(
+            ApiKeyEmbeddingConfig(provider=provider, api_key=secret)
+        )
     auth.validate_configuration()
     return auth

@@ -18,17 +18,11 @@ export {
   type SelectButtonProps,
 } from "@opal/components/buttons/select-button/components";
 
-/* OpenButton */
+/* RowAction */
 export {
-  OpenButton,
-  type OpenButtonProps,
-} from "@opal/components/buttons/open-button/components";
-
-/* FilterButton */
-export {
-  FilterButton,
-  type FilterButtonProps,
-} from "@opal/components/buttons/filter-button/components";
+  RowAction,
+  type RowActionProps,
+} from "@opal/components/buttons/row-action/components";
 
 /* AttachmentItemButton */
 export {
@@ -85,17 +79,35 @@ export {
   type InputImageProps,
 } from "@opal/components/inputs/input-image/components";
 
+/* InputCurrency */
+export {
+  InputCurrency,
+  type InputCurrencyProps,
+} from "@opal/components/inputs/numbers/input-currency/components";
+export {
+  getCurrencyParts,
+  type CurrencyParts,
+} from "@opal/components/inputs/numbers/input-currency/currency";
+
 /* InputNumber */
 export {
   default as InputNumber,
   type InputNumberProps,
-} from "@opal/components/inputs/input-number/components";
+} from "@opal/components/inputs/numbers/input-number/components";
 
-/* InputFile */
+/* InputSingleUpload */
 export {
-  default as InputFile,
-  type InputFileProps,
-} from "@opal/components/inputs/input-file/components";
+  default as InputSingleUpload,
+  type InputSingleUploadProps,
+  type InputSingleUploadTextProps,
+  type InputSingleUploadFileProps,
+} from "@opal/components/inputs/uploads/input-single-upload/components";
+
+/* InputMultiUpload */
+export {
+  default as InputMultiUpload,
+  type InputMultiUploadProps,
+} from "@opal/components/inputs/uploads/input-multi-upload/components";
 
 /* InputList */
 export {
@@ -115,14 +127,56 @@ export {
   type CompactMarkdownProps,
 } from "@opal/components/text/CompactMarkdown";
 
+/* Badge */
+export {
+  Badge,
+  BADGE_COLORS,
+  badgeTextClass,
+  type BadgeProps,
+  type BadgeSize,
+} from "@opal/components/badge/components";
+
+/* BadgeButton */
+export {
+  BadgeButton,
+  type BadgeButtonProps,
+} from "@opal/components/badge-button/components";
+
 /* Tag */
 export {
   Tag,
-  TAG_COLORS,
-  TAG_REMOVE_CLASS,
+  TAG_REMOVE_ATTR,
   type TagProps,
-  type TagColor,
 } from "@opal/components/tag/components";
+
+/* Fold */
+export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* Presence */
+export {
+  Presence,
+  type PresenceProps,
+  type PresenceSide,
+  type PresenceSwapProps,
+  type PresenceSwapDirection,
+  type PresenceSwapAxis,
+} from "@opal/components/presence/components";
+
+/* IconTooltip */
+export {
+  IconTooltip,
+  type IconTooltipProps,
+  type IconTooltipStatus,
+} from "@opal/components/icon-tooltip/components";
+
+/* Log */
+export {
+  Log,
+  type LogProps,
+  type LogStatus,
+  type LogVariant,
+  type LogWeight,
+} from "@opal/components/log/components";
 
 /* Divider */
 export {
@@ -145,6 +199,14 @@ export {
   type ProgressBarColor,
 } from "@opal/components/progress-bar/components";
 
+/* ProgressRing */
+export {
+  ProgressRing,
+  type ProgressRingProps,
+  type ProgressRingColor,
+  type ProgressRingTrack,
+} from "@opal/components/progress-ring/components";
+
 /* Card */
 export { Card, type CardProps } from "@opal/components/cards/card/components";
 
@@ -164,6 +226,9 @@ export {
 export {
   Collapsible,
   type CollapsibleProps,
+  type CollapsibleRootProps,
+  type CollapsibleTriggerProps,
+  type CollapsibleContentProps,
 } from "@opal/components/collapsible/components";
 
 /* MessageCard */
@@ -200,8 +265,16 @@ export {
 
 /* Table */
 export { Table } from "@opal/components/table/components";
-export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+export type {
+  TableColumn,
+  TableQualifierColumn,
+  TableFieldColumn,
+  TableValueColumn,
+  TableDisplayColumn,
+  TableActionsColumn,
+  TableCellValue,
+} from "@opal/components/table/types";
 
 /* ShadowDiv */
 export {
@@ -209,6 +282,7 @@ export {
   type ShadowDivProps,
   type ShadowDirection,
   type ShadowDivVariant,
+  type ShadowDivVariants,
 } from "@opal/components/shadow-div/components";
 
 /* Popover */
@@ -256,6 +330,39 @@ export {
   InputDatePicker,
   type InputDatePickerProps,
 } from "@opal/components/inputs/chrono/input-date-picker/components";
+
+/* Dropdown */
+export {
+  Dropdown,
+  type DropdownProps,
+  type DropdownAnchorProps,
+  type DropdownTriggerProps,
+  type DropdownDataProps,
+  type DropdownTriggerBehavior,
+  type DropdownTabKey,
+  type DropdownVirtualAnchor,
+} from "@opal/components/dropdown/components";
+export {
+  type DropdownItem,
+  type DropdownMenuItem,
+  type DropdownRow,
+  type DropdownMenuRow,
+  type DropdownOption,
+  type DropdownAction,
+  type DropdownToggle,
+  type DropdownCustom,
+  type DropdownGroup,
+  type DropdownRowState,
+  type DropdownRowProps,
+  type DropdownSearch,
+  type DropdownView,
+  type DropdownViews,
+  type DropdownWidth,
+  type DropdownAlign,
+  type DropdownSide,
+} from "@opal/components/dropdown/types";
+export { useDropdownViews } from "@opal/components/dropdown/context";
+export { SelectChevron } from "@opal/components/inputs/dropdowns/SelectChevron";
 
 /* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
 export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";

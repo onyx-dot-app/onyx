@@ -65,12 +65,13 @@ Everything above, **plus**:
 | `expanded`                | `boolean`         | `false` | Controlled expanded state. SelectCard never mutates this.      |
 | `expandedContent`         | `React.ReactNode` | —       | The body that animates open and closed below the header        |
 | `expandableContentHeight` | `80 \| "full"`    | `80`    | `80` caps the body at 20rem with scroll; `"full"` does not cap |
+| `expandableKeepMounted`   | `boolean`         | `false` | Keeps the body mounted while folded, e.g. so a form keeps what was typed |
 
 ### Expandable behaviour
 
 - **Only the header is interactive.** `Interactive.Stateful` wraps the header alone, so `onClick`, hover and the state colours stay there. A form inside `expandedContent` keeps its own clicks instead of toggling the card.
 - **Always controlled.** `expanded` is a one-way visual prop. There is no `defaultExpanded` and no `onExpandChange` — the caller owns the state and the trigger, exactly as with [`Card`](../card/README.md).
-- **Rounding adapts.** Expanded, the header rounds only at the top and the fold only at the bottom, so they read as one card. The corners animate over 200ms.
+- **Rounding adapts.** Expanded, the header rounds only at the top and the fold only at the bottom, so they read as one card. The corners square as the fold expands and round as it collapses, over the same 150ms.
 - **`state` is the caller's, open or closed.** The card paints whatever state it is given and never rewrites it. A card that should stop looking selected once it opens does that at the call site, with `state={open ? "filled" : "selected"}` — which is also what decides whether a `Content` inside it, set to `color="interactive"`, picks up the selection colour.
 - **The separator keeps its resting colour.** The header's bottom border stays `border-01` while expanded, even on a selected card, so it reads as a divider rather than an edge. The fold's own border does follow the selection.
 - **`padding` applies to the header only.** The fold has no intrinsic padding; pad whatever you pass to `expandedContent`.
@@ -86,7 +87,7 @@ const [open, setOpen] = useState(false);
   onClick={() => setOpen((value) => !value)}
   expandedContent={<div className="p-4">…</div>}
 >
-  <ContentAction icon={SvgPlusCircle} title="New account" />
+  <ContentAction font="heading-headline" orientation="stacked" icon={SvgPlusCircle} title="New account" />
 </SelectCard>;
 ```
 
@@ -142,8 +143,7 @@ import { CardHeaderLayout } from "@opal/layouts";
     icon={SvgGlobe}
     title="Google"
     description="Search engine"
-    sizePreset="main-ui"
-    variant="section"
+    font="main-ui-action"
     rightChildren={
       <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
         Current Default
@@ -164,8 +164,7 @@ import { CardHeaderLayout } from "@opal/layouts";
     icon={SvgCloud}
     title="OpenAI"
     description="Not configured"
-    sizePreset="main-ui"
-    variant="section"
+    font="main-ui-action"
     rightChildren={
       <Button rightIcon={SvgArrowExchange} prominence="tertiary">
         Connect
@@ -183,8 +182,7 @@ import { CardHeaderLayout } from "@opal/layouts";
     icon={SvgCloud}
     title="OpenAI"
     description="Connected"
-    sizePreset="main-ui"
-    variant="section"
+    font="main-ui-action"
     rightChildren={
       <div className="interactive-foldable-host flex items-center">
         <Interactive.Foldable>

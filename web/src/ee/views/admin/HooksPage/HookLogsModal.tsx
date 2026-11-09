@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
@@ -10,7 +11,6 @@ import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { downloadFile } from "@/lib/download";
-import { Section } from "@/layouts/general-layouts";
 import { hookPointName } from "@/ee/views/admin/HooksPage/hookPoints";
 import type {
   HookExecutionRecord,
@@ -29,12 +29,7 @@ interface HookLogsModalProps {
 // TODO(@raunakab): replace this with a proper, opalified `Separator` component (when it lands).
 function SectionHeader({ label }: { label: string }) {
   return (
-    <Section
-      flexDirection="row"
-      alignItems="center"
-      height="fit"
-      className="py-1"
-    >
+    <Section flexDirection="row" alignItems="center" height="fit">
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
@@ -53,12 +48,11 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
         alignItems="start"
         gap={2}
         height="fit"
-        className="py-2"
       >
         {/* 1. Timestamp */}
         <span className="shrink-0 text-code-code">
           <Text
-            font="secondary-mono-label"
+            font="secondary-mono"
             color="inherit"
             wordWrap="whitespace-nowrap"
           >
@@ -123,7 +117,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
         />
         <Modal.Body>
           {isLoading ? (
-            <Section justifyContent="center" height="fit" className="py-6">
+            <Section justifyContent="center" height="fit">
               <IconLoader />
             </Section>
           ) : error ? (

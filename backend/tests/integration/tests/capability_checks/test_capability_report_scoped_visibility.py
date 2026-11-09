@@ -113,7 +113,7 @@ def _check_url(credential_id: int) -> str:
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_scoped_manager_sees_only_their_groups_pairings(
@@ -172,12 +172,14 @@ def test_scoped_manager_sees_only_their_groups_pairings(
         connector_specific_config=_CONNECTOR_CONFIG,
         user_performing_action=admin_user,
     )
+    # The owner pairs first: another user may reuse a credential only with the
+    # bound settings of a pair that already uses it.
     CCPairManager.create(
         connector_id=in_group_connector.id,
         credential_id=credential.id,
         access_type=AccessType.PRIVATE,
         groups=[managed_group.id],
-        user_performing_action=admin_user,
+        user_performing_action=manager,
     )
     CCPairManager.create(
         connector_id=foreign_connector.id,
@@ -244,7 +246,7 @@ def test_scoped_manager_sees_only_their_groups_pairings(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_managed_pairing_is_readable_without_credential_visibility(
@@ -304,7 +306,7 @@ def test_managed_pairing_is_readable_without_credential_visibility(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_scoped_manager_cannot_trigger_foreign_pairings(
@@ -350,12 +352,14 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
         connector_specific_config=_MOCK_CONFIG,
         user_performing_action=admin_user,
     )
+    # The owner pairs first: another user may reuse a credential only with the
+    # bound settings of a pair that already uses it.
     CCPairManager.create(
         connector_id=in_group_connector.id,
         credential_id=credential.id,
         access_type=AccessType.PRIVATE,
         groups=[managed_group.id],
-        user_performing_action=admin_user,
+        user_performing_action=manager,
     )
     CCPairManager.create(
         connector_id=foreign_connector.id,
@@ -391,7 +395,7 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_managed_pairing_is_triggerable_without_credential_visibility(

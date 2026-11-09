@@ -74,50 +74,6 @@
       "temperature": false,
       "tool_call": false
     },
-    "groq/compound": {
-      "attachment": false,
-      "family": "groq",
-      "limit": {
-        "context": 131072,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Compound",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-09-04",
-      "temperature": true,
-      "tool_call": false
-    },
-    "groq/compound-mini": {
-      "attachment": false,
-      "family": "groq",
-      "limit": {
-        "context": 131072,
-        "output": 8192
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Compound Mini",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-09-04",
-      "temperature": true,
-      "tool_call": false
-    },
     "llama-3.1-8b-instant": {
       "attachment": false,
       "cost": {
@@ -141,6 +97,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-07-23",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -167,6 +124,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2024-12-06",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -193,7 +151,7 @@
       "name": "Llama Prompt Guard 2 22M",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-05-29",
+      "release_date": "2025-04-29",
       "status": "beta",
       "temperature": false,
       "tool_call": false
@@ -221,7 +179,7 @@
       "name": "Prompt Guard 2 86M",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-05-29",
+      "release_date": "2025-04-29",
       "status": "beta",
       "temperature": false,
       "tool_call": false
@@ -287,7 +245,7 @@
     "openai/gpt-oss-safeguard-20b": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.037,
+        "cache_read": 0.0375,
         "input": 0.075,
         "output": 0.3
       },
@@ -339,6 +297,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-22",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -351,7 +310,7 @@
       },
       "family": "qwen",
       "limit": {
-        "context": 131042,
+        "context": 131072,
         "output": 16384
       },
       "modalities": {
@@ -368,20 +327,21 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-14",
+      "status": "beta",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
     "whisper-large-v3": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "second": 0.0,
         "second_input": 3.083e-05
       },
       "family": "whisper",
       "limit": {
-        "context": 0,
-        "output": 0
+        "context": 448,
+        "output": 448
       },
       "modalities": {
         "input": [
@@ -395,20 +355,20 @@
       "name": "Whisper",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2023-09-01",
+      "release_date": "2023-11-06",
       "temperature": true,
       "tool_call": false
     },
     "whisper-large-v3-turbo": {
-      "attachment": false,
+      "attachment": true,
       "cost": {
         "second": 0.0,
         "second_input": 1.111e-05
       },
       "family": "whisper",
       "limit": {
-        "context": 0,
-        "output": 0
+        "context": 448,
+        "output": 448
       },
       "modalities": {
         "input": [

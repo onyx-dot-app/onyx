@@ -1,16 +1,20 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import LLMGatewayPage from "@/app/app/settings/llm-gateway/page";
 
 const mockReplace = jest.fn();
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ replace: mockReplace }),
 }));
-jest.mock("@/hooks/useTierAtLeast", () => ({
+jest.mock("@/lib/tiers/hooks", () => ({
+  ...jest.requireActual("@/lib/tiers/hooks"),
   useTierAtLeast: jest.fn(),
 }));
 jest.mock("@/lib/languageModels/hooks", () => ({
@@ -33,6 +37,7 @@ const mockUseSettings = useSettings as jest.MockedFunction<typeof useSettings>;
 
 describe("LLMGatewayPage", () => {
   beforeEach(() => {
+    window.history.replaceState(null, "", "/");
     jest.clearAllMocks();
     mockUseTierAtLeast.mockReturnValue(true);
     mockUseSettings.mockReturnValue({ isLoading: false } as ReturnType<
@@ -62,5 +67,18 @@ describe("LLMGatewayPage", () => {
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith("/app/settings/general")
     );
+  });
+
+  it("shows the disabled notice instead of redirecting when an admin turned the gateway off", async () => {
+    mockUseSettings.mockReturnValue({
+      isLoading: false,
+      llm_gateway_enabled: false,
+    } as ReturnType<typeof useSettings>);
+
+    render(<LLMGatewayPage />);
+
+    expect(screen.queryByText("Gateway settings")).not.toBeInTheDocument();
+    expect(await screen.findByText("LLM Gateway is off")).toBeInTheDocument();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

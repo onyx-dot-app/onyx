@@ -11,16 +11,18 @@ export class ProjectsPopover {
     return this.page.getByTestId("AppSidebar/projects");
   }
 
+  /** The list of projects: a menu named by the trigger's label. */
   get content(): Locator {
-    return this.page.getByTestId("ProjectsPopover");
+    return this.page.getByRole("menu", { name: "Projects" });
   }
 
+  /** The search field sits above the menu, not inside it; only one is open. */
   get searchField(): Locator {
-    return this.content.getByTestId("ProjectsPopover/search");
+    return this.page.getByTestId("ProjectsPopover/search");
   }
 
   get newProjectButton(): Locator {
-    return this.content.getByTestId("ProjectsPopover/new-project");
+    return this.page.getByTestId("ProjectsPopover/new-project");
   }
 
   async open(): Promise<void> {
@@ -106,9 +108,9 @@ export class SidebarChatRow {
     return this.root.getByTestId("ChatButton/options");
   }
 
-  /** The options popover. Only one row's popover is open at a time. */
+  /** The options menu. Only one row's menu is open at a time. */
   get optionsPopover(): Locator {
-    return this.page.getByTestId("ChatButton/popover");
+    return this.page.getByRole("menu", { name: "Chat options" });
   }
 
   /**
@@ -129,7 +131,7 @@ export class SidebarChatRow {
   /** Opens the options popover and clicks "Rename". */
   async startRename(): Promise<void> {
     await this.openOptions();
-    await this.optionsPopover.getByRole("button", { name: "Rename" }).click();
+    await this.optionsPopover.getByRole("menuitem", { name: "Rename" }).click();
   }
 
   /** Types a new name into the rename editor and submits it. */

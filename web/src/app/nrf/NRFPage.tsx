@@ -1,10 +1,10 @@
 "use client";
 
+import { useSearchParams, useNavigation } from "@opal/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -19,7 +19,7 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
-import { useProjectsContext } from "@/lib/projects/providers";
+import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
@@ -47,7 +47,6 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
-import { Section } from "@/layouts/general-layouts";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -65,6 +64,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   // Shared with the tools popover in AppInputBar below. Mounted by the route.
   const { user, authTypeMetadata, refreshUser } = useUser();
 
@@ -133,7 +133,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         });
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.selectedModels]);
 
   const toolConfiguration = useToolConfiguration();
@@ -142,6 +141,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // State
@@ -284,6 +284,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.reset();
   }, [setMessage, setCurrentMessageFiles]);
 
+  const restoreInputBar = useCallback(
+    (message: string, files: ProjectFile[]) => {
+      chatInputBarRef.current?.restore(message, files);
+    },
+    []
+  );
+
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
@@ -295,6 +302,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       selectedDocuments: [],
       searchParams: searchParams!,
       resetInputBar,
+      restoreInputBar,
     });
 
   // Chat session controller for loading sessions
@@ -692,7 +700,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       if (window.top) {
                         window.top.location.href = "/auth/login";
                       } else {
-                        window.location.href = "/auth/login";
+                        navigation.load("/auth/login");
                       }
                     }}
                   >
@@ -710,7 +718,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
+            navigation.load(ADMIN_ROUTES.LLM_MODELS.path);
           }}
         >
           {t("nrf.page.setupLlmButton.label")}

@@ -27,6 +27,7 @@ from onyx.connectors.google_utils.shared_constants import (
     GOOGLE_SCOPES,
     GoogleOAuthAuthenticationMethod,
 )
+from onyx.db.credentials import CredentialAccessLevel
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -127,11 +128,11 @@ def test_get_auth_url_accepts_dict_and_legacy_string(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY: stored_value})
 
     def _update_credential_json(
@@ -227,11 +228,11 @@ def test_update_credential_access_tokens_restores_pkce_verifier(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY: payload})
 
     def _from_client_config(
@@ -334,11 +335,11 @@ def test_get_auth_url_reconstructs_app_cred_from_token_blob(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_TOKEN_KEY: token_blob})
 
     def _update_credential_json(
@@ -420,11 +421,11 @@ def test_get_auth_url_uses_app_credential_on_row_without_rewrite(
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({DB_CREDENTIALS_DICT_APP_CREDENTIAL_KEY: payload})
 
     def _update_credential_json(
@@ -474,11 +475,11 @@ def test_get_auth_url_errors_without_app_cred_or_token(monkeypatch: Any) -> None
         credential_id: int,
         user: User,
         db_session: Session,
-        get_editable: bool = True,
+        access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
     ) -> _StubCredential:
         del user, db_session
         assert credential_id == 42
-        assert get_editable is True
+        assert access_level is CredentialAccessLevel.EDIT
         return _StubCredential({})
 
     def _update_credential_json(

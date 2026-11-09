@@ -7,44 +7,15 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.source_operations import (
-    SPACE_PERMISSION_OPERATION_READ,
-    SPACE_PERMISSION_TARGET_TYPE_SPACE,
     ConfluenceSourceOperations,
     ConfluenceSpacePermissionsVariant,
+    has_anonymous_space_read,
     read_dc_space_subjects,
 )
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-_OPERATION = "operation"
-_OPERATIONS = "operations"
-
-
-def _has_anonymous_read_permission(anonymous_permissions: list[dict]) -> bool:
-    """Whether the anonymous role has 'read' on a given space.
-
-    The DC 9.1+ anonymous-permissions endpoint can return either a flat
-    list of {operation: {operationKey, targetType}} entries OR a nested
-    {operations: [...]} envelope, depending on patch version. Accept both
-    so a transient endpoint shape change doesn't silently disable
-    anonymous-access detection.
-    """
-    candidates: list[dict] = []
-    for entry in anonymous_permissions:
-        if not isinstance(entry, dict):
-            continue
-        if _OPERATIONS in entry and isinstance(entry[_OPERATIONS], list):
-            candidates.extend(op for op in entry[_OPERATIONS] if isinstance(op, dict))
-        if _OPERATION in entry and isinstance(entry[_OPERATION], dict):
-            candidates.append(entry[_OPERATION])
-
-    return any(
-        op.get("operationKey") == SPACE_PERMISSION_OPERATION_READ
-        and op.get("targetType") == SPACE_PERMISSION_TARGET_TYPE_SPACE
-        for op in candidates
-    )
 
 
 def _resolve_anonymous_access(
@@ -82,7 +53,7 @@ def _resolve_anonymous_access(
         )
         return False, set()
 
-    if not _has_anonymous_read_permission(anonymous_permissions):
+    if not has_anonymous_space_read(anonymous_permissions):
         return False, set()
 
     if CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC:

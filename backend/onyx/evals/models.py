@@ -5,10 +5,48 @@ from typing import Any
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from onyx.configs.model_configs import DEFAULT_OPENAI_MODEL
 from onyx.db.tools import get_builtin_tool
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+
+
+def evaluation_input(
+    values: dict[str, Any], overrides: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Validate preferences and apply case defaults beneath explicit turn settings."""
+    overrides = overrides or {}
+    if (
+        overrides.get("force_tools")
+        or values.get("force_tools")
+        or any(message.get("force_tools") for message in values.get("messages", []))
+    ):
+        raise ValueError(
+            "force_tools is no longer supported; use preferred_tool and expected_tools assertions"
+        )
+    settings = (
+        "preferred_tool",
+        "expected_tools",
+        "require_all_tools",
+        "model",
+        "model_provider",
+        "temperature",
+    )
+    normalized = {
+        **values,
+        **{key: overrides[key] for key in settings if key in overrides},
+    }
+    preferred_tool = normalized.get("preferred_tool")
+    if preferred_tool is not None and preferred_tool not in BUILT_IN_TOOL_MAP:
+        raise ValueError(f"Unknown preferred tool: {preferred_tool}")
+    if "messages" in normalized:
+        defaults = {key: normalized[key] for key in settings if key in normalized}
+        normalized["messages"] = [
+            evaluation_input({**defaults, **message})
+            for message in normalized["messages"]
+        ]
+    return normalized
 
 
 class ToolAssertion(BaseModel):
@@ -63,7 +101,7 @@ class EvalMessage(BaseModel):
     model: str | None = None
     model_provider: str | None = None
     temperature: float | None = None
-    force_tools: list[str] = Field(default_factory=list)  # Tools to force for this turn
+    preferred_tool: str | None = None
 
 
 class MultiTurnEvalResult(BaseModel):
@@ -86,7 +124,7 @@ class EvalConfigurationOptions(BaseModel):
     builtin_tool_types: list[str] = list(BUILT_IN_TOOL_MAP.keys())
     llm: LLMOverride = LLMOverride(
         model_provider=None,
-        model_version="gpt-4o",
+        model_version=DEFAULT_OPENAI_MODEL,
         temperature=0.0,
     )
     search_permissions_email: str

@@ -10,7 +10,7 @@ from uuid import UUID
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import EndpointPolicy, ExternalAppType, SandboxStatus
+from onyx.db.enums import ActionPolicy, ExternalAppType, SandboxStatus
 from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
     create_external_app,
@@ -77,7 +77,7 @@ def remove_container(container_name: str) -> None:
         print(f"WARNING: failed to remove container {container_name!r}: {exc}")
 
 
-def _docker_exec(
+def exec_container(
     container: str,
     cmd: list[str],
     *,
@@ -136,7 +136,7 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
     """
     started_at = time.monotonic()
     try:
-        result = _docker_exec(
+        result = exec_container(
             container,
             ["sh", "-c", webapp_bootstrap_command(session_id)],
             timeout=WEBAPP_BOOTSTRAP_TIMEOUT_S,
@@ -151,7 +151,7 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
         )
     elapsed_s = time.monotonic() - started_at
     output = f"{result.stdout}{result.stderr}"
-    install_state = _docker_exec(
+    install_state = exec_container(
         container,
         ["sh", "-c", webapp_install_check_command(session_id)],
         user=SANDBOX_EXEC_USER,
@@ -167,7 +167,7 @@ def start_session_webapp(container: str, session_id: UUID) -> str:
 
 
 def session_webapp_logs(container: str, session_id: UUID) -> str:
-    result = _docker_exec(
+    result = exec_container(
         container,
         ["sh", "-c", webapp_logs_command(session_id)],
         user=SANDBOX_EXEC_USER,
@@ -178,7 +178,7 @@ def session_webapp_logs(container: str, session_id: UUID) -> str:
 
 @pytest.fixture(scope="session")
 def docker_exec() -> DockerExec:
-    return _docker_exec
+    return exec_container
 
 
 @pytest.fixture(scope="session")
@@ -207,7 +207,7 @@ def slack_external_app() -> None:
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
                 organization_credentials={"access_token": "fake-test-token"},
-                action_policies={"slack.messages.write": EndpointPolicy.ASK},
+                action_policies={"slack.messages.write": ActionPolicy.ASK},
             )
             associate_built_in_skill__no_commit(db, app)
             db.commit()

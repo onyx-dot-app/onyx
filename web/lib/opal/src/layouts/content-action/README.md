@@ -12,11 +12,12 @@ A row layout that pairs a [`Content`](../content/README.md) block with optional 
 
 Inherits **all** props from [`Content`](../content/README.md) (same discriminated-union API) plus:
 
-| Prop            | Type                 | Default     | Description                                                                                                                                                                                                                                                                     |
-| --------------- | -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rightChildren` | `ReactNode`          | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row.                                                                                                                                                                                            |
-| `padding`       | `0 \| 0.5 \| 1 \| 2` | `2`         | Padding around the `Content` area, as a spacing step (`N / 4` rem). Narrowed to the paddings `Interactive.Container` uses.                                                                                                                                                      |
-| `fillRight`     | `boolean`            | `false`     | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. Ignored in the `responsive` branch. |
+| Prop            | Type                 | Default     | Description                                                                                                                                                                                                                                                                                                                                          |
+| --------------- | -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rightChildren` | `ReactNode`          | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row.                                                                                                                                                                                                                                                                 |
+| `padding`       | `0 \| 0.5 \| 1 \| 2` | `2`         | Padding around the `Content` area, as a spacing step (`N / 4` rem). Narrowed to the paddings `Interactive.Container` uses.                                                                                                                                                                                                                           |
+| `gapping`       | `Spacing`            | `4`         | Gap between the `Content` area and `rightChildren`, as a spacing step (`N / 4` rem). Ignored in the `responsive` branch.                                                                                                                                                                                                                             |
+| `fillRight`     | `boolean`            | `false`     | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. With `responsive`, it applies on desktop; stacked on narrow viewports, the control spans the full width. |
 
 ### `padding` reference
 
@@ -35,7 +36,7 @@ scale from `Card`, where `lg` was 24px rather than 8px.
 [  Content (flex-1, padded)  ] 1rem [  rightChildren (shrink-0, full height)  ]
 ```
 
-- The outer wrapper is `flex flex-row items-stretch w-full gap-4`: 1rem between `Content` and `rightChildren`.
+- The outer wrapper is `flex flex-row items-stretch w-full`, with `gapping` between `Content` and `rightChildren` (1rem by default).
 - `Content` sits inside a `flex-1 min-w-0` div with padding from `padding`.
 - `rightChildren` is wrapped in `flex items-stretch shrink-0` so it stretches vertically.
 - With `fillRight`, the `rightChildren` wrapper instead becomes `flex-1 min-w-0` with a
@@ -52,13 +53,11 @@ import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import SvgSettings from "@opal/icons/settings";
 
-<ContentAction
+<ContentAction font="main-content-emphasis"
   icon={SvgSettings}
   title="OpenAI"
   description="GPT"
-  sizePreset="main-content"
-  variant="section"
-  tag={{ title: "Default", color: "blue" }}
+  badge={{ title: "Default", color: "info" }}
   padding={2}
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />
@@ -73,12 +72,10 @@ import { ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgArrowExchange, SvgCloud } from "@opal/icons";
 
-<ContentAction
+<ContentAction font="main-content-emphasis"
   icon={SvgCloud}
   title="Google Cloud Vertex AI"
   description="Gemini"
-  sizePreset="main-content"
-  variant="section"
   padding={1}
   rightChildren={
     <Button rightIcon={SvgArrowExchange} prominence="tertiary">
@@ -94,11 +91,9 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { InputSingleSelect } from "@opal/components";
 
-<ContentAction
+<ContentAction font="main-ui-action"
   title="Query History Visibility"
   description="Control what is shown in query history"
-  sizePreset="main-ui"
-  variant="section"
   fillRight
   rightChildren={<InputSingleSelect ... />}
 />
@@ -110,10 +105,8 @@ controls like `InputSwitch`/`Button` should omit `fillRight` so they keep huggin
 ### No right children (padding-only wrapper)
 
 ```tsx
-<ContentAction
+<ContentAction font="main-content-emphasis"
   title="Section Header"
-  sizePreset="main-content"
-  variant="section"
   padding={2}
 />
 ```

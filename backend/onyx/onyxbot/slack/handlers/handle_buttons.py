@@ -49,7 +49,7 @@ from onyx.onyxbot.slack.utils import (
     respond_in_thread_or_channel,
     update_emote_react,
 )
-from onyx.server.query_and_chat.models import ChatMessageDetail
+from onyx.server.query_and_chat.models import ChatMessageDetail, MessageOrigin
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
@@ -386,6 +386,7 @@ def handle_slack_feedback(
                 chat_message_id=message_id,
                 user_id=onyx_user.id if onyx_user else None,
                 db_session=db_session,
+                origin=MessageOrigin.SLACKBOT,
             )
             remove_scheduled_feedback_reminder(
                 client=client,

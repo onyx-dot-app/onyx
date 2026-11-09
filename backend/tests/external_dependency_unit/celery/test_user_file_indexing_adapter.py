@@ -116,7 +116,6 @@ def _make_index_chunk(user_file: UserFile) -> IndexChunk:
             full_embedding=[0.0] * 768,
             mini_chunk_embeddings=[],
         ),
-        title_embedding=None,
     )
 
 

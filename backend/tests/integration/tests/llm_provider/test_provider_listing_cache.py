@@ -30,13 +30,13 @@ def test_persona_default_model_edit_invalidates_listing_cache(
     provider_a = LLMProviderManager.create(
         user_performing_action=new_admin_user,
         api_key="test-key",
-        default_model_name="gpt-4o-mini",
+        default_model_name="gpt-6-luna",
         set_as_default=True,
     )
     provider_b = LLMProviderManager.create(
         user_performing_action=new_admin_user,
         api_key="test-key",
-        default_model_name="gpt-4o",
+        default_model_name="gpt-6.1-sol",
         set_as_default=False,
     )
 
@@ -49,7 +49,7 @@ def test_persona_default_model_edit_invalidates_listing_cache(
     default_text = _get_persona_default_text(new_admin_user, persona.id)
     assert default_text is not None
     assert default_text["provider_id"] == provider_a.id
-    assert default_text["model_name"] == "gpt-4o-mini"
+    assert default_text["model_name"] == "gpt-6-luna"
 
     PersonaManager.edit(
         persona=persona,
@@ -60,4 +60,4 @@ def test_persona_default_model_edit_invalidates_listing_cache(
     default_text = _get_persona_default_text(new_admin_user, persona.id)
     assert default_text is not None
     assert default_text["provider_id"] == provider_b.id
-    assert default_text["model_name"] == "gpt-4o"
+    assert default_text["model_name"] == "gpt-6.1-sol"

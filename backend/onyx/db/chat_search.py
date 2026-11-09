@@ -5,6 +5,7 @@ from sqlalchemy import ColumnElement, column, desc, func, select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql.expression import ColumnClause
 
+from onyx.db.chat import visible_chat_messages_filter
 from onyx.db.models import ChatMessage, ChatSession
 
 
@@ -32,6 +33,7 @@ def search_chat_sessions(
         stmt = (
             select(ChatSession)
             .where(ChatSession.onyxbot_flow.is_(False))
+            .where(ChatSession.spawned_by_message_id.is_(None))
             .where(ChatSession.incognito_record_mode.is_(None))
             .order_by(desc(ChatSession.time_created))
             .offset(offset_val)
@@ -58,6 +60,7 @@ def search_chat_sessions(
     # through a message body when its description does not match.
     base_conditions: list[ColumnElement[bool]] = [
         ChatSession.onyxbot_flow.is_(False),
+        ChatSession.spawned_by_message_id.is_(None),
         ChatSession.incognito_record_mode.is_(None),
     ]
     if user_id is not None:
@@ -80,6 +83,7 @@ def search_chat_sessions(
         select(ChatMessage.chat_session_id)
         .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
         .where(*base_conditions)
+        .where(visible_chat_messages_filter())
         .where(message_tsv.op("@@")(ts_query))
     )
 

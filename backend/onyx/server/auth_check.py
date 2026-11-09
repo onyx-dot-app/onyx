@@ -15,6 +15,8 @@ from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 PUBLIC_ENDPOINT_SPECS = [
+    # Tenant-scoped, expiring read-only capability; cookies do not authorize access.
+    ("/build/static-preview/{token}/{path:path}", {"GET"}),
     # Built-in API docs / schema. These routes only exist when ENABLE_PUBLIC_DOCS
     # is set (see get_application); they are gated off by default so the API
     # surface is not exposed publicly. When the flag is off the routes are not
@@ -70,6 +72,11 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/oauth/authorize", {"GET"}),
     ("/auth/oauth/callback", {"GET"}),
     ("/mcp/oauth/client-metadata", {"GET"}),
+    ("/oauth-provider/metadata", {"GET", "OPTIONS"}),
+    ("/oauth-provider/register", {"POST", "OPTIONS"}),
+    ("/oauth-provider/authorize", {"GET", "POST"}),
+    ("/oauth-provider/token", {"POST", "OPTIONS"}),
+    ("/oauth-provider/revoke", {"POST", "OPTIONS"}),
     # dedicated mobile google oauth (callback routes to the api_server, not the web app)
     ("/auth/mobile/oauth/authorize", {"GET"}),
     ("/auth/mobile/oauth/callback", {"GET"}),
@@ -87,12 +94,14 @@ PUBLIC_ENDPOINT_SPECS = [
     # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
     ("/auth/saml/{provider_name}/authorize", {"GET"}),
-    ("/auth/saml/callback", {"GET"}),
     ("/auth/saml/callback", {"POST"}),
+    ("/auth/saml/complete", {"GET"}),
     ("/auth/saml/logout", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
+    # Firecracker host agents; the handler checks the shared cluster credential.
+    ("/build/sandbox-node/signing-key", {"PUT"}),
     # craft webapp proxy — access enforced per-session via sharing_scope in handler
     ("/build/sessions/{session_id}/webapp", {"GET"}),
     ("/build/sessions/{session_id}/webapp/{path:path}", {"GET"}),

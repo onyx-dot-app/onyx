@@ -62,7 +62,7 @@ from onyx.db.models import (
     Persona,
     Persona__User,
     Persona__UserGroup,
-    TokenRateLimit__UserGroup,
+    TokenRateLimit,
     User,
     User__UserGroup,
     UserGroup,
@@ -178,19 +178,14 @@ def _handle_owned_personas_for_group_deletion__no_commit(
         persona.owner_group_id = None
 
 
-def _cleanup_token_rate_limit__user_group_relationships__no_commit(
+def _delete_token_rate_limits_for_group__no_commit(
     db_session: Session, user_group_id: int
 ) -> None:
-    """NOTE: does not commit the transaction."""
-    token_rate_limit__user_group_relationships = db_session.scalars(
-        select(TokenRateLimit__UserGroup).where(
-            TokenRateLimit__UserGroup.user_group_id == user_group_id
-        )
-    ).all()
-    for (
-        token_rate_limit__user_group_relationship
-    ) in token_rate_limit__user_group_relationships:
-        db_session.delete(token_rate_limit__user_group_relationship)
+    """A group marked for deletion stops limiting its members at once; the FK
+    cascade would only remove its limits when the row itself goes."""
+    db_session.execute(
+        delete(TokenRateLimit).where(TokenRateLimit.user_group_id == user_group_id)
+    )
 
 
 def _cleanup_user_group__cc_pair_relationships__no_commit(
@@ -1088,9 +1083,10 @@ def set_user_group_data_access_cc_pairs(
     return final_cc_pair_ids
 
 
-def _set_group_manager__no_commit(
+def set_group_manager__no_commit(
     db_session: Session, *, user_id: UUID, group_id: int, is_manager: bool
 ) -> None:
+    """Set manager status for an existing group member without committing."""
     edge = db_session.scalar(
         select(User__UserGroup).where(
             User__UserGroup.user_id == user_id,
@@ -1103,22 +1099,6 @@ def _set_group_manager__no_commit(
     # Refresh the affected user's cached is_group_manager flag; a pure manager flip
     # (no membership change) otherwise leaves the route-gate flag stale.
     recompute_user_permissions__no_commit([user_id], db_session)
-
-
-def make_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
-    """Flip is_manager=true on the (user, group) edge. The row must already exist —
-    a manager is always a member — else ValueError. Idempotent. Does NOT commit."""
-    _set_group_manager__no_commit(
-        db_session, user_id=user_id, group_id=group_id, is_manager=True
-    )
-
-
-def revoke_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
-    """Flip is_manager=false on the (user, group) edge. The row must exist else
-    ValueError. Idempotent. Does NOT commit."""
-    _set_group_manager__no_commit(
-        db_session, user_id=user_id, group_id=group_id, is_manager=False
-    )
 
 
 def rename_user_group(
@@ -1206,7 +1186,7 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
     _cleanup_user__user_group_relationships__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
-    _cleanup_token_rate_limit__user_group_relationships__no_commit(
+    _delete_token_rate_limits_for_group__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
     _cleanup_document_set__user_group_relationships__no_commit(

@@ -1,11 +1,16 @@
+import asyncio
 import contextvars
 import threading
 import time
-from collections.abc import Generator, Iterator
+from collections.abc import Coroutine, Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.utils import threadpool_concurrency
 from onyx.utils.threadpool_concurrency import (
     ThreadSafeDict,
     parallel_yield,
@@ -393,3 +398,108 @@ def test_parallel_yield_non_blocking() -> None:
     # Verify no values are missing
     assert len(results) == 300  # Should have all values from 0 to 299
     assert sorted(results) == list(range(300))
+
+
+def test_already_cancelled_call_does_not_start() -> None:
+    cancellation = CancellationSignal()
+    cancellation.cancel()
+
+    async def operation() -> None:
+        pytest.fail("A cancelled request must not start")
+
+    with pytest.raises(AgentCancelled):
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+
+
+@pytest.mark.parametrize("cancel_during_operation", [False, True])
+def test_completed_call_keeps_its_result(cancel_during_operation: bool) -> None:
+    cancellation = CancellationSignal()
+
+    async def operation() -> str:
+        if cancel_during_operation:
+            cancellation.cancel()
+        return "completed"
+
+    assert (
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+        == "completed"
+    )
+    assert not cancellation._callbacks
+    cancellation.cancel()
+
+
+def test_failed_call_keeps_its_error() -> None:
+    cancellation = CancellationSignal()
+    failure = ValueError("server failed")
+
+    async def operation() -> None:
+        raise failure
+
+    with pytest.raises(ValueError) as error:
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+    assert error.value is failure
+    assert not cancellation._callbacks
+    cancellation.cancel()
+
+
+def test_cancellation_before_event_loop_starts_does_not_start_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cancellation = CancellationSignal()
+    run = threadpool_concurrency.run_async_sync_no_cancel
+
+    def cancel_before_running(coroutine: Coroutine[Any, Any, object]) -> object:
+        cancellation.cancel()
+        return run(coroutine)
+
+    async def operation() -> None:
+        pytest.fail("A cancelled request must not start")
+
+    monkeypatch.setattr(
+        threadpool_concurrency, "run_async_sync_no_cancel", cancel_before_running
+    )
+    with pytest.raises(AgentCancelled):
+        threadpool_concurrency.run_until_cancelled(
+            operation(),
+            is_cancelled=lambda: cancellation.cancelled,
+            on_cancel=cancellation.on_cancel,
+            cancellation_error=AgentCancelled,
+        )
+    assert not cancellation._callbacks
+
+
+def test_cancellation_logs_unexpected_cleanup_failure() -> None:
+    cancellation = CancellationSignal()
+
+    async def operation() -> None:
+        try:
+            asyncio.get_running_loop().call_soon(cancellation.cancel)
+            await asyncio.sleep(30)
+        finally:
+            raise ValueError("cleanup failed")
+
+    with patch.object(threadpool_concurrency.logger, "exception") as log:
+        with pytest.raises(AgentCancelled):
+            threadpool_concurrency.run_until_cancelled(
+                operation(),
+                is_cancelled=lambda: cancellation.cancelled,
+                on_cancel=cancellation.on_cancel,
+                cancellation_error=AgentCancelled,
+            )
+    log.assert_called_once_with("Coroutine cleanup failed after cancellation")
+    assert not cancellation._callbacks

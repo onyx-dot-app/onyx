@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -33,7 +33,7 @@ interface Props {
 export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
   const t = useTranslations("admin.discordBot");
   const locale = useLocale();
-  const router = useRouter();
+  const navigation = useNavigation();
   const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
     null
   );
@@ -68,9 +68,6 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
         default_persona_id: guild.default_persona_id,
       });
       onRefresh();
-      toast.success(
-        !guild.enabled ? t("guilds.enabled.toast") : t("guilds.disabled.toast")
-      );
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("guilds.updateError.toast")
@@ -127,7 +124,9 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
                 <Button
                   disabled={!guild.guild_id}
                   prominence="internal"
-                  onClick={() => router.push(`/admin/discord-bot/${guild.id}`)}
+                  onClick={() =>
+                    navigation.go(`/admin/discord-bot/${guild.id}`)
+                  }
                   icon={SvgEdit}
                 >
                   {guild.guild_name ||

@@ -55,6 +55,18 @@ Use --agent to target specific agents (can be repeated).`,
 				return err
 			}
 
+			// A project checkout may hold planted symlinks, so writes there
+			// never follow them. The home directory is the user's own.
+			writeSkill := func(dest string, data []byte) error {
+				if global {
+					if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+						return err
+					}
+					return os.WriteFile(dest, data, 0o644)
+				}
+				return fsutil.WriteFileNoFollow(base, dest, data, 0o644)
+			}
+
 			// Write the canonical copy.
 			canonicalSkillDir := filepath.Join(base, canonicalDir, skillName)
 			dest := filepath.Join(canonicalSkillDir, "SKILL.md")
@@ -67,17 +79,11 @@ Use --agent to target specific agents (can be repeated).`,
 			switch status {
 			case fsutil.StatusUpToDate:
 				fmt.Fprintf(ios.Out, "Up to date %s\n", dest)
-			case fsutil.StatusDiffers:
-				fmt.Fprintf(ios.ErrOut, "Warning: overwriting modified %s\n", dest)
-				if err := os.WriteFile(dest, content, 0o644); err != nil {
-					return fmt.Errorf("could not write skill file: %w", err)
+			default:
+				if status == fsutil.StatusDiffers {
+					fmt.Fprintf(ios.ErrOut, "Warning: overwriting modified %s\n", dest)
 				}
-				fmt.Fprintf(ios.Out, "Installed %s\n", dest)
-			default: // statusMissing
-				if err := os.MkdirAll(canonicalSkillDir, 0o755); err != nil {
-					return fmt.Errorf("could not create directory: %w", err)
-				}
-				if err := os.WriteFile(dest, content, 0o644); err != nil {
+				if err := writeSkill(dest, content); err != nil {
 					return fmt.Errorf("could not write skill file: %w", err)
 				}
 				fmt.Fprintf(ios.Out, "Installed %s\n", dest)
@@ -104,16 +110,28 @@ Use --agent to target specific agents (can be repeated).`,
 			// Create symlinks (or copies) from agent-specific dirs to canonical.
 			for name, skillsDir := range targets {
 				agentSkillDir := filepath.Join(base, skillsDir, skillName)
+				// The link and copy steps below follow links in the parents,
+				// so a parent may only resolve inside the project.
+				if !global {
+					if err := fsutil.CheckResolvesInside(base, filepath.Dir(agentSkillDir)); err != nil {
+						return fmt.Errorf("could not prepare %s directory: %w", name, err)
+					}
+				}
+
+				// A committed link such as .claude/skills -> ../.agents/skills
+				// already makes the agent dir the canonical one. --copy still
+				// replaces a leaf link to the canonical dir with a real copy.
+				if sameDir(agentSkillDir, canonicalSkillDir) && (!copyMode || !isSymlink(agentSkillDir)) {
+					fmt.Fprintf(ios.Out, "Up to date %s\n", agentSkillDir)
+					continue
+				}
 
 				if copyMode {
 					copyDest := filepath.Join(agentSkillDir, "SKILL.md")
 					if err := fsutil.EnsureDirForCopy(agentSkillDir); err != nil {
 						return fmt.Errorf("could not prepare %s directory: %w", name, err)
 					}
-					if err := os.MkdirAll(agentSkillDir, 0o755); err != nil {
-						return fmt.Errorf("could not create %s directory: %w", name, err)
-					}
-					if err := os.WriteFile(copyDest, []byte(embedded.SkillMD), 0o644); err != nil {
+					if err := writeSkill(copyDest, []byte(embedded.SkillMD)); err != nil {
 						return fmt.Errorf("could not write %s skill file: %w", name, err)
 					}
 					fmt.Fprintf(ios.Out, "Copied  %s\n", copyDest)
@@ -137,10 +155,7 @@ Use --agent to target specific agents (can be repeated).`,
 				if err := os.Symlink(rel, agentSkillDir); err != nil {
 					// Fall back to copy if symlink fails (e.g. Windows without dev mode).
 					copyDest := filepath.Join(agentSkillDir, "SKILL.md")
-					if mkErr := os.MkdirAll(agentSkillDir, 0o755); mkErr != nil {
-						return fmt.Errorf("could not create %s directory: %w", name, mkErr)
-					}
-					if wErr := os.WriteFile(copyDest, []byte(embedded.SkillMD), 0o644); wErr != nil {
+					if wErr := writeSkill(copyDest, []byte(embedded.SkillMD)); wErr != nil {
 						return fmt.Errorf("could not write %s skill file: %w", name, wErr)
 					}
 					fmt.Fprintf(ios.Out, "Copied  %s (symlink failed)\n", copyDest)
@@ -173,4 +188,18 @@ func installBase(global bool) (string, error) {
 		return "", fmt.Errorf("could not determine working directory: %w", err)
 	}
 	return cwd, nil
+}
+
+func sameDir(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	return err == nil && os.SameFile(ai, bi)
+}
+
+func isSymlink(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }

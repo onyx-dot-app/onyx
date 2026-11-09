@@ -1,3 +1,5 @@
+import type { ComponentProps } from "react";
+import type ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import {
   act,
   deferred,
@@ -13,7 +15,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockDeleteUserSkill = jest.fn();
 const mockRouterReplace = jest.fn();
-const mockRouterPush = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
 const mockMutate = jest.fn();
@@ -51,6 +52,7 @@ function existingSkill(
     is_personal: true,
     enabled: true,
     can_toggle: true,
+    installation_policy: "AVAILABLE",
     author_user_id: "author-id",
     author_email: "author@example.com",
     owner: { id: "author-id", email: "author@example.com" },
@@ -67,9 +69,12 @@ function existingSkill(
 }
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   usePathname: () => "/craft/v1/skills/new",
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({
-    push: mockRouterPush,
     replace: mockRouterReplace,
   }),
 }));
@@ -90,7 +95,18 @@ jest.mock("@/lib/skills/creationDraft", () => ({
 
 jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: ComponentProps<typeof ShareSkillModal>) =>
+    props.open && props.mode === "create" ? (
+      <button
+        type="button"
+        onClick={() => {
+          props.onSaveDraft({ ...props.draft, public_permission: "VIEWER" });
+          props.onClose();
+        }}
+      >
+        Choose organization access
+      </button>
+    ) : null,
 }));
 
 jest.mock("@/lib/skills/api", () => ({
@@ -111,7 +127,7 @@ describe("SkillEditorPage", () => {
     mockDeleteUserSkill.mockReset();
     mockDeleteUserSkill.mockResolvedValue(undefined);
     mockRouterReplace.mockReset();
-    mockRouterPush.mockReset();
+    window.history.replaceState(null, "", "/");
     mockGetSkillCreationDraft.mockReset();
     mockDiscardSkillCreationDraft.mockReset();
     mockMutate.mockReset();
@@ -127,6 +143,31 @@ describe("SkillEditorPage", () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  it("includes draft sharing settings in the creation request", async () => {
+    const user = setupUser();
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      name: "report-writer",
+    });
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Choose organization access" })
+    );
+    expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sharing: {
+          public_permission: "VIEWER",
+          user_shares: [],
+          group_shares: [],
+        },
+      }),
+      undefined
+    );
+  });
 
   it("navigates after creation even when the skill-list refresh fails", async () => {
     const user = setupUser();
@@ -305,7 +346,7 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
@@ -315,7 +356,7 @@ describe("SkillEditorPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
   });
 
   it("confirms before leaving an existing skill with unsaved changes", async () => {
@@ -337,10 +378,10 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
     expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
   });
 
@@ -363,7 +404,7 @@ describe("SkillEditorPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/admin/craft/apps?editAppId=42"
     );
   });
@@ -404,7 +445,7 @@ describe("SkillEditorPage", () => {
     await waitFor(() =>
       expect(mockDeleteUserSkill).toHaveBeenCalledWith(skill.id)
     );
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
 
     await act(async () => {
       appRefresh.resolve();
@@ -412,7 +453,7 @@ describe("SkillEditorPage", () => {
     });
 
     await waitFor(() =>
-      expect(mockRouterPush).toHaveBeenCalledWith(
+      expect(mockRouterReplace).toHaveBeenCalledWith(
         "/admin/craft/apps?editAppId=42"
       )
     );
@@ -426,12 +467,12 @@ describe("SkillEditorPage", () => {
     render(<SkillEditorPage externalAppId={42} externalAppName="Acme CRM" />);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/admin/craft/apps?editAppId=42"
     );
   });
 
-  it("shows the app dependency and required organization visibility", () => {
+  it("keeps sharing in the header without a management section", () => {
     const skill = existingSkill({
       is_personal: false,
       public_permission: "VIEWER",
@@ -451,15 +492,9 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage skillId={skill.id} />);
 
+    expect(screen.queryByText("Management")).not.toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Connect app “Acme CRM” from the Apps page to use this skill."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Organization-wide viewer access is required while this skill is associated with app “Acme CRM”."
-      )
+      screen.getByRole("button", { name: "Edit sharing" })
     ).toBeInTheDocument();
   });
 

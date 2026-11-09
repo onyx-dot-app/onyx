@@ -4,10 +4,10 @@ from uuid import UUID
 
 from mitmproxy import http
 
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ActionPolicy
 from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.credential_injection import InjectionOutcome
-from onyx.sandbox_proxy.identity import ResolvedSandbox, SessionContext
+from onyx.sandbox_proxy.models import InjectionOutcome
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 
 _EGRESS_CONTEXT_FIELDS = "tenant=%s sandbox=%s"
 _EGRESS_SESSION_FIELDS = f"{_EGRESS_CONTEXT_FIELDS} session=%s"
@@ -63,8 +63,8 @@ def credential_outcome_label(outcome: InjectionOutcome) -> str:
     return outcome.value
 
 
-def _policy_label(policy: EndpointPolicy | str) -> str:
-    return policy.value if isinstance(policy, EndpointPolicy) else policy
+def _policy_label(policy: ActionPolicy | str) -> str:
+    return policy.value if isinstance(policy, ActionPolicy) else policy
 
 
 def _egress_context_args(sandbox: ResolvedSandbox | SessionContext) -> tuple[str, str]:
@@ -76,7 +76,7 @@ def _egress_request_args(flow: http.HTTPFlow) -> tuple[str, str]:
 
 
 def _egress_action_args(
-    matched_actions: AllMatchedActions, policy: EndpointPolicy | str
+    matched_actions: AllMatchedActions, policy: ActionPolicy | str
 ) -> tuple[object, ...]:
     return (
         matched_actions.app_name,
@@ -100,7 +100,7 @@ def egress_matched_args(
     flow: http.HTTPFlow,
     sandbox: ResolvedSandbox | SessionContext,
     matched_actions: AllMatchedActions,
-    policy: EndpointPolicy | str,
+    policy: ActionPolicy | str,
 ) -> tuple[object, ...]:
     return (
         *egress_target_args(flow, sandbox),
@@ -112,7 +112,7 @@ def egress_session_matched_args(
     flow: http.HTTPFlow,
     ctx: SessionContext,
     matched_actions: AllMatchedActions,
-    policy: EndpointPolicy | str,
+    policy: ActionPolicy | str,
 ) -> tuple[object, ...]:
     return (
         *_egress_context_args(ctx),
@@ -126,7 +126,7 @@ def egress_approval_matched_args(
     flow: http.HTTPFlow,
     ctx: SessionContext,
     matched_actions: AllMatchedActions,
-    policy: EndpointPolicy | str,
+    policy: ActionPolicy | str,
     approval_id: UUID,
 ) -> tuple[object, ...]:
     return (

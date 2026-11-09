@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { toast } from "@opal/layouts";
 import { Button } from "@opal/components";
@@ -26,6 +27,7 @@ export default function KickoffCSVExport({
   dateRange: DateRange;
 }) {
   const t = useTranslations("admin.queryHistory");
+  const navigation = useNavigation();
   const timerIdRef = useRef<null | number>(null);
   const retryCount = useRef<number>(0);
   const [, rerender] = useState<void>();
@@ -108,10 +110,7 @@ export default function KickoffCSVExport({
 
     if (status === "SUCCESS") {
       reset();
-      window.location.href = withRequestId(
-        DOWNLOAD_QUERY_HISTORY_URL,
-        requestId
-      );
+      navigation.load(withRequestId(DOWNLOAD_QUERY_HISTORY_URL, requestId));
     } else if (status === "FAILURE") {
       reset(true);
     }

@@ -60,3 +60,19 @@ def test_mcp_oauth_client_metadata_url_requires_https(
     monkeypatch.setattr(client_metadata, "WEB_DOMAIN", web_domain)
 
     assert client_metadata.validated_mcp_oauth_client_metadata_url() == expected_url
+
+
+@pytest.mark.parametrize(
+    ("client_id", "expected"),
+    [
+        ("https://onyx.example.com/api/mcp/oauth/client-metadata", True),
+        ("https://old-domain.example.com/api/mcp/oauth/client-metadata", True),
+        ("http://onyx.example.com/api/mcp/oauth/client-metadata", False),
+        ("mock-client-3f2a9c", False),
+        (None, False),
+    ],
+)
+def test_mcp_oauth_cimd_client_id_is_recognized_by_shape(
+    client_id: str | None, expected: bool
+) -> None:
+    assert client_metadata.is_mcp_oauth_cimd_client_id(client_id) is expected

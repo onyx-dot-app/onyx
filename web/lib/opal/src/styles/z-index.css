@@ -19,10 +19,11 @@
   --z-modal-overlay: 900;
   --z-modal: 1000;
 
-  /* Interactive overlays. Toasts sit below popovers so an open menu is
-     never obscured by a passive notification. */
-  --z-toast: 1100;
+  /* Interactive overlays. Toasts sit above everything but tooltips: a
+     notification is never hidden behind an open menu or modal, and a
+     toast's own button tooltip (its retry action) still shows above it. */
   --z-popover: 1200;
+  --z-toast: 1250;
   --z-tooltip: 1300;
 }
 

@@ -51,11 +51,11 @@ def _run_auto_llm_update() -> None:
 
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.llm.well_known_providers.auto_update_service import (
-        sync_llm_models_from_github,
+        sync_auto_update_providers,
     )
 
     with get_session_with_current_tenant() as db_session:
-        sync_llm_models_from_github(db_session)
+        sync_auto_update_providers(db_session)
 
 
 def _run_cache_cleanup() -> None:
@@ -116,7 +116,26 @@ def _run_scheduled_eval() -> None:
             )
 
 
+def _run_oauth_provider_cleanup() -> None:
+    from onyx.background.celery.tasks.oauth_provider.tasks import (
+        cleanup_oauth_provider_clients,
+        cleanup_oauth_provider_grants,
+    )
+    from shared_configs.contextvars import get_current_tenant_id
+
+    cleanup_oauth_provider_grants.run(tenant_id=get_current_tenant_id())
+    cleanup_oauth_provider_clients.run()
+
+
+def _run_fleet_telemetry() -> None:
+    from onyx.utils.fleet_telemetry_collector import collect_snapshots
+    from shared_configs.contextvars import get_current_tenant_id
+
+    collect_snapshots(get_current_tenant_id())
+
+
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
+_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS = 24 * 3600
 # The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
 _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
@@ -125,11 +144,13 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
     from onyx.cache.interface import CacheBackendType
     from onyx.configs.app_configs import (
         AUTO_LLM_CONFIG_URL,
-        AUTO_LLM_UPDATE_INTERVAL_SECONDS,
         CACHE_BACKEND,
+        DISABLE_TELEMETRY,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
+    from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
     from onyx.utils.variable_functionality import global_version
+    from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 
     tasks: list[_PeriodicTaskDef] = []
     if CACHE_BACKEND == CacheBackendType.POSTGRES:
@@ -168,6 +189,23 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 interval_seconds=_LICENSE_RECLAIM_INTERVAL_SECONDS,
                 lock_id=PERIODIC_TASK_LOCK_BASE + 3,
                 run_fn=_run_license_reclaim,
+            )
+        )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="oauth-provider-cleanup",
+            interval_seconds=_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 4,
+            run_fn=_run_oauth_provider_cleanup,
+        )
+    )
+    if not DISABLE_TELEMETRY:
+        tasks.append(
+            _PeriodicTaskDef(
+                name="fleet-telemetry",
+                interval_seconds=COLLECTION_INTERVAL_SECONDS,
+                lock_id=PERIODIC_TASK_LOCK_BASE + 5,
+                run_fn=_run_fleet_telemetry,
             )
         )
     return tasks

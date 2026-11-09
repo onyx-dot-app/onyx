@@ -13,9 +13,33 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
-_BASE = "https://slack.com/api/"
+# Rendered beside this script at push time from `cloud.txt.template`: the Web
+# API base on line 1 and the file-upload host on line 2. Onyx writes the cloud
+# that SLACK_API_URL selects, so GovSlack works without arguments.
+_CLOUD_FILE = Path(__file__).with_name("cloud.txt")
+_TRUSTED_DOMAINS = ("slack.com", "slack-gov.com")
+
+
+def _load_cloud() -> tuple[str, str]:
+    """(Web API base, files host). Falls back to commercial Slack when the file
+    is missing or holds anything other than a trusted Slack cloud, so a bad
+    value cannot send the user's token to an unknown host."""
+    try:
+        lines = _CLOUD_FILE.read_text().split()
+    except OSError:
+        lines = []
+    if len(lines) == 2:
+        base, files_host = lines
+        for domain in _TRUSTED_DOMAINS:
+            if base == f"https://{domain}/api/" and files_host == f"files.{domain}":
+                return base, files_host
+    return "https://slack.com/api/", "files.slack.com"
+
+
+_BASE, _FILES_HOST = _load_cloud()
 _METHOD_RE = re.compile(r"^[a-z][a-zA-Z0-9._]*$")
 _PAGE_SIZE = 200
 _DEFAULT_LIMIT = 200
@@ -193,7 +217,7 @@ def _upload_file(
     if not upload_url or not file_id:
         return {"ok": False, "error": "missing_upload_url"}
     parsed_url = urllib.parse.urlparse(upload_url)
-    if parsed_url.scheme != "https" or parsed_url.hostname != "files.slack.com":
+    if parsed_url.scheme != "https" or parsed_url.hostname != _FILES_HOST:
         return {"ok": False, "error": "untrusted_upload_url"}
     with open(file_path, "rb") as fh:
         content = fh.read()

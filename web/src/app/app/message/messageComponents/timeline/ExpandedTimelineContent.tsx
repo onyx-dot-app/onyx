@@ -3,7 +3,7 @@
 import React, { FunctionComponent, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState } from "../interfaces";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { TurnGroup, TransformedStep } from "./transformers";
 import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";

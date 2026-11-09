@@ -2,6 +2,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TypeVar
 
+from onyx.access.access import censor_chunks_for_user
 from onyx.context.search.models import (
     ContextExpansionType,
     IndexFilters,
@@ -9,9 +10,12 @@ from onyx.context.search.models import (
     InferenceSection,
 )
 from onyx.context.search.utils import inference_section_from_chunks
+from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
+from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.interfaces import LLM
 from onyx.prompts.prompt_utils import clean_up_source
+from onyx.secondary_llm_flows.decision_rerank_expansion import decide_context_expansion
 from onyx.secondary_llm_flows.document_filter import classify_section_relevance
 from onyx.tools.tool_implementations.search.constants import (
     FULL_DOC_NUM_CHUNKS_AROUND,
@@ -131,6 +135,7 @@ def section_to_dict(section: InferenceSection, section_num: int) -> dict:
 def _retrieve_adjacent_chunks(
     section: InferenceSection,
     document_index: DocumentIndex,
+    user: User,
     num_chunks_above: int,
     num_chunks_below: int,
 ) -> tuple[list[InferenceChunk], list[InferenceChunk]]:
@@ -139,6 +144,7 @@ def _retrieve_adjacent_chunks(
     Args:
         section: The InferenceSection to get adjacent chunks for
         document_index: The document index to query
+        user: The user the adjacent chunks are censored for
         num_chunks_above: Number of chunks to retrieve above the section
         num_chunks_below: Number of chunks to retrieve below the section
 
@@ -148,8 +154,7 @@ def _retrieve_adjacent_chunks(
     # Get the document_id and chunk range from the section
     document_id = section.center_chunk.document_id
 
-    # The document fetching already enforced permissions
-    # the expansion does not need to do this unless it's for performance reasons
+    # Chunks share their document's ACL, which the section's search already enforced.
     filters = IndexFilters(access_control_list=None)
 
     # Find the min and max chunk_id in the section
@@ -204,7 +209,12 @@ def _retrieve_adjacent_chunks(
         except Exception as e:
             logger.warning("Failed to retrieve chunks below section: %s", e)
 
-    return chunks_above, chunks_below
+    # One censoring pass for both sides keeps it to one permission lookup.
+    censored = censor_chunks_for_user(chunks_above + chunks_below, user)
+    return (
+        [chunk for chunk in censored if chunk.chunk_id < min_chunk_id],
+        [chunk for chunk in censored if chunk.chunk_id > max_chunk_id],
+    )
 
 
 def merge_overlapping_sections(
@@ -350,12 +360,42 @@ def merge_overlapping_sections(
     return result
 
 
+def expand_section_with_neighbors(
+    section: InferenceSection,
+    document_index: DocumentIndex,
+    user: User,
+    num_chunks: int,
+) -> InferenceSection:
+    """Add up to `num_chunks` chunks on each side of the section, read from
+    the index and censored for `user`. Makes no relevance call."""
+    if num_chunks == 0:
+        return section
+    chunks_above, chunks_below = _retrieve_adjacent_chunks(
+        section=section,
+        document_index=document_index,
+        user=user,
+        num_chunks_above=num_chunks,
+        num_chunks_below=num_chunks,
+    )
+    return (
+        inference_section_from_chunks(
+            center_chunk=section.center_chunk,
+            chunks=chunks_above + section.chunks + chunks_below,
+        )
+        or section
+    )
+
+
 def expand_section_with_context(
     section: InferenceSection,
     user_query: str,
     llm: LLM,
     document_index: DocumentIndex,
+    user: User,
     expand_override: bool = False,
+    enforce_llm_input_budget: bool = False,
+    decision_client: DecisionClient | None = None,
+    llm_fallback: bool = True,
 ) -> InferenceSection | None:
     """Use LLM to classify section relevance and return expanded section with appropriate context.
 
@@ -370,7 +410,12 @@ def expand_section_with_context(
         search_query: The user's search query
         llm: LLM instance to use for classification
         document_index: Document index for retrieving adjacent chunks
+        user: The user the adjacent chunks are censored for
         expand_override: If True, skip LLM classification and use FULL_DOCUMENT expansion
+        decision_client: If set, the decision model classifies first; the LLM
+            classifies only when that call fails
+        llm_fallback: If False, a failed decision call raises instead of
+            falling back to the LLM
 
     Returns:
         Expanded InferenceSection with appropriate context, or None if NOT_RELEVANT
@@ -387,6 +432,7 @@ def expand_section_with_context(
         chunks_above_for_prompt, chunks_below_for_prompt = _retrieve_adjacent_chunks(
             section=section,
             document_index=document_index,
+            user=user,
             num_chunks_above=2,
             num_chunks_below=2,
         )
@@ -403,14 +449,35 @@ def expand_section_with_context(
             else None
         )
 
-        # Classify section relevance using LLM
-        classification = classify_section_relevance(
-            document_title=section.center_chunk.semantic_identifier,
-            section_text=section.combined_content,
-            user_query=user_query,
-            llm=llm,
-            section_above_text=section_above_text,
-            section_below_text=section_below_text,
+        decided: ContextExpansionType | None = None
+        if decision_client is not None:
+            try:
+                decided = decide_context_expansion(
+                    document_title=section.center_chunk.semantic_identifier,
+                    section_text=section.combined_content,
+                    user_query=user_query,
+                    client=decision_client,
+                    section_above_text=section_above_text,
+                    section_below_text=section_below_text,
+                )
+            except Exception:
+                if not llm_fallback:
+                    raise
+                logger.warning(
+                    "Decision expansion failed, using the LLM", exc_info=True
+                )
+        classification = (
+            decided
+            if decided is not None
+            else classify_section_relevance(
+                document_title=section.center_chunk.semantic_identifier,
+                section_text=section.combined_content,
+                user_query=user_query,
+                llm=llm,
+                section_above_text=section_above_text,
+                section_below_text=section_below_text,
+                enforce_llm_input_budget=enforce_llm_input_budget,
+            )
         )
 
     # Now build the expanded section based on classification
@@ -462,30 +529,12 @@ def expand_section_with_context(
                 section.center_chunk.semantic_identifier,
             )
 
-        chunks_above_full, chunks_below_full = _retrieve_adjacent_chunks(
+        return expand_section_with_neighbors(
             section=section,
             document_index=document_index,
-            num_chunks_above=FULL_DOC_NUM_CHUNKS_AROUND,
-            num_chunks_below=FULL_DOC_NUM_CHUNKS_AROUND,
+            user=user,
+            num_chunks=FULL_DOC_NUM_CHUNKS_AROUND,
         )
-
-        # Combine all chunks: 5 above + section + 5 below
-        all_chunks = chunks_above_full + section.chunks + chunks_below_full
-
-        if not all_chunks:
-            logger.warning(
-                "No chunks found for full document context expansion: %s",
-                section.center_chunk.semantic_identifier,
-            )
-            return section
-
-        # Create new InferenceSection with full context
-        expanded_section = inference_section_from_chunks(
-            center_chunk=section.center_chunk,
-            chunks=all_chunks,
-        )
-
-        return expanded_section or section
 
     else:
         # Unknown classification - default to returning original section

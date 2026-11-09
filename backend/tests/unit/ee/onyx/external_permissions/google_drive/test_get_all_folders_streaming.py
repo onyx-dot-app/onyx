@@ -9,6 +9,9 @@ from ee.onyx.external_permissions.google_drive.group_sync import (
     _get_all_folders,
     _get_all_google_groups,
 )
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
+)
 
 
 def _folder(folder_id: str) -> dict[str, Any]:
@@ -34,15 +37,13 @@ def _folder(folder_id: str) -> dict[str, Any]:
 
 def _make_connector(user_emails: list[str]) -> MagicMock:
     connector = MagicMock()
-    connector.creds = MagicMock()
+    connector.ops = MagicMock(spec=GoogleDriveSourceOperations)
     connector._get_all_user_emails.return_value = user_emails
     return connector
 
 
 @patch("ee.onyx.external_permissions.google_drive.group_sync.get_modified_folders")
-@patch("ee.onyx.external_permissions.google_drive.group_sync.get_drive_service")
 def test_get_all_folders_streams_without_materializing(
-    mock_get_drive_service: MagicMock,
     mock_get_modified_folders: MagicMock,
 ) -> None:
     """Folders must be yielded as they are found, not accumulated into a list.
@@ -54,7 +55,6 @@ def test_get_all_folders_streams_without_materializing(
     """
     assert inspect.isgeneratorfunction(_get_all_folders)
 
-    mock_get_drive_service.return_value = MagicMock()
     mock_get_modified_folders.side_effect = [
         [_folder("a1"), _folder("a2")],
         [_folder("b1")],
@@ -67,30 +67,27 @@ def test_get_all_folders_streams_without_materializing(
     )
 
     # Merely calling the function must not perform any work.
-    assert mock_get_drive_service.call_count == 0
+    assert mock_get_modified_folders.call_count == 0
 
     first = next(generator)
 
     # One folder pulled => only the first user has been enumerated.
     assert first.id == "a1"
-    assert mock_get_drive_service.call_count == 1
+    assert mock_get_modified_folders.call_count == 1
 
     # Draining the rest reaches the remaining users.
     remaining = [folder.id for folder in generator]
     assert remaining == ["a2", "b1", "c1"]
-    assert mock_get_drive_service.call_count == 3
+    assert mock_get_modified_folders.call_count == 3
 
 
 @patch("ee.onyx.external_permissions.google_drive.group_sync.get_modified_folders")
-@patch("ee.onyx.external_permissions.google_drive.group_sync.get_drive_service")
 def test_get_all_folders_dedupes_across_users(
-    mock_get_drive_service: MagicMock,
     mock_get_modified_folders: MagicMock,
 ) -> None:
     """Every user re-enumerates the whole domain, so the shared seen-set must
     still collapse duplicates now that folders are streamed rather than
     appended to a shared list."""
-    mock_get_drive_service.return_value = MagicMock()
     mock_get_modified_folders.side_effect = [
         [_folder("shared"), _folder("only-a")],
         [_folder("shared"), _folder("only-b")],
@@ -108,15 +105,12 @@ def test_get_all_folders_dedupes_across_users(
 
 
 @patch("ee.onyx.external_permissions.google_drive.group_sync.get_modified_folders")
-@patch("ee.onyx.external_permissions.google_drive.group_sync.get_drive_service")
 def test_get_all_folders_aborts_after_too_many_user_failures(
-    mock_get_drive_service: MagicMock,
     mock_get_modified_folders: MagicMock,
 ) -> None:
     """Failure accounting must still abort mid-stream. With yield from, the
     per-user exception surfaces when the consumer pulls, so the guard has to
     keep working from inside the generator."""
-    mock_get_drive_service.return_value = MagicMock()
     mock_get_modified_folders.side_effect = RuntimeError("drive unavailable")
     connector = _make_connector([f"u{i}@example.com" for i in range(4)])
 
@@ -130,9 +124,7 @@ def test_get_all_folders_aborts_after_too_many_user_failures(
 
 
 @patch("ee.onyx.external_permissions.google_drive.group_sync.get_modified_folders")
-@patch("ee.onyx.external_permissions.google_drive.group_sync.get_drive_service")
 def test_get_all_folders_enforces_crawl_deadline(
-    mock_get_drive_service: MagicMock,
     mock_get_modified_folders: MagicMock,
 ) -> None:
     """On large domains the crawl skips almost every folder and yields nothing
@@ -140,14 +132,12 @@ def test_get_all_folders_enforces_crawl_deadline(
     the crawl must enforce its own deadline and fail the sync outright rather
     than being swallowed by the per-user failure accounting."""
 
-    def endless_folders(service: Any) -> Any:
-        del service
+    def endless_folders(**_kwargs: Any) -> Any:
         i = 0
         while True:
             i += 1
             yield _folder(f"f{i}")
 
-    mock_get_drive_service.return_value = MagicMock()
     mock_get_modified_folders.side_effect = endless_folders
     connector = _make_connector(["a@example.com", "b@example.com"])
 
@@ -163,26 +153,23 @@ def test_get_all_folders_enforces_crawl_deadline(
 
     # Only the first user was touched: the deadline ends the whole sync
     # instead of counting as a per-user failure and moving on.
-    assert mock_get_drive_service.call_count == 1
+    assert mock_get_modified_folders.call_count == 1
+    mock_get_modified_folders.assert_called_once_with(
+        ops=connector.ops, user_email="a@example.com"
+    )
 
 
 def test_group_enumeration_enforces_sync_deadline() -> None:
     """The groups phase materializes the full group list before anything
     yields, so it must check the shared sync deadline itself."""
 
-    def endless_groups(*_args: Any, **_kwargs: Any) -> Any:
+    def endless_groups() -> Any:
         i = 0
         while True:
             i += 1
-            yield {"email": f"group-{i}@example.com"}
+            yield f"group-{i}@example.com"
 
-    with patch(
-        "ee.onyx.external_permissions.google_drive.group_sync.execute_paginated_retrieval",
-        side_effect=endless_groups,
-    ):
-        with pytest.raises(TimeoutError, match="group sync exceeded"):
-            _get_all_google_groups(
-                admin_service=MagicMock(),
-                google_domain="example.com",
-                deadline=time.monotonic() - 1,
-            )
+    ops = MagicMock(spec=GoogleDriveSourceOperations)
+    ops.list_groups.side_effect = endless_groups
+    with pytest.raises(TimeoutError, match="group sync exceeded"):
+        _get_all_google_groups(ops=ops, deadline=time.monotonic() - 1)

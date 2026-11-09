@@ -64,6 +64,16 @@ output "gcs_project_id" {
   value       = var.project_id
 }
 
+output "sandbox_archive_bucket_name" {
+  description = "Craft sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.gcs_sandbox_archive[0].bucket_name : null
+}
+
+output "sandbox_archive_kms_key_name" {
+  description = "Cloud KMS key that encrypts the sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.gcs_sandbox_archive[0].kms_key_name : null
+}
+
 output "postgres_host" {
   description = "Private IP of the database. Set as POSTGRES_HOST."
   value       = module.postgres.host

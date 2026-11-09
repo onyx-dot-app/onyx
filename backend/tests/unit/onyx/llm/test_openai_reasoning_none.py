@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import litellm
 import pytest
@@ -204,7 +204,8 @@ def test_bifrost_chat_tools_off_sends_only_reasoning_effort_none() -> None:
         custom_config={BIFROST_API_MODE_CONFIG_KEY: BIFROST_API_MODE_CHAT_COMPLETIONS},
     )
     kwargs = _sent_kwargs(bifrost, ReasoningEffort.OFF, tools=_TOOLS)
-    assert kwargs["reasoning_effort"] == "none"
+    # LiteLLM bridges this tool turn to the responses API.
+    assert kwargs["reasoning_effort"] == {"effort": "none"}
     assert "reasoning" not in kwargs
 
 
@@ -306,20 +307,34 @@ def _search_llm() -> LitellmLLM:
     return _llm("gpt-5.6-sol", reasoning_effort_user_default=ReasoningEffort.HIGH)
 
 
+def _completion_stream(text: str) -> MagicMock:
+    stream = MagicMock(spec=litellm.CustomStreamWrapper)
+    chunks = iter(_text_stream_chunks(text))
+    stream.__iter__.side_effect = lambda: stream
+    stream.__next__.side_effect = chunks.__next__
+    return stream
+
+
 def test_semantic_query_rephrase_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
+    with patch(
+        _COMPLETION,
+        return_value=litellm.stream_chunk_builder(_text_stream_chunks("onyx")),
+    ) as completion:
         semantic_query_rephrase(_HISTORY, _search_llm())
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 
 
 def test_keyword_query_expansion_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("onyx")) as completion:
+    with patch(
+        _COMPLETION,
+        return_value=litellm.stream_chunk_builder(_text_stream_chunks("onyx")),
+    ) as completion:
         keyword_query_expansion(_HISTORY, _search_llm())
     assert completion.call_args.kwargs["reasoning"] == {"effort": "none"}
 
 
 def test_classify_section_relevance_sends_none() -> None:
-    with patch(_COMPLETION, return_value=_text_stream_chunks("1")) as completion:
+    with patch(_COMPLETION, return_value=_completion_stream("1")) as completion:
         classify_section_relevance(
             document_title="doc",
             section_text="body",

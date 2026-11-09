@@ -48,7 +48,8 @@ class TestFetchDataSourcesForDatabase:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             result = connector._fetch_data_sources_for_database("db-1")
 
@@ -67,7 +68,8 @@ class TestFetchDataSourcesForDatabase:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             result = connector._fetch_data_sources_for_database("db-1")
 
@@ -77,7 +79,8 @@ class TestFetchDataSourcesForDatabase:
         connector = _make_connector()
         resp = _mock_response({"object": "error"}, status_code=404)
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             result = connector._fetch_data_sources_for_database("db-missing")
 
@@ -100,7 +103,8 @@ class TestFetchDataSource:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.post", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.post",
+            return_value=resp,
         ):
             result = connector._fetch_data_source("ds-1")
 
@@ -112,7 +116,8 @@ class TestFetchDataSource:
         connector = _make_connector()
         resp = _mock_response({"object": "error"}, status_code=404)
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.post", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.post",
+            return_value=resp,
         ):
             result = connector._fetch_data_source("ds-missing")
 
@@ -313,7 +318,8 @@ class TestFetchDatabaseAsPage:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             page = connector._fetch_database_as_page("db-1")
 

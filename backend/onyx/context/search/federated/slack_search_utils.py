@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
+from onyx.configs.slack_configs import SLACK_DOMAIN
 from onyx.context.search.federated.models import ChannelMetadata, DirectThreadFetch
 from onyx.context.search.models import ChunkIndexRequest
 from onyx.federated_connectors.slack.models import SlackEntities
@@ -644,7 +645,7 @@ def expand_query_with_llm(query_text: str, llm: LLM) -> list[str]:
 
 
 SLACK_URL_PATTERN = re.compile(
-    r"https?://[a-z0-9-]+\.slack\.com/archives/([A-Z0-9]+)/p(\d{16})"
+    rf"https?://[a-z0-9-]+\.{re.escape(SLACK_DOMAIN)}/archives/([A-Z0-9]+)/p(\d{{16}})"
 )
 
 

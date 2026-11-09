@@ -26,6 +26,14 @@ class ChatTraceMetadata(BaseModel):
     user_id: str | None = None
 
 
+class SearchTraceMetadata(BaseModel):
+    """Trace metadata for search entry points that have no chat session."""
+
+    tenant_id: str = Field(default_factory=get_current_tenant_id)
+    user_id: str | None = None
+    persona_id: int | None = None
+
+
 def trace(
     workflow_name: str,
     trace_id: str | None = None,
@@ -196,6 +204,7 @@ def generation_span(
     parent: Trace | Span[Any] | None = None,
     disabled: bool = False,
     content_mode: TraceContentMode | None = None,
+    model_configuration_id: int | None = None,
 ) -> Span[GenerationSpanData]:
     """Create a new generation span. The span will not be started automatically, you should either
     do `with generation_span() ...` or call `span.start()` + `span.finish()` manually.
@@ -221,6 +230,7 @@ def generation_span(
         parent: The parent span or trace. If not provided, we will automatically use the current
             trace/span as the parent.
         disabled: If True, we will return a Span but the Span will not be recorded.
+        model_configuration_id: The saved model configuration the call ran, when known.
 
     Returns:
         The newly created generation span.
@@ -236,6 +246,7 @@ def generation_span(
             usage=usage,
             time_to_first_action_seconds=time_to_first_action_seconds,
             tools=tools,
+            model_configuration_id=model_configuration_id,
         ),
         span_id=span_id,
         parent=parent,

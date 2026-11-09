@@ -582,7 +582,7 @@ class TestGCSFileStore:
                 return_value=nullcontext(mock_db_session),
             ),
             patch(
-                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_optional",
+                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_for_update",
                 return_value=mock_record,
             ),
             patch(
@@ -622,7 +622,7 @@ class TestGCSFileStore:
                 return_value=nullcontext(mock_db_session),
             ),
             patch(
-                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_optional",
+                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_for_update",
                 return_value=mock_record,
             ),
             patch(
@@ -649,7 +649,7 @@ class TestGCSFileStore:
                 return_value=nullcontext(mock_db_session),
             ),
             patch(
-                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_optional",
+                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_for_update",
                 return_value=None,
             ),
         ):
@@ -672,7 +672,7 @@ class TestGCSFileStore:
                 return_value=nullcontext(mock_db_session),
             ),
             patch(
-                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_optional",
+                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id_for_update",
                 return_value=None,
             ),
         ):
@@ -706,12 +706,12 @@ class TestGCSFileStore:
                 return_value=nullcontext(mock_db_session),
             ),
             patch(
-                "onyx.file_store.gcs_file_store.get_filerecord_by_file_id",
+                "onyx.db.file_record.get_filerecord_by_file_id_for_update",
                 return_value=mock_record,
             ),
-            patch("onyx.file_store.gcs_file_store.upsert_filerecord") as mock_upsert,
+            patch("onyx.db.file_record.upsert_filerecord") as mock_upsert,
             patch(
-                "onyx.file_store.gcs_file_store.delete_filerecord_by_file_id"
+                "onyx.db.file_record.delete_filerecord_by_file_id"
             ) as mock_delete_record,
             patch(
                 "onyx.file_store.gcs_file_store.get_current_tenant_id",
@@ -721,7 +721,7 @@ class TestGCSFileStore:
             file_store = GCSBackedFileStore(bucket_name="test-bucket")
             file_store._gcs_client = mock_client
 
-            file_store.change_file_id(
+            assert file_store.change_file_id(
                 old_file_id="old-id",
                 new_file_id="new-id",
                 db_session=mock_db_session,

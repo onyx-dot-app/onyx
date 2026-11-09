@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useNavigation, useSearchParams } from "@opal/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getConfiguredSources } from "@/lib/connectors/utils";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
@@ -10,7 +11,6 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
-import { getConfiguredSources } from "@/lib/sources";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
 interface UseSendChatMessageFromURLProps {
@@ -57,7 +57,7 @@ export function useSendChatMessageFromURL({
   deepResearch,
   toolConfiguration,
 }: UseSendChatMessageFromURLProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
 
   const { currentMessageFiles } = useProjectsContext();
@@ -74,12 +74,21 @@ export function useSendChatMessageFromURL({
     [availableSources]
   );
 
-  const [queuedQuery, setQueuedQuery] = useState<string | null>(null);
+  const [queuedQuery, setQueuedQueryState] = useState<string | null>(null);
+  // The page that queued the query. The page being left stays mounted (and
+  // hidden) while the next one renders, so a query that settles after the
+  // user moved on must not write to the new page's URL or send.
+  const queuedPathnameRef = useRef<string | null>(null);
+  const setQueuedQuery = useCallback((query: string | null) => {
+    queuedPathnameRef.current =
+      query === null ? null : window.location.pathname;
+    setQueuedQueryState(query);
+  }, []);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   // Arriving with the parameters already on the URL.
   //
-  // Guarded because `router.replace` only drops `send-on-load` a tick after
+  // Guarded because `navigation.go` only drops `send-on-load` a tick after
   // the query is processed — without this the effect re-runs inside that
   // window and queues the same prompt twice.
   const sentForRef = useRef<string | null>(null);
@@ -89,7 +98,7 @@ export function useSendChatMessageFromURL({
     if (sentForRef.current === query) return;
     sentForRef.current = query;
     setQueuedQuery(query);
-  }, [searchParams]);
+  }, [searchParams, setQueuedQuery]);
 
   // The extension navigating the embedded page without a reload.
   useEffect(() => {
@@ -104,13 +113,19 @@ export function useSendChatMessageFromURL({
 
     window.addEventListener("message", onPageChange);
     return () => window.removeEventListener("message", onPageChange);
-  }, []);
+  }, [setQueuedQuery]);
 
   // Processes the queued query once every dimension it names has settled.
   // Re-runs as the loading flags flip, so a query that arrived early waits
   // here instead of resolving names against half-fetched lists.
   useEffect(() => {
     if (queuedQuery === null) return;
+    if (window.location.pathname !== queuedPathnameRef.current) {
+      // Not handled, so the same URL can queue it again on a return.
+      sentForRef.current = null;
+      setQueuedQuery(null);
+      return;
+    }
     // Writes are dropped until the composer's configuration binds to its
     // chat, so processing earlier would scope nothing and persist nothing.
     if (!toolConfiguration.ready) return;
@@ -174,7 +189,7 @@ export function useSendChatMessageFromURL({
 
     // Dropped before the replace so a refresh does not resend.
     params.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
-    router.replace(`?${params.toString()}`, { scroll: false });
+    navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
 
     if (message) setPendingMessage(message);
   }, [
@@ -186,8 +201,9 @@ export function useSendChatMessageFromURL({
     configuredSources,
     documentSets,
     tags,
-    router,
+    navigation,
     toolConfiguration,
+    setQueuedQuery,
   ]);
 
   // Submits one render after the filter write above landed, so `onSubmit`'s

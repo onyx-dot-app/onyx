@@ -69,6 +69,12 @@ services:
         condition: service_started
         required: false
 
+  mcp_server:
+    depends_on:
+      cache:
+        condition: service_started
+        required: false
+
   # Move Redis to a profile so it does not start by default.
   # The Postgres cache backend replaces Redis in lite mode.
   cache:

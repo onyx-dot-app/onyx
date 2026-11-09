@@ -1,6 +1,6 @@
 from typing import Any
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
     CreateCustomExternalAppRequest,
@@ -31,7 +31,7 @@ class ExternalAppManager:
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
-        action_policies: dict[str, EndpointPolicy] | None = None,
+        action_policies: dict[str, ActionPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
@@ -53,7 +53,7 @@ class ExternalAppManager:
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
         app_type: ExternalAppType = ExternalAppType.CUSTOM,
-        action_policies: dict[str, EndpointPolicy] | None = None,
+        action_policies: dict[str, ActionPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         return ExternalAppManager._upsert(
             user_performing_action,
@@ -75,7 +75,7 @@ class ExternalAppManager:
         upstream_url_patterns: list[str],
         auth_template: dict[str, Any],
         organization_credentials: dict[str, Any],
-        action_policies: dict[str, EndpointPolicy] | None = None,
+        action_policies: dict[str, ActionPolicy] | None = None,
     ) -> ExternalAppAdminResponse:
         # Update (``app_id`` set) is type-agnostic — the JSON PATCH edits fields
         # for built-in and custom apps alike. Create routes by app type.

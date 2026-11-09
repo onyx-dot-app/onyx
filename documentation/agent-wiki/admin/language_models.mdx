@@ -1,0 +1,42 @@
+---
+title: "Language Models"
+description: "Provider credentials and the model agents use"
+icon: "microchip"
+---
+
+Agent Wiki needs a language model provider. Until one is configured, agents, triggers,
+and Auto Organize sit idle — there's no error, they simply never do anything.
+
+Go to **Admin → Language Models** to manage provider credentials and set the model agents use.
+
+## What the model does here
+
+The model is doing more work than a chat box. It:
+
+- Evaluates [trigger](/agent-wiki/automate/triggers) conditions written in plain English, on every relevant change
+- Writes the notification text a trigger sends, grounded in what actually changed
+- Applies natural-language document updates, including the ones agents request over MCP
+- Merges concurrent edits when two writers touch the same page
+- Judges and applies [Auto Organize](/agent-wiki/automate/auto_organize) proposals
+
+So provider choice and rate limits affect the responsiveness of the whole product, not one feature.
+
+<Note>
+  **Choosing a model.** A capable model is worth it here — it's behind chat, trigger evaluation,
+  and every automated edit. Cost stays reasonable because the one genuinely high-volume job, ingestion,
+  can run on its own cheaper model (below).
+</Note>
+
+## A cheaper model for ingestion
+
+Ingestion generates more model calls than everything else combined,
+and its work — matching pushed documents to pages and merging them in — doesn't need your strongest model.
+On the [Onyx Integration](/agent-wiki/admin/onyx_integration)
+page you can select a separate model just for the ingestion pipeline; pick a cheap, fast one (e.g. Luna)
+and keep the more capable default for daily usage. The ingestion model has to come from the providers enabled here.
+
+## Per-user overrides
+
+Users can pick a different model for their own chats under **Settings**.
+The admin setting is the default and the model everything automated uses;
+the override only affects that person's interactive sessions.

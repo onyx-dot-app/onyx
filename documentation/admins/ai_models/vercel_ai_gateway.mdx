@@ -1,0 +1,47 @@
+---
+title: "Vercel AI Gateway"
+description: "Configure Vercel AI Gateway as a language model gateway for Onyx"
+icon: "server"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Guide
+
+Configure Onyx to use models served through [Vercel AI Gateway](https://vercel.com/ai-gateway).
+
+<Note>
+  Vercel AI Gateway exposes models from many vendors behind one OpenAI-compatible endpoint.
+  Onyx lists the models available to your gateway key.
+</Note>
+
+<Steps>
+  <Step title="Set Up Your Vercel AI Gateway Access">
+    In your Vercel dashboard, open **AI Gateway** and create an **API Key**.
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect Vercel AI Gateway">
+    Under **Gateways & Routers**, click **Connect** on the **Vercel AI Gateway** card.
+
+    Keep the default **API Base URL** (`https://ai-gateway.vercel.sh/v1`) or paste a custom base URL.
+
+    Paste your Vercel AI Gateway **API Key**.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/vercel_ai_gateway_connect.webp" alt="Set up Vercel AI Gateway dialog with API Base URL, API Key, Display Name, and Models"/>
+  </Step>
+
+  <Step title="Load Your Models">
+    In the **Models** section, click **Refresh models**. Onyx lists the models that Vercel AI Gateway exposes.
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the provider with one of the selected models before it saves it.
+  </Step>
+</Steps>
+
+See the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway) for account setup and billing details.

@@ -121,8 +121,8 @@ class TestSessionTypeForRecording:
         assert is_portal_upload("99") is True
 
     def test_an_unknown_code_is_no_session_either(self) -> None:
-        # A document id freezes the session type and ticket 04 picks the
-        # access-list endpoint from it, so a wrong guess can never be undone.
+        # A document id freezes the session type, and the details endpoint is
+        # picked from it, so a wrong guess can never be undone.
         assert session_type_for_recording("42") is None
 
     def test_an_unknown_code_is_not_mistaken_for_a_portal_upload(self) -> None:

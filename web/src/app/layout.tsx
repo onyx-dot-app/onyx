@@ -16,6 +16,7 @@ import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
+import { OpenSearchResourcePopup } from "@/sections/banners/OpenSearchResourceWarning";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
 import BannerQueue from "@/sections/banners/BannerQueue";
 import { AuthenticationShell } from "@/lib/auth/components";
@@ -65,13 +66,13 @@ interface LayoutProps {
 }
 
 export default async function Layout({ children }: LayoutProps) {
-  // The runtime tag comes from the NEXT_LOCALE cookie (see src/i18n/request.ts),
-  // which the backend sets from the stored language.
+  // The runtime tag comes from the NEXT_LOCALE cookie, or the workspace
+  // default when there is none (see src/i18n/request.ts).
   const locale = await getLocale();
   const messages = await getMessages();
-  // <html lang> and the direction follow the stored language, not the runtime
-  // tag: UserProvider refreshes whenever <html lang> differs from the stored
-  // language, and the numbering system belongs to Intl, not the document.
+  // <html lang> and the direction drop the numbering extension, which belongs
+  // to Intl, not the document. UserProvider refreshes when <html lang> differs
+  // from the effective language.
   const language = messageLocale(locale);
 
   let dir: HtmlDir = htmlDirForLocale(language);
@@ -171,6 +172,7 @@ export default async function Layout({ children }: LayoutProps) {
                         <BannerQueue />
                         <AuthenticationShell>
                           <AppProvider>
+                            <OpenSearchResourcePopup />
                             <PostHogRuntimeInitializer />
                             <CustomAnalyticsScript />
                             <PostHogPageTracker />

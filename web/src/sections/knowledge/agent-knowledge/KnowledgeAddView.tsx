@@ -1,13 +1,12 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { memo } from "react";
-import { useTranslations } from "next-intl";
-import * as GeneralLayouts from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { getSourceMetadata } from "@/lib/sources";
+import { getSourceMetadata } from "@/lib/connectors/utils";
+import { useFormatter, useTranslations } from "next-intl";
 import type { ConnectedSource } from "@/lib/hierarchy/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
-import { LineItemButton } from "@opal/components";
+import { Text, LineItemButton } from "@opal/components";
 import { SvgFiles, SvgFolder } from "@opal/icons";
 
 interface KnowledgeAddViewProps {
@@ -34,14 +33,15 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
   vectorDbEnabled,
 }: KnowledgeAddViewProps) {
   const t = useTranslations("knowledge");
+  const format = useFormatter();
   return (
-    <GeneralLayouts.Section
+    <Section
       gap={2}
       alignItems="start"
       height="auto"
       aria-label="knowledge-add-view"
     >
-      <GeneralLayouts.Section
+      <Section
         flexDirection="row"
         justifyContent="start"
         gap={2}
@@ -50,8 +50,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
       >
         {vectorDbEnabled && (
           <LineItemButton
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={SvgFolder}
             title={t("addView.documentSets.label")}
             onClick={onNavigateToDocumentSets}
@@ -63,8 +62,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
             aria-label="knowledge-add-document-sets"
             rightChildren={
               selectedDocumentSetIds.length > 0 ? (
-                <Text mainUiAction className="text-action-selection-05">
-                  {selectedDocumentSetIds.length}
+                <Text font="main-ui-action" color="action-selection-05">
+                  {format.number(selectedDocumentSetIds.length)}
                 </Text>
               ) : undefined
             }
@@ -72,8 +71,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
         )}
 
         <LineItemButton
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           icon={SvgFiles}
           title={t("addView.yourFiles.label")}
           description={t("addView.yourFiles.description")}
@@ -84,17 +82,17 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
           aria-label="knowledge-add-files"
           rightChildren={
             selectedFileIds.length > 0 ? (
-              <Text mainUiAction className="text-action-selection-05">
-                {selectedFileIds.length}
+              <Text font="main-ui-action" color="action-selection-05">
+                {format.number(selectedFileIds.length)}
               </Text>
             ) : undefined
           }
         />
-      </GeneralLayouts.Section>
+      </Section>
 
       {vectorDbEnabled && connectedSources.length > 0 && (
         <>
-          <Text as="p" text03 secondaryBody>
+          <Text as="p" color="text-03" font="secondary-body">
             {t("addView.connectedSources.label")}
           </Text>
           {connectedSources.map((connectedSource) => {
@@ -104,9 +102,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
               sourceSelectionCounts.get(connectedSource.source) ?? 0;
             return (
               <LineItemButton
+                font="main-ui-action"
                 key={connectedSource.source}
-                sizePreset="main-ui"
-                variant="section"
                 icon={sourceMetadata.icon}
                 title={sourceMetadata.displayName}
                 onClick={() => onNavigateToSource(connectedSource.source)}
@@ -118,8 +115,8 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
                 aria-label={`knowledge-add-source-${connectedSource.source}`}
                 rightChildren={
                   selectionCount > 0 ? (
-                    <Text mainUiAction className="text-action-selection-05">
-                      {selectionCount}
+                    <Text font="main-ui-action" color="action-selection-05">
+                      {format.number(selectionCount)}
                     </Text>
                   ) : undefined
                 }
@@ -128,6 +125,6 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
           })}
         </>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 });

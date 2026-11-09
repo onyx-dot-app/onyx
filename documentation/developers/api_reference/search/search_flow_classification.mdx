@@ -1,0 +1,16 @@
+---
+title: "Search Flow Classification"
+openapi: "POST /search/search-flow-classification"
+---
+
+<Info>
+  **Required permission:** Search &mdash; Read (`read:search`), which `basic` includes, so any signed-in user has it.
+  A limited [Personal Access Token](/developers/overview#personal-access-tokens) needs the Search &mdash; Read scope.
+</Info>
+
+<Note>
+  A helper for query bars that offer both search and chat:
+  it costs one small LLM call and answers whether a query reads like a document search. It is a routing hint,
+  not a guarantee &mdash; queries over 200 characters are called a chat flow without asking the LLM at all,
+  and a failed classification returns `is_search_flow: false` rather than an error.
+</Note>

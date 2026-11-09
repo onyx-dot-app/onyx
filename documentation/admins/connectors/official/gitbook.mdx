@@ -1,0 +1,58 @@
+---
+title: "GitBook"
+description: "Access documentation from GitBook"
+---
+
+## How it works
+
+The GitBook connector indexes the pages of one GitBook space. Each page becomes one document.
+Onyx converts the page content to Markdown and links the document to the page in GitBook.
+
+Onyx checks GitBook for new and changed pages every 30 minutes by default.
+You can change **Refresh Every** on the connector.
+
+Permission sync is not available for GitBook.
+Everyone who can see the connector's documents in Onyx can see every indexed page.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Open the developer settings">
+    In GitBook,
+    open your account settings and go to **Developer** at
+    [https://app.gitbook.com/account/developer](https://app.gitbook.com/account/developer).
+  </Step>
+
+  <Step title="Create an API token">
+    Click **Create new token**, name it, and select the scopes it needs to read the space.
+    Click **Create** and copy the token. GitBook does not show it again.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/gitbook/gitbook_1.webp" alt="GitBook developer settings page"/>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Onyx admin panel, go to **Connectors** and select **GitBook**. Under **Authentication Account**,
+    click **Create New** and enter the token as the **API Token**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/gitbook/gitbook_2.webp" alt="GitBook account form with the API Token field"/>
+  </Step>
+
+  <Step title="Enter the space ID">
+    Enter the **Space ID**. You find it in the URL of a page in the space.
+    For `https://app.gitbook.com/o/<organization>/s/<space-id>/`, the space ID is `<space-id>`.
+
+    <img className="rounded-image" src="/assets/admins/connectors/gitbook/gitbook_3.webp" alt="GitBook connector configuration with the Space ID field"/>
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the indexed pages.
+    **Specific Groups** is available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>

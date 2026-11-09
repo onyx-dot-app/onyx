@@ -8,14 +8,14 @@ the field under test as an override.
 from typing import Any
 
 from onyx.connectors.zoom.models import (
-    ZoomInvitee,
     ZoomMeetingDetails,
-    ZoomPanelist,
-    ZoomParticipant,
     ZoomPastMeetingDetails,
+    ZoomRecordingAuthenticationRule,
+    ZoomRecordingAuthenticationSettings,
     ZoomRecordingEntry,
     ZoomRecordingFile,
-    ZoomRegistrant,
+    ZoomRecordingRegistrant,
+    ZoomRecordingSettings,
     ZoomSessionOccurrence,
     ZoomUser,
     ZoomWebinarDetails,
@@ -132,39 +132,53 @@ def user(**overrides: Any) -> ZoomUser:
     return ZoomUser(**(fields | overrides))
 
 
-def participant(**overrides: Any) -> ZoomParticipant:
+# The built-in "Signed-in users in my account" rule of the test account.
+ACCOUNT_RULE_ID = "internally_GB7nutLVSz-Aoi3nrsxZrw"
+
+
+def recording_settings(**overrides: Any) -> ZoomRecordingSettings:
+    """What Zoom answered for a live recording on "Anyone in Signed-in users in
+    my account"."""
     fields: dict[str, Any] = {
-        "id": "30R7kT7bTIKSNUFEuH_Qlg",
-        "name": "Jill Chill",
-        "user_id": "27423744",
-        "user_email": "jchill@example.com",
-        "join_time": "2022-03-23T06:58:09Z",
-        "leave_time": "2022-03-23T07:02:28Z",
-        "duration": 259,
-        "failover": False,
-        "status": "in_meeting",
+        "share_recording": "publicly",
+        "recording_authentication": True,
+        "authentication_option": ACCOUNT_RULE_ID,
+        "authentication_name": "Signed-in users in my account",
+        "on_demand": False,
     }
-    return ZoomParticipant(**(fields | overrides))
+    return ZoomRecordingSettings(**(fields | overrides))
 
 
-def registrant(**overrides: Any) -> ZoomRegistrant:
+def recording_registrant(**overrides: Any) -> ZoomRecordingRegistrant:
+    fields: dict[str, Any] = {"email": "jchill@example.com", "status": "approved"}
+    return ZoomRecordingRegistrant(**(fields | overrides))
+
+
+def recording_authentication_rule(**overrides: Any) -> ZoomRecordingAuthenticationRule:
     fields: dict[str, Any] = {
-        "email": "jchill@example.com",
-        "first_name": "Jill",
+        "id": ACCOUNT_RULE_ID,
+        "type": "internally",
+        "name": "Signed-in users in my account",
     }
-    return ZoomRegistrant(**(fields | overrides))
+    return ZoomRecordingAuthenticationRule(**(fields | overrides))
 
 
-def invitee(**overrides: Any) -> ZoomInvitee:
-    fields: dict[str, Any] = {"email": "jchill@example.com"}
-    return ZoomInvitee(**(fields | overrides))
-
-
-def panelist(**overrides: Any) -> ZoomPanelist:
+def domain_rule(
+    domains: str = "example.com", **overrides: Any
+) -> ZoomRecordingAuthenticationRule:
     fields: dict[str, Any] = {
-        "id": "Tg2b6GhcQKKbV7nSCbDKug",
-        "email": "jchill@example.com",
-        "name": "Jill Chill",
-        "join_url": "https://example.com/j/11111",
+        "id": "KtK6lLjFQp24UqYxdYQQuA",
+        "type": "enforce_login_with_domains",
+        "name": "testing access with specified domains",
+        "domains": domains,
     }
-    return ZoomPanelist(**(fields | overrides))
+    return ZoomRecordingAuthenticationRule(**(fields | overrides))
+
+
+def recording_authentication_settings(
+    *rules: ZoomRecordingAuthenticationRule,
+) -> ZoomRecordingAuthenticationSettings:
+    return ZoomRecordingAuthenticationSettings(
+        recording_authentication=True,
+        authentication_options=list(rules or [recording_authentication_rule()]),
+    )

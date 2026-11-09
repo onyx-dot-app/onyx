@@ -6,16 +6,18 @@ from datetime import datetime, timezone
 from typing import Any, NamedTuple
 from uuid import UUID
 
+from psycopg2.errors import QueryCanceled
 from sqlalchemy import (
+    BigInteger,
     CompoundSelect,
     Integer,
     Select,
     String,
     and_,
     case,
+    cast,
     column,
     delete,
-    distinct,
     exists,
     func,
     literal,
@@ -28,8 +30,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
@@ -49,6 +52,9 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     DocumentByConnectorCredentialPair,
+    FileRecord,
+    IndexAttempt,
+    IndexAttemptError,
     User,
 )
 from onyx.db.models import Document as DbDocument
@@ -59,9 +65,14 @@ from onyx.db.relationships import (
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow, SortOrder, model_to_dict
 from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
-from onyx.server.documents.models import ConnectorCredentialPairIdentifier
+from onyx.server.documents.models import (
+    CCPairDocumentTypeBreakdown,
+    ConnectorCredentialPairIdentifier,
+    DocumentTypeCount,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -101,8 +112,7 @@ def count_documents_by_needs_sync(session: Session) -> int:
 
 def count_secondary_only_sync_pending_documents(db_session: Session) -> int:
     """Global count of docs whose deferred FUTURE metadata sync hasn't drained (via
-    ix_document_secondary_only_sync_pending). The swap gate must use the
-    *_for_cc_pairs variant — an INVALID/DELETING-only doc's flag never clears."""
+    ix_document_secondary_only_sync_pending)."""
     return db_session.execute(
         select(func.count()).where(DbDocument.secondary_only_sync_pending.is_(True))
     ).scalar_one()
@@ -137,35 +147,36 @@ def document_has_indexable_cc_pair(db_session: Session, document_id: str) -> boo
     )
 
 
-def count_secondary_only_sync_pending_documents_for_cc_pairs(
-    db_session: Session, cc_pair_ids: list[int]
-) -> int:
-    """Deferred-FUTURE-sync count scoped to docs owned by one of the given cc_pairs
-    (DISTINCT; counts if ANY owner is in the set). The swap gate passes its required
-    (ported) set so INVALID/DELETING-only deferred flags can't block the swap."""
-    if not cc_pair_ids:
-        return 0
-    return db_session.execute(
-        select(func.count(distinct(DbDocument.id)))
-        .select_from(DbDocument)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
+def has_secondary_only_sync_pending_documents(
+    db_session: Session, cc_pair_id: int
+) -> bool:
+    """Whether any doc owned by the cc_pair has a deferred FUTURE sync. Stops at
+    the first match, so it stays cheap on a large backlog."""
+    return bool(
+        db_session.scalar(
+            select(
+                select(DbDocument.id)
+                .join(
+                    DocumentByConnectorCredentialPair,
+                    DbDocument.id == DocumentByConnectorCredentialPair.id,
+                )
+                .join(
+                    ConnectorCredentialPair,
+                    and_(
+                        DocumentByConnectorCredentialPair.connector_id
+                        == ConnectorCredentialPair.connector_id,
+                        DocumentByConnectorCredentialPair.credential_id
+                        == ConnectorCredentialPair.credential_id,
+                    ),
+                )
+                .where(
+                    DbDocument.secondary_only_sync_pending.is_(True),
+                    ConnectorCredentialPair.id == cc_pair_id,
+                )
+                .exists()
+            )
         )
-        .join(
-            ConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
-        )
-        .where(
-            DbDocument.secondary_only_sync_pending.is_(True),
-            ConnectorCredentialPair.id.in_(cc_pair_ids),
-        )
-    ).scalar_one()
+    )
 
 
 def count_documents_by_needs_sync_or_secondary_pending(session: Session) -> int:
@@ -308,6 +319,106 @@ def get_document_ids_for_cc_pair_batch(
     return list(db_session.execute(stmt).scalars().all())
 
 
+class TabularRechunkTarget(NamedTuple):
+    document: DbDocument
+    connector_id: int
+    credential_id: int
+    # MIME type of the stored raw file. Names the format when the document's
+    # own name carries no extension, as Drive-sourced spreadsheets often do.
+    file_type: str | None
+
+
+def get_oversized_tabular_documents(
+    db_session: Session,
+    *,
+    chunk_count_above: int,
+    after_doc_id: str | None,
+    limit: int,
+) -> list[TabularRechunkTarget]:
+    """An ordered page of tabular documents still holding more chunks than the
+    current chunker could produce for one, with the cc-pair to re-index under.
+
+    Same cursor contract as `get_document_ids_for_cc_pair_batch`: ids
+    `> after_doc_id` ascending, capped at `limit`. Every page is an ordered
+    document_pkey scan, so the migration costs one pass of the table over its
+    whole life rather than a sort per run.
+
+    Left out: documents whose raw file was never stored, because only a crawl
+    can rebuild their sections, documents whose cc-pairs are all DELETING, and
+    hidden documents, whose head `id_based_retrieval` will not return.
+    """
+    # One row per document, lowest cc-pair winning, as any of them would write
+    # the same chunks. A LATERAL, not DISTINCT ON: that would order the join by
+    # (id, connector_id, credential_id) and lose the ordered scan.
+    cc_pair = (
+        select(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+        .order_by(
+            DocumentByConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id,
+        )
+        .limit(1)
+        .lateral("cc_pair")
+    )
+
+    stmt = (
+        select(
+            DbDocument,
+            cc_pair.c.connector_id,
+            cc_pair.c.credential_id,
+            FileRecord.file_type,
+        )
+        .select_from(DbDocument)
+        .outerjoin(FileRecord, FileRecord.file_id == DbDocument.file_id)
+        # Inner: a document whose cc-pairs are all DELETING yields no row.
+        .join(cc_pair, true())
+        .where(
+            DbDocument.chunk_count > chunk_count_above,
+            DbDocument.file_id.isnot(None),
+            DbDocument.hidden.is_(False),
+            or_(
+                # A Drive sheet's name often has no extension; its type does.
+                FileRecord.file_type.in_(sorted(OnyxMimeTypes.TABULAR_MIME_TYPES)),
+                *[
+                    func.lower(DbDocument.semantic_id).like(f"%{extension}")
+                    for extension in sorted(OnyxFileExtensions.TABULAR_EXTENSIONS)
+                ],
+            ),
+        )
+        .order_by(DbDocument.id)
+        .limit(limit)
+    )
+    if after_doc_id is not None:
+        stmt = stmt.where(DbDocument.id > after_doc_id)
+
+    return [
+        TabularRechunkTarget(
+            document=document,
+            connector_id=connector_id,
+            credential_id=credential_id,
+            file_type=file_type,
+        )
+        for document, connector_id, credential_id, file_type in db_session.execute(
+            stmt
+        ).all()
+    ]
+
+
 class PortedScope(NamedTuple):
     connector_id: int
     credential_id: int
@@ -436,7 +547,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
     for row in rows:
         doc_row = DocumentRow(
             id=row.id,
-            doc_metadata=row.doc_metadata,
+            doc_metadata=row.doc_metadata or {},
             external_user_group_ids=row.external_user_group_ids or [],
             external_user_emails=row.external_user_emails or [],
         )
@@ -846,6 +957,125 @@ def get_document_counts_for_cc_pairs(
     ]
 
 
+# A cold read of a 135k-document pair takes about 0.9 s, so this covers pairs
+# into the low millions and still frees the API worker on larger ones.
+_DOCUMENT_TYPE_BREAKDOWN_TIMEOUT_MS = 10_000
+
+
+def get_document_type_breakdown_for_cc_pair(
+    db_session: Session, connector_id: int, credential_id: int
+) -> CCPairDocumentTypeBreakdown:
+    """Indexed documents of the pair per source MIME type, largest first. Empty
+    with `timed_out` set when the read takes longer than the timeout."""
+    stmt = (
+        select(
+            DbDocument.source_mime_type,
+            func.count(),
+            func.count(DbDocument.source_size_bytes),
+            cast(func.sum(DbDocument.source_size_bytes), BigInteger),
+        )
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+        )
+        .group_by(DbDocument.source_mime_type)
+        .order_by(func.count().desc(), DbDocument.source_mime_type)
+    )
+    # Always rolled back: the savepoint only scopes the timeout to this read.
+    savepoint = db_session.begin_nested()
+    try:
+        db_session.execute(
+            select(
+                func.set_config(
+                    "statement_timeout", str(_DOCUMENT_TYPE_BREAKDOWN_TIMEOUT_MS), True
+                )
+            )
+        )
+        rows = db_session.execute(stmt).all()
+    except Exception as e:
+        if not (isinstance(e, OperationalError) and isinstance(e.orig, QueryCanceled)):
+            # On a dead connection the rollback fails too; raise the read's error.
+            with contextlib.suppress(SQLAlchemyError):
+                savepoint.rollback()
+            raise
+        savepoint.rollback()
+        logger.warning(
+            "Document type breakdown timed out for connector %s, credential %s",
+            connector_id,
+            credential_id,
+        )
+        return CCPairDocumentTypeBreakdown(types=[], untyped_count=0, timed_out=True)
+    savepoint.rollback()
+
+    types: list[DocumentTypeCount] = []
+    untyped_count = 0
+    for mime_type, count, sized_count, size_bytes in rows:
+        if mime_type is None:
+            untyped_count = count
+            continue
+        types.append(
+            DocumentTypeCount(
+                mime_type=mime_type,
+                count=count,
+                sized_count=sized_count,
+                size_bytes=size_bytes,
+            )
+        )
+    return CCPairDocumentTypeBreakdown(types=types, untyped_count=untyped_count)
+
+
+def count_documents_by_cc_pair_ids(
+    db_session: Session, cc_pair_ids: list[int]
+) -> dict[int, int]:
+    """Number of documents of each cc-pair, indexed or not. cc-pairs with no
+    documents are left out."""
+    if not cc_pair_ids:
+        return {}
+    stmt = (
+        select(ConnectorCredentialPair.id, func.count())
+        .join(
+            DocumentByConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+        .group_by(ConnectorCredentialPair.id)
+    )
+    return dict(db_session.execute(stmt).tuples().all())
+
+
+def count_documents_for_cc_pair_up_to(
+    db_session: Session, cc_pair_id: int, up_to_doc_id: str
+) -> int:
+    """Number of documents of the cc-pair whose ID is <= up_to_doc_id: the
+    documents a cursor scan in ID order has passed."""
+    stmt = (
+        select(func.count())
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            DocumentByConnectorCredentialPair.id <= up_to_doc_id,
+        )
+    )
+    return db_session.scalar(stmt) or 0
+
+
 def get_document_counts_for_all_cc_pairs(
     db_session: Session,
 ) -> Sequence[tuple[int, int, int]]:
@@ -1048,6 +1278,8 @@ def upsert_documents(
                     ),
                     doc_metadata=doc.doc_metadata,
                     file_id=doc.file_id,
+                    source_mime_type=doc.source_mime_type,
+                    source_size_bytes=doc.source_size_bytes,
                 )
             )
             for doc in seen_documents.values()
@@ -1065,6 +1297,8 @@ def upsert_documents(
         "doc_metadata": insert_stmt.excluded.doc_metadata,
         "parent_hierarchy_node_id": insert_stmt.excluded.parent_hierarchy_node_id,
         "file_id": insert_stmt.excluded.file_id,
+        # The source type and size change on an existing row only after the
+        # index write, so a failed write is retried on the next sync.
     }
     if includes_permissions:
         preserve_onedrive_permissions = exists(
@@ -1293,6 +1527,34 @@ def mark_cc_pair_documents_for_sync__no_commit(
     )
 
 
+def build_cc_pair_has_unsynced_documents_clause() -> ColumnElement[bool]:
+    """EXISTS over the indexed documents of the enclosing query's
+    ConnectorCredentialPair row that wait for metadata sync: the documents
+    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced.
+
+    Documents with a NULL chunk_count (indexed before the column existed) are
+    left out. Metadata sync skips their chunks and still marks them synced, so
+    waiting for them protects nothing. Only a re-index rewrites their access,
+    and the perm-sync-pending guarantee does not cover them."""
+    return (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id
+            == ConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id
+            == ConnectorCredentialPair.credential_id,
+            DbDocument.chunk_count.is_not(None),
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+            ),
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+
+
 def update_docs_chunk_count__no_commit(
     document_ids: list[str],
     doc_id_to_chunk_count: dict[str, int],
@@ -1316,6 +1578,121 @@ def update_docs_content_hash__no_commit(
     )
     for doc in documents_to_update:
         doc.content_hash = ids_to_new_hash[doc.id]
+
+
+def update_docs_source_info__no_commit(
+    ids_to_source_info: dict[str, tuple[str | None, int | None]],
+    db_session: Session,
+) -> None:
+    """The reported type and size, written once the document reached the index
+    so a failed write keeps them new and the change gates let it through again.
+    A source that stops reporting sets them back to null."""
+    if not ids_to_source_info:
+        return
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(ids_to_source_info.keys()))
+        .all()
+    )
+    for doc in documents_to_update:
+        doc.source_mime_type, doc.source_size_bytes = ids_to_source_info[doc.id]
+
+
+def _update_documents__no_commit(
+    db_session: Session,
+    targets: Select,
+    changes: dict[str, Any],
+    skip_locked: bool,
+) -> int:
+    """Updates the documents `targets` selects (a plain id select, no DISTINCT).
+    With `skip_locked`, rows another transaction holds are left out, not waited
+    for: the swap's second pass runs after the status flip, so a row a batch
+    still holds gets no new stamp from that batch (it reads PAST), and its old
+    stamp was already handled by the first pass. Returns the row count."""
+    if skip_locked:
+        targets = targets.with_for_update(skip_locked=True)
+    result = db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(targets))
+        .values(**changes)
+        .execution_options(synchronize_session=False)
+    )
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
+
+
+def clear_content_hash_for_cc_pair_since__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    since: datetime,
+    *,
+    skip_locked: bool = False,
+) -> int:
+    """Forget what the index holds for this cc_pair's documents modified at or
+    after `since`: a NULL hash never matches, so the next poll re-indexes them.
+    Used at a reindex swap. Caller commits. Returns the rows cleared."""
+    targets = select(DbDocument.id).where(
+        DbDocument.id.in_(
+            construct_document_id_select_for_connector_credential_pair(
+                connector_id, credential_id
+            )
+        ),
+        DbDocument.last_modified >= since,
+        DbDocument.content_hash.isnot(None),
+    )
+    return _update_documents__no_commit(
+        db_session, targets, {"content_hash": None}, skip_locked
+    )
+
+
+def clear_content_hash_for_failed_documents__no_commit(
+    db_session: Session, search_settings_id: int, *, skip_locked: bool = False
+) -> int:
+    """Forget what the index holds for every document an attempt on these
+    search settings failed on, resolved or not (UI Resolve does not re-index).
+    The attempt moved the cursor past the document, so only a retry or a source
+    change fetches it again, and a NULL hash makes that fetch index it. Used at
+    a reindex swap for the FUTURE settings. Caller commits."""
+    failed_ids = (
+        select(IndexAttemptError.document_id)
+        .join(IndexAttempt, IndexAttempt.id == IndexAttemptError.index_attempt_id)
+        .where(
+            IndexAttempt.search_settings_id == search_settings_id,
+            IndexAttemptError.document_id.isnot(None),
+        )
+    )
+    targets = select(DbDocument.id).where(
+        DbDocument.id.in_(failed_ids), DbDocument.content_hash.isnot(None)
+    )
+    return _update_documents__no_commit(
+        db_session, targets, {"content_hash": None}, skip_locked
+    )
+
+
+def mark_secondary_pending_documents_needs_sync__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    *,
+    skip_locked: bool = False,
+) -> int:
+    """Turn this cc_pair's deferred-FUTURE-write flags into a plain needs-sync,
+    so the next metadata sync re-applies permissions and document sets on the
+    current index. Used at a reindex swap. Caller commits."""
+    targets = select(DbDocument.id).where(
+        DbDocument.id.in_(
+            construct_document_id_select_for_connector_credential_pair(
+                connector_id, credential_id
+            )
+        ),
+        DbDocument.secondary_only_sync_pending.is_(True),
+    )
+    return _update_documents__no_commit(
+        db_session,
+        targets,
+        {"secondary_only_sync_pending": False, "last_synced": None},
+        skip_locked,
+    )
 
 
 def mark_document_as_modified__no_commit(
@@ -1788,6 +2165,35 @@ def get_document_sources(
     return {doc_id: source for doc_id, source in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
+def get_document_access_types(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, set[AccessType]]:
+    """Access types of every cc_pair each document is indexed under, except
+    ones being deleted."""
+    stmt: Select[tuple[str, AccessType]] = (
+        select(
+            DocumentByConnectorCredentialPair.id,
+            ConnectorCredentialPair.access_type,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+    )
+    access_types: dict[str, set[AccessType]] = defaultdict(set)
+    for doc_id, access_type in db_session.execute(stmt).all():
+        access_types[doc_id].add(access_type)
+    return dict(access_types)
+
+
 def fetch_chunk_counts_for_documents(
     document_ids: list[str],
     db_session: Session,
@@ -1892,3 +2298,27 @@ def delete_document_by_id__no_commit(
     cc pair associations, feedback, tags).
     """
     delete_documents_complete__no_commit(db_session, [document_id])
+
+
+def get_indexed_documents_for_cc_pair_with_id_containing(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    id_substring: str,
+) -> list[DbDocument]:
+    """The cc-pair's indexed documents whose id contains ``id_substring``
+    (matched as a literal, not as a pattern)."""
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+            DbDocument.id.contains(id_substring, autoescape=True),
+        )
+    )
+    return list(db_session.execute(stmt).scalars().all())

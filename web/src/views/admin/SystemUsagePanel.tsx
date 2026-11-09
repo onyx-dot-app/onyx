@@ -10,7 +10,7 @@ import {
   MessageCard,
   Table,
   Text,
-  createTableColumns,
+  type TableColumn,
 } from "@opal/components";
 import { SvgCpu, SvgX } from "@opal/icons";
 import { Section } from "@opal/layouts";
@@ -94,22 +94,24 @@ function filterCategory(
   };
 }
 
-const tc = createTableColumns<SystemUsageRow>();
-
-function buildColumns(t: SystemUsageTranslate) {
+function buildColumns(t: SystemUsageTranslate): TableColumn<SystemUsageRow>[] {
   return [
-    tc.qualifier({ content: "icon", getContent: () => SvgCpu }),
-    tc.column("category", {
-      header: t("table.columns.category.header"),
+    { kind: "qualifier", content: "icon", icon: () => SvgCpu },
+    {
+      kind: "data",
+      field: "category",
+      title: t("table.columns.category.header"),
       weight: 40,
       cell: (value) => (
         <Text font="main-ui-body" color="text-05">
           {categoryLabel(value, t)}
         </Text>
       ),
-    }),
-    tc.column("cost_cents", {
-      header: t("table.columns.spend.header"),
+    },
+    {
+      kind: "data",
+      field: "cost_cents",
+      title: t("table.columns.spend.header"),
       weight: 18,
       alignment: "right",
       cell: (value) => (
@@ -117,9 +119,11 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatCost(value)}
         </Text>
       ),
-    }),
-    tc.column("total_tokens", {
-      header: t("table.columns.tokens.header"),
+    },
+    {
+      kind: "data",
+      field: "total_tokens",
+      title: t("table.columns.tokens.header"),
       weight: 18,
       alignment: "right",
       cell: (value) => (
@@ -127,9 +131,11 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatTokens(value)}
         </Text>
       ),
-    }),
-    tc.column("input_tokens", {
-      header: t("table.columns.input.header"),
+    },
+    {
+      kind: "data",
+      field: "input_tokens",
+      title: t("table.columns.input.header"),
       weight: 12,
       alignment: "right",
       cell: (value) => (
@@ -137,9 +143,11 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatTokens(value)}
         </Text>
       ),
-    }),
-    tc.column("output_tokens", {
-      header: t("table.columns.output.header"),
+    },
+    {
+      kind: "data",
+      field: "output_tokens",
+      title: t("table.columns.output.header"),
       weight: 12,
       alignment: "right",
       cell: (value) => (
@@ -147,7 +155,7 @@ function buildColumns(t: SystemUsageTranslate) {
           {formatTokens(value)}
         </Text>
       ),
-    }),
+    },
   ];
 }
 
@@ -203,7 +211,7 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
 
   const header = (
     <Section alignItems="stretch" gap={0.125} height="fit">
-      <Text font="heading-h3">{t("panel.title")}</Text>
+      <Text font="heading-section">{t("panel.title")}</Text>
       <Text font="secondary-body" color="text-03">
         {usage
           ? t("panel.description", {
@@ -253,19 +261,23 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
             <Text font="secondary-body" color="text-03">
               {t("summary.spend.label")}
             </Text>
-            <Text font="heading-h3">{formatCost(totalCostCents, locale)}</Text>
+            <Text font="heading-section">
+              {formatCost(totalCostCents, locale)}
+            </Text>
           </Section>
           <Section alignItems="start" gap={0.125} width="fit" height="fit">
             <Text font="secondary-body" color="text-03">
               {t("summary.tokens.label")}
             </Text>
-            <Text font="heading-h3">{formatTokens(totalTokens, locale)}</Text>
+            <Text font="heading-section">
+              {formatTokens(totalTokens, locale)}
+            </Text>
           </Section>
           <Section alignItems="start" gap={0.125} width="fit" height="fit">
             <Text font="secondary-body" color="text-03">
               {t("summary.unattributed.label")}
             </Text>
-            <Text font="heading-h3">
+            <Text font="heading-section">
               {formatCost(unattributedCostCents, locale)}
             </Text>
           </Section>
@@ -316,7 +328,7 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
 
       <Table
         key={`${model}-${provider}`}
-        data={rows}
+        items={rows}
         columns={columns}
         getRowId={(row) => row.category}
         initialSorting={[{ id: "cost_cents", desc: true }]}

@@ -121,7 +121,7 @@
       "reasoning": true,
       "release_date": "2026-02-14",
       "structured_output": true,
-      "temperature": true,
+      "temperature": false,
       "tool_call": true
     },
     "MiniMaxAI/MiniMax-M2.5": {
@@ -291,7 +291,7 @@
       "name": "Qwen3 32B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-04",
+      "release_date": "2025-04-28",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -320,7 +320,7 @@
       "name": "Qwen3 Coder 480B A35B Instruct Turbo",
       "open_weights": true,
       "reasoning": false,
-      "release_date": "2025-07-23",
+      "release_date": "2025-07-22",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -370,6 +370,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-09-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -432,6 +433,35 @@
       "temperature": true,
       "tool_call": true
     },
+    "Qwen/Qwen3-VL-30B-A3B-Instruct": {
+      "attachment": true,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Qwen3 VL 30B A3B Instruct",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-10-04",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "Qwen/Qwen3.5-122B-A10B": {
       "attachment": true,
       "cost": {
@@ -447,8 +477,7 @@
         "input": [
           "text",
           "image",
-          "video",
-          "audio"
+          "video"
         ],
         "output": [
           "text"
@@ -459,6 +488,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-02-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -478,8 +508,7 @@
         "input": [
           "text",
           "image",
-          "video",
-          "audio"
+          "video"
         ],
         "output": [
           "text"
@@ -520,7 +549,7 @@
       "name": "Qwen 3.5 35B A3B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-01",
+      "release_date": "2026-02-23",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -551,7 +580,7 @@
       "name": "Qwen 3.5 397B A17B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-02-01",
+      "release_date": "2026-02-15",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -601,8 +630,7 @@
         "input": [
           "text",
           "image",
-          "video",
-          "audio"
+          "video"
         ],
         "output": [
           "text"
@@ -620,6 +648,7 @@
     "Qwen/Qwen3.6-35B-A3B": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.1,
         "input": 0.1,
         "output": 0.95
       },
@@ -642,7 +671,7 @@
       "name": "Qwen3.6 35B A3B",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-01",
+      "release_date": "2026-04-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -677,7 +706,7 @@
       "family": "qwen",
       "limit": {
         "context": 256000,
-        "output": 65536
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -721,6 +750,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-08-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -783,6 +813,7 @@
       "reasoning": false,
       "release_date": "2026-08-26",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "Qwen/Qwen3.8-Max": {
@@ -845,6 +876,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-22",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -875,8 +907,101 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-22",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "XiaomiMiMo/MiMo-V2.6-Flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0028,
+        "input": 0.14,
+        "output": 0.28
+      },
+      "family": "mimo",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiMo-V2.6-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "XiaomiMiMo/MiMo-V2.6-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0036,
+        "input": 0.43,
+        "output": 0.87
+      },
+      "family": "mimo",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiMo-V2.6-Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic/claude-fable-5": {
+      "attachment": true,
+      "cost": {
+        "input": 10,
+        "output": 50
+      },
+      "family": "claude-fable",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Fable 5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-09",
+      "structured_output": true,
+      "temperature": false,
       "tool_call": true
     },
     "deepseek-ai/DeepSeek-R1-0528": {
@@ -886,6 +1011,7 @@
         "input": 0.5,
         "output": 2.15
       },
+      "family": "deepseek-thinking",
       "limit": {
         "context": 163840,
         "output": 64000
@@ -900,7 +1026,7 @@
       },
       "mode": "chat",
       "name": "DeepSeek-R1-0528",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
       "release_date": "2025-05-28",
       "structured_output": true,
@@ -960,6 +1086,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1000,6 +1127,7 @@
         "input": 0.26,
         "output": 0.38
       },
+      "family": "deepseek",
       "limit": {
         "context": 163840,
         "output": 64000
@@ -1014,9 +1142,9 @@
       },
       "mode": "chat",
       "name": "DeepSeek-V3.2",
-      "open_weights": false,
+      "open_weights": true,
       "reasoning": true,
-      "release_date": "2025-12-02",
+      "release_date": "2025-12-01",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1025,6 +1153,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.018,
+        "cache_write": 0.1125,
         "input": 0.09,
         "output": 0.18
       },
@@ -1161,7 +1290,7 @@
       "name": "DeepSeek V4 Pro 0813",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-08-12",
+      "release_date": "2026-08-13",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1187,10 +1316,41 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "DeepSeek V4.1 Flash",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-10",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.006,
+        "input": 0.2,
+        "output": 0.6
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1314,8 +1474,8 @@
     "google/gemma-4-31B-it": {
       "attachment": true,
       "cost": {
-        "input": 0.13,
-        "output": 0.38
+        "input": 0.2,
+        "output": 0.4
       },
       "family": "gemma",
       "limit": {
@@ -1367,6 +1527,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-02",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1396,6 +1557,7 @@
       "reasoning": false,
       "release_date": "2024-12-06",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8": {
@@ -1423,7 +1585,9 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-04-05",
+      "status": "deprecated",
       "structured_output": true,
+      "temperature": true,
       "tool_call": false
     },
     "meta-llama/Llama-4-Scout-17B-16E-Instruct": {
@@ -1452,7 +1616,64 @@
       "reasoning": false,
       "release_date": "2025-04-05",
       "structured_output": true,
+      "temperature": true,
       "tool_call": true
+    },
+    "meta-llama/Llama-Guard-4-12B": {
+      "attachment": true,
+      "cost": {
+        "input": 0.18,
+        "output": 0.18
+      },
+      "family": "llama",
+      "limit": {
+        "context": 163840,
+        "output": 163840
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Llama Guard 4 12B",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-04-29",
+      "temperature": true,
+      "tool_call": false
+    },
+    "mistralai/Mistral-Small-24B-Instruct-2501": {
+      "attachment": false,
+      "cost": {
+        "input": 0.05,
+        "output": 0.08
+      },
+      "family": "mistral-small",
+      "limit": {
+        "context": 32768,
+        "output": 16384
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Mistral Small 3",
+      "open_weights": true,
+      "reasoning": false,
+      "release_date": "2025-01-30",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": false
     },
     "moonshotai/Kimi-K2.5": {
       "attachment": true,
@@ -1512,7 +1733,7 @@
       "name": "Kimi K2.6",
       "open_weights": true,
       "reasoning": true,
-      "release_date": "2026-04-21",
+      "release_date": "2026-04-20",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1521,6 +1742,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.136,
+        "cache_write": 0.85,
         "input": 0.68,
         "output": 3.4
       },
@@ -1544,6 +1766,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1552,6 +1775,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.285,
+        "cache_write": 3.5625,
         "input": 2.85,
         "output": 14.25
       },
@@ -1632,6 +1856,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2025-12-15",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1748,6 +1973,37 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-05-29",
+      "status": "deprecated",
+      "temperature": true,
+      "tool_call": true
+    },
+    "stepfun-ai/Step-5-Preview": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.1,
+        "input": 1,
+        "output": 2.7
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 1000000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Step 5 Preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-16",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1777,6 +2033,35 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-06",
+      "status": "deprecated",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "tencent/Hy4-preview": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.042,
+        "input": 0.834,
+        "output": 2.501
+      },
+      "family": "Hy",
+      "limit": {
+        "context": 1048576,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Hy4 preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-28",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1808,6 +2093,8 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-15",
+      "status": "deprecated",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1985,6 +2272,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1993,6 +2281,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.14,
+        "cache_write": 0.9375,
         "input": 0.75,
         "output": 2.4
       },
@@ -2022,7 +2311,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.2,
-        "input": 1.2,
+        "input": 0.9,
         "output": 4
       },
       "family": "glm",

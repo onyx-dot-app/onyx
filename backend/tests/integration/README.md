@@ -26,7 +26,9 @@ the schema or client for other work.
 1. Start the services Onyx depends on (for example with Docker). The test session runs the api_server in-process through
    `TestClient` and starts the Celery workers itself, so do not start those.
    - If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.
-   - Onyx MUST be configured with AUTH_TYPE=basic and ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+   - Onyx MUST be configured with AUTH_TYPE=basic.
+   - Enterprise tests run only with `RUN_EE_TESTS=true`. They also need a license: put it in `ONYX_DEV_LICENSE`
+     and the session seeds it.
 2. Navigate to `onyx/backend`.
 3. Run the following command in the terminal:
    ```sh
@@ -83,7 +85,11 @@ def test_search_then_answer(admin_user: DATestUser, mock_llm: MockLLMScript) -> 
     mock_llm.conversation(
         "chat",
         Reply(
-            tool_calls=[ToolCall(id="call_1", name="internal_search", arguments={"queries": ["pto"]})],
+            tool_calls=[
+                ToolCall(
+                    id="call_1", name="internal_search", arguments={"queries": ["pto"]}
+                )
+            ],
             conditions=RequestConditions(offers=["internal_search"]),
         ),
         Reply(

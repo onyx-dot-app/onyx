@@ -5,6 +5,7 @@ These endpoints allow self-hosted Onyx instances to:
 2. Upload a license file manually (for air-gapped deployments)
 3. View license status and seat usage
 4. Refresh/delete the local license
+5. Downgrade to the Community tier
 
 NOTE: Cloud (MULTI_TENANT) deployments do NOT use these endpoints.
 Cloud licensing is managed via the control plane and gated_tenants Redis key.
@@ -21,18 +22,28 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
+from ee.onyx.db.community_downgrade import (
+    disable_paid_features__no_commit,
+    make_all_cc_pairs_public__no_commit,
+    remove_custom_user_groups__no_commit,
+)
 from ee.onyx.db.license import delete_license as db_delete_license
 from ee.onyx.db.license import (
     get_license_metadata,
     refresh_license_cache,
 )
 from ee.onyx.server.billing.api import invalidate_billing_info_cache
+from ee.onyx.server.enterprise_settings.store import (
+    reset_settings as reset_enterprise_settings,
+)
 from ee.onyx.server.license.models import (
+    CommunityDowngradeResponse,
     LicenseResponse,
     LicenseStatusResponse,
     LicenseUploadResponse,
     SeatUsageResponse,
 )
+from ee.onyx.server.settings.api import is_access_gated
 from ee.onyx.utils.license import (
     LicenseNotStoredError,
     LicenseRejectedError,
@@ -48,6 +59,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
+from onyx.server.settings.store import clear_chat_retention
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -273,3 +286,55 @@ def delete_license(
     deleted = db_delete_license(db_session)
 
     return {"deleted": deleted}
+
+
+@router.post("/downgrade")
+def downgrade_to_community(
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CommunityDowngradeResponse:
+    """
+    Drop this deployment to the Community tier.
+
+    Every connector becomes public, permissions synced from the sources stop
+    applying, user groups are removed with what they shared made public, the
+    other paid features are switched off, and the license is removed. Allowed
+    only while the deployment is gated, as in the UI: a license in its grace
+    period can still be renewed. Lives under /license so it stays reachable
+    while an expired license gates the rest of the API.
+    """
+    if MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Downgrading is only available for self-hosted deployments",
+        )
+    if not is_access_gated(get_license_metadata(db_session)):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Downgrading is only available while access is restricted",
+        )
+
+    # The license goes last: a failure before it leaves a licensed deployment
+    # that is part way to Community, which a retry finishes.
+    cc_pair_ids: list[int] = make_all_cc_pairs_public__no_commit(db_session)
+    user_groups_removed: int = remove_custom_user_groups__no_commit(db_session)
+    disable_paid_features__no_commit(db_session)
+    db_session.commit()
+    # Listings are cached per group set, so a provider that just became public
+    # would stay hidden from users outside its old groups until the TTL.
+    invalidate_provider_listing_cache()
+    reset_enterprise_settings()
+    clear_chat_retention()
+    db_delete_license(db_session)
+
+    logger.notice(
+        "Downgraded to Community by %s: %d connectors made public, "
+        "%d user groups removed",
+        user.email,
+        len(cc_pair_ids),
+        user_groups_removed,
+    )
+    return CommunityDowngradeResponse(
+        connectors_made_public=len(cc_pair_ids),
+        user_groups_removed=user_groups_removed,
+    )

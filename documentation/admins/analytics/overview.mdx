@@ -1,0 +1,65 @@
+---
+title: "Usage Analytics"
+description: "Analytics and usage monitoring in Onyx"
+icon: "chart-line"
+---
+
+<Note>
+  The **Usage**, **Analytics**, and **Query History** pages are available on **Business**, **Enterprise**,
+  and **Cloud** plans. See [Plans & Billing](/admins/billing/overview).
+</Note>
+
+Onyx gives admins two dashboards under the **Usage** section of the Admin Panel.
+
+## Usage
+
+Open **Admin Panel > Usage** to see model usage and spend for a period.
+
+- **Usage overview**: active users, workspace spend, total tokens, and the top spender.
+- **Users**: spend and tokens for each user, sorted highest first.
+  Filter the list and select a user for a full breakdown by model and feature.
+- **System usage**: tokens used by background features that are not tied to one user, such as contextual retrieval.
+
+Costs come from the recorded model usage and the price list for each model.
+Admins can also reset a user's usage window from this page if a [spending
+limit](/admins/advanced_configs/spending_limits) blocks them.
+
+Each user can see their own usage in **User Settings > Usage**.
+
+## Analytics
+
+Open **Admin Panel > Analytics** to see activity over time.
+
+- **Usage**: queries and unique users per day.
+- **Feedback**: thumbs up and thumbs down over time.
+- **Slack channels**:
+  total queries and auto-resolved questions from the [Slack Integration](/admins/getting_started/slack_bot_setup).
+- **Agent Analytics**: messages and unique users per day for a selected Agent.
+
+<img className="rounded-image" src="/assets/admins/analytics/usage_statistics.webp" alt="Usage Statistics"/>
+
+### Usage reports
+
+On the Analytics page you can generate a usage report for a period, or for all time.
+Reports build in the background and stay available on the page for later download.
+
+The report is a ZIP file with these files:
+
+| File                  | Contents                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| `usage_report.pdf`    | A summary to share: active people, spend over time, top models and users, and unused seats.  |
+| `chat_messages.csv`   | One row per user message and model reply: session, user, time, Agent, tokens, and model.     |
+| `users.csv`           | Each user ID and whether the user is active.                                                 |
+| `usage_by_user.csv`   | Tokens and cost for each user, day, model, and feature.                                      |
+| `usage_by_system.csv` | Tokens and cost for background features that are not tied to one user, by day and model.     |
+
+`chat_messages.csv` has rows for user messages only.
+A message with replies from more than one model has one row for each model.
+It includes all messages from chat sessions that started in the period,
+so the row count is not the number of messages sent in the period.
+
+Days in the report are in UTC. If the PDF cannot be built, the ZIP still contains the CSV files.
+
+## Query History
+
+See [Query History](/admins/analytics/query_history) to review and export individual chat sessions.

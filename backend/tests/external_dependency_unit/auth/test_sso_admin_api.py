@@ -470,6 +470,106 @@ def test_can_disable_provider_when_another_remains_and_auth_off(
     assert response.json()["enabled"] is False
 
 
+def test_delete_provider_removes_the_row(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+
+    response = client.delete(f"/admin/sso/provider/{provider_id}")
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(SSOProvider, provider_id) is None
+    listed_ids = [p["id"] for p in client.get("/admin/sso/provider").json()]
+    assert provider_id not in listed_ids
+
+
+def test_handoff_counts_linked_users(
+    client: TestClient,
+    provider_names: list[str],
+) -> None:
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+
+    response = client.get(f"/admin/sso/provider/{provider_id}/handoff")
+
+    assert response.status_code == 200
+    assert response.json() == {"linked_users": 0, "renamed_users": 0}
+
+
+def test_cannot_delete_last_provider_when_password_auth_off(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    """Deleting the only enabled provider with password auth off would leave no
+    way in, so it is refused and the row survives."""
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+
+    with (
+        patch(
+            "onyx.server.manage.sso.api.load_effective_uncached",
+            _auth_disabled_settings,
+        ),
+        patch(
+            "onyx.server.manage.sso.api.fetch_sso_providers",
+            return_value=[SimpleNamespace(id=provider_id)],
+        ),
+    ):
+        response = client.delete(f"/admin/sso/provider/{provider_id}")
+
+    assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+    assert response.json()["error_code"] == OnyxErrorCode.INVALID_INPUT.code
+    db_session.expire_all()
+    assert db_session.get(SSOProvider, provider_id) is not None
+
+
+def test_can_delete_disabled_provider_when_password_auth_off(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    """A disabled provider signs no one in, so deleting it never trips the
+    lockout guard, even when no enabled provider remains."""
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+    assert (
+        client.post(
+            f"/admin/sso/provider/{provider_id}/enabled", json={"enabled": False}
+        ).status_code
+        == 200
+    )
+
+    with (
+        patch(
+            "onyx.server.manage.sso.api.load_effective_uncached",
+            _auth_disabled_settings,
+        ),
+        patch("onyx.server.manage.sso.api.fetch_sso_providers", return_value=[]),
+    ):
+        response = client.delete(f"/admin/sso/provider/{provider_id}")
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(SSOProvider, provider_id) is None
+
+
 def test_missing_provider_routes_return_not_found(client: TestClient) -> None:
     missing_provider_id = 987654321
 
@@ -486,6 +586,10 @@ def test_missing_provider_routes_return_not_found(client: TestClient) -> None:
     )
     assert enabled_response.status_code == OnyxErrorCode.NOT_FOUND.status_code
     assert enabled_response.json()["error_code"] == OnyxErrorCode.NOT_FOUND.code
+
+    delete_response = client.delete(f"/admin/sso/provider/{missing_provider_id}")
+    assert delete_response.status_code == OnyxErrorCode.NOT_FOUND.status_code
+    assert delete_response.json()["error_code"] == OnyxErrorCode.NOT_FOUND.code
 
 
 def _gated_bridge(*_args: Any, **_kwargs: Any) -> Any:

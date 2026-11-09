@@ -106,7 +106,7 @@ function getSelectionMessage(
  */
 export default function Footer(props: FooterProps) {
   const resolvedSize = useTableSize();
-  const isSmall = resolvedSize === "md";
+  const isSmall = resolvedSize === 2.25;
   return (
     <div
       className="table-footer flex w-full items-center justify-between border-t border-border-01"

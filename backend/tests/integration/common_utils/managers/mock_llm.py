@@ -21,7 +21,7 @@ from tests.integration.mock_services.mock_llm_server.models import (
     ScriptState,
 )
 
-# Onyx special-cases some model names (claude, qwen, gpt-5.x, catalog models).
+# Onyx special-cases some model names (claude, qwen, gpt-6-sol.x, catalog models).
 MOCK_LLM_MODEL_NAME = "mock-model"
 # Deep Research needs at least 50000.
 MOCK_LLM_MAX_INPUT_TOKENS = 200000
@@ -52,6 +52,10 @@ class MockLLMScript:
             json=conversation.model_dump(mode="json"),
         )
         response.raise_for_status()
+
+    def release_gate(self, gate_id: str) -> None:
+        """Allow a paused response to emit its remaining chunks."""
+        self._client.post(f"{self._url}/gates/{gate_id}/release").raise_for_status()
 
     def _state(self) -> ScriptState:
         response = self._client.get(self._url)

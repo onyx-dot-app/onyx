@@ -19,7 +19,7 @@ def _mock_db_session() -> MagicMock:
 
 
 @patch(f"{_S3_MODULE}.get_session_with_current_tenant_if_none")
-@patch(f"{_S3_MODULE}.get_filerecord_by_file_id_optional", return_value=None)
+@patch(f"{_S3_MODULE}.get_filerecord_by_file_id_for_update", return_value=None)
 def test_s3_delete_missing_file_raises_by_default(
     _mock_get_record: MagicMock,
     mock_ctx: MagicMock,
@@ -34,7 +34,7 @@ def test_s3_delete_missing_file_raises_by_default(
 
 
 @patch(f"{_S3_MODULE}.get_session_with_current_tenant_if_none")
-@patch(f"{_S3_MODULE}.get_filerecord_by_file_id_optional", return_value=None)
+@patch(f"{_S3_MODULE}.get_filerecord_by_file_id_for_update", return_value=None)
 @patch(f"{_S3_MODULE}.delete_filerecord_by_file_id")
 def test_s3_delete_missing_file_silent_when_error_on_missing_false(
     mock_delete_record: MagicMock,

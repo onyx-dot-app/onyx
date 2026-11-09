@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
 import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 import { User } from "@/lib/types";
-import { hasAnyAdminPermission } from "@/lib/permissions";
+import { hasAnyAdminPermission } from "@/lib/permissions/utils";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
@@ -37,6 +37,7 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
       provider_type: SSOProviderType;
       authorize_url: string;
     }[];
+    default_language?: string | null;
   } = await res.json();
 
   const multiTenant: boolean = NEXT_PUBLIC_CLOUD_ENABLED
@@ -62,6 +63,7 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
       providerType: provider.provider_type,
       authorizeUrl: provider.authorize_url,
     })),
+    defaultLanguage: data.default_language ?? undefined,
   };
 }
 

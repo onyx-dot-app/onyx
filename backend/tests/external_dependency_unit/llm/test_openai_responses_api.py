@@ -21,11 +21,13 @@ import json
 import warnings
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.litellm_singleton import litellm
 from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.multi_llm import LitellmLLM
+from tests.common.models import CI_OPENAI_MODEL
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.nightly
@@ -55,9 +57,9 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
     fixed both. This test is the regression guard against either failure
     re-emerging.
     """
-    llm = _build_openai_llm("gpt-4o-mini", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
-    tools = [
+    tools: list[dict[str, JsonValue]] = [
         {
             "type": "function",
             "function": {
@@ -86,7 +88,6 @@ def test_streaming_parallel_tool_calls_land_in_distinct_slots(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "For Paris, France: call get_weather AND get_population. "
                 "Issue both tool calls in a single response."
@@ -144,7 +145,7 @@ def test_responses_call_with_invalid_key_raises_authentication_error() -> None:
     """
     with pytest.raises(Exception) as exc_info:
         litellm.responses(
-            model="openai/gpt-5.4-nano",
+            model=f"openai/{CI_OPENAI_MODEL}",
             input="hi",
             api_key="sk-onyx-contract-test-deliberately-invalid",
             metadata=None,
@@ -177,7 +178,7 @@ def test_responses_call_tolerates_explicit_metadata_none(
     error paths.
     """
     response = litellm.responses(
-        model="openai/gpt-5.4-nano",
+        model=f"openai/{CI_OPENAI_MODEL}",
         input="Reply with exactly the word: ok",
         api_key=test_secrets[TestSecret.OPENAI_API_KEY],
         metadata=None,
@@ -200,11 +201,10 @@ def test_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     `monkey_patches.py`) inserts the blank line. This test guards that the
     patch is still firing for current LiteLLM and OpenAI behavior.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -241,11 +241,10 @@ def test_non_streaming_reasoning_summary_sections_are_separated_by_blank_line(
     `monkey_patches.py`) post-processes the result to join with `\\n\\n`. This
     test guards that the patch fires on the non-stream path.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Plan a 3-day trip to Tokyo for someone with a peanut allergy on a $2000 budget. "
                 "First plan the itinerary, then verify each restaurant choice is safe, then check "
@@ -280,10 +279,10 @@ def test_streaming_emits_no_pydantic_serializer_warnings(
     captures the symptom rather than either patch's internals — if the
     warning escapes, at least one patch is broken or upstream regressed.
     """
-    llm = _build_openai_llm("gpt-5.4-nano", test_secrets[TestSecret.OPENAI_API_KEY])
+    llm = _build_openai_llm(CI_OPENAI_MODEL, test_secrets[TestSecret.OPENAI_API_KEY])
 
     prompt: list[ChatCompletionMessage] = [
-        UserMessage(role="user", content="Reply with exactly the word: ok")
+        UserMessage(content="Reply with exactly the word: ok")
     ]
 
     with warnings.catch_warnings(record=True) as captured:

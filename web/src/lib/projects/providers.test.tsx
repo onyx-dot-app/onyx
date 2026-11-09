@@ -4,7 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import { ChatFileType } from "@/app/app/interfaces";
+import { ChatFileType } from "@/app/app/types";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
@@ -12,12 +12,14 @@ const mockToastWarning = jest.fn();
 const mockGetUserFileStatuses = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useSearchParams: () => ({
-    get: () => null,
-  }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  usePathname: () => "/app",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({ openNewSession: jest.fn() }),
 }));
 

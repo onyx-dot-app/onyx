@@ -1,4 +1,3 @@
-import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/constants";
 import { fetchStandardSettingsSS } from "@/lib/settings/svcSS";
 import EEFeatureRedirect from "@/app/ee/EEFeatureRedirect";
 
@@ -7,20 +6,14 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // First check build-time constant (fast path)
-  if (!SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    return <EEFeatureRedirect />;
-  }
-
-  // Then check runtime license status (for license enforcement mode)
-  // This allows gating EE features when user doesn't have a valid license
+  // Gate EE features on the runtime license status.
   try {
     const settings = await fetchStandardSettingsSS();
     if (settings) {
       if (settings.ee_features_enabled === false) {
-        // When the app is in GATED_ACCESS (expired or missing license), defer
-        // to the root layout's GatedContentWrapper which handles path-based
-        // exemptions (e.g. allowing /admin/billing for license management).
+        // When the app is in GATED_ACCESS, defer to the root layout's
+        // GatedContentWrapper which handles path-based exemptions (e.g.
+        // allowing /admin/billing for license management).
         if (settings.application_status === "gated_access") {
           return children;
         }

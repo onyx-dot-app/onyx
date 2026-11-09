@@ -1,0 +1,110 @@
+---
+title: "Desktop App"
+description: "Install and configure the Onyx desktop application"
+icon: "desktop"
+---
+
+The Onyx Desktop App provides users with a native application experience for accessing Onyx on Windows, macOS,
+and Linux.
+
+Features include:
+
+- Quick-launch from the system tray or dock
+- A global shortcut that summons Onyx from any app (`⌘ ⇧ Space` on macOS, `Ctrl Alt Space` on Windows and Linux)
+
+<img className="rounded-image" src="/assets/deployment/onyx_desktop_app.webp" alt="Onyx Desktop App"/>
+
+<Info>
+  The desktop app is used for connecting to an Onyx server backend. Users will need access to the Onyx instance URL.
+  It cannot connect directly to a local inference backend.
+</Info>
+
+## Download
+
+Download the latest Onyx Desktop App for your platform:
+
+<CardGroup cols={3}>
+  <Card title="Windows" icon="windows" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_x64.exe">
+    Download for Windows (.exe)
+  </Card>
+
+  <Card title="macOS" icon="apple" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_universal.dmg">
+    Download for macOS (.dmg)
+  </Card>
+
+  <Card title="Linux" icon="linux" href="https://github.com/onyx-dot-app/onyx/releases/latest/download/Onyx_amd64.deb">
+    Download for Linux (.deb)
+  </Card>
+</CardGroup>
+
+<Tip>
+  Additional architectures and formats (.msi, .rpm, .app.tar.gz)
+  are available on the [GitHub Releases page](https://github.com/onyx-dot-app/onyx/releases/latest).
+</Tip>
+
+## First Launch
+
+**Self-hosted users**: On first launch,
+the app opens a **Settings** screen to configure the connection to your Onyx instance:
+
+- **Server URL**: Your Onyx instance URL (e.g., `https://onyx.yourcompany.com`)
+
+The Server URL can be changed at any time from the **Settings** screen (`⌘ ,` on macOS, `Ctrl ,` on Windows and Linux).
+
+## Enterprise Deployment
+
+For organizations rolling out the desktop app at scale, you can pre-configure the Server URL (and other options)
+so users skip the first-launch **Settings** prompt entirely.
+Place a `config.json` file on each machine before the user first opens the app. On launch,
+Onyx reads the file and connects to your instance directly; users only need to sign in.
+
+### Configuration File Location
+
+The app reads its settings from a `config.json` file at the following location:
+
+<Tabs>
+  <Tab title="Windows">
+    ```
+    %APPDATA%\onyx\onyx-desktop\config\config.json
+    ```
+  </Tab>
+
+  <Tab title="macOS">
+    ```
+    ~/Library/Application Support/app.onyx.onyx-desktop/config.json
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    ```
+    ~/.config/onyx-desktop/config.json
+    # or, if $XDG_CONFIG_HOME is set:
+    $XDG_CONFIG_HOME/onyx-desktop/config.json
+    ```
+  </Tab>
+</Tabs>
+
+Example `config.json`:
+
+```json
+{
+  "server_url": "https://onyx.yourcompany.com",
+  "window_title": "Onyx"
+}
+```
+
+## Configuration Options
+
+| Option | Values | Platforms | Description |
+|--------|--------|-----------|-------------|
+| `server_url` | string<br />(default: `"https://cloud.onyx.app"`) | Windows, macOS, Linux | The Onyx instance the app connects to. Required for the app to skip the first-launch **Settings** prompt. A trailing slash is ignored. |
+| `window_title` | string<br />(default: `"Onyx"`) | Windows, macOS, Linux | Custom title shown in the application window. |
+| `show_menu_bar` | boolean<br />(default: `true`) | Windows, Linux | Whether the application menu bar is shown. Normally toggled from **Window → Show Menu Bar** rather than pre-configured. Ignored on macOS, where the menu bar is managed by the operating system. |
+| `hide_window_decorations` | boolean<br />(default: `false`) | Linux | Hides the window's title bar and borders. Normally toggled from **Window → Hide Window Decorations**. |
+| `summon_shortcut` | string or `null`<br />(default: `"Super+Shift+Space"` on macOS, `"Ctrl+Alt+Space"` on Windows and Linux) | Windows, macOS, Linux | Global shortcut that brings Onyx to the front from any app, in Tauri accelerator syntax. Set to `null` to disable it. |
+| `summon_opens_new_chat` | boolean<br />(default: `true`) | Windows, macOS, Linux | Whether the summon shortcut opens a new chat. Set to `false` to return to the current page. |
+
+<Warning>
+  `config.json` must be valid JSON with values of the correct type.
+  A single invalid entry causes the app to discard the **entire** file and fall back to the default settings.
+</Warning>

@@ -2,27 +2,31 @@ import type { IconFunctionComponent } from "@opal/types";
 import { SvgCpu, SvgPlug, SvgServer } from "@opal/icons";
 import {
   SvgBifrost,
-  SvgOpenai,
+  SvgOpenAI,
   SvgClaude,
   SvgOllama,
-  SvgAws,
-  SvgOpenrouter,
+  SvgAWS,
+  SvgOpenRouter,
   SvgAzure,
   SvgGemini,
-  SvgLitellm,
-  SvgLmStudio,
+  SvgLiteLLM,
+  SvgLMStudio,
   SvgMicrosoft,
   SvgMistral,
-  SvgDeepseek,
+  SvgDeepSeek,
   SvgQwen,
   SvgGoogle,
   SvgNebius,
   SvgPortkey,
+  SvgTypeSafe,
   SvgVercel,
+  SvgZoom,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import { LLMProviderName } from "@/lib/languageModels/types";
 import OpenAIModal from "@/sections/modals/languageModels/OpenAIModal";
+import TypeSafeModal from "@/sections/modals/languageModels/TypeSafeModal";
+import ZoomDecisionModal from "@/sections/modals/languageModels/ZoomDecisionModal";
 import AnthropicModal from "@/sections/modals/languageModels/AnthropicModal";
 import OllamaModal from "@/sections/modals/languageModels/OllamaModal";
 import AzureModal from "@/sections/modals/languageModels/AzureModal";
@@ -42,8 +46,22 @@ import type { ProviderEntry } from "@/lib/languageModels/types";
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
 export const PROVIDERS: Record<string, ProviderEntry> = {
+  [LLMProviderName.TYPESAFE]: {
+    decisionOnly: true,
+    icon: SvgTypeSafe,
+    productName: "System One",
+    companyName: "TypeSafe AI",
+    Modal: TypeSafeModal,
+  },
+  [LLMProviderName.ZOOM_AI]: {
+    decisionOnly: true,
+    icon: SvgZoom,
+    productName: "Zoom AI Decisions",
+    companyName: "Zoom",
+    Modal: ZoomDecisionModal,
+  },
   [LLMProviderName.OPENAI]: {
-    icon: SvgOpenai,
+    icon: SvgOpenAI,
     productName: "GPT",
     companyName: "OpenAI",
     Modal: OpenAIModal,
@@ -61,7 +79,7 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     Modal: VertexAIModal,
   },
   [LLMProviderName.BEDROCK]: {
-    icon: SvgAws,
+    icon: SvgAWS,
     productName: "Amazon Bedrock",
     companyName: "AWS",
     Modal: BedrockModal,
@@ -73,13 +91,13 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     Modal: AzureModal,
   },
   [LLMProviderName.LITELLM]: {
-    icon: SvgLitellm,
+    icon: SvgLiteLLM,
     productName: "LiteLLM",
     companyName: "LiteLLM",
     Modal: CustomModal,
   },
   [LLMProviderName.LITELLM_PROXY]: {
-    icon: SvgLitellm,
+    icon: SvgLiteLLM,
     productName: "LiteLLM Proxy",
     companyName: "LiteLLM Proxy",
     Modal: LiteLLMProxyModal,
@@ -91,13 +109,13 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
     Modal: OllamaModal,
   },
   [LLMProviderName.OPENROUTER]: {
-    icon: SvgOpenrouter,
+    icon: SvgOpenRouter,
     productName: "OpenRouter",
     companyName: "OpenRouter",
     Modal: OpenRouterModal,
   },
   [LLMProviderName.LM_STUDIO]: {
-    icon: SvgLmStudio,
+    icon: SvgLMStudio,
     productName: "LM Studio",
     companyName: "LM Studio",
     Modal: LMStudioModal,
@@ -110,8 +128,9 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
   },
   [LLMProviderName.OPENAI_COMPATIBLE]: {
     icon: SvgPlug,
-    productName: "OpenAI-Compatible",
-    companyName: "OpenAI-Compatible",
+    productName: LLMProviderName.OPENAI_COMPATIBLE,
+    companyName: LLMProviderName.OPENAI_COMPATIBLE,
+    copyKey: "openAICompatible",
     Modal: OpenAICompatibleModal,
   },
   [LLMProviderName.NEBIUS_TOKENFACTORY]: {
@@ -134,8 +153,9 @@ export const PROVIDERS: Record<string, ProviderEntry> = {
   },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
-    productName: "Custom Models",
-    companyName: "models from other LiteLLM-compatible providers",
+    productName: LLMProviderName.CUSTOM,
+    companyName: LLMProviderName.CUSTOM,
+    copyKey: "custom",
     Modal: CustomModal,
   },
 };
@@ -178,29 +198,31 @@ export const AGGREGATOR_PROVIDERS = new Set([
 // ─── Model icons ─────────────────────────────────────────────────────────────
 
 export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
-  [LLMProviderName.OPENAI]: SvgOpenai,
+  [LLMProviderName.TYPESAFE]: SvgTypeSafe,
+  [LLMProviderName.ZOOM_AI]: SvgZoom,
+  [LLMProviderName.OPENAI]: SvgOpenAI,
   [LLMProviderName.ANTHROPIC]: SvgClaude,
   [LLMProviderName.OLLAMA_CHAT]: SvgOllama,
-  [LLMProviderName.LM_STUDIO]: SvgLmStudio,
-  [LLMProviderName.OPENROUTER]: SvgOpenrouter,
+  [LLMProviderName.LM_STUDIO]: SvgLMStudio,
+  [LLMProviderName.OPENROUTER]: SvgOpenRouter,
   [LLMProviderName.VERTEX_AI]: SvgGemini,
-  [LLMProviderName.BEDROCK]: SvgAws,
-  [LLMProviderName.LITELLM_PROXY]: SvgLitellm,
+  [LLMProviderName.BEDROCK]: SvgAWS,
+  [LLMProviderName.LITELLM_PROXY]: SvgLiteLLM,
   [LLMProviderName.BIFROST]: SvgBifrost,
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
   [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
   [LLMProviderName.PORTKEY]: SvgPortkey,
   [LLMProviderName.VERCEL_AI_GATEWAY]: SvgVercel,
 
-  amazon: SvgAws,
-  gpt: SvgOpenai,
+  amazon: SvgAWS,
+  gpt: SvgOpenAI,
   phi: SvgMicrosoft,
   mistral: SvgMistral,
   ministral: SvgMistral,
   llama: SvgCpu,
   ollama: SvgOllama,
   gemini: SvgGemini,
-  deepseek: SvgDeepseek,
+  deepseek: SvgDeepSeek,
   claude: SvgClaude,
   azure: SvgAzure,
   microsoft: SvgMicrosoft,
@@ -209,5 +231,5 @@ export const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   qwen: SvgQwen,
   qwq: SvgQwen,
   zai: ZAIIcon,
-  bedrock_converse: SvgAws,
+  bedrock_converse: SvgAWS,
 };

@@ -16,10 +16,8 @@ import requests
 from requests.exceptions import HTTPError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.connector import (
-    ConfluenceConnector,
-    _extract_page_id_from_url,
-)
+from onyx.connectors.confluence.config import extract_page_id_from_url
+from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.source_operations import (
     _OnyxConfluence,
 )
@@ -105,7 +103,7 @@ def test_400_keeps_partial_attachments_and_records_failure() -> None:
     assert "400" in failure.failure_message
     assert failure.failed_document is not None
     # document_id must be the page URL so targeted reindex can recover the page id
-    assert _extract_page_id_from_url(failure.failed_document.document_id) == "111"
+    assert extract_page_id_from_url(failure.failed_document.document_id) == "111"
     assert isinstance(failure.exception, HTTPError)
 
 
@@ -265,4 +263,4 @@ def test_reindex_rerecords_attachment_failure() -> None:
     assert len(failures) == 1
     assert "400" in failures[0].failure_message
     assert failures[0].failed_document is not None
-    assert _extract_page_id_from_url(failures[0].failed_document.document_id) == "111"
+    assert extract_page_id_from_url(failures[0].failed_document.document_id) == "111"

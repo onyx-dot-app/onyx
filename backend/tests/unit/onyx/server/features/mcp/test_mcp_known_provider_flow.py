@@ -47,6 +47,7 @@ def _server() -> MCPServer:
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             transport=MCPTransport.STREAMABLE_HTTP,
             oauth_provider_mode=MCPOAuthProviderMode.KNOWN_PROVIDER,
+            oauth_cimd_enabled=True,
             oauth_authorization_endpoint=_AUTHORIZATION_URL,
             oauth_token_endpoint=_TOKEN_URL,
             oauth_scopes_override=["files:read"],
@@ -83,7 +84,7 @@ def test_start_persists_the_exact_authorization_attempt(
     server = _server()
     server.oauth_additional_auth_params = {"prompt": "consent"}
     attempt_store = MagicMock()
-    monkeypatch.setattr(oauth_flow, "mcp_oauth_attempt_store", lambda: attempt_store)
+    monkeypatch.setattr(oauth_flow, "MCP_OAUTH_ATTEMPTS", attempt_store)
 
     result = oauth_flow.start_known_provider_oauth_flow(
         mcp_server=server,

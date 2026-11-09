@@ -1,0 +1,65 @@
+---
+title: "Overview"
+description: "An overview of deploying Onyx"
+icon: "server"
+---
+
+## Deployment Modes
+
+Onyx supports two deployment modes:
+
+**Onyx Standard** — The full Onyx platform, recommended for serious users and larger teams.
+Includes everything in Lite plus:
+- Vector + Keyword index for RAG
+- Background containers for syncing knowledge from connectors
+- AI model inference servers for deep learning models used during indexing and inference
+- File storage in the object store
+- Performance optimizations via Redis
+
+**Onyx Lite** — A lightweight Chat UI that uses fewer resources than Onyx Standard.
+It is great for users who want to try Onyx quickly or teams only interested in Chat and Agents. Includes LLM chat,
+tools, file uploads, and Projects, but does not use the vector database or background workers.
+Docker Compose Lite skips both model servers;
+Helm Lite still starts the inference model server unless you disable it explicitly.
+
+<Note>
+  Onyx Lite does not include indexing. Use Onyx Standard to index knowledge from connected applications.
+</Note>
+
+## Quickstart
+
+<Card title="Install Script (Recommended)" icon="bolt" href="/deployment/getting_started/quickstart">
+  A guided installation script that deploys Onyx in Docker Compose. Supports both Standard and Lite modes.
+</Card>
+
+## Resourcing
+
+<Card title="Resourcing Guide" icon="microchip" href="/deployment/getting_started/resourcing">
+  Resource requirements, cloud instance selection, and scaling guidance for your Onyx deployment.
+</Card>
+
+## Deployment Options
+
+<CardGroup cols={1}>
+  <Card title="Self-Host Open Source" icon="code" href="/deployment/getting_started/quickstart">
+    Get all of Onyx's core features, including Internal Search, Connectors, Chat, Agents, Plugins, Deep Research,
+    and more! All of your data remains secure within your Onyx deployment.
+
+    **For teams looking for a powerful free solution**
+  </Card>
+
+  <Card title="Onyx Cloud" icon="cloud" href="https://cloud.onyx.app">
+    Onyx managed solution with all Enterprise Edition features. Comes with a 2 week free trial (no credit card needed)!
+
+    SOC2 Type II and GDPR compliant.
+
+    **The most effortless way to get Onyx to your whole team**
+  </Card>
+
+  <Card title="Self-Host Enterprise Edition" icon="building" href="/deployment/enterprise_edition">
+    Self-Host with all premium features such as Role-Based Access Control (RBAC), automatic permission sync,
+    and advanced knowledge curation options.
+
+    **Best for large teams with strict data requirements**
+  </Card>
+</CardGroup>

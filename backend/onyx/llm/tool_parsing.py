@@ -3,25 +3,21 @@
 import json
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Iterator, Sequence
 from html import unescape
 from typing import Any
 
 from onyx.llm.models import ToolCall, ToolDefinition
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
-from onyx.utils.text_processing import find_all_json_objects
+from onyx.utils.text_processing import iter_json_objects_with_spans
 
 logger = setup_logger()
 
-_XML_INVOKE_BLOCK_RE = re.compile(
-    r"<invoke\b(?P<attrs>[^>]*)>(?P<body>.*?)</invoke>",
-    re.IGNORECASE | re.DOTALL,
-)
-_XML_PARAMETER_RE = re.compile(
-    r"<parameter\b(?P<attrs>[^>]*)>(?P<value>.*?)</parameter>",
-    re.IGNORECASE | re.DOTALL,
-)
+_XML_INVOKE_OPEN_RE = re.compile(r"<invoke\b", re.IGNORECASE)
+_XML_INVOKE_CLOSE_RE = re.compile(r"</invoke>", re.IGNORECASE)
+_XML_PARAMETER_OPEN_RE = re.compile(r"<parameter\b", re.IGNORECASE)
+_XML_PARAMETER_CLOSE_RE = re.compile(r"</parameter>", re.IGNORECASE)
 
 
 _FUNCTION_CALLS_OPEN_MARKER = "<function_calls"
@@ -116,6 +112,8 @@ def looks_like_xml_tool_call_payload(text: str | None) -> bool:
 def extract_tool_calls_from_response_text(
     response_text: str | None,
     tool_definitions: Sequence[ToolDefinition],
+    *,
+    implicit_tool_names: Collection[str] | None = None,
 ) -> list[ToolCall]:
     """Extract tool calls from LLM response text by matching JSON against tool definitions.
 
@@ -127,6 +125,7 @@ def extract_tool_calls_from_response_text(
     Args:
         response_text: The LLM's text response to search for tool calls
         tool_definitions: List of tool definitions to match against
+        implicit_tool_names: Candidates for unnamed arguments; explicit names stay intact.
 
     Returns:
         List of canonical ToolCall objects for matched tools
@@ -137,34 +136,19 @@ def extract_tool_calls_from_response_text(
     tool_name_to_def = {tool.name: tool for tool in tool_definitions}
 
     matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
-    # Find all JSON objects in the response text
-    json_objects = find_all_json_objects(response_text)
-    prev_json_obj: dict[str, Any] | None = None
-    prev_tool_call: tuple[str, dict[str, Any]] | None = None
-
-    for json_obj in json_objects:
-        matched_tool_call = _try_match_json_to_tool(json_obj, tool_name_to_def)
+    matched_end = -1
+    for start, end, json_obj in iter_json_objects_with_spans(response_text):
+        # The matched call owns its nested objects; separate calls retain identity.
+        if start < matched_end:
+            continue
+        matched_tool_call = _try_match_json_to_tool(
+            json_obj, tool_name_to_def, implicit_tool_names=implicit_tool_names
+        )
         if not matched_tool_call:
             continue
 
-        # `find_all_json_objects` can return both an outer tool-call object and
-        # its nested arguments object. If both resolve to the same tool call,
-        # drop only this nested duplicate artifact.
-        if (
-            prev_json_obj is not None
-            and prev_tool_call is not None
-            and matched_tool_call == prev_tool_call
-            and _is_nested_arguments_duplicate(
-                previous_json_obj=prev_json_obj,
-                current_json_obj=json_obj,
-                tool_name_to_def=tool_name_to_def,
-            )
-        ):
-            continue
-
         matched_tool_calls.append(matched_tool_call)
-        prev_json_obj = json_obj
-        prev_tool_call = matched_tool_call
+        matched_end = end
 
     # Some providers/models emit XML-style function calls instead of JSON objects.
     # Keep this as a fallback behind JSON extraction to preserve current behavior.
@@ -195,29 +179,55 @@ def _extract_xml_tool_calls_from_response_text(
     """
     matched_tool_calls: list[tuple[str, dict[str, Any]]] = []
 
-    for invoke_match in _XML_INVOKE_BLOCK_RE.finditer(response_text):
-        invoke_attrs = invoke_match.group("attrs")
+    for invoke_attrs, invoke_body in _iter_xml_blocks(
+        response_text, _XML_INVOKE_OPEN_RE, _XML_INVOKE_CLOSE_RE
+    ):
         tool_name = _extract_xml_attribute(invoke_attrs, "name")
         if not tool_name or tool_name not in tool_name_to_def:
             continue
 
         tool_args: dict[str, Any] = {}
-        invoke_body = invoke_match.group("body")
-        for parameter_match in _XML_PARAMETER_RE.finditer(invoke_body):
-            parameter_attrs = parameter_match.group("attrs")
+        for parameter_attrs, parameter_value in _iter_xml_blocks(
+            invoke_body, _XML_PARAMETER_OPEN_RE, _XML_PARAMETER_CLOSE_RE
+        ):
             parameter_name = _extract_xml_attribute(parameter_attrs, "name")
             if not parameter_name:
                 continue
 
             string_attr = _extract_xml_attribute(parameter_attrs, "string")
             tool_args[parameter_name] = _parse_xml_parameter_value(
-                raw_value=parameter_match.group("value"),
+                raw_value=parameter_value,
                 string_attr=string_attr,
             )
 
         matched_tool_calls.append((tool_name, tool_args))
 
     return matched_tool_calls
+
+
+def _iter_xml_blocks(
+    text: str, open_re: re.Pattern[str], close_re: re.Pattern[str]
+) -> Iterator[tuple[str, str]]:
+    """Yield (attrs, body) for each `<tag attrs>body</tag>` in one linear pass.
+
+    Matches `<tag\\b([^>]*)>(.*?)</tag>` with finditer semantics. The next '>'
+    and close tag are cached, so unclosed tags do not rescan the text.
+    """
+    pos = 0
+    next_gt = -1
+    next_close: re.Match[str] | None = None
+    while (open_match := open_re.search(text, pos)) is not None:
+        if next_gt < open_match.end():
+            next_gt = text.find(">", open_match.end())
+            if next_gt == -1:
+                return
+        body_start = next_gt + 1
+        if next_close is None or next_close.start() < body_start:
+            next_close = close_re.search(text, body_start)
+            if next_close is None:
+                return
+        yield text[open_match.end() : next_gt], text[body_start : next_close.start()]
+        pos = next_close.end()
 
 
 def _extract_xml_attribute(attrs: str, attr_name: str) -> str | None:
@@ -266,6 +276,8 @@ def _resolve_tool_arguments(obj: dict[str, Any]) -> dict[str, Any] | None:
 def _try_match_json_to_tool(
     json_obj: dict[str, Any],
     tool_name_to_def: dict[str, ToolDefinition],
+    *,
+    implicit_tool_names: Collection[str] | None = None,
 ) -> tuple[str, dict[str, Any]] | None:
     """Try to match a JSON object to a tool definition.
 
@@ -307,6 +319,8 @@ def _try_match_json_to_tool(
 
     # Format 4: Check if the JSON object matches a tool's parameter schema
     for tool_name, func_def in tool_name_to_def.items():
+        if implicit_tool_names is not None and tool_name not in implicit_tool_names:
+            continue
         params = func_def.parameters
         properties = params.get("properties", {})
         required = params.get("required", [])
@@ -324,41 +338,5 @@ def _try_match_json_to_tool(
                 # Filter to only include known properties
                 filtered_args = {k: v for k, v in json_obj.items() if k in properties}
                 return (tool_name, filtered_args)
-
-    return None
-
-
-def _is_nested_arguments_duplicate(
-    previous_json_obj: dict[str, Any],
-    current_json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, ToolDefinition],
-) -> bool:
-    """Detect when current object is the nested args object from previous tool call."""
-    extracted_args = _extract_nested_arguments_obj(previous_json_obj, tool_name_to_def)
-    return extracted_args is not None and current_json_obj == extracted_args
-
-
-def _extract_nested_arguments_obj(
-    json_obj: dict[str, Any],
-    tool_name_to_def: dict[str, ToolDefinition],
-) -> dict[str, Any] | None:
-    # Format 1: {"name": "...", "arguments": {...}} or {"name": "...", "parameters": {...}}
-    if "name" in json_obj and json_obj["name"] in tool_name_to_def:
-        args_obj = json_obj.get("arguments", json_obj.get("parameters"))
-        if isinstance(args_obj, dict):
-            return args_obj
-
-    # Format 2: {"function": {"name": "...", "arguments": {...}}}
-    if "function" in json_obj and isinstance(json_obj["function"], dict):
-        function_obj = json_obj["function"]
-        if "name" in function_obj and function_obj["name"] in tool_name_to_def:
-            args_obj = function_obj.get("arguments", function_obj.get("parameters"))
-            if isinstance(args_obj, dict):
-                return args_obj
-
-    # Format 3: {"tool_name": {...arguments...}}
-    for tool_name in tool_name_to_def:
-        if tool_name in json_obj and isinstance(json_obj[tool_name], dict):
-            return json_obj[tool_name]
 
     return None

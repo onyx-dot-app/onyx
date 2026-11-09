@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { getConfiguredSources } from "@/lib/connectors/utils";
 import { createSharedHook } from "@opal/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useAvailableSources } from "@/lib/connectors/hooks";
@@ -9,7 +10,6 @@ import {
   effectiveAvailableSourcesFor,
   toggleSourceSelection,
 } from "@/lib/searchFilters/utils";
-import { getConfiguredSources } from "@/lib/sources";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ValidSources } from "@/lib/connectors/types/source";
 
@@ -39,8 +39,8 @@ export interface ToolsPopoverValue extends ToolsPopoverInputs {
   /** How many of {@link configuredSources} are on, and how many there are. */
   sourceCounts: { enabled: number; total: number };
   isSourceEnabled: (uniqueKey: string) => boolean;
-  /** Pins a tool for the next message, or releases it. */
-  toggleForced: (toolId: number) => void;
+  /** Pins a preferred tool for this chat, or releases it. */
+  togglePreferred: (toolId: number) => void;
   /** Switches a tool off for this chat, or back on. */
   toggleEnabled: (toolId: number) => void;
   toggleSource: (uniqueKey: string) => void;
@@ -58,7 +58,7 @@ export interface ToolsPopoverValue extends ToolsPopoverInputs {
  * own (permissions, the configured tools, the connectors) stays a hook call in
  * the row.
  *
- * The tool states and the source selection are orthogonal axes: forcing,
+ * The tool states and the source selection are orthogonal axes: preferring,
  * enabling or disabling a tool never changes which sources are selected, and
  * picking sources never changes any tool's state. Both live on the chat's
  * {@link ToolConfigurationHandle}, where a new chat starts untouched — every
@@ -104,8 +104,8 @@ function useToolsPopoverState({
     isSourceEnabled(source.uniqueKey)
   ).length;
 
-  const toggleForced = useCallback(
-    (toolId: number) => toolConfiguration.toggleToolState(toolId, "forced"),
+  const togglePreferred = useCallback(
+    (toolId: number) => toolConfiguration.toggleToolState(toolId, "preferred"),
     [toolConfiguration]
   );
 
@@ -157,7 +157,7 @@ function useToolsPopoverState({
         total: configuredSources.length,
       },
       isSourceEnabled,
-      toggleForced,
+      togglePreferred,
       toggleEnabled,
       toggleSource,
       enableAllSources,
@@ -173,7 +173,7 @@ function useToolsPopoverState({
       isSourceEnabled,
       openSources,
       toggleEnabled,
-      toggleForced,
+      togglePreferred,
       toggleSource,
       toolConfiguration,
     ]

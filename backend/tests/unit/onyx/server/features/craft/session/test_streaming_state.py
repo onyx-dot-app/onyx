@@ -419,3 +419,90 @@ def test_persist_context_usage_and_compaction(
         "compaction",
         "context_usage",
     ]
+
+
+def test_parallel_child_chunks_persist_part_identity_across_routing_flushes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy.orm import Session
+
+    from onyx.server.features.build.sandbox.opencode.serve_client import (
+        _TurnState,
+        translate_opencode_event,
+    )
+
+    persisted: list[dict[str, Any]] = []
+
+    def capture_message(**kwargs: Any) -> None:
+        persisted.append(kwargs["message_metadata"])
+
+    monkeypatch.setattr(streaming, "create_message", capture_message)
+    translated = _TurnState(session_id="parent")
+    state = BuildStreamingState(turn_index=0)
+    session_id = uuid4()
+    events: list[dict[str, Any]] = [
+        {
+            "type": "message.updated",
+            "properties": {
+                "info": {
+                    "sessionID": child,
+                    "id": child + "-assistant",
+                    "role": "assistant",
+                }
+            },
+        }
+        for child in ["child-a", "child-b"]
+    ]
+    events.extend(
+        {
+            "type": "message.part.delta",
+            "properties": {
+                "sessionID": child,
+                "messageID": child + "-assistant",
+                "partID": part_id,
+                "field": "text",
+                "delta": text,
+            },
+        }
+        for child, part_id, text in [
+            ("child-a", "part-a", "Hello"),
+            ("child-b", "part-b", "Other child"),
+            ("child-a", "part-a", " world"),
+        ]
+    )
+    with Session() as db_session:
+        for raw in events:
+            for event in translate_opencode_event(
+                raw,
+                translated,
+                parent_resolver=lambda child: (
+                    "parent" if child in {"child-a", "child-b"} else None
+                ),
+            ):
+                streaming.persist_sandbox_event(db_session, session_id, state, event)
+        streaming.finalize_persist(db_session, session_id, state)
+
+    assert [packet["content"]["text"] for packet in persisted] == [
+        "Hello",
+        "Other child",
+        " world",
+    ]
+    assert [packet["_meta"] for packet in persisted] == [
+        {"partId": "part-a", "sessionId": "child-a", "parentSessionId": "parent"},
+        {"partId": "part-b", "sessionId": "child-b", "parentSessionId": "parent"},
+        {"partId": "part-a", "sessionId": "child-a", "parentSessionId": "parent"},
+    ]
+
+
+@pytest.mark.parametrize("kind", ["message", "thought"])
+def test_explicit_subagent_routing_preserves_text_part_identity(kind: str) -> None:
+    state = BuildStreamingState(turn_index=0)
+    routing = {"sessionId": "child", "parentSessionId": "parent"}
+    if kind == "message":
+        state.add_message_chunk("prefix", {"partId": "part-a"})
+        packet = state.finalize_message_chunks(routing)
+    else:
+        state.add_thought_chunk("prefix", {"partId": "part-a"})
+        packet = state.finalize_thought_chunks(routing)
+    assert packet is not None
+    assert packet["_meta"] == {"partId": "part-a", **routing}

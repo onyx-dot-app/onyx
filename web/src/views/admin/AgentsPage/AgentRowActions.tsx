@@ -1,16 +1,17 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
+  Dropdown,
+  Text,
   useCreateModal,
+  type DropdownMenuItem,
 } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import { cn, escapeMarkdown, markdown } from "@opal/utils";
+import { cn, escapeMarkdown, markdown, richNodes } from "@opal/utils";
 import {
   SvgMoreHorizontal,
   SvgEdit,
@@ -23,9 +24,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
-import { useRouter } from "next/navigation";
 import {
   deleteAgent,
   toggleAgentFeatured,
@@ -33,8 +32,8 @@ import {
 } from "@/lib/agents/svc";
 import type { Agent } from "@/lib/agents/types";
 import { ShareAgentModal } from "@/lib/agents/components";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------
@@ -55,7 +54,7 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const t = useTranslations("admin.agents");
-  const router = useRouter();
+  const navigation = useNavigation();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareModal = useCreateModal();
 
@@ -70,7 +69,7 @@ export default function AgentRowActions({
   const hasOverflowItems =
     canList || canShare || (businessTier && canViewStats) || canDeleteRow;
 
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [featuredOpen, setFeaturedOpen] = useState(false);
@@ -96,6 +95,65 @@ export default function AgentRowActions({
     }
   }
 
+  const menuItems: DropdownMenuItem[] = [
+    ...(canList
+      ? [
+          {
+            kind: "action" as const,
+            id: "visibility",
+            icon: agent.is_listed ? SvgEyeOff : SvgEye,
+            title: agent.is_listed
+              ? t("rowActions.unlistItem.title")
+              : t("rowActions.listItem.title"),
+            onSelect: () => {
+              if (agent.is_listed) {
+                setUnlistOpen(true);
+              } else {
+                handleAction(
+                  () => toggleAgentListed(agent.id, agent.is_listed),
+                  () => {}
+                );
+              }
+            },
+          },
+        ]
+      : []),
+    ...(canShare
+      ? [
+          {
+            kind: "action" as const,
+            id: "share",
+            icon: SvgShare,
+            title: t("rowActions.shareItem.title"),
+            onSelect: () => shareModal.toggle(true),
+          },
+        ]
+      : []),
+    ...(businessTier && canViewStats
+      ? [
+          {
+            kind: "action" as const,
+            id: "stats",
+            icon: SvgBarChart,
+            title: t("rowActions.statsItem.title"),
+            onSelect: () => navigation.go(`/ee/agents/stats/${agent.id}`),
+          },
+        ]
+      : []),
+    ...(canDeleteRow
+      ? [
+          {
+            kind: "action" as const,
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("rowActions.deleteItem.title"),
+            onSelect: () => setDeleteOpen(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       <shareModal.Provider>
@@ -120,7 +178,7 @@ export default function AgentRowActions({
               aria-label={t("rowActions.editAgentButton.label")}
               data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
-                router.push(
+                navigation.go(
                   `/app/agents/edit/${agent.id}?u=${Date.now()}&admin=true`
                 )
               }
@@ -164,7 +222,7 @@ export default function AgentRowActions({
                       : t("rowActions.setFeaturedButton.label")
                   }
                   onClick={() => {
-                    setPopoverOpen(false);
+                    setMenuOpen(false);
                     setFeaturedOpen(true);
                   }}
                 />
@@ -173,92 +231,26 @@ export default function AgentRowActions({
 
         {/* Overflow menu */}
         {hasOverflowItems && (
-          <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
             <div
               className={cn(
-                !popoverOpen &&
+                !menuOpen &&
                   "opacity-0 group-hover/row:opacity-100 transition-opacity"
               )}
             >
-              <Popover.Trigger asChild>
+              <Dropdown.Trigger asChild>
                 <Button
                   prominence="tertiary"
                   icon={SvgMoreHorizontal}
                   aria-label={t("rowActions.menuButton.ariaLabel")}
                 />
-              </Popover.Trigger>
+              </Dropdown.Trigger>
             </div>
-            <Popover.Content align="end" width="sm">
-              <PopoverMenu>
-                {[
-                  canList ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="visibility"
-                      icon={agent.is_listed ? SvgEyeOff : SvgEye}
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        if (agent.is_listed) {
-                          setUnlistOpen(true);
-                        } else {
-                          handleAction(
-                            () => toggleAgentListed(agent.id, agent.is_listed),
-                            () => {}
-                          );
-                        }
-                      }}
-                      title={
-                        agent.is_listed
-                          ? t("rowActions.unlistItem.title")
-                          : t("rowActions.listItem.title")
-                      }
-                    />
-                  ) : undefined,
-                  canShare ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="share"
-                      icon={SvgShare}
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        shareModal.toggle(true);
-                      }}
-                      title={t("rowActions.shareItem.title")}
-                    />
-                  ) : undefined,
-                  businessTier && canViewStats ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="stats"
-                      icon={SvgBarChart}
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        router.push(`/ee/agents/stats/${agent.id}`);
-                      }}
-                      title={t("rowActions.statsItem.title")}
-                    />
-                  ) : undefined,
-                  canDeleteRow ? (
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding={2}
-                      key="delete"
-                      icon={SvgTrash}
-                      color="danger"
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        setDeleteOpen(true);
-                      }}
-                      title={t("rowActions.deleteItem.title")}
-                    />
-                  ) : undefined,
-                ]}
-              </PopoverMenu>
-            </Popover.Content>
-          </Popover>
+            <Dropdown.Data
+              label={t("rowActions.menuButton.ariaLabel")}
+              items={menuItems}
+            />
+          </Dropdown>
         )}
       </div>
 
@@ -282,15 +274,17 @@ export default function AgentRowActions({
             </Button>
           }
         >
-          <Text as="p" text03>
-            {t.rich("deleteModal.confirmation.description", {
-              name: agent.name,
-              emphasis: (chunks) => (
-                <Text as="span" text05>
-                  {chunks}
-                </Text>
-              ),
-            })}
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("deleteModal.confirmation.description", {
+                name: agent.name,
+                emphasis: (chunks) => (
+                  <Text as="span" color="text-05">
+                    {richNodes(chunks)}
+                  </Text>
+                ),
+              })
+            )}
           </Text>
         </ConfirmationModalLayout>
       )}
@@ -321,14 +315,14 @@ export default function AgentRowActions({
           }
         >
           <div className="flex flex-col gap-2">
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {agent.is_featured
                 ? t("featuredModal.removeBody.description", {
                     name: agent.name,
                   })
                 : t("featuredModal.addBody.description")}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("modals.accessNote.description")}
             </Text>
           </div>
@@ -357,10 +351,10 @@ export default function AgentRowActions({
           }
         >
           <div className="flex flex-col gap-2">
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("unlistModal.body.description")}
             </Text>
-            <Text as="p" text03>
+            <Text as="p" color="text-03">
               {t("modals.accessNote.description")}
             </Text>
           </div>

@@ -1,24 +1,34 @@
 """The sso_provider store must round-trip the encrypted per-type config,
 enforce the slug name contract, validate config against provider_type, preserve
-config on partial update, and keep disable-not-delete semantics."""
+config on partial update, keep links through a disable, and import the legacy
+SAML config only once so a deleted import stays deleted."""
 
+import json
 from collections.abc import Generator
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
+import onyx.db.sso_provider as sso_provider_module
+from onyx.configs.constants import KV_LEGACY_SAML_IMPORTED_KEY
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.db.sso_provider import (
     create_sso_provider,
+    delete_sso_provider_links__no_commit,
+    delete_sso_provider_row__no_commit,
     fetch_sso_provider_by_name,
     fetch_sso_providers,
+    seed_saml_provider_from_conf_dir,
     set_sso_provider_enabled,
     update_sso_provider,
     validate_sso_provider_name,
 )
+from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 
 _NAME_PREFIX = "testsso"
 _GOOGLE_CONFIG = {"client_id": "client-id", "client_secret": "super-secret"}
@@ -33,6 +43,12 @@ _SAML_CONFIG = {
     "idp_x509_cert": "MIIC-fake-cert",
     "sp_entity_id": "https://onyx.example.com/saml",
 }
+
+
+def _delete_provider(db_session: Session, provider_id: int) -> None:
+    name = delete_sso_provider_row__no_commit(db_session, provider_id)
+    delete_sso_provider_links__no_commit(db_session, name)
+    db_session.commit()
 
 
 @pytest.fixture()
@@ -195,3 +211,50 @@ def test_disable_keeps_row_and_filters(db_session: Session, provider_name: str) 
     enabled_names = {p.name for p in fetch_sso_providers(db_session, enabled_only=True)}
     assert provider_name in all_names
     assert provider_name not in enabled_names
+
+
+def _forget_legacy_saml_import() -> None:
+    try:
+        get_kv_store().delete(KV_LEGACY_SAML_IMPORTED_KEY)
+    except KvKeyNotFoundError:
+        return
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_legacy_saml_import_does_not_restore_a_deleted_row(
+    db_session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert not any(
+        provider.provider_type is SSOProviderType.SAML
+        for provider in fetch_sso_providers(db_session)
+    ), "needs a database with no SAML provider"
+    (tmp_path / "settings.json").write_text(
+        json.dumps(
+            {
+                "idp": {
+                    "entityId": _SAML_CONFIG["idp_entity_id"],
+                    "singleSignOnService": {"url": _SAML_CONFIG["idp_sso_url"]},
+                    "x509cert": _SAML_CONFIG["idp_x509_cert"],
+                },
+                "sp": {"entityId": _SAML_CONFIG["sp_entity_id"]},
+            }
+        )
+    )
+    monkeypatch.setenv("AUTH_TYPE", "saml")
+    monkeypatch.setattr(sso_provider_module, "MULTI_TENANT", False)
+    monkeypatch.setattr(sso_provider_module, "SAML_CONF_DIR", str(tmp_path))
+    _forget_legacy_saml_import()
+    try:
+        seed_saml_provider_from_conf_dir(db_session)
+        imported = fetch_sso_provider_by_name(db_session, "saml")
+        assert imported is not None
+
+        _delete_provider(db_session, imported.id)
+        seed_saml_provider_from_conf_dir(db_session)
+
+        assert fetch_sso_provider_by_name(db_session, "saml") is None
+    finally:
+        db_session.rollback()
+        db_session.execute(delete(SSOProvider).where(SSOProvider.name == "saml"))
+        db_session.commit()
+        _forget_legacy_saml_import()

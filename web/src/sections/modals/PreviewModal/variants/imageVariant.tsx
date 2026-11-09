@@ -1,4 +1,4 @@
-import { Section } from "@/layouts/general-layouts";
+import { Section } from "@opal/layouts";
 import PreviewImage from "@/refresh-components/PreviewImage";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import {

@@ -2,6 +2,7 @@
 
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
+import type { BadgeProps } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -13,7 +14,7 @@ import {
 import type {
   ScheduledTaskRunStatus,
   ScheduledTaskStatus,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 
 // ---------------------------------------------------------------------------
 // Task status (active / paused)

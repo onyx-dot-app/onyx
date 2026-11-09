@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
+from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
@@ -26,12 +27,20 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.session.models import TurnOutputSnapshot
 from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
 )
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.common.craft.stubs import StubSandboxManager
 from tests.unit.fakes import FakeCache
+
+
+@pytest.fixture(autouse=True)
+def stub_output_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager = StubSandboxManager()
+    monkeypatch.setattr(executor, "get_sandbox_manager", lambda: manager)
 
 
 class _FakeDbSession:
@@ -91,6 +100,7 @@ def _run_turn_with_events(
     reclaimed: bool = False,
     prompt_slot: "_FakePromptSlot | None" = None,
     session_missing: bool = False,
+    turn_index: int = 0,
 ) -> SimpleNamespace:
     cache = FakeCache()
     db_session = _FakeDbSession()
@@ -104,6 +114,7 @@ def _run_turn_with_events(
     stamped: list[tuple[int, int]] = []
     cleared: list[bool] = []
     captured_should_abort_on_teardown: list[Callable[[], bool]] = []
+    output_lifecycle: list[str] = []
 
     turn = create_interactive_turn(
         cache=cache,
@@ -111,7 +122,7 @@ def _run_turn_with_events(
         user_id=user_id,
         client_request_id="req-1",
         prompt="hello",
-        turn_index=0,
+        turn_index=turn_index,
     )
 
     class FakeSessionManager:
@@ -161,7 +172,10 @@ def _run_turn_with_events(
             assert attachments == []
             assert should_interrupt is not None
             captured_should_abort_on_teardown.append(should_abort_on_teardown)
-            yield from events
+            try:
+                yield from events
+            finally:
+                output_lifecycle.append("producer_closed")
 
         def merge_events_with_announces(
             self,
@@ -185,10 +199,10 @@ def _run_turn_with_events(
             finalized.append(session_id_arg)
 
         def persist_turn_error(
-            self, session_id_arg: UUID, turn_index: int, message: str
+            self, session_id_arg: UUID, turn_index_arg: int, message: str
         ) -> None:
             assert session_id_arg == session_id
-            assert turn_index == 0
+            assert turn_index_arg == turn_index
             turn_errors.append(message)
 
         def stamp_turn_deadline(
@@ -210,6 +224,37 @@ def _run_turn_with_events(
             assert session_id_arg == session_id
             cleared.append(True)
 
+    def capture_outputs(
+        manager: object, sandbox_id_arg: UUID, session_id_arg: UUID, turn_index_arg: int
+    ) -> TurnOutputSnapshot:
+        assert manager is executor.get_sandbox_manager()
+        assert sandbox_id_arg == sandbox_id
+        assert session_id_arg == session_id
+        assert turn_index_arg == turn_index
+        output_lifecycle.append("baseline")
+        return TurnOutputSnapshot(
+            sandbox_id=sandbox_id_arg,
+            session_id=session_id_arg,
+            turn_index=turn_index_arg,
+            sources={},
+        )
+
+    def persist_outputs(
+        _db: object,
+        _manager: object,
+        _snapshot: TurnOutputSnapshot | None,
+        *,
+        owns_turn: Callable[[], bool],
+    ) -> None:
+        if _snapshot is None or not owns_turn():
+            return
+        active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
+        assert active is not None
+        assert not prompt_slot.exited
+        output_lifecycle.append("cards_persisted")
+
+    monkeypatch.setattr(executor, "capture_turn_outputs", capture_outputs)
+    monkeypatch.setattr(executor, "persist_turn_outputs", persist_outputs)
     monkeypatch.setattr(executor, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(
         executor,
@@ -249,6 +294,7 @@ def _run_turn_with_events(
         turn_errors=turn_errors,
         stamped=stamped,
         cleared=cleared,
+        output_lifecycle=output_lifecycle,
         user_id=user_id,
     )
 
@@ -276,7 +322,7 @@ def test_runner_succeeds_on_prompt_response(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.stamped == [(30, 30)]
     assert result.cleared == [True]
     assert result.prompt_slot.exited
-    assert result.prompt_slot.extend_calls == 1
+    assert result.prompt_slot.extend_calls >= 1
     assert result.db_session.rollbacks == 0
 
 
@@ -408,12 +454,12 @@ def test_runner_records_cancelled_prompt_response_as_cancelled(
     # User-initiated cancels don't get an error row.
     assert result.turn_errors == []
     assert result.prompt_slot.exited
-    assert result.prompt_slot.extend_calls == 1
+    assert result.prompt_slot.extend_calls >= 1
     assert result.db_session.rollbacks == 0
 
 
 def test_lost_lease_fails_turn(monkeypatch: pytest.MonkeyPatch) -> None:
-    prompt_slot = _FakePromptSlot(lost_after_extends=1)
+    prompt_slot = _FakePromptSlot(lost_after_extends=2)
     non_terminal_event = object()
     second_event = object()
 
@@ -847,7 +893,7 @@ def test_teardown_abort_allowed_after_successful_turn(
 def test_teardown_abort_suppressed_after_lost_lease(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    prompt_slot = _FakePromptSlot(lost_after_extends=1)
+    prompt_slot = _FakePromptSlot(lost_after_extends=2)
     non_terminal_event = object()
     second_event = object()
 
@@ -1164,3 +1210,64 @@ def test_start_interactive_turn_runner_skips_fresh_running_turn(
     time.sleep(0.05)
 
     assert observed == []
+
+
+@pytest.mark.parametrize("stop_reason", ["end_turn", "cancelled"])
+def test_output_cards_settle_after_producer_and_before_turn_release(
+    monkeypatch: pytest.MonkeyPatch, stop_reason: str
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": stop_reason})],
+        turn_index=7,
+    )
+    assert result.output_lifecycle == ["baseline", "producer_closed", "cards_persisted"]
+
+
+def test_reclaimed_runner_does_not_invent_an_output_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": "end_turn"})],
+        reclaimed=True,
+    )
+    assert result.output_lifecycle == ["producer_closed"]
+
+
+def test_lost_prompt_slot_cannot_assign_output_cards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": "end_turn"})],
+        prompt_slot=_FakePromptSlot(lost_after_extends=2),
+    )
+    assert result.output_lifecycle == ["baseline", "producer_closed"]
+
+
+def test_lost_baseline_lease_prevents_starting_the_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": "end_turn"})],
+        prompt_slot=_FakePromptSlot(lost_after_extends=1),
+    )
+    assert result.output_lifecycle == ["baseline"]
+    assert result.persisted == []
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None and finished.status == TURN_STATUS_FAILED
+
+
+def test_terminal_status_retry_does_not_capture_outputs_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    finish = Mock(side_effect=[RuntimeError("cache unavailable"), None])
+    monkeypatch.setattr(executor, "finish_turn", finish)
+    result = _run_turn_with_events(
+        monkeypatch, [PromptResponse.model_validate({"stopReason": "end_turn"})]
+    )
+    assert finish.call_count == 2
+    assert result.output_lifecycle == ["baseline", "producer_closed", "cards_persisted"]
+    assert result.prompt_slot.exited

@@ -12,7 +12,7 @@
 #   1000+  blocked ranges               deny(403)
 #   2000   outside the allowlist        deny(403)
 #   2100+  blocked countries            deny(403)
-#   3000+  preconfigured WAF rules      deny(403)
+#   3000+  preconfigured WAF rules      deny(403), tuned for Onyx traffic
 #   4000+  rate limit exempt ranges     allow, so they skip both limits
 #   5000   API path rate limit          throttle, deny(429)
 #   5100   global rate limit            throttle, deny(429)
@@ -28,6 +28,58 @@ locals {
   country_chunks = chunklist(var.geo_restriction_countries, 10)
 
   waf_rule_keys = sort(keys(var.preconfigured_rules))
+
+  # Rule sets left untuned, because nothing Onyx sends trips them. The rest
+  # read field values, and an Onyx field value is often code, a URL or a secret.
+  untuned_rule_sets = ["methodenforcement", "scannerdetection", "sessionfixation"]
+
+  # The standard WAF tuning: a signature keeps running but does not read the
+  # value of a named field. These are the Onyx fields that hold chat text,
+  # prompts, code, URLs and secrets, which the signatures match at any
+  # sensitivity. A field missing here shows up as a 403 and a load balancer
+  # log line naming the signature.
+  default_uninspected_fields = [
+    # chat and prompts
+    "message", "query", "user_query", "prompt", "system_prompt", "task_prompt",
+    "instructions", "instructions_markdown", "description", "content", "text",
+    "answer", "feedback_text", "reason", "summary", "title", "name", "match_pattern",
+    # code and errors
+    "code", "reasoning_content", "error_message",
+    # URLs, which the remote file inclusion signatures match on an address
+    "api_base", "base_url", "server_url", "url", "api_url",
+    # secrets, whose random symbols the injection signatures match
+    "password", "api_key", "client_secret", "access_token", "bot_token",
+    "app_token", "user_token", "token", "api_secret",
+    # the Google sign-in callback carries userinfo.profile here
+    "scope",
+  ]
+
+  # A nested JSON key is reached only through the key it sits under, so whole
+  # free-form objects are named by prefix.
+  default_uninspected_field_prefixes = [
+    "connector_specific_config", "credential_json", "definition", "custom_config",
+    "new_custom_config", "existing_custom_config", "connection_headers", "config", "environment",
+  ]
+
+  # The names cover query string and body parameters, and the top-level keys
+  # of a JSON body.
+  uninspected_params = concat(
+    [for f in concat(local.default_uninspected_fields, var.extra_uninspected_fields) : { operator = "EQUALS", value = f }],
+    [for f in concat(local.default_uninspected_field_prefixes, var.extra_uninspected_field_prefixes) : { operator = "STARTS_WITH", value = f }],
+  )
+
+  # Cloud Armor does not parse a multipart body. It reads the file content as
+  # parameter names, which no exclusion covers, so the content rule sets skip
+  # an upload. The method check keeps the header from exempting a GET.
+  multipart_guard = "!(request.method.matches('POST|PUT|PATCH') && request.headers['content-type'].lower().startsWith('multipart/form-data')) && "
+
+  # One exclusion per content rule set, for every signature in it.
+  waf_exclusions = {
+    for k in local.waf_rule_keys : k => contains(local.untuned_rule_sets, k) ? [] : [{
+      rule_set     = "${k}-${var.crs_version}-stable"
+      query_params = local.uninspected_params
+    }]
+  }
 
   waf_expressions = {
     for k, r in var.preconfigured_rules : k => format(
@@ -49,6 +101,7 @@ locals {
       src_ip_ranges = chunk
       expression    = null
       rate_limit    = null
+      exclusions    = []
     }],
     length(var.allowed_ip_cidrs) > 0 ? [{
       priority      = 2000
@@ -58,6 +111,7 @@ locals {
       src_ip_ranges = null
       expression    = "!(${join(" || ", [for c in var.allowed_ip_cidrs : "inIpRange(origin.ip, '${c}')"])})"
       rate_limit    = null
+      exclusions    = []
     }] : [],
     [for i, chunk in local.country_chunks : {
       priority      = 2100 + i
@@ -67,6 +121,7 @@ locals {
       src_ip_ranges = null
       expression    = join(" || ", [for c in chunk : "origin.region_code == '${c}'"])
       rate_limit    = null
+      exclusions    = []
     }],
     [for i, k in local.waf_rule_keys : {
       priority      = 3000 + i
@@ -74,8 +129,9 @@ locals {
       description   = "OWASP CRS ${k}"
       preview       = coalesce(var.preconfigured_rules[k].preview, var.preview)
       src_ip_ranges = null
-      expression    = local.waf_expressions[k]
+      expression    = "${contains(local.untuned_rule_sets, k) ? "" : local.multipart_guard}${local.waf_expressions[k]}"
       rate_limit    = null
+      exclusions    = local.waf_exclusions[k]
     }],
     [for i, chunk in local.exempt_chunks : {
       priority      = 4000 + i
@@ -85,6 +141,7 @@ locals {
       src_ip_ranges = chunk
       expression    = null
       rate_limit    = null
+      exclusions    = []
     }],
     # A throttle rule allows requests under its limit and stops there, so API
     # requests count against this limit only, not also against the global one.
@@ -96,6 +153,7 @@ locals {
       src_ip_ranges = null
       expression    = "request.path.startsWith('${var.api_path_prefix}')"
       rate_limit    = { count = var.api_rate_limit_threshold }
+      exclusions    = []
     }],
     [{
       priority      = 5100
@@ -105,6 +163,7 @@ locals {
       src_ip_ranges = ["*"]
       expression    = null
       rate_limit    = { count = var.rate_limit_threshold }
+      exclusions    = []
     }],
     [{
       priority      = 2147483647
@@ -114,6 +173,7 @@ locals {
       src_ip_ranges = ["*"]
       expression    = null
       rate_limit    = null
+      exclusions    = []
     }],
   )
 }
@@ -163,6 +223,26 @@ resource "google_compute_security_policy" "this" {
           for_each = rule.value.expression != null ? [rule.value.expression] : []
           content {
             expression = expr.value
+          }
+        }
+      }
+
+      dynamic "preconfigured_waf_config" {
+        for_each = length(rule.value.exclusions) > 0 ? [rule.value.exclusions] : []
+        content {
+          dynamic "exclusion" {
+            for_each = preconfigured_waf_config.value
+            content {
+              target_rule_set = exclusion.value.rule_set
+
+              dynamic "request_query_param" {
+                for_each = exclusion.value.query_params
+                content {
+                  operator = request_query_param.value.operator
+                  value    = request_query_param.value.value
+                }
+              }
+            }
           }
         }
       }

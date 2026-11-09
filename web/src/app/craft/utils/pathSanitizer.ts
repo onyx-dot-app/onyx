@@ -1,7 +1,7 @@
 /**
  * Path Sanitizer
  *
- * Pure string functions for stripping sandbox/session path prefixes.
+ * Helpers for displaying sandbox paths and validating output links.
  * All paths displayed in the UI must be relative to the session root.
  *
  * Two deployment shapes exist (both always include the sessions layer):
@@ -66,4 +66,24 @@ export function sanitizePathsInText(text: string): string {
     result = result.replace(pattern, "");
   }
   return result;
+}
+
+/** Validate an untrusted output link without resolving or stripping path segments. */
+export function parseOutputLink(href: string): string | null {
+  const path = href.startsWith("./") ? href.slice(2) : href;
+  if (!path.startsWith("outputs/")) return null;
+
+  try {
+    const segments = path.split("/").map((part) => decodeURIComponent(part));
+    if (
+      segments.some(
+        (part) =>
+          !part || part.startsWith(".") || /[/\\%:?#]|\p{Cc}/u.test(part)
+      )
+    )
+      return null;
+    return segments.join("/");
+  } catch {
+    return null;
+  }
 }

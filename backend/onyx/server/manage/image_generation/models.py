@@ -16,21 +16,11 @@ def _mask_api_key(api_key: str | None) -> str | None:
 
 
 class TestImageGenerationRequest(BaseModel):
-    """Request model for testing image generation API key.
-
-    Two modes:
-    1. Direct API key: Provide api_key + provider
-    2. From existing provider: Provide source_llm_provider_id (backend fetches API key)
-    """
+    """Request model for testing image generation API key."""
 
     model_name: str  # e.g., "gpt-image-1"
-
-    # Option 1: Direct API key
     provider: str | None = None  # e.g., "openai", "azure"
     api_key: str | None = None
-
-    # Option 2: Use API key from existing provider
-    source_llm_provider_id: int | None = None
 
     # Additional fields for custom config
     custom_config: dict[str, str] | None = None
@@ -44,23 +34,13 @@ class TestImageGenerationRequest(BaseModel):
 class ImageGenerationConfigCreate(BaseModel):
     """Request model for creating an image generation config.
 
-    Two creation modes (backend always creates new LLM provider + model config):
-
-    1. Clone mode: Provide source_llm_provider_id + model_name
-       → Backend extracts credentials from existing provider and creates new provider
-
-    2. New credentials mode: Provide api_key + provider + model_name (+ optional fields)
-       → Backend creates new provider with provided credentials
+    The backend always creates a new LLM provider + model config with the
+    provided credentials.
     """
 
-    # Required for both modes
     image_provider_id: str  # Static unique key (e.g., "openai_gpt_image_1")
     model_name: str  # e.g., "gpt-image-1"
 
-    # Option 1: Clone mode - use credentials from existing provider
-    source_llm_provider_id: int | None = None
-
-    # Option 2: New credentials mode
     provider: str | None = None  # e.g., "openai", "azure"
     api_key: str | None = None
     api_base: str | None = None
@@ -71,21 +51,40 @@ class ImageGenerationConfigCreate(BaseModel):
     is_default: bool = False
 
 
+class ImageGenerationConfigLink(BaseModel):
+    """Link a model on an existing LLM provider. No credentials are sent;
+    the LLM provider's own credentials are used."""
+
+    llm_provider_id: int
+    model_name: str
+    is_default: bool = False
+
+
+class ImageGenerationProviderModel(BaseModel):
+    name: str
+    display_name: str | None
+    # Catalog or model name says this is an image generation model.
+    is_recommended: bool
+    image_provider_id: str | None  # Set when this model is already connected
+
+
+class ImageGenerationLLMProvider(BaseModel):
+    llm_provider_id: int
+    llm_provider_name: str | None
+    provider: str
+    is_public: bool
+    models: list[ImageGenerationProviderModel]
+
+
 class ImageGenerationConfigUpdate(BaseModel):
     """Request model for updating an image generation config.
 
-    Same modes as create - either clone from existing provider or use new credentials.
     Backend will delete old LLM provider and create new one.
     """
 
-    # Required
     model_name: str  # e.g., "gpt-image-1"
     # Note: image_provider_id cannot be changed during update
 
-    # Option 1: Clone mode - use credentials from existing provider
-    source_llm_provider_id: int | None = None
-
-    # Option 2: New credentials mode
     provider: str | None = None  # e.g., "openai", "azure"
     api_key: str | None = None
     api_base: str | None = None
@@ -93,7 +92,7 @@ class ImageGenerationConfigUpdate(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
 
-    # If False and using new credentials mode, preserve existing API key from DB
+    # If False, preserve existing API key from DB
     api_key_changed: bool = False
 
 
@@ -105,6 +104,8 @@ class ImageGenerationConfigView(BaseModel):
     model_name: str  # From model_configuration.name
     llm_provider_id: int  # From model_configuration.llm_provider_id
     llm_provider_name: str | None  # From model_configuration.llm_provider.name
+    llm_provider_type: str  # From model_configuration.llm_provider.provider
+    llm_provider_owned: bool
     is_default: bool
 
     @classmethod
@@ -118,6 +119,8 @@ class ImageGenerationConfigView(BaseModel):
             model_name=config.model_configuration.name,
             llm_provider_id=config.model_configuration.llm_provider_id,
             llm_provider_name=config.model_configuration.llm_provider.name,
+            llm_provider_type=config.model_configuration.llm_provider.provider,
+            llm_provider_owned=config.llm_provider_owned,
             is_default=config.is_default,
         )
 

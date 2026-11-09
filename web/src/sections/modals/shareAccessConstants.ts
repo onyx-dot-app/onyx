@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { SvgBubbleText, SvgEdit, SvgLock, SvgOrganization } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { SharePermissionMenuOption } from "@/sections/modals/SharePermissionMenu";
+import { SharePermissionMenuOption } from "@/lib/permissions/components";
 
 export type ShareScope = "PRIVATE" | "PUBLIC";
 export type ShareAccessPermission = "EDITOR" | "VIEWER";
@@ -10,8 +10,8 @@ export type ShareAccessPermission = "EDITOR" | "VIEWER";
 // Message keys under `chat.modals.share`, not copy — the literal union keeps
 // `t()` statically checked while the definitions stay a plain module.
 type ShareOptionLabelKey =
-  | "permissionMenu.viewAndChat.label"
-  | "permissionMenu.edit.label"
+  | "permissionMenu.canUse.label"
+  | "permissionMenu.canEdit.label"
   | "scope.invitedOnly.label"
   | "scope.organization.label";
 
@@ -25,12 +25,12 @@ const PERMISSION_OPTION_DEFINITIONS: ShareOptionDefinition<ShareAccessPermission
   [
     {
       icon: SvgBubbleText,
-      labelKey: "permissionMenu.viewAndChat.label",
+      labelKey: "permissionMenu.canUse.label",
       value: "VIEWER",
     },
     {
       icon: SvgEdit,
-      labelKey: "permissionMenu.edit.label",
+      labelKey: "permissionMenu.canEdit.label",
       value: "EDITOR",
     },
   ];

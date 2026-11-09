@@ -24,9 +24,15 @@
 #   REPS=5 NS=onyx-sandboxes \
 #     bench-sandbox-spinup.sh onyxdotapp/sandbox:dev
 #
+# Env knobs: REPS (3), NS (onyx-sandboxes), KIND_CLUSTER (onyx-dev),
+# KIND_NODE (<cluster>-control-plane), WAIT_TIMEOUT (300s).
+#
+# Caveats: `kind load` (docker save → tar → crictl load) is much slower than a
+# registry pull, so compare the delta between images, not the absolute cold
+# number. Warm spinup is nearly independent of image size.
+#
 # Requires: docker, kind, kubectl, python3. Cluster context must be
-# kind-onyx-dev — see docs/craft/dev/local-kubernetes.md for the local setup.
-# Full context + recorded numbers: docs/craft/sandbox/image-and-spinup.md.
+# kind-onyx-dev — see deployment/helm/dev/README.md for the local setup.
 set -euo pipefail
 
 KIND_CLUSTER="${KIND_CLUSTER:-onyx-dev}"

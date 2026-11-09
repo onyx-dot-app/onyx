@@ -452,6 +452,7 @@ class TestSectionExpansion:
         above, below = _retrieve_adjacent_chunks(
             section=section,
             document_index=pair,
+            user=MagicMock(),
             num_chunks_above=2,
             num_chunks_below=2,
         )
@@ -464,6 +465,7 @@ class TestSectionExpansion:
             user_query="roadmap",
             llm=llm,
             document_index=pair,
+            user=MagicMock(),
             expand_override=True,
         )
         assert expanded is not None

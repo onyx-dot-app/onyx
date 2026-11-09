@@ -53,36 +53,26 @@
   --content-title-color: initial;
 }
 
+/* A status colour (`CONTENT_STATUS_COLORS`, set inline as
+   --content-status-color) tints the title and the icon; `titleColor`
+   overrides the title only. */
+[data-content-color]:not([data-content-color="interactive"]) {
+  /* text-04 when no status colour is set, so nothing renders transparent. */
+  --content-foreground: var(
+    --content-title-color,
+    var(--content-status-color, var(--text-04))
+  );
+  --content-foreground-icon: var(--content-status-color, var(--text-04));
+  color: var(--content-foreground);
+}
+
+/* The neutral default has no tone of its own, so its icon follows the
+   title: `titleColor="text-03"` mutes both. */
 [data-content-color="default"] {
-  --content-foreground: var(--content-title-color, var(--text-04));
-  --content-foreground-icon: var(--text-04);
-  color: var(--content-foreground);
-}
-
-[data-content-color="muted"] {
-  --content-foreground: var(--content-title-color, var(--text-03));
-  --content-foreground-icon: var(--text-03);
-  color: var(--content-foreground);
-}
-
-/* Status glyph against muted body text: the icon carries the state and the
-   text stays secondary. */
-[data-content-color="success"] {
-  --content-foreground: var(--content-title-color, var(--text-03));
-  --content-foreground-icon: var(--status-success-05);
-  color: var(--content-foreground);
-}
-
-[data-content-color="warning"] {
-  --content-foreground: var(--content-title-color, var(--text-03));
-  --content-foreground-icon: var(--status-warning-05);
-  color: var(--content-foreground);
-}
-
-[data-content-color="danger"] {
-  --content-foreground: var(--content-title-color, var(--text-03));
-  --content-foreground-icon: var(--status-error-05);
-  color: var(--content-foreground);
+  --content-foreground-icon: var(
+    --content-title-color,
+    var(--content-status-color, var(--text-04))
+  );
 }
 
 /* Interactive is default plus the interactivity: outside an Interactive
@@ -132,400 +122,185 @@
 }
 
 /* ===========================================================================
-   Content — ContentXl
+   Content — layout
 
-   Icon row on top (flex-col). Icon row contains main icon + optional
-   moreIcon1 / moreIcon2 in a flex-row.
-
-   Sizing (icon size, gap, padding, font, line-height) is driven by the
-   sizePreset prop via inline styles + Tailwind classes in the component.
+   Root (0.25rem gap inline, none stacked or for `secondary-*` and
+   `figure-*` titles) > icon row, then the
+   text (no gap)
+   > title row, then description. Every size derives from the title font:
+   an icon box is `1lh` of it, with 2px padding, so the glyph is the line
+   height less 4px.
    =========================================================================== */
 
-/* ---------------------------------------------------------------------------
-   Layout — flex-col (icon row above body)
-   --------------------------------------------------------------------------- */
-
-.opal-content-xl {
-  @apply flex flex-col items-start;
+.opal-content {
+  /* items-start: the icon box is one title line tall, so a wrapped title
+     keeps its icon on the first line. */
+  @apply flex items-start;
+  gap: 0.25rem;
 }
 
-/* ---------------------------------------------------------------------------
-   Icon row — flex-row containing main icon + more icons
-   --------------------------------------------------------------------------- */
+.opal-content[data-orientation="inline"] {
+  @apply flex-row;
+}
 
-.opal-content-xl-icon-row {
-  @apply flex flex-row items-center;
-  gap: 0.25rem;
+/* `secondary-*` and `figure-*` titles put the icon flush against the text. */
+.opal-content[data-flush] {
+  gap: 0;
+}
+
+/* Stacked, the icon row sits directly on the title, with no gap. */
+.opal-content[data-orientation="stacked"] {
+  @apply flex-col;
+  gap: 0;
 }
 
 /* ---------------------------------------------------------------------------
    Icons
    --------------------------------------------------------------------------- */
 
-.opal-content-xl-icon-container {
-  @apply flex items-center justify-center p-0.5;
-}
-
-.opal-content-xl-more-icon-container {
-  @apply flex items-center justify-center p-0.5;
-}
-
-.opal-content-xl-icon {
-  color: var(--content-foreground-icon);
-}
-
-/* The secondary icon between two marks reads as a connector, so it takes
-   the secondary foreground (text-03 in every mode), not the icon color. */
-.opal-content-xl-more-icon-container > .opal-content-xl-icon {
-  color: var(--content-foreground-secondary);
-}
-
-/* ---------------------------------------------------------------------------
-   Title row — title (or input) + edit button
-   --------------------------------------------------------------------------- */
-
-.opal-content-xl-title-row {
-  @apply flex items-center w-full;
+.opal-content-icon-row {
+  @apply flex flex-row items-center shrink-0;
   gap: 0.25rem;
-  min-width: 0.0625rem;
 }
 
-.opal-content-xl-input-sizer {
-  display: inline-grid;
-  align-items: stretch;
+/* The box carries the title font only for its `1lh`. */
+.opal-content-icon {
+  @apply flex shrink-0 items-center justify-center;
+  box-sizing: border-box;
+  width: 1lh;
+  height: 1lh;
+  padding: 0.125rem;
 }
 
-.opal-content-xl-input-sizer > * {
-  grid-area: 1 / 1;
-  padding: 0 0.125rem;
-  min-width: 0.0625rem;
+/* `figure-*` lines are small: 1px padding keeps the glyph readable. */
+.opal-content-icon[data-figure] {
+  padding: 1px;
 }
 
-.opal-content-xl-input-mirror {
-  visibility: hidden;
-  white-space: pre;
+/* `enlargedIcon`: the same box, no padding, so the glyph is the full line. */
+.opal-content-icon[data-enlarged] {
+  padding: 0;
 }
 
-.opal-content-xl-input {
-  @apply bg-transparent outline-none border-none;
-}
-
-/* ---------------------------------------------------------------------------
-   Edit button — visible only on hover of the outer container
-   --------------------------------------------------------------------------- */
-
-.opal-content-xl-edit-button {
-  @apply opacity-0 transition-opacity shrink-0;
-}
-
-.opal-content-xl:hover .opal-content-xl-edit-button {
-  @apply opacity-100;
-}
-
-/* ---------------------------------------------------------------------------
-   Description
-   --------------------------------------------------------------------------- */
-
-.opal-content-xl-description,
-.opal-content-lg-description,
-.opal-content-md-description,
-.opal-content-md-suffix {
-  color: var(--content-foreground-secondary);
-}
-
-.opal-content-xl-description {
-  @apply text-start w-full;
-}
-
-/* ===========================================================================
-   Content — ContentLg
-
-   Always inline (flex-row) — icon beside content.
-
-   Sizing (icon size, gap, padding, font, line-height) is driven by the
-   sizePreset prop via inline styles + Tailwind classes in the component.
-   =========================================================================== */
-
-/* ---------------------------------------------------------------------------
-   Layout
-   --------------------------------------------------------------------------- */
-
-.opal-content-lg {
-  @apply flex flex-col items-start;
-}
-
-/* ---------------------------------------------------------------------------
-   Header row — icon beside title (flex-row)
-   --------------------------------------------------------------------------- */
-
-.opal-content-lg-header {
-  @apply flex flex-row items-start w-full;
-  gap: 0.125rem;
-}
-
-/* ---------------------------------------------------------------------------
-   Icon
-   --------------------------------------------------------------------------- */
-
-.opal-content-lg-icon-container {
-  @apply flex items-center justify-center p-0.5;
-}
-
-.opal-content-lg-icon {
-  color: var(--content-foreground-icon);
-}
-
-/* ---------------------------------------------------------------------------
-   Title row — title (or input) + edit button
-   --------------------------------------------------------------------------- */
-
-.opal-content-lg-title-row {
-  @apply flex items-center w-full;
-  gap: 0.25rem;
-  min-width: 0.0625rem;
-}
-
-.opal-content-lg-input-sizer {
-  display: inline-grid;
-  align-items: stretch;
-}
-
-.opal-content-lg-input-sizer > * {
-  grid-area: 1 / 1;
-  padding: 0 0.125rem;
-  min-width: 0.0625rem;
-}
-
-.opal-content-lg-input-mirror {
-  visibility: hidden;
-  white-space: pre;
-}
-
-.opal-content-lg-input {
-  @apply bg-transparent outline-none border-none;
-}
-
-/* ---------------------------------------------------------------------------
-   Edit button — visible only on hover of the outer container
-   --------------------------------------------------------------------------- */
-
-.opal-content-lg-edit-button {
-  @apply opacity-0 transition-opacity shrink-0;
-}
-
-.opal-content-lg:hover .opal-content-lg-edit-button {
-  @apply opacity-100;
-}
-
-/* ---------------------------------------------------------------------------
-   Description
-   --------------------------------------------------------------------------- */
-
-.opal-content-lg-description {
-  @apply text-start w-full;
-}
-
-/* ===========================================================================
-   Content — ContentMd
-
-   Always inline (flex-row). Icon color is set via the shared
-   `--content-foreground-icon` custom property.
-   =========================================================================== */
-
-/* ---------------------------------------------------------------------------
-   Layout
-   --------------------------------------------------------------------------- */
-
-.opal-content-md {
-  @apply flex flex-col items-start;
-}
-
-/* Responsive layout — active only when a `rightChildren` slot is passed.
-   Mobile-first: the title row, the slot (e.g. an input), and the description
-   stack full-width (see the onboarding name card in Figma). At the `sm`
-   breakpoint (724px) it reflows to the desktop layout — title + description on
-   the left, the slot on the right spanning both rows. */
-.opal-content-md[data-stacked] {
-  display: grid;
+.opal-content-icon-glyph {
   width: 100%;
-  gap: 0.25rem;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    "title"
-    "aux"
-    "description";
+  height: 100%;
+  color: var(--content-foreground-icon);
 }
 
-.opal-content-md[data-stacked] > .opal-content-md-header {
-  grid-area: title;
+/* The connector between two marks: a smaller glyph, in the secondary
+   foreground. */
+/* moreIcon1, the connector between two marks: a box 12px smaller than the
+   icon box (`1lh` of the title font), with 2px padding, in the secondary
+   foreground. */
+.opal-content-more-icon {
+  @apply flex shrink-0 items-center justify-center;
+  box-sizing: border-box;
+  width: calc(1lh - 0.75rem);
+  height: calc(1lh - 0.75rem);
+  padding: 0.125rem;
 }
 
-.opal-content-md[data-stacked] > .opal-content-md-right-children {
-  grid-area: aux;
+.opal-content-more-icon > .opal-content-icon-glyph {
+  color: var(--content-foreground-secondary);
 }
 
-.opal-content-md[data-stacked] > .opal-content-md-description {
-  grid-area: description;
+/* The aux icon is a status mark, not a second icon: a fixed 16px box with
+   2px padding (a 12px glyph) at every title size, centred on the title
+   line by the row. */
+.opal-content-aux-icon {
+  @apply flex shrink-0 items-center justify-center;
+  box-sizing: border-box;
+  width: 1rem;
+  height: 1rem;
+  padding: 0.125rem;
 }
 
-@media (min-width: 724px) {
-  .opal-content-md[data-stacked] {
-    /* Title and description sit flush on desktop, matching the non-responsive
-       layout; the 4px stacking gap only applies to the mobile column. */
-    row-gap: 0;
-    column-gap: 1rem;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "title       aux"
-      "description aux";
-  }
-
-  .opal-content-md[data-stacked] > .opal-content-md-right-children {
-    min-width: 12rem;
-  }
-
-  /* Keep the description aligned under the title (past the icon), matching the
-     non-responsive desktop layout. */
-  .opal-content-md[data-stacked] > .opal-content-md-description {
-    padding-inline-start: var(--opal-content-md-desc-indent, 0);
-  }
+.opal-content-aux-glyph {
+  width: 100%;
+  height: 100%;
 }
 
-.opal-content-md-right-children {
+/* ---------------------------------------------------------------------------
+   Text — the title row, then the description, with no gap
+   --------------------------------------------------------------------------- */
+
+.opal-content-text {
+  @apply flex flex-col min-w-0 flex-1;
+}
+
+.opal-content[data-orientation="stacked"] > .opal-content-text {
   @apply w-full;
 }
 
-/* items-start: the icon container is exactly one title line tall (its icon
-   is lineHeight - 4px, plus 2px padding each side), so a one-line title reads
-   centred and a wrapped title keeps its icon on the first line. */
-.opal-content-md-header {
-  @apply flex flex-row items-start w-full;
-  gap: 0.125rem;
+.opal-content-title-row {
+  /* min-w-0: the row's automatic minimum width would push a clamped title
+     past the edge, clipping its ellipsis. gap-0: each Text's own 2px inline
+     padding spaces the row. */
+  @apply flex items-center min-w-0 gap-0;
 }
 
-.opal-content-md-header[data-editing] {
-  @apply rounded-08;
+.opal-content-description,
+.opal-content-suffix {
+  color: var(--content-foreground-secondary);
+}
+
+.opal-content-description {
+  @apply text-start w-full;
+}
+
+/* Stays one line beside the title, edited or not. */
+.opal-content-suffix {
+  @apply shrink-0 whitespace-nowrap;
+}
+
+.opal-content-badge {
+  @apply ms-1 flex shrink-0 gap-1;
+}
+
+/* ---------------------------------------------------------------------------
+   Editing — the edited title sizes to its text (the hidden mirror), and the
+   outline marks only it
+   --------------------------------------------------------------------------- */
+
+.opal-content-input-sizer {
+  @apply rounded-04;
+  display: inline-grid;
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
+  /* A long title's hidden mirror is wider than the field; clipped, it cannot
+     make a clipping ancestor (a card) scroll sideways. */
+  overflow: hidden;
   box-shadow: inset 0 0 0 1px var(--border-02);
 }
 
-/* ---------------------------------------------------------------------------
-   Icon
-   --------------------------------------------------------------------------- */
-
-.opal-content-md-icon-container {
-  @apply flex items-center justify-center p-0.5;
-}
-
-.opal-content-md-icon {
-  color: var(--content-foreground-icon);
-}
-
-/* ---------------------------------------------------------------------------
-   Title row — title (or input) + edit button
-   --------------------------------------------------------------------------- */
-
-.opal-content-md-title-row {
-  /* min-w-0: as a flex item next to the icon, the row's automatic minimum
-     width would push a clamped title past the container edge, clipping the
-     ellipsis out of view. */
-  /* gap-0: each Text's own 2px inline padding spaces the row. */
-  @apply flex items-center w-full min-w-0 gap-0;
-}
-
-.opal-content-md-input-sizer {
-  display: inline-grid;
-  align-items: stretch;
-  width: 100%;
-}
-
-.opal-content-md-input-sizer > * {
+.opal-content-input-sizer > * {
   grid-area: 1 / 1;
   padding: 0 0.125rem;
   min-width: 0.0625rem;
 }
 
-.opal-content-md-input-mirror {
+.opal-content-input-mirror {
   visibility: hidden;
   white-space: pre;
 }
 
-.opal-content-md-input {
+.opal-content-input {
   @apply bg-transparent outline-none border-none;
+  height: 1lh;
 }
 
-/* ---------------------------------------------------------------------------
-   Aux icon
-   --------------------------------------------------------------------------- */
-
-.opal-content-md-aux-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.opal-content-edit-button {
+  @apply transition-opacity shrink-0;
 }
 
-/* ---------------------------------------------------------------------------
-   Edit button — visible only on hover of the outer container
-   --------------------------------------------------------------------------- */
-
-.opal-content-md-edit-button {
-  @apply opacity-0 transition-opacity shrink-0;
+.opal-content-edit-button[data-show="hover"] {
+  @apply opacity-0 no-hover:opacity-100;
 }
 
-.opal-content-md:hover .opal-content-md-edit-button {
+/* Hover, or keyboard focus on the pencil, reveals it. */
+.opal-content:hover .opal-content-edit-button[data-show="hover"],
+.opal-content-edit-button[data-show="hover"]:focus-within {
   @apply opacity-100;
-}
-
-/* ---------------------------------------------------------------------------
-   Description
-   --------------------------------------------------------------------------- */
-
-.opal-content-md-description {
-  @apply text-start w-full;
-}
-
-/* ===========================================================================
-   Content — ContentSm
-
-   Three orientation modes (driven by orientation prop):
-     inline  : flex-row         — icon left, title right
-     vertical: flex-col         — icon top, title below
-     reverse : flex-row-reverse — title left, icon right
-
-   Colors are driven by the `data-content-color` attribute on the
-   Content dispatcher wrapper (see `color` prop on `<Content>`).
-   =========================================================================== */
-
-/* ---------------------------------------------------------------------------
-   Layout — orientation
-   --------------------------------------------------------------------------- */
-
-.opal-content-sm {
-  /* items-start: as in ContentMd, the icon container is one title line tall,
-     so a wrapped title keeps its icon on the first line. */
-  @apply flex items-start;
-  gap: 0.125rem;
-}
-
-.opal-content-sm[data-orientation="inline"] {
-  @apply flex-row;
-}
-
-.opal-content-sm[data-orientation="vertical"] {
-  @apply flex-col items-start;
-}
-
-.opal-content-sm[data-orientation="reverse"] {
-  @apply flex-row-reverse;
-}
-
-/* ---------------------------------------------------------------------------
-   Icon
-   --------------------------------------------------------------------------- */
-
-.opal-content-sm-icon-container {
-  @apply flex items-center justify-center p-0.5;
-}
-
-.opal-content-sm-icon {
-  color: var(--content-foreground-icon);
 }

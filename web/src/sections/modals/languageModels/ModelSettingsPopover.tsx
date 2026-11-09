@@ -9,7 +9,7 @@ import { Disabled } from "@opal/core";
 import type { IconFunctionComponent } from "@opal/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import type { ModelConfiguration } from "@/lib/languageModels/types";
-import { modelDisplayName } from "@/lib/languageModels/utils";
+import { useModelDisplayName } from "@/lib/languageModels/hooks";
 import {
   ALL_REASONING_STOPS,
   PaneSlider,
@@ -83,8 +83,7 @@ function SectionHeader({
       className="mx-2 mb-0.5 mt-2"
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={caption}
@@ -181,6 +180,7 @@ export function ModelSettingsPopover({
   onOpenChange,
 }: ModelSettingsPopoverProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const resolveDisplayName = useModelDisplayName();
   // The reasoning, context and temperature vocabulary is shared with the chat
   // model selector, so both surfaces read the same messages.
   const tModelSelector = useTranslations("chat.modelSelector");
@@ -286,7 +286,7 @@ export function ModelSettingsPopover({
               color="text-02"
               wordWrap="whitespace-nowrap"
             >
-              {modelDisplayName(model)}
+              {resolveDisplayName(model)}
             </Text>
             <Text font="secondary-body" color="text-02">
               {capabilities.length

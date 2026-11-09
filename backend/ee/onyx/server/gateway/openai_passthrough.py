@@ -40,10 +40,9 @@ from onyx.server.gateway.models import (
     ResponsesObjectPayload,
     ResponsesRequest,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
-from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -261,10 +260,6 @@ def _non_streaming_error_response(response: httpx.Response) -> JSONResponse:
     raise OnyxError(OnyxErrorCode.BAD_GATEWAY, _SANITIZED_ERROR)
 
 
-def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
-
-
 def handle_openai_responses_passthrough(
     request: ResponsesRequest,
     provider: LLMProviderView,
@@ -278,7 +273,7 @@ def handle_openai_responses_passthrough(
     headers = _build_upstream_headers(provider)
     url = _responses_url(provider)
     # llm is built only for tracing config (model/provider metadata); the
-    # actual call goes straight over httpx, never through llm.invoke/stream.
+    # actual call goes straight over httpx, never through llm.invoke_raw/stream_raw.
     llm = llm_from_provider(model_name=model_config.name, llm_provider=provider)
 
     if request.stream:
@@ -297,7 +292,7 @@ def handle_openai_responses_passthrough(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=request.input, tools=request.tools
         ) as span,
@@ -363,7 +358,7 @@ def handle_openai_responses_passthrough(
         converted_usage = _usage_from_openai_wire(usage) if usage else None
         if converted_usage is not None:
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
             llm._track_llm_cost(converted_usage)
         if span is not None:
             record_llm_span_output(
@@ -424,7 +419,7 @@ def _openai_passthrough_stream_worker(
     # Runs on its own thread after the endpoint returned, so the trace must be
     # opened here or the generation span sees no active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        llm_gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,
@@ -558,6 +553,6 @@ def _openai_passthrough_stream_worker(
                     if frame_next_sequence is not None:
                         next_sequence_number = frame_next_sequence
             # Managed-key cost accounting normally happens inside
-            # LLM.invoke/stream, which this path bypasses.
+            # LitellmLLM.invoke_raw/stream_raw, which this path bypasses.
             if state.usage is not None:
                 llm._track_llm_cost(state.usage)

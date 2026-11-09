@@ -1,5 +1,6 @@
 from uuid import UUID
 
+import puremagic
 from fastapi import (
     APIRouter,
     Depends,
@@ -65,7 +66,11 @@ from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
+from onyx.file_store.serving import (
+    INLINE_SAFE_IMAGE_MIME_TYPES,
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.persona.constants import (
     ADMIN_AGENTS_RESOURCE,
@@ -321,21 +326,46 @@ def undelete_persona(
     )
 
 
+# Every allowlisted image type is identified by its first few bytes.
+_AVATAR_SNIFF_BYTES = 2048
+
+
 # used for assistant profile pictures
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> dict[str, str]:
+    # Store the type sniffed from the bytes, never the client-declared one.
+    header: bytes = file.file.read(_AVATAR_SNIFF_BYTES)
+    file.file.seek(0)
+    file_type: str | None = _sniff_avatar_mime_type(header)
+    if file_type is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Avatar must be a PNG, JPEG, GIF, or WebP image",
+        )
     file_store = get_default_file_store()
-    file_type = ChatFileType.IMAGE
-    file_id = file_store.save_file(
+    file_id: str = file_store.save_file(
         content=file.file,
         display_name=file.filename,
         file_origin=FileOrigin.CHAT_UPLOAD,
-        file_type=file.content_type or file_type.value,
+        file_type=file_type,
     )
     return {"file_id": file_id}
+
+
+def _sniff_avatar_mime_type(header: bytes) -> str | None:
+    try:
+        matches: list[puremagic.PureMagicWithConfidence] = puremagic.magic_string(
+            header
+        )
+    except (puremagic.PureError, ValueError):
+        return None
+    mime_type: str | None = matches[0].mime_type if matches else None
+    if mime_type not in INLINE_SAFE_IMAGE_MIME_TYPES:
+        return None
+    return mime_type
 
 
 """Endpoints for all"""
@@ -725,17 +755,15 @@ def get_persona(
             f"Agent with ID {persona_id} does not exist",
         ) from e
 
-    # Validate and clear the model override if the referenced model is no longer
-    # accessible to this persona (e.g. provider was restricted after the persona was saved).
+    snapshot = FullPersonaSnapshot.from_model(persona)
+    # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
+    # it changes only the response, never the stored agent.
     if persona.default_model_configuration_id:
         valid_ids = get_valid_model_configuration_ids_for_persona(
             persona, user, db_session
         )
         if persona.default_model_configuration_id not in valid_ids:
-            persona.default_model_configuration_id = None
-            db_session.commit()
-
-    snapshot = FullPersonaSnapshot.from_model(persona)
+            snapshot.default_model_configuration_id = None
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids
@@ -816,7 +844,7 @@ def get_persona_avatar(
         )
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
-    etag = f'"{file_id}"'
+    etag: str = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
     cache_headers = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
@@ -825,8 +853,15 @@ def get_persona_avatar(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=cache_headers)
 
+    # Older uploads kept the client-declared type, so anything that is not an
+    # allowlisted image is served as an inert attachment.
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type, inline_types=INLINE_SAFE_IMAGE_MIME_TYPES
+    )
     file_store = get_default_file_store()
     file_io = file_store.read_file(file_id, mode="b")
     return StreamingResponse(
-        file_io, media_type=file_record.file_type, headers=cache_headers
+        file_io,
+        media_type=media_type,
+        headers={**cache_headers, **security_headers},
     )

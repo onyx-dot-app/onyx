@@ -66,8 +66,30 @@ class OneDriveDrive(BaseModel):
     web_url: str | None = None
 
 
-class OneDriveTokenInfo(BaseModel):
-    expires_in: int | None = None
+class OneDrivePersonalDrive(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    drive: OneDriveDrive
+    owner_id: str | None = None
+
+
+class OneDriveUserDrive(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user: OneDriveUser
+    drive: OneDriveDrive
+
+
+class OneDriveReindexCache(BaseModel):
+    """Lookups shared by the targets of one `reindex` call."""
+
+    personal_drives: dict[str, OneDrivePersonalDrive | None] = Field(
+        default_factory=dict
+    )
+    users: dict[str, OneDriveUser | None] = Field(default_factory=dict)
+    default_drives: dict[str, OneDriveDrive | None] = Field(default_factory=dict)
+    configured_drives: list[OneDriveUserDrive] | None = None
+    emitted_node_ids: set[str] = Field(default_factory=set)
 
 
 class OneDriveDiscoveredFile(BaseModel):
@@ -145,3 +167,16 @@ class OneDriveCheckpoint(ConnectorCheckpoint):
     current_drive_delta_resync_attempted: bool = False
     delta_started: bool = False
     delta_pages: int = 0
+
+
+class Opened(BaseModel):
+    """The user whose OneDrive answered a probe."""
+
+    user: OneDriveUser
+    drive: OneDriveDrive
+
+
+class UserProblem(BaseModel):
+    identifier: str
+    message: str
+    locked: bool

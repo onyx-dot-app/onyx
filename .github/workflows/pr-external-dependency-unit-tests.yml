@@ -4,7 +4,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  merge_group:
   pull_request:
     paths:
       - "backend/**"
@@ -76,7 +75,7 @@ jobs:
         run: |
           # Find all subdirectories in backend/tests/external_dependency_unit
           dirs=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
-          echo "test-dirs=$dirs" >> $GITHUB_OUTPUT
+          echo "test-dirs=$dirs" >> "$GITHUB_OUTPUT"
 
   external-dependency-unit-tests:
     needs: discover-test-dirs
@@ -112,6 +111,10 @@ jobs:
             backend/requirements/default.txt
             backend/requirements/dev.txt
             backend/requirements/ee.txt
+
+      - name: Install Chromium for browser request tests
+        if: matrix.test-dir == 'utils'
+        run: python -m playwright install --with-deps chromium
 
       - name: Setup Helm
         if: matrix.test-dir == 'craft_helm'

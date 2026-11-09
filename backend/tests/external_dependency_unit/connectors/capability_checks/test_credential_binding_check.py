@@ -16,7 +16,10 @@ from onyx.server.documents.credential_capabilities import (
     CredentialBindingCheckRequest,
     CredentialBindingCheckResponse,
     CredentialBindingRejectionCode,
+    DraftCredentialBindingCheckRequest,
+    DraftCredentialBindingCheckResponse,
     check_credential_binding,
+    check_draft_credential_binding,
 )
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
@@ -177,4 +180,58 @@ def test_source_without_a_connector_is_rejected(
         assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
     finally:
         db_session.delete(credential)
+        db_session.commit()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_new_account_is_checked_as_its_owners_draft(
+    db_session: Session, users: tuple[User, User]
+) -> None:
+    admin, other = users
+    # Typed values as a save takes them: an access token binds to no site.
+    values = {"confluence_access_token": "fake_token"}
+    config = {"wiki_base": _AUTHORIZED_SITE, "is_cloud": True}
+
+    def check_values(
+        user: User, credential_id: int | None = None
+    ) -> DraftCredentialBindingCheckResponse:
+        return check_draft_credential_binding(
+            DraftCredentialBindingCheckRequest(
+                source=DocumentSource.CONFLUENCE,
+                connector_specific_config=config,
+                credential_id=credential_id,
+                credential_json=values,
+            ),
+            user=user,
+            db_session=db_session,
+        )
+
+    first = check_values(admin)
+    draft_ids = [first.credential_id]
+    try:
+        assert first.field_errors == {} and first.rejection is None
+        draft = db_session.get(Credential, first.credential_id)
+        assert draft is not None
+        assert draft.is_draft and not draft.admin_public
+        assert draft.user_id == admin.id
+
+        # The same draft again: by id with values, and by id alone.
+        assert check_values(admin, first.credential_id).credential_id == draft.id
+        assert _check(db_session, admin, draft, config) == (
+            CredentialBindingCheckResponse(field_errors={}, rejection=None)
+        )
+
+        # Another user cannot reach the draft: by id alone it does not exist,
+        # and with values they get a draft of their own.
+        with pytest.raises(OnyxError) as error:
+            _check(db_session, other, draft, {"wiki_base": _AUTHORIZED_SITE})
+        assert error.value.error_code == OnyxErrorCode.CREDENTIAL_NOT_FOUND
+        others = check_values(other, first.credential_id)
+        draft_ids.append(others.credential_id)
+        assert others.credential_id != first.credential_id
+    finally:
+        for credential_id in draft_ids:
+            credential = db_session.get(Credential, credential_id)
+            if credential is not None:
+                db_session.delete(credential)
         db_session.commit()

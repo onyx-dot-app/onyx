@@ -172,9 +172,9 @@ describe("packetUtils", () => {
       expect(isDisplayPacket(packet)).toBe(true);
     });
 
-    test("returns true for IMAGE_GENERATION_TOOL_START", () => {
+    test("returns false for IMAGE_GENERATION_TOOL_START", () => {
       const packet = createPacket(PacketType.IMAGE_GENERATION_TOOL_START);
-      expect(isDisplayPacket(packet)).toBe(true);
+      expect(isDisplayPacket(packet)).toBe(false);
     });
 
     test("returns false for other packet types", () => {
@@ -237,9 +237,9 @@ describe("packetUtils", () => {
       expect(isFinalAnswerComing(packets)).toBe(true);
     });
 
-    test("returns true when packets contain IMAGE_GENERATION_TOOL_START", () => {
+    test("returns false when packets contain IMAGE_GENERATION_TOOL_START", () => {
       const packets = [createPacket(PacketType.IMAGE_GENERATION_TOOL_START)];
-      expect(isFinalAnswerComing(packets)).toBe(true);
+      expect(isFinalAnswerComing(packets)).toBe(false);
     });
 
     test("returns false when no display packets present", () => {

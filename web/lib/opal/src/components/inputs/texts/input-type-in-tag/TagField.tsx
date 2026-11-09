@@ -6,9 +6,13 @@ import "@opal/components/inputs/texts/input-type-in/styles.css";
 import "@opal/components/inputs/texts/input-type-in-tag/styles.css";
 import { useCallback, useEffect, useRef } from "react";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, Tag, TAG_REMOVE_CLASS, Text } from "@opal/components";
+import { Button, Tag, TAG_REMOVE_ATTR, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
+import {
+  InputContainer,
+  InputTitleLine,
+} from "@opal/components/inputs/container";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,6 +83,9 @@ interface TagFieldProps extends TagFieldBaseProps {
   /** Receives the wrapper element (a select's floating reference). */
   rootRef?: (node: HTMLDivElement | null) => void;
 
+  /** The list this field opens is open: it keeps its focused border. */
+  open?: boolean;
+
   /** The text input, when the caller must focus or read it. */
   inputRef?: React.RefObject<HTMLInputElement | null>;
 
@@ -96,11 +103,18 @@ interface TagFieldProps extends TagFieldBaseProps {
 
   onInputClick?: () => void;
 
+  /** A double click anywhere on the field but its buttons. */
+  onInputDoubleClick?: () => void;
+
   /** Extra attributes on the text input (a select's combobox aria). */
   inputAriaProps?: React.AriaAttributes & { role?: React.AriaRole };
 
-  /** Trailing controls after the clear button (a select's chevron and dropdown). */
+  /** Trailing controls before the clear button (a select's chevron and dropdown). */
   children?: React.ReactNode;
+
+  /** A control after the clear button, so it keeps its place as the clear
+   * button comes and goes (an upload's select button). */
+  trailingAction?: React.ReactNode;
 
   /**
    * No text input: the chips are the whole field (a select's button
@@ -120,7 +134,7 @@ interface TagFieldProps extends TagFieldBaseProps {
 
 /**
  * The chips-in-input chrome (Figma `Input/Tags`) that `InputTypeInTag` and
- * `InputMultiSelect` share: editable `Tag`s inline with a text input on the
+ * `InputMultiSelect` share: `Tag`s inline with a text input on the
  * `.opal-input` chrome. Backspace on an empty input arms the last tag, and
  * Backspace or Delete on an armed tag removes it. Internal to Opal.
  */
@@ -138,13 +152,16 @@ function TagField({
   maxRows = 2,
   focusOnMount = false,
   rootRef,
+  open = false,
   inputRef: inputRefProp,
   onInputKeyDown,
   onEnter,
   onInputFocus,
   onInputClick,
+  onInputDoubleClick,
   inputAriaProps,
   children,
+  trailingAction,
   readOnly = false,
   triggerRef: triggerRefProp,
 }: TagFieldProps) {
@@ -174,7 +191,6 @@ function TagField({
   useEffect(() => {
     if (focusOnMount) focusField();
     // Mount only: later prop changes must not steal focus back.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // A new chip lands on the last row, next to the input or the trigger.
@@ -193,7 +209,7 @@ function TagField({
   function removeButtons(): HTMLButtonElement[] {
     return Array.from(
       ownRootRef.current?.querySelectorAll<HTMLButtonElement>(
-        `.${TAG_REMOVE_CLASS}`
+        `[${TAG_REMOVE_ATTR}]`
       ) ?? []
     );
   }
@@ -255,7 +271,18 @@ function TagField({
   // returns to the field.
   function handleRootKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
-    if (!target.classList.contains(TAG_REMOVE_CLASS)) return;
+    // Escape on a control in the field (a chip, the clear button, a
+    // chevron) returns focus to the field, even when a tooltip or popover
+    // consumed the key to close itself.
+    if (
+      event.key === "Escape" &&
+      target !== inputRef.current &&
+      target !== triggerRef.current
+    ) {
+      focusField();
+      return;
+    }
+    if (!target.hasAttribute(TAG_REMOVE_ATTR)) return;
     const buttons = removeButtons();
     const index = buttons.indexOf(target as HTMLButtonElement);
     // The arrows walk the chips; Right off the last one returns to the
@@ -283,106 +310,113 @@ function TagField({
   }
 
   return (
-    <div
+    <InputContainer
       ref={setRootRef}
-      role="presentation"
-      className="opal-input opal-input-type-in-tag"
-      data-variant={disabled ? "disabled" : variant}
+      className="opal-input-type-in-tag"
+      variant={disabled ? "disabled" : variant}
+      open={open}
+      grows
       data-read-only={readOnly || undefined}
       onKeyDown={handleRootKeyDown}
       onClick={focusField}
+      // Anywhere on the field but its buttons (a tag's ×, the clear button).
+      onDoubleClick={(event) => {
+        if (disabled || !onInputDoubleClick) return;
+        if ((event.target as Element).closest("button")) return;
+        onInputDoubleClick();
+      }}
     >
-      {Icon && (
-        <div className="opal-input-type-in-tag-icon-container">
-          <Icon className="opal-input-type-in-tag-icon" />
+      <InputTitleLine icon={Icon} grows>
+        <div
+          ref={tagsRef}
+          className="opal-input-type-in-tag-tags"
+          style={
+            {
+              "--opal-input-type-in-tag-rows": minRows,
+              "--opal-input-type-in-tag-max-rows": Math.max(maxRows, minRows),
+            } as React.CSSProperties
+          }
+        >
+          {tags.map((tag) => (
+            <Tag
+              key={tag.id}
+              title={tag.label}
+              icon={tag.icon}
+              error={tag.error}
+              disabled={disabled}
+              removeInTabOrder={false}
+              onRemove={
+                tag.locked
+                  ? undefined
+                  : () => {
+                      onRemoveTag(tag.id);
+                      focusField();
+                    }
+              }
+            />
+          ))}
+          {readOnly ? (
+            <div
+              ref={triggerRef}
+              role="combobox"
+              tabIndex={disabled ? -1 : 0}
+              className="opal-input-type-in-tag-trigger"
+              aria-label={placeholder}
+              {...inputAriaProps}
+              // Named here as well as in the spread: the combobox role
+              // requires them, and the caller's spread is opaque to lint.
+              aria-expanded={inputAriaProps?.["aria-expanded"] ?? false}
+              aria-controls={inputAriaProps?.["aria-controls"]}
+              aria-disabled={disabled || undefined}
+              onFocus={disabled ? undefined : onInputFocus}
+              onClick={disabled ? undefined : onInputClick}
+              onKeyDown={disabled ? undefined : handleTriggerKeyDown}
+            >
+              {tags.length === 0 && placeholder && (
+                <Text font="main-ui-muted" color="text-02">
+                  {placeholder}
+                </Text>
+              )}
+            </div>
+          ) : (
+            /* raw-ok: nesting InputTypeIn double-pads the composite chrome, so the inner field reuses InputTypeIn's .opal-input-field styling directly */
+            <input
+              ref={inputRef}
+              type="text"
+              // dir="auto": typed text decides the direction, as in InputTypeIn.
+              dir="auto"
+              className="opal-input-field opal-input-type-in-tag-field"
+              disabled={disabled}
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onFocus={onInputFocus}
+              onClick={onInputClick}
+              onKeyDown={handleInputKeyDown}
+              placeholder={placeholder}
+              aria-label={placeholder}
+              {...inputAriaProps}
+            />
+          )}
         </div>
-      )}
-      <div
-        ref={tagsRef}
-        className="opal-input-type-in-tag-tags"
-        style={
-          {
-            "--opal-input-type-in-tag-rows": minRows,
-            "--opal-input-type-in-tag-max-rows": Math.max(maxRows, minRows),
-          } as React.CSSProperties
-        }
-      >
-        {tags.map((tag) => (
-          <Tag
-            key={tag.id}
-            size="md"
-            title={tag.label}
-            icon={tag.icon}
-            error={tag.error}
-            disabled={disabled}
-            removeInTabOrder={false}
-            onRemove={
-              tag.locked
-                ? undefined
-                : () => {
-                    onRemoveTag(tag.id);
-                    focusField();
-                  }
-            }
-          />
-        ))}
-        {readOnly ? (
-          <div
-            ref={triggerRef}
-            role="combobox"
-            tabIndex={disabled ? -1 : 0}
-            className="opal-input-type-in-tag-trigger"
-            aria-label={placeholder}
-            {...inputAriaProps}
-            // Named here as well as in the spread: the combobox role
-            // requires them, and the caller's spread is opaque to lint.
-            aria-expanded={inputAriaProps?.["aria-expanded"] ?? false}
-            aria-controls={inputAriaProps?.["aria-controls"]}
-            aria-disabled={disabled || undefined}
-            onFocus={disabled ? undefined : onInputFocus}
-            onClick={disabled ? undefined : onInputClick}
-            onKeyDown={disabled ? undefined : handleTriggerKeyDown}
-          >
-            {tags.length === 0 && placeholder && (
-              <Text font="main-ui-muted" color="text-02">
-                {placeholder}
-              </Text>
-            )}
-          </div>
-        ) : (
-          /* raw-ok: nesting InputTypeIn double-pads the composite chrome, so the inner field reuses InputTypeIn's .opal-input-field styling directly */
-          <input
-            ref={inputRef}
-            type="text"
-            // dir="auto": typed text decides the direction, as in InputTypeIn.
-            dir="auto"
-            className="opal-input-field opal-input-type-in-tag-field"
-            disabled={disabled}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            onFocus={onInputFocus}
-            onClick={onInputClick}
-            onKeyDown={handleInputKeyDown}
-            placeholder={placeholder}
-            aria-label={placeholder}
-            {...inputAriaProps}
-          />
-        )}
-      </div>
+      </InputTitleLine>
+      {children}
+      {/* The clear action is the field's last control, but for a
+      trailingAction. */}
       {onClear !== undefined && !disabled && (
         <Button
-          prominence="internal"
+          prominence="tertiary"
           icon={SvgX}
-          size="xs"
+          size="sm"
           tooltip={strings.clear}
+          aria-label={strings.clear}
           onClick={(event) => {
             event.stopPropagation();
             onClear();
           }}
         />
       )}
-      {children}
-    </div>
+      {trailingAction}
+    </InputContainer>
   );
 }
 

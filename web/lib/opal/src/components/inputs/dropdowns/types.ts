@@ -1,5 +1,6 @@
-import type { RichStr } from "@opal/types";
+import type { RichNodes, RichStr } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
+import type { BadgeProps } from "@opal/components/badge/components";
 import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
 /**
@@ -14,8 +15,16 @@ export type SelectOption = {
   description?: string | RichStr;
   /** Muted text beside the title in the list, like "(Default)". */
   suffix?: string;
+  /** Muted note at the end of the row, like what is already set for it. */
+  info?: string | RichStr | RichNodes;
   icon?: IconFunctionComponent;
   disabled?: boolean;
+  /** Badge beside the title, like a plan badge. */
+  tag?: BadgeProps;
+  /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
+  tooltip?: string | RichStr;
+  /** Makes the row a link: picking it follows `href` instead of selecting it. */
+  href?: string;
 };
 
 /**
@@ -45,7 +54,7 @@ export type SelectOptions = (SelectOption | SelectDivider)[];
  * ComboBoxes); a `"button"` trigger has nothing to type and is pressed to
  * open the full set, like a native `<select>` (the Selects).
  */
-export type DropdownTrigger = "type-in" | "button";
+export type FieldTrigger = "type-in" | "button";
 
 // ---------------------------------------------------------------------------
 // Single arity
@@ -71,6 +80,11 @@ type InputSingleBaseProps = Omit<
   rightChildren?: React.ReactNode;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
+  /**
+   * Where the list portals to. Inside a modal, pass the modal content so the
+   * list sits within its focus trap and the search field can take focus.
+   */
+  container?: HTMLElement | null;
 };
 
 /**
@@ -140,7 +154,7 @@ export type InputSingleSelectProps = InputSingleBaseProps & {
 };
 
 /** The internal single implementation: either public prop set plus its trigger. */
-export type SingleDropdownProps =
+export type SingleSelectFieldProps =
   | (InputSingleComboBoxProps & { trigger: "type-in" })
   | (InputSingleSelectProps & { trigger: "button" });
 
@@ -165,6 +179,12 @@ type InputMultiBaseProps = Omit<
   onSelectOption: (option: SelectOption) => void;
   /** Max height of the dropdown in CSS units. Defaults to "15rem". */
   dropdownMaxHeight?: string;
+  /**
+   * Show the chosen options as chips in the field. `false` keeps them only as
+   * selected rows in the list, for a caller that lists them elsewhere.
+   * @default true
+   */
+  showTags?: boolean;
 };
 
 /** `InputMultiComboBox`: chips beside a text input whose text filters the set. */
@@ -199,6 +219,6 @@ export type InputMultiSelectProps = InputMultiBaseProps & {
 };
 
 /** The internal multi implementation: either public prop set plus its trigger. */
-export type MultiDropdownProps =
+export type MultiSelectFieldProps =
   | (InputMultiComboBoxProps & { trigger: "type-in" })
   | (InputMultiSelectProps & { trigger: "button" });

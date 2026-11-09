@@ -2,6 +2,9 @@ import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import Page from "@/app/admin/document-processing/page";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ back: jest.fn() }),
   usePathname: () => "/admin/document-processing",
 }));

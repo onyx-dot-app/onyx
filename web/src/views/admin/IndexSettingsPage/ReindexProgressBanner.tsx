@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn, markdown } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
-import { Button, MessageCard, ProgressBar, Tag, Text } from "@opal/components";
+import {
+  Button,
+  MessageCard,
+  ProgressBar,
+  Badge,
+  Text,
+} from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -15,6 +21,7 @@ import {
 } from "@opal/icons";
 import ReindexErrorsModal from "@/views/admin/IndexSettingsPage/ReindexErrorsModal";
 import { useReindexProgress } from "@/lib/searchSettings/hooks";
+import type { ReindexProgress } from "@/lib/searchSettings/types";
 
 interface ReindexProgressBannerProps {
   secondaryModelName?: string;
@@ -23,13 +30,14 @@ interface ReindexProgressBannerProps {
   onCancel?: () => void;
 }
 
-const ZERO = {
+const ZERO: ReindexProgress = {
   total: 0,
   waiting: 0,
   in_progress: 0,
   completed: 0,
   failed: 0,
   paused: 0,
+  reembeds: true,
 };
 
 // Stable identity so the spinner doesn't remount (and restart at 0°) each poll.
@@ -44,15 +52,24 @@ export default function ReindexProgressBanner({
   const t = useTranslations("admin.indexSettings");
   const [errorsOpen, setErrorsOpen] = useState(false);
   const { data } = useReindexProgress({ pollIntervalMs: 5000 });
-  const { total, waiting, in_progress, completed, failed, paused } =
+  const { total, waiting, in_progress, completed, failed, paused, reembeds } =
     data ?? ZERO;
 
+  // A copy-only port (e.g. a quantization change) rebuilds from the stored
+  // vectors, so the slow re-embedding wording does not apply.
+  // Only an explicit false means a copy; an unknown flag keeps the re-index text.
+  const title: string =
+    reembeds === false
+      ? t("progressBanner.copyTitle")
+      : t("progressBanner.title");
   const description = markdown(
-    secondaryModelName
-      ? t("progressBanner.description.withModel", {
-          model: secondaryModelName,
-        })
-      : t("progressBanner.description.withoutModel")
+    reembeds === false
+      ? t("progressBanner.description.copy")
+      : secondaryModelName
+        ? t("progressBanner.description.withModel", {
+            model: secondaryModelName,
+          })
+        : t("progressBanner.description.withoutModel")
   );
 
   return (
@@ -63,7 +80,7 @@ export default function ReindexProgressBanner({
 
       <MessageCard
         variant="pending"
-        title={t("progressBanner.title")}
+        title={title}
         description={description}
         bottomChildren={
           <div className="flex flex-row items-center gap-4 px-2 py-1">
@@ -77,24 +94,28 @@ export default function ReindexProgressBanner({
                   {t("progressBanner.status.label")}
                 </Text>
                 <div className="flex flex-row items-center gap-1.5">
-                  <Tag color="purple" icon={SvgClock} title={String(waiting)} />
-                  <Tag
-                    color="blue"
+                  <Badge
+                    color="queued"
+                    icon={SvgClock}
+                    title={String(waiting)}
+                  />
+                  <Badge
+                    color="info"
                     icon={in_progress > 0 ? SpinningLoader : SvgLoader}
                     title={String(in_progress)}
                   />
-                  <Tag
-                    color="green"
+                  <Badge
+                    color="success"
                     icon={SvgCheckCircle}
                     title={String(completed)}
                   />
-                  <Tag
-                    color="red"
+                  <Badge
+                    color="error"
                     icon={SvgAlertCircle}
                     title={String(failed)}
                   />
-                  <Tag
-                    color="amber"
+                  <Badge
+                    color="pending"
                     icon={SvgPauseCircle}
                     title={String(paused)}
                   />

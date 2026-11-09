@@ -1,15 +1,15 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { getSourceMetadata } from "@/lib/connectors/utils";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFormatter, useTranslations } from "next-intl";
 import { BaseFilters, MinimalOnyxDocument } from "@/lib/search/types";
 import SearchCard from "@/ee/sections/SearchCard";
-import { Divider, Pagination } from "@opal/components";
+import { Divider, Pagination, Text } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import { IllustrationContent, toast } from "@opal/layouts";
+import { IllustrationContent, toast, Section } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import { getSourceMetadata } from "@/lib/sources";
 import { Tag } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import {
@@ -19,14 +19,8 @@ import {
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
-import Text from "@/refresh-components/texts/Text";
-import { Section } from "@/layouts/general-layouts";
-import { Popover, PopoverMenu } from "@opal/components";
-import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
-import { FilterButton } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import useFilter from "@/hooks/useFilter";
-import { LineItemButton } from "@opal/components";
+import { Dropdown, SelectButton, LineItemButton } from "@opal/components";
+import { SvgClock, SvgTag } from "@opal/icons";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@opal/utils";
 
@@ -47,6 +41,7 @@ const RESULTS_PER_PAGE = 20;
 
 export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const t = useTranslations("admin.search");
+  const format = useFormatter();
 
   const timeFilterOptions: { value: TimeFilter; label: string }[] = [
     { value: "day", label: t("timeFilter.day.label") },
@@ -85,15 +80,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
-  const tagExtractor = useCallback(
-    (tag: Tag) => `${tag.tag_key} ${tag.tag_value}`,
-    []
-  );
-  const {
-    query: tagQuery,
-    setQuery: setTagQuery,
-    filtered: filteredTags,
-  } = useFilter(availableTags, tagExtractor);
+  // JSON, so a key or value holding "=" cannot collide with another pair.
+  const tagKey = (tag: Tag) => JSON.stringify([tag.tag_key, tag.tag_value]);
+  const selectedTagKeys = new Set(selectedTags.map(tagKey));
 
   // Build the combined server-side filters from current state
   const buildFilters = (
@@ -196,11 +185,14 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         >
           <div className="flex flex-row gap-2">
             {/* Time filter */}
-            <Popover open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
-              <Popover.Trigger asChild>
-                <FilterButton
+            <Dropdown open={timeFilterOpen} onOpenChange={setTimeFilterOpen}>
+              <Dropdown.Trigger asChild>
+                <SelectButton
+                  variant="select-filter"
+                  chevron
+                  labelFont="main-ui-action"
                   icon={SvgClock}
-                  active={!!timeFilter}
+                  state={timeFilter ? "selected" : "empty"}
                   onClear={() => {
                     setTimeFilter(null);
                     onRefineSearch(buildFilters({ time: null }));
@@ -208,35 +200,37 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                 >
                   {timeFilterOptions.find((o) => o.value === timeFilter)
                     ?.label ?? t("timeFilter.all.label")}
-                </FilterButton>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="md">
-                <PopoverMenu>
-                  {timeFilterOptions.map((opt) => (
-                    <LineItemButton
-                      key={opt.value}
-                      onClick={() => {
-                        setTimeFilter(opt.value);
-                        setTimeFilterOpen(false);
-                        onRefineSearch(buildFilters({ time: opt.value }));
-                      }}
-                      state={timeFilter === opt.value ? "selected" : "empty"}
-                      icon={timeFilter === opt.value ? SvgCheck : SvgClock}
-                      title={opt.label}
-                      sizePreset="main-ui"
-                      variant="section"
-                    />
-                  ))}
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+                </SelectButton>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("timeFilter.all.label")}
+                value={timeFilter ?? ""}
+                onSelect={(option) => {
+                  const next = timeFilterOptions.find(
+                    (o) => o.value === option.value
+                  );
+                  if (!next) return;
+                  setTimeFilter(next.value);
+                  onRefineSearch(buildFilters({ time: next.value }));
+                }}
+                items={timeFilterOptions.map((opt) => ({
+                  kind: "option",
+                  value: opt.value,
+                  icon: SvgClock,
+                  title: opt.label,
+                }))}
+              />
+            </Dropdown>
 
             {/* Tag filter */}
-            <Popover open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
-              <Popover.Trigger asChild>
-                <FilterButton
+            <Dropdown open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
+              <Dropdown.Trigger asChild>
+                <SelectButton
+                  variant="select-filter"
+                  chevron
+                  labelFont="main-ui-action"
                   icon={SvgTag}
-                  active={selectedTags.length > 0}
+                  state={selectedTags.length > 0 ? "selected" : "empty"}
                   onClear={() => {
                     setSelectedTags([]);
                     onRefineSearch(buildFilters({ tags: [] }));
@@ -247,49 +241,38 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                         count: selectedTags.length,
                       })
                     : t("tagFilter.empty.label")}
-                </FilterButton>
-              </Popover.Trigger>
-              <Popover.Content align="start" width="lg">
-                <PopoverMenu>
-                  <InputTypeIn
-                    searchIcon
-                    placeholder={t("tagFilter.search.placeholder")}
-                    value={tagQuery}
-                    onChange={(e) => setTagQuery(e.target.value)}
-                    clearButton
-                    variant="internal"
-                  />
-                  {filteredTags.map((tag) => {
-                    const isSelected = selectedTags.some(
-                      (t) =>
-                        t.tag_key === tag.tag_key &&
-                        t.tag_value === tag.tag_value
-                    );
-                    return (
-                      <LineItemButton
-                        key={`${tag.tag_key}=${tag.tag_value}`}
-                        onClick={() => {
-                          const next = isSelected
-                            ? selectedTags.filter(
-                                (t) =>
-                                  t.tag_key !== tag.tag_key ||
-                                  t.tag_value !== tag.tag_value
-                              )
-                            : [...selectedTags, tag];
-                          setSelectedTags(next);
-                          onRefineSearch(buildFilters({ tags: next }));
-                        }}
-                        state={isSelected ? "selected" : "empty"}
-                        icon={isSelected ? SvgCheck : SvgTag}
-                        title={tag.tag_value}
-                        sizePreset="main-ui"
-                        variant="section"
-                      />
-                    );
-                  })}
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+                </SelectButton>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("tagFilter.empty.label")}
+                search={{ placeholder: t("tagFilter.search.placeholder") }}
+                values={selectedTagKeys}
+                onSelect={(option) => {
+                  const tag = availableTags.find(
+                    (candidate) => tagKey(candidate) === option.value
+                  );
+                  if (!tag) return;
+                  const next = selectedTagKeys.has(option.value)
+                    ? selectedTags.filter(
+                        (candidate) => tagKey(candidate) !== option.value
+                      )
+                    : [...selectedTags, tag];
+                  setSelectedTags(next);
+                  onRefineSearch(buildFilters({ tags: next }));
+                }}
+                items={availableTags.map((tag) => ({
+                  kind: "option",
+                  value: tagKey(tag),
+                  keywords: [
+                    tag.tag_key,
+                    `${tag.tag_key} ${tag.tag_value}`,
+                    `${tag.tag_key}=${tag.tag_value}`,
+                  ],
+                  icon: SvgTag,
+                  title: tag.tag_value,
+                }))}
+              />
+            </Dropdown>
           </div>
 
           <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -298,7 +281,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         {!showEmpty && (
           <div className="flex-1 flex flex-col justify-end gap-3">
             <Section alignItems="start">
-              <Text text03 mainUiMuted>
+              <Text font="main-ui-muted" color="text-03">
                 {t("results.count.label", { count: results.length })}
               </Text>
             </Section>
@@ -351,6 +334,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             <Section gap={1} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItemButton
+                  font="main-ui-action"
                   key={source}
                   icon={(props) => (
                     <SourceIcon sourceType={source} iconSize={16} {...props} />
@@ -361,9 +345,9 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
                   }
                   title={meta.displayName}
                   selectVariant="select-heavy"
-                  sizePreset="main-ui"
-                  variant="section"
-                  rightChildren={<Text text03>{count}</Text>}
+                  rightChildren={
+                    <Text color="text-03">{format.number(count)}</Text>
+                  }
                 />
               ))}
             </Section>

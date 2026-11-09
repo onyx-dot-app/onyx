@@ -11,11 +11,11 @@ documents, or to feed a failed doc_id straight back into a repair path:
 - backend/onyx/background/celery/celery_utils.py:_get_failure_id reads the same
   field back out.
 - ConfluenceConnector.reindex (Resolver.reindex) takes stored failure doc_ids and
-  calls _extract_page_id_from_url on them to figure out which pages to re-fetch.
+  calls extract_page_id_from_url on them to figure out which pages to re-fetch.
 
 Confluence's Document.id is the page URL (built by build_confluence_document_id).
 If a failure's document_id is instead a bare numeric page id, all of the above
-break: the failure never matches an indexed document, and _extract_page_id_from_url
+break: the failure never matches an indexed document, and extract_page_id_from_url
 cannot parse a bare number out of its URL-shaped regexes, so the page can never be
 repaired by a targeted reindex.
 """
@@ -23,10 +23,8 @@ repaired by a targeted reindex.
 from typing import Any
 from unittest import mock
 
-from onyx.connectors.confluence.connector import (
-    ConfluenceConnector,
-    _extract_page_id_from_url,
-)
+from onyx.connectors.confluence.config import extract_page_id_from_url
+from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.source_operations import (
     _OnyxConfluence,
 )
@@ -103,7 +101,7 @@ def test_failure_document_id_can_be_repaired_by_reindex() -> None:
     failed_document = result.failed_document
     assert failed_document is not None
 
-    extracted_page_id = _extract_page_id_from_url(failed_document.document_id)
+    extracted_page_id = extract_page_id_from_url(failed_document.document_id)
     assert extracted_page_id is not None
     assert extracted_page_id == _PAGE_ID
 
@@ -121,7 +119,7 @@ def test_failure_before_url_is_built_still_carries_the_url() -> None:
     assert isinstance(result, ConnectorFailure)
     failed_document = result.failed_document
     assert failed_document is not None
-    assert _extract_page_id_from_url(failed_document.document_id) == _PAGE_ID
+    assert extract_page_id_from_url(failed_document.document_id) == _PAGE_ID
 
 
 def test_failure_before_url_can_be_built_falls_back_to_page_id() -> None:

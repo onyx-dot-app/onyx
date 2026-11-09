@@ -6,6 +6,9 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   {{- $craftEnabled := eq (include "onyx.craftEnabled" .) "true" }}
+  {{- if $craftEnabled }}
+  ONYX_SERVER_URL: {{ include "onyx.sandboxApiUrl" . | quote }}
+  {{- end }}
   INTERNAL_URL: "http://{{ include "onyx.resourceName" (list . "api-service") }}:{{ .Values.api.service.servicePort | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
   POSTGRES_HOST: {{ .Release.Name }}-pg-rw
@@ -37,7 +40,8 @@ data:
 {{- $skipPostgresTlsKey := and (eq (include "onyx.postgresTls.enabled" $) "true") (or (eq $key "POSTGRES_SSLMODE") (eq $key "POSTGRES_SSLROOTCERT")) }}
 {{- $skipRedisTlsKey := and (eq (include "onyx.redisTls.enabled" $) "true") (or (eq $key "REDIS_SSL") (eq $key "REDIS_SSL_CERT_REQS") (eq $key "REDIS_SSL_CA_CERTS") (eq $key "REDIS_SSL_CHECK_HOSTNAME")) }}
 {{- $skipBundledS3Key := and (or (eq (include "onyx.objectStore.enabled" $) "true") $.Values.minio.enabled) (or (eq $key "S3_ENDPOINT_URL") (eq $key "S3_LEGACY_ENDPOINT_URL")) }}
-{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) (not $skipBundledS3Key) }}
+{{- $skipCraftApiKey := and $craftEnabled (eq $key "ONYX_SERVER_URL") }}
+{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) (not $skipBundledS3Key) (not $skipCraftApiKey) }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
 {{- end }}

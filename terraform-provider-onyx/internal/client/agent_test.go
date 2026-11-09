@@ -35,13 +35,11 @@ const agentResponse = `{
 func TestCreateAgentSendsFullBody(t *testing.T) {
 	c, captured := newTestServer(t, http.StatusOK, agentResponse)
 	agent, err := c.CreateAgent(context.Background(), AgentWrite{
-		Name:             "support",
-		Description:      "answers support questions",
-		DocumentSetIDs:   []int64{2},
-		ToolIDs:          []int64{7, 9},
-		SystemPrompt:     "be helpful",
-		HierarchyNodeIDs: []int64{},
-		DocumentIDs:      []string{},
+		Name:           "support",
+		Description:    "answers support questions",
+		DocumentSetIDs: []int64{2},
+		ToolIDs:        []int64{7, 9},
+		SystemPrompt:   "be helpful",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -58,10 +56,18 @@ func TestCreateAgentSendsFullBody(t *testing.T) {
 	for _, field := range []string{
 		"name", "description", "document_set_ids", "tool_ids", "system_prompt",
 		"task_prompt", "datetime_aware", "is_public", "is_featured", "starter_messages",
-		"label_ids", "users", "groups", "hierarchy_node_ids", "document_ids",
+		"label_ids", "users", "groups",
 	} {
 		if _, ok := body[field]; !ok {
 			t.Errorf("%s must be present: the write is a full replace", field)
+		}
+	}
+	// Create sends empty lists, so a revived deleted agent drops its old
+	// attachments.
+	for _, field := range []string{"hierarchy_node_ids", "document_ids"} {
+		list, ok := body[field].([]any)
+		if !ok || len(list) != 0 {
+			t.Errorf("%s = %v, want an empty list on create", field, body[field])
 		}
 	}
 }
@@ -73,6 +79,13 @@ func TestUpdateAgentUsesPatchWithIDInPath(t *testing.T) {
 	}
 	if captured.Method != http.MethodPatch || captured.Path != "/persona/4" {
 		t.Errorf("%s %s", captured.Method, captured.Path)
+	}
+	// Omitted lists keep the attachments made in the admin panel.
+	body := bodyAsMap(t, captured.Body)
+	for _, field := range []string{"hierarchy_node_ids", "document_ids"} {
+		if _, ok := body[field]; ok {
+			t.Errorf("%s must be omitted on update so Onyx keeps the stored value", field)
+		}
 	}
 }
 
@@ -127,12 +140,6 @@ func TestAgentIDAccessors(t *testing.T) {
 	}
 	if got := agent.UserIDs(); len(got) != 1 || got[0] != "3f2b7c1e-0000-4000-8000-000000000001" {
 		t.Errorf("UserIDs() = %v", got)
-	}
-	if got := agent.HierarchyNodeIDs(); len(got) != 1 || got[0] != 21 {
-		t.Errorf("HierarchyNodeIDs() = %v, want [21]", got)
-	}
-	if got := agent.DocumentIDs(); len(got) != 1 || got[0] != "doc-1" {
-		t.Errorf("DocumentIDs() = %v, want [doc-1]", got)
 	}
 }
 
