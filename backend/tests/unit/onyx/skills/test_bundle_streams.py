@@ -97,7 +97,7 @@ def test_streamed_bundle_rejects_normalized_name_collisions() -> None:
         )
 
 
-def test_bundle_digest_import_has_no_database_or_server_dependencies() -> None:
+def test_digest_import_avoids_application_database_and_server() -> None:
     import subprocess
     import sys
 
@@ -109,7 +109,11 @@ def test_bundle_digest_import_has_no_database_or_server_dependencies() -> None:
 import sys
 from onyx.file_store.models import BundleLimits
 from onyx.utils.bundle import compute_bundle_metadata
-assert not any(name.startswith(('onyx.db.', 'onyx.server.')) for name in sys.modules)
+allowed = {'onyx.db', 'onyx.db.zip_metadata'}
+assert not any(
+    name.startswith(('onyx.db', 'onyx.server', 'sqlalchemy')) and name not in allowed
+    for name in sys.modules
+)
 """,
         ],
         check=True,

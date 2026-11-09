@@ -1,5 +1,4 @@
 import io
-import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import NamedTuple
@@ -7,6 +6,7 @@ from typing import NamedTuple
 from onyx.configs.constants import FileOrigin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.models import BundleMetadata
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -105,7 +105,7 @@ def prepare_skill_bundle(
         bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
 
     normalized = normalize_custom_bundle(bundle_bytes)
-    with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
+    with ZipIndex(normalized.content) as bundle_zip:
         raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
     document = parse_skill_document(
         raw_skill_md,

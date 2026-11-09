@@ -51,6 +51,44 @@ def test_upload_limit_cannot_exceed_stored_allowance(
     assert result.stdout.strip() == f"{expected} 4096 4096"
 
 
+def test_stored_default_preserves_operator_total_allowance() -> None:
+    script = """
+import io
+import zipfile
+from unittest.mock import Mock
+from onyx.skills.bundle import STORED_BUNDLE_LIMITS
+from onyx.skills.validation import load_stored_custom_skill_bundle
+
+output = io.BytesIO()
+with zipfile.ZipFile(output, "w") as archive:
+    archive.writestr("SKILL.md", "---\\nname: limits\\ndescription: Legacy\\n---\\n\\nInstructions")
+content = b"x" * (100 * 1024 * 1024) + output.getvalue()
+store = Mock()
+store.read_file.return_value = io.BytesIO(content)
+normalized = load_stored_custom_skill_bundle("legacy", store)
+with zipfile.ZipFile(io.BytesIO(normalized.content)) as archive:
+    assert archive.read("SKILL.md").endswith(b"Instructions")
+store.read_file.assert_called_once_with("legacy", max_bytes=128 * 1024 * 1024)
+assert STORED_BUNDLE_LIMITS.max_stored_bytes == 128 * 1024 * 1024
+print("legacy-read-ok")
+"""
+    environment: dict[str, str] = {
+        **os.environ,
+        "PYTHONPATH": str(Path(__file__).resolve().parents[4]),
+        "SKILL_BUNDLE_TOTAL_MAX_BYTES": str(128 * _MIB),
+    }
+    environment.pop("SKILL_BUNDLE_STORED_ZIP_MAX_BYTES", None)
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "legacy-read-ok"
+
+
 def _build_zip(
     entries: list[tuple[str, bytes]],
     *,
@@ -78,6 +116,17 @@ def test_read_bundle_file_refuses_26_mib_upload() -> None:
         read_bundle_file(io.BytesIO(b"\x00" * (26 * _MIB)))
 
     _assert_limit_error(exc_info.value, "zip_bytes", 25 * _MIB)
+
+
+@pytest.mark.parametrize(
+    ("limit", "label"),
+    [(1024, "1,024 bytes"), (_MIB + 1, "1,048,577 bytes"), (_MIB, "1 MiB")],
+)
+def test_zip_refusal_reports_exact_configured_limit(limit: int, label: str) -> None:
+    with pytest.raises(OnyxError) as caught:
+        read_bundle_file(io.BytesIO(b"x" * (limit + 1)), max_bytes=limit)
+    _assert_limit_error(caught.value, "zip_bytes", limit)
+    assert caught.value.detail == f"Skill bundle zip exceeds the {label} limit."
 
 
 def test_read_bundle_file_accepts_upload_at_limit() -> None:
@@ -219,6 +268,7 @@ def test_skipped_limits_allow_bundles_saved_before_them() -> None:
         [("SKILL.md", _SKILL_MD)] + [(f"refs/{index}.md", b"x") for index in range(600)]
     )
 
-    with pytest.raises(OnyxError):
-        normalize_custom_bundle(zip_bytes)
+    with pytest.raises(OnyxError) as caught:
+        normalize_custom_bundle(zip_bytes, max_file_count=500)
+    _assert_limit_error(caught.value, "file_count", 500)
     normalize_custom_bundle(zip_bytes, zip_max_bytes=None, max_file_count=None)

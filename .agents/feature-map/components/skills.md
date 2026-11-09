@@ -194,15 +194,38 @@ The library preview of an external-app skill calls the same renderer
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the observed version and bundle. The skill lock serializes
    this update with replacement; the legacy validity column is dual-written.
-   Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
+   Writes check five limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
-   both the incoming and normalized ZIP sizes. Raw uploads use the per-file
+   both the incoming and normalized ZIP sizes. ZIP refusal messages preserve the
+   exact configured byte limit instead of rounding it down to whole MiB. Raw uploads use the per-file
    read cap; ZIP uploads use the ZIP cap.
    Stored-bundle reads (`skills/validation.py:load_stored_custom_skill_bundle`)
    skip the upload ZIP-size and file-count limits. Their separate
    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
+   When unset, it inherits `SKILL_BUNDLE_TOTAL_MAX_BYTES`, the previous stored-read
+   allowance, including operator values above 100 MiB.
    Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
    Stored reads retain the existing per-file and expanded-total limits.
+   New upload inputs have a 1 MiB central-directory cap before parsing. Stored reads
+   and edits read the saved input without this cap. Saves check the rewritten
+   directory against the 1 MiB cap. `file_processing/zip_index.py:ZipIndex` parses
+   one central directory record at a time and keeps entry names and offsets in an
+   anonymous SQLite file, preserving digest order.
+   `db/zip_metadata.py` owns all entry-index, written-entry, and path-set queries.
+   `file_processing/zip_index.py` owns the end record, central record, extra field and local
+   header parsing; `file_processing/zip_stream.py` decompresses member data with
+   `zlib`, `bz2` and `lzma`. Both use documented interfaces only. Errors and
+   values match the installed `zipfile`, with stream behavior as in 3.13.16. A
+   pair of side-effect-free `zipfile` probes selects the ZIP64 end record checks
+   and comment search window on first use, not during import. Entries that share
+   a local header all end
+   at the next greater header, so they read without the 3.13.16 warning.
+   `file_processing/zip_writer.py:SpooledZipWriter` writes the bytes of
+   `zipfile.ZipFile(output, "w", ZIP_DEFLATED)` with `struct` and the documented
+   compressors, to a seekable output only. It exposes only member writes and
+   close, and keeps entry metadata on disk. A refused close with an open member
+   keeps that metadata until the member closes and the caller retries. Editor/history responses
+   and sandbox file maps still allocate per file; only directory parsing is bounded.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
@@ -308,7 +331,8 @@ The library preview of an external-app skill calls the same renderer
     version numbers. The version, pointer and legacy columns change in one
     transaction. Equal content digests keep the current version and stored-byte
     hash. `utils/bundle.py:compute_bundle_metadata` computes the digest without
-    database imports; ZIP timestamps and entry order do not affect it. See
+    application database or server imports. It uses only the temporary SQLite
+    store in `db/zip_metadata.py`; ZIP timestamps and entry order do not affect it. See
     [[#bundle-retention]] for which bundle files stay.
     Legacy columns remain for V2 compatibility and repair. A save repairs a stale
     or missing pointer before writing its new content. A recovery snapshot has
