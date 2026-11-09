@@ -83,7 +83,9 @@ def ingest_skill_bundle(
     automatically if the caller's transaction fails.
     Only retained version restores may use stored-data admission.
     """
-    prepared = prepare_skill_bundle(bundle_bytes, filename, expected_name=expected_name)
+    prepared = prepare_skill_bundle(
+        bundle_bytes, filename, expected_name=expected_name, stored=stored
+    )
     bundle_file_id = save_skill_bundle_bytes(
         prepared.content,
         display_name=f"{prepared.canonical_name}.zip",
@@ -103,6 +105,7 @@ def prepare_skill_bundle(
     filename: str | None,
     *,
     expected_name: str | None = None,
+    stored: bool = False,
 ) -> PreparedSkillBundle:
     """Validate and hash without storage I/O, so storage faults remain fatal."""
     is_standalone_skill_md = filename is not None and filename.lower() == "skill.md"
