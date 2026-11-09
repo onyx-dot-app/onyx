@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from typing import Annotated, NamedTuple
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import Field, ValidationError
 from sqlalchemy.orm import Session
 
@@ -762,7 +762,10 @@ def list_custom_skill_versions(
     skill_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
+    *,
+    before_version: Annotated[int | None, Query(ge=1)] = None,
 ) -> list[SkillVersionResponse]:
+    """Return up to 50 versions. Use the last version number to read older rows."""
     skill = fetch_skill(
         skill_id, policy=SkillManagementPolicy.EDIT, user=user, db_session=db_session
     )
@@ -781,7 +784,9 @@ def list_custom_skill_versions(
             is_current=is_current,
             has_bundle=version.bundle_file_id is not None,
         )
-        for version, creator, is_current in list_skill_versions(skill, db_session)
+        for version, creator, is_current in list_skill_versions(
+            skill, db_session, before_version=before_version
+        )
     ]
 
 
