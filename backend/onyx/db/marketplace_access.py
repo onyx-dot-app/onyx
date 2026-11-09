@@ -116,7 +116,16 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
     def __init__(self, tier: Tier) -> None:
         self.tier = tier
 
-    def load(self, resource_id: UUID, user: User, db_session: Session) -> Marketplace:
+    def load(
+        self,
+        resource_id: UUID,
+        user: User,
+        db_session: Session,
+        *,
+        allow_management: bool,
+    ) -> Marketplace:
+        if not allow_management:
+            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
         marketplace = _lock_marketplace(resource_id, db_session)
         if marketplace.owner_user_id is not None:
             raise OnyxError(
