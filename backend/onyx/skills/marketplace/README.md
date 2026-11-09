@@ -98,9 +98,12 @@ Overlapping discovery sources load each path once; different paths with the same
 key fail the read. A nested plugin can load its root `SKILL.md` when neither a
 `skills` key nor a default skills directory with members exists.
 
-Tar reads require an end marker after the last member. A valid gzip wrapper
-does not prove that its tar body is complete. Missing or damaged tar headers
-fail the read before reconciliation can infer removed skills.
+Marketplace discovery requires a TAR end marker after the last member.
+The general archive reader still accepts member-boundary EOF. Discovery enables
+`require_tar_end` because a valid gzip wrapper does not prove catalog completion.
+Missing end markers and parser-detected header errors fail discovery before
+reconciliation can infer removed skills. A zero header can still conceal later
+entries, as described above. Truncated sparse extensions also fail discovery.
 
 Each skill path builds once per read, even when many plugins reference it.
 Unique generated bundles share a 256 MiB ceiling. This permits ten maximum-size

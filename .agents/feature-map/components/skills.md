@@ -434,7 +434,10 @@ still propagate unexpected storage errors.
     has a separate ceiling, including nested paths. Mixed plugins are unsupported.
     Completed entries form an immutable snapshot. Present catalog metadata must
     be an object. Empty declarations cannot hide agent or command Markdown files.
-    Tar reads require an end marker, including when gzip itself is intact.
+    Marketplace discovery enables `archive_files(require_tar_end=True)`: missing
+    TAR end markers fail discovery even when gzip itself is intact. General archive
+    reads retain member-boundary EOF support. Truncated sparse extensions become
+    parsing errors, so the reader returns a failed result instead of raising IndexError.
     Missing explicit skill definitions keep their keys as blocked entries.
     Plugin manifest skill paths participate in discovery; Claude paths add to
     defaults, while Codex compatibility paths replace defaults. Entry paths

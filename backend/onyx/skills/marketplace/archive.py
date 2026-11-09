@@ -212,6 +212,9 @@ class _StrictTarInfo(tarfile.TarInfo):
             ):
                 raise
             raise ReadError(str(exc)) from exc
+        except IndexError as exc:
+            # Truncated GNU sparse extensions can escape tarfile as IndexError.
+            raise ReadError("Truncated TAR extension") from exc
 
 
 def _open_member(
@@ -234,17 +237,21 @@ def _open_member(
     )
 
 
-def _require_tar_end_marker(archive: zipfile.ZipFile | tarfile.TarFile) -> None:
-    if not isinstance(archive, tarfile.TarFile):
+def _require_tar_end_marker(
+    archive: zipfile.ZipFile | tarfile.TarFile, *, required: bool
+) -> None:
+    if not required or not isinstance(archive, tarfile.TarFile):
         return
-    # tarfile silently stops at a damaged header after the first member.
+    # Catalog discovery cannot treat member-boundary truncation as completion.
     archive.fileobj.seek(archive.offset)
     if archive.fileobj.read(tarfile.BLOCKSIZE) != b"\0" * tarfile.BLOCKSIZE:
         raise ValueError("Tar archive has no valid end marker")
 
 
 @contextmanager
-def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
+def archive_files(
+    data: bytes, *, require_tar_end: bool = False
+) -> Iterator[ArchiveFiles]:
     if len(data) > ARCHIVE_MAX_BYTES:
         raise ArchiveLimitError(f"Archive exceeds {ARCHIVE_MAX_BYTES} bytes")
     with ExitStack() as stack:
@@ -340,7 +347,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                 files[path] = partial(_open_member, archive, member, budget)
             else:
                 files[path] = None
-        _require_tar_end_marker(archive)
+        _require_tar_end_marker(archive, required=require_tar_end)
         # Directories named like files must not silently select a fallback manifest.
         for path in directories:
             if path == "SKILL.md" or path.endswith((".json", "/SKILL.md")):
