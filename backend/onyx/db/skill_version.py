@@ -21,6 +21,7 @@ from onyx.db.resource_version import (
     repair_version_metadata,
     write_resource_version,
 )
+from onyx.db.skill_mutation import assert_skill_mutable
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -149,6 +150,7 @@ def save_skill_version(
     staged upload when the current version is reused."""
     adapter = SkillVersionAdapter(skill)
     adapter.lock(db_session)
+    assert_skill_mutable(skill)
     reuse_current = False
     if not initial:
         current = repair_skill_version(skill, db_session)
