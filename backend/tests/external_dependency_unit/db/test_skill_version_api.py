@@ -25,7 +25,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill import api
-from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES
+from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES, compute_bundle_sha256
 from onyx.skills.ingest import save_skill_bundle_bytes
 from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.db.test_skill_version_writes import (
@@ -326,6 +326,79 @@ def test_legacy_current_and_preview_keep_stored_allowances(
         len(api.preview_custom_skill_version(skill.id, version.id, user, session).files)
         == 501
     )
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_legacy_large_central_directory_stays_readable(
+    session: Session, user: User, wrapped: bool
+) -> None:
+    import io
+    import struct
+    import zipfile
+
+    from onyx.db.skill_version import repair_skill_version_metadata
+    from onyx.skills.validation import validate_stored_custom_skill
+    from onyx.utils.bundle import compute_bundle_metadata
+
+    response = api.create_custom_skill(
+        upload(bundle("legacy-directory")),
+        False,
+        user,
+        session,
+    )
+    skill = session.get(Skill, response.id)
+    assert skill is not None and skill.current_version is not None
+    version = skill.current_version
+    with zipfile.ZipFile(io.BytesIO(bundle(skill.name))) as original:
+        skill_md = original.read("SKILL.md")
+    # Fewer than 100 files, but long extra fields, comments and folders make
+    # the central directory larger than 4 MiB.
+    prefix = f"{skill.name}/" if wrapped else ""
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr(zipfile.ZipInfo(f"{prefix}SKILL.md"), skill_md)
+        for index in range(90):
+            info = zipfile.ZipInfo(f"{prefix}refs/{index}.md")
+            info.extra = struct.pack("<HH", 0xCAFE, 50_000) + bytes(50_000)
+            info.comment = b"c" * 1000
+            archive.writestr(info, b"x")
+        for index in range(10_000):
+            archive.writestr(zipfile.ZipInfo(f"{prefix}folders/{index}/"), b"")
+    content = output.getvalue()
+    directory_size = int.from_bytes(content[-10:-6], "little")
+    assert directory_size > 4 * 1024 * 1024
+    store = get_default_file_store()
+    version.bundle_file_id = save_skill_bundle_bytes(
+        content, display_name="legacy.zip", file_store=store
+    )
+    skill.bundle_file_id = version.bundle_file_id
+    skill.is_valid = None
+    version.bundle_sha256 = compute_bundle_sha256(content)
+    skill.bundle_sha256 = version.bundle_sha256
+    version.content_digest = None
+    version.unpacked_size_bytes = None
+    version.file_count = None
+    version.is_valid = None
+    session.commit()
+
+    if not wrapped:
+        # The editor reads root SKILL.md, so it has never opened wrapped bundles.
+        editable = api.fetch_custom_skill_for_edit(skill.id, user, session)
+        assert len(editable.files) == 90
+    preview = api.preview_custom_skill_version(skill.id, version.id, user, session)
+    assert [file.path for file in preview.files][:2] == ["refs/0.md", "refs/1.md"]
+    assert len(preview.files) == 90
+    validation = validate_stored_custom_skill(skill, store)
+    assert validation.is_valid is True and validation.normalized_bundle is not None
+    if not wrapped:
+        assert validation.normalized_bundle == content
+
+    repair_skill_version_metadata(skill, session, store)
+    session.commit()
+    session.refresh(version)
+    metadata = compute_bundle_metadata(content)
+    assert version.content_digest == metadata.content_digest
+    assert (version.file_count, version.unpacked_size_bytes) == (91, 90 + len(skill_md))
 
 
 def test_history_pages_keep_older_rows_stable_during_new_writes(
