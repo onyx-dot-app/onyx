@@ -1,6 +1,7 @@
 """Reconcile real reader results against PostgreSQL constraints without bundle I/O."""
 
 import io
+import struct
 import sys
 import time
 import zipfile
@@ -606,3 +607,29 @@ def test_waiting_sync_reads_committed_version(
         result = future.result(timeout=15)
     assert not result.changed_skill_ids
     assert len(list(session.scalars(SkillVersionAdapter(skill).versions()))) == 2
+
+
+def test_corrupt_zip_catalog_cannot_retire_existing_skills(
+    session: Session, marketplace: Marketplace
+) -> None:
+    apply(session, marketplace, catalog("s0", "s1", "s2", "s3"))
+    session.commit()
+    before = [(row.id, row.current_version_id) for row in skills(session, marketplace)]
+    revision = marketplace.last_synced_revision
+    files = {CLAUDE: _catalog()}
+    files.update({f"skills/s{i}/SKILL.md": _md(f"s{i}") for i in range(4)})
+    data = bytearray(_archive(files))
+    end = data.rfind(b"PK\x05\x06")
+    central = struct.unpack_from("<I", data, end + 16)[0]
+    second = data.index(b"PK\x01\x02", central + 4)
+    third = data.index(b"PK\x01\x02", second + 4)
+    struct.pack_into("<H", data, second + 32, end - third)
+    read = read_marketplace_archive(bytes(data))
+    result = apply(session, marketplace, read, revision="damaged", staged={})
+    session.commit()
+    assert result.status == "failed"
+    assert not result.retired_skill_ids
+    rows = skills(session, marketplace)
+    assert [(row.id, row.current_version_id) for row in rows] == before
+    assert all(row.retired_at is None for row in rows)
+    assert marketplace.last_synced_revision == revision
