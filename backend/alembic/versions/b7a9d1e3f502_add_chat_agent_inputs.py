@@ -1,0 +1,106 @@
+"""Store pending agent messages and accepted generation inputs.
+
+Revision ID: b7a9d1e3f502
+Revises: c0de5e7a91b2
+Create Date: 2026-11-09 12:00:00.000000
+"""
+
+import sqlalchemy as sa
+from alembic import op
+from sqlalchemy.dialects import postgresql
+
+revision = "b7a9d1e3f502"
+down_revision = "c0de5e7a91b2"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.add_column(
+        "chat_message",
+        sa.Column(
+            "response_inputs_closed",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.false(),
+        ),
+    )
+    op.create_table(
+        "chat_agent_input",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column(
+            "recipient_session_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("chat_session.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("message_id", sa.String(), nullable=False),
+        sa.Column("source", sa.String(), nullable=False),
+        sa.Column(
+            "invoking_tool_call_id",
+            sa.Integer(),
+            sa.ForeignKey("tool_call.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
+        sa.Column(
+            "source_response_id",
+            sa.Integer(),
+            sa.ForeignKey("chat_message.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
+        sa.Column(
+            "target_response_id",
+            sa.Integer(),
+            sa.ForeignKey("chat_message.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
+        sa.Column("max_steps", sa.Integer(), nullable=True),
+        sa.Column("total_timeout_s", sa.Float(), nullable=True),
+        sa.Column("delivery", sa.String(), nullable=True),
+        sa.Column("content", sa.Text(), nullable=False),
+        sa.Column(
+            "response_item_id",
+            sa.String(),
+            sa.ForeignKey("chat_response_item.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
+        sa.Column("position", sa.Integer(), nullable=True),
+        sa.CheckConstraint(
+            "(response_item_id IS NULL AND position IS NULL) OR (response_item_id IS NOT NULL AND position IS NOT NULL AND position >= 0)",
+            name="ck_agent_input_acceptance",
+        ),
+        sa.CheckConstraint(
+            "response_item_id IS NOT NULL OR (delivery IS NOT NULL AND invoking_tool_call_id IS NOT NULL AND max_steps IS NOT NULL AND max_steps > 0)",
+            name="ck_agent_input_pending",
+        ),
+        sa.CheckConstraint(
+            "source IN ('human', 'agent', 'agent_result')", name="ck_agent_input_source"
+        ),
+        sa.CheckConstraint(
+            "delivery IS NULL OR delivery IN ('send', 'queue')",
+            name="ck_agent_input_delivery",
+        ),
+    )
+    op.create_index(
+        "uq_agent_input_position",
+        "chat_agent_input",
+        ["response_item_id", "position"],
+        unique=True,
+    )
+    op.create_index(
+        "uq_agent_input_message",
+        "chat_agent_input",
+        ["response_item_id", "message_id"],
+        unique=True,
+    )
+    op.create_index(
+        "ix_agent_input_pending",
+        "chat_agent_input",
+        ["recipient_session_id", "id"],
+        postgresql_where=sa.text("response_item_id IS NULL"),
+    )
+
+
+def downgrade() -> None:
+    op.drop_table("chat_agent_input")
+    op.drop_column("chat_message", "response_inputs_closed")

@@ -11,6 +11,7 @@ from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.concurrency import WorkTracker
 from onyx.agents.models import (
     AgentInfo,
+    AgentState,
     RunFailure,
     RunFailureKind,
     RunState,
@@ -19,7 +20,7 @@ from onyx.agents.models import (
 from onyx.agents.runtime import Run
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
-from onyx.chat.agent import ChatAgent
+from onyx.chat.agent import ChatAgent, build_chat_agent
 from onyx.chat.chat_processing_checker import (
     PROCESSING_REFRESH_INTERVAL_S,
 )
@@ -32,14 +33,13 @@ from onyx.chat.models import ChatResponseOutcome, ChatTurnSetup, CreateChatSessi
 from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
-from onyx.chat.restoration import restore_chat_agent
+from onyx.chat.restoration import restore_chat_agent, restore_subagent
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.chat_configs import (
     CHAT_EXECUTION_TIMEOUT_S,
-    CODE_MODE_ENABLED,
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
@@ -65,6 +65,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
 from onyx.server.settings.store import load_settings
+from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -209,6 +210,7 @@ class ChatTurnExecution:
             lambda _future: self._completion_changed.set()
         )
         self._auto_filters = False
+        self._admission_released = False
         self._stopped_by_user = False
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
@@ -257,98 +259,116 @@ class ChatTurnExecution:
                     self._stopped_models.add(packet.placement.model_index or 0)
 
     def run(self, *, startup_error: BaseException | None = None) -> None:
-        try:
-            self.delivery.events.start()
-        except Exception as error:
-            startup_error = error
-        if startup_error is not None:
-            self.cancellation.cancel()
-            self.delivery.publish(
-                chat_error(startup_error)
-                if isinstance(startup_error, OnyxError)
-                else StreamingError(
-                    error="The response could not be started. Please try again.",
-                    error_code="CHAT_STARTUP_ERROR",
-                    is_retryable=True,
-                )
-            )
-        for index, response in enumerate(self.setup.responses):
-            persistence = ChatResponsePersistence(
-                coordinator=AgentCoordinator(),
-                history_store=get_chat_history_store(
-                    message_id=response.message_id,
-                    chat_session_id=self.setup.chat_session_id,
-                    admission=self.setup.admission,
-                    persist_content=record_mode_persists_content(
-                        self.setup.incognito_record_mode
-                    ),
-                ),
-                model_index=index,
-                llm=response.llm,
-                delivery=self.delivery,
-                outcome=self._response_future
-                if index == 0 and self._response_future is not None
-                else Future[ChatResponseOutcome](),
-            )
-            emitter = Emitter(
-                self._publish, persistence.model_index, self._query_observation
-            )
+        research = (
+            len(self.setup.responses) == 1 and self.setup.new_msg_req.deep_research
+        )
+        # The trace stays open while background agents still own work.
+        with trace(
+            "run_deep_research" if research else "chat",
+            group_id=str(self.setup.chat_session_id),
+            metadata=ChatTraceMetadata(
+                chat_session_id=str(self.setup.chat_session_id),
+                user_id=self.setup.user_identity.user_id,
+            ).model_dump(),
+        ):
             try:
-                worker = start_thread_future(
-                    lambda persistence=persistence, emitter=emitter: self._run_response(
-                        persistence,
-                        emitter,
-                        startup_error=startup_error,
-                    ),
-                    name="chat-response",
-                )
+                self.delivery.events.start()
             except Exception as error:
-                worker = Future[Run | None]()
-                worker.set_result(
-                    self._run_response(persistence, emitter, startup_error=error)
+                startup_error = error
+            if startup_error is not None:
+                self.cancellation.cancel()
+                self.delivery.publish(
+                    chat_error(startup_error)
+                    if isinstance(startup_error, OnyxError)
+                    else StreamingError(
+                        error="The response could not be started. Please try again.",
+                        error_code="CHAT_STARTUP_ERROR",
+                        is_retryable=True,
+                    )
                 )
-            self._response_workers[worker] = persistence
-            worker.add_done_callback(lambda _future: self._completion_changed.set())
+            for index, response in enumerate(self.setup.responses):
+                persistence = ChatResponsePersistence(
+                    coordinator=AgentCoordinator(),
+                    history_store=get_chat_history_store(
+                        message_id=response.message_id,
+                        chat_session_id=self.setup.chat_session_id,
+                        admission=self.setup.admission,
+                        persist_content=record_mode_persists_content(
+                            self.setup.incognito_record_mode
+                        ),
+                    ),
+                    model_index=index,
+                    llm=response.llm,
+                    delivery=self.delivery,
+                    outcome=self._response_future
+                    if index == 0 and self._response_future is not None
+                    else Future[ChatResponseOutcome](),
+                )
+                emitter = Emitter(
+                    self._publish, persistence.model_index, self._query_observation
+                )
+                try:
+                    worker = start_thread_future(
+                        lambda persistence=persistence, emitter=emitter: (
+                            self._run_response(
+                                persistence,
+                                emitter,
+                                startup_error=startup_error,
+                            )
+                        ),
+                        name="chat-response",
+                    )
+                except Exception as error:
+                    worker = Future[Run | None]()
+                    worker.set_result(
+                        self._run_response(persistence, emitter, startup_error=error)
+                    )
+                self._response_workers[worker] = persistence
+                worker.add_done_callback(lambda _future: self._completion_changed.set())
 
-        while True:
-            # Clear before checking state so a concurrent completion cannot be lost.
-            self._completion_changed.clear()
-            try:
-                self._poll_control()
-            except Exception:
-                self.cancellation.cancel()
-                logger.exception("Chat turn control failed; draining active work")
-            try:
-                self._poll_responses()
-            except Exception:
-                self.cancellation.cancel()
-                logger.exception("Chat response polling failed; draining active work")
-            with self._lock:
-                stores = tuple(self._stores)
-            if not self._response_workers and not any(
-                store.has_owned_work for store in stores
-            ):
-                if not self.delivery.is_closing:
-                    stop = self._turn_stop()
-                    if stop is not None:
-                        with self._lock:
-                            pending = (
-                                set(range(len(self.setup.responses)))
-                                - self._stopped_models
-                            )
-                        for index in sorted(pending):
-                            self.delivery.publish(
-                                Packet(
-                                    placement=Placement(
-                                        turn_index=0, model_index=index
-                                    ),
-                                    obj=self._response_stops.get(index, stop),
+            while True:
+                # Clear before checking state so a concurrent completion cannot be lost.
+                self._completion_changed.clear()
+                try:
+                    self._poll_control()
+                except Exception:
+                    self.cancellation.cancel()
+                    logger.exception("Chat turn control failed; draining active work")
+                try:
+                    self._poll_responses()
+                except Exception:
+                    self.cancellation.cancel()
+                    logger.exception(
+                        "Chat response polling failed; draining active work"
+                    )
+                with self._lock:
+                    stores = tuple(self._stores)
+                if not self._response_workers:
+                    if not self.delivery.is_closing:
+                        stop = self._turn_stop()
+                        if stop is not None:
+                            with self._lock:
+                                pending = (
+                                    set(range(len(self.setup.responses)))
+                                    - self._stopped_models
                                 )
-                            )
-                    self.delivery.finish()
-                if self.delivery.finished.done() and self._clear_processing_status():
-                    return
-            self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
+                            for index in sorted(pending):
+                                self.delivery.publish(
+                                    Packet(
+                                        placement=Placement(
+                                            turn_index=0, model_index=index
+                                        ),
+                                        obj=self._response_stops.get(index, stop),
+                                    )
+                                )
+                        self.delivery.finish()
+                    if self.delivery.finished.done() and not self._admission_released:
+                        self._clear_processing_status()
+                    if self._admission_released and not any(
+                        store.has_owned_work for store in stores
+                    ):
+                        return
+                self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
 
     def _poll_responses(self) -> None:
         for worker, persistence in tuple(self._response_workers.items()):
@@ -399,13 +419,12 @@ class ChatTurnExecution:
                     )
             del self._response_workers[worker]
 
-    def _clear_processing_status(self) -> bool:
+    def _clear_processing_status(self) -> None:
         try:
             self.setup.admission.release()
-            return True
+            self._admission_released = True
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
-            return False
 
     def _run_response(
         self,
@@ -468,17 +487,20 @@ class ChatTurnExecution:
             history_store = get_chat_history_store(
                 message_id=persistence.message_id,
                 chat_session_id=self.setup.chat_session_id,
-                visible_message_ids=branch.message_ids,
                 persist_content=persist_content,
                 branch=branch,
             )
             saved_agents = history_store.list_agents()
             directory = ChatAgentDirectory(
                 history_store=history_store,
-                llm=persistence.llm,
-                tools=configured_tools,
-                user_identity=self.setup.user_identity,
                 store=store,
+                build_agent=partial(
+                    restore_subagent,
+                    setup=self.setup,
+                    llm=persistence.llm,
+                    tools=configured_tools,
+                    inject_memories=self.user.use_memories,
+                ),
             )
             coordinator = (
                 store.bind(
@@ -509,27 +531,16 @@ class ChatTurnExecution:
                 )
             )
             cancellation.check()
-            research = (
-                len(self.setup.responses) == 1 and self.setup.new_msg_req.deep_research
+            run = chat_agent.start(
+                background=False,
+                messages=self.setup.input_messages,
+                max_steps=chat_agent.max_steps,
+                cancellation=cancellation,
+                deadline_at=self._deadline_at,
+                coordinator=coordinator,
+                event_dispatcher=self.delivery.events,
+                on_event=ResponsePresenter(emitter, tool_ids=tool_ids).consume,
             )
-            with trace(
-                "run_deep_research" if research else "chat",
-                group_id=str(self.setup.chat_session_id),
-                metadata=ChatTraceMetadata(
-                    chat_session_id=str(self.setup.chat_session_id),
-                    user_id=self.setup.user_identity.user_id,
-                ).model_dump(),
-            ):
-                run = chat_agent.start(
-                    background=False,
-                    messages=self.setup.input_messages,
-                    max_steps=chat_agent.max_steps,
-                    cancellation=cancellation,
-                    deadline_at=self._deadline_at,
-                    coordinator=coordinator,
-                    event_dispatcher=self.delivery.events,
-                    on_event=ResponsePresenter(emitter, tool_ids=tool_ids).consume,
-                )
 
             def response_saved(completion: Future[RunState]) -> None:
                 try:
@@ -582,6 +593,10 @@ class ChatTurnExecution:
                 self.cancellation.cancel()
                 logger.exception("Chat ownership control failed; will retry")
 
+        # Background children keep their leases after this response releases the chat.
+        if self._admission_released:
+            return
+
         if (
             not self.cancellation.cancelled
             and datetime.now(timezone.utc) >= self._deadline_at + _DEADLINE_BACKSTOP
@@ -628,11 +643,27 @@ def create_chat_agent(
     llm = setup.responses[response_index].llm
     with cancellation_scope(cancellation):
         cancellation.check()
+        tool_configuration = setup.tool_configuration
+        if setup.incognito_record_mode is not None:
+            if setup.new_msg_req.deep_research:
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Deep research is not available in incognito. Start a normal chat to use it.",
+                )
+            tool_configuration = tool_configuration.model_copy(
+                update={
+                    "tools": [
+                        tool
+                        for tool in tool_configuration.tools
+                        if tool.in_code_tool_id != CODING_AGENT_TOOL_ID
+                    ]
+                }
+            )
         filters = setup.new_msg_req.internal_search_filters
         source_types = filters.source_type if filters else None
         # Tools open DB sessions on demand, so model I/O cannot retain a connection.
         tools_by_type = construct_tools(
-            configuration=setup.tool_configuration,
+            configuration=tool_configuration,
             user=user,
             llm=llm,
             selection_llm_factory=partial(
@@ -721,26 +752,14 @@ def create_chat_agent(
                 checkpoint=setup.checkpoint,
                 previous_run_id=setup.previous_run_id,
             )
-        return ChatAgent(
-            agent_id=agent_id,
-            messages=list(setup.messages),
-            tools=tools,
-            code_mode=CODE_MODE_ENABLED,
-            custom_agent_prompt=setup.custom_agent_prompt,
-            additional_context=setup.additional_context,
-            context_files=setup.extracted_context_files,
-            persona=setup.persona,
-            base_system_prompt=setup.base_system_prompt,
-            checkpoint=setup.checkpoint,
-            previous_run_id=setup.previous_run_id,
-            user_memory_context=setup.user_memory_context,
+        return build_chat_agent(
+            AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
+            agent_id,
+            setup.previous_run_id,
+            setup=setup,
             llm=llm,
-            token_counter=get_llm_token_counter(llm),
+            tools=tools,
+            inject_memories=user.use_memories,
+            additional_context=setup.additional_context,
             preferred_tool_id=setup.preferred_tool_id,
-            user_identity=setup.user_identity,
-            chat_files=setup.chat_files_for_tools,
-            reasoning_effort=setup.reasoning_effort,
-            include_citations=setup.new_msg_req.include_citations,
-            all_injected_file_metadata=setup.all_injected_file_metadata,
-            inject_memories_in_prompt=user.use_memories,
         )

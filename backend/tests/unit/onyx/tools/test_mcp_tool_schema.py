@@ -22,7 +22,7 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
-from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
+from onyx.tools.tool_constructor import disambiguate_tool_names
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
     _normalize_parameters_schema,
@@ -193,7 +193,7 @@ class TestMCPToolLLMNames:
     def test_mcp_tool_keeps_original_name_without_conflicts(self) -> None:
         tool = _make_tool({"type": "object"})
 
-        _disambiguate_mcp_tool_names([tool])
+        disambiguate_tool_names([tool])
 
         assert tool.name == "aws___list_regions"
         assert tool.tool_definition().name == "aws___list_regions"
@@ -204,7 +204,7 @@ class TestMCPToolLLMNames:
         )
         static_tool = _StaticTool("shared")
 
-        _disambiguate_mcp_tool_names([mcp_tool, static_tool])
+        disambiguate_tool_names([mcp_tool, static_tool])
 
         assert mcp_tool.name == "mcp_server_name_shared"
         assert mcp_tool.tool_definition().name == "mcp_server_name_shared"
@@ -218,7 +218,7 @@ class TestMCPToolLLMNames:
         second_order_conflicting_tool = _StaticTool("mcp_server_shared")
 
         tools: list[Tool] = [mcp_tool, conflicting_tool, second_order_conflicting_tool]
-        _disambiguate_mcp_tool_names(tools)
+        disambiguate_tool_names(tools)
 
         assert [tool.name for tool in tools] == [
             "mcp_server_shared",
@@ -229,7 +229,7 @@ class TestMCPToolLLMNames:
     def test_disambiguated_mcp_tool_calls_server_with_original_name(self) -> None:
         mcp_tool = _make_tool({"type": "object"}, tool_name="shared")
         conflicting_tool = _StaticTool("shared")
-        _disambiguate_mcp_tool_names([mcp_tool, conflicting_tool])
+        disambiguate_tool_names([mcp_tool, conflicting_tool])
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",

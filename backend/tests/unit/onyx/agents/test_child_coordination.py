@@ -4,7 +4,7 @@ import gc
 import threading
 import time
 import weakref
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Collection, Generator
 from concurrent.futures import Future
 from contextvars import ContextVar
 from datetime import timedelta
@@ -20,9 +20,12 @@ from onyx.agents.agent_coordination import (
 )
 from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.models import (
+    AgentCompletion,
     AgentInfo,
     ExecutionCheckpoint,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     PreparedStep,
     RunFailure,
     RunFailureKind,
@@ -100,6 +103,27 @@ def test_discovery_isolates_nested_configuration_from_callers() -> None:
         saved = coordinator.discover_children("root")[0].restoration_config
         assert isinstance(saved, MutableRestorationConfig)
         assert saved.sources == ["original"]
+
+
+def test_discovery_refreshes_running_children_owned_elsewhere() -> None:
+    status = RunStatus.RUNNING
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(read_run_status=lambda *_: status)
+    )
+    coordinator.register(
+        AgentInfo(
+            id="child",
+            path="/root/child",
+            parent_id="root",
+            description="Independent work",
+            restoration_config=None,
+            latest_run_id="child-response",
+            status=status,
+        )
+    )
+    assert coordinator.discover_children("root")[0].status == RunStatus.RUNNING
+    status = RunStatus.COMPLETE
+    assert coordinator.discover_children("root")[0].status == RunStatus.COMPLETE
 
 
 def parent_agent(
@@ -755,6 +779,83 @@ def test_background_child_outlives_parent_and_reports_to_application() -> None:
         assert all(event.run_id == run.id for event in root_events)
         assert any(snapshot.run_id == child_run.id for snapshot in completed)
         assert coordinator.child_run(child_run.id, parent.id) is child_run
+    finally:
+        release.set()
+        assert coordinator.close(3)
+
+
+def test_stopping_parent_wait_keeps_background_child_running() -> None:
+    entered, release = threading.Event(), threading.Event()
+    spawned: list[SpawnResult] = []
+    completed: list[RunState] = []
+
+    def generate(
+        _request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        entered.set()
+        while not release.wait(0.01):
+            signal.check()
+        return AssistantMessage(content=[TextContent(text="background finished")])
+
+    child = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                child,
+                name="background",
+                description="Independent work",
+                messages=[],
+                max_steps=1,
+                lifetime=AgentLifetime.BACKGROUND,
+            )
+        )
+        return ChildRunWait(run_ids=[spawned[0].run_id])
+
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda _invocation, children: ToolResult(
+                    content=children[0].status.value
+                ),
+            )
+        ],
+    )
+    coordinator = AgentCoordinator(
+        store=FakeRunStore(save=lambda run: completed.append(run.snapshot())),
+    )
+    root = parent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert entered.wait(2)
+        assert root.wait_until_settled(2).status == RunStatus.SUSPENDED
+        root.cancel()
+        with pytest.raises(AgentCancelled):
+            root.result(3)
+        assert root.wait_for_idle(3)
+        child_run = coordinator.child_run(spawned[0].run_id, parent.id)
+        assert child_run is not None
+        assert child_run.status == RunStatus.RUNNING
+        assert not child_run.cancellation_signal.cancelled
+        release.set()
+        assert child_run.result(3).output.text == "background finished"
+        assert child_run.wait_for_idle(3)
+        assert (
+            coordinator.completion(child_run.id).result(3).status == RunStatus.COMPLETE
+        )
+        assert any(state.run_id == child_run.id for state in completed)
     finally:
         release.set()
         assert coordinator.close(3)
@@ -3499,4 +3600,135 @@ def test_remote_dependency_recovers_after_observation_timeout(
     finally:
         complete.set()
         monkeypatch.undo()
+        assert owner.close(3)
+
+
+@pytest.mark.parametrize(
+    "status,answer_step_index,expected",
+    [
+        (RunStatus.COMPLETE, 0, "Selected answer"),
+        (RunStatus.ERROR, None, "Partial output"),
+        (RunStatus.CANCELLED, None, "Partial output"),
+    ],
+)
+def test_background_completion_preserves_selected_and_partial_answers(
+    status: RunStatus,
+    answer_step_index: int | None,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = AgentCoordinator()
+    spawned: list[SpawnResult] = []
+    mailbox_checked = threading.Event()
+    read_completions = owner.completed_agents
+
+    def completed_agents(
+        parent_id: str, received_run_ids: Collection[str], *, limit: int = 8
+    ) -> list[AgentCompletion]:
+        results = read_completions(parent_id, received_run_ids, limit=limit)
+        if not results:
+            mailbox_checked.set()
+        return results
+
+    monkeypatch.setattr(owner, "completed_agents", completed_agents)
+
+    def spawn(invocation: ToolInvocation) -> ToolResult:
+        if spawned:
+            assert invocation.agents.wait_for_agent_message(timeout=30)
+            return ToolResult(content="received")
+        spawned.append(
+            invocation.agents.spawn_agent(
+                suspended_agent(),
+                name="child",
+                description="",
+                messages=[],
+                max_steps=2,
+                lifetime=AgentLifetime.BACKGROUND,
+            )
+        )
+        return ToolResult(content="started")
+
+    parent = parent_agent(spawn)
+    try:
+        run_agent(parent, max_steps=2, coordinator=owner)
+        child = owner.run(spawned[0].run_id)
+        assert child.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert child.wait_for_idle(3)
+        saved = child.handoff().run_state
+        saved.status = status
+        saved.progress = None
+        saved.answer_step_index = answer_step_index
+        saved.steps = [
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="Selected answer")]),
+                generation_status=ExecutionStatus.COMPLETE,
+            ),
+            StepRecord(
+                message=AssistantMessage(content=[TextContent(text="Partial output")]),
+                generation_status=ExecutionStatus.COMPLETE
+                if status == RunStatus.COMPLETE
+                else ExecutionStatus(status.value),
+            ),
+        ]
+        mailbox_checked.clear()
+        waiting = parent.start(max_steps=2, coordinator=owner)
+        assert mailbox_checked.wait(3)
+        owner.restore_completed(saved)
+        assert waiting.result(3).output.text == "second finished"
+        received = [
+            message
+            for step in waiting.snapshot().steps
+            for message in step.input_messages
+        ]
+        assert len(received) == 1
+        assert expected in received[0].text
+        assert isinstance(received[0].metadata, InputMessageMetadata)
+        assert received[0].metadata.source == InputSource.AGENT_RESULT
+        assert waiting.received_agent_run_ids == {saved.run_id}
+        completion = owner.completed_agents(parent.id, set())[0]
+        assert completion.status == status
+        assert completion.output is not None
+        assert completion.output.text == expected
+        completion.output.content.clear()
+        retained = owner.completed_agents(parent.id, set())[0].output
+        assert retained is not None
+        assert retained.text == expected
+    finally:
+        assert owner.close(3)
+
+
+def test_background_completion_does_not_turn_failed_persistence_into_a_result() -> None:
+    child = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    spawned: list[SpawnResult] = []
+
+    def save(run: Run) -> None:
+        if run.agent_id == child.id:
+            raise OSError("Storage unavailable")
+
+    def spawn(invocation: ToolInvocation) -> ToolResult:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                child,
+                name="child",
+                description="",
+                messages=[],
+                max_steps=1,
+                lifetime=AgentLifetime.BACKGROUND,
+            )
+        )
+        return ToolResult(content="started")
+
+    owner = AgentCoordinator(store=FakeRunStore(save=save))
+    parent = parent_agent(spawn)
+    try:
+        run_agent(parent, max_steps=2, coordinator=owner)
+        with pytest.raises(OSError, match="Storage unavailable"):
+            owner.completion(spawned[0].run_id).result(3)
+        assert owner.completed_agents(parent.id, set()) == []
+    finally:
         assert owner.close(3)

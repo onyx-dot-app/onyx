@@ -1,17 +1,31 @@
 """Exercise ChatAgent through model streaming, tools, and packet rendering."""
 
+import json
 import queue
 import threading
 from datetime import datetime, timezone
 from functools import partial
+from typing import Literal
 from unittest.mock import Mock
 
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentStep, StepInput
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.events import AgentEvent, ToolStartEvent
+from onyx.agents.models import (
+    AgentCompletion,
+    AgentInfo,
+    AgentMessageReceipt,
+    AgentStep,
+    InputMessageMetadata,
+    InputSource,
+    RunState,
+    RunStatus,
+    StepInput,
+)
 from onyx.agents.runtime import Run
+from onyx.agents.tools import SpawnResult, ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -24,6 +38,8 @@ from onyx.chat.models import (
 from onyx.chat.presentation import ResponsePresenter, project_response
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.enums import IncognitoRecordMode, MCPOAuthProviderMode
+from onyx.db.models import MCPServer
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
@@ -53,13 +69,20 @@ from onyx.prompts.chat_prompts import (
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
-from onyx.tools.models import ChatFile
+from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
+from shared_configs.contextvars import CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
+    FakeAgentDirectory,
     FakeModelClient,
+    FakeRunStore,
     ScriptedLLM,
     run_agent,
 )
@@ -520,9 +543,16 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
 
 @pytest.mark.parametrize(
-    "tool_name", [WebSearchTool.NAME, SearchTool.NAME, RESEARCH_AGENT_TOOL_NAME]
+    "tool_name, incognito",
+    [
+        (WebSearchTool.NAME, False),
+        (WebSearchTool.NAME, True),
+        (SearchTool.NAME, False),
+        (SearchTool.NAME, True),
+        (RESEARCH_AGENT_TOOL_NAME, False),
+        (RESEARCH_AGENT_TOOL_NAME, True),
+    ],
 )
-@pytest.mark.parametrize("incognito", [False, True])
 def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
     tool_name: str,
     incognito: bool,
@@ -734,8 +764,11 @@ def test_context_file_citations_keep_history_numbers_across_turns(
 
 
 @pytest.mark.parametrize("replace_base", [False, True])
+@pytest.mark.parametrize("incognito_mode", [None, *IncognitoRecordMode])
 def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
-    replace_base: bool, monkeypatch: pytest.MonkeyPatch
+    replace_base: bool,
+    incognito_mode: IncognitoRecordMode | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("onyx.chat.prompt_utils.get_company_context", lambda: None)
     files = ExtractedContextFiles(
@@ -746,23 +779,29 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         uncapped_token_count=4,
         file_metadata=[],
     )
-    agent = ChatAgent(
-        messages=[],
-        tools=[EchoTool()],
-        custom_agent_prompt="Custom instructions",
-        base_system_prompt="Base instructions",
-        context_files=files,
-        persona=PersonaPromptConfig(
-            system_prompt="Replacement instructions",
-            task_prompt="Task reminder",
-            datetime_aware=False,
-            replace_base_system_prompt=replace_base,
-        ),
-        user_memory_context=None,
-        llm=ScriptedLLM([]),
-        token_counter=len,
-        reminders_enabled=False,
+    token = CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(
+        incognito_mode.value if incognito_mode else None
     )
+    try:
+        agent = ChatAgent(
+            messages=[],
+            tools=[EchoTool()],
+            custom_agent_prompt="Custom instructions",
+            base_system_prompt="Base instructions",
+            context_files=files,
+            persona=PersonaPromptConfig(
+                system_prompt="Replacement instructions",
+                task_prompt="Task reminder",
+                datetime_aware=False,
+                replace_base_system_prompt=replace_base,
+            ),
+            user_memory_context=None,
+            llm=ScriptedLLM([]),
+            token_counter=len,
+            reminders_enabled=False,
+        )
+    finally:
+        CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.reset(token)
     prepared = agent._prepare_step(
         StepInput(
             history=[],
@@ -802,7 +841,20 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
             request.messages[-1].text
             == "<system-reminder>\nTask reminder\n</system-reminder>"
         )
-        assert [tool.name for tool in request.tools] == ["echo"]
+        assert {tool.name for tool in request.tools} == (
+            {"echo"}
+            if incognito_mode is not None
+            else {
+                "echo",
+                "spawn_agent",
+                "list_agents",
+                "wait_agent",
+                "cancel_agent",
+                "send_message",
+                "queue_message",
+                "cancel_message",
+            }
+        )
     assert any(message.text == "Earlier question" for message in first.messages)
     assert not any(message.text == "Earlier question" for message in second.messages)
     assert [message.model_dump() for message in history] == original
@@ -934,7 +986,17 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     assert outcome.output.text == "Answered without the preferred tool."
     assert len(requests) == (2 if use_other_tool else 1)
     for request in requests:
-        assert [tool.name for tool in request.tools] == ["echo", "other"]
+        assert [tool.name for tool in request.tools] == [
+            "echo",
+            "other",
+            "spawn_agent",
+            "list_agents",
+            "wait_agent",
+            "cancel_agent",
+            "send_message",
+            "queue_message",
+            "cancel_message",
+        ]
         reminder = request.messages[-1]
         assert (
             "The user selected these operations for this request: echo."
@@ -963,3 +1025,803 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     assert not any(
         "The user selected" in message.text for message in requests[-1].messages
     )
+
+
+@pytest.mark.parametrize("parent_action", ["finish", "wait", "work"])
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_chat_delegates_to_an_independent_agent(
+    parent_action: Literal["finish", "wait", "work"], code_mode: bool
+) -> None:
+    entered, release = threading.Event(), threading.Event()
+    child_requests: list[GenerationRequest] = []
+    saved: list[RunState] = []
+    spawned: list[SpawnResult] = []
+
+    class SlowTool(EchoTool):
+        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+            if invocation.arguments["value"] == "parent":
+                release.set()
+                coordinator.completion(spawned[0].run_id).result(10)
+            else:
+                entered.set()
+                assert release.wait(10)
+            invocation.cancellation.check()
+            return ToolResult(content="work complete")
+
+    def reply(
+        request: GenerationRequest, cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        cancellation.check()
+        names = {tool.name for tool in request.tools}
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        assert names == {
+            *({"execute_code", "wait_code"} if code_mode else {"echo"}),
+            "spawn_agent",
+            "list_agents",
+            "wait_agent",
+            "cancel_agent",
+            "send_message",
+            "queue_message",
+            "cancel_message",
+        }
+        if any(message.text == "Leaf task" for message in request.messages):
+            if not results:
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="work",
+                            name="execute_code" if code_mode else "echo",
+                            arguments={
+                                "code": "print(await echo(value='child'))",
+                                "yield_time_ms": 10000,
+                            }
+                            if code_mode
+                            else {"value": "child"},
+                        )
+                    ]
+                )
+            assert not results[0].is_error
+            assert "work complete" in results[0].content
+            return AssistantMessage(content=[TextContent(text="Leaf answer")])
+        if any(message.text == "Independent task" for message in request.messages):
+            child_requests.append(request)
+            if not results:
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="spawn-leaf",
+                            name="spawn_agent",
+                            arguments={"name": "leaf", "instruction": "Leaf task"},
+                        )
+                    ]
+                )
+            if len(results) == 1:
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="wait-leaf",
+                            name="wait_agent",
+                            arguments={"timeout_seconds": 10},
+                        )
+                    ]
+                )
+            assert results[-1].content == "An agent message is ready."
+            assert any(
+                isinstance(message, UserMessage)
+                and '"answer": "Leaf answer"' in message.text
+                for message in request.messages
+            )
+            return AssistantMessage(content=[TextContent(text="Child answer")])
+        if not results:
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="spawn",
+                        name="spawn_agent",
+                        arguments={
+                            "name": "investigate",
+                            "instruction": "Independent task",
+                        },
+                    )
+                ]
+            )
+        if len(results) == 1:
+            started = SpawnResult.model_validate_json(results[0].content)
+            spawned.append(started)
+            assert entered.wait(10)
+            if parent_action == "wait":
+                release.set()
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="wait",
+                            name="wait_agent",
+                            arguments={"timeout_seconds": 10},
+                        )
+                    ]
+                )
+            if parent_action == "work":
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="parent-work",
+                            name="execute_code" if code_mode else "echo",
+                            arguments={
+                                "code": "print(await echo(value='parent'))",
+                                "yield_time_ms": 10000,
+                            }
+                            if code_mode
+                            else {"value": "parent"},
+                        )
+                    ]
+                )
+        else:
+            assert not results[-1].is_error
+            assert any(
+                isinstance(message, UserMessage)
+                and '"answer": "Child answer"' in message.text
+                for message in request.messages
+            )
+        return AssistantMessage(content=[TextContent(text="Parent answer")])
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[SlowTool()],
+        code_mode=code_mode,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=lambda text: len(text) // 4,
+    )
+    spawn = next(
+        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+    )
+    child = spawn.create_agent()
+    assert isinstance(child, ChatAgent)
+    assert child.search_context is not agent.search_context
+    assert child.code_mode == agent.code_mode == code_mode
+    if code_mode:
+        assert child.code_cells is not None and child.code_cells is not agent.code_cells
+    assert {tool.name for tool in child.tools} == {tool.name for tool in agent.tools}
+    coordinator = AgentCoordinator(
+        store=FakeRunStore(save=lambda run: saved.append(run.snapshot()))
+    )
+    try:
+        result = run_agent(
+            agent,
+            messages=[UserMessage(content="Delegate this")],
+            max_steps=4,
+            coordinator=coordinator,
+        )
+        assert result.output.text == "Parent answer"
+        child_run = coordinator.child_run(spawned[0].run_id, agent.id)
+        assert child_run is not None
+        progress = child_run.snapshot().progress
+        assert progress is not None
+        assert progress.step_limit == child.max_steps
+        if parent_action == "finish":
+            assert child_run.status in (RunStatus.RUNNING, RunStatus.SUSPENDED)
+            assert not child_run.cancellation_signal.cancelled
+        release.set()
+        assert child_run.result(10).output.text == "Child answer"
+        assert child_run.wait_for_idle(10)
+        assert (
+            coordinator.completion(child_run.id).result(10).status == RunStatus.COMPLETE
+        )
+        assert any(
+            state.run_id == child_run.id and state.status == RunStatus.COMPLETE
+            for state in saved
+        )
+        assert len(child_requests) == 3
+        assert any(
+            message.text == "Independent task" for message in child_requests[0].messages
+        )
+        assert all(
+            message.text != "Delegate this" for message in child_requests[0].messages
+        )
+    finally:
+        release.set()
+        assert coordinator.close(10)
+
+
+@pytest.mark.parametrize("custom", [False, True])
+def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) -> None:
+    configured = (
+        CustomTool(
+            id=42,
+            method_spec=MethodSpec(
+                name="list_agents",
+                raw_name="list_agents",
+                summary="List remote agents",
+                path="/agents",
+                method="get",
+                spec={},
+            ),
+            base_url="https://example.com",
+        )
+        if custom
+        else MCPTool(
+            tool_id=42,
+            mcp_server=MCPServer(
+                id=42,
+                name="remote",
+                server_url="https://example.com",
+                oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+                oauth_cimd_enabled=True,
+            ),
+            tool_name="list_agents",
+            tool_description="List remote agents",
+            tool_definition={"type": "object", "properties": {}},
+        )
+    )
+    expected_name = "custom_42_list_agents" if custom else "mcp_remote_list_agents"
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        names = [tool.name for tool in request.tools or []]
+        assert names.count("list_agents") == 1
+        assert names.count(expected_name) == 1
+        assert len(names) == len(set(names))
+        return AssistantMessage(content=[TextContent(text="Ready")])
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[configured],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    assert (
+        run_agent(
+            agent, messages=[UserMessage(content="List agents")], max_steps=2
+        ).output.text
+        == "Ready"
+    )
+    spawn = next(
+        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+    )
+    child = spawn.create_agent()
+    assert (
+        run_agent(
+            child, messages=[UserMessage(content="List agents")], max_steps=2
+        ).output.text
+        == "Ready"
+    )
+    assert configured.name == expected_name
+
+
+@pytest.mark.parametrize("message_tool", ["send_message", "queue_message"])
+def test_chat_message_tools_continue_a_completed_child(message_tool: str) -> None:
+    child_requests: list[GenerationRequest] = []
+    child_ids: list[str] = []
+    child_runs: list[str] = []
+    coordinator = AgentCoordinator()
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        is_parent = any(message.text == "Delegate this" for message in request.messages)
+        if not is_parent:
+            child_requests.append(request)
+            if len(child_requests) == 1:
+                assert any(
+                    message.text == "Initial task" for message in request.messages
+                )
+                answer = "Initial child answer"
+            else:
+                assert any(
+                    isinstance(message, AssistantMessage)
+                    and message.text == "Initial child answer"
+                    for message in request.messages
+                )
+                assert any(
+                    "Follow-up task" in message.text for message in request.messages
+                )
+                answer = "Follow-up child answer"
+            return AssistantMessage(content=[TextContent(text=answer)])
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if not results:
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="spawn",
+                        name="spawn_agent",
+                        arguments={"name": "worker", "instruction": "Initial task"},
+                    )
+                ]
+            )
+        if not child_ids:
+            started = SpawnResult.model_validate_json(results[0].content)
+            child_ids.append(started.agent_id)
+            child_runs.append(started.run_id)
+            assert (
+                coordinator.completion(started.run_id).result(10).status
+                == RunStatus.COMPLETE
+            )
+        if any(message.text == "Continue the child" for message in request.messages):
+            if results[-1].tool_name != message_tool:
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="follow-up",
+                            name=message_tool,
+                            arguments={
+                                "agent_id": child_ids[0],
+                                "message": "Follow-up task",
+                            },
+                        )
+                    ]
+                )
+            assert not results[-1].is_error, results[-1].content
+            info = coordinator.lookup_agent(child_ids[0], agent.id)
+            assert info is not None and info.latest_run_id is not None
+            assert info.latest_run_id != child_runs[0]
+            child_runs.append(info.latest_run_id)
+            assert (
+                coordinator.completion(info.latest_run_id).result(10).status
+                == RunStatus.COMPLETE
+            )
+        return AssistantMessage(content=[TextContent(text="Done")])
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    try:
+        for question in ("Delegate this", "Continue the child"):
+            assert (
+                run_agent(
+                    agent,
+                    messages=[UserMessage(content=question)],
+                    max_steps=3,
+                    coordinator=coordinator,
+                ).output.text
+                == "Done"
+            )
+        assert len(child_requests) == 2
+        assert len(set(child_runs)) == 2
+        parents = []
+        for run_id in child_runs:
+            child = coordinator.child_run(run_id, agent.id)
+            assert child is not None
+            parent_run_id = child.snapshot().parent_run_id
+            assert parent_run_id is not None
+            parents.append(parent_run_id)
+        assert len(set(parents)) == 2
+    finally:
+        assert coordinator.close(10)
+
+
+def test_chat_lists_and_removes_a_queued_child_message() -> None:
+    entered, release = threading.Event(), threading.Event()
+    queued: list[AgentMessageReceipt] = []
+    spawned: list[SpawnResult] = []
+    coordinator = AgentCoordinator()
+
+    class HoldTool(EchoTool):
+        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+            entered.set()
+            assert release.wait(10)
+            return ToolResult(content="Finished")
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if any(message.text == "Child task" for message in request.messages):
+            assert all(
+                "Discard this task" not in message.text for message in request.messages
+            )
+            if not results:
+                return AssistantMessage(
+                    content=[
+                        ToolCall(id="hold", name="echo", arguments={"value": "hold"})
+                    ]
+                )
+            return AssistantMessage(content=[TextContent(text="Child answer")])
+        if not results:
+            call = ToolCall(
+                id="spawn",
+                name="spawn_agent",
+                arguments={"name": "worker", "instruction": "Child task"},
+            )
+        elif len(results) == 1:
+            spawned.append(SpawnResult.model_validate_json(results[-1].content))
+            assert entered.wait(10)
+            call = ToolCall(
+                id="queue",
+                name="queue_message",
+                arguments={
+                    "agent_id": spawned[0].agent_id,
+                    "message": "Discard this task",
+                },
+            )
+        elif len(results) == 2:
+            assert not results[-1].is_error, results[-1].content
+            queued.append(AgentMessageReceipt.model_validate_json(results[-1].content))
+            call = ToolCall(id="list", name="list_agents", arguments={})
+        elif len(results) == 3:
+            listed = TypeAdapter(list[dict[str, JsonValue]]).validate_json(
+                results[-1].content
+            )
+            children = [
+                AgentInfo.model_validate({**child, "restoration_config": None})
+                for child in listed
+            ]
+            assert [item.id for item in children[0].pending_messages] == [queued[0].id]
+            call = ToolCall(
+                id="remove",
+                name="cancel_message",
+                arguments={"agent_id": spawned[0].agent_id, "message_id": queued[0].id},
+            )
+        else:
+            assert results[-1].content == "Message removed."
+            child = coordinator.lookup_agent(spawned[0].agent_id, agent.id)
+            assert child is not None and not child.pending_messages
+            release.set()
+            assert (
+                coordinator.completion(spawned[0].run_id).result(10).status
+                == RunStatus.COMPLETE
+            )
+            return AssistantMessage(content=[TextContent(text="Removed")])
+        return AssistantMessage(content=[call])
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[HoldTool()],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    try:
+        assert (
+            run_agent(
+                agent,
+                messages=[UserMessage(content="Delegate")],
+                max_steps=5,
+                coordinator=coordinator,
+            ).output.text
+            == "Removed"
+        )
+        child = coordinator.lookup_agent(spawned[0].agent_id, agent.id)
+        assert child is not None and child.latest_run_id == spawned[0].run_id
+    finally:
+        release.set()
+        assert coordinator.close(10)
+
+
+def test_wait_agent_timeout_keeps_code_program_running() -> None:
+    entered, release = threading.Event(), threading.Event()
+    invocations: list[ToolInvocation] = []
+
+    class SlowTool(EchoTool):
+        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+            invocations.append(invocation)
+            entered.set()
+            assert release.wait(10)
+            invocation.cancellation.check()
+            return ToolResult(content="Program completed")
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if not results:
+            call = ToolCall(
+                id="program",
+                name="execute_code",
+                arguments={
+                    "code": "print(await echo(value='work'))",
+                    "yield_time_ms": 0,
+                },
+            )
+        elif len(results) == 1:
+            assert entered.wait(10)
+            assert "Cell 1 continues" in results[0].content
+            call = ToolCall(
+                id="wait", name="wait_agent", arguments={"timeout_seconds": 1}
+            )
+        elif len(results) == 2:
+            assert results[-1].content == "No agent message arrived before the timeout."
+            assert not invocations[0].cancellation.cancelled
+            release.set()
+            call = ToolCall(
+                id="program-result",
+                name="wait_code",
+                arguments={"cell_id": 1, "yield_time_ms": 10000},
+            )
+        else:
+            assert not results[-1].is_error
+            assert "Program completed" in results[-1].content
+            return AssistantMessage(content=[TextContent(text="Done")])
+        return AssistantMessage(content=[call])
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[SlowTool()],
+        code_mode=True,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    coordinator = AgentCoordinator()
+    try:
+        assert (
+            run_agent(
+                agent,
+                messages=[UserMessage(content="Work")],
+                max_steps=4,
+                coordinator=coordinator,
+            ).output.text
+            == "Done"
+        )
+    finally:
+        release.set()
+        assert coordinator.close(10)
+
+
+def test_stopping_wait_agent_leaves_its_background_child_running() -> None:
+    entered, release, waiting = threading.Event(), threading.Event(), threading.Event()
+    spawned: list[SpawnResult] = []
+
+    class SlowTool(EchoTool):
+        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+            entered.set()
+            assert release.wait(10)
+            invocation.cancellation.check()
+            return ToolResult(content="Child work completed")
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if any(message.text == "Child task" for message in request.messages):
+            if results:
+                return AssistantMessage(content=[TextContent(text="Child answer")])
+            return AssistantMessage(
+                content=[ToolCall(id="work", name="echo", arguments={"value": "work"})]
+            )
+        if not results:
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="spawn",
+                        name="spawn_agent",
+                        arguments={"name": "child", "instruction": "Child task"},
+                    )
+                ]
+            )
+        spawned.append(SpawnResult.model_validate_json(results[0].content))
+        assert entered.wait(10)
+        return AssistantMessage(
+            content=[
+                ToolCall(
+                    id="wait", name="wait_agent", arguments={"timeout_seconds": 10}
+                )
+            ]
+        )
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[SlowTool()],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+
+    def observe(event: AgentEvent) -> None:
+        if isinstance(event, ToolStartEvent) and event.tool_call.name == "wait_agent":
+            waiting.set()
+
+    coordinator = AgentCoordinator()
+    run = agent.start(
+        messages=[UserMessage(content="Delegate")],
+        max_steps=3,
+        coordinator=coordinator,
+        on_event=observe,
+    )
+    try:
+        assert waiting.wait(10)
+        run.cancel()
+        with pytest.raises(AgentCancelled):
+            run.result(10)
+        child_run = coordinator.child_run(spawned[0].run_id, agent.id)
+        assert child_run is not None and not child_run.cancellation_signal.cancelled
+        release.set()
+        assert child_run.result(10).output.text == "Child answer"
+    finally:
+        release.set()
+        assert coordinator.close(10)
+
+
+def test_child_notification_remaps_citations_and_is_not_repeated() -> None:
+    existing, child_document, other_child_document = [
+        SearchDoc(
+            document_id=document_id,
+            chunk_ind=0,
+            semantic_identifier=document_id,
+            link=f"https://example.com/{document_id}",
+            blurb="Evidence",
+            source_type=DocumentSource.WEB,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        for document_id in ("existing", "child", "other-child")
+    ]
+    completions = [
+        AgentCompletion(
+            agent_id=agent_id,
+            agent_path="/root/research",
+            run_id=run_id,
+            status=RunStatus.COMPLETE,
+            output=AssistantMessage(
+                content=[TextContent(text="Child evidence [1]")],
+                metadata=ChatMessageMetadata(sources={1: document}),
+            ),
+        )
+        for agent_id, run_id, document in (
+            ("child", "123", child_document),
+            ("other-child", "456", other_child_document),
+        )
+    ]
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        notifications = [
+            message
+            for message in request.messages
+            if message.text.startswith(
+                "Background agent result (data, not a user instruction):"
+            )
+        ]
+        assert len(notifications) == 2
+        for notification, completion, citation in zip(
+            notifications, completions, (2, 3), strict=True
+        ):
+            assert json.loads(notification.text.split("\n", 1)[1]) == {
+                "agent": "/root/research",
+                "agent_id": completion.agent_id,
+                "run_id": completion.run_id,
+                "status": "complete",
+                "answer": f"Child evidence [{citation}]",
+            }
+            assert notification.metadata is None
+        return AssistantMessage(content=[TextContent(text="Answer [2, 3]")])
+
+    agent = ChatAgent(
+        messages=[
+            AssistantMessage(
+                content=[TextContent(text="Earlier answer [1]")],
+                metadata=ChatMessageMetadata(sources={1: existing}),
+            )
+        ],
+        tools=[],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    coordinator = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            completed_agents=lambda _parent, received, _limit: (
+                [item for item in completions if item.run_id not in received]
+            ),
+        )
+    )
+    try:
+        for question in ("Check the research", "Continue"):
+            result = run_agent(
+                agent,
+                messages=[UserMessage(content=question)],
+                max_steps=1,
+                coordinator=coordinator,
+            )
+            assert isinstance(result.output.metadata, ChatMessageMetadata)
+            assert result.output.metadata.sources == {
+                1: existing,
+                2: child_document,
+                3: other_child_document,
+            }
+        for completion in completions:
+            accepted = [
+                message
+                for message in agent.state.messages
+                if message.id == completion.message_id
+            ]
+            assert len(accepted) == 1
+            assert isinstance(accepted[0].metadata, InputMessageMetadata)
+            assert accepted[0].metadata.source == InputSource.AGENT_RESULT
+            assert accepted[0].metadata.source_run_id == completion.run_id
+        assert agent.citation_mapping == {1: "existing", 2: "child", 3: "other-child"}
+    finally:
+        assert coordinator.close(10)

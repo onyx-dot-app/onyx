@@ -118,8 +118,9 @@ captured tools in order and applies these gates:
 Two tools are added outside this loop. `SearchTool` is added when the request
 forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
 the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
-is set ([[#memory-tool-bypasses-filters]]). Last, `_disambiguate_mcp_tool_names`
-renames MCP tools whose names collide.
+is set ([[#memory-tool-bypasses-filters]]). Last, `disambiguate_tool_names`
+qualifies colliding MCP names with the server name and custom names with the tool ID.
+`ChatAgent` repeats this check after adding its built-in controls.
 
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
@@ -154,6 +155,24 @@ result. On Stop or a run failure, a running call ends with no result (status
 result that finishes after cancellation. Side effects that the tool already
 made are not undone, so check `invocation.cancellation` before irreversible
 work.
+
+**Default subagent controls.** `ChatAgent` adds the tools in
+`tools/tool_implementations/subagents/subagent_tools.py` to every normal chat,
+including children it creates. Incognito omits them. Chat also excludes the coding
+agent from tool configuration before construction and rejects deep research in
+incognito (`chat/execution.py:create_chat_agent`). These controls have no
+catalog rows or persona switches. ChatAgent supplies a child factory with its
+configured tools and step limit; each child builds its own controls and conversation state.
+The controls stay direct in code mode. Each child inherits code mode but owns
+its own code cells.
+An agent can list, message, or cancel its descendants on the selected branch,
+including children whose parent has finished. It cannot control siblings or ancestors.
+`send_message` reaches the next model step or starts an idle child with fresh limits.
+`queue_message` waits for normal completion; `cancel_message` removes pending input.
+Results reach the requesting agent before its next model call. `wait_agent` waits
+for an unread result or instruction, with a bounded timeout. It does not consume
+the message. The wait keeps the run active and preserves code cells.
+A completed root receives pending results on its next user turn.
 
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
@@ -352,11 +371,9 @@ Their control functions, such as `think_tool`, `generate_report` and
 - **A failed MCP credential lookup hides the server's tools with no user
   error.** `_construct_tools_impl` catches `MCPCredentialsError`, logs a
   warning and skips the server.
-- **OpenAPI tool names can collide.** `_disambiguate_mcp_tool_names` renames
-  only `MCPTool`. One OpenAPI schema rejects its own duplicate operation IDs
-  (`tools/tool_implementations/custom/openapi_parsing.py`), but nothing checks
-  across two OpenAPI tools on one agent, or against a built-in name. The
-  by-name maps keep the last one ([[#tool-name-is-lookup-key]]).
+- **Qualified tool names can still collide.** `disambiguate_tool_names` does
+  one pass. A configured name that already matches another tool's qualified
+  name can still conflict ([[#tool-name-is-lookup-key]]).
 - **`tools/utils.py:is_image_generation_available` has no caller,** and its
   rule differs from the image tool's ([[image-generation]]).
 

@@ -8,6 +8,9 @@ from onyx.agents.compaction import count_tokens
 from onyx.agents.execution_records import run_input_message_id
 from onyx.agents.models import (
     AgentInfo,
+    InputMessageMetadata,
+    InputSource,
+    MessageDelivery,
     RunFailureKind,
     RunStatus,
     StepRecord,
@@ -25,6 +28,7 @@ from onyx.chat.models import (
     ToolRecordReference,
     ToolReplayData,
 )
+from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
@@ -33,18 +37,21 @@ from onyx.db.chat import (
     MAX_CONVERSATION_MESSAGES,
     add_search_docs_to_chat_message,
     add_search_docs_to_tool_call,
+    agent_ancestor_chain,
     agent_session_path,
     checkpoint_from_summary,
     create_db_search_doc,
     find_summary_for_ancestry,
     parent_session_id,
     root_response_id,
+    session_ancestors,
     translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
+    ChatAgentInput,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatResponseItem,
@@ -56,6 +63,7 @@ from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import (
     GenerationRequestParams,
+    Message,
     UserMessage,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -673,7 +681,8 @@ class _ResponseWriter:
         )
         if (
             creation_response is None
-            or creation_response.chat_session_id != parent.chat_session_id
+            or parent.chat_session_id
+            not in session_ancestors(self.db_session, [response.chat_session_id])
             or root_response_id(self.db_session, creation_response)
             not in self.branch_ids
         ):
@@ -704,8 +713,6 @@ def reserve_child_response__no_commit(
         raise ValueError("Parent response is unavailable on this branch")
     if not record_mode_persists_content(root.chat_session.incognito_record_mode):
         raise ValueError("Content-free sessions cannot reserve durable child responses")
-    if agent.parent_id != str(parent.chat_session_id):
-        raise ValueError("Child agent belongs to another parent")
     if not isinstance(instruction.content, str):
         raise ValueError("Saved child instructions must contain text only")
     generation = next(
@@ -727,6 +734,8 @@ def reserve_child_response__no_commit(
     child_session = session.get(ChatSession, UUID(agent.id))
     branch_ids = visible_message_ids(session, root)
     if child_session is None:
+        if agent.parent_id != str(parent.chat_session_id):
+            raise ValueError("Child agent belongs to another parent")
         child_session = ChatSession(
             id=UUID(agent.id),
             spawned_by_message_id=parent.id,
@@ -747,7 +756,7 @@ def reserve_child_response__no_commit(
     )
     if (
         creation_response is None
-        or creation_response.chat_session_id != parent.chat_session_id
+        or parent.chat_session_id not in session_ancestors(session, [child_session.id])
         or root_response_id(session, creation_response) not in branch_ids
     ):
         raise ValueError("Child session is unavailable on this branch")
@@ -845,6 +854,7 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
         if row.message.id != row.id or row.step_index != len(steps):
             raise ValueError("Response assistant identity or step is invalid")
         step = StepRecord(
+            input_messages=[read_response_input(item) for item in row.inputs],
             message=row.message.model_copy(deep=True),
             generation_status=row.generation_status,
         )
@@ -887,6 +897,119 @@ def _invoking_message_id(invocation: ToolCall) -> str:
     }:
         raise ValueError("Tool invocation has no assistant message")
     return row.id
+
+
+def read_response_input(row: ChatAgentInput) -> UserMessage:
+    invocation = row.invoking_tool_call
+    source_id = (
+        invocation.parent_chat_message_id if invocation else row.source_response_id
+    )
+    metadata = (
+        InputMessageMetadata(
+            source=row.source,
+            source_run_id=str(source_id) if source_id is not None else None,
+            sender_agent_id=(
+                str(invocation.chat_session_id)
+                if invocation
+                else str(row.source_agent_id)
+                if row.source_agent_id is not None
+                else None
+            ),
+        )
+        if row.source != InputSource.HUMAN or source_id is not None
+        else None
+    )
+    return UserMessage(id=row.message_id, content=row.content, metadata=metadata)
+
+
+def write_response_inputs(
+    session: Session,
+    response: ChatMessage,
+    item: ChatResponseItem,
+    messages: list[UserMessage],
+) -> None:
+    """Keep accepted inputs immutable and adopt pending rows in model order."""
+    existing = {row.message_id: row for row in item.inputs}
+    incoming: set[str] = set()
+    for position, message in enumerate(messages):
+        if message.id is None or message.id in incoming:
+            raise ValueError("Received input identity is missing or repeated")
+        if not isinstance(message.content, str):
+            raise ValueError("Saved agent inputs must contain text only")
+        incoming.add(message.id)
+        content = sanitize_string(message.content)
+        row = existing.get(message.id)
+        if row is not None:
+            if row.position != position or row.content != content:
+                raise ValueError("Accepted input content or position changed")
+            continue
+        row = session.scalar(
+            select(ChatAgentInput)
+            .where(
+                ChatAgentInput.recipient_session_id == response.chat_session_id,
+                ChatAgentInput.message_id == message.id,
+                ChatAgentInput.response_item_id.is_(None),
+            )
+            .with_for_update(of=ChatAgentInput)
+        )
+        origin = message.metadata
+        if row is not None and (
+            row.target_response_id != response.id
+            or row.delivery != MessageDelivery.SEND
+        ):
+            raise ValueError("Pending input targets another response")
+        if row is None:
+            source = (
+                origin.source
+                if isinstance(origin, InputMessageMetadata)
+                else InputSource.HUMAN
+            )
+            source_id = (
+                origin.source_run_id
+                if isinstance(origin, InputMessageMetadata)
+                else None
+            )
+            if source == InputSource.AGENT:
+                raise ValueError("Submitted input is no longer pending")
+            if source_id is not None and not source_id.isdecimal():
+                raise ValueError("Saved input source must identify a response")
+            if source == InputSource.AGENT_RESULT:
+                source_response = (
+                    session.get(ChatMessage, int(source_id))
+                    if source_id is not None
+                    else None
+                )
+                source_question = (
+                    source_response.parent_message if source_response else None
+                )
+                invocation = (
+                    source_question.invoking_tool_call if source_question else None
+                )
+                root = session.get(ChatMessage, root_response_id(session, response))
+                if (
+                    source_response is None
+                    or root is None
+                    or invocation is None
+                    or invocation.chat_session_id != response.chat_session_id
+                    or root_response_id(session, source_response)
+                    not in visible_message_ids(session, root)
+                ):
+                    raise ValueError("Input result is unavailable on this branch")
+            row = ChatAgentInput(
+                recipient_session_id=response.chat_session_id,
+                message_id=sanitize_string(message.id),
+                source=source,
+                source_response_id=int(source_id) if source_id is not None else None,
+                content=content,
+            )
+        row.content = content
+        row.position = position
+        row.delivery = None
+        row.max_steps = None
+        row.total_timeout_s = None
+        item.inputs.append(row)
+    if existing.keys() - incoming:
+        raise ValueError("Response update cannot discard accepted inputs")
 
 
 def read_response_record(
@@ -985,6 +1108,8 @@ def write_response_items(
         if item_id not in existing:
             response.response_items.append(row)
         row.message = message
+        with db_session.no_autoflush:
+            write_response_inputs(db_session, response, row, step.input_messages)
         row.generation_status = step.generation_status
         row.is_answer = step_index == record.answer_step_index
         setting = presentation.pop(message_id, None)
@@ -1085,6 +1210,8 @@ def read_response_status__no_commit(
         return None
     current = response
     visited: set[int] = set()
+    ancestor_agent_ids: list[str] = []
+    follows_session_ancestry = True
     while current.spawned_by_message_id is not None:
         if current.message_id in visited or len(visited) >= MAX_AGENT_DEPTH:
             raise ValueError("Child response hierarchy is cyclic or too deep")
@@ -1094,14 +1221,23 @@ def read_response_status__no_commit(
         parent = _read_response_ancestry(session, current.parent_response_id)
         if parent is None:
             raise ValueError("Parent response is unavailable")
+        ancestor_agent_ids.append(str(parent.session_id))
+        follows_session_ancestry = (
+            follows_session_ancestry and parent.session_id == current.parent_session_id
+        )
         current = parent
+    if not follows_session_ancestry:
+        # An ancestor can invoke a descendant without changing its original parent.
+        ancestors = session_ancestors(session, [response.session_id])
+        ancestor_agent_ids = [
+            str(ancestor.id)
+            for ancestor in agent_ancestor_chain(response.session_id, ancestors)[1:]
+        ]
     return ResponseStatus(
         message_id=response.message_id,
         root_message_id=current.message_id,
         root_session_id=current.session_id,
-        parent_agent_id=str(response.parent_session_id)
-        if response.parent_session_id is not None
-        else None,
+        ancestor_agent_ids=ancestor_agent_ids,
         status=response.status,
     )
 
@@ -1131,6 +1267,27 @@ def read_response__no_commit(
     parent_id = parent_session_id(session, agent)
     path = agent_session_path(session, agent)
     record = read_response_record(response, path)
+    messages: list[Message] = [step.message for step in record.steps]
+    restore_response_sources(
+        messages,
+        {
+            doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
+            for saved in session.scalars(
+                select(ChatMessage)
+                .where(ChatMessage.id.in_({root_id, response.id}))
+                .options(selectinload(ChatMessage.search_docs))
+                .order_by(ChatMessage.id == response.id)
+            )
+            for doc in saved.search_docs or []
+        },
+        {
+            item.id: MessageRendering.model_validate(item.rendering)
+            for item in response.response_items
+            if item.rendering is not None
+        },
+    )
+    for step, message in zip(record.steps, messages, strict=True):
+        step.message.metadata = message.metadata
     record.checkpoint = checkpoint_from_summary(
         find_summary_for_ancestry(
             session, response.chat_session_id, visible_message_ids(session, response)

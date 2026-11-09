@@ -9,6 +9,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    InputMessageMetadata,
     RunProgress,
     RunState,
     RunStatus,
@@ -39,6 +40,7 @@ _SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])
 
 
 CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
+    "agent.input.v1": InputMessageMetadata,
     "prompt.metadata.v1": PromptMetadata,
     "chat.metadata.v1": ChatMessageMetadata,
     "chat.rendering.v1": MessageRendering,
@@ -197,6 +199,9 @@ def _serialized_run_state(
     data = _dump(state, exclude={"input_messages", "steps", "progress"})
     data["steps"] = [
         {
+            "input_messages": [
+                serializer.encode_message(message) for message in step.input_messages
+            ],
             "message": serializer.encode_message(step.message),
             "generation_status": step.generation_status.value,
             "tools": {

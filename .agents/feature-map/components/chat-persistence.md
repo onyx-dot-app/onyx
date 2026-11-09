@@ -88,7 +88,8 @@ ChatRunStore (content-persisting only)     chat/run_store.py; each save commits 
                                            no steps yet
   reserve_run_id (sub-agent)               saves the parent's steps so far, then
                                            reserve_child_response__no_commit
-  save (child run end)                     _save_output: the child's terminal record
+  save (child run end)                     _save_output -> save_chat_turn: terminal
+                                           record, display data and source links
   save (root run end)                      ownership check, then:
 ChatResponsePersistence.save               chat/persistence.py; for USAGE_ONLY it is
                                            the run store itself (no ChatRunStore)
@@ -134,7 +135,7 @@ those pointers from the root gives the active conversation
 (`db/chat.py:set_as_latest_chat_message`). A multi-model pick sets
 `preferred_response_id` and moves the same pointer (`db/chat.py:set_preferred_response`).
 
-**Child sessions.** When a research or coding sub-agent runs in a
+**Child sessions.** When a research, coding or background sub-agent runs in a
 content-persisting chat, `reserve_child_response__no_commit` creates a
 `ChatSession` with `spawned_by_message_id` set to the parent response. It
 copies the root's user, agent, Slack flag and record mode. A child session has
@@ -142,13 +143,20 @@ no `SYSTEM` root: its first question has no parent, and
 `invoking_tool_call_id` links it to the parent's `ToolCall`, which
 `ChatRunStore.reserve_run_id` saves first. A later call to the same sub-agent
 reuses its child session and chains the new question to the previous
-response, which must be terminal. `db/chat_response.py:_ResponseWriter.store`
+response, which must be terminal. Creation links determine authorized ancestors;
+the invoking tool identifies the requester of each run. An ancestor can request
+a grandchild's next run without changing the grandchild's session ancestry.
+`db/chat_response.py:_ResponseWriter.store`
 refuses a run tree deeper than 8 or larger than 512 runs, and a run with more
 than 8192 messages, so a very large research turn fails its save. Hard delete and
 retention treat the root and its descendants as one conversation
 (`db/chat.py:session_descendants`). A failed child start deletes the unused
 question, response and empty child session
-(`db/chat_response.py:abort_response_start__no_commit`).
+(`db/chat_response.py:abort_response_start__no_commit`). Child answers retain
+their own source links. Reads prefer those sources and fall back to the root
+response's sources for earlier saved children.
+`db/chat_subagents.py:load_session_agent_metadata` limits recent agents but
+also returns their ancestors, so discovery can reach each selected descendant.
 
 **Tool calls.** On a runtime response, `parent_chat_message_id` always names
 the owning response ([[#turn-number-is-step-index]]), and
@@ -161,6 +169,19 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 **Replay.** Neither path re-runs anything. A runtime response replays through
 `chat/presentation.py:replay_response`, which uses the same message and tool
 renderers as the live stream and reads typed results, not the tool catalog.
+It excludes background child output from the `spawn_agent` card. The parent
+receives that output as a message before its next model call.
+`ChatAgentInput` stores pending instructions as text and links accepted inputs
+to the response item that consumed them. Starting a new run moves its pending
+instruction into the existing user-message tree in the same transaction.
+The runtime records an input only after its acceptance transaction commits.
+Inbox writers lock the recipient session before the response. The session lock
+uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
+Accepted result inputs reference their source response; reconstructed history
+retains that provenance across compaction. The directory selects unread results
+for the invoking agent on the active branch, so receipt on one branch
+does not consume a result on another. An ended parent receives results on its
+next user turn; completion alone does not create a turn.
 Search documents and `tool_id` come from the `ToolCall` rows and their search-doc
 links (`db/chat_response.py:read_response_replay_data`), not from the typed
 result: the saved `SearchDocsResponse` holds no documents. Only
@@ -204,7 +225,9 @@ Content-persisting sessions retain PostgreSQL evidence for replay and citations.
 `USAGE_ONLY` sessions store no conversation content there. Their temporary history
 can lose evidence before model compaction under the retention limits below.
 
-**Incognito.** A session pins `incognito_record_mode` when it is created
+**Incognito.** Chat does not start subagents, deep research, or coding agents in
+incognito. Temporary history retains root messages and response receipts for
+idempotent saves. It does not index child conversations. A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings
 cache). `FULL_HISTORY` stores content like a normal chat and only hides it
 from the owner. `USAGE_ONLY` (the default) writes rows with blank text and
@@ -217,16 +240,15 @@ mode store work in later turns.
 The database branch selects retained user messages and response output IDs from
 the temporary list. Saving a new input removes future turns and unselected model
 answers before appending its text-file messages and question. A small response
-index keeps run IDs, output IDs and each response’s checkpoint even when child-agent
-payloads are evicted. Continuation and regeneration use the selected parent’s
+index keeps run IDs, output IDs and each response’s checkpoint.
+Continuation and regeneration use the selected parent’s
 checkpoint, never the last sibling saved. A failed save or eviction can leave a
 selected database response without temporary content. The next turn’s temporary
 prompt history omits that response and never substitutes a sibling. The chat-session
 API still returns its blank database row and replay stop. Image metadata keeps file references, not image bytes. Regeneration reuses the saved
 input group; it fails when the question has expired or was trimmed.
-The list keeps at most 200 messages and 1 MB. For byte overflows, older sub-agent
-records go first. Remaining byte overflows and message-count overflows remove complete
-oldest turns, including attachments, questions, and response/tool messages.
+The list keeps at most 200 messages and 1 MB. Byte and message-count overflows
+remove complete oldest turns, including attachments, questions, and response/tool messages.
 An input or response that cannot fit with its complete current turn fails its save
 (`chat/incognito_context.py:_retained_state`). The answer save is two writes
 that are not atomic: the Postgres usage row commits first, then Redis. A

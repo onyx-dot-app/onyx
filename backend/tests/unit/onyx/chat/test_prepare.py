@@ -19,7 +19,7 @@ from onyx.chat.chat_processing_checker import (
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
-    IncognitoAgentResponse,
+    IncognitoResponseReceipt,
     IncognitoState,
 )
 from onyx.chat.process_message import (
@@ -617,7 +617,7 @@ def test_incognito_history_retains_summary_checkpoint(
         ],
         previous_run_id="previous-run",
         responses={
-            "1": IncognitoAgentResponse(
+            "1": IncognitoResponseReceipt(
                 replay_digest="",
                 run_id="previous-run",
                 message_ids=["previous-run:0"],

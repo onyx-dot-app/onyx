@@ -1657,10 +1657,11 @@ def session_ancestors(
     return {row.id: row for row in rows}
 
 
-def agent_path_from_ancestors(
+def agent_ancestor_chain(
     agent_id: UUID, ancestors: dict[UUID, SessionAncestor]
-) -> str:
-    segments: list[str] = []
+) -> list[SessionAncestor]:
+    """Return this agent and its parents, with a complete and acyclic ancestry."""
+    chain: list[SessionAncestor] = []
     visited: set[UUID] = set()
     current: UUID | None = agent_id
     while current is not None:
@@ -1670,8 +1671,18 @@ def agent_path_from_ancestors(
         ancestor = ancestors.get(current)
         if ancestor is None:
             raise ValueError("Agent parent is unavailable")
-        segments.append(ancestor.agent_name or "root")
+        chain.append(ancestor)
         current = ancestor.parent_id
+    return chain
+
+
+def agent_path_from_ancestors(
+    agent_id: UUID, ancestors: dict[UUID, SessionAncestor]
+) -> str:
+    segments = [
+        ancestor.agent_name or "root"
+        for ancestor in agent_ancestor_chain(agent_id, ancestors)
+    ]
     return "/" + "/".join(reversed(segments))
 
 

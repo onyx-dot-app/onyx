@@ -74,13 +74,13 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
         assert root_status is not None
         assert root_status.message_id == root_id
         assert root_status.root_message_id == root_id
-        assert root_status.parent_agent_id is None
+        assert root_status.ancestor_agent_ids == []
         assert root_status.status == RunStatus.RUNNING
         assert child_status is not None
         assert child_status.message_id == child_id
         assert child_status.root_message_id == root_id
         assert child_status.root_session_id == root_session_id
-        assert child_status.parent_agent_id == str(root_session_id)
+        assert child_status.ancestor_agent_ids == [str(root_session_id)]
         assert child_status.status == RunStatus.SUSPENDED
         assert missing is None
         assert len(statements) == 4

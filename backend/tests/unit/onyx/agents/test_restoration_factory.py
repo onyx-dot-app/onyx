@@ -323,5 +323,15 @@ def test_restored_chat_keeps_the_saved_code_mode(
     rebuilt.restore_state(state)
     run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
     names, choice, request_text = _offered(llm)
-    assert (names, choice) == (offered, ToolChoiceOptions.AUTO)
+    assert names == [
+        *offered,
+        "spawn_agent",
+        "list_agents",
+        "wait_agent",
+        "cancel_agent",
+        "send_message",
+        "queue_message",
+        "cancel_message",
+    ]
+    assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text

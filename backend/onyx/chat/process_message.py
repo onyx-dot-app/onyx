@@ -486,7 +486,6 @@ def prepare_chat_turn(
             history_store = RedisChatHistoryStore(
                 message_id=user_message_id,
                 chat_session_id=chat_session_id,
-                visible_message_ids=(),
                 admission=admission,
             )
             history, previous_run_id, checkpoint = history_store.prepare_messages(

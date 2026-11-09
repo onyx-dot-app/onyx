@@ -1,17 +1,24 @@
 """Select child sessions and restore their branch-visible conversation context."""
 
+from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import TypeAdapter
-from sqlalchemy import Text, case, cast, func, literal, or_, select
+from sqlalchemy import Text, and_, case, cast, func, literal, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
 from sqlalchemy.sql.selectable import CTE
 
 from onyx.agents.execution_records import run_input_message_id
-from onyx.agents.models import AgentInfo, RunStatus, messages_from_steps
+from onyx.agents.models import (
+    AgentCompletion,
+    AgentInfo,
+    RunStatus,
+    messages_from_steps,
+)
 from onyx.chat.models import (
     MAX_DISCOVERED_AGENTS,
     ChatBranch,
+    ChatMessageMetadata,
     MessageRendering,
     ResponseLink,
     ResponseRecord,
@@ -23,10 +30,8 @@ from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     MAX_AGENT_HISTORY_RUNS,
     agent_path_from_ancestors,
-    agent_session_path,
     checkpoint_from_summary,
     find_summary_for_ancestry,
-    parent_session_id,
     session_ancestors,
     translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
@@ -36,8 +41,19 @@ from onyx.db.chat_response import (
     read_response_steps,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, ToolCall
+from onyx.db.models import (
+    ChatAgentInput,
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatResponseItem,
+    ChatSession,
+    ToolCall,
+)
+from onyx.db.models import (
+    SearchDoc as StoredSearchDoc,
+)
 from onyx.llm.models import Message, UserMessage
+from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 
 MAX_AGENT_HISTORY_BYTES = 16 * 1024 * 1024
 
@@ -129,6 +145,166 @@ def _selected_responses(branch: ChatBranch) -> CTE:
         )
     )
     return responses
+
+
+def background_response_statuses(
+    db_session: Session,
+    branch: ChatBranch,
+    parent_agent_id: str,
+    received_run_ids: Collection[str],
+) -> dict[int, RunStatus]:
+    """Read unread direct-child statuses on the authorized branch; does not commit."""
+    selected = _selected_responses(branch)
+    question = aliased(ChatMessage)
+    invocation = aliased(ToolCall)
+    generation = aliased(ChatResponseItem)
+    rows = db_session.execute(
+        select(ChatMessage.id, ChatMessage.response_status)
+        .join(selected, selected.c.id == ChatMessage.id)
+        .join(question, ChatMessage.parent_message_id == question.id)
+        .join(invocation, question.invoking_tool_call_id == invocation.id)
+        .join(
+            generation,
+            and_(
+                generation.chat_message_id == invocation.parent_chat_message_id,
+                generation.step_index == invocation.turn_number,
+            ),
+        )
+        .where(
+            invocation.chat_session_id == UUID(parent_agent_id),
+            or_(
+                *[
+                    generation.message["content"].contains(
+                        func.jsonb_build_array(
+                            func.jsonb_build_object(
+                                "type",
+                                "tool_call",
+                                "id",
+                                invocation.tool_call_id,
+                                "name",
+                                name,
+                            )
+                        )
+                    )
+                    for name in (SPAWN_AGENT_TOOL_NAME, "send_message", "queue_message")
+                ]
+            ),
+            ChatMessage.id.not_in(
+                [int(run_id) for run_id in received_run_ids if run_id.isdecimal()]
+            ),
+        )
+        .order_by(
+            case(
+                (
+                    ChatMessage.response_status.in_(
+                        [status for status in RunStatus if status.is_terminal]
+                    ),
+                    0,
+                ),
+                else_=1,
+            ),
+            ChatMessage.id,
+        )
+        .limit(MAX_DISCOVERED_AGENTS)
+    )
+    return {response_id: status for response_id, status in rows if status is not None}
+
+
+def read_agent_completions(
+    db_session: Session, response_ids: list[int]
+) -> list[AgentCompletion]:
+    """Read final output of authorized response IDs, without their execution trees."""
+    if not response_ids:
+        return []
+    last_step = (
+        select(ChatResponseItem.step_index)
+        .where(ChatResponseItem.chat_message_id == ChatMessage.id)
+        .order_by(ChatResponseItem.is_answer.desc(), ChatResponseItem.step_index.desc())
+        .limit(1)
+        .correlate(ChatMessage)
+        .scalar_subquery()
+    )
+    rows = db_session.execute(
+        select(ChatMessage, ChatResponseItem)
+        .outerjoin(
+            ChatResponseItem,
+            and_(
+                ChatResponseItem.chat_message_id == ChatMessage.id,
+                ChatResponseItem.step_index == last_step,
+            ),
+        )
+        .where(ChatMessage.id.in_(response_ids))
+        .order_by(ChatMessage.id)
+        .options(
+            load_only(
+                ChatMessage.id,
+                ChatMessage.chat_session_id,
+                ChatMessage.response_status,
+                ChatMessage.response_failure,
+            ),
+            load_only(ChatResponseItem.message, ChatResponseItem.rendering),
+        )
+    ).all()
+    ancestors = session_ancestors(
+        db_session, [response.chat_session_id for response, _ in rows]
+    )
+    renderings = {
+        response.id: MessageRendering.model_validate(item.rendering)
+        for response, item in rows
+        if item is not None and item.rendering is not None
+    }
+    cited_document_ids = {
+        document_id
+        for rendering in renderings.values()
+        for document_id in rendering.citation_documents.values()
+    }
+    documents = (
+        {
+            (
+                response_id,
+                document.document_id,
+            ): translate_db_search_doc_to_saved_search_doc(document)
+            for response_id, document in db_session.execute(
+                select(ChatMessage__SearchDoc.chat_message_id, StoredSearchDoc)
+                .join(
+                    StoredSearchDoc,
+                    StoredSearchDoc.id == ChatMessage__SearchDoc.search_doc_id,
+                )
+                .where(
+                    ChatMessage__SearchDoc.chat_message_id.in_(response_ids),
+                    StoredSearchDoc.document_id.in_(cited_document_ids),
+                )
+            )
+        }
+        if cited_document_ids
+        else {}
+    )
+    completions: list[AgentCompletion] = []
+    for response, item in rows:
+        if response.response_status is None or not response.response_status.is_terminal:
+            raise ValueError("Agent completion requires a terminal response")
+        output = item.message if item is not None else None
+        rendering = renderings.get(response.id)
+        if output is not None and rendering is not None:
+            output.metadata = ChatMessageMetadata(
+                sources={
+                    number: documents[(response.id, document_id)]
+                    for number, document_id in rendering.citation_documents.items()
+                }
+            )
+        completions.append(
+            AgentCompletion(
+                agent_id=str(response.chat_session_id),
+                agent_path=agent_path_from_ancestors(
+                    response.chat_session_id, ancestors
+                ),
+                run_id=str(response.id),
+                status=response.response_status,
+                output=output,
+                failure=response.response_failure,
+            )
+        )
+    return completions
 
 
 def _selected_response_links(
@@ -248,7 +424,19 @@ def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
         .scalar_subquery()
     )
     total_bytes = db_session.execute(
-        select(item_bytes + tool_bytes + input_bytes)
+        select(
+            item_bytes
+            + tool_bytes
+            + input_bytes
+            + select(
+                func.coalesce(func.sum(func.octet_length(ChatAgentInput.content)), 0)
+            )
+            .join(
+                ChatResponseItem, ChatAgentInput.response_item_id == ChatResponseItem.id
+            )
+            .where(ChatResponseItem.chat_message_id.in_(response_ids))
+            .scalar_subquery()
+        )
     ).scalar_one()
     if total_bytes > MAX_AGENT_HISTORY_BYTES:
         raise ValueError("Agent history exceeds its content limit")
@@ -305,31 +493,31 @@ def _load_history(
             db_session, agent.id, visible_message_ids(db_session, responses[0])
         )
         restored.checkpoint = checkpoint_from_summary(summary)
-    roots = {
-        root.id: {
+    sources = {
+        response.id: {
             doc.document_id: translate_db_search_doc_to_saved_search_doc(doc)
-            for doc in root.search_docs
+            for doc in response.search_docs
         }
-        for root in db_session.scalars(
+        for response in db_session.scalars(
             select(ChatMessage)
-            .where(ChatMessage.id.in_({link.root_id for link in links}))
+            .where(
+                ChatMessage.id.in_({link.root_id for link in links} | set(response_ids))
+            )
             .options(selectinload(ChatMessage.search_docs))
         )
     }
     for response in reversed(responses):
         root_id = by_id[response.id].root_id
-        documents = roots.get(root_id)
-        if documents is None:
+        if root_id not in sources:
             raise ValueError("Root response is unavailable")
+        documents = {**sources[root_id], **sources.get(response.id, {})}
         for item in response.response_items:
             if item.rendering:
                 rendering = MessageRendering.model_validate(item.rendering)
                 for number, document_id in rendering.citation_documents.items():
                     document = documents.get(document_id)
                     if document is None:
-                        raise ValueError(
-                            "Cited source is unavailable on the root response"
-                        )
+                        raise ValueError("Cited source is unavailable on the response")
                     restored.sources[number] = document
     return restored
 
@@ -356,7 +544,9 @@ def load_saved_response(
         if session_id is None:
             return None
         agent = _visible_agent(db_session, branch, str(session_id))
-        if parent_session_id(db_session, agent) != UUID(parent_agent_id):
+        ancestors = session_ancestors(db_session, [agent.id])
+        parent_id = UUID(parent_agent_id)
+        if parent_id == agent.id or parent_id not in ancestors:
             return None
         links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
         if not any(link.id == response_id for link in links):
@@ -375,7 +565,9 @@ def load_saved_response(
         )
         if response is None:
             return None
-        record = read_response_record(response, agent_session_path(db_session, agent))
+        record = read_response_record(
+            response, agent_path_from_ancestors(agent.id, ancestors)
+        )
         summary = find_summary_for_ancestry(
             db_session, agent.id, visible_message_ids(db_session, response)
         )
@@ -440,10 +632,20 @@ def load_session_agent_metadata(
                 for agent in agents
             }
         )
+        # Keep the ancestry needed to reach descendants outside the recent-agent limit.
+        missing_ids = ancestors.keys() - set(agent_ids)
+        if not include_root:
+            missing_ids.discard(branch.chat_session_id)
+        if missing_ids:
+            agents.extend(
+                db_session.scalars(
+                    select(ChatSession).where(ChatSession.id.in_(missing_ids))
+                )
+            )
         links = _selected_response_links(
             db_session,
             branch,
-            [agent_id for agent_id in agent_ids if agent_id != branch.chat_session_id],
+            [agent.id for agent in agents if agent.id != branch.chat_session_id],
         )
         metadata: list[AgentInfo] = []
         for agent in agents:
@@ -486,21 +688,21 @@ def lookup_session_agent(
         parent = _visible_agent(db_session, branch, parent_agent_id)
         responses = _selected_responses(branch)
         agent = db_session.scalar(
-            select(ChatSession)
-            .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
-            .where(
-                ChatMessage.chat_session_id == parent.id,
+            select(ChatSession).where(
                 ChatSession.id == UUID(agent_id),
                 ChatSession.spawned_by_message_id.in_(select(responses.c.id)),
             )
         )
         if agent is None:
             return None
+        ancestors = session_ancestors(db_session, [agent.id])
+        if parent.id == agent.id or parent.id not in ancestors:
+            return None
         links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
         latest = links[0] if links else None
         return _agent_metadata(
             agent,
-            session_ancestors(db_session, [agent.id]),
+            ancestors,
             latest.id if latest else None,
             latest.status if latest else None,
         )

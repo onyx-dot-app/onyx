@@ -19,12 +19,14 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
     message_citation_sources,
+    remap_received_citations,
 )
 from onyx.chat.errors import build_empty_llm_response_error
 from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import (
     ChatFeatureState,
     ChatMessageMetadata,
+    ChatTurnSetup,
     CitationMode,
     PersonaPromptConfig,
     PromptMetadata,
@@ -41,9 +43,14 @@ from onyx.chat.tool_results import (
     tool_result_parts,
     tool_result_sources,
 )
-from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
+from onyx.configs.chat_configs import (
+    CODE_MODE_ENABLED,
+    CODE_MODE_MAX_LLM_CYCLES,
+    MAX_LLM_CYCLES,
+)
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
     AssistantMessage,
@@ -61,14 +68,25 @@ from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.tool_constructor import disambiguate_tool_names
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.subagents.subagent_tools import (
+    CancelAgentTool,
+    CancelMessageTool,
+    ListAgentsTool,
+    QueueMessageTool,
+    SendMessageTool,
+    SpawnAgentTool,
+    WaitAgentTool,
+)
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
+from shared_configs.contextvars import get_current_incognito_record_mode
 
 
 class ChatAgent(Agent, RestorableFeature):
@@ -156,6 +174,20 @@ class ChatAgent(Agent, RestorableFeature):
         self.persona = persona
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
+
+        if get_current_incognito_record_mode() is None:
+            self.application_tools.extend(
+                [
+                    SpawnAgentTool(self.create_subagent, max_steps=self.max_steps),
+                    ListAgentsTool(),
+                    WaitAgentTool(),
+                    CancelAgentTool(),
+                    SendMessageTool(max_steps=self.max_steps),
+                    QueueMessageTool(max_steps=self.max_steps),
+                    CancelMessageTool(),
+                ]
+            )
+        disambiguate_tool_names(self.application_tools)
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -174,6 +206,28 @@ class ChatAgent(Agent, RestorableFeature):
             after_tool_call=self._finalize_tool,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
+        )
+
+    def create_subagent(self) -> "ChatAgent":
+        """Build a child conversation with this chat's current tools and settings."""
+        return ChatAgent(
+            messages=[],
+            tools=self.configured_tools,
+            code_mode=self.code_mode,
+            custom_agent_prompt=self.custom_agent_prompt,
+            base_system_prompt=self.base_system_prompt,
+            context_files=self.context_files,
+            persona=self.persona,
+            user_memory_context=self.memory,
+            llm=self.llm,
+            token_counter=self.token_counter,
+            user_identity=self.generation_context.user_identity,
+            chat_files=self.chat_files,
+            reasoning_effort=self.reasoning_effort,
+            include_citations=self.include_citations,
+            all_injected_file_metadata=self.file_metadata,
+            inject_memories_in_prompt=self.inject_memories,
+            reminders_enabled=self.reminders_enabled,
         )
 
     def capture_state(self) -> ChatFeatureState:
@@ -274,6 +328,19 @@ class ChatAgent(Agent, RestorableFeature):
                     self._update_tool_context([message])
             # Query expansion applies to the current turn only.
             self.has_called_search_tool = False
+        received = remap_received_citations(
+            state.received_inputs, self.citation_processor.citation_to_doc
+        )
+        if (citations := received.citation_sources) is not None:
+            known_documents = {
+                document.document_id for document in self.gathered_documents
+            }
+            self.citation_processor.update_citation_mapping(citations)
+            for number, document in citations.items():
+                self.citation_mapping[number] = document.document_id
+                if document.document_id not in known_documents:
+                    known_documents.add(document.document_id)
+                    self.gathered_documents.append(document)
         results = [
             message
             for message in state.messages
@@ -304,6 +371,7 @@ class ChatAgent(Agent, RestorableFeature):
             preferred_tool_id=self.preferred_tool_id,
         )
         return PreparedStep(
+            input_messages=received.messages,
             allowed_tool_names=allowed_tool_names,
             options=GenerationOptions(
                 tool_choice=tool_choice, reasoning_effort=self.reasoning_effort
@@ -420,3 +488,41 @@ class ChatAgent(Agent, RestorableFeature):
                 "The model did not return a final answer after tool execution."
             )
         return None
+
+
+def build_chat_agent(
+    state: AgentState,
+    agent_id: str,
+    previous_run_id: str | None,
+    *,
+    setup: ChatTurnSetup,
+    llm: LLM,
+    tools: list[Tool],
+    inject_memories: bool,
+    preferred_tool_id: int | None = None,
+    additional_context: str | None = None,
+) -> ChatAgent:
+    """Build a chat conversation independently of the current root's feature."""
+    return ChatAgent(
+        agent_id=agent_id,
+        messages=state.messages,
+        checkpoint=state.checkpoint,
+        previous_run_id=previous_run_id,
+        tools=tools,
+        code_mode=CODE_MODE_ENABLED,
+        custom_agent_prompt=setup.custom_agent_prompt,
+        additional_context=additional_context,
+        context_files=setup.extracted_context_files,
+        persona=setup.persona,
+        base_system_prompt=setup.base_system_prompt,
+        user_memory_context=setup.user_memory_context,
+        llm=llm,
+        token_counter=get_llm_token_counter(llm),
+        preferred_tool_id=preferred_tool_id,
+        user_identity=setup.user_identity,
+        chat_files=setup.chat_files_for_tools,
+        reasoning_effort=setup.reasoning_effort,
+        include_citations=setup.new_msg_req.include_citations,
+        all_injected_file_metadata=setup.all_injected_file_metadata,
+        inject_memories_in_prompt=inject_memories,
+    )

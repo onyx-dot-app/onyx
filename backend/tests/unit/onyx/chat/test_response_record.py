@@ -7,8 +7,11 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from onyx.agents.models import (
+    AgentResultDetails,
     AgentState,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     PreparedStep,
     RunState,
     RunStatus,
@@ -44,6 +47,43 @@ from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 class ApplicationData(BaseModel):
     private_field: str = "application-only"
+
+
+def test_response_capture_keeps_input_provenance_without_transient_payloads() -> None:
+    metadata = InputMessageMetadata(
+        source=InputSource.AGENT_RESULT,
+        source_run_id="child-run",
+        sender_agent_id="child",
+        result=AgentResultDetails(
+            agent_id="child", agent_path="/root/child", status=RunStatus.COMPLETE
+        ),
+        content_metadata=ApplicationData(),
+    )
+    snapshot = RunState(
+        run_id="parent-run",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                input_messages=[
+                    UserMessage(
+                        id="delivery", content="Accepted result", metadata=metadata
+                    )
+                ],
+                message=AssistantMessage(content=[TextContent(text="Answer")]),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+    )
+    restored = response_snapshot(response_record(snapshot))
+    accepted = restored.steps[0].input_messages[0]
+    assert accepted.id == "delivery" and accepted.text == "Accepted result"
+    assert accepted.metadata == InputMessageMetadata(
+        source=InputSource.AGENT_RESULT,
+        source_run_id="child-run",
+        sender_agent_id="child",
+    )
+    assert metadata.result is not None
+    assert metadata.content_metadata == ApplicationData()
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
