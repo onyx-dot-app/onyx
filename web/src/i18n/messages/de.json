@@ -17391,15 +17391,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "Importieren Sie einen oder mehrere Skills aus einem Repository.",
-          "title": "Aus GitHub importieren"
+          "description": "Skills aus einem GitHub-Repository aktuell halten.",
+          "title": "Mit GitHub synchronisieren"
         },
         "scratch": {
           "description": "Schreiben Sie die Anweisungen und fügen Sie unterstützende Dateien in {appName} hinzu.",
-          "title": "Von Grund auf neu beginnen"
+          "title": "Skill erstellen"
         },
         "trigger": {
-          "label": "Skill erstellen"
+          "label": "Hinzufügen"
         },
         "upload": {
           "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
@@ -17625,6 +17625,25 @@
     "listTitle": "Marketplaces",
     "emptyList": "Noch keine Marketplaces",
     "emptyListDescription": "Synchronisiere von GitHub, um einen Skill-Katalog hinzuzufügen.",
-    "detailsFor": "Details für {name} anzeigen"
+    "detailsFor": "Details für {name} anzeigen",
+    "access": {
+      "description": "Diese Vorgaben gelten für synchronisierte Skills, die dem Marketplace-Zugriff folgen.",
+      "forbidden": "Eine globale Berechtigung zur Skill-Verwaltung ist erforderlich.",
+      "loading": "Zugriffseinstellungen werden geladen…",
+      "settingsError": "Zugriffseinstellungen konnten nicht geladen werden. Ihre Vorgaben bleiben unverändert.",
+      "community": "Der kostenlose Tarif unterstützt organisationsweiten Nutzungszugriff. Privater Zugriff und Gruppen erfordern einen kostenpflichtigen Tarif.",
+      "restricted": "Diese gespeicherten Vorgaben erfordern einen kostenpflichtigen Tarif. Sie bleiben erhalten; Speichern ist im kostenlosen Tarif nicht verfügbar.",
+      "groups": "Gruppen",
+      "addGroup": "Gruppe zum Hinzufügen suchen",
+      "groupsLoading": "Gruppen werden geladen…",
+      "groupsError": "Gruppen konnten nicht geladen werden. Bestehende Berechtigungen bleiben erhalten.",
+      "unknownGroup": "Gruppe #{id}",
+      "groupPermission": "Zugriff für {name}",
+      "installationDescription": "Wählen Sie, wie synchronisierte Skills für alle Zugriffsberechtigten installiert werden.",
+      "title": "Vorgaben des Unternehmens-Marketplace",
+      "loadError": "Die Marketplace-Vorgaben konnten nicht geladen werden. Ihre Änderungen bleiben erhalten.",
+      "companyOnly": "Zugriffsvorgaben sind nur für Unternehmens-Marketplaces verfügbar.",
+      "save": "Vorgaben speichern"
+    }
   }
 }
