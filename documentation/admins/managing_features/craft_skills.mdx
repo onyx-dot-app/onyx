@@ -158,6 +158,7 @@ Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `
 `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and `SKILL_BUNDLE_TOTAL_MAX_BYTES`. If your reverse proxy sets a request size limit,
 allow space for the bundle and multipart form data.
 The effective upload ZIP limit cannot exceed the stored ZIP allowance. Raise both settings to accept larger ZIPs.
+ZIP size errors show the exact configured limit. Values that are not whole MiB are shown in bytes.
 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,

@@ -195,7 +195,8 @@ The library preview of an external-app skill calls the same renderer
    this update with replacement; the legacy validity column is dual-written.
    Writes check five limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
-   both the incoming and normalized ZIP sizes. Raw uploads use the per-file
+   both the incoming and normalized ZIP sizes. ZIP refusal messages preserve the
+   exact configured byte limit instead of rounding it down to whole MiB. Raw uploads use the per-file
    read cap; ZIP uploads use the ZIP cap.
    Stored-bundle reads (`skills/validation.py:load_stored_custom_skill_bundle`)
    skip the upload ZIP-size and file-count limits. Their separate

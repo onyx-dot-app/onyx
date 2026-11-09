@@ -86,10 +86,13 @@ def _bundle_limit_error(
 
 
 def _zip_too_large_error(max_bytes: int) -> OnyxError:
+    label = (
+        f"{max_bytes // (1024 * 1024)} MiB"
+        if max_bytes % (1024 * 1024) == 0
+        else f"{max_bytes:,} bytes"
+    )
     return _bundle_limit_error(
-        "zip_bytes",
-        max_bytes,
-        f"Skill bundle zip exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
+        "zip_bytes", max_bytes, f"Skill bundle zip exceeds the {label} limit."
     )
 
 
