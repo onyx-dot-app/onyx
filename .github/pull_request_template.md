@@ -6,8 +6,6 @@
 
 <!--- Describe the tests you ran to verify your changes --->
 
-- [ ] Bug fix: the new regression test fails without the fix.
-
 ## Docs
 
 - [ ] Customer-facing change: I updated `documentation/` (text and screenshots).
