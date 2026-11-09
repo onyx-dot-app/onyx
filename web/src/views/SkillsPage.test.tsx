@@ -1119,7 +1119,7 @@ describe("SkillsPage preference toggles", () => {
     const user = setupUser();
     render(<SkillsPage />);
 
-    await user.click(screen.getByRole("button", { name: "Create skill" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(screen.getAllByText("Upload a skill")[0]!);
     await user.click(screen.getByRole("button", { name: "Continue upload" }));
 
@@ -1134,8 +1134,8 @@ describe("SkillsPage preference toggles", () => {
     const user = setupUser();
     render(<SkillsPage />);
 
-    await user.click(screen.getByRole("button", { name: "Create skill" }));
-    await user.click(screen.getAllByText("Import from GitHub")[0]!);
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getAllByText("Sync from GitHub")[0]!);
 
     expect(
       screen.getByRole("button", { name: "GitHub import open" })

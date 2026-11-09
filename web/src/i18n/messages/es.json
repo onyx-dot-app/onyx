@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "Importa una o más habilidades desde un repositorio.",
-          "title": "Importar desde GitHub"
+          "description": "Mantén las habilidades actualizadas desde un repositorio de GitHub.",
+          "title": "Sincronizar desde GitHub"
         },
         "scratch": {
           "description": "Escribe las instrucciones y agrega archivos de apoyo en {appName}.",
-          "title": "Empezar desde cero"
+          "title": "Crear una habilidad"
         },
         "trigger": {
-          "label": "Crear habilidad"
+          "label": "Añadir"
         },
         "upload": {
           "description": "Importa un archivo SKILL.md, un archivo ZIP o una carpeta de habilidad.",
@@ -17616,6 +17616,25 @@
     "listTitle": "Marketplaces",
     "emptyList": "Aún no hay marketplaces",
     "emptyListDescription": "Sincroniza desde GitHub para añadir un catálogo de habilidades.",
-    "detailsFor": "Ver detalles de {name}"
+    "detailsFor": "Ver detalles de {name}",
+    "access": {
+      "description": "Estos valores se aplican a las habilidades sincronizadas que siguen el acceso del marketplace.",
+      "forbidden": "Se requiere permiso global para gestionar habilidades.",
+      "loading": "Cargando ajustes de acceso…",
+      "settingsError": "No se pudieron cargar los ajustes de acceso. Los valores no han cambiado.",
+      "community": "El plan gratuito permite el acceso de uso para toda la organización. El acceso privado y los grupos requieren un plan de pago.",
+      "restricted": "Estos valores guardados requieren un plan de pago. Se conservan; no se pueden guardar en el plan gratuito.",
+      "groups": "Grupos",
+      "addGroup": "Buscar un grupo para añadir",
+      "groupsLoading": "Cargando grupos…",
+      "groupsError": "No se pudieron cargar los grupos. Se conservan los permisos existentes.",
+      "unknownGroup": "Grupo #{id}",
+      "groupPermission": "Acceso para {name}",
+      "installationDescription": "Elige cómo se instalan las habilidades sincronizadas para quienes tienen acceso.",
+      "title": "Valores Predeterminados del Marketplace de la Empresa",
+      "loadError": "No se pudieron cargar los valores del marketplace. Se conservan tus cambios.",
+      "companyOnly": "Los valores de acceso solo están disponibles para marketplaces de empresa.",
+      "save": "Guardar valores"
+    }
   }
 }
