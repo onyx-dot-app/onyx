@@ -17535,5 +17535,17 @@
     "jvmMemoryTitle": "JVM 메모리",
     "vectorMemoryTitle": "벡터 메모리",
     "viewDetails": "세부 정보 보기"
+  },
+  "marketplaces": {
+    "retry": "새로 고침",
+    "connectionError": "GitHub 연결을 확인할 수 없습니다.",
+    "previewFailed": "마켓플레이스를 읽을 수 없습니다",
+    "sampleTitle": "마켓플레이스 파일 추가",
+    "sampleDescription": "선택한 폴더에 .claude-plugin/marketplace.json으로 저장하세요. team-skills/skills/example/SKILL.md에 스킬을 넣고 다시 미리 보세요.",
+    "copySample": "예제 복사",
+    "emptyPreview": "이 카탈로그에는 항목이 없습니다.",
+    "ok": "준비됨",
+    "blocked": "차단됨",
+    "not_supported": "지원되지 않음"
   }
 }
