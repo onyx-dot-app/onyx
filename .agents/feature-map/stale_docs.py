@@ -30,12 +30,18 @@ match. The agent Stop hook (`.agents/hooks/pre_commit_on_stop.py`) runs this; wi
 `--session`, each section or key of a document, and each file, is named at most
 once per session.
 
+`--pr [BRANCH]` prints the same sections and keys for the whole PR: the change
+from the merge base with BRANCH (default `origin/main`; pass the lower branch in
+a stack) to the working tree. It includes the documents the PR edited, because
+they hold the claims the PR wrote. Run it before you push.
+
 `--cited` prints the documents and keys that cite the given files, for step 4 of
 VERIFYING.md. `--queue` lists the components by how much of their cited code
 changed since their Verified-against commit, as a queue for verify passes.
 
 Usage: stale_docs.py [--session ID] [--base COMMIT] [--start-blob PATH=BLOB ...]
                       FILE [FILE ...]
+       stale_docs.py --pr [BRANCH]
        stale_docs.py --cited FILE [FILE ...]
        stale_docs.py --queue
 """
@@ -78,6 +84,9 @@ _NO_BEHAVIOUR = re.compile(
     r"(^|/)(py\.typed|\.gitkeep|\.keep|(LICEN[CS]E|NOTICE|COPYING)[^/]*)$"
 )
 _JUDGMENT = ".agents/feature-map/README.md#editing-judgment"
+_PR_DEFAULT_BASE = "origin/main"
+# `--pr` names at most this many documents, so the list stays short enough to read.
+MAX_PR_DOCUMENTS = 15
 
 
 @dataclass(frozen=True)
@@ -323,12 +332,17 @@ def _run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", *args], cwd=repo_root, capture_output=True, text=True)
 
 
+def merge_base(repo_root: Path, branch: str) -> str | None:
+    """The commit HEAD forked from `branch`; None when git cannot find it."""
+    result = _run_git(repo_root, "merge-base", "HEAD", branch)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
 def branch_base(repo_root: Path) -> str | None:
     """The commit this branch forked from main."""
     for upstream in ("origin/main", "main"):
-        result = _run_git(repo_root, "merge-base", "HEAD", upstream)
-        if result.returncode == 0:
-            return result.stdout.strip()
+        if fork := merge_base(repo_root, upstream):
+            return fork
     return None
 
 
@@ -550,9 +564,11 @@ def find(
     repo_root: Path = REPO_ROOT,
     base: str | None = None,
     start_blobs: Mapping[str, str] | None = None,
+    include_updated: bool = False,
 ) -> Findings:
-    """The documents the changed files touch, except documents in `changed`.
+    """The documents the changed files touch.
 
+    Documents in `changed` count only with `include_updated`.
     `base` is the commit the change is measured from, such as the turn's start.
     `start_blobs` maps a file that was dirty at the turn's start to the blob of
     its content then ("" when it did not exist); its change is measured from that
@@ -597,7 +613,9 @@ def find(
                     continue  # The parser found the symbol; the change is outside it.
             current = found.get(citation.doc.rel, Reminder(citation.doc))
             found[citation.doc.rel] = _add_place(current, citation, by_symbol)
-    kept = [r for rel, r in sorted(found.items()) if rel not in updated]
+    kept = [
+        r for rel, r in sorted(found.items()) if include_updated or rel not in updated
+    ]
     # Documents with symbol matches first: they are the most likely to need an edit.
     result.reminders.extend(
         sorted(kept, key=lambda r: not any(by_symbol for _, _, by_symbol in r.places))
@@ -629,10 +647,13 @@ def branch_growth(repo_root: Path, base: str | None, scope: str) -> dict[str, in
     return growth
 
 
-def format_reminder(reminder: Reminder, repo_rel: str, growth: int) -> str:
+def format_reminder(
+    reminder: Reminder, repo_rel: str, growth: int, edited: bool = False
+) -> str:
     size = reminder.doc.text.count("\n")
     head = f"- {reminder.doc.name} ({repo_rel}; {size} lines"
-    head += f", {growth:+d} on this branch)" if growth else ")"
+    head += f", {growth:+d} on this branch" if growth else ""
+    head += "; edited in this PR)" if edited else ")"
     # Symbol matches first: they are the most likely to need an edit.
     places = sorted(reminder.places, key=lambda p: not p[2])
     by_section: dict[str, list[str]] = {}
@@ -671,6 +692,45 @@ def format_cited(files: list[str], map_dir: Path, repo_root: Path) -> str:
             for c in cited.get(path, [])
         ]
         lines.append(f"{path}: {', '.join(dict.fromkeys(refs)) or 'not cited'}")
+    return "\n".join(lines)
+
+
+def pr_text(
+    base_branch: str = _PR_DEFAULT_BASE,
+    map_dir: Path = MAP_DIR,
+    repo_root: Path = REPO_ROOT,
+) -> str:
+    """The map sections and keys that cite code the PR changed, for a pre-push check."""
+    fork = merge_base(repo_root, base_branch)
+    if fork is None:
+        return f"Cannot find the merge base of HEAD and `{base_branch}`."
+    diff = _run_git(repo_root, "diff", "--name-only", "--no-renames", fork)
+    changed = diff.stdout.split()
+    map_prefix = map_dir.relative_to(repo_root).as_posix() + "/"
+    edited = {p.removeprefix(map_prefix) for p in changed if p.startswith(map_prefix)}
+    findings = find(changed, map_dir, repo_root, fork, include_updated=True)
+    # Documents the PR edited first: they hold the claims the PR wrote. Ownership
+    # alone asks for no recheck, so the list leaves it out.
+    cited = sorted(
+        (replace(r, owned=()) for r in findings.reminders if r.places),
+        key=lambda r: r.doc.rel not in edited,
+    )
+    if not cited:
+        return ""
+    map_rel = map_dir.relative_to(repo_root).as_posix()
+    lines = [
+        f"Feature map: these documents cite code that this PR changed (since {fork[:10]})."
+    ]
+    lines.extend(
+        format_reminder(r, f"{map_rel}/{r.doc.rel}", 0, edited=r.doc.rel in edited)
+        for r in cited[:MAX_PR_DOCUMENTS]
+    )
+    if len(cited) > MAX_PR_DOCUMENTS:
+        lines.append(f"... and {len(cited) - MAX_PR_DOCUMENTS} more documents.")
+    lines.append(
+        "Recheck each claim in the listed sections and keys against the code. "
+        f"See {_JUDGMENT}."
+    )
     return "\n".join(lines)
 
 
@@ -845,6 +905,14 @@ def main() -> int:
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
+        "--pr",
+        nargs="?",
+        const=_PR_DEFAULT_BASE,
+        metavar="BRANCH",
+        help="list the map sections that cite code the PR changed since its merge "
+        f"base with BRANCH (default {_PR_DEFAULT_BASE})",
+    )
+    mode.add_argument(
         "--cited",
         action="store_true",
         help="print the documents and keys that cite each file",
@@ -857,6 +925,11 @@ def main() -> int:
     parser.add_argument("files", nargs="*")
     args = parser.parse_args()
 
+    if args.pr:
+        text = pr_text(args.pr)
+        if text:
+            print(text)
+        return 0
     if args.cited:
         print(format_cited(args.files, MAP_DIR, REPO_ROOT))
         return 0
