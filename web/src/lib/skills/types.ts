@@ -113,20 +113,6 @@ export interface SkillBundleContents {
   files: SkillBundleFile[];
 }
 
-export interface GitHubSkillPreview {
-  path: string;
-  name: string;
-  description: string | null;
-  unavailable_reason: string | null;
-}
-
-export interface GitHubSkillsPreview {
-  repository: string;
-  revision: string;
-  subpath: string | null;
-  skills: GitHubSkillPreview[];
-}
-
 export interface GitHubImportedSkill {
   skill: CustomSkill;
   disabled_reason: string | null;
