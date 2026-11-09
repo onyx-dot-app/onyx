@@ -1,0 +1,36 @@
+{{- /* ServiceMonitor for the Craft Firecracker host agent metrics (ENG-4570).
+Needs craft.sandboxRuntime=firecracker, craft.hostAgent.metrics.enabled and
+monitoring.serviceMonitors.enabled. The agent serves /metrics without auth;
+the host agent NetworkPolicy limits who reaches the port. */}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict }}
+{{- $metrics := $agent.metrics | default dict }}
+{{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $metrics.enabled .Values.monitoring.serviceMonitors.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "onyx.resourceName" (list . "craft-fc-host-agent") }}
+  namespace: {{ include "onyx.craftHostAgentNamespace" . }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+    {{- with .Values.monitoring.serviceMonitors.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ include "onyx.craftHostAgentNamespace" . }}
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: craft-fc-host-agent
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      # One target per node: keep the node name on every series.
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+{{- end }}

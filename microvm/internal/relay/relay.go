@@ -25,6 +25,13 @@ const (
 	maxBackoff = time.Second
 )
 
+// Connection events for Relay.Events.
+const (
+	EventAccepted       = "accepted"
+	EventOverCap        = "over_cap"
+	EventUpstreamFailed = "upstream_failed"
+)
+
 // MinIdleTimeout is the shortest idle timeout the relay allows. LLM streams
 // can be quiet for minutes.
 const MinIdleTimeout = 180 * time.Second
@@ -48,6 +55,8 @@ type Relay struct {
 	// cap is closed at once. 0 means DefaultMaxConns.
 	MaxConns int
 	Log      *slog.Logger
+	// Events, if set, gets one Event* value per VM connection.
+	Events func(event string)
 	// dial replaces the upstream dial in tests.
 	dial func(ctx context.Context, network, addr string) (net.Conn, error)
 
@@ -152,12 +161,14 @@ func (r *Relay) accept(ln net.Listener, vm VM) {
 		select {
 		case sem <- struct{}{}:
 			full = false
+			r.event(EventAccepted)
 			go func() {
 				defer func() { <-sem }()
 				r.handle(c, vm)
 			}()
 		default:
 			_ = c.Close()
+			r.event(EventOverCap)
 			if !full {
 				full = true
 				r.Log.Warn("relay connection cap reached; closing new connections", "sandbox_id", vm.SandboxID, "max", cap(sem))
@@ -196,6 +207,23 @@ func (r *Relay) Live(sandboxID string) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.conns[sandboxID])
+}
+
+// Open returns the number of open connections of all sandboxes.
+func (r *Relay) Open() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, set := range r.conns {
+		n += len(set)
+	}
+	return n
+}
+
+func (r *Relay) event(e string) {
+	if r.Events != nil {
+		r.Events(e)
+	}
 }
 
 func (r *Relay) track(id string, p *pair) {
@@ -257,6 +285,7 @@ func (r *Relay) handle(vmConn net.Conn, vm VM) {
 	cancel()
 	if err != nil {
 		_, _ = io.WriteString(vmConn, "HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n")
+		r.event(EventUpstreamFailed)
 		r.Log.Warn("relay dial", "sandbox_id", vm.SandboxID, "err", err)
 		return
 	}

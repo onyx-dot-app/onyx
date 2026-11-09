@@ -278,6 +278,15 @@ data dir on a node (`stat -f -c %T <dataDir>` must print `xfs`, and
 `xfs_info` must show `reflink=1`). The agent also checks reflink support at
 start-up and does not start without it.
 
+To scrape the agent metrics, set `craft.hostAgent.metrics.enabled: true`
+(port `craft.hostAgent.metrics.port`, default 9464). With
+`monitoring.serviceMonitors.enabled: true`, the chart also makes a
+ServiceMonitor in the agent namespace. The metrics port has no auth. Limit
+who reaches it with `craft.hostAgent.metrics.networkPolicyFrom` (empty: any
+source). The agent writes each VM's serial console and Firecracker log to its
+stdout as JSON lines (`kind=guest_log`), and an audit line for every API call
+to stderr (`kind=audit`), so the cluster log pipeline collects both.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip

@@ -2101,6 +2101,15 @@ craft:
       pollInterval: 10s
     # Extra host-agent flags, for example ["--max-scratch-gib=200"].
     extraArgs: []
+    # Prometheus metrics on a plain HTTP port (--metrics-listen). With
+    # monitoring.serviceMonitors.enabled the chart also makes a ServiceMonitor
+    # in the agent namespace.
+    metrics:
+      enabled: false
+      port: 9464
+      # NetworkPolicy sources for the metrics port, for example a
+      # namespaceSelector for the Prometheus namespace. Empty = any source.
+      networkPolicyFrom: []
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.

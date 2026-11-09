@@ -235,6 +235,47 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   images (`mkfs.ext4 -d`). The agent image (ENG-4607) must install e2fsprogs.
 - Privileged enough to mount a tmpfs in its own mount namespace (the managed bundle stage).
 
+### Metrics, guest logs and audit
+
+- **Metrics (ENG-4570).** `--metrics-listen` (for example `:9464`, default off) serves Prometheus
+  `/metrics` over plain HTTP, without auth. The VM table, node memory, allocated memory, open relay
+  connections and open Dial streams are read at scrape time, in one pass, like the observable gauges of
+  E2B's orchestrator (`e2b-dev/infra`, Apache-2.0). No metric has a sandbox or tenant label.
+
+  | Metric | Type | Labels |
+  |---|---|---|
+  | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed |
+  | `craft_fc_host_agent_admissions_total` | counter | `result`: admitted, refused, failed; `reason`: ErrorReason |
+  | `craft_fc_host_agent_vms` | gauge | `state`: starting, running, exited |
+  | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |
+  | `craft_fc_host_agent_node_memory_total_bytes`, `_node_memory_available_bytes`, `_node_disk_free_bytes` | gauge | |
+  | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk |
+  | `craft_fc_host_agent_rpc_requests_total` | counter | `method`, `code` (gRPC) |
+  | `craft_fc_host_agent_rpc_duration_seconds` | histogram | `method` |
+  | `craft_fc_host_agent_passthrough_calls_total` | counter | `method` (daemon method, else `unknown`), `code` |
+  | `craft_fc_host_agent_relay_open_connections` | gauge | |
+  | `craft_fc_host_agent_relay_connections_total` | counter | `result`: accepted, over_cap, upstream_failed |
+  | `craft_fc_host_agent_dial_open_streams` | gauge | |
+  | `craft_fc_host_agent_guest_log_bytes_total`, `_guest_log_dropped_bytes_total` | counter | `stream`: console, firecracker |
+
+  The Go runtime and process collectors are on the same registry.
+- **Guest logs.** The agent tails each VM's serial console (`console.log`, Firecracker's stdout and
+  stderr) and Firecracker log (`fc.log`) and writes one JSON line per log line to its **stdout**:
+  `kind=guest_log`, `stream`, `sandbox_id`, `generation`, `tenant_id`, `line`. The agent's own log and
+  the audit lines go to stderr. One goroutine reads all VMs every second. Each VM may ship
+  `--guest-log-rate` bytes/s (default 16 KiB/s, burst `--guest-log-burst`, default 256 KiB), and the
+  node `--guest-log-node-rate` (default 1 MiB/s, burst 4 s). Bytes over a budget are skipped, counted in
+  `guest_log_dropped_bytes_total`, and reported in one `guest log rate limit` line. Lines over 4 KiB are
+  cut (`truncated=true`). Stop and VM exit ship the last lines before the files are removed. After an
+  agent restart, adopted VMs are read from the current end of their files, so nothing is shipped twice.
+  `--guest-log-rate=0` turns shipping off.
+- **Audit.** One `rpc` line (`kind=audit`) on stderr for every HostAgent call and every daemon
+  pass-through call: `method`, `passthrough`, `caller` (the URI and DNS SANs of the verified client
+  certificate, or `unix` for the root-only socket), `sandbox_id`, `tenant_id` (from the request or the VM
+  table), `attempt` and `generation` when the request has them, `result` (gRPC code), `reason`
+  (ErrorReason) and `ms`. A gRPC interceptor writes it. It never reads request or response bodies past
+  the IDs, and never logs metadata, so `sandboxd_key` and `x-sandboxd-key` never reach the log.
+
 ### Templates
 
 A template is `<data-dir>/templates/<version>/`. The agent builds it on the node from a root drive
