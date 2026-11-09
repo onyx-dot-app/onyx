@@ -110,3 +110,72 @@ def test_existing_files_and_combined_library_are_not_readmitted(
     push._resolve_skill_dirs(files, ["first", "second"])
 
     assert files == original
+
+
+def test_expansion_respects_receiver_file_limit_when_upload_limit_is_higher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = b"${CLAUDE_SKILL_DIR}/run.py"
+    files = {
+        "report/SKILL.md": body,
+        "report/run.py": b"script",
+        "report-other/SKILL.md": b"healthy",
+    }
+    expected = f"{_SKILL_DIR}/run.py".encode()
+    monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 1000)
+    monkeypatch.setattr(push, "MAX_FILE_BYTES", len(expected) - 1, raising=False)
+    push._resolve_skill_dirs(files, ["report", "report-other"])
+    assert files == {"report-other/SKILL.md": b"healthy"}
+
+
+@pytest.mark.parametrize("excess", [0, 1])
+def test_expansion_checks_combined_bytes_before_substitution(
+    monkeypatch: pytest.MonkeyPatch,
+    excess: int,
+) -> None:
+    body = b"${CLAUDE_SKILL_DIR}/run.py"
+    files = {
+        "report/SKILL.md": body,
+        "report/run.py": b"script",
+        "report-other/SKILL.md": b"healthy",
+    }
+    expected = f"{_SKILL_DIR}/run.py".encode()
+    monkeypatch.setattr(
+        push,
+        "MAX_BUNDLE_BYTES",
+        len(expected) + len(b"scripthealthy") - excess,
+        raising=False,
+    )
+    push._resolve_skill_dirs(files, ["report", "report-other"])
+    if excess:
+        assert files == {"report-other/SKILL.md": b"healthy"}
+    else:
+        assert files["report/SKILL.md"] == expected
+        assert files["report/run.py"] == b"script"
+        assert files["report-other/SKILL.md"] == b"healthy"
+
+
+def test_expansion_accumulates_growth_and_keeps_later_fitting_skill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = b"${CLAUDE_SKILL_DIR}"
+    files = {
+        "first/SKILL.md": body,
+        "second/SKILL.md": body,
+        "third/SKILL.md": body,
+        "healthy/SKILL.md": b"healthy",
+    }
+    first = b"/workspace/managed/skills/first"
+    third = b"/workspace/managed/skills/third"
+    monkeypatch.setattr(
+        push,
+        "MAX_BUNDLE_BYTES",
+        len(first) + len(body) * 2 + len(b"healthy"),
+        raising=False,
+    )
+    push._resolve_skill_dirs(files, ["first", "second", "third", "healthy"])
+    assert files == {
+        "first/SKILL.md": first,
+        "third/SKILL.md": third,
+        "healthy/SKILL.md": b"healthy",
+    }

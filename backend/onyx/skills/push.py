@@ -25,6 +25,10 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_hashes__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
+    MAX_BUNDLE_BYTES,
+    MAX_FILE_BYTES,
+)
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
@@ -154,21 +158,25 @@ def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
     """Point ``${CLAUDE_SKILL_DIR}`` in each root ``SKILL.md`` at the skill's
     sandbox folder. Only the sent copy changes, not the stored bundle."""
     placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
+    total = sum(len(content) for content in files.values())
+    file_limit = min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
     for name in skill_names:
         path = f"{name}/{SKILL_MD_NAME}"
         content = files.get(path)
         if content is None or placeholder not in content:
             continue
-        if _resolved_file_size(path, content) > DEFAULT_PER_FILE_MAX_BYTES:
+        resolved_size = _resolved_file_size(path, content)
+        resolved_total = total - len(content) + resolved_size
+        if resolved_size > file_limit or resolved_total > MAX_BUNDLE_BYTES:
             logger.warning(
-                "Skipping skill %s: resolved instructions exceed %d bytes",
+                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
                 name,
-                DEFAULT_PER_FILE_MAX_BYTES,
             )
             prefix = f"{name}/"
             for skill_path in [key for key in files if key.startswith(prefix)]:
-                del files[skill_path]
+                total -= len(files.pop(skill_path))
             continue
+        total = resolved_total
         files[path] = resolve_skill_dir_placeholder(
             content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
         ).encode("utf-8")

@@ -259,9 +259,10 @@ The library preview of an external-app skill calls the same renderer
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
     placeholder. Before substitution, the push checks the predicted instruction
-    size against the configured file limit. An oversized expansion skips that
-    whole Skill, logs a warning and leaves other Skills available. Files without
-    placeholders are unchanged; this check does not cap the combined library.
+    size against both the configured file limit and the receiver file limit.
+    Expansion must also fit the receiver total, including other Skills. An
+    oversized expansion skips that whole Skill, logs a warning and continues.
+    Files without placeholders keep their previous delivery behavior.
     The sent bytes feed the runtime hash. OpenCode adds the base
     folder line and the relative-path rule itself, so the push adds neither.
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
