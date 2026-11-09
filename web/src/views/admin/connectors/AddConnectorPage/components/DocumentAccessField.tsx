@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
-import { useField, useFormikContext } from "formik";
+import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect, type SelectOption } from "@opal/components";
 import {
@@ -60,10 +60,6 @@ export default function DocumentAccessField({
   const plans = usePlans();
   const [accessType, accessTypeMeta, accessTypeHelpers] =
     useField<AccessType>("access_type");
-  // An owner-only pair keeps its option when edited; without it the field
-  // would move to another access type on save.
-  const { initialValues } = useFormikContext<{ access_type?: AccessType }>();
-  const wasPersonal = initialValues.access_type === "personal";
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
@@ -93,7 +89,8 @@ export default function DocumentAccessField({
       ? "private"
       : "public";
 
-  // Auto Sync and Specific Groups need Business; Everyone is on every tier.
+  // Auto Sync, Specific Groups and Only Me need Business; Everyone is on every
+  // tier.
   const businessOptions = useMemo(() => {
     const built: SelectOption[] = [];
     if (isValidAutoSyncSource(connector)) {
@@ -115,16 +112,14 @@ export default function DocumentAccessField({
       description: t("specificGroups.description"),
       icon: SvgUsers,
     });
-    if (wasPersonal) {
-      built.push({
-        value: "personal",
-        title: t("onlyMe.title"),
-        description: t("onlyMe.description"),
-        icon: SvgUser,
-      });
-    }
+    built.push({
+      value: "personal",
+      title: t("onlyMe.title"),
+      description: t("onlyMe.description"),
+      icon: SvgUser,
+    });
     return built;
-  }, [isSyncDisabledByAuth, connector, t, appName, wasPersonal]);
+  }, [isSyncDisabledByAuth, connector, t, appName]);
   // A scoped manager's authority stops at the groups they manage, so the
   // backend rejects a public connector from them. Offering it would only
   // produce a 403 on submit.
