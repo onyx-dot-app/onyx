@@ -260,6 +260,16 @@ export async function updateSkillShares(
   return handle<CustomSkill>(res);
 }
 
+export async function resetSkillMarketplaceAccess(
+  skillId: string
+): Promise<CustomSkill> {
+  return handle<CustomSkill>(
+    await fetch(`/api/skills/custom/${skillId}/reset-marketplace-access`, {
+      method: "POST",
+    })
+  );
+}
+
 export async function transferSkillOwnership(
   skillId: string,
   payload: { new_owner_user_id: string }

@@ -17359,7 +17359,20 @@
         "peopleTitle": "People with access",
         "manageIndividualAccess": "Manage individual access",
         "individualAccessTitle": "Individual access",
-        "ownershipTitle": "Ownership"
+        "ownershipTitle": "Ownership",
+        "marketplace": {
+          "personal": "Personal Marketplace",
+          "personalDescription": "Only the owner can change access to this skill from {name}. Managers can change installation settings.",
+          "following": "Follows Marketplace Access",
+          "followingDescription": "Access and installation settings follow {name}. Saving changes here creates an override.",
+          "overridden": "Custom Access",
+          "overriddenDescription": "This skill uses its own access and installation settings instead of the defaults from {name}.",
+          "reset": "Reset to marketplace access",
+          "resetDescription": "This replaces access and installation settings with the defaults from {name}. It removes individual grants and discards unsaved changes. Future marketplace access changes will apply to this skill.",
+          "confirmReset": "Reset access",
+          "resetSuccess": "Marketplace access restored",
+          "resetError": "Could not reset access. Try again."
+        }
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"
@@ -17526,6 +17539,12 @@
       "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
       "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
       "moreActions": "More actions"
+    },
+    "synced": {
+      "view": "View content",
+      "readOnlyTitle": "Synced from GitHub",
+      "readOnlyDescription": "Edit these instructions and files in GitHub. Onyx updates them when this marketplace syncs.",
+      "source": "Marketplace: {name}"
     }
   },
   "opensearchHealth": {

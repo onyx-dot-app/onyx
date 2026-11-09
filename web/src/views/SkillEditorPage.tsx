@@ -70,6 +70,8 @@ import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
+import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
+import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
 interface SkillEditorPageProps {
   skillId?: string;
@@ -157,7 +159,7 @@ export default function SkillEditorPage({
   }, []);
 
   useEffect(() => {
-    if (!skill || hydratedSkillId === skill.id) return;
+    if (!skill || (hydratedSkillId === skill.id && !skill.marketplace)) return;
     syncEditableFields(skill);
     setHydratedSkillId(skill.id);
   }, [hydratedSkillId, skill, syncEditableFields]);
@@ -172,7 +174,7 @@ export default function SkillEditorPage({
         creationSharing
       );
     }
-    if (!skill) return false;
+    if (!skill || skill.marketplace || skill.retired_at) return false;
     return (
       description !== skill.description ||
       instructionsMarkdown !== skill.instructions_markdown
@@ -196,16 +198,20 @@ export default function SkillEditorPage({
     isCreating ||
     skill?.user_permission === "OWNER" ||
     skill?.user_permission === "EDITOR";
+  const isSynced = Boolean(skill?.marketplace);
+  const canEditContent = canManageSkill && !isSynced && !skill?.retired_at;
+  const canDelete = skill && canDeleteSkill({ skill, canManageCompanySkills });
+  const canShare = skill && canShareSkill({ skill, canManageCompanySkills });
 
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
   // would be clobbered by the post-upload sync (or race it via Save).
   const fieldsLocked =
-    !canManageSkill || isPreparingFiles || isUploadingFiles || isSaving;
+    !canEditContent || isPreparingFiles || isUploadingFiles || isSaving;
 
   const canSave =
     (isCreating || !!skill) &&
-    canManageSkill &&
+    canEditContent &&
     !isPreparingFiles &&
     !isUploadingFiles &&
     isDirty &&
@@ -349,7 +355,7 @@ export default function SkillEditorPage({
       }
       return;
     }
-    if (!skill || !canManageSkill || isDirty) return;
+    if (!skill || !canEditContent || isDirty) return;
 
     setIsUploadingFiles(true);
     try {
@@ -392,7 +398,7 @@ export default function SkillEditorPage({
   }
 
   async function handleRemoveFile(path: string) {
-    if (!skill || !canManageSkill || removingFilePath !== null) return;
+    if (!skill || !canEditContent || removingFilePath !== null) return;
     setRemovingFilePath(path);
     try {
       const updated = await removeUserSkillFile(skill.id, path);
@@ -410,7 +416,7 @@ export default function SkillEditorPage({
   }
 
   async function handleDeleteConfirmed() {
-    if (!skill || !canManageSkill || isDeleting) return;
+    if (!skill || !canDelete || isDeleting) return;
 
     setIsDeleting(true);
     try {
@@ -488,7 +494,9 @@ export default function SkillEditorPage({
           title={
             isCreating
               ? t("editor.header.createTitle")
-              : t("editor.header.editTitle")
+              : isSynced
+                ? t("synced.view")
+                : t("editor.header.editTitle")
           }
           description={
             isCreating
@@ -498,31 +506,37 @@ export default function SkillEditorPage({
                       externalAppName ?? t("editor.header.appFallbackName"),
                   })
                 : t("editor.header.createDescription")
-              : t("editor.header.editDescription")
+              : isSynced
+                ? t("synced.readOnlyDescription")
+                : t("editor.header.editDescription")
           }
           cancel={handleCancel}
           actions={[
-            ...(canManageSkill && !isCreating && skill
+            ...(canShare && !isCreating && skill
               ? [
                   <Button
                     key="sharing"
                     type="button"
                     prominence="secondary"
                     icon={SvgShare}
-                    disabled={fieldsLocked}
+                    disabled={isSaving || isUploadingFiles || isPreparingFiles}
                     onClick={() => setShareOpen(true)}
                   >
                     {t("editor.management.sharing.edit.label")}
                   </Button>,
                 ]
               : []),
-            <Tooltip key="save" tooltip={saveTooltip} side="bottom">
-              <Button disabled={!canSave} type="submit">
-                {isSaving
-                  ? t("editor.header.save.pendingLabel")
-                  : t("editor.header.save.label")}
-              </Button>
-            </Tooltip>,
+            ...(!isSynced
+              ? [
+                  <Tooltip key="save" tooltip={saveTooltip} side="bottom">
+                    <Button disabled={!canSave} type="submit">
+                      {isSaving
+                        ? t("editor.header.save.pendingLabel")
+                        : t("editor.header.save.label")}
+                    </Button>
+                  </Tooltip>,
+                ]
+              : []),
           ]}
           divider
         />
@@ -544,6 +558,16 @@ export default function SkillEditorPage({
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
+              {skill?.marketplace && (
+                <Section height="auto" alignItems="stretch" gap={2}>
+                  <SkillMarketplaceLabel marketplace={skill.marketplace} />
+                  <MessageCard
+                    variant="info"
+                    title={t("synced.readOnlyTitle")}
+                    description={t("synced.readOnlyDescription")}
+                  />
+                </Section>
+              )}
               {appConflictingSkillName && (
                 <MessageCard
                   variant="error"
@@ -634,7 +658,11 @@ export default function SkillEditorPage({
                         }}
                         placeholder={t("editor.details.name.placeholder")}
                         variant={
-                          fieldsLocked || !isCreating ? "disabled" : "primary"
+                          isSynced
+                            ? "readOnly"
+                            : fieldsLocked || !isCreating
+                              ? "disabled"
+                              : "primary"
                         }
                       />
                     </div>
@@ -657,7 +685,13 @@ export default function SkillEditorPage({
                     )}
                     autoResize
                     maxRows={8}
-                    variant={fieldsLocked ? "disabled" : "primary"}
+                    variant={
+                      isSynced
+                        ? "readOnly"
+                        : fieldsLocked
+                          ? "disabled"
+                          : "primary"
+                    }
                   />
                 </InputVertical>
               </Section>
@@ -694,7 +728,13 @@ export default function SkillEditorPage({
                         setInstructionsMarkdown(event.target.value)
                       }
                       placeholder={t("editor.instructions.placeholder")}
-                      variant={fieldsLocked ? "disabled" : "internal"}
+                      variant={
+                        isSynced
+                          ? "readOnly"
+                          : fieldsLocked
+                            ? "disabled"
+                            : "internal"
+                      }
                     />
                   ) : (
                     <div className="min-h-[34rem] max-h-[70dvh] overflow-y-auto overflow-x-hidden rounded-08 bg-background-neutral-00 p-2">
@@ -719,7 +759,7 @@ export default function SkillEditorPage({
                   <SkillFileTree
                     files={displayedFiles}
                     onRemove={
-                      skill && canManageSkill ? handleRemoveFile : undefined
+                      skill && canEditContent ? handleRemoveFile : undefined
                     }
                     removingPath={removingFilePath}
                     removeDisabled={filesUploadDisabled}
@@ -729,7 +769,7 @@ export default function SkillEditorPage({
                         : undefined
                     }
                   />
-                  {canManageSkill && (
+                  {canEditContent && (
                     <div className="border-t border-border-01 p-2">
                       <Tooltip tooltip={filesUploadTooltip} side="bottom">
                         <div>
@@ -753,35 +793,32 @@ export default function SkillEditorPage({
                 </Card>
               </Section>
 
-              {skill &&
-                canManageSkill &&
-                (skill.installation_policy !== "REQUIRED" ||
-                  canManageCompanySkills) && (
-                  <>
-                    <Divider paddingParallel={0} paddingPerpendicular={0} />
+              {skill && canDelete && (
+                <>
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                    <Card border="solid" rounding={4}>
-                      <Section>
-                        <InputHorizontal
-                          title={t("editor.delete.title")}
-                          description={t("editor.delete.description")}
-                          center
+                  <Card border="solid" rounding={4}>
+                    <Section>
+                      <InputHorizontal
+                        title={t("editor.delete.title")}
+                        description={t("editor.delete.description")}
+                        center
+                      >
+                        <Button
+                          type="button"
+                          variant="danger"
+                          prominence="secondary"
+                          icon={SvgTrash}
+                          disabled={isDeleting}
+                          onClick={() => deleteModal.toggle(true)}
                         >
-                          <Button
-                            type="button"
-                            variant="danger"
-                            prominence="secondary"
-                            icon={SvgTrash}
-                            disabled={isDeleting}
-                            onClick={() => deleteModal.toggle(true)}
-                          >
-                            {t("editor.delete.button.label")}
-                          </Button>
-                        </InputHorizontal>
-                      </Section>
-                    </Card>
-                  </>
-                )}
+                          {t("editor.delete.button.label")}
+                        </Button>
+                      </InputHorizontal>
+                    </Section>
+                  </Card>
+                </>
+              )}
             </>
           )}
         </SettingsLayouts.Body>

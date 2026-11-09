@@ -77,6 +77,22 @@
   History returns at most 50 rows. The positive `before_version` cursor excludes
   that version and loads older rows without shifting when a new version is saved.
   Restore creates a new version unless its content equals the current version.
+- **Synced source metadata.** Skill responses include the marketplace name,
+  scope, repository-relative folder and access-inheritance flag. Ordinary Skill
+  viewers can read these labels without gaining marketplace management access.
+  `db/skill.py:skill_marketplace_sources` selects only display fields in one
+  query per list. `server/features/skill/response_helpers.py` omits list rows
+  whose source was deleted during the request; a detail request returns not found.
+  `sections/skills/SkillMarketplaceLabel.tsx` shows the source and folder in
+  cards, the admin table and the content page. `views/SkillEditorPage.tsx`
+  keeps synced content copyable but removes content-write controls. Sharing
+  remains separate. `lib/skills/permissions.ts:canDeleteSkill` gates row,
+  editor and bulk deletion; active synced skills cannot be deleted.
+  `sections/modals/skills/ShareSkillModal.tsx` shows company default inheritance
+  and confirms reset for global managers of overridden company skills. Reset replaces
+  the draft with saved defaults; failures keep the draft. Personal synced owners
+  control audience, while other managers can change installation policy only.
+  Synced ownership transfer is hidden. Non-owner personal editors have no sharing action.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
@@ -285,6 +301,8 @@ The library preview of an external-app skill calls the same renderer
     Client company controls use `usePermissionAuthority` with that permission,
     not ownership or scoped admin capabilities. `web/src/lib/skills/sharing.ts:serializeSkillSharing`
     omits company fields without global authority, preserving existing public access.
+    The personal synced owner can supply public access separately; this never grants
+    installation-policy authority.
     Changed group grants and explicit group settings use `assert_within_scope`
     against stored groups and visibility. Group managers cannot change another
     group's settings or company settings. An omitted group setting preserves
@@ -707,8 +725,8 @@ The library preview of an external-app skill calls the same renderer
 - **Marketplace UI remains pending.** Preview, management mutations and skill reset
   are available through the API. Plugin membership is not modeled yet; its access
   guard belongs in `SkillAccessAdapter.load`.
-  S9 must expose personal synced owner audience controls and hide sharing actions
-  from non-owner editors; existing generic UI capabilities do not encode this yet.
+  Company inheritance/reset and personal owner audience controls are wired in the
+  skill sharing dialog. Source creation/list pages and retired-skill management remain pending.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing

@@ -336,6 +336,16 @@ A version ID from another Skill also returns `404`.
 
 ## Synced marketplace Skills
 
+Synced Skills show their marketplace name and repository folder in the library.
+Owners and editors can select **View content** to read instructions and inspect the file list.
+The content page is read-only. To change instructions or files, edit the GitHub repository and sync the marketplace.
+Permitted sharing settings remain available. Active synced Skills cannot be deleted from row actions or bulk selection.
+
+Skill list and detail responses include `marketplace` for synced Skills and `null` for other Skills.
+It contains the source `id`, `name`, `personal` scope, Skill `folder`, and `follows_access` flag.
+The folder is relative to the repository root. The response does not include source credentials or login details.
+For company sources, `follows_access` indicates whether marketplace default changes apply to this Skill.
+
 Change a synced Skill's instructions and files in its GitHub repository. Onyx rejects manual content changes,
 version restores, ownership transfers, and deletion while the synced Skill remains active.
 You can still change permitted sharing settings and enable the Skill for yourself. Required Skills cannot be disabled.
@@ -347,8 +357,14 @@ Retired Skills reject all user changes except deletion.
 Only the personal owner or a global manage-skills user can delete a retired synced Skill.
 An editor grant alone does not permit deletion. The same rule applies to bulk deletion.
 
-Through the sharing API, only the owner can change a personal synced Skill's audience,
-including company visibility and group grants. This also applies when the owner is a group manager.
+Open **Edit sharing** to see whether a company Skill **Follows Marketplace Access** or uses **Custom Access**.
+Saving an access or installation change creates custom settings for that Skill.
+Global skill managers can select **Reset to marketplace access**, then **Reset access**.
+Reset removes individual grants, discards unsaved changes, and restores the source defaults.
+Future marketplace access changes then apply to the Skill.
+
+Only the owner can change a personal synced Skill's audience, including company visibility and group grants.
+This also applies when the owner is a group manager.
 Changing installation settings still requires the appropriate manage-skills authority.
 Other editors and admins cannot change that audience.
 A manager can change installation settings while preserving the existing grants.
