@@ -266,11 +266,17 @@ The library preview of an external-app skill calls the same renderer
    Stored reads retain the existing per-file and expanded-total limits.
    New upload inputs have a 1 MiB central-directory cap before parsing. Stored reads
    and edits read the saved input without this cap. Saves check the rewritten
-   directory against the 1 MiB cap. `file_processing/zip_index.py` indexes entries
-   in an anonymous SQLite file, preserving native zipfile reads and digest order.
+   directory against the 1 MiB cap. `file_processing/zip_index.py:ZipIndex` parses
+   one central directory record at a time and keeps entry names and offsets in an
+   anonymous SQLite file, preserving digest order.
    `db/zip_metadata.py` owns all entry-index, written-entry, and path-set queries.
-   Its end-record and equal-offset handling match supported Python patch releases.
-   The tie-order probe runs once on first use, not during import.
+   `file_processing/zip_index.py` owns the end record, central record, extra field and local
+   header parsing; `file_processing/zip_stream.py` decompresses member data with
+   `zlib`, `bz2` and `lzma`. Both use documented interfaces only. Errors and
+   values match the installed `zipfile`, with stream behavior as in 3.13.16. A
+   side-effect-free `zipfile` probe selects the gh-139700 ZIP64 end record checks
+   on first use, not during import. Entries that share a local header all end
+   at the next greater header, so they read without the 3.13.16 warning.
    `file_processing/zip_writer.py:SpooledZipWriter` writes the bytes of
    `zipfile.ZipFile(output, "w", ZIP_DEFLATED)` with `struct` and the documented
    compressors, to a seekable output only. It exposes only member writes and

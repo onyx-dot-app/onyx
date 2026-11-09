@@ -17,7 +17,7 @@ from typing import IO, Final, Literal
 from onyx.db.zip_metadata import DiskPathSet
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_processing.zip_index import ZipIndex
+from onyx.file_processing.zip_index import IndexedZipInfo, ZipIndex
 from onyx.file_processing.zip_limits import ZipMetadataLimitError
 from onyx.file_processing.zip_writer import SpooledZipWriter
 from onyx.file_store.models import BundleLimits
@@ -476,7 +476,7 @@ def _copy_bundle_stream(
 def _copy_validated_bundle_file(
     *,
     source_zip: ZipIndex,
-    source_info: zipfile.ZipInfo,
+    source_info: IndexedZipInfo,
     source_path: str,
     output_path: str,
     target_zip: SpooledZipWriter | None,

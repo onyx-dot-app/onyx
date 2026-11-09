@@ -3,7 +3,7 @@
 import sqlite3
 import zipfile
 from collections.abc import Iterable, Iterator
-from typing import Literal, Self
+from typing import Self
 
 _SCHEMA = (
     "CREATE TABLE entries (seq INTEGER PRIMARY KEY, name BLOB NOT NULL, "
@@ -27,11 +27,16 @@ def _offset(key: bytes) -> int:
     return int.from_bytes(key, "big") - _OFFSET_BIAS
 
 
-# Each entry ends at the next header, with the runtime's tie order.
+# Each entry's data must end before the next greater local header offset, or
+# before the central directory. Entries that share a header offset all get the
+# same end. zipfile instead gives all but one of them their own header offset:
+# Python 3.13.0 then fails to open them, and 3.13.16 warns and reads them with
+# no bound at all. This rule reads every shared entry that 3.13.16 reads within
+# the bound, and refuses the data that would run into another local header.
 _END_OFFSETS = (
-    "UPDATE entries SET end_offset = COALESCE(later.header, ?) FROM "  # noqa: S608 -- fixed ASC/DESC keywords only
-    "(SELECT seq, LEAD(header) OVER (ORDER BY header, seq {order}) AS header "
-    "FROM entries) AS later WHERE entries.seq = later.seq"
+    "UPDATE entries SET end_offset = COALESCE(("
+    "SELECT MIN(later.header) FROM entries AS later "
+    "WHERE later.header > entries.header), ?)"
 )
 
 
@@ -51,7 +56,6 @@ class ZipEntryStore:
         entries: Iterable[tuple[int, bytes, int, int]],
         *,
         directory_start: int,
-        shared_header_order: Literal["ASC", "DESC"],
     ) -> None:
         with self._db:
             self._db.executemany(
@@ -61,10 +65,7 @@ class ZipEntryStore:
                     for seq, name, record, header in entries
                 ),
             )
-            self._db.execute(
-                _END_OFFSETS.format(order=shared_header_order),
-                (_offset_key(directory_start),),
-            )
+            self._db.execute(_END_OFFSETS, (_offset_key(directory_start),))
 
     def entries(self, *, by_name: bool = False) -> Iterator[tuple[int, int]]:
         query = (

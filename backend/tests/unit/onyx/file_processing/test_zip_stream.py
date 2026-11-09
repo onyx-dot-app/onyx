@@ -1,4 +1,4 @@
-"""ZipMemberReader streams read, seek and fail as zipfile's member streams do."""
+"""ZipIndex member streams read, seek and fail as zipfile's member streams do."""
 
 import io
 import os
@@ -10,11 +10,11 @@ from collections.abc import Callable
 
 import pytest
 
-from onyx.file_processing.zip_stream import ZipMemberReader
+from onyx.file_processing.zip_index import ZipIndex
 
 # Older zipfile releases (3.13.0 among them) decompress bzip2 and LZMA without
-# a bound and keep a stale compressed size after a stored seek. ZipMemberReader
-# streams follow 3.13.16, so seeks and the read that reports a CRC error can differ there.
+# a bound and keep a stale compressed size after a stored seek. ZipIndex streams
+# follow 3.13.16, so seeks and the read that reports a CRC error can differ there.
 _BOUNDED_ZIPFILE = sys.version_info >= (3, 13, 16)
 
 _COMPRESSIONS = {
@@ -89,17 +89,6 @@ def _run(stream: io.BufferedIOBase, steps: list[Step]) -> list[object]:
     return results
 
 
-def _open(data: bytes, name: str) -> ZipMemberReader:
-    """A member stream at the member's data; zipfile does the open checks."""
-    with zipfile.ZipFile(io.BytesIO(data)) as reference:
-        info = reference.getinfo(name)
-        reference.open(info).close()
-    name_size, extra_size = struct.unpack_from("<2H", data, info.header_offset + 26)
-    source = io.BytesIO(data)
-    source.seek(info.header_offset + 30 + name_size + extra_size)
-    return ZipMemberReader(source, info)
-
-
 def _both(data: bytes, name: str, steps: list[Step]) -> tuple[object, object]:
     def native() -> object:
         with zipfile.ZipFile(io.BytesIO(data)) as reference:
@@ -108,7 +97,8 @@ def _both(data: bytes, name: str, steps: list[Step]) -> tuple[object, object]:
             return _run(stream, steps)
 
     def indexed() -> object:
-        return _run(_open(data, name), steps)
+        with ZipIndex(data) as index:
+            return _run(index.open(index.getinfo(name)), steps)
 
     def guarded(call: Callable[[], object]) -> object:
         try:
@@ -130,8 +120,11 @@ def test_stream_steps_match_zipfile(compression: str, name: str) -> None:
 
 def test_streams_name_the_member_and_open_in_binary_mode() -> None:
     data = _archive(zipfile.ZIP_DEFLATED)
-    with zipfile.ZipFile(io.BytesIO(data)) as reference:
-        with reference.open("member") as expected, _open(data, "member") as ours:
+    with zipfile.ZipFile(io.BytesIO(data)) as reference, ZipIndex(data) as index:
+        with (
+            reference.open("member") as expected,
+            index.open(index.getinfo("member")) as ours,
+        ):
             assert (
                 (ours.mode, ours.name)
                 == (expected.mode, expected.name)

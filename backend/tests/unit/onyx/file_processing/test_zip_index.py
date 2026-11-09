@@ -1,22 +1,26 @@
 """ZipIndex reads the entries zipfile reads, without holding them in memory."""
 
 import io
+import random
 import sqlite3
 import struct
 import subprocess
 import sys
+import threading
 import tracemalloc
 import warnings
 import zipfile
 import zlib
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.file_processing.zip_index import ZipIndex
+from onyx.file_processing import zip_index
+from onyx.file_processing.zip_index import IndexedZipInfo, ZipIndex
 from onyx.file_processing.zip_limits import ZipMetadataLimitError
 
 _EXTRA_ID = 0xCAFE
@@ -103,15 +107,37 @@ def raw_zip(
     return with_zip64_end(body, count, size, start)
 
 
-def with_zip64_end(body: bytes, count: int, size: int, start: int) -> bytes:
+def with_zip64_end(
+    body: bytes,
+    count: int,
+    size: int,
+    start: int,
+    *,
+    extensible: bytes = b"",
+    record_size: int | None = None,
+    locator_offset: int | None = None,
+    disks: int = 1,
+    signature: bytes = b"PK\x06\x06",
+) -> bytes:
     record = struct.pack(
-        "<4sQ2H2L4Q", b"PK\x06\x06", 44, 45, 45, 0, 0, count, count, size, start
+        "<4sQ2H2L4Q",
+        signature,
+        44 + len(extensible) if record_size is None else record_size,
+        45,
+        45,
+        0,
+        0,
+        count,
+        count,
+        size,
+        start,
     )
-    locator = struct.pack("<4sLQL", b"PK\x06\x07", 0, len(body), 1)
+    offset = len(body) if locator_offset is None else locator_offset
+    locator = struct.pack("<4sLQL", b"PK\x06\x07", 0, offset, disks)
     end = struct.pack(
         "<4s4H2LH", b"PK\x05\x06", 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0
     )
-    return body + record + locator + end
+    return body + record + extensible + locator + end
 
 
 def directory_size(data: bytes) -> int:
@@ -153,9 +179,6 @@ _PARITY: dict[str, Callable[[], bytes]] = {
     ),
     "zip64 end record": lambda: raw_zip([("z", b"1"), ("y", b"22")], zip64=True),
     "unicode path extra": _unicode_extra,
-    "shared header offset": lambda: raw_zip(
-        [("same", b""), ("same", b"")], shared_header=True
-    ),
 }
 
 
@@ -174,86 +197,273 @@ def _fields(info: zipfile.ZipInfo) -> tuple[object, ...]:
         info.external_attr,
         info.create_system,
         info.is_dir(),
-        info._end_offset,  # ty: ignore[unresolved-attribute]
+        info.internal_attr,
+        info.create_version,
+        info.extract_version,
+        info.reserved,
+        info.volume,
+        info.compress_type,
     )
 
 
 def _read(open_member: Callable[[], object]) -> object:
-    with warnings.catch_warnings(record=True):
+    """The value or error of a call, with the warnings it gave."""
+    with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         try:
-            return open_member()
+            value = open_member()
         except Exception as exc:  # noqa: BLE001
-            return (type(exc), str(exc))
+            value = (type(exc), str(exc))
+    return value, [str(warning.message) for warning in caught]
 
 
-def _index_reader(index: ZipIndex) -> Callable[[zipfile.ZipInfo], bytes]:
-    def read(info: zipfile.ZipInfo) -> bytes:
+def _index_reader(index: ZipIndex) -> Callable[[IndexedZipInfo], bytes]:
+    def read(info: IndexedZipInfo) -> bytes:
         with index.open(info) as source:
             return source.read()
 
     return read
 
 
-def _member(read: Callable[[zipfile.ZipInfo], bytes], info: zipfile.ZipInfo) -> object:
+def _reference_reader(reference: zipfile.ZipFile) -> Callable[[zipfile.ZipInfo], bytes]:
+    def read(info: zipfile.ZipInfo) -> bytes:
+        with reference.open(info) as source:
+            return source.read()
+
+    return read
+
+
+def _member[Info: zipfile.ZipInfo](read: Callable[[Info], bytes], info: Info) -> object:
     return _read(partial(read, info))
+
+
+def _outcome(data: bytes, *, indexed: bool) -> object:
+    """Everything a caller can see from one archive, errors included."""
+
+    def entries_and_reads() -> object:
+        if indexed:
+            with ZipIndex(data) as index:
+                infos = list(index.infos())
+                return (
+                    [_fields(info) for info in infos],
+                    [_fields(info) for info in index.sorted_infos()],
+                    [_member(_index_reader(index), info) for info in infos],
+                    [_read(partial(index.read, info.filename)) for info in infos],
+                )
+        with zipfile.ZipFile(io.BytesIO(data)) as reference:
+            expected = reference.infolist()
+            ordered = sorted(expected, key=lambda info: info.filename)
+            return (
+                [_fields(info) for info in expected],
+                [_fields(info) for info in ordered],
+                [_member(_reference_reader(reference), info) for info in expected],
+                [_read(partial(reference.read, info.filename)) for info in expected],
+            )
+
+    return _read(entries_and_reads)
 
 
 @pytest.mark.parametrize("fixture", _PARITY)
 def test_entries_match_zipfile(fixture: str) -> None:
     data = _PARITY[fixture]()
+    assert _outcome(data, indexed=True) == _outcome(data, indexed=False)
     with zipfile.ZipFile(io.BytesIO(data)) as reference, ZipIndex(data) as index:
-        expected = reference.infolist()
-        assert [_fields(info) for info in index.infos()] == [
-            _fields(info) for info in expected
-        ]
-        assert [_fields(info) for info in index.sorted_infos()] == [
-            _fields(info) for info in sorted(expected, key=lambda i: i.filename)
-        ]
-        for info, ours in zip(expected, index.infos(), strict=True):
-            assert _member(_index_reader(index), ours) == _member(reference.read, info)
+        for info in reference.infolist():
             assert _fields(index.getinfo(info.filename)) == _fields(
                 reference.getinfo(info.filename)
-            )
-            assert _read(partial(index.read, info.filename)) == _read(
-                partial(reference.read, info.filename)
             )
         with pytest.raises(KeyError):
             index.getinfo("missing")
 
 
-@pytest.mark.parametrize("zip64", [False, True])
-@pytest.mark.parametrize("legacy_location", [False, True])
-@pytest.mark.parametrize("prefix", [b"", b"prepended data"])
-@pytest.mark.parametrize("comment", [b"", b"archive comment"])
-def test_zip64_end_locations_across_python_releases(
-    monkeypatch: pytest.MonkeyPatch,
-    zip64: bool,
-    legacy_location: bool,
-    prefix: bytes,
-    comment: bytes,
-) -> None:
-    data = prefix + raw_zip([("SKILL.md", b"saved skill")], zip64=zip64)
-    data = data[:-2] + struct.pack("<H", len(comment)) + comment
-    with zipfile.ZipFile(io.BytesIO(data)) as reference:
-        expected = [_fields(info) for info in reference.infolist()]
-    end = zipfile._EndRecData(io.BytesIO(data))  # ty: ignore[unresolved-attribute]
-    assert end is not None
-    # Python 3.13.0 returns the ordinary end position even for ZIP64.
-    end[9] = data.index(
-        b"PK\x06\x06" if zip64 and not legacy_location else b"PK\x05\x06"
+def test_entries_keep_the_directory_name_that_local_headers_match() -> None:
+    with ZipIndex(_unicode_extra()) as index:
+        [info] = index.infos()
+        assert (info.filename, info.directory_name) == (
+            "\u00fcn\u00efcode.txt",
+            "plain.txt",
+        )
+        assert index.read(info.filename) == b"u"
+
+
+def _zip64(
+    *,
+    prefix: bytes = b"",
+    comment: bytes = b"",
+    size_delta: int = 0,
+    extensible: bytes = b"",
+    record_size: int | None = None,
+    locator_offset: int | None = None,
+    disks: int = 1,
+    signature: bytes = b"PK\x06\x06",
+) -> bytes:
+    """One saved Skill with ZIP64 end records."""
+    plain = raw_zip([("SKILL.md", b"saved skill")])
+    body = plain[:-22]
+    size = directory_size(plain)
+    data = with_zip64_end(
+        body,
+        1,
+        size + size_delta,
+        len(body) - size,
+        extensible=extensible,
+        record_size=record_size,
+        locator_offset=locator_offset,
+        disks=disks,
+        signature=signature,
     )
-    monkeypatch.setattr(zipfile, "_EndRecData", lambda _: end)
+    return prefix + data[:-2] + struct.pack("<H", len(comment)) + comment
+
+
+_CHECKED_RECORD = "Corrupt zip64 end of central directory record"
+_NOT_FOUND = "Zip64 end of central directory record not found"
+_BAD_OFFSET = "Bad offset for central directory"
+# The local header offset, or the error, on Python 3.13.16 and on 3.13.0,
+# whose zipfile does not check the ZIP64 records (gh-139700).
+_ZIP64_ENDS: dict[str, tuple[Callable[[], bytes], int | str, int | str]] = {
+    "well formed": (lambda: _zip64(), 0, 0),
+    "prepended": (lambda: _zip64(prefix=b"prepended data"), 14, 14),
+    "comment": (lambda: _zip64(comment=b"archive comment"), 0, 0),
+    "prepended with comment": (
+        lambda: _zip64(prefix=b"prepended data", comment=b"archive comment"),
+        14,
+        14,
+    ),
+    "extensible data": (lambda: _zip64(extensible=bytes(8)), 0, _BAD_OFFSET),
+    "extensible data, prepended": (
+        lambda: _zip64(prefix=b"prefix", extensible=bytes(8)),
+        _NOT_FOUND,
+        _BAD_OFFSET,
+    ),
+    "wrong record size field": (lambda: _zip64(record_size=45), _CHECKED_RECORD, 0),
+    "wrong directory size": (
+        lambda: _zip64(size_delta=1),
+        _CHECKED_RECORD,
+        "Bad magic number for central directory",
+    ),
+    "locator past record": (
+        lambda: _zip64(locator_offset=1 << 20),
+        "Corrupt zip64 end of central directory locator",
+        0,
+    ),
+    "locator at start": (lambda: _zip64(locator_offset=0), _CHECKED_RECORD, 0),
+    "record missing": (
+        lambda: _zip64(signature=b"PK\x06\x08"),
+        _NOT_FOUND,
+        _BAD_OFFSET,
+    ),
+    "multiple disks": (
+        lambda: _zip64(disks=2),
+        "zipfiles that span multiple disks are not supported",
+        "zipfiles that span multiple disks are not supported",
+    ),
+}
+
+
+def _skill_outcome(read: Callable[[], tuple[list[int], bytes]]) -> int | str:
+    try:
+        offsets, content = read()
+    except zipfile.BadZipFile as exc:
+        return str(exc)
+    assert content == b"saved skill"
+    [offset] = offsets
+    return offset
+
+
+@pytest.mark.parametrize("fixture", _ZIP64_ENDS)
+def test_zip64_end_records_follow_each_python_release(
+    monkeypatch: pytest.MonkeyPatch, fixture: str
+) -> None:
+    build, checked_outcome, legacy_outcome = _ZIP64_ENDS[fixture]
+    data = build()
+
+    def native() -> tuple[list[int], bytes]:
+        with zipfile.ZipFile(io.BytesIO(data)) as reference:
+            offsets = [info.header_offset for info in reference.infolist()]
+            return offsets, reference.read("SKILL.md")
+
+    def indexed() -> tuple[list[int], bytes]:
+        with ZipIndex(data) as index:
+            offsets = [info.header_offset for info in index.infos()]
+            return offsets, index.read("SKILL.md")
+
+    running = zip_index._checks_zip64_end()
+    assert _skill_outcome(native) == (checked_outcome if running else legacy_outcome)
+    for checked, expected in ((True, checked_outcome), (False, legacy_outcome)):
+        monkeypatch.setattr(zip_index, "_checks_zip64_end", lambda c=checked: c)
+        assert _skill_outcome(indexed) == expected
+
+
+def _with_record_before_first(data: bytes, compress_size: int) -> bytes:
+    """Add a copy of the first entry, with another size, before it."""
+    first = data.index(b"PK\x01\x02")
+    name_length = struct.unpack_from("<H", data, first + 28)[0]
+    record = bytearray(data[first : first + 46 + name_length])
+    struct.pack_into("<2L", record, 20, compress_size, compress_size)
+    end = data.rindex(b"PK\x05\x06")
+    count, size, offset = struct.unpack_from("<H2L", data, end + 10)
+    tail = struct.pack(
+        "<4s4H2LH",
+        b"PK\x05\x06",
+        0,
+        0,
+        count + 1,
+        count + 1,
+        size + len(record),
+        offset,
+        0,
+    )
+    return data[:first] + bytes(record) + data[first:end] + tail
+
+
+def _member_reads(data: bytes) -> list[object]:
     with ZipIndex(data) as index:
-        assert [_fields(info) for info in index.infos()] == expected
-        assert index.read("SKILL.md") == b"saved skill"
+        read = _index_reader(index)
+        return [_member(read, info) for info in index.infos()]
+
+
+def test_entries_that_share_a_header_end_at_the_next_header() -> None:
+    shared = raw_zip([("same", b"1")] * 3, shared_header=True)
+    assert _member_reads(shared) == [(b"1", [])] * 3
+    # The first "a" claims data past the local header of "b". Python 3.13.16
+    # warns and reads it with no bound; Python 3.13.0 also refuses the second
+    # "a". Both entries named "a" end at the header of "b" here.
+    data = _with_record_before_first(raw_zip([("a", b"1" * 40), ("b", b"2")]), 80)
+    overlapped = (
+        (zipfile.BadZipFile, "Overlapped entries: 'a' (possible zip bomb)"),
+        [],
+    )
+    assert _member_reads(data) == [overlapped, (b"1" * 40, []), (b"2", [])]
+
+
+def test_concurrent_first_use_reads_while_other_threads_capture_warnings() -> None:
+    data = raw_zip([("SKILL.md", b"saved skill")])
+    zip_index._checks_zip64_end.cache_clear()
+    barrier = threading.Barrier(16)
+
+    def read(worker: int) -> object:
+        barrier.wait()
+        with warnings.catch_warnings(record=bool(worker % 2)):
+            with ZipIndex(data) as index:
+                return index.read("SKILL.md")
+
+    switch = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        for _ in range(10):
+            zip_index._checks_zip64_end.cache_clear()
+            with ThreadPoolExecutor(max_workers=16) as pool:
+                assert list(pool.map(read, range(16))) == [b"saved skill"] * 16
+    finally:
+        sys.setswitchinterval(switch)
 
 
 @pytest.mark.parametrize("failure", ["connect", "schema"])
-def test_reader_closes_archive_when_storage_creation_fails(
+def test_reader_closes_storage_when_its_creation_fails(
     monkeypatch: pytest.MonkeyPatch, failure: str
 ) -> None:
     data = raw_zip([("SKILL.md", b"body")])
+    zip_index._checks_zip64_end()
     connection = sqlite3.connect("")
     failed = MagicMock(wraps=connection)
     error = sqlite3.OperationalError("storage failure")
@@ -262,24 +472,10 @@ def test_reader_closes_archive_when_storage_creation_fails(
     else:
         failed.executescript.side_effect = error
         monkeypatch.setattr(sqlite3, "connect", lambda _: failed)
-    closed: list[zipfile.ZipFile] = []
-    original_close = zipfile.ZipFile.close
-
-    def close(archive: zipfile.ZipFile) -> None:
-        # ZipFile.__del__ also calls close; count only closes of open archives.
-        was_open = archive.fp is not None
-        original_close(archive)
-        if was_open:
-            closed.append(archive)
-
-    monkeypatch.setattr(zipfile.ZipFile, "close", close)
     try:
         with pytest.raises(sqlite3.OperationalError, match="storage failure") as caught:
             ZipIndex(data)
         assert caught.value is error
-        assert len(closed) == 1
-        with pytest.raises(ValueError, match="closed"):
-            closed[0].open("SKILL.md")
         if failure == "schema":
             with pytest.raises(sqlite3.ProgrammingError, match="closed"):
                 connection.execute("SELECT 1")
@@ -320,22 +516,85 @@ _MALFORMED: dict[str, Callable[[], bytes]] = {
 }
 
 
-@pytest.mark.parametrize("fixture", _MALFORMED)
-def test_malformed_archives_fail_as_in_zipfile(fixture: str) -> None:
-    data = _MALFORMED[fixture]()
+def _with_local_header(data: bytes, offset: int, value: bytes) -> bytes:
+    start = data.index(b"PK\x03\x04")
+    return data[: start + offset] + value + data[start + offset + len(value) :]
 
-    def entries(archive: Callable[[], object]) -> object:
-        return _read(archive)
 
-    expected = entries(
-        lambda: [_fields(i) for i in zipfile.ZipFile(io.BytesIO(data)).infolist()]
+def _with_flags(data: bytes, flags: int) -> bytes:
+    flag_bytes = struct.pack("<H", flags)
+    data = _with_local_header(data, 6, flag_bytes)
+    start = data.index(b"PK\x01\x02")
+    return data[: start + 8] + flag_bytes + data[start + 10 :]
+
+
+def _with_record_field(data: bytes, offset: int, value: bytes) -> bytes:
+    start = data.index(b"PK\x01\x02")
+    return data[: start + offset] + value + data[start + offset + len(value) :]
+
+
+def _zip64_extra(sizes: bytes) -> bytes:
+    data = raw_zip([("a", b"1")], extra_bytes=len(sizes))
+    data = data.replace(
+        struct.pack("<HH", _EXTRA_ID, len(sizes)) + bytes(len(sizes)),
+        struct.pack("<HH", 1, len(sizes)) + sizes,
+    )
+    return _with_record_field(data, 20, struct.pack("<2L", 0xFFFFFFFF, 0xFFFFFFFF))
+
+
+def _unicode_path(value: bytes) -> bytes:
+    data = raw_zip([("a", b"1")], extra_bytes=len(value))
+    return data.replace(
+        struct.pack("<HH", _EXTRA_ID, len(value)) + bytes(len(value)),
+        struct.pack("<HH", 0x7075, len(value)) + value,
     )
 
-    def ours() -> list[tuple[object, ...]]:
-        with ZipIndex(data) as index:
-            return [_fields(info) for info in index.infos()]
 
-    assert entries(ours) == expected
+_MEMBER_FAILURES: dict[str, Callable[[], bytes]] = {
+    "bad local header magic": lambda: raw_zip([("a", b"1")]).replace(
+        b"PK\x03\x04", b"PK\x03\x09"
+    ),
+    "truncated local header": lambda: _with_record_field(
+        raw_zip([("a", b"1")]), 42, struct.pack("<L", 30)
+    ),
+    "header past the end": lambda: _with_record_field(
+        raw_zip([("a", b"1")]), 42, struct.pack("<L", 1 << 20)
+    ),
+    "negative header offset": lambda: (
+        raw_zip([("a", b"1")])[:-22]
+        + struct.pack("<4s4H2LH", b"PK\x05\x06", 0, 0, 1, 1, 52, 31, 0)
+    ),
+    "local name differs": lambda: _with_local_header(raw_zip([("a", b"1")]), 30, b"b"),
+    "local extra field": lambda: _with_local_header(
+        raw_zip([("a", b"123456")]), 28, struct.pack("<H", 2)
+    ),
+    "bad crc": lambda: _with_record_field(raw_zip([("a", b"1")]), 16, bytes(4)),
+    "encrypted": lambda: _with_flags(raw_zip([("a", b"1")]), 0x801),
+    "compressed patch": lambda: _with_flags(raw_zip([("a", b"1")]), 0x820),
+    "strong encryption": lambda: _with_flags(raw_zip([("a", b"1")]), 0x840),
+    "unsupported compression": lambda: _with_record_field(
+        raw_zip([("a", b"1")]), 10, struct.pack("<H", 99)
+    ),
+    "cp437 name": lambda: _with_flags(raw_zip([("\u00e9", b"1")]), 0),
+    "zip64 extra sizes": lambda: _zip64_extra(struct.pack("<2Q", 1, 1)),
+    "zip64 extra missing a size": lambda: _zip64_extra(struct.pack("<Q", 1)),
+    "unicode path, empty": lambda: _unicode_path(
+        struct.pack("<BL", 1, zlib.crc32(b"a"))
+    ),
+    "unicode path, bad utf-8": lambda: _unicode_path(
+        struct.pack("<BL", 1, zlib.crc32(b"a")) + b"\xff"
+    ),
+    "unicode path, short": lambda: _unicode_path(b"\x01\x02"),
+    "unicode path, other crc": lambda: _unicode_path(
+        struct.pack("<BL", 1, 7) + b"other"
+    ),
+}
+
+
+@pytest.mark.parametrize("fixture", {**_MALFORMED, **_MEMBER_FAILURES})
+def test_malformed_archives_fail_as_in_zipfile(fixture: str) -> None:
+    data = {**_MALFORMED, **_MEMBER_FAILURES}[fixture]()
+    assert _outcome(data, indexed=True) == _outcome(data, indexed=False)
 
 
 def test_overlapped_entries_fail_as_in_zipfile() -> None:
@@ -344,11 +603,57 @@ def test_overlapped_entries_fail_as_in_zipfile() -> None:
     second = data.rindex(b"PK\x01\x02")
     data[second + 42 : second + 46] = struct.pack("<L", 10)
     data = bytes(data)
-    with zipfile.ZipFile(io.BytesIO(data)) as reference, ZipIndex(data) as index:
-        for info, ours in zip(reference.infolist(), index.infos(), strict=True):
-            assert _member(_index_reader(index), ours) == _member(reference.read, info)
+    assert _outcome(data, indexed=True) == _outcome(data, indexed=False)
+    with zipfile.ZipFile(io.BytesIO(data)) as reference:
         with pytest.raises(zipfile.BadZipFile, match="Overlapped entries"):
             reference.read("a")
+
+
+def _mutated(rng: random.Random, data: bytes) -> bytes:
+    mutated = bytearray(data)
+    near_end = rng.random() < 0.5
+    for _ in range(rng.randint(1, 3)):
+        low = max(len(mutated) - 160, 0) if near_end else 0
+        position = rng.randrange(low, len(mutated))
+        roll = rng.random()
+        if roll < 0.6:
+            mutated[position] = rng.randrange(256)
+        elif roll < 0.85:
+            value = rng.choice([0, 0xFFFFFFFF, rng.randrange(len(mutated) + 1)])
+            mutated[position : position + 4] = struct.pack("<L", value)
+        else:
+            del mutated[position : position + rng.randint(1, 8)]
+    return bytes(mutated)
+
+
+def test_mutated_archives_match_zipfile() -> None:
+    bases = [
+        _written(),
+        b"prefix" + _written(),
+        _unicode_extra(),
+        _zip64(),
+        _zip64(prefix=b"prefix", extensible=bytes(8)),
+        raw_zip([("b", b"1"), ("a", b"2"), ("b", b"3")], comment_bytes=5),
+    ]
+    rng = random.Random(17)
+    compared = 0
+    for _ in range(600):
+        data = _mutated(rng, rng.choice(bases))
+        if _shares_header_offsets(data):
+            continue
+        compared += 1
+        assert _outcome(data, indexed=True) == _outcome(data, indexed=False), data.hex()
+    assert compared > 550
+
+
+def _shares_header_offsets(data: bytes) -> bool:
+    """Whether zipfile lists two entries at one local header offset."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as reference:
+            offsets = [info.header_offset for info in reference.infolist()]
+    except Exception:  # noqa: BLE001
+        return False
+    return len(set(offsets)) != len(offsets)
 
 
 @pytest.mark.parametrize("offset", [2**63 - 1, 2**63, 2**64 - 1])
@@ -358,14 +663,9 @@ def test_header_offsets_past_sqlite_integers_fail_as_in_zipfile(offset: int) -> 
         info = zipfile.ZipInfo("a")
         info.extra = struct.pack("<HHQ", 1, 8, offset)
         archive.writestr(info, b"x")
-    data = bytearray(output.getvalue())
-    record = data.index(b"PK\x01\x02")
-    data[record + 42 : record + 46] = struct.pack("<L", 0xFFFFFFFF)
-    data = bytes(data)
-    with zipfile.ZipFile(io.BytesIO(data)) as reference, ZipIndex(data) as index:
-        for info, ours in zip(reference.infolist(), index.infos(), strict=True):
-            assert _fields(ours) == _fields(info)
-            assert _member(_index_reader(index), ours) == _member(reference.read, info)
+    data = output.getvalue()
+    data = _with_record_field(data, 42, struct.pack("<L", 0xFFFFFFFF))
+    assert _outcome(data, indexed=True) == _outcome(data, indexed=False)
 
 
 def test_metadata_cap_refuses_before_any_entry_exists(
@@ -374,7 +674,7 @@ def test_metadata_cap_refuses_before_any_entry_exists(
     data = raw_zip([(f"{index}/", b"") for index in range(1000)])
     created: list[str] = []
 
-    class CountingZipInfo(zipfile.ZipInfo):
+    class CountingZipInfo(IndexedZipInfo):
         __slots__ = ()
 
         def __init__(
@@ -385,7 +685,7 @@ def test_metadata_cap_refuses_before_any_entry_exists(
             super().__init__(filename, date_time)
             created.append(filename)
 
-    monkeypatch.setattr(zipfile, "ZipInfo", CountingZipInfo)
+    monkeypatch.setattr(zip_index, "IndexedZipInfo", CountingZipInfo)
     with pytest.raises(ZipMetadataLimitError):
         ZipIndex(data, max_metadata_bytes=directory_size(data) - 1)
     assert created == []

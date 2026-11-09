@@ -1,9 +1,9 @@
 """Read one ZIP member's data, as zipfile's member stream reads it.
 
-The caller finds and checks the member; this module only decompresses and
-checks the CRC. It uses the documented zlib, bz2 and lzma decompressors. The
-read, seek and error behavior follows zipfile on Python 3.13.16, whose bzip2
-and LZMA reads are bounded. The caller must refuse encrypted members.
+ZipIndex finds and checks the member; this module only decompresses and checks
+the CRC. It uses the documented zlib, bz2 and lzma decompressors. The read,
+seek and error behavior follows zipfile on Python 3.13.16, whose bzip2 and
+LZMA reads are bounded. Encrypted members never get here: ZipIndex refuses them.
 """
 
 import bz2
