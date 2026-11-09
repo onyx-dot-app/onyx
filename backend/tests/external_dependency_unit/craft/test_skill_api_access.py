@@ -412,7 +412,14 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     read_bundle.assert_not_called()
 
 
-@pytest.mark.parametrize("policy", list(SkillInstallationPolicy))
+@pytest.mark.parametrize(
+    "policy",
+    [
+        SkillInstallationPolicy.AVAILABLE,
+        SkillInstallationPolicy.DEFAULT,
+        SkillInstallationPolicy.REQUIRED,
+    ],
+)
 def test_admin_can_set_installation_policy(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
@@ -426,7 +433,7 @@ def test_admin_can_set_installation_policy(
     monkeypatch.setattr("onyx.server.features.skill.api.push_skills_for_users", push)
     response = share_current_user_skill(
         skill.id,
-        SkillShareRequest(installation_policy=policy),
+        SkillShareRequest.model_validate({"installation_policy": policy}),
         user=admin,
         db_session=db_session,
     )

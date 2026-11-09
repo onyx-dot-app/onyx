@@ -219,6 +219,10 @@ def _make_group_shared_resources_public__no_commit(
         )
         .values(public_permission=SkillSharePermission.VIEWER)
     )
+    # Remove the grants and their install settings after preserving read access.
+    db_session.execute(
+        delete(Skill__UserGroup).where(Skill__UserGroup.user_group_id.in_(group_ids))
+    )
 
 
 def _add_to_default_group__no_commit(
