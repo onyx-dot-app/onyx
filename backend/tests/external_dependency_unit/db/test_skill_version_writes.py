@@ -1124,6 +1124,42 @@ def test_late_insert_below_cursor(tenant: str, session: Session, user: User) -> 
     assert skill_version_repair_batch(session, None, drift_only=True) == []
 
 
+def test_repair_refreshes_later_batch_skill_after_completed_edit(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = legacy_skill(session, user, 1)
+    later = legacy_skill(session, user, 2)
+    repair = repair_tasks.repair_skill_version_metadata
+
+    def edit_before_repair(
+        skill: Skill, db_session: Session, file_store: FileStore
+    ) -> list[str]:
+        if skill.id == first.id:
+            with get_session_with_current_tenant() as writer:
+                actor = writer.get(User, user.id)
+                assert actor is not None
+                api.replace_current_user_skill_bundle(
+                    later.id,
+                    upload(bundle(later.name, "Edited before repair")),
+                    actor,
+                    writer,
+                )
+        return repair(skill, db_session, file_store)
+
+    monkeypatch.setattr(
+        repair_tasks, "repair_skill_version_metadata", edit_before_repair
+    )
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY) == str(later.id)
+    session.expire_all()
+    history = versions(later, session)
+    assert len(history) == 2
+    assert all(version.content_digest is not None for version in history)
+    assert later.current_version is not None
+    assert later.current_version.version_number == 2
+    assert skill_version_repair_batch(session, None, drift_only=True) == []
+
+
 @pytest.mark.parametrize("validity", [False, True, None])
 def test_completed_validity_drift(
     tenant: str, session: Session, user: User, validity: bool | None
@@ -1647,7 +1683,12 @@ def test_replacement_preserves_history_on_unexpected_read_failure(
 
     monkeypatch.setattr(get_default_file_store(), "read_file", failed_read)
     with pytest.raises(type(error)) as caught:
-        api.replace_current_user_skill_bundle(skill.id, upload(content), user, session)
+        api.replace_current_user_skill_bundle(
+            skill.id,
+            upload(content),
+            user,
+            session,
+        )
     assert caught.value is error
     session.rollback()
     session.refresh(skill)
