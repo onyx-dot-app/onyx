@@ -17,6 +17,7 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     ExecutionStatus,
     PreparedStep,
+    ReleaseFailed,
     RunFailureKind,
     RunState,
     RunStatus,
@@ -523,6 +524,107 @@ def test_suspend_hook_stopped_by_cancellation_finishes_the_run() -> None:
         assert len(finish.calls) == 1
         end = next(event for event in events if isinstance(event, AgentEndEvent))
         assert end.outcome == RunStatus.CANCELLED
+    finally:
+        assert run.wait_for_idle(3)
+        assert coordinator.close(3)
+
+
+def _release_failed() -> ReleaseFailed:
+    """A release hook failure, as when before_tool_call raised for a program's
+    call."""
+    return ReleaseFailed(
+        RuntimeError("the policy service is unavailable"),
+        [ToolResultAmendment(call_id=CALL_ID, result=ToolResult(content="closed"))],
+    )
+
+
+@pytest.mark.parametrize("stopped", [False, True], ids=["no_stop", "stop"])
+def test_a_finish_hook_failure_fails_the_run_unless_the_user_stopped_it(
+    stopped: bool,
+) -> None:
+    hook = FinishHook(error=_release_failed())
+    cancellation = CancellationSignal()
+
+    def reply(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        if request.messages and isinstance(request.messages[-1], ToolResultMessage):
+            if stopped:
+                cancellation.cancel()
+                signal.check()
+            return _answer()
+        return AssistantMessage(
+            content=[ToolCall(id=CALL_ID, name="cell", arguments={})]
+        )
+
+    agent = _agent(
+        reply=reply,
+        execute=lambda _invocation: ToolResult(content="running"),
+        hook=hook,
+    )
+    run, events, saved = _run(agent, cancellation=cancellation)
+    outcome = RunStatus.CANCELLED if stopped else RunStatus.ERROR
+    assert run.status == outcome
+    assert len(hook.calls) == 1
+    _assert_amended(run, events, saved, outcome)
+    failure = saved[0].failure
+    if stopped:
+        assert failure is None
+    else:
+        assert failure is not None and failure.kind == RunFailureKind.EXECUTION
+
+
+@pytest.mark.parametrize("stopped", [False, True], ids=["no_stop", "stop"])
+def test_a_suspend_hook_failure_fails_the_run_unless_the_user_stopped_it(
+    stopped: bool,
+) -> None:
+    cancellation = CancellationSignal()
+
+    def suspend(_results: list[ToolResultMessage]) -> list[ToolResultAmendment]:
+        if stopped:
+            # The user stops the run while the hook runs.
+            cancellation.cancel()
+        raise _release_failed()
+
+    finish = FinishHook(error=RuntimeError("no amendments"))
+    events: list[AgentEvent] = []
+
+    def reply(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        return AssistantMessage(
+            content=[ToolCall(id=CALL_ID, name="cell", arguments={})]
+        )
+
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        before_tool_call=lambda _context: PendingToolInput(
+            request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+        ),
+        on_suspend=suspend,
+        on_finish=finish,
+    )
+    coordinator = AgentCoordinator()
+    run = agent.start(
+        max_steps=2,
+        cancellation=cancellation,
+        coordinator=coordinator,
+        on_event=events.append,
+    )
+    outcome = RunStatus.CANCELLED if stopped else RunStatus.ERROR
+    try:
+        assert run.wait_until_settled(3).status == outcome
+        assert run.wait_for_idle(3)
+        end = next(event for event in events if isinstance(event, AgentEndEvent))
+        assert end.outcome == outcome
+        assert (end.failure is None) == stopped
     finally:
         assert run.wait_for_idle(3)
         assert coordinator.close(3)

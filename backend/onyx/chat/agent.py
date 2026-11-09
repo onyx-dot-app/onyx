@@ -32,7 +32,12 @@ from onyx.chat.prompt_utils import (
     build_chat_prompt,
     prepare_prompt,
 )
-from onyx.chat.tool_results import staged_result_details, tool_result_sources
+from onyx.chat.tool_results import (
+    merged_chat_files,
+    staged_result_details,
+    tool_result_parts,
+    tool_result_sources,
+)
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
@@ -201,16 +206,16 @@ class ChatAgent(Agent, RestorableFeature):
         """Apply accepted tool results to the next request's context policy."""
         for response in responses:
             data = response.details
-            if response.tool_name == SearchTool.NAME:
+            if any(
+                part.tool_name == SearchTool.NAME
+                for part in tool_result_parts(response)
+            ):
                 self.has_called_search_tool = True
             sources = tool_result_sources(data)
             if sources is not None:
                 self.gathered_documents.extend(sources.documents)
             if isinstance(data, StagedChatFiles):
-                existing = {file.filename for file in self.chat_files}
-                self.chat_files.extend(
-                    file for file in data.staged_files if file.filename not in existing
-                )
+                self.chat_files = merged_chat_files(self.chat_files, data.staged_files)
             if sources is None:
                 continue
             self.citation_processor.update_citation_mapping(sources.citations)
@@ -313,7 +318,8 @@ class ChatAgent(Agent, RestorableFeature):
 
     def _after_step(self, result: StepResult) -> bool:
         self.search_context = update_search_context(
-            self.search_context, result.tool_results
+            self.search_context,
+            [part for item in result.tool_results for part in tool_result_parts(item)],
         )
         self._update_tool_context(result.tool_results)
         if not result.message.tool_calls or result.step.is_last:
