@@ -597,7 +597,9 @@ The library preview of an external-app skill calls the same renderer
 
 25. `marketplace-management-transactions` **Manage sources through the database service.**
     `db/marketplace_management.py` refreshes active Basic authority. Reads do not take
-    the membership lock. Mutations take membership before marketplace and sorted skill locks. Owners manage personal sources;
+    the membership lock. Mutations take membership before marketplace and sorted skill locks.
+    Recheck active authority after marketplace locks, and after child Skill locks before removal;
+    user deactivation does not take the membership lock. Owners manage personal sources;
     global `MANAGE_SKILLS` manages company sources. Global managers can also read,
     sync, replace logins and remove personal sources, including deactivated owners' sources.
     Scoped group authority does not permit company source management.

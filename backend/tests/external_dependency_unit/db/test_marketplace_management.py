@@ -3,11 +3,13 @@
 import sys
 from collections.abc import Generator
 from datetime import datetime, timezone
+from threading import Event
+from time import monotonic, sleep
 from types import FrameType
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, event, select, update
+from sqlalchemy import delete, event, func, select, text, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -37,7 +39,9 @@ from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.resource_access import ResourceAccessChange, mutate_resource_access
 from onyx.db.skill import SkillAccessAdapter
 from onyx.db.skill_version import delete_unreferenced_skill_bundles
+from onyx.db.user_preferences import deactivate_user
 from onyx.db.users import lock_group_membership
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.settings.models import Tier
@@ -49,6 +53,7 @@ from onyx.skills.marketplace.models import (
     MarketplaceSyncStatus,
 )
 from onyx.skills.marketplace.read_models import ReadySkill
+from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.craft.db_helpers import (
     make_sandbox,
     make_skill,
@@ -344,6 +349,78 @@ def test_refresh_separate_auth_actor(
                     operations[operation](row_id, stale, db_session)
         db_session.commit()
         assert not row.sync_requested and row.login_user_id == actor_id
+
+
+@pytest.mark.parametrize("personal", [False, True])
+@pytest.mark.parametrize("locked_resource", ["marketplace", "skill"])
+def test_deactivated_actor_cannot_remove_after_resource_lock_wait(
+    db_session: Session, personal: bool, locked_resource: str
+) -> None:
+    actor, _ = manager(db_session, global_access=True)
+    connect(db_session, actor)
+    row = create(db_session, actor, personal=personal)
+    skill = make_skill(db_session, author_user_id=actor.id)
+    skill.marketplace_id = row.id
+    skill.marketplace_entry_key = skill.name
+    db_session.commit()
+    actor_id, row_id, skill_id = actor.id, row.id, skill.id
+    entered = Event()
+    backend_pids: list[int] = []
+
+    def remove() -> OnyxErrorCode | None:
+        with get_session_with_current_tenant() as writer:
+            current = writer.get(User, actor_id)
+            assert current is not None and current.is_active
+            pid = writer.scalar(select(func.pg_backend_pid()))
+            assert isinstance(pid, int)
+            backend_pids.append(pid)
+            entered.set()
+            try:
+                management.remove_marketplace__no_commit(row_id, current, writer)
+                writer.commit()
+            except OnyxError as exc:
+                writer.rollback()
+                return exc.error_code
+            return None
+
+    with get_session_with_current_tenant() as holder:
+        if locked_resource == "marketplace":
+            holder.scalar(
+                select(Marketplace).where(Marketplace.id == row_id).with_for_update()
+            )
+        else:
+            holder.scalar(
+                select(Skill.id).where(Skill.id == skill_id).with_for_update()
+            )
+        future = start_thread_future(remove, name="marketplace-deactivation-test")
+        try:
+            assert entered.wait(5)
+            deadline = monotonic() + 5
+            blocked = False
+            while monotonic() < deadline:
+                blocked = bool(
+                    holder.scalar(
+                        text(
+                            "SELECT EXISTS (SELECT 1 FROM pg_locks "
+                            "WHERE pid = :pid AND NOT granted)"
+                        ),
+                        {"pid": backend_pids[0]},
+                    )
+                )
+                if blocked:
+                    break
+                sleep(0.01)
+            assert blocked, "Removal must wait on the held resource lock"
+            with get_session_with_current_tenant() as revoker:
+                current = revoker.get(User, actor_id)
+                assert current is not None
+                deactivate_user(current, revoker)
+        finally:
+            holder.rollback()
+    assert future.result(timeout=15) == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    db_session.expire_all()
+    assert db_session.get(Marketplace, row_id) is not None
+    assert db_session.get(Skill, skill_id) is not None
 
 
 @pytest.mark.parametrize("invalid", ["disconnected", "disabled", "inactive"])

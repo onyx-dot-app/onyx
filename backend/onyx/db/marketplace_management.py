@@ -56,6 +56,7 @@ def _lock_managed_marketplace(
     )
     if row is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found")
+    actor = fetch_resource_access_user(actor.id, db_session)
     if row.owner_user_id != actor.id:
         if row.owner_user_id is not None and not global_personal:
             raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
@@ -246,6 +247,8 @@ def remove_marketplace__no_commit(
             .execution_options(populate_existing=True)
         )
     )
+    # Deactivation can commit while either resource lock is waiting.
+    fetch_resource_access_user(user.id, db_session)
     audiences = affected_user_ids_for_skills([skill.id for skill in skills], db_session)
     result = MarketplaceRemovalResult(
         cleanup_file_ids=skill_bundle_file_ids_for_skills(skills, db_session),
