@@ -467,6 +467,7 @@ def test_cancelled_source_file_staging_drains_before_completion(
             )
         ]
     )
+    # Files of found documents are staged only for the Python tool.
     agent = ChatAgent(
         [],
         [EchoTool(), _PythonTool()],

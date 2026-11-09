@@ -144,6 +144,8 @@ namespace) and `code_mode_result` (the value and stub type a program
 receives); see [[code-execution]]. A tool that must not run twice sets
 `interrupted_result`: on restore, the runtime saves it as the result of a call
 that a lost execution owner left running (`agents/tools.py:AgentTool`).
+`inner_tools` lists the tools that run inside a tool's calls, such as the
+functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
@@ -296,7 +298,8 @@ Their control functions, such as `think_tool`, `generate_report` and
     calls to the same tool when the tool sets `merge_list_argument` and all
     other arguments match (`tools/interface.py:merge_tool_arguments`). Both
     lists must be non-empty string lists, and the merged list must stay within
-    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`). No merge happens
+    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`, search
+    `MAX_QUERIES_PER_CALL`). No merge happens
     when the run has `before_tool_call`, or when arguments are truncated or
     invalid. A parallel tool can merge calls that are not next to each other;
     a `SEQUENTIAL` tool merges only up to its first call that cannot merge. One

@@ -42,6 +42,7 @@ from onyx.tools.tool_implementations.search.models import (
     SearchPlanningResult,
 )
 from onyx.tools.tool_implementations.search.search_tool import (
+    MAX_QUERIES_PER_CALL,
     SearchTool,
     update_search_context,
 )
@@ -93,6 +94,7 @@ def _run(
     progress: list[ToolProgress] | None = None,
     sections: list[InferenceSection] | None = None,
     context: ToolContext | None = None,
+    queries: list[str] | None = None,
 ) -> MagicMock:
     """Mock retrieval and scope selection; supplied sections exercise context expansion."""
     mock_search_pipeline = MagicMock(return_value=[])
@@ -124,7 +126,7 @@ def _run(
         result = tool.run(
             invocation=ToolInvocation(
                 call_id="search",
-                arguments={"queries": ["ticket"]},
+                arguments={"queries": queries or ["ticket"]},
                 cancellation=CancellationSignal(),
                 update=lambda item: (
                     progress.append(item.model_copy(deep=True))
@@ -376,6 +378,19 @@ def _emitted_filter_sources(progress: list[ToolProgress]) -> list[list[str]]:
         for item in progress
         if isinstance(item.details, SearchDocsResponse) and item.details.sources
     ]
+
+
+def test_a_call_runs_at_most_the_query_limit() -> None:
+    queries = [f"query {index}" for index in range(MAX_QUERIES_PER_CALL + 2)]
+    mock_search_pipeline = _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.SLACK],
+        skip_query_expansion=True,
+        queries=queries,
+    )
+    sent = set(_queries_sent(mock_search_pipeline))
+    assert set(queries[:MAX_QUERIES_PER_CALL]) <= sent
+    assert not set(queries[MAX_QUERIES_PER_CALL:]) & sent
 
 
 def test_decided_scope_is_passed_to_search() -> None:
