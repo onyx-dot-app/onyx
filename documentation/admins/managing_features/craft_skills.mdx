@@ -151,6 +151,7 @@ Lowering the upload ZIP-size or file-count limit does not change stored-bundle v
 Stored ZIP reads have a separate 100 MiB allowance, set by `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`.
 Keep this allowance large enough for your existing bundles when you lower upload limits.
 If you previously allowed ZIPs above 100 MiB, set this allowance before upgrading.
+A saved bundle above this allowance returns a 413 read-limit error. Raise the allowance to read it.
 Onyx applies the limits when you save the Skill again.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,

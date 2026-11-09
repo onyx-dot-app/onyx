@@ -56,6 +56,7 @@ from onyx.db.models import (
     WorkspaceActionPolicy,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.skill_version import repair_skill_version
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
 
@@ -201,6 +202,7 @@ def make_skill(
     )
     db_session.add(skill)
     db_session.flush()
+    repair_skill_version(skill, db_session)
     return skill
 
 
