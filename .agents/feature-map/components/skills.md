@@ -406,6 +406,28 @@ still propagate unexpected storage errors.
     replacement refreshes the description and applies digest equality and retention.
     Never reuse the historical blob: this restore can prune its source version.
     Cleanup stays after the content commit and before the sandbox push.
+21. `marketplace-processing-limits` **Archive processing has separate read and index limits.**
+    `skills/marketplace/archive.py:archive_files` bounds gzip expansion and member
+    reads separately from skill limits. Every supported stream read charges the
+    shared byte budget. ZIP metadata reads are bounded before directory parsing;
+    only stored and deflated members without encryption or patched-data flags are
+    supported. ZIP member streams
+    reject seeking, which could otherwise bypass the decompression budget. TAR
+    streams can seek within the already expanded spool. Path depth, path bytes and
+    the aggregate parent index
+    are bounded before retained path allocations can grow without limit.
+    The index budget also counts each retained TAR PAX dictionary and its text
+    objects; global headers must not multiply retained metadata without a limit.
+    TAR enumeration propagates parser-detected header errors, including failures
+    inside extension chains. Normal zero-header and member-boundary EOF endings
+    remain accepted; TAR cannot distinguish those endings from all lost data.
+    Enumeration also charges metadata reads before a member returns.
+    Each member also has its own metadata budget, so chained headers and sparse
+    maps stop before large allocation or deep parser recursion. Sparse members
+    fail the read. `read`, `readline` and `readlines` fail above
+    `MEMBER_CALL_MAX_BYTES` instead of truncating. `read1` can return less;
+    `readinto` fills larger buffers in bounded steps. All reads share the byte budget.
+    It inflates gzip once into a temporary spool. See `backend/onyx/skills/marketplace/README.md` for compatibility costs.
 
 ---
 

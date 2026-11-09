@@ -387,7 +387,7 @@ def _bundle_wrapper_prefix(file_paths: list[str]) -> str | None:
 
 
 def _copy_bundle_stream(
-    source: IO[bytes],
+    source: IO[bytes] | io.BufferedIOBase,
     target: IO[bytes] | None,
     output_path: str,
     per_file_max_bytes: int,
@@ -767,7 +767,9 @@ def compute_bundle_sha256(zip_bytes: bytes) -> str:
     return hashlib.sha256(zip_bytes).hexdigest()
 
 
-def build_custom_bundle(files: Mapping[str, Callable[[], IO[bytes]]]) -> bytes:
+def build_custom_bundle(
+    files: Mapping[str, Callable[[], IO[bytes] | io.BufferedIOBase]],
+) -> bytes:
     """Build a deterministic bundle from archive members without unbounded reads."""
     _check_bundle_file_count(len(files), DEFAULT_MAX_FILE_COUNT)
     output = io.BytesIO()
