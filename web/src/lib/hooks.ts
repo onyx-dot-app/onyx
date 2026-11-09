@@ -46,6 +46,7 @@ import {
 } from "@/app/app/services/lib";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupListUrl } from "@/hooks/useGroups";
 
 export const usePublicCredentials = () => {
   const { mutate } = useSWRConfig();
@@ -900,6 +901,7 @@ export function useLlmManager(
 EE Only APIs
 */
 
+/** Groups without member lists; read `member_count`. */
 export const useUserGroups = (): {
   data: UserGroup[] | undefined;
   isLoading: boolean;
@@ -911,12 +913,21 @@ export const useUserGroups = (): {
   const isPaidEnterpriseFeaturesEnabled =
     !isLoading && settings.enterprise !== null;
 
+  const url = userGroupListUrl({
+    includeDefault: false,
+    includeMembers: false,
+  });
   const swrResponse = useSWR<UserGroup[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
+    isPaidEnterpriseFeaturesEnabled ? url : null,
     errorHandlingFetcher
   );
 
-  const refreshUserGroups = () => mutate(SWR_KEYS.adminUserGroups);
+  // Every variant, the same as useGroups' refreshGroups.
+  const refreshUserGroups = () =>
+    mutate(
+      (key) =>
+        typeof key === "string" && key.startsWith(SWR_KEYS.adminUserGroups)
+    );
 
   if (isLoading) {
     return {

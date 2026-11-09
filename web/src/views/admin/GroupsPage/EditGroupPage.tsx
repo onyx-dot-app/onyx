@@ -29,7 +29,11 @@ import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
+import {
+  errorHandlingFetcher,
+  isNotFoundError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
 import { AccountType } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
@@ -57,6 +61,7 @@ import {
   refreshGroupLists,
 } from "./svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupUrl } from "@/hooks/useGroups";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
@@ -86,24 +91,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // Fetch the group data — poll every 5s while syncing so the UI updates
   // automatically when the backend finishes processing the previous edit.
   const {
-    data: groups,
+    data: groupData,
     isLoading: groupLoading,
     error: groupError,
-  } = useSWR<UserGroup[]>(
-    SWR_KEYS.adminUserGroupsWithDefault,
-    errorHandlingFetcher,
-    {
-      refreshInterval: (latestData) => {
-        const g = latestData?.find((g) => g.id === groupId);
-        return g && !g.is_up_to_date ? 5000 : 0;
-      },
-    }
-  );
-
-  const group = useMemo(
-    () => groups?.find((g) => g.id === groupId) ?? null,
-    [groups, groupId]
-  );
+  } = useSWR<UserGroup>(userGroupUrl(groupId), errorHandlingFetcher, {
+    refreshInterval: (latestData) =>
+      latestData && !latestData.is_up_to_date ? 5000 : 0,
+  });
+  const group = groupData ?? null;
 
   const canManage = can(group, "manage");
   const canManageMembers = can(group, "manage_members");
@@ -184,7 +179,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     candidatesLoading ||
     tokenLimitsLoading ||
     permissionsLoading;
-  const error = groupError ?? candidatesError;
+  // A missing or hidden group renders the not-found state, not a load error.
+  const error =
+    (isNotFoundError(groupError) ? undefined : groupError) ?? candidatesError;
 
   // Pre-populate form when group data loads
   useEffect(() => {
@@ -470,11 +467,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups = await fetch(SWR_KEYS.adminUserGroupsWithDefault).then(
-      (r) => r.json()
-    );
-    const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
-    if (freshGroup && !freshGroup.is_up_to_date) {
+    const freshGroupResponse = await fetch(userGroupUrl(groupId));
+    if (!freshGroupResponse.ok) {
+      toast.error(t("edit.toasts.updateFailed"));
+      return;
+    }
+    const freshGroup: UserGroup = await freshGroupResponse.json();
+    if (!freshGroup.is_up_to_date) {
       toast.error(t("edit.toasts.syncing"));
       return;
     }

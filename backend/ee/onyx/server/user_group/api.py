@@ -8,6 +8,8 @@ from ee.onyx.db.user_group import (
     add_users_to_user_group,
     assert_group_membership_survives_deletion,
     fetch_user_group,
+    fetch_user_group_for_snapshot,
+    fetch_user_group_member_counts,
     fetch_user_groups,
     fetch_user_groups_for_user,
     insert_user_group,
@@ -30,6 +32,7 @@ from ee.onyx.server.user_group.models import (
     UserGroup,
     UserGroupCreate,
     UserGroupIncognitoUpdate,
+    UserGroupMemberCounts,
     UserGroupRename,
     UserGroupUpdate,
 )
@@ -82,6 +85,8 @@ router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
 @router.get("/admin/user-group")
 def list_user_groups(
     include_default: bool = False,
+    # False sends member counts without member lists, which are large in big orgs.
+    include_users: bool = True,
     user: User = Depends(
         require_permission(Permission.READ_USER_GROUPS, allow_scope=True)
     ),
@@ -110,12 +115,27 @@ def list_user_groups(
         eager_load_for_snapshot=True,
         include_default=include_default,
         restrict_to_group_ids=restrict_to_group_ids,
+        include_users=include_users,
+    )
+    member_counts = (
+        None
+        if include_users
+        else fetch_user_group_member_counts(
+            db_session, [user_group.id for user_group in user_groups]
+        )
     )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
         UserGroup.from_model(
             user_group,
             mask_credential_prefix=mask_credential_prefix,
+            member_counts=(
+                None
+                if member_counts is None
+                else member_counts.get(
+                    user_group.id, UserGroupMemberCounts(total=0, active=0)
+                )
+            ),
             permissions=user_group_permissions(
                 can_manage=manages_group(
                     user,
@@ -130,6 +150,54 @@ def list_user_groups(
         )
         for user_group in user_groups
     ]
+
+
+@router.get("/admin/user-group/{user_group_id}")
+def get_user_group(
+    user_group_id: int,
+    user: User = Depends(
+        require_permission(Permission.READ_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> UserGroup:
+    """Read one group with its members and nested snapshots."""
+    # GATE 2 (read): same visibility as list_user_groups, so a scoped manager
+    # cannot read groups outside their managed set one id at a time.
+    managed_group_ids = (
+        get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+        if has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is PermissionAuthority.SCOPED
+        else set[int]()
+    )
+    if (
+        not has_global_permission(user, Permission.READ_USER_GROUPS)
+        and user_group_id not in managed_group_ids
+    ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+
+    user_group = fetch_user_group_for_snapshot(db_session, user_group_id)
+    if user_group is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+
+    return UserGroup.from_model(
+        user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        permissions=user_group_permissions(
+            can_manage=manages_group(
+                user,
+                db_session,
+                group_id=user_group.id,
+                managed_group_ids=managed_group_ids,
+            ),
+            is_user_groups_admin=has_global_permission(
+                user, Permission.MANAGE_USER_GROUPS
+            ),
+            is_full_admin=has_global_permission(
+                user, Permission.FULL_ADMIN_PANEL_ACCESS
+            ),
+            is_default=user_group.is_default,
+        ),
+    )
 
 
 @router.get("/user-groups/minimal")

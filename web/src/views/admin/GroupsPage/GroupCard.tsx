@@ -63,9 +63,7 @@ function GroupCard({ group }: GroupCardProps) {
             <Section flexDirection="row" alignItems="start" gap={0}>
               <div className="py-1">
                 <Text mainUiBody text03>
-                  {formatMemberCount(
-                    group.users.filter((u) => u.is_active).length
-                  )}
+                  {formatMemberCount(group.active_member_count)}
                 </Text>
               </div>
               {canManageMembers && (
