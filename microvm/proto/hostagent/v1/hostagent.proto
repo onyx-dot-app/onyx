@@ -28,6 +28,12 @@ service HostAgent {
 
   // NodeInfo returns the node capacity, versions and templates.
   rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+
+  // CloseConnections closes every egress relay connection of the VM, with
+  // the same preconditions as Stop. New connections still work. The
+  // api_server calls it in the daemon Init sequence after a restore, so that
+  // pooled client connections in the guest fail fast and reconnect.
+  rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
 }
 
 // The reason of a host agent error (google.rpc.ErrorInfo.reason).
@@ -97,6 +103,9 @@ message CreateRequest {
   // Scratch disk size. Must be at least the template's scratch size. A
   // larger value grows the disk; the guest daemon grows the file system.
   uint32 scratch_gib = 6;
+  // Tenant of the sandbox (^[A-Za-z0-9_-]+$). The egress relay stamps
+  // spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>.
+  string tenant_id = 7;
 }
 
 message CreateResponse {
@@ -138,6 +147,18 @@ message VM {
   // Jailer UID and GID of the VM.
   uint32 uid = 10;
   google.protobuf.Timestamp started_at = 11;
+  string tenant_id = 12;
+}
+
+message CloseConnectionsRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+}
+
+message CloseConnectionsResponse {
+  // Number of relay connections that were closed.
+  uint32 closed = 1;
 }
 
 message NodeInfoRequest {}

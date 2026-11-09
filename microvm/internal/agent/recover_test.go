@@ -169,16 +169,16 @@ func TestRecoverRules(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	vm, created, err := f.m.Create(ctx, CreateRequest{SandboxID: idAlive, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4})
+	vm, created, err := f.m.Create(ctx, CreateRequest{SandboxID: idAlive, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4, TenantID: "public"})
 	if err != nil || created || vm.Generation != 100 || vm.PID != 501 {
 		t.Fatalf("repeat create of adopted VM: %+v %v %v", vm, created, err)
 	}
 	if res, err := f.m.Stop(ctx, idStopped, 2, 105); err != nil || !res.AlreadyStopped {
 		t.Fatalf("repeat stop from journal tombstone: %+v %v", res, err)
 	}
-	_, _, err = f.m.Create(ctx, CreateRequest{SandboxID: idStopped, Attempt: 2, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4})
+	_, _, err = f.m.Create(ctx, CreateRequest{SandboxID: idStopped, Attempt: 2, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4, TenantID: "public"})
 	wantReason(t, err, pb.ErrorReason_STALE_ATTEMPT)
-	nv, _, err := f.m.Create(ctx, CreateRequest{SandboxID: idOrphan, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4})
+	nv, _, err := f.m.Create(ctx, CreateRequest{SandboxID: idOrphan, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4, TenantID: "public"})
 	if err != nil || nv.Generation <= 105 {
 		t.Fatalf("new VM generation %d must be above the journal's (105): %v", nv.Generation, err)
 	}
@@ -259,7 +259,7 @@ func TestDoubtfulSandboxesAreBlockedUntilTheProcessExits(t *testing.T) {
 	if f.uids.Reserve(1000020) || f.uids.Reserve(1000013) {
 		t.Fatal("a kept VM's UID is free")
 	}
-	_, _, err := f.m.Create(ctx, CreateRequest{SandboxID: idBadFile, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4})
+	_, _, err := f.m.Create(ctx, CreateRequest{SandboxID: idBadFile, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4, TenantID: "public"})
 	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
 	_, err = f.m.Stop(ctx, idDoubt, 1, 103)
 	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
@@ -276,7 +276,7 @@ func TestDoubtfulSandboxesAreBlockedUntilTheProcessExits(t *testing.T) {
 
 	// The VM with the unreadable record exits: its doubt clears.
 	table.set([]Candidate{{ID: idDoubt, PID: 504, UID: 1000013}, {ID: idBadFile}}, nil)
-	if _, _, err := f.m.Create(ctx, CreateRequest{SandboxID: idBadFile, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4}); err != nil {
+	if _, _, err := f.m.Create(ctx, CreateRequest{SandboxID: idBadFile, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4, TenantID: "public"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := table.removedIDs(); len(got) != 1 || got[0] != idBadFile {
@@ -307,7 +307,7 @@ func TestRecoverScanErrorBlocksCreateUntilAScanWorks(t *testing.T) {
 	if f.uids.Reserve(1000003) {
 		t.Fatal("the untracked VM's UID is free")
 	}
-	_, _, err = f.m.Create(ctx, CreateRequest{SandboxID: idOrphan, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4})
+	_, _, err = f.m.Create(ctx, CreateRequest{SandboxID: idOrphan, Attempt: 1, Template: "tpl-1", VCPUs: 2, MemMiB: 4096, ScratchGiB: 4, TenantID: "public"})
 	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
 }
 

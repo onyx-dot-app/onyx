@@ -187,7 +187,7 @@ func (m *Manager) adoptLocked(ctx context.Context, a Adopter, r journal.Record, 
 	}
 	e := &entry{vm: VM{
 		SandboxID: r.SandboxID, Attempt: r.Attempt, Generation: r.Generation, Template: r.Template,
-		VCPUs: r.VCPUs, MemMiB: r.MemMiB, ScratchGiB: r.ScratchGiB, PID: r.PID, UID: r.UID, StartedAt: r.StartedAt,
+		VCPUs: r.VCPUs, MemMiB: r.MemMiB, ScratchGiB: r.ScratchGiB, PID: r.PID, UID: r.UID, StartedAt: r.StartedAt, TenantID: r.TenantID,
 		State: pb.VMState_VM_STATE_RUNNING,
 	}}
 	proc, err := a.Adopt(ctx, r)
@@ -217,6 +217,11 @@ func (m *Manager) adoptLocked(ctx context.Context, a Adopter, r journal.Record, 
 	}
 	e.proc = proc
 	m.vms[r.SandboxID] = e
+	if m.egress != nil {
+		if err := m.egress.Attach(e.vm, proc.Info()); err != nil {
+			m.log.Error("attach egress relay to adopted VM", "sandbox_id", r.SandboxID, "err", err)
+		}
+	}
 	go m.watch(r.SandboxID, e)
 	return actKeep
 }

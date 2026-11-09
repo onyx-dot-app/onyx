@@ -55,7 +55,7 @@ func TestTypedErrorsOverUnixSocket(t *testing.T) {
 	c := pb.NewHostAgentClient(conn)
 	ctx := context.Background()
 
-	_, err = c.Create(ctx, &pb.CreateRequest{SandboxId: "11111111-1111-4111-8111-111111111111", Attempt: 1, Template: "missing", Vcpus: 2, MemMib: 4096, ScratchGib: 1})
+	_, err = c.Create(ctx, &pb.CreateRequest{SandboxId: "11111111-1111-4111-8111-111111111111", Attempt: 1, Template: "missing", Vcpus: 2, MemMib: 4096, ScratchGib: 1, TenantId: "public"})
 	if status.Code(err) != codes.NotFound || apierr.FromStatus(err) != pb.ErrorReason_TEMPLATE_MISSING {
 		t.Fatalf("create: code %s reason %s (%v)", status.Code(err), apierr.FromStatus(err), err)
 	}

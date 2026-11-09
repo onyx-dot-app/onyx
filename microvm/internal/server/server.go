@@ -28,7 +28,7 @@ type Service struct {
 func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateResponse, error) {
 	vm, created, err := s.M.Create(ctx, agent.CreateRequest{
 		SandboxID: r.GetSandboxId(), Attempt: r.GetAttempt(), Template: r.GetTemplate(),
-		VCPUs: r.GetVcpus(), MemMiB: r.GetMemMib(), ScratchGiB: r.GetScratchGib(),
+		VCPUs: r.GetVcpus(), MemMiB: r.GetMemMib(), ScratchGiB: r.GetScratchGib(), TenantID: r.GetTenantId(),
 	})
 	if err != nil {
 		return nil, toStatus(err)
@@ -53,6 +53,15 @@ func (s *Service) List(context.Context, *pb.ListRequest) (*pb.ListResponse, erro
 		out.Vms = append(out.Vms, toVM(vm))
 	}
 	return out, nil
+}
+
+// CloseConnections implements pb.HostAgentServer.
+func (s *Service) CloseConnections(_ context.Context, r *pb.CloseConnectionsRequest) (*pb.CloseConnectionsResponse, error) {
+	n, err := s.M.CloseConnections(r.GetSandboxId(), r.GetAttempt(), r.GetGeneration())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &pb.CloseConnectionsResponse{Closed: uint32(n)}, nil
 }
 
 // NodeInfo implements pb.HostAgentServer.
@@ -85,7 +94,7 @@ func toStatus(err error) error {
 func toVM(vm agent.VM) *pb.VM {
 	return &pb.VM{
 		SandboxId: vm.SandboxID, Attempt: vm.Attempt, Generation: vm.Generation, Template: vm.Template,
-		Vcpus: vm.VCPUs, MemMib: vm.MemMiB, ScratchGib: vm.ScratchGiB, State: vm.State,
+		Vcpus: vm.VCPUs, MemMib: vm.MemMiB, ScratchGib: vm.ScratchGiB, State: vm.State, TenantId: vm.TenantID,
 		Pid: int32(vm.PID), Uid: vm.UID, StartedAt: timestamppb.New(vm.StartedAt),
 	}
 }
