@@ -48,7 +48,7 @@ RUN --mount=type=secret,id=build_ca_bundle,mode=0444 \
 # Every OS package the sandbox ships, in its own stage: the audit gate builds
 # this stage alone and scans it, so an apt install belongs here, never in the
 # runtime stage below.
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1 AS os
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS os
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
