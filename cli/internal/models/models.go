@@ -10,6 +10,13 @@ type AgentSummary struct {
 	IsVisible        bool   `json:"is_listed"`
 }
 
+// DocumentSetSummary is a document set the current user can search.
+type DocumentSetSummary struct {
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+}
+
 // ChatSessionDetails is a session with timestamps as strings.
 type ChatSessionDetails struct {
 	ID        string  `json:"id"`

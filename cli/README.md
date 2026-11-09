@@ -82,6 +82,15 @@ onyx-cli agents
 onyx-cli agents --json
 ```
 
+### List document sets
+
+```shell
+onyx-cli document-sets
+onyx-cli document-sets --json
+```
+
+Pass the names to `onyx-cli search --document-set` to limit a search to those document sets.
+
 ### Serve over SSH
 
 ```shell
@@ -116,6 +125,7 @@ Useful hardening flags:
 | `chat` | Interactive | Launch the interactive chat TUI (requires terminal) |
 | `ask` | Agent / Script | Ask a question and print the answer to stdout |
 | `agents` | Agent / Script | List available agents (ID, name, description) |
+| `document-sets` | Agent / Script | List document sets you can search (ID, name, description) |
 | `validate-config` | Agent / Script | Check CLI configuration and server connectivity |
 | `install-skill` | Agent / Script | Install the Onyx CLI agent skill file |
 | `experiments` | Agent / Script | List experimental features and their status |
