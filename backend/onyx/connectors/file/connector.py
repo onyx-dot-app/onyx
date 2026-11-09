@@ -33,7 +33,7 @@ from onyx.file_processing.extract_file_text import (
     get_file_ext,
     is_text_file,
 )
-from onyx.file_processing.file_types import is_indexable_file_type
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import RawFileCallback

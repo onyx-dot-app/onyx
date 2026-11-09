@@ -9,6 +9,7 @@ from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.file_types import (
     OnyxFileExtensions,
     guess_mime_type,
+    is_indexable_file_type,
     load_configured_plain_text_extensions,
 )
 
@@ -22,38 +23,13 @@ def mock_unstructured_api_key() -> Generator[None, None, None]:
         yield
 
 
-def test_code_extensions_in_allowed_and_plain_text() -> None:
-    expected_extensions = [
-        ".py",
-        ".pyw",
-        ".java",
-        ".js",
-        ".jsx",
-        ".ts",
-        ".tsx",
-        ".c",
-        ".cpp",
-        ".h",
-        ".hpp",
-        ".cs",
-        ".go",
-        ".rs",
-        ".rb",
-        ".php",
-        ".sh",
-        ".bash",
-        ".zsh",
-        ".sql",
-        ".toml",
-    ]
-    for ext in expected_extensions:
-        assert (
-            ext in OnyxFileExtensions.CODE_EXTENSIONS
-            or ext in OnyxFileExtensions.BASE_PLAIN_TEXT_EXTENSIONS
-        )
-        assert ext in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
-        assert ext in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
-        assert ext in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
+def test_sandbox_only_extensions_remain_disjoint_from_default_plain_text() -> None:
+    assert not (
+        OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS
+        & OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
+    )
+    assert ".markdown" in OnyxFileExtensions.BASE_PLAIN_TEXT_EXTENSIONS
+    assert ".markdown" in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
 
 
 def test_env_var_plain_text_file_extensions_configuration(
@@ -73,6 +49,7 @@ def test_env_var_plain_text_file_extensions_configuration(
         OnyxFileExtensions.reload_configured_extensions()
         assert ".zig" in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
         assert ".zig" in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
+        assert is_indexable_file_type("main.zig", None, allow_images=True) is True
         assert ".sol" in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
         assert ".v" in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
     finally:
@@ -81,6 +58,7 @@ def test_env_var_plain_text_file_extensions_configuration(
         OnyxFileExtensions.reload_configured_extensions()
 
     assert ".zig" not in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS
+    assert is_indexable_file_type("main.zig", None, allow_images=True) is False
 
 
 def test_extract_text_and_images_code_files() -> None:
@@ -130,6 +108,7 @@ def test_file_to_document_with_source_code_and_fallback() -> None:
         stage=None,
     )
     assert len(docs_java) == 1
+    assert docs_java[0].sections[0].text is not None
     assert "package com.example;" in docs_java[0].sections[0].text
 
     # Unrecognized extension with valid plain text content
@@ -144,6 +123,7 @@ def test_file_to_document_with_source_code_and_fallback() -> None:
         stage=None,
     )
     assert len(docs_unknown) == 1
+    assert docs_unknown[0].sections[0].text is not None
     assert "rule custom_rule" in docs_unknown[0].sections[0].text
 
     # Unrecognized extension with binary content should be rejected
