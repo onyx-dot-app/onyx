@@ -148,10 +148,10 @@ func TestBuildSearchRequest(t *testing.T) {
 			wantPersonaID:  nil,
 		},
 		{
-			name:             "document_sets_trimmed_and_empty_dropped",
+			name:             "document_sets_kept_verbatim_and_blank_dropped",
 			query:            "test query",
-			documentSets:     []string{" Engineering Wiki ", "", "Sales"},
-			wantDocumentSets: []string{"Engineering Wiki", "Sales"},
+			documentSets:     []string{" Engineering Wiki ", "", "  ", "Sales"},
+			wantDocumentSets: []string{" Engineering Wiki ", "Sales"},
 		},
 		{
 			name:             "document_sets_skip_default_agent",

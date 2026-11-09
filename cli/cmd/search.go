@@ -395,12 +395,12 @@ func buildSearchRequest(flags searchFlags) models.SearchRequest {
 	return req
 }
 
-// cleanDocumentSets trims names and drops empty entries; nil means no filter.
+// cleanDocumentSets drops blank entries and keeps the rest verbatim, since the
+// server matches names exactly; nil means no filter.
 func cleanDocumentSets(names []string) []string {
 	var out []string
 	for _, name := range names {
-		name = strings.TrimSpace(name)
-		if name != "" {
+		if strings.TrimSpace(name) != "" {
 			out = append(out, name)
 		}
 	}
