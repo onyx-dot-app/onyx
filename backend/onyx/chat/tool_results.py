@@ -6,15 +6,25 @@ files. Callers do not branch on result types; a new type changes only this modul
 """
 
 from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 
 from pydantic import BaseModel
 
 from onyx.chat.citation_processor import cited_documents
-from onyx.chat.models import ChatSearchResult, ResultSources, StagedChatFiles
+from onyx.chat.models import (
+    ChatCodeModeResult,
+    ChatSearchResult,
+    ResultSources,
+    StagedChatFiles,
+)
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.llm.models import ToolResultMessage
 from onyx.tools.models import ChatFile
-from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeCall,
+    CodeModeExecutionResult,
+)
 from onyx.utils.pydantic_util import as_base, shallow_model_dump
 
 
@@ -97,7 +107,30 @@ def saved_result_details(details: BaseModel | None) -> BaseModel | None:
                 "displayed_docs": [] if details.displayed_docs == [] else None,
             }
         )
+    if isinstance(details, CodeModeExecutionResult):
+        return as_base(details, CodeModeExecutionResult).map_calls(_saved_call)
     return details
+
+
+def _saved_call(call: CodeModeCall) -> CodeModeCall:
+    """A nested call in its saved form; it keeps the ids of the documents that
+    its search displayed. Planning metadata applies to the current turn, as for
+    direct calls."""
+    details = call.details
+    displayed = (
+        _search_sources([details]).displayed
+        if isinstance(details, SearchDocsResponse)
+        else None
+    )
+    return call.model_copy(
+        update={
+            "details": saved_result_details(details),
+            "metadata": None,
+            "displayed_document_ids": None
+            if displayed is None
+            else [doc.document_id for doc in displayed],
+        }
+    )
 
 
 def restored_result_details[T: BaseModel](
@@ -112,7 +145,25 @@ def restored_result_details[T: BaseModel](
         return details.model_copy(
             update={"search_docs": list(_by_id(list(cited.values())).values())}
         )
+    if isinstance(details, CodeModeExecutionResult):
+        return details.map_calls(partial(_restored_call, documents=documents))
     return details
+
+
+def _restored_call(
+    call: CodeModeCall, documents: Mapping[str, SearchDoc]
+) -> CodeModeCall:
+    if call.details is None:
+        return call
+    details = restored_result_details(call.details, documents)
+    ids = call.displayed_document_ids
+    if isinstance(details, SearchDocsResponse) and ids is not None:
+        details = details.model_copy(
+            update={
+                "displayed_docs": [documents[key] for key in ids if key in documents]
+            }
+        )
+    return call.model_copy(update={"details": details})
 
 
 def staged_result_details(
@@ -128,6 +179,8 @@ def staged_result_details(
     staged_type: type[StagedChatFiles]
     if isinstance(details, SearchDocsResponse):
         staged_type = ChatSearchResult
+    elif isinstance(details, CodeModeExecutionResult):
+        staged_type = ChatCodeModeResult
     else:
         return details
     sources = tool_result_sources(details)
@@ -152,3 +205,14 @@ def merged_chat_files(
     """`chat_files`, then the `added` files with a filename not yet present."""
     names = {file.filename for file in chat_files}
     return [*chat_files, *(file for file in added if file.filename not in names)]
+
+
+def tool_result_parts(result: ToolResultMessage) -> list[ToolResultMessage]:
+    """The result, then a result for each tool call that it made."""
+    details = result.details
+    if not isinstance(details, CodeModeExecutionResult):
+        return [result]
+    return [
+        result,
+        *(call.as_result() for call in details.all_calls()),
+    ]

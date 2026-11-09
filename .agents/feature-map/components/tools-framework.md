@@ -231,22 +231,34 @@ Their control functions, such as `think_tool`, `generate_report` and
    `ToolExecutionError`. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed argument
-   deltas go only to `run_python` (`chat/renderer.py:MessageRenderer.consume`).
-   Saved responses replay through the same renderer
+   deltas go only to `run_python` and `execute_code`
+   (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
+   `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
+   `tool_renderer` picks by tool name. A result that a run release hook sets
+   streams through `ToolRenderer.amend`. Only a code mode card renders what
+   the amendment added (the cell's closing record), after the call's section
+   end, live and on replay. The generic display adds nothing live; replay
+   shows the saved, amended result. Saved responses replay through the same renderer
    (`chat/presentation.py:replay_response`), so a change here changes reload too.
 8. `durable-details-registered` **A new `details` type must be registered
-   twice.** Chat saves `details` through the discriminated union in
-   `db/models.py:StoredToolResult`, keyed by the model's `type` literal, and
-   checkpoints it through `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES`. A new
-   `type` literal missing from the union fails every save with a
-   `ValidationError`. A subclass that keeps its parent's `type` literal saves as
+   once.** `db/models.py:SavedToolResultDetails` is the one union of saved
+   details, keyed by the model's `type` literal. `StoredToolResult` saves
+   through it, `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` tags each member
+   `result.<type>.v1`, and temporary chats keep it
+   (`chat/models.py:serialize_incognito_message`). A new `type` literal missing
+   from the union fails every save with a `ValidationError`. A tool that code
+   mode programs can call also needs its details type in
+   `tools/tool_implementations/code_mode/models.py:CodeModeCallDetails`, the
+   union of nested call details.
+   `tools/tool_implementations/code_mode/cells.py:durable_details` drops
+   details of any other type, so the nested call saves and replays without
+   them. A subclass that keeps its parent's `type` literal saves as
    the parent and drops its own fields with no error.
    `chat/agent.py:ChatAgent._finalize_tool` replaces each `SearchDocsResponse`
    with `chat/models.py:ChatSearchResult` in this way, and its `staged_files`
    are not saved. Only the unwired checkpoint handoff path reads the registry
    ([[agent-runtime]]), so a missing registration fails only that path and its
-   tests. Saved rows and checkpoints keep the `type` value and the tag, so
-   never rename them.
+   tests. Saved rows and checkpoints keep the `type` value, so never rename it.
 9. `parallel-by-default` **Calls in one step run in parallel and share one
    `ToolContext`.** `agents/tool_execution.py:ToolBatch` starts every call of a
    step together. `ChatAgent._tool_context` advances only after the step, so

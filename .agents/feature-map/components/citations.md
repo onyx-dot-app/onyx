@@ -233,9 +233,12 @@ of only markers stays empty.
     into a citation, or drop real citations after an unclosed fence.
 12. `history-owns-numbers` **Saved history must bring its citation numbers
     back.** `chat/agent.py:ChatAgent` starts new numbers after the highest
-    number in history. Saved tool results keep `citation_mapping` but no
-    documents; `chat/response.py:restore_response_sources` refills them, and
-    the answer's sources come from its saved `MessageRendering.citation_documents`.
+    number in history. Tool results saved in the database keep
+    `citation_mapping` but no documents;
+    `chat/response.py:restore_response_sources` refills them, and the answer's
+    sources come from its saved `MessageRendering.citation_documents`. A
+    temporary chat keeps each saved result with its documents
+    (`chat/models.py:serialize_incognito_message`).
     A source that a history path drops lets a later search reuse its number,
     and an old marker then points at a new document. Chat and deep research
     both read these saved sources, so a mode switch keeps the links.
@@ -290,8 +293,13 @@ of only markers stays empty.
   functions. `tool_result_sources` drops numbers whose document is not there.
   A details type that the module does not know carries no numbers, so its
   markers render as nothing. A tool that carries documents in a new
-  details type changes only that module. If the tool sets
-  `merge_list_argument`, expect merged calls to share one number block.
+  details type changes only that module. Code mode keeps documents only in its
+  calls' search details; the module derives the result's documents and numbers
+  from the calls of every window (`CodeModeExecutionResult.all_calls`), so
+  calls in the cell's closing record add theirs to that observation, and save
+  and restore rewrite the calls with `CodeModeExecutionResult.map_calls`. If
+  the tool sets `merge_list_argument`, expect merged calls to share one number
+  block.
 - `save-path` **A new save path.** Copy the call in
   `db/chat_response.py:save_chat_response_to_db`; list the
   callers with `git grep -n 'save_chat_turn(' backend/onyx`. Pass both

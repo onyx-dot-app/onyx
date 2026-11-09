@@ -40,9 +40,14 @@ from onyx.chat.renderer import (
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
+    tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
-from onyx.chat.tool_results import tool_result_sources
+from onyx.chat.tool_results import (
+    restored_result_details,
+    tool_result_parts,
+    tool_result_sources,
+)
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
@@ -133,20 +138,32 @@ def _tool_record(
 ) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
     sources = tool_result_sources(data)
-    generated_images = None
-    if isinstance(data, FinalImageGenerationResponse):
-        generated_images = data.generated_images
-
-    generated_files = None
-    if isinstance(data, LlmPythonExecutionResult):
-        generated_files = data.generated_files or None
-
+    # Artifacts of nested calls belong to the call that made them.
+    parts = (
+        [part.details for part in tool_result_parts(tool_response)]
+        if tool_response
+        else []
+    )
+    generated_images = [
+        image
+        for part in parts
+        if isinstance(part, FinalImageGenerationResponse)
+        for image in part.generated_images
+    ] or None
+    generated_files = [
+        file
+        for part in parts
+        if isinstance(part, LlmPythonExecutionResult)
+        for file in part.generated_files
+    ] or None
     # Custom tools save image/CSV blobs and return their ids.
-    generated_file_ids = None
-    if isinstance(data, CustomToolCallSummary) and isinstance(
-        data.tool_result, CustomToolUserFileSnapshot
-    ):
-        generated_file_ids = data.tool_result.file_ids or None
+    generated_file_ids = [
+        file_id
+        for part in parts
+        if isinstance(part, CustomToolCallSummary)
+        and isinstance(part.tool_result, CustomToolUserFileSnapshot)
+        for file_id in part.tool_result.file_ids
+    ] or None
 
     return ToolCallInfo(
         message_id=_message_identity(output),
@@ -395,7 +412,7 @@ class ResponsePresenter:
             ]
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
-                self.tools[(event.run_id, event.message_id, call.id)] = ToolRenderer(
+                self.tools[(event.run_id, event.message_id, call.id)] = tool_renderer(
                     call, tool_placement, self.tool_ids.get(call.name)
                 )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
@@ -416,17 +433,16 @@ class ResponsePresenter:
             if tool is None:
                 # A call recorded before a restore has no card in this stream;
                 # the amended result renders in a new card, which later
-                # amendments reuse. An ended card keeps what it showed; replay
-                # shows the saved result.
+                # amendments reuse.
                 renderer = self.renderers.get(event.run_id)
-                tool = self.tools[key] = ToolRenderer(
+                tool = self.tools[key] = tool_renderer(
                     event.tool_call,
                     renderer.tool_placement(event.tool_call.id)
                     if renderer is not None
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
                 )
-            output = tool.complete(event.result)
+            output = tool.amend(event.result)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
@@ -488,27 +504,38 @@ def replay_response(
             record = records.get((message_id, call.id))
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
+            details = result.details if result is not None else None
             if (
                 result is not None
-                and isinstance(result.details, SearchDocsResponse)
+                and isinstance(details, SearchDocsResponse)
                 and record is not None
             ):
                 # Saved document IDs support citation and source-card links.
-                search = result.details.model_copy(
-                    update={"search_docs": record.search_docs or []}
-                )
+                search = details.model_copy(update={"search_docs": record.search_docs})
                 result = result.model_copy(update={"details": search})
-            tool_renderer = ToolRenderer(
+            elif result is not None and details is not None:
+                # Nested results keep documents as citation numbers; the call's
+                # saved documents and the response's documents refill them.
+                saved_documents = record.search_docs if record is not None else []
+                restored = restored_result_details(
+                    details,
+                    {
+                        **documents,
+                        **{doc.document_id: doc for doc in saved_documents},
+                    },
+                )
+                result = result.model_copy(update={"details": restored})
+            renderer_of_call = tool_renderer(
                 call, tool_placement, record.tool_id if record is not None else None
             )
-            packets.extend(tool_renderer.start())
+            packets.extend(renderer_of_call.start())
             for child in response.child_runs:
                 if (
                     child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue
-                tool_renderer.has_child_output = True
+                renderer_of_call.has_child_output = True
                 child_mode = (
                     PresentationMode.CODING_THINKING
                     if call.name == CODING_AGENT_TOOL_NAME
@@ -525,7 +552,7 @@ def replay_response(
                         child_mode,
                     )
                 )
-            packets.extend(tool_renderer.complete(result))
+            packets.extend(renderer_of_call.complete(result))
     if response.parent_run_id is None:
         packets.append(
             Packet(

@@ -1,10 +1,10 @@
 """Typed details for code mode: one model-written program that calls other tools."""
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import Future
 from functools import cached_property
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Literal, Self, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 from pydantic_monty import FunctionSnapshot, FutureSnapshot
@@ -70,9 +70,17 @@ class CodeModeCall(BaseModel):
     # Saved calls keep a bounded copy of the text; the program received all of it.
     content: str = ""
     state: CodeModeCallState
+    # Saved search details keep citation numbers but no documents;
+    # chat/tool_results.py removes the documents on save and looks them up again on
+    # restore.
     details: CodeModeCallDetails | None = None
-    # The planning decisions of a search call.
+    # Set while the turn runs: the planning decisions of a search call. Saving
+    # (chat/tool_results.py) clears it.
     metadata: SearchPlanningResult | None = None
+    # Set by saving a search (chat/tool_results.py): ids of the documents it
+    # displayed, which are all its documents when it selected none. Restoring
+    # rebuilds `details.displayed_docs` from them. None while the turn runs.
+    displayed_document_ids: list[str] | None = None
 
     @property
     def is_error(self) -> bool:
@@ -93,6 +101,17 @@ class CodeModeCall(BaseModel):
         """This call, recorded as still running when its program ended."""
         return self.failed(UNFINISHED_CALL_MESSAGE).model_copy(
             update={"state": "unfinished"}
+        )
+
+    def as_result(self) -> ToolResultMessage:
+        """This call as the result of an ordinary tool call."""
+        return ToolResultMessage(
+            tool_call_id=self.id,
+            tool_name=self.tool_name,
+            content=self.content,
+            details=self.details,
+            is_error=self.is_error,
+            metadata=self.metadata,
         )
 
 
@@ -229,6 +248,20 @@ class CodeModeExecutionResult(CellWindow):
     def all_calls(self) -> list[CodeModeCall]:
         """The calls of every window, in window order."""
         return [call for window in self.windows() for call in window.calls]
+
+    def map_calls(self, transform: Callable[[CodeModeCall], CodeModeCall]) -> Self:
+        """A copy with `transform` applied to the calls of every window."""
+        closing = self.closing
+        return self.model_copy(
+            update={
+                "calls": [transform(call) for call in self.calls],
+                "closing": None
+                if closing is None
+                else closing.model_copy(
+                    update={"calls": [transform(call) for call in closing.calls]}
+                ),
+            }
+        )
 
 
 def code_mode_results(

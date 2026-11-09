@@ -139,9 +139,10 @@ health calls are not retried.
    forms.** `tools/models.py:LlmPythonExecutionResult` is the model text, as
    JSON in `content`, and the typed `details` that chat saves in
    `ToolCall.result` and in checkpoints. Checkpoints store `details` under a
-   stable tag in `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` (`tool.python.v1`,
-   `tool.bash.v1`, `coding.result.v1`). Register a new details type there, and
-   keep each tag able to parse old payloads, or checkpoint restore fails.
+   tag in `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` that comes from the
+   `type` literal (`result.python_execution.v1`, `result.bash_execution.v1`,
+   `result.coding_result.v1`). Register a new details type in
+   `db/models.py:SavedToolResultDetails`, or saving and checkpoint restore fail.
    `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`
    parses the JSON for messages saved before response items existed. Both
    readers, and `db/chat_response.py:_extract_referenced_file_descriptors`,
