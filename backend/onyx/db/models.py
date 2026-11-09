@@ -152,6 +152,7 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
+from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
@@ -5395,6 +5396,67 @@ class SkillVersion(BundleVersionMixin, Base):
     )
 
 
+class Marketplace(Base):
+    __tablename__ = "marketplace"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    provider: Mapped[MarketplaceProvider] = mapped_column(
+        Enum(
+            MarketplaceProvider,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=False,
+    )
+    provider_config: Mapped[GitHubMarketplaceConfig] = mapped_column(
+        PydanticType(GitHubMarketplaceConfig), nullable=False
+    )
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="RESTRICT"), nullable=True
+    )
+    login_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    last_synced_revision: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    webhook_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    webhook_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+
+
+class Marketplace__UserGroup(Base):
+    __tablename__ = "marketplace__user_group"
+
+    marketplace_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("marketplace.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("user_group.id", ondelete="CASCADE"), primary_key=True
+    )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+    installation_policy: Mapped[SkillInstallationPolicy | None] = mapped_column(
+        Enum(SkillInstallationPolicy, native_enum=False), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_marketplace__user_group_user_group_id", "user_group_id"),
+    )
+
+
 class Skill(Base):
     """A built-in or custom skill.
 
@@ -5429,6 +5491,20 @@ class Skill(Base):
 
     current_version_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), nullable=True
+    )
+
+    marketplace_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("marketplace.id", ondelete="CASCADE", name="fk_skill_marketplace"),
+        nullable=True,
+        index=True,
+    )
+    marketplace_entry_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    follows_marketplace_access: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    retired_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     author_user_id: Mapped[UUID | None] = mapped_column(
@@ -5492,6 +5568,17 @@ class Skill(Base):
             unique=True,
             postgresql_where=text("installation_policy <> 'AVAILABLE'"),
         ),
+        CheckConstraint(
+            "marketplace_id IS NULL OR marketplace_entry_key IS NOT NULL",
+            name="ck_skill_marketplace_entry_key",
+        ),
+        Index(
+            "uq_skill_live_marketplace_entry",
+            "marketplace_id",
+            "marketplace_entry_key",
+            unique=True,
+            postgresql_where=text("retired_at IS NULL"),
+        ),
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
         # Preallocate both IDs, insert the skill, then its version before commit.
         ForeignKeyConstraint(
@@ -5507,7 +5594,7 @@ class Skill(Base):
             name="ck_skill_definition_source",
         ),
         CheckConstraint(
-            "built_in_skill_id IS NOT NULL OR public_permission IS NOT NULL OR author_user_id IS NOT NULL",
+            "built_in_skill_id IS NOT NULL OR public_permission IS NOT NULL OR author_user_id IS NOT NULL OR marketplace_id IS NOT NULL",
             name="ck_private_skill_has_owner",
         ),
     )
