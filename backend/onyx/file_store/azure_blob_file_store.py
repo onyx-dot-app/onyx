@@ -26,6 +26,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_for_update,
@@ -385,10 +386,18 @@ class AzureBlobBackedFileStore(PresignableFileStore):
             try:
                 properties = blob_client.get_blob_properties()
             except ResourceNotFoundError as e:
+                # The SDK adds error_code dynamically, outside azure-core stubs.
+                if (
+                    getattr(e, "error_code", None)  # ods: ignore[getattr]
+                    != "BlobNotFound"
+                ):
+                    raise
                 raise FileNotFoundError(
                     f"Object for file {file_id} does not exist"
                 ) from e
             return properties.size
+        except FileRecordNotFoundError as e:
+            raise FileNotFoundError(f"File record {file_id} does not exist") from e
         except FileNotFoundError:
             raise
         except Exception as e:

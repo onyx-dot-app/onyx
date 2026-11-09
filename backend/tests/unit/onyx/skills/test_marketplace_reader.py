@@ -842,3 +842,14 @@ def test_deep_yaml_blocks_only_its_skill() -> None:
     assert isinstance(entries["tools/hello"], ReadySkill)
     assert isinstance(entries["tools/deep"], BlockedSkill)
     assert "not valid YAML" in entries["tools/deep"].reason
+
+
+def test_truncated_sparse_extension_returns_failed_marketplace() -> None:
+    info = tarfile.TarInfo("sparse")
+    info.type = tarfile.GNUTYPE_SPARSE
+    header = bytearray(info.tobuf(format=tarfile.GNU_FORMAT))
+    header[482] = 1
+    header[148:156] = b" " * 8
+    header[148:156] = b"%06o\0 " % sum(header)
+    result = reader.read_marketplace_archive(gzip.compress(header))
+    assert isinstance(result, FailedMarketplace), result

@@ -1,4 +1,4 @@
-"""Bounded, seekable access to repository archives without extracting paths."""
+"""Bounded access to repository archives without extracting paths."""
 
 import gzip
 import io
@@ -9,8 +9,9 @@ import zipfile
 from collections.abc import Buffer, Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from functools import partial
+from tarfile import HeaderError, ReadError, TarFile
 from tempfile import SpooledTemporaryFile
-from typing import cast
+from typing import Self, cast
 
 ARCHIVE_MAX_BYTES = 25 * 1024 * 1024
 ARCHIVE_MAX_ENTRIES = 10_000
@@ -77,10 +78,13 @@ class _ReadBudget:
 
 
 class _MemberReader(io.BufferedIOBase):
-    def __init__(self, source: io.BufferedIOBase, budget: _ReadBudget) -> None:
+    def __init__(
+        self, source: io.BufferedIOBase, budget: _ReadBudget, *, allow_seek: bool
+    ) -> None:
         super().__init__()
         self.source = source
         self.budget = budget
+        self.allow_seek = allow_seek
 
     def read(self, size: int | None = -1, /) -> bytes:
         # One call never returns more than MEMBER_CALL_MAX_BYTES or truncates.
@@ -135,9 +139,11 @@ class _MemberReader(io.BufferedIOBase):
         return self.source.readable()
 
     def seekable(self) -> bool:
-        return self.source.seekable()
+        return self.allow_seek and self.source.seekable()
 
     def seek(self, offset: int, whence: int = io.SEEK_SET, /) -> int:
+        if not self.seekable():
+            raise io.UnsupportedOperation("Archive ZIP members do not support seeking")
         return self.source.seek(offset, whence)
 
     def tell(self) -> int:
@@ -166,6 +172,7 @@ class _ZipReader(io.BytesIO):
 
 class _TarReader(io.BufferedReader):
     metadata_reads = True
+    last_read_was_end = False
     metadata_bytes = 0
     member_metadata_bytes = 0
 
@@ -180,6 +187,7 @@ class _TarReader(io.BufferedReader):
             remaining + 1 if size is None or size < 0 else min(size, remaining + 1)
         )
         data = super().read(requested)
+        self.last_read_was_end = not data or data == bytes(512)
         self.metadata_bytes += len(data)
         self.member_metadata_bytes += len(data)
         if self.metadata_bytes > TAR_METADATA_MAX_BYTES:
@@ -187,6 +195,26 @@ class _TarReader(io.BufferedReader):
         if self.member_metadata_bytes > TAR_MEMBER_METADATA_MAX_BYTES:
             raise ArchiveLimitError("Archive TAR member metadata is too large")
         return data
+
+
+class _StrictTarInfo(tarfile.TarInfo):
+    @classmethod
+    def fromtarfile(cls, tarfile: TarFile) -> Self:
+        start = tarfile.fileobj.tell()
+        try:
+            return super().fromtarfile(tarfile)
+        except HeaderError as exc:
+            # Preserve normal EOF; TarFile otherwise hides corrupt later headers.
+            if (
+                isinstance(tarfile.fileobj, _TarReader)
+                and tarfile.fileobj.last_read_was_end
+                and tarfile.fileobj.tell() - start <= 512
+            ):
+                raise
+            raise ReadError(str(exc)) from exc
+        except IndexError as exc:
+            # Truncated GNU sparse extensions can escape tarfile as IndexError.
+            raise ReadError("Truncated TAR extension") from exc
 
 
 def _open_member(
@@ -202,20 +230,28 @@ def _open_member(
             raise ValueError(f"Unreadable archive member: {member.name}")
     else:
         raise TypeError("Archive member format mismatch")
-    return _MemberReader(cast(io.BufferedIOBase, source), budget)
+    return _MemberReader(
+        cast(io.BufferedIOBase, source),
+        budget,
+        allow_seek=isinstance(archive, tarfile.TarFile),
+    )
 
 
-def _require_tar_end_marker(archive: zipfile.ZipFile | tarfile.TarFile) -> None:
-    if not isinstance(archive, tarfile.TarFile):
+def _require_tar_end_marker(
+    archive: zipfile.ZipFile | tarfile.TarFile, *, required: bool
+) -> None:
+    if not required or not isinstance(archive, tarfile.TarFile):
         return
-    # tarfile silently stops at a damaged header after the first member.
+    # Catalog discovery cannot treat member-boundary truncation as completion.
     archive.fileobj.seek(archive.offset)
     if archive.fileobj.read(tarfile.BLOCKSIZE) != b"\0" * tarfile.BLOCKSIZE:
         raise ValueError("Tar archive has no valid end marker")
 
 
 @contextmanager
-def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
+def archive_files(
+    data: bytes, *, require_tar_end: bool = False
+) -> Iterator[ArchiveFiles]:
     if len(data) > ARCHIVE_MAX_BYTES:
         raise ArchiveLimitError(f"Archive exceeds {ARCHIVE_MAX_BYTES} bytes")
     with ExitStack() as stack:
@@ -244,7 +280,9 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                     expanded.write(chunk)
             expanded.seek(0)
             buffered = stack.enter_context(_TarReader(expanded))
-            archive = stack.enter_context(tarfile.open(fileobj=buffered, mode="r:"))
+            archive = stack.enter_context(
+                tarfile.open(fileobj=buffered, mode="r:", tarinfo=_StrictTarInfo)
+            )
         files: ArchiveFiles = {}
         paths: set[str] = set()
         index_bytes = 0
@@ -262,11 +300,13 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                     f"Archive exceeds {ARCHIVE_MAX_ENTRIES} entries"
                 )
             if isinstance(member, zipfile.ZipInfo):
-                if member.compress_type not in (
+                if member.flag_bits & 0x61 or member.compress_type not in (
                     zipfile.ZIP_STORED,
                     zipfile.ZIP_DEFLATED,
                 ):
-                    raise ArchiveLimitError("Archive ZIP compression is not supported")
+                    raise ArchiveLimitError(
+                        "Archive ZIP compression, encryption or patched data is not supported"
+                    )
                 name = member.orig_filename
                 mode = stat.S_IFMT(member.external_attr >> 16)
                 regular = mode in (0, stat.S_IFREG, stat.S_IFDIR)
@@ -307,7 +347,7 @@ def archive_files(data: bytes) -> Iterator[ArchiveFiles]:
                 files[path] = partial(_open_member, archive, member, budget)
             else:
                 files[path] = None
-        _require_tar_end_marker(archive)
+        _require_tar_end_marker(archive, required=require_tar_end)
         # Directories named like files must not silently select a fallback manifest.
         for path in directories:
             if path == "SKILL.md" or path.endswith((".json", "/SKILL.md")):

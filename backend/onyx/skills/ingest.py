@@ -11,6 +11,9 @@ from onyx.file_store.file_store import FileStore
 from onyx.file_store.models import BundleMetadata
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
+    DEFAULT_MAX_FILE_COUNT,
+    DEFAULT_STORED_ZIP_MAX_BYTES,
+    DEFAULT_ZIP_MAX_BYTES,
     SKILL_MD_NAME,
     build_single_file_bundle,
     compute_bundle_sha256,
@@ -65,6 +68,7 @@ def ingest_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
+    stored: bool = False,
 ) -> IngestedBundle:
     """Validate, parse, hash, and store a custom skill bundle.
 
@@ -77,6 +81,7 @@ def ingest_skill_bundle(
 
     Prefer ``ingested_skill_bundle`` when the stored blob should be cleaned up
     automatically if the caller's transaction fails.
+    Only retained version restores may use stored-data admission.
     """
     prepared = prepare_skill_bundle(bundle_bytes, filename, expected_name=expected_name)
     bundle_file_id = save_skill_bundle_bytes(
@@ -104,7 +109,11 @@ def prepare_skill_bundle(
     if is_standalone_skill_md:
         bundle_bytes = build_single_file_bundle(SKILL_MD_NAME, bundle_bytes)
 
-    normalized = normalize_custom_bundle(bundle_bytes)
+    normalized = normalize_custom_bundle(
+        bundle_bytes,
+        zip_max_bytes=DEFAULT_STORED_ZIP_MAX_BYTES if stored else DEFAULT_ZIP_MAX_BYTES,
+        max_file_count=None if stored else DEFAULT_MAX_FILE_COUNT,
+    )
     with zipfile.ZipFile(io.BytesIO(normalized.content)) as bundle_zip:
         raw_skill_md = bundle_zip.read(SKILL_MD_NAME)
     document = parse_skill_document(
@@ -143,12 +152,14 @@ def ingested_skill_bundle(
     file_store: FileStore,
     *,
     expected_name: str | None = None,
+    stored: bool = False,
 ) -> Iterator[IngestedBundle]:
     ingested = ingest_skill_bundle(
         bundle_bytes,
         filename,
         file_store,
         expected_name=expected_name,
+        stored=stored,
     )
     try:
         yield ingested
