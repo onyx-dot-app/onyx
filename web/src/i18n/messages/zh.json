@@ -17569,6 +17569,25 @@
     "folderValue": "文件夹：{folder}",
     "rootFolder": "仓库根目录",
     "revision": "已应用的修订：{revision}",
-    "lastSynced": "上次同步：{date}"
+    "lastSynced": "上次同步：{date}",
+    "details": "市场详情",
+    "loadError": "无法加载市场",
+    "unauthorized": "你无权访问这些市场。",
+    "syncNow": "立即同步",
+    "replaceLogin": "更换登录",
+    "replaceDescription": "将当前 GitHub 连接用于今后的同步。如有需要，请先连接 GitHub。",
+    "configureAccess": "配置访问权限",
+    "remove": "移除",
+    "removeTitle": "移除市场",
+    "removeDescription": "移除 {name} 及其所有已同步技能？此操作无法撤销。",
+    "confirmRemove": "确认移除",
+    "reviewRetirements": "查看停用提案",
+    "retireTitle": "确认停用技能",
+    "retireDescription": "这些技能将在以下修订中停用。已停用的技能无法恢复。",
+    "confirmRetire": "确认停用",
+    "proposalChanged": "提案已更改。请在确认前查看最新提案。",
+    "proposalUnavailable": "无法获取提案中的技能名称。请刷新后再确认。",
+    "activeSkill": "{name}",
+    "retiredSkill": "{name} · 已停用"
   }
 }

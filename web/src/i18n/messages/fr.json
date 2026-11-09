@@ -17569,6 +17569,25 @@
     "folderValue": "Dossier : {folder}",
     "rootFolder": "Racine du dépôt",
     "revision": "Révision appliquée : {revision}",
-    "lastSynced": "Dernière synchronisation : {date}"
+    "lastSynced": "Dernière synchronisation : {date}",
+    "details": "Détails du marketplace",
+    "loadError": "Impossible de charger les marketplaces",
+    "unauthorized": "Vous n’avez pas accès à ces marketplaces.",
+    "syncNow": "Synchroniser maintenant",
+    "replaceLogin": "Remplacer la connexion",
+    "replaceDescription": "Utilisez votre connexion GitHub actuelle pour les prochaines synchronisations. Connectez GitHub au préalable si nécessaire.",
+    "configureAccess": "Configurer l’accès",
+    "remove": "Supprimer",
+    "removeTitle": "Supprimer le marketplace",
+    "removeDescription": "Supprimer {name} et toutes ses compétences synchronisées ? Cette action est irréversible.",
+    "confirmRemove": "Confirmer la suppression",
+    "reviewRetirements": "Examiner les retraits",
+    "retireTitle": "Confirmer le retrait des compétences",
+    "retireDescription": "Ces compétences seront retirées à la révision ci-dessous. Les compétences retirées ne peuvent pas être restaurées.",
+    "confirmRetire": "Confirmer le retrait",
+    "proposalChanged": "La proposition a changé. Examinez la dernière proposition avant de confirmer.",
+    "proposalUnavailable": "Les noms des compétences de la proposition sont indisponibles. Actualisez avant de confirmer.",
+    "activeSkill": "{name}",
+    "retiredSkill": "{name} · Retirée"
   }
 }

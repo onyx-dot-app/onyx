@@ -647,7 +647,11 @@ The library preview of an external-app skill calls the same renderer
     requires global authority and a host callback that saves access atomically.
     Acceptance means sync requested. Shared summaries separate pending work
     from the last applied revision. Hosts can override or hide skill counts
-    without inferring unsupported plugin data. Pages are not wired yet.
+    without inferring unsupported plugin data. Detail polls pending work while
+    visible. Retirement confirmation sends the reviewed revision and IDs only;
+    names come from detail. A rejected proposal needs a fresh review. Removal
+    and login replacement require confirmation. Access configuration belongs
+    to the host sharing UI. Pages are not wired yet.
 
 
 ---
