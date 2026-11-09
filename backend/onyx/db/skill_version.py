@@ -285,16 +285,25 @@ def save_skill_version(
 
 
 def skill_bundle_file_ids(skill: Skill, db_session: Session) -> set[str]:
+    return skill_bundle_file_ids_for_skills([skill], db_session)
+
+
+def skill_bundle_file_ids_for_skills(
+    skills: Sequence[Skill], db_session: Session
+) -> set[str]:
     file_ids = {
         file_id
         for file_id in db_session.scalars(
-            select(SkillVersion.bundle_file_id).where(SkillVersion.skill_id == skill.id)
+            select(SkillVersion.bundle_file_id).where(
+                SkillVersion.skill_id.in_([skill.id for skill in skills])
+            )
         )
         if file_id is not None
     }
     # Keep cleanup compatible with pointerless legacy writes until V7.
-    if skill.bundle_file_id is not None:
-        file_ids.add(skill.bundle_file_id)
+    file_ids.update(
+        skill.bundle_file_id for skill in skills if skill.bundle_file_id is not None
+    )
     return file_ids
 
 

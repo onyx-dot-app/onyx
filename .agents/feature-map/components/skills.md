@@ -580,6 +580,24 @@ The library preview of an external-app skill calls the same renderer
     error. Queue reservations expire separately from retry delays.
     The background worker uses these transitions for all sync attempts.
 
+25. `marketplace-management-transactions` **Manage sources through the database service.**
+    `db/marketplace_management.py` refreshes active Basic authority. Reads do not take
+    the membership lock. Mutations take membership before marketplace and sorted skill locks. Owners manage personal sources;
+    global `MANAGE_SKILLS` manages company sources. Global managers can also read,
+    sync, replace logins and remove personal sources, including deactivated owners' sources.
+    Scoped group authority does not permit company source management.
+    List/detail return safe typed snapshots with batched live/retired counts.
+    Creation and login replacement follow caller provider validation and recheck
+    stored active login, enabled app and credential presence without network calls.
+    The login is always the actor; company sources have no owner. MIT-only creation
+    uses public defaults; installed licensed builds start private regardless of tier lookup.
+    Replacement clears retirement approval, old status/error and sync ownership before requesting work.
+    Default access requires global authority before the existing access adapter;
+    resolve tier before locking, then commit and push its returned audience once.
+    Removal captures all version/legacy file IDs and sandbox recipients before cascading.
+    Commit before dispatch, push or unreferenced-file cleanup. Rollback preserves rows
+    and blobs. Replacement and deletion fence workers that already staged content.
+
 
 ---
 
@@ -599,9 +617,10 @@ The library preview of an external-app skill calls the same renderer
 
 ## Known issues
 
-- **Marketplace management endpoints remain pending.** The access adapter and
-  skill reset endpoint are available. S8 must authorize marketplace changes, call the
-  adapter, commit, and push its affected users once. Plugin membership is not modeled
+- **Marketplace management endpoints remain pending.** The management database
+  service and skill reset endpoint are available. S8 must validate providers before
+  database locks, commit service writes, then dispatch, push and clean files.
+  Plugin membership is not modeled
   yet; its access guard belongs in `SkillAccessAdapter.load`.
   S9 must expose personal synced owner audience controls and hide sharing actions
   from non-owner editors; existing generic UI capabilities do not encode this yet.
