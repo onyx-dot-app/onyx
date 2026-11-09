@@ -40,14 +40,12 @@ from tests.unit.onyx.agents.fakes import (
 )
 
 
-def test_send_binding_and_pending_removal_are_atomic(
+def test_send_binding_preserves_the_run_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     entered, release_generation = threading.Event(), threading.Event()
     staged, release_binding = threading.Event(), threading.Event()
-    removed, release_removal = threading.Event(), threading.Event()
-    claimed, release_start = threading.Event(), threading.Event()
-    restarted, completed = threading.Event(), threading.Event()
+    restarted = threading.Event()
     requests: list[list[str]] = []
 
     def generate(
@@ -59,8 +57,6 @@ def test_send_binding_and_pending_removal_are_atomic(
             assert release_generation.wait(3)
         elif len(requests) == 2:
             restarted.set()
-        else:
-            completed.set()
         return AssistantMessage(content=[TextContent(text="answer")])
 
     owner = AgentCoordinator()
@@ -119,44 +115,9 @@ def test_send_binding_and_pending_removal_are_atomic(
             assert initial.status == RunStatus.LIMIT
             assert len(requests) == 1
 
-            cancel = Run.cancel_message
-
-            def remove(run: Run, message_id: str) -> bool:
-                result = cancel(run, message_id)
-                removed.set()
-                assert release_removal.wait(3)
-                return result
-
-            start = owner.start_message_run
-
-            def claim(request: AgentMessageRequest) -> Run | None:
-                if request.message.id == "steer":
-                    claimed.set()
-                    assert release_start.wait(3)
-                return start(request)
-
-            monkeypatch.setattr(Run, "cancel_message", remove)
-            monkeypatch.setattr(owner, "start_message_run", claim)
-            removal = executor.submit(
-                owner.cancel_message, child.id, parent.id, "steer"
-            )
-            assert removed.wait(3)
-            resumption = executor.submit(submit, "resume")
-            assert claimed.wait(3)
-            release_removal.set()
-            assert not removal.result(3)
-            release_start.set()
-            resumption.result(3)
-            assert completed.wait(3)
-            assert requests[-1][-1] == "steer"
         finally:
-            for event in (
-                release_generation,
-                release_binding,
-                release_removal,
-                release_start,
-            ):
-                event.set()
+            release_generation.set()
+            release_binding.set()
             assert owner.close(3)
 
 
@@ -524,7 +485,8 @@ def test_queued_runs_follow_normal_completion_and_pause_after_failure(
             "second task",
             MessageDelivery.SEND if pause == RunStatus.LIMIT else MessageDelivery.QUEUE,
         )
-        submit("third", "third task", MessageDelivery.QUEUE)
+        if pause is None:
+            submit("third", "third task", MessageDelivery.QUEUE)
         if pause is not None:
             if pause == RunStatus.CANCELLED:
                 initial.cancel()
@@ -535,7 +497,6 @@ def test_queued_runs_follow_normal_completion_and_pause_after_failure(
             info = owner.lookup_agent(child.id, parent.id)
             assert info is not None and info.queue_paused
             assert len(requests) == 1
-            assert owner.cancel_message(child.id, parent.id, "third")
             submit("resume", "explicit new task", MessageDelivery.SEND)
         release.set()
         assert third.wait(3)

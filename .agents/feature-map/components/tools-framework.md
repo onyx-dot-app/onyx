@@ -165,10 +165,11 @@ catalog rows or persona switches. ChatAgent supplies a child factory with its
 configured tools and step limit; each child builds its own controls and conversation state.
 The controls stay direct in code mode. Each child inherits code mode but owns
 its own code cells.
-An agent can list, message, or cancel its descendants on the selected branch,
+An agent can list, message, or interrupt its descendants on the selected branch,
 including children whose parent has finished. It cannot control siblings or ancestors.
 `send_message` reaches the next model step or starts an idle child with fresh limits.
-`queue_message` waits for normal completion; `cancel_message` removes pending input.
+`queue_message` waits for normal completion. `interrupt_agent` cancels the current
+run and preserves the conversation for later messages.
 Results reach the requesting agent before its next model call. `wait_agent` waits
 for an unread result or instruction, with a bounded timeout. It does not consume
 the message. The wait keeps the run active and preserves code cells.

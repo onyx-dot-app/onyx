@@ -122,10 +122,6 @@ class AgentDirectory(Protocol):
 
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt: ...
 
-    def cancel_message(
-        self, agent_id: str, parent_id: str, message_id: str
-    ) -> bool: ...
-
 
 class _QueuedMessage:
     def __init__(self, request: AgentMessageRequest) -> None:
@@ -580,27 +576,6 @@ class AgentCoordinator:
             message=request.message.text,
             delivery=request.delivery,
         )
-
-    def cancel_message(self, agent_id: str, parent_id: str, message_id: str) -> bool:
-        if self._directory is not None:
-            return self._directory.cancel_message(agent_id, parent_id, message_id)
-        if self.lookup_agent(agent_id, parent_id) is None:
-            raise ValueError("Agent is unavailable to this parent")
-        with self._state.lock:
-            queued = self._state.pending_messages.get(message_id)
-            if queued is None or queued.request.agent_id != agent_id or queued.starting:
-                return False
-            target = queued.target_run_id
-        if target is not None and not self.run(target).cancel_message(message_id):
-            return False
-        with self._state.lock:
-            if (
-                self._state.pending_messages.get(message_id) is not queued
-                or queued.starting
-            ):
-                return False
-            del self._state.pending_messages[message_id]
-        return True
 
     def start_message_run(self, request: AgentMessageRequest) -> Run | None:
         """Start one authorized follow-up after the previous owner has drained."""
@@ -1695,12 +1670,6 @@ class _ToolControl(AgentControl):
             delivery=MessageDelivery.QUEUE,
             max_steps=max_steps,
             total_timeout_s=total_timeout_s,
-        )
-
-    def cancel_message(self, agent_id: str, *, message_id: str) -> bool:
-        self.owner.check_tool_active(self.active)
-        return self.owner.coordinator.cancel_message(
-            agent_id, self.owner.run.agent_id, message_id
         )
 
     def spawn_agent(

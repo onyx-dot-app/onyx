@@ -171,10 +171,15 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 renderers as the live stream and reads typed results, not the tool catalog.
 It excludes background child output from the `spawn_agent` card. The parent
 receives that output as a message before its next model call.
-`ChatAgentInput` stores pending instructions as text and links accepted inputs
+`ChatInput` stores pending instructions as text and links accepted inputs
 to the response item that consumed them. Starting a new run moves its pending
 instruction into the existing user-message tree in the same transaction.
 The runtime records an input only after its acceptance transaction commits.
+Human input needs no invoking tool call. Main Chat accepts text only, without
+request headers or serialized request settings. Withdrawing pending text uses the
+same recipient lock as acceptance; accepted text cannot be withdrawn. A queued
+root turn consumes its row with the user-message insert, then advances remaining
+queued entries to the new response so they form sequential turns on that branch.
 Inbox writers lock the recipient session before the response. The session lock
 uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Accepted result inputs reference their source response; reconstructed history

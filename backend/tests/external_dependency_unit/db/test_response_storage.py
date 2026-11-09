@@ -98,7 +98,6 @@ from onyx.db.chat_inputs import (
     lock_agent,
     pending_inputs,
     receive_messages,
-    remove_message,
 )
 from onyx.db.chat_response import (
     read_chat_execution,
@@ -121,7 +120,7 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
-    ChatAgentInput,
+    ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
     ChatResponseCheckpoint,
@@ -3338,7 +3337,7 @@ def test_invalid_checkpoint_publication_leaves_state_unchanged(
         assert saved is None
 
 
-def test_agent_inbox_acceptance_owns_content_and_blocks_removal(
+def test_agent_inbox_acceptance_preserves_content_and_source(
     db_session: Session, conversation: ChatSession
 ) -> None:
     response = _response(db_session, conversation)
@@ -3377,7 +3376,6 @@ def test_agent_inbox_acceptance_owns_content_and_blocks_removal(
     )
     write_response_items(db_session, child_row, child, {})
     db_session.flush()
-    assert not remove_message(db_session, branch, child.agent_id, receipt.id)
     assert pending_inputs(db_session, branch, child.agent_id) == []
     db_session.expire_all()
     [accepted] = read_response_steps(child_row)[-1].input_messages
@@ -3386,9 +3384,7 @@ def test_agent_inbox_acceptance_owns_content_and_blocks_removal(
     assert isinstance(accepted.metadata, InputMessageMetadata)
     assert accepted.metadata.source == InputSource.AGENT
     rows = list(
-        db_session.scalars(
-            select(ChatAgentInput).where(ChatAgentInput.message_id == receipt.id)
-        )
+        db_session.scalars(select(ChatInput).where(ChatInput.message_id == receipt.id))
     )
     assert len(rows) == 1
     assert rows[0].response_item_id == f"{child.run_id}:1"
@@ -3396,7 +3392,7 @@ def test_agent_inbox_acceptance_owns_content_and_blocks_removal(
     assert rows[0].delivery is None
 
 
-def test_agent_inbox_removal_and_close_linearize_before_generation(
+def test_agent_inbox_close_preserves_pending_and_retargets_late_input(
     db_session: Session, conversation: ChatSession
 ) -> None:
     response = _response(db_session, conversation)
@@ -3419,37 +3415,16 @@ def test_agent_inbox_removal_and_close_linearize_before_generation(
         parent_tool_call_id="delegate",
     )
     receipt = enqueue_message(db_session, branch, request)
-    messages = receive_messages(db_session, child.agent_id, child.run_id, [])
     assert close_response_inputs(
         db_session, int(child.run_id), can_continue=True, ownership_version=None
     )
     assert not child_row.response_inputs_closed
-    assert remove_message(db_session, branch, child.agent_id, receipt.id)
-    assert not inputs_available(
-        db_session, int(child.run_id), messages, ownership_version=None
+    assert close_response_inputs(
+        db_session, int(child.run_id), can_continue=False, ownership_version=None
     )
-    child.steps.append(
-        StepRecord(
-            input_messages=messages,
-            message=AssistantMessage(id=f"{child.run_id}:1"),
-            generation_status=ExecutionStatus.RUNNING,
-        )
-    )
-    with (
-        pytest.raises(ValueError, match="Submitted input is no longer pending"),
-        db_session.begin_nested(),
-    ):
-        write_response_items(db_session, child_row, child, {})
-    assert (
-        db_session.scalar(
-            select(ChatAgentInput.id).where(ChatAgentInput.message_id == receipt.id)
-        )
-        is None
-    )
-    child.steps.pop()
-    assert not close_response_inputs(
-        db_session, int(child.run_id), can_continue=True, ownership_version=None
-    )
+    assert [
+        row.message_id for row in pending_inputs(db_session, branch, child.agent_id)
+    ] == [receipt.id]
     assert child_row.response_inputs_closed
     late = enqueue_message(db_session, branch, request)
     assert late.run_id is None

@@ -72,10 +72,9 @@ SUBAGENT_TOOLS = [
     "spawn_agent",
     "list_agents",
     "wait_agent",
-    "cancel_agent",
+    "interrupt_agent",
     "send_message",
     "queue_message",
-    "cancel_message",
 ]
 
 PLACEMENT = Placement(turn_index=1, tab_index=0)

@@ -41,10 +41,17 @@ from onyx.chat.incognito import (
     incognito_allowed_for_user,
 )
 from onyx.chat.incognito_context import teardown_incognito_session
-from onyx.chat.models import ChatFullResponse, ChatResponseOutcome, CreateChatSessionID
+from onyx.chat.models import (
+    ChatFullResponse,
+    ChatResponseOutcome,
+    CreateChatSessionID,
+    PendingChatMessage,
+)
 from onyx.chat.process_message import (
+    dispatch_pending_chat_messages,
     handle_multi_model_stream,
     handle_stream_message_objects,
+    process_chat_query,
     run_chat_turn,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
@@ -79,6 +86,12 @@ from onyx.db.chat import (
     set_preferred_response,
     translate_db_message_to_chat_message_detail,
     update_chat_session,
+)
+from onyx.db.chat_inputs import (
+    get_human_input_session,
+    list_human_messages,
+    submit_human_message__no_commit,
+    withdraw_human_message__no_commit,
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
@@ -139,6 +152,7 @@ from onyx.server.query_and_chat.models import (
     ChatSessionUpdateRequest,
     CurrentStreamInfo,
     MessageOrigin,
+    PendingChatMessageRequest,
     RenameChatSessionResponse,
     SendMessageRequest,
     SetPreferredResponseRequest,
@@ -1461,6 +1475,86 @@ def resume_chat_stream(
             time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
 
     return StreamingResponse(stream_buffered_run(), media_type="text/event-stream")
+
+
+@router.post("/chat-session/{session_id}/pending-messages")
+def submit_pending_chat_message(
+    session_id: UUID,
+    body: PendingChatMessageRequest,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+    _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
+) -> PendingChatMessage:
+    """Submit text for the next model step or a new turn on the selected branch."""
+    if user.is_anonymous or user.id is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to queue chat messages")
+    user_id = user.id
+    try:
+        chat_session = get_human_input_session(db_session, session_id, user_id)
+        message = process_chat_query(body.message, chat_session, user, db_session)
+        pending = submit_human_message__no_commit(
+            db_session,
+            session_id,
+            user_id,
+            message=message,
+            delivery=body.delivery,
+            target_response_id=body.target_response_id,
+        )
+        db_session.commit()
+    except LookupError as error:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
+        ) from error
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    dispatch_pending_chat_messages(session_id, user_id)
+    return pending
+
+
+@router.get("/chat-session/{session_id}/pending-messages")
+def list_pending_chat_messages(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.READ_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> list[PendingChatMessage]:
+    if user.is_anonymous or user.id is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to view queued messages")
+    try:
+        return list_human_messages(db_session, session_id, user.id)
+    except LookupError as error:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
+        ) from error
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+
+
+@router.delete("/chat-session/{session_id}/pending-messages/{message_id}")
+def withdraw_pending_chat_message(
+    session_id: UUID,
+    message_id: str,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> PendingChatMessage:
+    """Remove pending input and return its text for local editing or discarding."""
+    if user.is_anonymous or user.id is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to remove queued messages")
+    try:
+        pending = withdraw_human_message__no_commit(
+            db_session, session_id, user.id, message_id
+        )
+        if pending is None:
+            raise OnyxError(OnyxErrorCode.CONFLICT, "This message is no longer pending")
+        db_session.commit()
+    except LookupError as error:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
+        ) from error
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    dispatch_pending_chat_messages(session_id, user.id)
+    return pending
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)

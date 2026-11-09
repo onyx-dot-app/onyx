@@ -76,8 +76,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     update_search_context,
 )
 from onyx.tools.tool_implementations.subagents.subagent_tools import (
-    CancelAgentTool,
-    CancelMessageTool,
+    InterruptAgentTool,
     ListAgentsTool,
     QueueMessageTool,
     SendMessageTool,
@@ -181,10 +180,9 @@ class ChatAgent(Agent, RestorableFeature):
                     SpawnAgentTool(self.create_subagent, max_steps=self.max_steps),
                     ListAgentsTool(),
                     WaitAgentTool(),
-                    CancelAgentTool(),
+                    InterruptAgentTool(),
                     SendMessageTool(max_steps=self.max_steps),
                     QueueMessageTool(max_steps=self.max_steps),
-                    CancelMessageTool(),
                 ]
             )
         disambiguate_tool_names(self.application_tools)

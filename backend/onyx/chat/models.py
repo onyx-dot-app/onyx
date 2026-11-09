@@ -19,6 +19,7 @@ from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
+    MessageDelivery,
     RunFailure,
     RunStatus,
     StepRecord,
@@ -75,6 +76,13 @@ MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
 _INCOGNITO_IMAGES = TypeAdapter(list[SavedLoadedFile])
 _INCOGNITO_DETAILS = TypeAdapter(SavedToolResultDetails)
+
+
+class PendingChatMessage(BaseModel):
+    id: str
+    message: str
+    delivery: MessageDelivery
+    target_response_id: int | None
 
 
 class PromptMetadata(CompactionMetadata):

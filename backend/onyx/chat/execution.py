@@ -2,6 +2,7 @@
 
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
@@ -97,6 +98,7 @@ def start_chat_turn(
     response_future: Future[ChatResponseOutcome] | None = None,
     *,
     query_observation: QueryObservation | None = None,
+    on_turn_finished: Callable[[], None] | None = None,
 ) -> ChatStream:
     """Publish response identity and launch work that outlives its stream reader."""
     mode = setup.incognito_record_mode
@@ -127,6 +129,7 @@ def start_chat_turn(
             response_future,
             stream_buffer,
             query_observation=query_observation,
+            on_turn_finished=on_turn_finished,
         )
         startup_error: Exception | None = None
         try:
@@ -195,11 +198,13 @@ class ChatTurnExecution:
         stream_buffer: StreamBufferWriter | None = None,
         *,
         query_observation: QueryObservation | None = None,
+        on_turn_finished: Callable[[], None] | None = None,
     ) -> None:
         self.setup = setup
         self.user = user
         self.delivery = ChatDelivery(stream_buffer, query_observation=query_observation)
         self._query_observation = query_observation
+        self._on_turn_finished = on_turn_finished
         self._stores: list[ChatRunStore] = []
         self.cancellation = CancellationSignal()
         self._response_future = response_future
@@ -425,6 +430,12 @@ class ChatTurnExecution:
             self._admission_released = True
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
+            return
+        if self._on_turn_finished is not None and not self.cancellation.cancelled:
+            try:
+                self._on_turn_finished()
+            except Exception:
+                logger.exception("Could not dispatch queued chat input")
 
     def _run_response(
         self,

@@ -67,7 +67,7 @@ from onyx.db.chat_response import (
 )
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import (
-    ChatAgentInput,
+    ChatInput,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatSession,
@@ -1583,43 +1583,36 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         elif action == "completed":
             release_child.set()
             first_coordinator.completion(child.run_id).result(timeout=10)
-        later_step = 0
+        later_calls = [ToolCall(id="list", name="list_agents", arguments={})]
+        if action == "cancel":
+            later_calls.append(
+                ToolCall(
+                    id="queue",
+                    name="queue_message",
+                    arguments={"agent_id": child.agent_id, "message": "Continue later"},
+                )
+            )
+            later_calls.append(
+                ToolCall(
+                    id="interrupt",
+                    name="interrupt_agent",
+                    arguments={"agent_id": child.agent_id},
+                )
+            )
+        if action in {"wait", "cancel"}:
+            later_calls.append(
+                ToolCall(id="wait", name="wait_agent", arguments={"timeout_seconds": 5})
+            )
+        calls = iter(later_calls)
 
         def later_reply(
-            request: GenerationRequest, _cancellation: CancellationSignal
+            _request: GenerationRequest, _cancellation: CancellationSignal
         ) -> AssistantMessage:
-            nonlocal later_step
-            if later_step == 0:
-                call = ToolCall(id="list", name="list_agents", arguments={})
-            elif later_step == 1:
-                listed = next(
-                    message
-                    for message in request.messages
-                    if isinstance(message, ToolResultMessage)
-                    and message.tool_call_id == "list"
-                )
-                discovered = json.loads(listed.text)
-                assert any(item["id"] == child.agent_id for item in discovered)
-                if action in {"completed", "cancelled"}:
-                    return AssistantMessage(content=[TextContent(text="Checked")])
-                if cancel_child:
-                    call = ToolCall(
-                        id="cancel",
-                        name="cancel_agent",
-                        arguments={"agent_id": child.agent_id},
-                    )
-                else:
-                    release_child.set()
-                    call = ToolCall(
-                        id="wait", name="wait_agent", arguments={"timeout_seconds": 5}
-                    )
-            elif later_step == 2 and cancel_child and not nested:
-                call = ToolCall(
-                    id="wait", name="wait_agent", arguments={"timeout_seconds": 5}
-                )
-            else:
+            call = next(calls, None)
+            if call is None:
                 return AssistantMessage(content=[TextContent(text="Checked")])
-            later_step += 1
+            if action == "wait" and call.name == "wait_agent":
+                release_child.set()
             return AssistantMessage(content=[call])
 
         later_agent = ChatAgent(
@@ -1654,11 +1647,22 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                         id=f"chat:{later_question.id}", content=later_question.message
                     )
                 ],
-                max_steps=4,
+                max_steps=len(later_calls) + 1,
                 coordinator=later_view,
             )
             assert later.result(timeout=15).output.text == "Checked"
             assert later.wait_for_idle(timeout=10)
+        later_results = [
+            tool.result
+            for step in later.snapshot().steps
+            for tool in step.tools.values()
+        ]
+        assert all(
+            result is not None and not result.is_error for result in later_results
+        )
+        listed = later_results[0]
+        assert listed is not None
+        assert child.agent_id in {item["id"] for item in json.loads(listed.text)}
         later_coordinator.completion(later.id).result(timeout=10)
         first_coordinator.completion(child.run_id).result(timeout=10)
         saved = later_owner.read_run(child.run_id, str(branch[0]))
@@ -1666,6 +1670,15 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         assert saved.status == (
             RunStatus.CANCELLED if cancel_child else RunStatus.COMPLETE
         )
+        if action == "cancel":
+            loaded_child = later_view.lookup_agent(child.agent_id, str(branch[0]))
+            assert loaded_child is not None and loaded_child.queue_paused
+            assert [item.message for item in loaded_child.pending_messages] == [
+                "Continue later"
+            ]
+            assert [item.delivery for item in loaded_child.pending_messages] == [
+                MessageDelivery.QUEUE
+            ]
         received = [
             message
             for step in later.snapshot().steps
@@ -2184,9 +2197,9 @@ def test_input_acceptance_failure_preserves_committed_history(
         assert len(saved.response.steps) == (2 if commit_before_error else 1)
         accepted = list(
             db_session.scalars(
-                select(ChatAgentInput).where(
-                    ChatAgentInput.recipient_session_id == branch[0],
-                    ChatAgentInput.message_id == "incoming",
+                select(ChatInput).where(
+                    ChatInput.recipient_session_id == branch[0],
+                    ChatInput.message_id == "incoming",
                 )
             )
         )

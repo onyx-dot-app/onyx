@@ -118,10 +118,6 @@ class FakeAgentDirectory(AgentDirectory):
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:
         raise ValueError("Remote messaging is unavailable")
 
-    @override
-    def cancel_message(self, agent_id: str, parent_id: str, message_id: str) -> bool:
-        return False
-
 
 class FakeRunStore(RunStore):
     def __init__(self, *, save: Callable[[Run], None]) -> None:

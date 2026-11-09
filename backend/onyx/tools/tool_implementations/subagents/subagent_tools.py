@@ -18,7 +18,6 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.subagents.models import (
     AgentMessageInput,
-    CancelMessageInput,
     ChatConfiguration,
     ListAgentsInput,
     SpawnAgentInput,
@@ -141,25 +140,6 @@ class QueueMessageTool(_SubagentTool):
         return ToolResult(content=receipt.model_dump_json())
 
 
-class CancelMessageTool(_SubagentTool):
-    name = "cancel_message"
-    display_name = "Remove agent message"
-    description = (
-        "Remove a pending agent message by its ID from list_agents. "
-        "Messages already accepted by the agent cannot be removed."
-    )
-    input_model = CancelMessageInput
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(CancelMessageInput, invocation.arguments)
-        removed = invocation.agents.cancel_message(
-            request.agent_id, message_id=request.message_id
-        )
-        return ToolResult(
-            content="Message removed." if removed else "Message is no longer pending."
-        )
-
-
 class WaitAgentTool(_SubagentTool):
     name = "wait_agent"
     display_name = "Wait for agents"
@@ -182,10 +162,13 @@ class WaitAgentTool(_SubagentTool):
         )
 
 
-class CancelAgentTool(_SubagentTool):
-    name = "cancel_agent"
-    display_name = "Cancel agent"
-    description = "Request cancellation of an agent. Use list_agents to confirm when it has stopped."
+class InterruptAgentTool(_SubagentTool):
+    name = "interrupt_agent"
+    display_name = "Interrupt agent"
+    description = (
+        "Request cancellation of an agent's current run. Use list_agents to confirm "
+        "when it has stopped. Its conversation remains available for later messages."
+    )
     input_model = SubagentSelection
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -199,4 +182,4 @@ class CancelAgentTool(_SubagentTool):
         if agent.latest_run_id is None:
             raise ValueError("Subagent has no run")
         invocation.agents.cancel_run(agent.latest_run_id)
-        return ToolResult(content=f"Cancellation requested for {agent.path}.")
+        return ToolResult(content=f"Interruption requested for {agent.path}.")

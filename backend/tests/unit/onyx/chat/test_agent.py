@@ -15,8 +15,6 @@ from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolStartEvent
 from onyx.agents.models import (
     AgentCompletion,
-    AgentInfo,
-    AgentMessageReceipt,
     AgentStep,
     InputMessageMetadata,
     InputSource,
@@ -849,10 +847,9 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
                 "spawn_agent",
                 "list_agents",
                 "wait_agent",
-                "cancel_agent",
+                "interrupt_agent",
                 "send_message",
                 "queue_message",
-                "cancel_message",
             }
         )
     assert any(message.text == "Earlier question" for message in first.messages)
@@ -992,10 +989,9 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
             "spawn_agent",
             "list_agents",
             "wait_agent",
-            "cancel_agent",
+            "interrupt_agent",
             "send_message",
             "queue_message",
-            "cancel_message",
         ]
         reminder = request.messages[-1]
         assert (
@@ -1063,10 +1059,9 @@ def test_chat_delegates_to_an_independent_agent(
             "spawn_agent",
             "list_agents",
             "wait_agent",
-            "cancel_agent",
+            "interrupt_agent",
             "send_message",
             "queue_message",
-            "cancel_message",
         }
         if any(message.text == "Leaf task" for message in request.messages):
             if not results:
@@ -1429,117 +1424,6 @@ def test_chat_message_tools_continue_a_completed_child(message_tool: str) -> Non
             parents.append(parent_run_id)
         assert len(set(parents)) == 2
     finally:
-        assert coordinator.close(10)
-
-
-def test_chat_lists_and_removes_a_queued_child_message() -> None:
-    entered, release = threading.Event(), threading.Event()
-    queued: list[AgentMessageReceipt] = []
-    spawned: list[SpawnResult] = []
-    coordinator = AgentCoordinator()
-
-    class HoldTool(EchoTool):
-        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-            entered.set()
-            assert release.wait(10)
-            return ToolResult(content="Finished")
-
-    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
-        results = [
-            message
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-        ]
-        if any(message.text == "Child task" for message in request.messages):
-            assert all(
-                "Discard this task" not in message.text for message in request.messages
-            )
-            if not results:
-                return AssistantMessage(
-                    content=[
-                        ToolCall(id="hold", name="echo", arguments={"value": "hold"})
-                    ]
-                )
-            return AssistantMessage(content=[TextContent(text="Child answer")])
-        if not results:
-            call = ToolCall(
-                id="spawn",
-                name="spawn_agent",
-                arguments={"name": "worker", "instruction": "Child task"},
-            )
-        elif len(results) == 1:
-            spawned.append(SpawnResult.model_validate_json(results[-1].content))
-            assert entered.wait(10)
-            call = ToolCall(
-                id="queue",
-                name="queue_message",
-                arguments={
-                    "agent_id": spawned[0].agent_id,
-                    "message": "Discard this task",
-                },
-            )
-        elif len(results) == 2:
-            assert not results[-1].is_error, results[-1].content
-            queued.append(AgentMessageReceipt.model_validate_json(results[-1].content))
-            call = ToolCall(id="list", name="list_agents", arguments={})
-        elif len(results) == 3:
-            listed = TypeAdapter(list[dict[str, JsonValue]]).validate_json(
-                results[-1].content
-            )
-            children = [
-                AgentInfo.model_validate({**child, "restoration_config": None})
-                for child in listed
-            ]
-            assert [item.id for item in children[0].pending_messages] == [queued[0].id]
-            call = ToolCall(
-                id="remove",
-                name="cancel_message",
-                arguments={"agent_id": spawned[0].agent_id, "message_id": queued[0].id},
-            )
-        else:
-            assert results[-1].content == "Message removed."
-            child = coordinator.lookup_agent(spawned[0].agent_id, agent.id)
-            assert child is not None and not child.pending_messages
-            release.set()
-            assert (
-                coordinator.completion(spawned[0].run_id).result(10).status
-                == RunStatus.COMPLETE
-            )
-            return AssistantMessage(content=[TextContent(text="Removed")])
-        return AssistantMessage(content=[call])
-
-    agent = ChatAgent(
-        messages=[],
-        tools=[HoldTool()],
-        custom_agent_prompt=None,
-        base_system_prompt="",
-        context_files=ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
-        ),
-        persona=None,
-        user_memory_context=None,
-        llm=FakeModelClient(reply),
-        token_counter=len,
-    )
-    try:
-        assert (
-            run_agent(
-                agent,
-                messages=[UserMessage(content="Delegate")],
-                max_steps=5,
-                coordinator=coordinator,
-            ).output.text
-            == "Removed"
-        )
-        child = coordinator.lookup_agent(spawned[0].agent_id, agent.id)
-        assert child is not None and child.latest_run_id == spawned[0].run_id
-    finally:
-        release.set()
         assert coordinator.close(10)
 
 

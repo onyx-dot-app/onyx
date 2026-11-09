@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from sqlalchemy import delete, func, inspect, select
+from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
@@ -40,6 +40,7 @@ from onyx.db.chat import (
     agent_ancestor_chain,
     agent_session_path,
     checkpoint_from_summary,
+    configure_response_transaction__no_commit,
     create_db_search_doc,
     find_summary_for_ancestry,
     parent_session_id,
@@ -51,7 +52,7 @@ from onyx.db.chat import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
-    ChatAgentInput,
+    ChatInput,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatResponseItem,
@@ -73,9 +74,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 logger = setup_logger()
-
-CHAT_RESPONSE_STATEMENT_TIMEOUT_MS = 30_000
-CHAT_RESPONSE_LOCK_TIMEOUT_MS = 5_000
 
 
 def _extract_referenced_file_descriptors(
@@ -303,28 +301,6 @@ def save_chat_turn(
             assistant_message.files = existing_files + referenced
 
     db_session.commit()
-
-
-def configure_response_transaction__no_commit(session: Session) -> None:
-    """Bound database waits while a response holds its execution lease."""
-    session.execute(
-        select(
-            func.set_config(
-                "statement_timeout",
-                str(CHAT_RESPONSE_STATEMENT_TIMEOUT_MS),
-                True,
-            )
-        )
-    )
-    session.execute(
-        select(
-            func.set_config(
-                "lock_timeout",
-                str(CHAT_RESPONSE_LOCK_TIMEOUT_MS),
-                True,
-            )
-        )
-    )
 
 
 def save_chat_response_to_db(
@@ -899,7 +875,7 @@ def _invoking_message_id(invocation: ToolCall) -> str:
     return row.id
 
 
-def read_response_input(row: ChatAgentInput) -> UserMessage:
+def read_response_input(row: ChatInput) -> UserMessage:
     invocation = row.invoking_tool_call
     source_id = (
         invocation.parent_chat_message_id if invocation else row.source_response_id
@@ -912,7 +888,7 @@ def read_response_input(row: ChatAgentInput) -> UserMessage:
                 str(invocation.chat_session_id)
                 if invocation
                 else str(row.source_agent_id)
-                if row.source_agent_id is not None
+                if row.source != InputSource.HUMAN and row.source_agent_id is not None
                 else None
             ),
         )
@@ -935,7 +911,7 @@ def write_response_inputs(
         if message.id is None or message.id in incoming:
             raise ValueError("Received input identity is missing or repeated")
         if not isinstance(message.content, str):
-            raise ValueError("Saved agent inputs must contain text only")
+            raise ValueError("Saved response inputs must contain text only")
         incoming.add(message.id)
         content = sanitize_string(message.content)
         row = existing.get(message.id)
@@ -944,13 +920,13 @@ def write_response_inputs(
                 raise ValueError("Accepted input content or position changed")
             continue
         row = session.scalar(
-            select(ChatAgentInput)
+            select(ChatInput)
             .where(
-                ChatAgentInput.recipient_session_id == response.chat_session_id,
-                ChatAgentInput.message_id == message.id,
-                ChatAgentInput.response_item_id.is_(None),
+                ChatInput.recipient_session_id == response.chat_session_id,
+                ChatInput.message_id == message.id,
+                ChatInput.response_item_id.is_(None),
             )
-            .with_for_update(of=ChatAgentInput)
+            .with_for_update(of=ChatInput)
         )
         origin = message.metadata
         if row is not None and (
@@ -969,7 +945,9 @@ def write_response_inputs(
                 if isinstance(origin, InputMessageMetadata)
                 else None
             )
-            if source == InputSource.AGENT:
+            if source == InputSource.AGENT or (
+                source == InputSource.HUMAN and source_id is not None
+            ):
                 raise ValueError("Submitted input is no longer pending")
             if source_id is not None and not source_id.isdecimal():
                 raise ValueError("Saved input source must identify a response")
@@ -995,7 +973,7 @@ def write_response_inputs(
                     not in visible_message_ids(session, root)
                 ):
                     raise ValueError("Input result is unavailable on this branch")
-            row = ChatAgentInput(
+            row = ChatInput(
                 recipient_session_id=response.chat_session_id,
                 message_id=sanitize_string(message.id),
                 source=source,

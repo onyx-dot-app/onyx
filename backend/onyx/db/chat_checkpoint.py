@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.chat.models import ResponseCheckpoint, SavedCheckpoint
+from onyx.db.chat import configure_response_transaction__no_commit
 from onyx.db.chat_response import (
-    configure_response_transaction__no_commit,
     finish_checkpoint__no_commit,
 )
 from onyx.db.enums import record_mode_persists_content

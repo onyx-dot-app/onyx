@@ -22,6 +22,10 @@
   second streaming send on the same session with a `StreamingError` packet whose
   `error_code` is `CONFLICT`, not with an HTTP status. A `stream=false` send
   fails with "Message ID is required" ([[#session-admission]]).
+  The separate pending-message API accepts text during a turn. `send` targets
+  the selected response's next model step; `queue` starts a new turn after normal
+  completion. Stop, failure, and step limits leave queued text pending. The
+  existing frontend queue does not use this API yet; Craft has a separate backend.
 - **Stop.** The user presses stop. The input shows that the turn is stopping
   until active model, tool and save work drains. The partial answer stays, with
   "Generation was stopped by the user." after it. A reload shows the same saved
@@ -107,7 +111,9 @@ Processing hook before it saves the user message, only for a new, non-blank
 message, and only when the incognito mode allows hooks
 (`IncognitoRecordMode.fires_hooks`), because the hook sends the query out
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
-user message. Then setup resolves the custom agent prompt, memories, the
+user message. Pending human submissions run the same hook before queue storage;
+setup reuses that processed text without rewriting it again. Then setup resolves
+the custom agent prompt, memories, the
 reserved tokens, the tool configuration and the branch summary, and copies the
 history out of the ORM rows. It closes the DB session before slow file loading,
 renews the admission between stages, and reserves one assistant row per model.
@@ -162,6 +168,10 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 `CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
 `DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
 preparation that has not started a run. When response workers finish, it finishes delivery and releases admission.
+`chat/process_message.py:dispatch_pending_chat_messages` checks for queued user text
+after submission, withdrawal, and release. It starts an ordinary turn with current
+session settings and fresh authorization checks. Withdrawal removes pending text
+atomically; editing resubmits a new entry. No browser reader is needed.
 Background children keep running; the same control thread polls their owner
 leases until they finish. It no longer checks the released turn's Stop key,
 admission lease or deadline. Foreground children still drain with their parent. API shutdown

@@ -3781,11 +3781,11 @@ class ChatResponseItem(Base):
     message: Mapped[AssistantMessage] = mapped_column(
         PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
     )
-    inputs: Mapped[list["ChatAgentInput"]] = relationship(
-        "ChatAgentInput",
+    inputs: Mapped[list["ChatInput"]] = relationship(
+        "ChatInput",
         back_populates="response_item",
-        order_by="ChatAgentInput.position",
-        foreign_keys="ChatAgentInput.response_item_id",
+        order_by="ChatInput.position",
+        foreign_keys="ChatInput.response_item_id",
         cascade="all, delete-orphan",
         passive_deletes=True,
         lazy="selectin",
@@ -3810,33 +3810,34 @@ class ChatResponseItem(Base):
     )
 
 
-class ChatAgentInput(Base):
-    """Pending agent instructions and the inputs accepted by a model generation."""
+class ChatInput(Base):
+    """Submitted messages and additional inputs accepted by a model generation."""
 
-    __tablename__ = "chat_agent_input"
+    __tablename__ = "chat_input"
     __table_args__ = (
         CheckConstraint(
             "(response_item_id IS NULL AND position IS NULL) OR "
             "(response_item_id IS NOT NULL AND position IS NOT NULL AND position >= 0)",
-            name="ck_agent_input_acceptance",
+            name="ck_chat_input_acceptance",
         ),
         CheckConstraint(
             "response_item_id IS NOT NULL OR "
-            "(delivery IS NOT NULL AND invoking_tool_call_id IS NOT NULL AND max_steps IS NOT NULL AND max_steps > 0)",
-            name="ck_agent_input_pending",
+            "(delivery IS NOT NULL AND ((source = 'human' AND invoking_tool_call_id IS NULL AND max_steps IS NULL) OR "
+            "(source = 'agent' AND invoking_tool_call_id IS NOT NULL AND max_steps IS NOT NULL AND max_steps > 0)))",
+            name="ck_chat_input_pending",
         ),
         CheckConstraint(
             "source IN ('human', 'agent', 'agent_result')",
-            name="ck_agent_input_source",
+            name="ck_chat_input_source",
         ),
         CheckConstraint(
             "delivery IS NULL OR delivery IN ('send', 'queue')",
-            name="ck_agent_input_delivery",
+            name="ck_chat_input_delivery",
         ),
-        Index("uq_agent_input_position", "response_item_id", "position", unique=True),
-        Index("uq_agent_input_message", "response_item_id", "message_id", unique=True),
+        Index("uq_chat_input_position", "response_item_id", "position", unique=True),
+        Index("uq_chat_input_message", "response_item_id", "message_id", unique=True),
         Index(
-            "ix_agent_input_pending",
+            "ix_chat_input_pending",
             "recipient_session_id",
             "id",
             postgresql_where=text("response_item_id IS NULL"),

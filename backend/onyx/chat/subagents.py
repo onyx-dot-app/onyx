@@ -125,10 +125,3 @@ class ChatAgentDirectory(AgentDirectory):
         if self.store is None:
             raise ValueError("Agent messages require durable execution ownership")
         return self.store.submit_message(request)
-
-    def cancel_message(self, agent_id: str, parent_id: str, message_id: str) -> bool:
-        if self.lookup_agent(agent_id, parent_id) is None:
-            raise ValueError("Agent is unavailable to this parent")
-        if self.store is None:
-            raise ValueError("Agent messages require durable execution ownership")
-        return self.store.cancel_message(agent_id, message_id)

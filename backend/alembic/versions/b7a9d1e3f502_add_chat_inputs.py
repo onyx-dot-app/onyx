@@ -1,4 +1,4 @@
-"""Store pending agent messages and accepted generation inputs.
+"""Store pending chat messages and accepted generation inputs.
 
 Revision ID: b7a9d1e3f502
 Revises: c0de5e7a91b2
@@ -26,7 +26,7 @@ def upgrade() -> None:
         ),
     )
     op.create_table(
-        "chat_agent_input",
+        "chat_input",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column(
             "recipient_session_id",
@@ -67,40 +67,41 @@ def upgrade() -> None:
         sa.Column("position", sa.Integer(), nullable=True),
         sa.CheckConstraint(
             "(response_item_id IS NULL AND position IS NULL) OR (response_item_id IS NOT NULL AND position IS NOT NULL AND position >= 0)",
-            name="ck_agent_input_acceptance",
+            name="ck_chat_input_acceptance",
         ),
         sa.CheckConstraint(
-            "response_item_id IS NOT NULL OR (delivery IS NOT NULL AND invoking_tool_call_id IS NOT NULL AND max_steps IS NOT NULL AND max_steps > 0)",
-            name="ck_agent_input_pending",
+            "response_item_id IS NOT NULL OR (delivery IS NOT NULL AND ((source = 'human' AND invoking_tool_call_id IS NULL AND max_steps IS NULL) OR "
+            "(source = 'agent' AND invoking_tool_call_id IS NOT NULL AND max_steps IS NOT NULL AND max_steps > 0)))",
+            name="ck_chat_input_pending",
         ),
         sa.CheckConstraint(
-            "source IN ('human', 'agent', 'agent_result')", name="ck_agent_input_source"
+            "source IN ('human', 'agent', 'agent_result')", name="ck_chat_input_source"
         ),
         sa.CheckConstraint(
             "delivery IS NULL OR delivery IN ('send', 'queue')",
-            name="ck_agent_input_delivery",
+            name="ck_chat_input_delivery",
         ),
     )
     op.create_index(
-        "uq_agent_input_position",
-        "chat_agent_input",
+        "uq_chat_input_position",
+        "chat_input",
         ["response_item_id", "position"],
         unique=True,
     )
     op.create_index(
-        "uq_agent_input_message",
-        "chat_agent_input",
+        "uq_chat_input_message",
+        "chat_input",
         ["response_item_id", "message_id"],
         unique=True,
     )
     op.create_index(
-        "ix_agent_input_pending",
-        "chat_agent_input",
+        "ix_chat_input_pending",
+        "chat_input",
         ["recipient_session_id", "id"],
         postgresql_where=sa.text("response_item_id IS NULL"),
     )
 
 
 def downgrade() -> None:
-    op.drop_table("chat_agent_input")
+    op.drop_table("chat_input")
     op.drop_column("chat_message", "response_inputs_closed")

@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
@@ -186,6 +186,27 @@ class SendMessageRequest(BaseModel):
 
 class ChatMessageIdentifier(BaseModel):
     message_id: int
+
+
+class PendingChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1)
+    delivery: MessageDelivery = Field(
+        description="send adds input to the active response; queue starts a later turn."
+    )
+    target_response_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="The selected response; omit only for an empty session.",
+    )
+
+    @field_validator("message")
+    @classmethod
+    def require_message_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("A pending message must contain text")
+        return value
 
 
 class ChatRenameRequest(BaseModel):

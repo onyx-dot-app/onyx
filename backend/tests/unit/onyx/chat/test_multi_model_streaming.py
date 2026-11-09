@@ -2723,13 +2723,24 @@ def test_stop_cache_failure_retries_and_keeps_polling_ownership(
             _wait_for_chat_workers(chat_workers)
 
 
+@pytest.mark.parametrize("reader_attached", [False, True])
 def test_finished_response_releases_chat_while_polling_background_ownership(
     chat_workers: list[Future[Run | None]],
+    reader_attached: bool,
 ) -> None:
     released = threading.Event()
     polled_after_release = threading.Event()
     outcome = Future[ChatResponseOutcome]()
-    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    dispatched = threading.Event()
+
+    def dispatch_pending() -> None:
+        assert released.is_set()
+        assert not dispatched.is_set()
+        dispatched.set()
+
+    turn = ChatTurnExecution(
+        _make_setup(), MagicMock(), outcome, on_turn_finished=dispatch_pending
+    )
     store = MagicMock(spec=ChatRunStore)
     store.has_owned_work = True
     turn._stores.append(store)
@@ -2776,12 +2787,20 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
         patch.object(root_trace, "finish", wraps=root_trace.finish) as end_trace,
     ):
         reader = _launch_turn(turn)
-        packets = start_thread_future(lambda: list(reader), name="test-reader")
+        if not reader_attached:
+            reader.close()
+        packets = (
+            start_thread_future(lambda: list(reader), name="test-reader")
+            if reader_attached
+            else None
+        )
         try:
             assert outcome.result(timeout=5).response.answer == "Root finished"
             assert released.wait(5)
+            assert dispatched.wait(5)
             assert polled_after_release.wait(5)
-            assert _stop_reasons(packets.result(timeout=5)) == ["finished"]
+            if packets is not None:
+                assert _stop_reasons(packets.result(timeout=5)) == ["finished"]
             assert not turn.cancellation.cancelled
             assert not chat_turn_work.wait_idle(timeout=0)
             end_trace.assert_not_called()
@@ -2795,7 +2814,8 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
             turn._completion_changed.set()
             reader.close()
             _wait_for_chat_workers(chat_workers)
-            packets.result(timeout=5)
+            if packets is not None:
+                packets.result(timeout=5)
 
 
 def test_storage_ownership_failure_reports_failed_response_without_writing(
@@ -3185,7 +3205,10 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         )
     )
-    turn = ChatTurnExecution(_make_setup(), MagicMock(), outcome)
+    dispatch_pending = MagicMock()
+    turn = ChatTurnExecution(
+        _make_setup(), MagicMock(), outcome, on_turn_finished=dispatch_pending
+    )
     with (
         patch.object(turn.setup.admission, "release") as release_admission,
         patch("onyx.chat.execution.create_chat_agent", return_value=agent),
@@ -3219,6 +3242,7 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
                 for packet in packets
             )
             release_admission.assert_called_once()
+            dispatch_pending.assert_not_called()
         finally:
             release.set()
             turn.delivery.reader.close()
@@ -3671,10 +3695,9 @@ def test_chat_turn_excludes_delegation_tools_in_incognito(
                 "spawn_agent",
                 "list_agents",
                 "wait_agent",
-                "cancel_agent",
+                "interrupt_agent",
                 "send_message",
                 "queue_message",
-                "cancel_message",
             }
         )
     assert seen_tools == [expected]

@@ -24,7 +24,13 @@ from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.models import CompactionCheckpoint, RunFailureKind, RunStatus
+from onyx.agents.models import (
+    CompactionCheckpoint,
+    InputSource,
+    MessageDelivery,
+    RunFailureKind,
+    RunStatus,
+)
 from onyx.chat.errors import chat_error
 from onyx.chat.models import (
     HistoryLink,
@@ -42,6 +48,7 @@ from onyx.db.enums import (
     record_mode_persists_content,
 )
 from onyx.db.models import (
+    ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
     ChatSession,
@@ -74,6 +81,8 @@ FILE_CLEANUP_BATCH_SIZE = 500
 MAX_AGENT_HISTORY_RUNS = 512
 MAX_AGENT_DEPTH = 8
 MAX_CONVERSATION_MESSAGES = 8192
+CHAT_RESPONSE_STATEMENT_TIMEOUT_MS = 30_000
+CHAT_RESPONSE_LOCK_TIMEOUT_MS = 5_000
 
 
 def visible_chat_messages_filter() -> ColumnElement[bool]:
@@ -892,6 +901,28 @@ def get_or_create_root_message(
         return new_root_message
 
 
+def configure_response_transaction__no_commit(session: Session) -> None:
+    """Bound database waits while a response holds its execution lease."""
+    session.execute(
+        select(
+            func.set_config(
+                "statement_timeout",
+                str(CHAT_RESPONSE_STATEMENT_TIMEOUT_MS),
+                True,
+            )
+        )
+    )
+    session.execute(
+        select(
+            func.set_config(
+                "lock_timeout",
+                str(CHAT_RESPONSE_LOCK_TIMEOUT_MS),
+                True,
+            )
+        )
+    )
+
+
 def reserve_chat_response_ids(
     db_session: Session,
     chat_session_id: UUID,
@@ -901,6 +932,13 @@ def reserve_chat_response_ids(
     """Reserve assistant responses and select the last response as the active branch."""
     if not model_display_names:
         raise ValueError("At least one response model is required")
+    configure_response_transaction__no_commit(db_session)
+    # Queue submission and response reservation share the session-first lock order.
+    db_session.execute(
+        select(ChatSession.id)
+        .where(ChatSession.id == chat_session_id)
+        .with_for_update(key_share=True)
+    )
     reserved: list[ChatMessage] = []
     for display_name in model_display_names:
         msg = ChatMessage(
@@ -925,6 +963,30 @@ def reserve_chat_response_ids(
         .first()
     )
     if parent:
+        if (
+            len(reserved) == 1
+            and parent.message_type == MessageType.USER
+            and parent.latest_child_message_id is None
+        ):
+            previous = parent.parent_message
+            previous_response_id = (
+                previous.id
+                if previous is not None
+                and previous.message_type == MessageType.ASSISTANT
+                else None
+            )
+            # Advance queued turns with the branch, never onto a regeneration sibling.
+            db_session.execute(
+                update(ChatInput)
+                .where(
+                    ChatInput.recipient_session_id == chat_session_id,
+                    ChatInput.source == InputSource.HUMAN,
+                    ChatInput.response_item_id.is_(None),
+                    ChatInput.target_response_id == previous_response_id,
+                    ChatInput.delivery == MessageDelivery.QUEUE,
+                )
+                .values(target_response_id=reserved[0].id)
+            )
         parent.latest_child_message_id = reserved[-1].id
 
     db_session.commit()

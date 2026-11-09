@@ -10,10 +10,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     ChatTurnAdmission,
+    is_chat_session_processing,
 )
 from onyx.chat.chat_utils import (
     capture_chat_history,
@@ -22,7 +24,7 @@ from onyx.chat.chat_utils import (
     is_last_assistant_message_clarification,
 )
 from onyx.chat.errors import chat_error
-from onyx.chat.execution import start_chat_turn
+from onyx.chat.execution import chat_turn_work, start_chat_turn
 from onyx.chat.files import (
     collect_available_file_ids,
     convert_loaded_files_to_chat_files,
@@ -67,13 +69,18 @@ from onyx.db.chat import (
     load_message_branch,
     reserve_chat_response_ids,
 )
+from onyx.db.chat_inputs import (
+    accept_human_message__no_commit,
+    pending_human_message__no_commit,
+)
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookPoint, record_mode_persists_content
+from onyx.db.enums import HookPoint, Permission, record_mode_persists_content
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatSession, User
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import capture_user_file_metadata, prepare_chat_file_inputs
+from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
 )
@@ -102,13 +109,18 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
 )
-from onyx.server.query_and_chat.token_limit import check_model_spend_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
 from onyx.tools.models import SearchToolUsage
+from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.threadpool_concurrency import start_thread_future
 from onyx.utils.timing import log_function_time, log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -220,12 +232,13 @@ def _select_models(
     return selected_models
 
 
-def _process_query(
+def process_chat_query(
     message_text: str,
     chat_session: ChatSession,
     user: User,
     db_session: Session,
 ) -> str:
+    """Apply query hooks before user text enters chat history or the pending queue."""
     # The hook sends query text and email externally; respect content egress policy.
     mode = chat_session.incognito_record_mode
     if not message_text.strip() or (mode is not None and not mode.fires_hooks):
@@ -262,6 +275,7 @@ def prepare_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     slack_context: SlackContext | None = None,
     additional_context: str | None = None,
+    pending_message_id: str | None = None,
 ) -> ChatTurnSetup:
     """Capture configuration, load files, then reserve responses before execution."""
     admission = ChatTurnAdmission(
@@ -272,6 +286,21 @@ def prepare_chat_turn(
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
             admission.claim(chat_session.id)
+            if pending_message_id is not None:
+                pending = pending_human_message__no_commit(
+                    db_session, chat_session.id, user.id
+                )
+                if pending is None or pending.id != pending_message_id:
+                    raise OnyxError(
+                        OnyxErrorCode.CONFLICT,
+                        "The queued message is no longer available to start.",
+                    )
+                # A prior turn may have moved the queue onto its new response.
+                new_msg_req = SendMessageRequest(
+                    message=pending.message,
+                    chat_session_id=chat_session.id,
+                    parent_message_id=pending.target_response_id,
+                )
             selected_models = _select_models(
                 new_msg_req,
                 chat_session,
@@ -287,8 +316,13 @@ def prepare_chat_turn(
             accepted_text = None
             # Regeneration reuses the user message and its accepted query.
             if parent_message.message_type != MessageType.USER:
-                accepted_text = _process_query(
-                    new_msg_req.message, chat_session, user, db_session
+                # Submitted input already passed the hook before entering the queue.
+                accepted_text = (
+                    new_msg_req.message
+                    if pending_message_id is not None
+                    else process_chat_query(
+                        new_msg_req.message, chat_session, user, db_session
+                    )
                 )
                 # Use one tokenizer for stored counts, including after model switches.
                 user_token_count = len(get_tokenizer(None, None).encode(accepted_text))
@@ -296,6 +330,15 @@ def prepare_chat_turn(
                     chat_session.incognito_record_mode
                 )
                 admission.refresh()
+                if pending_message_id is not None:
+                    pending = accept_human_message__no_commit(
+                        db_session, chat_session.id, user.id, pending_message_id
+                    )
+                    if pending is None:
+                        raise OnyxError(
+                            OnyxErrorCode.CONFLICT,
+                            "The queued message is no longer available to start.",
+                        )
                 user_message = create_new_chat_message(
                     chat_session_id=chat_session.id,
                     parent_message=parent_message,
@@ -557,6 +600,91 @@ def prepare_chat_turn(
         raise
 
 
+def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None:
+    """Start an eligible queued turn independently of its submitting browser."""
+    try:
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        if is_chat_session_processing(chat_session_id, cache):
+            return
+        with get_session_with_current_tenant() as db_session:
+            pending = pending_human_message__no_commit(
+                db_session, chat_session_id, user_id
+            )
+        if pending is None:
+            return
+
+        def start_pending_turn() -> None:
+            # A queued turn starts a new root trace while retaining tenant context.
+            trace_token = Scope.set_current_trace(None)
+            span_token = Scope.set_current_span(None)
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    user = fetch_user_by_id(db_session, user_id)
+                    if (
+                        user is None
+                        or not user.is_active
+                        or not has_global_permission(user, Permission.WRITE_CHAT)
+                    ):
+                        logger.warning(
+                            "Queued chat message cannot start: user lacks chat access"
+                        )
+                        return
+                check_token_rate_limits(user)
+                setup = prepare_chat_turn(
+                    new_msg_req=SendMessageRequest(
+                        message=pending.message,
+                        chat_session_id=chat_session_id,
+                        parent_message_id=pending.target_response_id,
+                    ),
+                    user=user,
+                    llm_overrides=None,
+                    pending_message_id=pending.id,
+                )
+                stream = start_chat_turn(
+                    setup,
+                    user,
+                    on_turn_finished=partial(
+                        dispatch_pending_chat_messages, chat_session_id, user_id
+                    ),
+                )
+                # Delivery and persistence continue without a browser reader.
+                stream.close()
+            except OnyxError as error:
+                if error.error_code is OnyxErrorCode.CONFLICT:
+                    logger.debug(
+                        "Queued chat message was withdrawn or claimed elsewhere"
+                    )
+                    try:
+                        with get_session_with_current_tenant() as db_session:
+                            following = pending_human_message__no_commit(
+                                db_session, chat_session_id, user_id
+                            )
+                        # A withdrawal can expose a new head while admission was held.
+                        if following is not None and following.id != pending.id:
+                            dispatch_pending_chat_messages(chat_session_id, user_id)
+                    except Exception:
+                        logger.exception("Could not dispatch the next queued message")
+                else:
+                    log_onyx_error(error)
+            except Exception:
+                logger.exception("Could not start queued chat message")
+            finally:
+                Scope.reset_current_span(span_token)
+                Scope.reset_current_trace(trace_token)
+
+        chat_turn_work.started()
+        try:
+            worker = start_thread_future(
+                start_pending_turn, name="chat-queued-message", daemon=False
+            )
+        except BaseException:
+            chat_turn_work.finished()
+            raise
+        worker.add_done_callback(lambda _future: chat_turn_work.finished())
+    except Exception:
+        logger.exception("Could not dispatch queued chat input")
+
+
 def _stream_chat_turn(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -588,6 +716,11 @@ def _stream_chat_turn(
             user,
             response_future,
             query_observation=query_observation,
+            on_turn_finished=partial(
+                dispatch_pending_chat_messages, setup.chat_session_id, user.id
+            )
+            if setup.incognito_record_mode is None
+            else None,
         )
         yield from stream
     except Exception as error:

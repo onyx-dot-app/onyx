@@ -62,7 +62,6 @@ from onyx.db.chat_inputs import (
     pending_inputs,
     queued_request,
     receive_messages,
-    remove_message,
     reserve_input_response,
 )
 from onyx.db.chat_response import (
@@ -291,12 +290,6 @@ class ChatRunStore(RunStore, RunOwnership):
                 message_receipt(row)
                 for row in pending_inputs(session, self._input_branch, agent_id)
             ]
-
-    def cancel_message(self, agent_id: str, message_id: str) -> bool:
-        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            removed = remove_message(session, self._input_branch, agent_id, message_id)
-            session.commit()
-            return removed
 
     def receive_inputs(self, run: Run) -> list[UserMessage]:
         received = run.received_input_ids

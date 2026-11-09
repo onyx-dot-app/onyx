@@ -23,8 +23,8 @@ from onyx.chat.models import (
     IncognitoState,
 )
 from onyx.chat.process_message import (
-    _process_query,
     prepare_chat_turn,
+    process_chat_query,
 )
 from onyx.chat.prompt_utils import build_chat_prompt, prepare_prompt
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
@@ -69,7 +69,7 @@ def test_process_query_applies_hook_result(
     expected: str,
 ) -> None:
     with patch("onyx.chat.process_message.execute_hook", return_value=hook_result):
-        result = _process_query(
+        result = process_chat_query(
             "original query",
             chat_session,
             User(id=uuid4(), email="reader@example.com"),
@@ -94,7 +94,7 @@ def test_process_query_rejects_empty_hook_query(
         ),
         pytest.raises(OnyxError) as exc_info,
     ):
-        _process_query(
+        process_chat_query(
             "original query",
             chat_session,
             User(id=uuid4(), email="reader@example.com"),

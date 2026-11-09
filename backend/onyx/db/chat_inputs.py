@@ -1,9 +1,9 @@
-"""Durable agent inbox operations. Callers own transactions and response leases."""
+"""Chat input storage. Callers own transactions and response leases."""
 
 from collections.abc import Collection
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, aliased, load_only
 
 from onyx.agents.models import (
@@ -18,25 +18,33 @@ from onyx.agents.models import (
     RunFailureKind,
     RunStatus,
 )
-from onyx.chat.models import ChatBranch
-from onyx.db.chat import root_response_id, session_ancestors
+from onyx.chat.models import ChatBranch, PendingChatMessage
+from onyx.configs.constants import MessageType
+from onyx.db.chat import (
+    configure_response_transaction__no_commit,
+    get_owned_chat_session,
+    root_response_id,
+    session_ancestors,
+)
 from onyx.db.chat_checkpoint import check_checkpoint_owner__no_commit
 from onyx.db.chat_response import (
-    configure_response_transaction__no_commit,
+    read_response_input,
     reserve_child_response__no_commit,
 )
 from onyx.db.chat_subagents import _agent_metadata, _selected_responses, _visible_agent
 from onyx.db.models import (
-    ChatAgentInput,
+    ChatInput,
     ChatMessage,
     ChatResponseItem,
     ChatSession,
     ToolCall,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import UserMessage
 from onyx.utils.postgres_sanitization import sanitize_string
 
-MAX_PENDING_AGENT_MESSAGES = 64
+MAX_PENDING_MESSAGES = 64
 
 
 def lock_agent(session: Session, agent_id: str) -> ChatSession:
@@ -52,22 +60,234 @@ def lock_agent(session: Session, agent_id: str) -> ChatSession:
     return agent
 
 
+def get_human_input_session(
+    session: Session, chat_session_id: UUID, user_id: UUID
+) -> ChatSession:
+    """Authorize durable user input without granting shared-session write access."""
+    chat_session = get_owned_chat_session(chat_session_id, user_id, session)
+    if chat_session is None or chat_session.deleted:
+        raise LookupError("Chat session is unavailable")
+    if chat_session.incognito_record_mode is not None:
+        raise ValueError("Pending messages are unavailable in incognito chats")
+    return chat_session
+
+
+def _pending_human_inputs(chat_session_id: UUID) -> Select[tuple[ChatInput]]:
+    return (
+        select(ChatInput)
+        .where(
+            ChatInput.recipient_session_id == chat_session_id,
+            ChatInput.source == InputSource.HUMAN,
+            ChatInput.response_item_id.is_(None),
+        )
+        .order_by(ChatInput.id)
+    )
+
+
+def _pending_human_message(row: ChatInput) -> PendingChatMessage:
+    if row.delivery is None or row.response_item_id is not None:
+        raise ValueError("Message is no longer pending")
+    return PendingChatMessage(
+        id=row.message_id,
+        message=row.content,
+        delivery=row.delivery,
+        target_response_id=row.target_response_id,
+    )
+
+
+def _selected_response(session: Session, chat_session_id: UUID) -> ChatMessage | None:
+    # Follow only IDs; queue checks do not need response content or tool results.
+    branch = (
+        select(ChatMessage.id, ChatMessage.latest_child_message_id)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.parent_message_id.is_(None),
+        )
+        .cte("input_branch", recursive=True)
+    )
+    branch = branch.union_all(
+        select(ChatMessage.id, ChatMessage.latest_child_message_id)
+        .join(branch, ChatMessage.id == branch.c.latest_child_message_id)
+        .where(ChatMessage.chat_session_id == chat_session_id)
+    )
+    return session.scalar(
+        select(ChatMessage)
+        .where(
+            ChatMessage.id.in_(select(branch.c.id)),
+            ChatMessage.latest_child_message_id.is_(None),
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+        .options(
+            load_only(
+                ChatMessage.id,
+                ChatMessage.response_status,
+                ChatMessage.response_inputs_closed,
+            )
+        )
+    )
+
+
+def submit_human_message__no_commit(
+    session: Session,
+    chat_session_id: UUID,
+    user_id: UUID,
+    *,
+    message: str,
+    delivery: MessageDelivery,
+    target_response_id: int | None,
+) -> PendingChatMessage:
+    """Submit text on the selected branch. The caller commits the pending row."""
+    get_human_input_session(session, chat_session_id, user_id)
+    lock_agent(session, str(chat_session_id))
+    selected = _selected_response(session, chat_session_id)
+    if target_response_id is None:
+        has_messages = session.scalar(
+            select(ChatMessage.id)
+            .where(
+                ChatMessage.chat_session_id == chat_session_id,
+                ChatMessage.message_type == MessageType.USER,
+            )
+            .limit(1)
+        )
+        if has_messages is not None:
+            raise ValueError("Select a response before submitting another message")
+    elif selected is None or selected.id != target_response_id:
+        raise ValueError("The target must be the selected branch's last response")
+    if selected is not None and selected.response_status is None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This response cannot accept pending messages; send a new chat message instead",
+        )
+    if delivery == MessageDelivery.SEND and (
+        selected is None
+        or selected.response_status not in (RunStatus.RUNNING, RunStatus.SUSPENDED)
+        or selected.response_inputs_closed
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The response no longer accepts messages; send a new chat message instead",
+        )
+    pending_count = session.scalar(
+        select(func.count()).select_from(
+            _pending_human_inputs(chat_session_id).subquery()
+        )
+    )
+    if pending_count is not None and pending_count >= MAX_PENDING_MESSAGES:
+        raise ValueError("Chat message queue is full")
+    content = sanitize_string(message)
+    if not content.strip():
+        raise ValueError("Message cannot be empty")
+    row = ChatInput(
+        recipient_session_id=chat_session_id,
+        message_id=str(uuid4()),
+        source=InputSource.HUMAN,
+        source_response_id=target_response_id,
+        target_response_id=target_response_id,
+        delivery=delivery,
+        content=content,
+    )
+    session.add(row)
+    session.flush()
+    return _pending_human_message(row)
+
+
+def list_human_messages(
+    session: Session, chat_session_id: UUID, user_id: UUID
+) -> list[PendingChatMessage]:
+    get_human_input_session(session, chat_session_id, user_id)
+    return [
+        _pending_human_message(row)
+        for row in session.scalars(_pending_human_inputs(chat_session_id))
+    ]
+
+
+def withdraw_human_message__no_commit(
+    session: Session, chat_session_id: UUID, user_id: UUID, message_id: str
+) -> PendingChatMessage | None:
+    """Withdraw before acceptance; callers commit before returning text to an editor."""
+    get_human_input_session(session, chat_session_id, user_id)
+    lock_agent(session, str(chat_session_id))
+    row = session.scalar(
+        _pending_human_inputs(chat_session_id)
+        .where(ChatInput.message_id == message_id)
+        .with_for_update(of=ChatInput)
+    )
+    if row is None:
+        return None
+    pending = _pending_human_message(row)
+    session.delete(row)
+    return pending
+
+
+def pending_human_message__no_commit(
+    session: Session, chat_session_id: UUID, user_id: UUID
+) -> PendingChatMessage | None:
+    """Read an eligible next turn; acceptance rechecks under the session lock."""
+    get_human_input_session(session, chat_session_id, user_id)
+    query = _pending_human_inputs(chat_session_id).where(
+        ChatInput.delivery == MessageDelivery.QUEUE,
+    )
+    if session.scalar(query.with_only_columns(ChatInput.id).limit(1)) is None:
+        return None
+    selected = _selected_response(session, chat_session_id)
+    if selected is not None and selected.response_status != RunStatus.COMPLETE:
+        return None
+    if (
+        selected is None
+        and session.scalar(
+            select(ChatMessage.id)
+            .where(
+                ChatMessage.chat_session_id == chat_session_id,
+                ChatMessage.message_type == MessageType.USER,
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        return None
+    query = query.where(
+        ChatInput.target_response_id == (selected.id if selected else None)
+    )
+    row = session.scalar(query.limit(1))
+    return _pending_human_message(row) if row is not None else None
+
+
+def accept_human_message__no_commit(
+    session: Session, chat_session_id: UUID, user_id: UUID, message_id: str
+) -> PendingChatMessage | None:
+    """Adopt the next instruction in the transaction that creates its user message."""
+    get_human_input_session(session, chat_session_id, user_id)
+    lock_agent(session, str(chat_session_id))
+    pending = pending_human_message__no_commit(session, chat_session_id, user_id)
+    if pending is None or pending.id != message_id:
+        return None
+    row = session.scalar(
+        _pending_human_inputs(chat_session_id)
+        .where(ChatInput.message_id == message_id)
+        .with_for_update(of=ChatInput)
+    )
+    if row is None:
+        return None
+    session.delete(row)
+    return pending
+
+
 def pending_inputs(
     session: Session, branch: ChatBranch, agent_id: str | None = None
-) -> list[ChatAgentInput]:
+) -> list[ChatInput]:
     selected = _selected_responses(branch)
     query = (
-        select(ChatAgentInput)
-        .join(ToolCall, ChatAgentInput.invoking_tool_call_id == ToolCall.id)
+        select(ChatInput)
+        .join(ToolCall, ChatInput.invoking_tool_call_id == ToolCall.id)
         .where(
-            ChatAgentInput.response_item_id.is_(None),
+            ChatInput.response_item_id.is_(None),
             ToolCall.parent_chat_message_id.in_(select(selected.c.id)),
         )
-        .order_by(ChatAgentInput.id)
+        .order_by(ChatInput.id)
     )
     if agent_id is not None:
         _visible_agent(session, branch, agent_id)
-        query = query.where(ChatAgentInput.recipient_session_id == UUID(agent_id))
+        query = query.where(ChatInput.recipient_session_id == UUID(agent_id))
     return list(session.scalars(query))
 
 
@@ -106,7 +326,7 @@ def latest_agent_responses(
     return {str(row.chat_session_id): row for row in rows}
 
 
-def message_receipt(row: ChatAgentInput) -> AgentMessageReceipt:
+def message_receipt(row: ChatInput) -> AgentMessageReceipt:
     if row.delivery is None or row.response_item_id is not None:
         raise ValueError("Message is no longer pending")
     return AgentMessageReceipt(
@@ -127,10 +347,7 @@ def enqueue_message(
     if not isinstance(request.message.content, str):
         raise ValueError("Agent messages must contain text only")
     recipient = lock_agent(session, request.agent_id)
-    if (
-        len(pending_inputs(session, branch, request.agent_id))
-        >= MAX_PENDING_AGENT_MESSAGES
-    ):
+    if len(pending_inputs(session, branch, request.agent_id)) >= MAX_PENDING_MESSAGES:
         raise ValueError("Agent message queue is full")
     invocation = session.scalar(
         select(ToolCall)
@@ -167,7 +384,7 @@ def enqueue_message(
         raise ValueError(
             "This agent cannot start another run after its resources are released"
         )
-    row = ChatAgentInput(
+    row = ChatInput(
         recipient_session_id=UUID(request.agent_id),
         message_id=request.message.id or str(uuid4()),
         source=InputSource.AGENT,
@@ -183,17 +400,6 @@ def enqueue_message(
     return message_receipt(row)
 
 
-def remove_message(
-    session: Session, branch: ChatBranch, agent_id: str, message_id: str
-) -> bool:
-    lock_agent(session, agent_id)
-    for row in pending_inputs(session, branch, agent_id):
-        if row.message_id == message_id:
-            session.delete(row)
-            return True
-    return False
-
-
 def receive_messages(
     session: Session,
     agent_id: str,
@@ -201,29 +407,17 @@ def receive_messages(
     received_ids: Collection[str],
 ) -> list[UserMessage]:
     rows = session.scalars(
-        select(ChatAgentInput)
+        select(ChatInput)
         .where(
-            ChatAgentInput.recipient_session_id == UUID(agent_id),
-            ChatAgentInput.target_response_id == int(run_id),
-            ChatAgentInput.delivery == MessageDelivery.SEND,
-            ChatAgentInput.response_item_id.is_(None),
-            ChatAgentInput.message_id.not_in(received_ids),
+            ChatInput.recipient_session_id == UUID(agent_id),
+            ChatInput.target_response_id == int(run_id),
+            ChatInput.delivery == MessageDelivery.SEND,
+            ChatInput.response_item_id.is_(None),
+            ChatInput.message_id.not_in(received_ids),
         )
-        .order_by(ChatAgentInput.id)
+        .order_by(ChatInput.id)
     )
-    return [
-        UserMessage(
-            id=row.message_id,
-            content=row.content,
-            metadata=InputMessageMetadata(
-                source=InputSource.AGENT,
-                source_run_id=str(row.invoking_tool_call.parent_chat_message_id),
-                sender_agent_id=str(row.invoking_tool_call.chat_session_id),
-            ),
-        )
-        for row in rows
-        if row.invoking_tool_call is not None
-    ]
+    return [read_response_input(row) for row in rows]
 
 
 def inputs_available(
@@ -241,19 +435,21 @@ def inputs_available(
     check_checkpoint_owner__no_commit(session, run_id, ownership_version)
     for message in messages:
         origin = message.metadata
-        if (
-            not isinstance(origin, InputMessageMetadata)
-            or origin.source != InputSource.AGENT
+        if not isinstance(origin, InputMessageMetadata) or (
+            origin.source != InputSource.AGENT
+            and not (
+                origin.source == InputSource.HUMAN and origin.source_run_id is not None
+            )
         ):
             continue
         row = session.scalar(
-            select(ChatAgentInput)
+            select(ChatInput)
             .where(
-                ChatAgentInput.recipient_session_id == response.chat_session_id,
-                ChatAgentInput.message_id == message.id,
-                ChatAgentInput.target_response_id == run_id,
+                ChatInput.recipient_session_id == response.chat_session_id,
+                ChatInput.message_id == message.id,
+                ChatInput.target_response_id == run_id,
             )
-            .with_for_update(of=ChatAgentInput)
+            .with_for_update(of=ChatInput)
         )
         if row is None:
             return False
@@ -275,11 +471,11 @@ def close_response_inputs(
     check_checkpoint_owner__no_commit(session, response_id, ownership_version)
     pending = (
         session.scalar(
-            select(ChatAgentInput.id)
+            select(ChatInput.id)
             .where(
-                ChatAgentInput.target_response_id == response_id,
-                ChatAgentInput.delivery == MessageDelivery.SEND,
-                ChatAgentInput.response_item_id.is_(None),
+                ChatInput.target_response_id == response_id,
+                ChatInput.delivery == MessageDelivery.SEND,
+                ChatInput.response_item_id.is_(None),
             )
             .limit(1)
         )
@@ -290,7 +486,7 @@ def close_response_inputs(
     return pending
 
 
-def queued_request(row: ChatAgentInput) -> AgentMessageRequest:
+def queued_request(row: ChatInput) -> AgentMessageRequest:
     invocation = row.invoking_tool_call
     if (
         invocation is None
@@ -312,7 +508,7 @@ def queued_request(row: ChatAgentInput) -> AgentMessageRequest:
     )
 
 
-def can_start_message(row: ChatAgentInput, latest: ChatMessage | None) -> bool:
+def can_start_message(row: ChatInput, latest: ChatMessage | None) -> bool:
     if latest is not None and (
         latest.response_status is None or not latest.response_status.is_terminal
     ):
@@ -323,7 +519,7 @@ def can_start_message(row: ChatAgentInput, latest: ChatMessage | None) -> bool:
 
 
 def reserve_input_response(
-    session: Session, row: ChatAgentInput, agent: AgentInfo, latest: ChatMessage | None
+    session: Session, row: ChatInput, agent: AgentInfo, latest: ChatMessage | None
 ) -> tuple[int, int]:
     request = queued_request(row)
     parent = session.get(ChatMessage, int(request.parent_run_id))

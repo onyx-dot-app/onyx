@@ -330,7 +330,7 @@ Stopping that parent stops the wait; use `cancel_run` to stop the child.
 `invocation.agents.send_message(agent_id, message=..., max_steps=...)` delivers an instruction before the next model step.
 If the child is idle, it starts a fresh run with the supplied step limit.
 `queue_message` always requests a later run. Normal completion drains the queue; Stop, errors, and step limits pause it.
-An explicit send can start fresh work after a pause. `cancel_message` removes only input that has not been accepted.
+An explicit send can start fresh work after a pause. Chat's `interrupt_agent` tool cancels the current run and preserves its conversation.
 Submitted instructions are stored immediately in Chat; pending input is distinct from accepted conversation history.
 
 Chat's `wait_agent(timeout_seconds)` waits for an unread background result or incoming instruction.
@@ -547,7 +547,7 @@ The runtime agent ID identifies this session.
 An assistant `chat_message` owns one complete or partial response, its outcome, and feedback.
 Its user-message parent owns the input. `chat_response_item` stores each assistant model generation in step order.
 These items retain message identity, content, generation status, and provider metadata, including empty messages.
-`chat_agent_input` stores pending instructions and inputs accepted between model steps.
+`chat_input` stores pending instructions and inputs accepted between model steps.
 Starting a new run moves its instruction into the user-message tree in one transaction.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 Argument parsing details remain in the saved assistant message; tool rows do not store another copy.

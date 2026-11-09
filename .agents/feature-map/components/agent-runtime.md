@@ -33,14 +33,14 @@ document does not repeat it.
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
 - **Independent children.** ChatAgent and its children expose controls from
-  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, wait for results, and cancel children. Incognito omits these controls. Children survive
+  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, wait for results, and interrupt children. Incognito omits these controls. Children survive
   the root response. Later turns use the branch-scoped directory and run store
   to access them. The runtime accepts submitted instructions and unread results
   before a model call. Chat can remap citations through `PreparedStep.input_messages`.
   Accepted inputs retain their identity and source in saved history.
   `send_message` targets the next step or starts an idle child with fresh limits.
   `queue_message` waits for normal completion; Stop, failure, and step limits pause
-  queued work. `cancel_message` removes an input only before acceptance.
+  queued work. `interrupt_agent` cancels the current run while retaining its conversation.
   `wait_agent` waits for an unread result or incoming instruction on its tool worker;
   it does not suspend the run. It polls storage across pods and never starts
   a new model turn after the parent finishes.

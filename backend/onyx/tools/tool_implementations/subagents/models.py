@@ -33,12 +33,6 @@ class AgentMessageInput(SubagentSelection):
     message: str = Field(min_length=1, description="Instructions for this agent.")
 
 
-class CancelMessageInput(SubagentSelection):
-    message_id: str = Field(
-        min_length=1, description="The pending message ID returned by list_agents."
-    )
-
-
 class ListAgentsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

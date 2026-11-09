@@ -42,7 +42,7 @@ from onyx.db.chat_response import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import (
-    ChatAgentInput,
+    ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
     ChatResponseItem,
@@ -428,12 +428,8 @@ def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
             item_bytes
             + tool_bytes
             + input_bytes
-            + select(
-                func.coalesce(func.sum(func.octet_length(ChatAgentInput.content)), 0)
-            )
-            .join(
-                ChatResponseItem, ChatAgentInput.response_item_id == ChatResponseItem.id
-            )
+            + select(func.coalesce(func.sum(func.octet_length(ChatInput.content)), 0))
+            .join(ChatResponseItem, ChatInput.response_item_id == ChatResponseItem.id)
             .where(ChatResponseItem.chat_message_id.in_(response_ids))
             .scalar_subquery()
         )
