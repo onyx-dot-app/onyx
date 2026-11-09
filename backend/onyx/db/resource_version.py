@@ -48,6 +48,27 @@ def fill_version_metadata(
     version.file_count = metadata.file_count
 
 
+def is_missing_bundle_error(
+    exc: Exception, file_id: str, file_store: FileStore
+) -> bool:
+    """Confirm object absence; ambiguous provider failures need a metadata check."""
+    if isinstance(exc, (FileRecordNotFoundError, FileNotFoundError)):
+        return True
+    if not isinstance(exc, (ResourceNotFoundError, NotFound, ClientError)):
+        return False
+    if isinstance(exc, ClientError):
+        if not is_missing_object(exc):
+            return False
+        if s3_error_code(exc) in ("NoSuchKey", "NoSuchObject"):
+            return True
+    # A provider 404 can name the bucket/container, not the object.
+    try:
+        file_store.get_file_size(file_id)
+    except FileNotFoundError:
+        return True
+    return False
+
+
 def read_version_bundle(
     version: BundleVersionMixin, file_store: FileStore, *, max_bytes: int
 ) -> bytes:
@@ -59,23 +80,8 @@ def read_version_bundle(
             version.bundle_file_id, max_bytes=max_bytes
         ) as source:
             return source.read()
-    except (
-        FileRecordNotFoundError,
-        FileNotFoundError,
-    ) as exc:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
-    except (ResourceNotFoundError, NotFound, ClientError) as exc:
-        if isinstance(exc, ClientError):
-            if not is_missing_object(exc):
-                raise
-            if s3_error_code(exc) in ("NoSuchKey", "NoSuchObject"):
-                raise OnyxError(
-                    OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT
-                ) from exc
-        # A provider 404 can name the bucket/container, not the object.
-        try:
-            file_store.get_file_size(version.bundle_file_id)
-        except FileNotFoundError:
+    except Exception as exc:
+        if is_missing_bundle_error(exc, version.bundle_file_id, file_store):
             raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
         raise
 

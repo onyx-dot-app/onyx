@@ -201,6 +201,9 @@ still propagate unexpected storage errors.
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the observed version and bundle. The skill lock serializes
    this update with replacement; the legacy validity column is dual-written.
+   Runtime and history use the same missing-object classification. Ambiguous cloud
+   404s need a physical metadata check before runtime persists invalidity. Unknown
+   metadata or storage outages leave validity unclassified so later reads can retry.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file

@@ -6,8 +6,8 @@ import io
 import zipfile
 from dataclasses import dataclass
 
-from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import Skill
+from onyx.db.resource_version import is_missing_bundle_error
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.models import FileSizeLimitExceeded
@@ -49,23 +49,6 @@ def load_stored_custom_skill_bundle(
     )
 
 
-def _is_missing_file_error(exc: Exception) -> bool:
-    if isinstance(exc, FileRecordNotFoundError):
-        return True
-
-    response = getattr(exc, "response", None)  # ods: ignore[getattr]
-    if isinstance(response, dict):
-        error = response.get("Error")
-        if isinstance(error, dict) and str(error.get("Code")) in {
-            "404",
-            "NoSuchKey",
-            "NoSuchObject",
-            "NotFound",
-        }:
-            return True
-    return getattr(exc, "code", None) == 404  # ods: ignore[getattr]
-
-
 def validate_stored_custom_skill(
     skill: Skill,
     file_store: FileStore,
@@ -96,7 +79,11 @@ def validate_stored_custom_skill(
             file_store,
         )
     except Exception as exc:
-        if _is_missing_file_error(exc):
+        try:
+            missing = is_missing_bundle_error(exc, version.bundle_file_id, file_store)
+        except Exception:
+            missing = False
+        if missing:
             return SkillValidationResult(
                 is_valid=False,
                 normalized_bundle=None,
