@@ -522,15 +522,19 @@ def test_close_interrupts_idle_stream(idle_sse_url: str) -> None:
     """close() must wake a reader blocked on an idle /event stream instead of
     waiting out the join timeout."""
     bus = PodEventBus(base_url=idle_sse_url, auth=None, event_read_timeout=60.0)
-    bus.subscribe("ses_A")
-    assert bus.stream_ready.wait(timeout=5.0)
-    reader = bus._reader_thread
-    assert reader is not None
+    try:
+        bus.subscribe("ses_A")
+        assert bus.stream_ready.wait(timeout=5.0)
+        reader = bus._reader_thread
+        assert reader is not None
 
-    start = time.monotonic()
-    bus.close()
+        start = time.monotonic()
+        bus.close()
+        elapsed = time.monotonic() - start
+    finally:
+        bus.close()
 
-    assert time.monotonic() - start < 2.0
+    assert elapsed < 2.0
     assert not reader.is_alive()
 
 
