@@ -97,7 +97,7 @@ def parse_skill_md_frontmatter(raw: bytes) -> tuple[dict[Any, Any], str]:
             parsed = loader.get_single_data()
         finally:
             loader.dispose()
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, RecursionError) as exc:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"SKILL.md frontmatter is not valid YAML: {exc}",
