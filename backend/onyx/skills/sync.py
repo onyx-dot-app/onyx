@@ -274,9 +274,11 @@ def sync_marketplace(
                 max_duration=MAX_RUN_SECONDS,
             ) as heartbeat:
                 try:
-                    result, pending = _sync_marketplace(
+                    pass_result, pending = _sync_marketplace(
                         marketplace_id, tenant_id, owner, heartbeat
                     )
+                    if pass_result is not None:
+                        result = pass_result
                 except MarketplaceSyncLeaseLost:
                     raise
                 except Exception as exc:

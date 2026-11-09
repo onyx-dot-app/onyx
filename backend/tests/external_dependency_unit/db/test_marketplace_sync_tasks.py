@@ -168,6 +168,46 @@ def test_second_commit_during_run(
     assert len([url for url in github.urls if "/tar.gz/" in url]) == 2
 
 
+@pytest.mark.parametrize("second_pass_fails", [False, True])
+def test_repeat_preserves_applied_result_unless_a_later_pass_fails(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    second_pass_fails: bool,
+) -> None:
+    identifier = marketplace.id
+    get = github.get
+    requested = False
+
+    def request_during_fetch(url: str, **kwargs: object) -> requests.Response:
+        nonlocal requested
+        response = get(url, **kwargs)
+        if "/tar.gz/" in url and not requested:
+            requested = True
+            with get_session_with_tenant(tenant_id=tenant) as other:
+                ownership.request_marketplace_sync(identifier, other)
+            if second_pass_fails:
+                github.revision = "b" * 40
+                github.archive = b"incomplete archive"
+        return response
+
+    with patch("onyx.utils.github.ssrf_safe_get", request_during_fetch):
+        result = sync.sync_marketplace(identifier, tenant)
+
+    assert result is not None
+    skills = rows(session)
+    assert {skill.name for skill in skills} == {"alpha", "beta"}
+    assert result.status == ("failed" if second_pass_fails else "applied")
+    if not second_pass_fails:
+        assert set(result.changed_skill_ids) == {skill.id for skill in skills}
+    assert len([url for url in github.urls if "/commits/" in url]) == 2
+    session.refresh(marketplace)
+    assert marketplace.last_synced_revision == "a" * 40
+    assert marketplace.sync_owner is None
+    assert not marketplace.sync_requested
+
+
 def test_request_at_final_release(
     session: Session,
     marketplace: Marketplace,

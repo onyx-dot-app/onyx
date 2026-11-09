@@ -523,7 +523,9 @@ The library preview of an external-app skill calls the same renderer
     the five-minute operation deadline still applies. Commit or rollback invalidates
     the publication object. Unfenced expired workers cannot publish or clear another owner.
     Finalization releases ownership and reads pending work under the same row lock.
-    After two passes, recovery dispatches any remaining request. Temporary upstream
+    After two passes, recovery dispatches any remaining request. An unchanged repeat
+    preserves the last nonempty result; a later failure or confirmation result takes precedence.
+    Temporary upstream
     failures and expired workers share a three-attempt budget, with 60/120-second
     backoff. Other exceptions, failed reads and confirmation guards are terminal.
     Explicit requests reset the budget and delay, including during a running attempt.
