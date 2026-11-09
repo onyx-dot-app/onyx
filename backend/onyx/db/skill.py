@@ -913,7 +913,10 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         if is_company_marketplace_skill(skill, db_session):
             if not allow_management:
-                raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+                raise OnyxError(
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    "API token lacks manage-skills scope.",
+                )
             assert_within_scope(
                 user,
                 db_session,
@@ -1034,6 +1037,8 @@ def create_skill_from_bundle__no_commit(
     auto_enable: bool,
     user: User,
     db_session: Session,
+    *,
+    allow_management: bool = True,
 ) -> tuple[Skill, bool, set[UUID]]:
     """Create a skill from a stored bundle inside a savepoint, so a name
     conflict or a rejected access change rolls back this skill only. Returns
@@ -1043,7 +1048,9 @@ def create_skill_from_bundle__no_commit(
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         affected: set[UUID] = set()
         if change is not None:
-            affected = share_skill__no_commit(skill, change, user, db_session)
+            affected = share_skill__no_commit(
+                skill, change, user, db_session, allow_management=allow_management
+            )
         enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         )
