@@ -267,7 +267,8 @@ The library preview of an external-app skill calls the same renderer
     legacy validity. The next save or repair copies validity onto the existing
     version without creating history or duplicating its blob.
     Identical saves verify the existing bundle before reusing it. A missing,
-    changed or unreadable current file creates a fresh version from the upload.
+    changed or corrupt current file creates a fresh version from the upload.
+    Unexpected storage errors abort the save and keep the current version.
     Missing or corrupt historical files retain unknown metadata. Built-ins have
     no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
