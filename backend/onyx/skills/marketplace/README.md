@@ -1,7 +1,7 @@
 # Marketplace archive processing
 
-This package provides internal sync building blocks. It does not change the
-one-time GitHub import or expose a marketplace API.
+This package provides sync and preview building blocks. The marketplace API uses
+its provider adapter and reader. The one-time GitHub import remains separate.
 
 ## Resource limits
 
