@@ -17598,6 +17598,31 @@
         "own": "This change would put your skills at {size} in {files, plural, one {# file} other {# files}}. The limit is {maxSize} and {maxFiles, plural, one {# file} other {# files}}.{others, plural, =0 {} one { It would also put # other user over the limit.} other { It would also put # other users over the limit.}}",
         "ownEstimated": "This change would put your skills at an estimated {size} in {files, plural, one {# file} other {# files}}. The estimate counts {unknown, plural, one {# skill} other {# skills}} not yet measured at the largest allowed size. The limit is {maxSize} and {maxFiles, plural, one {# file} other {# files}}.{others, plural, =0 {} one { It would also put # other user over the limit.} other { It would also put # other users over the limit.}}",
         "affected": "This change would put {count, plural, one {# user} other {# users}} over the {limit, select, files {skill file limit} other {skill size limit}}."
+      },
+      "admin": {
+        "title": "{count, plural, one {# user is over the skill limit} other {# users are over the skill limit}}",
+        "description": "These users have more than {maxSize} or {maxFiles, plural, one {# file} other {# files}} of skills. They cannot add or turn on more skills until they are under the limit, and sessions can leave some of their skills out.",
+        "tableLabel": "Users over the skill limit",
+        "columns": {
+          "user": "User",
+          "size": "Skill Size",
+          "files": "Files",
+          "omitted": "Not Loaded in Last Session"
+        },
+        "size": {
+          "estimated": "About {size} (estimated: {unknown, plural, one {# skill} other {# skills}} not measured)"
+        },
+        "files": {
+          "measured": "{files, number}",
+          "estimated": "About {files, number} (estimated)"
+        },
+        "omitted": {
+          "none": "No session yet",
+          "count": "{count, plural, one {# skill} other {# skills}}"
+        },
+        "loadError": "Could not load skill usage",
+        "retry": "Try Again",
+        "loading": "Checking skill usage…"
       }
     }
   },

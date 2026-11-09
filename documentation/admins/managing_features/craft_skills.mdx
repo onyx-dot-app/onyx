@@ -41,6 +41,21 @@ Hover over or focus **+ more groups** to read the remaining groups and their ins
 and global skill managers see every group. Other users see only the groups they belong to or manage.
 An empty cell does not mean that the Skill has no groups. On narrow screens, the group names show below the Skill name.
 
+## Users above the Skill limit
+
+**Admin Panel → Skills** shows a warning and usage rows when users exceed a write limit.
+Only users with global Manage Skills can read this list. Group managers cannot read it.
+
+Each row shows the user's email, Skill size, file count, and Skills omitted from the last successful session delivery.
+Size and file totals include allowances for Skills that Onyx has not measured. These totals are labeled as estimates.
+**No session yet** means no successful delivery is recorded. The last delivery count does not predict the next delivery.
+
+If loading fails, Onyx hides the cached rows. Select **Try Again** to fetch current usage.
+The warning disappears when no users exceed a limit.
+
+`GET /api/skills/limit/users` returns these rows and requires global Manage Skills. Each row contains `user`, `usage`,
+and nullable `last_delivery_omitted_skill_count`.
+
 ## Manage several Skills
 
 <Steps>

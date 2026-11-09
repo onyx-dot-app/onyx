@@ -140,6 +140,11 @@ The own-usage hook reads `/api/skills/limit/me`; admin usage requires global
 Manage Skills and a user-bound SWR key. Any failed admin refetch hides cached rows.
 SkillsPage actions revalidate usage through the shared SWR helper. Other write
 surfaces rely on SWR remount and focus revalidation.
+`web/src/sections/skills/SkillLimitUsers.tsx` mounts in the global manager's
+admin Skills page. It distinguishes charged estimates from last-delivery
+omissions, including null for no recorded delivery. Narrow rows stack their
+fields and wrap email addresses. Loading, error, empty and retry states hide
+sensitive rows until a valid authorized response is available.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a

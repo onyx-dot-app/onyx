@@ -17598,6 +17598,31 @@
         "own": "この変更により、スキルは {size}、{files, plural, one {# ファイル} other {# ファイル}} になります。上限は {maxSize}、{maxFiles, plural, one {# ファイル} other {# ファイル}} です。{others, plural, =0 {} one {他の # 人のユーザーも上限を超えます。} other {他の # 人のユーザーも上限を超えます。}}",
         "ownEstimated": "この変更により、スキルは推定 {size}、{files, plural, one {# ファイル} other {# ファイル}} になります。この推定では、まだ測定されていない {unknown, plural, one {# 件のスキル} other {# 件のスキル}} を許容される最大サイズとして数えています。上限は {maxSize}、{maxFiles, plural, one {# ファイル} other {# ファイル}} です。{others, plural, =0 {} one {他の # 人のユーザーも上限を超えます。} other {他の # 人のユーザーも上限を超えます。}}",
         "affected": "この変更により、{count, plural, one {# 人のユーザー} other {# 人のユーザー}}が{limit, select, files {スキルのファイル数の上限} other {スキルのサイズの上限}}を超えます。"
+      },
+      "admin": {
+        "title": "{count, plural, one {# 人のユーザーがスキルの上限を超えています} other {# 人のユーザーがスキルの上限を超えています}}",
+        "description": "これらのユーザーのスキルは {maxSize} または {maxFiles, plural, one {# ファイル} other {# ファイル}} を超えています。上限内に戻るまでスキルの追加や有効化はできず、セッションで一部のスキルが読み込まれない場合があります。",
+        "tableLabel": "スキルの上限を超えているユーザー",
+        "columns": {
+          "user": "ユーザー",
+          "size": "スキルのサイズ",
+          "files": "ファイル",
+          "omitted": "前回のセッションで未読み込み"
+        },
+        "size": {
+          "estimated": "約 {size}（推定: 未測定の {unknown, plural, one {# 件のスキル} other {# 件のスキル}}）"
+        },
+        "files": {
+          "measured": "{files, number}",
+          "estimated": "約 {files, number}（推定）"
+        },
+        "omitted": {
+          "none": "セッションはまだありません",
+          "count": "{count, plural, one {# 件のスキル} other {# 件のスキル}}"
+        },
+        "loadError": "スキルの使用量を読み込めませんでした",
+        "retry": "再試行",
+        "loading": "スキルの使用量を確認しています…"
       }
     }
   },

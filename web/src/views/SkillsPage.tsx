@@ -74,6 +74,7 @@ import {
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
 import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
+import SkillLimitUsers from "@/sections/skills/SkillLimitUsers";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -813,6 +814,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
 
       <StickyBox.Root ref={bodyRef}>
         <SettingsLayouts.Body gap={admin ? 4 : 8}>
+          {admin && canManageCompanySkills && <SkillLimitUsers />}
           <MarketplaceList
             onChanged={() => void revalidateSkills()}
             onConfigureAccess={

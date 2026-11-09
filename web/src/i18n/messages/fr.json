@@ -17598,6 +17598,31 @@
         "own": "Cette modification porterait vos compétences à {size} dans {files, plural, one {# fichier} other {# fichiers}}. La limite est de {maxSize} et {maxFiles, plural, one {# fichier} other {# fichiers}}.{others, plural, =0 {} one { Elle ferait aussi dépasser la limite à # autre utilisateur.} other { Elle ferait aussi dépasser la limite à # autres utilisateurs.}}",
         "ownEstimated": "Cette modification porterait vos compétences à environ {size} dans {files, plural, one {# fichier} other {# fichiers}}. L’estimation compte {unknown, plural, one {# compétence pas encore mesurée} other {# compétences pas encore mesurées}} à la taille maximale autorisée. La limite est de {maxSize} et {maxFiles, plural, one {# fichier} other {# fichiers}}.{others, plural, =0 {} one { Elle ferait aussi dépasser la limite à # autre utilisateur.} other { Elle ferait aussi dépasser la limite à # autres utilisateurs.}}",
         "affected": "Cette modification ferait dépasser {limit, select, files {la limite de fichiers des compétences} other {la limite de taille des compétences}} à {count, plural, one {# utilisateur} other {# utilisateurs}}."
+      },
+      "admin": {
+        "title": "{count, plural, one {# utilisateur dépasse la limite des compétences} other {# utilisateurs dépassent la limite des compétences}}",
+        "description": "Les compétences de ces utilisateurs dépassent {maxSize} ou {maxFiles, plural, one {# fichier} other {# fichiers}}. Ils ne peuvent pas ajouter ni activer d’autres compétences tant qu’ils dépassent la limite, et les sessions peuvent omettre certaines de leurs compétences.",
+        "tableLabel": "Utilisateurs au-delà de la limite des compétences",
+        "columns": {
+          "user": "Utilisateur",
+          "size": "Taille des compétences",
+          "files": "Fichiers",
+          "omitted": "Non chargées lors de la dernière session"
+        },
+        "size": {
+          "estimated": "Environ {size} (estimation : {unknown, plural, one {# compétence non mesurée} other {# compétences non mesurées}})"
+        },
+        "files": {
+          "measured": "{files, number}",
+          "estimated": "Environ {files, number} (estimation)"
+        },
+        "omitted": {
+          "none": "Aucune session pour l’instant",
+          "count": "{count, plural, one {# compétence} other {# compétences}}"
+        },
+        "loadError": "Impossible de charger l’utilisation des compétences",
+        "retry": "Réessayer",
+        "loading": "Vérification de l’utilisation des compétences…"
       }
     }
   },

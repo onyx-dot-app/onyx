@@ -17598,6 +17598,31 @@
         "own": "Esta alteração deixaria suas habilidades com {size} em {files, plural, one {# arquivo} other {# arquivos}}. O limite é {maxSize} e {maxFiles, plural, one {# arquivo} other {# arquivos}}.{others, plural, =0 {} one { Também deixaria # outro usuário acima do limite.} other { Também deixaria # outros usuários acima do limite.}}",
         "ownEstimated": "Esta alteração deixaria suas habilidades com cerca de {size} em {files, plural, one {# arquivo} other {# arquivos}}. A estimativa conta {unknown, plural, one {# habilidade ainda não medida} other {# habilidades ainda não medidas}} com o tamanho máximo permitido. O limite é {maxSize} e {maxFiles, plural, one {# arquivo} other {# arquivos}}.{others, plural, =0 {} one { Também deixaria # outro usuário acima do limite.} other { Também deixaria # outros usuários acima do limite.}}",
         "affected": "Esta alteração deixaria {count, plural, one {# usuário} other {# usuários}} acima do {limit, select, files {limite de arquivos de habilidades} other {limite de tamanho de habilidades}}."
+      },
+      "admin": {
+        "title": "{count, plural, one {# usuário está acima do limite de habilidades} other {# usuários estão acima do limite de habilidades}}",
+        "description": "Estes usuários têm mais de {maxSize} ou {maxFiles, plural, one {# arquivo} other {# arquivos}} em habilidades. Eles não podem adicionar nem ativar mais habilidades até ficarem dentro do limite, e as sessões podem deixar algumas de suas habilidades de fora.",
+        "tableLabel": "Usuários acima do limite de habilidades",
+        "columns": {
+          "user": "Usuário",
+          "size": "Tamanho das habilidades",
+          "files": "Arquivos",
+          "omitted": "Não carregadas na última sessão"
+        },
+        "size": {
+          "estimated": "Cerca de {size} (estimado: {unknown, plural, one {# habilidade não medida} other {# habilidades não medidas}})"
+        },
+        "files": {
+          "measured": "{files, number}",
+          "estimated": "Cerca de {files, number} (estimado)"
+        },
+        "omitted": {
+          "none": "Nenhuma sessão ainda",
+          "count": "{count, plural, one {# habilidade} other {# habilidades}}"
+        },
+        "loadError": "Não foi possível carregar o uso de habilidades",
+        "retry": "Tentar novamente",
+        "loading": "Verificando o uso de habilidades…"
       }
     }
   },
