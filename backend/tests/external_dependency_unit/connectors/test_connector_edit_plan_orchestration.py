@@ -283,6 +283,8 @@ def test_group_only_edit_skips_validation(
     enable_ee: None,  # noqa: ARG001
 ) -> None:
     slack_pair.access_type = AccessType.PRIVATE
+    # The row's foreign key needs the pair's new access type stored first.
+    db_session.flush()
     db_session.add(
         UserGroup__CCPairDataAccess(
             cc_pair_id=slack_pair.id,
