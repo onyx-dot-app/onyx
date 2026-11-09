@@ -5,7 +5,8 @@ import { useTranslations } from "next-intl";
 import { Button, Modal, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgBlocks, SvgLock, SvgOrganization, SvgUsers } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import useShareableUsers from "@/hooks/useShareableUsers";
 import useShareableGroups, {
   type MinimalUserGroupSnapshot,
@@ -22,8 +23,6 @@ import { useSharePermissionOptions } from "@/sections/modals/shareAccessConstant
 
 interface BulkSkillSharingModalProps {
   count: number;
-  // False when a selected skill's organization access is not the caller's to
-  // change (owner or admin only); the API would reject that skill's update.
   canChangeOrgAccess: boolean;
   open: boolean;
   saving: boolean;
@@ -41,7 +40,9 @@ export default function BulkSkillSharingModal({
 }: BulkSkillSharingModalProps) {
   const t = useTranslations("skills.bulk");
   const shareCopy = useTranslations("skills.modals.share");
-  const { isAdmin } = useUser();
+  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
+    Permission.MANAGE_SKILLS
+  );
   const { data: users } = useShareableUsers({ includeApiKeys: true });
   const { data: groups } = useShareableGroups();
   const [scope, setScope] = useState<"KEEP" | "PRIVATE" | "PUBLIC">("KEEP");
@@ -57,8 +58,8 @@ export default function BulkSkillSharingModal({
   );
   const permissionOptions = useSharePermissionOptions();
   const changed =
-    scope !== "KEEP" ||
-    policy !== "KEEP" ||
+    (canManageCompanySkills && canChangeOrgAccess && scope !== "KEEP") ||
+    (canManageCompanySkills && policy !== "KEEP") ||
     stagedUsers.length > 0 ||
     stagedGroups.length > 0;
 
@@ -75,9 +76,10 @@ export default function BulkSkillSharingModal({
 
   async function save() {
     const sharing: SkillShareUpdatePayload = {};
-    if (scope !== "KEEP")
+    if (canManageCompanySkills && canChangeOrgAccess && scope !== "KEEP")
       sharing.public_permission = scope === "PUBLIC" ? publicPermission : null;
-    if (policy !== "KEEP") sharing.installation_policy = policy;
+    if (canManageCompanySkills && policy !== "KEEP")
+      sharing.installation_policy = policy;
     if (stagedUsers.length)
       sharing.user_shares = stagedUsers.map((user) => ({
         user_id: user.id,
@@ -116,7 +118,9 @@ export default function BulkSkillSharingModal({
                 value={scope}
                 onChange={setScope}
                 ariaLabel={shareCopy("accessTitle")}
-                disabled={saving || !canChangeOrgAccess}
+                disabled={
+                  saving || !canManageCompanySkills || !canChangeOrgAccess
+                }
                 options={[
                   { value: "KEEP", label: t("unchanged"), icon: SvgUsers },
                   {
@@ -132,11 +136,13 @@ export default function BulkSkillSharingModal({
                   value={publicPermission}
                   onChange={setPublicPermission}
                   options={permissionOptions}
-                  disabled={saving}
+                  disabled={
+                    saving || !canManageCompanySkills || !canChangeOrgAccess
+                  }
                 />
               )}
             </Section>
-            {isAdmin && (
+            {canManageCompanySkills && (
               <Section gap={2} height="auto" alignItems="stretch">
                 <Content
                   font="main-ui-action"
