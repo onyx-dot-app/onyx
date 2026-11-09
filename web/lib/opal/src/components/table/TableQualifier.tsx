@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useId } from "react";
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
@@ -16,6 +16,8 @@ interface TableQualifierProps {
   selectable?: boolean;
   /** Whether the row is currently selected */
   selected?: boolean;
+  indeterminate?: boolean;
+  selectionLabel?: string;
   /** Called when the checkbox is toggled */
   onSelectChange?: (selected: boolean) => void;
   /** Icon component to render (for "icon" content). */
@@ -50,6 +52,8 @@ function TableQualifier({
   disabled = false,
   selectable = false,
   selected = false,
+  indeterminate = false,
+  selectionLabel,
   onSelectChange,
   icon: Icon,
   imageSrc,
@@ -57,6 +61,7 @@ function TableQualifier({
   background = false,
   avatar = false,
 }: TableQualifierProps) {
+  const checkboxId = useId();
   const resolvedSize = useTableSize();
   const iconSize = avatar ? AVATAR_SIZES[resolvedSize] : ICON_SIZE;
   const overlayStyles = getOverlayStyles(selected, disabled);
@@ -122,18 +127,23 @@ function TableQualifier({
 
       {/* Selection overlay */}
       {selectable && (
-        <div
+        <label
+          htmlFor={checkboxId}
           className={cn(
             "absolute inset-0 items-center justify-center rounded-08",
+            disabled ? "cursor-not-allowed" : "cursor-pointer",
             content === "checkbox" ? "flex" : overlayStyles
           )}
         >
           <InputCheckbox
+            id={checkboxId}
+            aria-label={selectionLabel}
             checked={selected}
+            indeterminate={indeterminate}
             onCheckedChange={onSelectChange}
             disabled={disabled}
           />
-        </div>
+        </label>
       )}
     </div>
   );

@@ -1,7 +1,9 @@
 "use client";
 
+import { cn } from "@opal/utils";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
+import useScreenSize from "@opal/hooks/useScreenSize";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -77,6 +79,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
     Permission.MANAGE_SKILLS
   );
+  const { isMobile } = useScreenSize();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
@@ -492,14 +495,149 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     };
   }
 
+  const searchInput = (
+    <InputTypeIn
+      ref={searchInputRef}
+      aria-label={t("page.search.placeholder")}
+      placeholder={t("page.search.placeholder")}
+      value={searchQuery}
+      readOnly={bulkBusy}
+      onChange={(event) => {
+        setSearchQuery(event.target.value);
+        setSelectedIds(new Set());
+        setBulkFailures([]);
+      }}
+      icon="search"
+    />
+  );
+  const selectionControls = (
+    <Section
+      role="group"
+      aria-label={t("page.browse.title")}
+      flexDirection="row"
+      justifyContent="between"
+      height={admin ? 1.75 : 2.25}
+      gap={2}
+    >
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        width="auto"
+        height="auto"
+        gap={2}
+        className="shrink-0"
+      >
+        {!admin && (
+          <InputCheckbox
+            aria-label={bulkCopy("selectAll")}
+            checked={selectedItems.length === selectableItems.length}
+            indeterminate={
+              selectedItems.length > 0 &&
+              selectedItems.length < selectableItems.length
+            }
+            disabled={bulkBusy}
+            onCheckedChange={(checked) =>
+              setSelectedIds(
+                new Set(checked ? selectableItems.map((item) => item.id) : [])
+              )
+            }
+          />
+        )}
+        {!isLoading && !error && (
+          <Text
+            font={
+              admin && selectedItems.length > 0
+                ? "secondary-action"
+                : "secondary-body"
+            }
+            color={admin && selectedItems.length > 0 ? "text-05" : "text-03"}
+          >
+            {selectedItems.length > 0
+              ? bulkCopy("selected", {
+                  count: selectedItems.length,
+                })
+              : admin
+                ? bulkCopy("total", { count: selectableItems.length })
+                : t("page.browse.title")}
+          </Text>
+        )}
+        <Section width={1} height={1}>
+          {bulkBusy && <IconLoader />}
+        </Section>
+      </Section>
+      {(admin || selectedItems.length > 0) && (
+        <Section
+          flexDirection="row"
+          width="auto"
+          height="full"
+          gap={2}
+          justifyContent="start"
+          aria-hidden={admin && selectedItems.length === 0 ? true : undefined}
+          className={cn(
+            "min-w-0 overflow-x-auto",
+            admin && selectedItems.length === 0 && "invisible"
+          )}
+        >
+          <Button
+            size={admin ? "sm" : "md"}
+            prominence="secondary"
+            icon={SvgShare}
+            disabled={bulkLocked || !canManageSelected}
+            onClick={() => setBulkSharingOpen(true)}
+          >
+            {bulkCopy("share")}
+          </Button>
+          <Dropdown align="end" disabled={bulkLocked}>
+            <Dropdown.Trigger asChild>
+              <Button
+                size={admin ? "sm" : "md"}
+                prominence="tertiary"
+                icon={SvgMoreHorizontal}
+                aria-label={bulkCopy("moreActions")}
+                tooltip={bulkCopy("moreActions")}
+                disabled={bulkLocked}
+              />
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={bulkCopy("moreActions")}
+              items={[
+                { kind: "group", items: bulkToggleActions },
+                {
+                  kind: "group",
+                  items: [
+                    {
+                      kind: "action",
+                      id: "delete",
+                      icon: SvgTrash,
+                      title: bulkCopy("delete"),
+                      danger: true,
+                      disabled:
+                        !canManageSelected ||
+                        (!canManageCompanySkills &&
+                          selectedItems.some(
+                            (item) =>
+                              item.skill.installation_policy === "REQUIRED"
+                          )),
+                      onSelect: () => setBulkDeleteOpen(true),
+                    },
+                  ],
+                },
+              ]}
+            />
+          </Dropdown>
+        </Section>
+      )}
+    </Section>
+  );
+
   return (
     <SettingsLayouts.Root
       width={admin ? "lg" : "md"}
+      narrowGutters={admin}
       data-testid="SkillsPage/container"
     >
       <SettingsLayouts.Header
-        stackActionsOnMobile={admin}
-        icon={SvgBlocks}
+        icon={admin && isMobile ? undefined : SvgBlocks}
         title={t("page.header.title")}
         description={
           admin ? bulkCopy("adminDescription") : t("page.header.description")
@@ -511,8 +649,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             onOpenChange={setCreateMenuOpen}
           >
             <Dropdown.Trigger asChild>
-              <Button icon={SvgPlus}>
-                {t("page.createMenu.trigger.label")}
+              <Button
+                icon={SvgPlus}
+                aria-label={t("page.createMenu.trigger.label")}
+              >
+                {admin && isMobile
+                  ? undefined
+                  : t("page.createMenu.trigger.label")}
               </Button>
             </Dropdown.Trigger>
             <Dropdown.Data
@@ -549,21 +692,16 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           </Dropdown>,
         ]}
       >
-        <InputTypeIn
-          ref={searchInputRef}
-          placeholder={t("page.search.placeholder")}
-          value={searchQuery}
-          readOnly={bulkBusy}
-          onChange={(event) => {
-            setSearchQuery(event.target.value);
-            setSelectedIds(new Set());
-            setBulkFailures([]);
-          }}
-          icon="search"
-        />
+        {!admin && searchInput}
       </SettingsLayouts.Header>
 
-      <SettingsLayouts.Body>
+      <SettingsLayouts.Body gap={admin ? 1 : 8}>
+        {admin && (
+          <Section height="auto" gap={1}>
+            {searchInput}
+            {selectionControls}
+          </Section>
+        )}
         {bulkFailures.length > 0 && (
           <MessageCard
             variant="error"
@@ -623,113 +761,15 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                 {selectableItems.length > 0 ? (
                   <>
                     <Section height="auto" gap={2} alignItems="stretch">
-                      <Section
-                        role="group"
-                        aria-label={t("page.browse.title")}
-                        flexDirection="row"
-                        justifyContent="between"
-                        height={2.25}
-                        gap={2}
-                      >
-                        <Section
-                          flexDirection="row"
-                          justifyContent="start"
-                          width="auto"
-                          height="auto"
-                          gap={2}
-                          className="shrink-0"
-                        >
-                          <InputCheckbox
-                            aria-label={bulkCopy("selectAll")}
-                            checked={
-                              selectedItems.length === selectableItems.length
-                            }
-                            indeterminate={
-                              selectedItems.length > 0 &&
-                              selectedItems.length < selectableItems.length
-                            }
-                            disabled={bulkBusy}
-                            onCheckedChange={(checked) =>
-                              setSelectedIds(
-                                new Set(
-                                  checked
-                                    ? selectableItems.map((item) => item.id)
-                                    : []
-                                )
-                              )
-                            }
-                          />
-                          <Text font="secondary-body" color="text-03">
-                            {selectedItems.length > 0
-                              ? bulkCopy("selected", {
-                                  count: selectedItems.length,
-                                })
-                              : t("page.browse.title")}
-                          </Text>
-                        </Section>
-                        {selectedItems.length > 0 && (
-                          <Section
-                            flexDirection="row"
-                            width="auto"
-                            height="full"
-                            gap={2}
-                            justifyContent="start"
-                            className="min-w-0 overflow-x-auto"
-                          >
-                            <Button
-                              prominence="secondary"
-                              icon={SvgShare}
-                              disabled={bulkLocked || !canManageSelected}
-                              onClick={() => setBulkSharingOpen(true)}
-                            >
-                              {bulkCopy("share")}
-                            </Button>
-                            <Dropdown align="end" disabled={bulkLocked}>
-                              <Dropdown.Trigger asChild>
-                                <Button
-                                  prominence="tertiary"
-                                  icon={SvgMoreHorizontal}
-                                  aria-label={bulkCopy("moreActions")}
-                                  tooltip={bulkCopy("moreActions")}
-                                  disabled={bulkLocked}
-                                />
-                              </Dropdown.Trigger>
-                              <Dropdown.Data
-                                label={bulkCopy("moreActions")}
-                                items={[
-                                  { kind: "group", items: bulkToggleActions },
-                                  {
-                                    kind: "group",
-                                    items: [
-                                      {
-                                        kind: "action",
-                                        id: "delete",
-                                        icon: SvgTrash,
-                                        title: bulkCopy("delete"),
-                                        danger: true,
-                                        disabled:
-                                          !canManageSelected ||
-                                          (!canManageCompanySkills &&
-                                            selectedItems.some(
-                                              (item) =>
-                                                item.skill
-                                                  .installation_policy ===
-                                                "REQUIRED"
-                                            )),
-                                        onSelect: () => setBulkDeleteOpen(true),
-                                      },
-                                    ],
-                                  },
-                                ]}
-                              />
-                            </Dropdown>
-                          </Section>
-                        )}
-                      </Section>
+                      {!admin && selectionControls}
                       {admin ? (
                         <SkillsTable
                           items={selectableItems}
                           selectedIds={selectedIds}
+                          selectionDisabled={bulkBusy}
+                          onSelectionChange={(values) =>
+                            setSelectedIds(new Set(values))
+                          }
                           getItemProps={getItemProps}
                         />
                       ) : (
@@ -740,12 +780,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                         </CardGrid>
                       )}
                     </Section>
-                    <TextSeparator
-                      count={selectableItems.length}
-                      text={t("page.countSeparator.label", {
-                        count: selectableItems.length,
-                      })}
-                    />
+                    {!admin && (
+                      <TextSeparator
+                        count={selectableItems.length}
+                        text={t("page.countSeparator.label", {
+                          count: selectableItems.length,
+                        })}
+                      />
+                    )}
                   </>
                 ) : !searchQuery.trim() ? (
                   <IllustrationContent

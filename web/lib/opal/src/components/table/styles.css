@@ -70,10 +70,18 @@
   @apply pointer-events-none;
 }
 
-/* Suppress default focus ring on rows — the row bg is the indicator */
 .tbl-row:focus,
 .tbl-row:focus-visible {
   outline: none;
+}
+
+.tbl-row.interactive:focus-visible:not(
+  [data-disabled],
+  [data-opal-nav-mode="pointer"] *
+) {
+  border-radius: var(--radius-12);
+  outline: 2px solid var(--border-04);
+  outline-offset: -4px;
 }
 
 /* ---- Rows: rounded cards with a gap ---- */
@@ -103,11 +111,6 @@ table.tbl .tbl-row[data-drag-handle] > td:nth-last-child(2) {
 }
 table.tbl .tbl-row[data-drag-handle] > td:last-child {
   border-radius: 0;
-}
-
-table.tbl .tbl-row:focus-visible > td,
-table.tbl .tbl-row:has(:focus-visible) > td {
-  @apply bg-action-selection-01;
 }
 
 /* ---- Qualifier tile ---- */
