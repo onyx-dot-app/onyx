@@ -228,12 +228,21 @@ def test_personal_owner_cannot_be_deleted(
 
 
 @pytest.mark.parametrize("raw_delete", [False, True])
+@pytest.mark.parametrize("private_synced", [False, True])
 def test_login_and_version_creator_deletion(
-    db_session: Session, marketplace: Marketplace, raw_delete: bool
+    db_session: Session,
+    marketplace: Marketplace,
+    raw_delete: bool,
+    private_synced: bool,
 ) -> None:
     login = make_user(db_session)
     marketplace.login_user_id = login.id
     skill = make_skill(db_session, is_public=True)
+    if private_synced:
+        skill.marketplace_id = marketplace.id
+        skill.marketplace_entry_key = "private/skill"
+        skill.author_user_id = login.id
+        skill.public_permission = None
     version = skill.current_version
     assert version is not None
     version.created_by_user_id = login.id
@@ -246,6 +255,11 @@ def test_login_and_version_creator_deletion(
     db_session.refresh(version)
     assert marketplace.login_user_id is None
     assert version.created_by_user_id is None
+    if private_synced:
+        db_session.refresh(skill)
+        assert skill.author_user_id is None
+        assert skill.marketplace_id == marketplace.id
+        assert skill.public_permission is None
     if not raw_delete:
         assert (
             marketplace.last_error is not None

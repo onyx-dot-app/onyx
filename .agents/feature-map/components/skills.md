@@ -166,8 +166,10 @@ The library preview of an external-app skill calls the same renderer
    it, so the opt-out returns when the policy goes back to default.
 5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
    unique index `uq_user_skill_preference_name` allows one enabled choice per
-   user and name. `uq_skill_automatic_name` covers every policy except
-   AVAILABLE. `server/features/skill/models.py:SkillShareRequest` and
+   user and name. `uq_skill_automatic_name` covers live rows with every policy except
+   AVAILABLE. Retirement disables explicit preferences in the same transaction,
+   so both automatic and personal name reservations become available.
+   `server/features/skill/models.py:SkillShareRequest` and
    `db/skill.py:set_skill_installation_policy`
    reject NOT_AVAILABLE until effective-policy resolution and write rules support it.
    Every write that enables a preference first
@@ -266,7 +268,14 @@ The library preview of an external-app skill calls the same renderer
     change or clear them. Explicit downgrade persists public defaults and removes marketplace
     group grants so sync cannot recreate them.
     `db/skill_mutation.py:assert_skill_mutable` refuses retired user mutations;
-    deletion explicitly allows retirement. New access entry points must use the
+    deletion explicitly allows retirement. Active synced skills reject content changes,
+    restore, ownership transfer, and deletion through shared database guards.
+    Content routes check before storage and again at publication. Access and personal
+    toggles remain editable, subject to policy. User reads, including admin and app
+    associations, omit retired rows; internal history and recipient capture retain them.
+    App association replacement preserves already-linked retired rows without changing them,
+    even when a stale form includes their ids. New retired associations remain refused.
+    New access entry points must use the
     adapter function, not `db/skill.py:replace_skill_shares`.
     `POST /skills/custom/batch` and GitHub import create each bundle through
     `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
@@ -284,6 +293,8 @@ The library preview of an external-app skill calls the same renderer
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `version-rollout-reads` **Custom readers use `Skill.current_version`.**
+    History rows and their current-version markers come from one SQL statement,
+    so an edit after authorization cannot mark an older version as current.
     Its eager outer join retains built-ins, which have no versions. A custom
     row without a pointer cannot load or enable. Locks on joined skill queries
     must specify `of=Skill`. Reload `current_version` after a locking read before
@@ -315,7 +326,8 @@ The library preview of an external-app skill calls the same renderer
     no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
     interval is five minutes; cloud uses the standard beat multiplier (eight
-    by default). Repair prunes bundle links under the skill lock, then deletes
+    by default). Repair saves recovered metadata before pruning bundle links
+    under the skill lock, then deletes
     unreferenced files after commit, with the same retention rule as saves.
     The deadline is cooperative between skills;
     a single skill's blob reads can exceed it. Each skill commits before its
@@ -346,6 +358,9 @@ The library preview of an external-app skill calls the same renderer
     at that commit. The reader receives bytes and a folder. Reconciliation receives
     its result and staged bundle metadata.
     Config and import share repository-name and folder validation in `utils/github.py`.
+    Repository, ref and folder are fixed at creation; no API edits them.
+    A future source edit must clear the synced revision and invalidate active sync
+    ownership and retirement approval before allowing publication from the new source.
     Empty folders become NULL; trailing slashes are removed. Absolute paths and
     dot segments are rejected.
     Webhooks remain unsupported until the self-hosted webhook ticket ships.
@@ -450,7 +465,8 @@ The library preview of an external-app skill calls the same renderer
     public manual skills use the company library, private manual skills use their author.
     Reconciliation serializes each tenant/library with a transaction advisory lock.
     G3 must use that same lock for manual name checks. S5 owns job
-    freshness; S6 owns retired-read/write guards. Access materialization and audience
+    freshness. Retirement releases enabled preferences and automatic-policy names.
+    Access materialization and audience
     capture share the reconciliation transaction without tier lookups or external I/O.
     No API or worker calls the sync service yet.
 23. `marketplace-sync-staging` **Upload first, commit once, then clean unused files.**

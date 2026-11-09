@@ -44,6 +44,7 @@ from onyx.db.resource_version import (
     VERSION_FILES_NOT_KEPT,
     read_version_bundle,
     repair_version_metadata,
+    write_resource_version,
 )
 from onyx.db.skill import (
     SkillValidityUpdate,
@@ -474,6 +475,52 @@ def test_metadata_repair_reads_all_versions_before_locking(
     assert all(
         version.content_digest is not None for version in versions(skill, session)
     )
+
+
+def test_metadata_repair_preserves_history_before_pruning(
+    session: Session, user: User
+) -> None:
+    skill = skill_with_versions(session, user, 10)
+    oldest = versions(skill, session)[-1]
+    original_metadata = (
+        oldest.content_digest,
+        oldest.unpacked_size_bytes,
+        oldest.file_count,
+    )
+    oldest_file = oldest.bundle_file_id
+    assert oldest_file is not None
+    store = get_default_file_store()
+    # Model a legacy backlog with eleven retained bundles.
+    with ingested_skill_bundle(
+        bundle(skill.name, "Eleventh"), "skill.zip", store
+    ) as added:
+        write_resource_version(
+            SkillVersionAdapter(skill),
+            bundle_file_id=added.bundle_file_id,
+            bundle_sha256=added.bundle_sha256,
+            is_valid=True,
+            metadata=added.metadata,
+            created_by_user_id=user.id,
+            db_session=session,
+        )
+        session.commit()
+    oldest.content_digest = None
+    oldest.unpacked_size_bytes = None
+    oldest.file_count = None
+    session.commit()
+    pruned = repair_skill_version_metadata(skill, session, store)
+    session.commit()
+    session.refresh(oldest)
+    assert (
+        oldest.content_digest,
+        oldest.unpacked_size_bytes,
+        oldest.file_count,
+    ) == original_metadata
+    assert oldest.bundle_file_id is None
+    assert pruned == [oldest_file]
+    assert len(versions(skill, session)) == 11
+    with store.read_file(oldest_file) as content:
+        assert content.read().startswith(b"PK")
 
 
 def test_metadata_repair_retries_changed_legacy_bundle(

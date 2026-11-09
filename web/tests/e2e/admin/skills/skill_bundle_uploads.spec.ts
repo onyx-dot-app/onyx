@@ -2,6 +2,8 @@ import { randomBytes } from "crypto";
 import { crc32 } from "zlib";
 
 import { expect, test, type Page } from "@playwright/test";
+import * as yup from "yup";
+import { AdminSkillsPage } from "@tests/e2e/pages/AdminSkillsPage";
 
 interface ZipEntry {
   path: string;
@@ -55,24 +57,27 @@ function zipFile(name: string, entries: ZipEntry[]) {
   return { name, mimeType: "application/zip", buffer: storedZip(entries) };
 }
 
-async function openUploadModal(page: Page) {
-  await page.goto("/admin/skills");
-  await page.getByRole("button", { name: "Create skill" }).click();
-  await page.getByText("Upload a skill", { exact: true }).click();
-  const dialog = page.getByRole("dialog").filter({ hasText: "Upload skill" });
-  await expect(dialog).toBeVisible();
-  return dialog;
-}
-
 async function deleteSkillsNamed(page: Page, names: string[]) {
   const response = await page.request.get("/api/skills");
-  if (!response.ok()) return;
-  const { customs } = (await response.json()) as {
-    customs: { id: string; name: string }[];
-  };
+  await expect(response, "List Skills for cleanup").toBeOK();
+  const { customs } = yup
+    .object({
+      customs: yup
+        .array(
+          yup.object({
+            id: yup.string().defined(),
+            name: yup.string().defined(),
+          })
+        )
+        .defined(),
+    })
+    .validateSync(await response.json(), { strict: true });
   for (const skill of customs) {
     if (names.includes(skill.name)) {
-      await page.request.delete(`/api/skills/custom/${skill.id}`);
+      const deleted = await page.request.delete(
+        `/api/skills/custom/${skill.id}`
+      );
+      await expect(deleted, `Delete test Skill ${skill.name}`).toBeOK();
     }
   }
 }
@@ -85,14 +90,19 @@ test.describe("Skill bundle uploads", () => {
 
   test.afterAll(async ({ browser }) => {
     const page = await browser.newPage({ storageState: "admin_auth.json" });
-    await deleteSkillsNamed(page, [validName, countName, historyName]);
-    await page.close();
+    try {
+      await deleteSkillsNamed(page, [validName, countName, historyName]);
+    } finally {
+      await page.close();
+    }
   });
 
   test("batch upload imports a large bundle and reports each rejected bundle", async ({
     page,
   }) => {
-    const dialog = await openUploadModal(page);
+    const skills = new AdminSkillsPage(page);
+    await skills.goto();
+    const dialog = await skills.openUpload();
 
     const largeBundle = zipFile(`${validName}.zip`, [
       { path: "SKILL.md", data: skillMd(validName, "Read assets/blob.bin.") },
@@ -115,30 +125,22 @@ test.describe("Skill bundle uploads", () => {
       { path: "README.md", data: Buffer.from("No skill here.") },
     ]);
 
-    await dialog
-      .locator('input[type="file"]')
-      .setInputFiles([largeBundle, tooManyFiles, notAZip, missingSkillMd]);
-    await expect(dialog.getByText("4 skill bundles selected")).toBeVisible();
-
-    const uploadResponse = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/skills/custom/batch") &&
-        response.request().method() === "POST"
-    );
-    await dialog.getByRole("button", { name: /Import/ }).click();
-    expect((await uploadResponse).status()).toBe(200);
-
-    await expect(dialog.getByText("1 skill imported. 3 failed.")).toBeVisible();
-    await expect(dialog.getByText(validName, { exact: true })).toBeVisible();
-    await expect(
-      dialog.getByText(/bundle contains more than 500 files/)
-    ).toBeVisible();
-    await expect(dialog.getByText(/not-a-zip.*not a valid zip/i)).toBeVisible();
-    await expect(dialog.getByText(/missing-skill-md.*SKILL\.md/)).toBeVisible();
-
-    await dialog.getByRole("button", { name: "Done" }).click();
-    await expect(page.getByText(validName).first()).toBeVisible();
-    await expect(page.getByText(countName)).toHaveCount(0);
+    await dialog.selectFiles([
+      largeBundle,
+      tooManyFiles,
+      notAZip,
+      missingSkillMd,
+    ]);
+    await dialog.expectMessage("4 skill bundles selected");
+    await dialog.import();
+    await dialog.expectMessage("1 skill imported. 3 failed.");
+    await dialog.expectMessage(validName);
+    await dialog.expectMessage(/bundle contains more than 500 files/);
+    await dialog.expectMessage(/not-a-zip.*not a valid zip/i);
+    await dialog.expectMessage(/missing-skill-md.*SKILL\.md/);
+    await dialog.done();
+    await skills.expectSkillVisible(validName);
+    await skills.expectSkillAbsent(countName);
   });
 
   test("history lists each edit and restore brings back earlier instructions", async ({
@@ -152,7 +154,9 @@ test.describe("Skill bundle uploads", () => {
       },
     });
     expect(created.status()).toBe(200);
-    const { id } = (await created.json()) as { id: string };
+    const { id } = yup
+      .object({ id: yup.string().defined() })
+      .validateSync(await created.json(), { strict: true });
 
     const patched = await page.request.patch(`/api/skills/custom/${id}`, {
       data: { instructions_markdown: "Edited instructions." },
@@ -166,18 +170,24 @@ test.describe("Skill bundle uploads", () => {
 
     const history = await page.request.get(`/api/skills/custom/${id}/versions`);
     expect(history.status()).toBe(200);
-    const versions = (await history.json()) as {
-      id: string;
-      version_number: number;
-      is_current: boolean;
-      has_bundle: boolean;
-    }[];
+    const versions = yup
+      .array(
+        yup.object({
+          id: yup.string().defined(),
+          version_number: yup.number().defined(),
+          is_current: yup.boolean().defined(),
+          has_bundle: yup.boolean().defined(),
+        })
+      )
+      .defined()
+      .validateSync(await history.json(), { strict: true });
     expect(versions.map((version) => version.version_number)).toEqual([2, 1]);
     expect(versions.map((version) => version.is_current)).toEqual([
       true,
       false,
     ]);
-    const original = versions[1]!;
+    const original = versions[1];
+    if (!original) throw new Error("Original Skill version was not returned");
 
     const preview = await page.request.get(
       `/api/skills/custom/${id}/versions/${original.id}`
@@ -195,16 +205,23 @@ test.describe("Skill bundle uploads", () => {
     const afterRestore = await page.request.get(
       `/api/skills/custom/${id}/versions`
     );
-    const restoredVersions = (await afterRestore.json()) as {
-      version_number: number;
-      is_current: boolean;
-    }[];
+    await expect(afterRestore).toBeOK();
+    const restoredVersions = yup
+      .array(
+        yup.object({
+          version_number: yup.number().defined(),
+          is_current: yup.boolean().defined(),
+        })
+      )
+      .defined()
+      .validateSync(await afterRestore.json(), { strict: true });
     expect(restoredVersions[0]).toMatchObject({
       version_number: 3,
       is_current: true,
     });
 
     const current = await page.request.get(`/api/skills/${id}/preview`);
+    await expect(current).toBeOK();
     expect(await current.json()).toMatchObject({
       instructions_markdown: "Original instructions.",
     });
@@ -214,7 +231,8 @@ test.describe("Skill bundle uploads", () => {
     );
     expect(missing.status()).toBe(404);
 
-    await page.goto("/admin/skills");
-    await expect(page.getByText(historyName).first()).toBeVisible();
+    const skills = new AdminSkillsPage(page);
+    await skills.goto();
+    await skills.expectSkillVisible(historyName);
   });
 });

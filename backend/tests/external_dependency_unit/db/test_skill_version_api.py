@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import GrantSource, Permission
 from onyx.db.models import (
     FileRecord,
@@ -38,6 +38,52 @@ from tests.external_dependency_unit.db.test_skill_version_writes import (
 )
 from tests.external_dependency_unit.db.test_skill_version_writes import tenant as tenant
 from tests.external_dependency_unit.db.test_skill_version_writes import user as user
+
+
+def test_history_current_marker_includes_edit_after_authorization(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skill = api.create_custom_skill(
+        upload(bundle("history-concurrent-edit")), False, user, session
+    )
+    list_versions = api.list_skill_versions
+
+    def edit_before_history_query(
+        authorized: Skill, db_session: Session, *, before_version: int | None = None
+    ) -> list[tuple[SkillVersion, User | None, bool]]:
+        with get_session_with_current_tenant() as writer:
+            writer_user = writer.get(User, user.id)
+            assert writer_user is not None
+            api.replace_current_user_skill_bundle(
+                skill.id,
+                upload(bundle(skill.name, "Concurrent edit")),
+                writer_user,
+                writer,
+            )
+        return list_versions(authorized, db_session, before_version=before_version)
+
+    monkeypatch.setattr(api, "list_skill_versions", edit_before_history_query)
+    history = api.list_custom_skill_versions(skill.id, user, session)
+    assert [(version.version_number, version.is_current) for version in history] == [
+        (2, True),
+        (1, False),
+    ]
+
+
+def test_history_without_current_pointer_has_no_current_marker(
+    session: Session, user: User
+) -> None:
+    created = api.create_custom_skill(
+        upload(bundle("history-missing-pointer")), False, user, session
+    )
+    skill = session.get(Skill, created.id)
+    assert skill is not None
+    skill.current_version_id = None
+    session.commit()
+    history = api.list_custom_skill_versions(created.id, user, session)
+    assert [(version.version_number, version.is_current) for version in history] == [
+        (1, False)
+    ]
 
 
 @pytest.mark.parametrize("damage", ["pruned", "missing", "oversized", "corrupt"])
