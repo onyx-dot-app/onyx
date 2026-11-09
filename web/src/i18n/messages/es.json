@@ -17517,6 +17517,12 @@
       "addAccessDescription": "Añade estas personas y grupos a cada habilidad seleccionada. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
       "apply": "{count, plural, one {Aplicar a # habilidad} other {Aplicar a # habilidades}}",
       "moreActions": "Más acciones"
+    },
+    "synced": {
+      "view": "Ver contenido",
+      "readOnlyTitle": "Sincronizado desde GitHub",
+      "readOnlyDescription": "Edita estas instrucciones y archivos en GitHub. Onyx los actualiza cuando se sincroniza este mercado.",
+      "source": "Mercado: {name}"
     }
   },
   "opensearchHealth": {

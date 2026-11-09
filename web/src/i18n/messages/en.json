@@ -17517,6 +17517,12 @@
       "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
       "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
       "moreActions": "More actions"
+    },
+    "synced": {
+      "view": "View content",
+      "readOnlyTitle": "Synced from GitHub",
+      "readOnlyDescription": "Edit these instructions and files in GitHub. Onyx updates them when this marketplace syncs.",
+      "source": "Marketplace: {name}"
     }
   },
   "opensearchHealth": {

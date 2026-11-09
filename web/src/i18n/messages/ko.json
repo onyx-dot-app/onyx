@@ -17517,6 +17517,12 @@
       "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
       "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
       "moreActions": "추가 작업"
+    },
+    "synced": {
+      "view": "콘텐츠 보기",
+      "readOnlyTitle": "GitHub에서 동기화됨",
+      "readOnlyDescription": "GitHub에서 이 지침과 파일을 편집하세요. 이 마켓플레이스가 동기화되면 Onyx가 업데이트합니다.",
+      "source": "마켓플레이스: {name}"
     }
   },
   "opensearchHealth": {

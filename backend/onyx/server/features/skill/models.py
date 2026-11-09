@@ -38,6 +38,14 @@ class SkillExternalAppDependencyResponse(BaseModel):
     ready: bool
 
 
+class SkillMarketplaceResponse(BaseModel):
+    id: UUID
+    name: str
+    personal: bool
+    folder: str | None
+    follows_access: bool
+
+
 class SkillResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID
@@ -63,6 +71,8 @@ class SkillResponse(BaseModel):
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
     external_app: SkillExternalAppDependencyResponse | None = None
+    marketplace: SkillMarketplaceResponse | None = None
+    retired_at: datetime.datetime | None = None
 
     @classmethod
     def from_builtin(
@@ -97,6 +107,7 @@ class SkillResponse(BaseModel):
         user_permission: SkillAccessLevel | None = None,
         include_share_details: bool = False,
         external_app: SkillExternalAppDependencyResponse | None = None,
+        marketplace: SkillMarketplaceResponse | None = None,
     ) -> "SkillResponse":
         user_shares = [
             SkillUserShare(
@@ -146,6 +157,8 @@ class SkillResponse(BaseModel):
             and not group_shares,
             user_permission=user_permission,
             external_app=external_app,
+            marketplace=marketplace,
+            retired_at=skill.retired_at,
         )
 
 

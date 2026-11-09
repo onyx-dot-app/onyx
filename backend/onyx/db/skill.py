@@ -55,6 +55,7 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import (
     ExternalApp__Skill,
+    Marketplace,
     Sandbox,
     Skill,
     Skill__User,
@@ -116,6 +117,31 @@ class SkillUserState:
     enabled: bool
     can_toggle: bool
     external_app_dependency: SkillExternalAppDependencyState | None
+
+
+@dataclass(frozen=True)
+class SkillMarketplaceSource:
+    id: UUID
+    name: str
+    personal: bool
+
+
+def skill_marketplace_sources(
+    marketplace_ids: Collection[UUID], db_session: Session
+) -> dict[UUID, SkillMarketplaceSource]:
+    """Load display fields only, for sources of already authorized skills."""
+    if not marketplace_ids:
+        return {}
+    return {
+        source_id: SkillMarketplaceSource(source_id, name, personal)
+        for source_id, name, personal in db_session.execute(
+            select(
+                Marketplace.id,
+                Marketplace.name,
+                Marketplace.owner_user_id.is_not(None),
+            ).where(Marketplace.id.in_(marketplace_ids))
+        )
+    }
 
 
 def _is_shared_with_user(
