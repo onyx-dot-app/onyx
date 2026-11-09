@@ -103,7 +103,9 @@ def test_agent_pod_spec() -> None:
     assert spec["tolerations"] == sandbox["tolerations"]
     assert "runtimeClassName" not in spec
     assert spec["hostPID"] is True
-    assert spec["automountServiceAccountToken"] is False
+    # The drain watch reads the Node: the token of the agent's own account.
+    assert spec["automountServiceAccountToken"] is True
+    assert spec["serviceAccountName"] == "onyx-craft-fc-host-agent"
     assert container["securityContext"]["privileged"] is True
     assert container["image"] == "onyxdotapp/craft-fc-host-agent:0.1.0"
     # Host cgroup namespace, so the agent can check VM cgroups on re-adopt.
@@ -139,6 +141,61 @@ def test_agent_pod_spec() -> None:
     assert "--egress-proxy=onyx-sandbox-proxy.onyx.svc.cluster.local:8080" in args
     assert any(a.startswith("--api-server-url=http") for a in args)
     assert env["NODE_NAME"]["valueFrom"]["fieldRef"]["fieldPath"] == "spec.nodeName"
+    assert "--watch-node-drain" in args
+    assert "--drain-taints=node.kubernetes.io/unschedulable" in args
+    assert "--drain-poll-interval=10s" in args
+
+
+def test_drain_watch_rbac_is_get_nodes_only() -> None:
+    docs = _render(_FIRECRACKER)
+    account = _by_kind(docs, "ServiceAccount")
+    role = _by_kind(docs, "ClusterRole")
+    binding = _by_kind(docs, "ClusterRoleBinding")
+
+    assert account["metadata"]["namespace"] == _AGENT_NS
+    assert role["rules"] == [
+        {"apiGroups": [""], "resources": ["nodes"], "verbs": ["get"]}
+    ]
+    assert binding["roleRef"]["name"] == role["metadata"]["name"]
+    assert binding["subjects"] == [
+        {
+            "kind": "ServiceAccount",
+            "name": account["metadata"]["name"],
+            "namespace": _AGENT_NS,
+        }
+    ]
+
+
+def test_drain_watch_off_has_no_rbac() -> None:
+    docs = _render([*_FIRECRACKER, "--set", "craft.hostAgent.drainWatch.enabled=false"])
+    kinds = {d["kind"] for d in docs}
+    spec = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
+    args = spec["containers"][0]["args"]
+
+    assert not kinds & {"ServiceAccount", "ClusterRole", "ClusterRoleBinding"}
+    assert spec["automountServiceAccountToken"] is False
+    assert "serviceAccountName" not in spec
+    assert not [a for a in args if "drain" in a]
+
+
+def test_drain_watch_overrides() -> None:
+    docs = _render(
+        [
+            *_FIRECRACKER,
+            "--set-string",
+            "craft.hostAgent.drainWatch.taints=node.kubernetes.io/unschedulable\\,karpenter.sh/disrupted",
+            "--set-string",
+            "craft.hostAgent.drainWatch.pollInterval=30s",
+        ]
+    )
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+
+    assert (
+        "--drain-taints=node.kubernetes.io/unschedulable,karpenter.sh/disrupted" in args
+    )
+    assert "--drain-poll-interval=30s" in args
 
 
 def test_registration_secret_is_copied_into_agent_namespace() -> None:

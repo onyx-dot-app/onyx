@@ -19,6 +19,19 @@ type Launcher struct {
 	// Cgroups says how to read the VM cgroups (DetectCgroupView). The zero
 	// value is the host cgroup namespace.
 	Cgroups CgroupView
+	// MemOverheadMiB is the memory each VM scope gets on top of the guest
+	// memory (memory.max). 0 means jailer.DefaultMemOverheadMiB.
+	MemOverheadMiB uint32
+}
+
+// limits returns the cgroup limits of a VM scope: memory.max = guest memory
+// + MemOverheadMiB, cpu.max = vcpus CPUs.
+func (l *Launcher) limits(vcpus, memMiB uint32) jailer.Limits {
+	over := l.MemOverheadMiB
+	if over == 0 {
+		over = jailer.DefaultMemOverheadMiB
+	}
+	return jailer.VMLimits(vcpus, memMiB, over)
 }
 
 // FileSource is a file to put in a VM chroot. Every file is a reflink copy,

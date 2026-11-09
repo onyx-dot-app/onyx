@@ -23,6 +23,9 @@ Agent flags and node requirements: microvm/README.md.
   copy in its own namespace.
 - Only api_server pods reach the agent listener (NetworkPolicy below). Agent
   pods may reach the sandbox-proxy port (sandbox-proxy/networkpolicy.yaml).
+- Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
+  ServiceAccount that may only "get" nodes, and refuses new VMs while the
+  Node has a drain taint. Off: no ServiceAccount token in the pod.
 */}}
 {{- $craft := .Values.craft | default dict }}
 {{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
@@ -62,6 +65,8 @@ Agent flags and node requirements: microvm/README.md.
 {{- if not $nodeSelector }}
 {{- $nodeSelector = merge (dict "onyx.app/kvm" "true") (deepCopy (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox"))) }}
 {{- end }}
+{{- $drain := $agent.drainWatch | default dict }}
+{{- $watchDrain := ne (toString $drain.enabled) "false" }}
 {{- $tolerations := $agent.tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) }}
 {{- if ne (toString $agent.createNamespace) "false" }}
 apiVersion: v1
@@ -88,6 +93,47 @@ metadata:
 type: Opaque
 stringData:
   {{ $regKey }}: {{ $regValue | quote }}
+---
+{{- end }}
+{{- if $watchDrain }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+automountServiceAccountToken: false
+---
+{{- /* Cluster-scoped: RBAC cannot limit "get" to the pod's own Node. Node objects hold no secrets. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-read
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-read
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $ns }}-{{ $name }}-node-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $ns }}
 ---
 {{- end }}
 apiVersion: apps/v1
@@ -127,7 +173,13 @@ spec:
       {{- end }}
       # VMs keep running while the agent restarts (journal + re-adopt).
       hostPID: true
+      {{- if $watchDrain }}
+      serviceAccountName: {{ $name }}
+      # The agent reads its own Node (drain taints).
+      automountServiceAccountToken: true
+      {{- else }}
       automountServiceAccountToken: false
+      {{- end }}
       enableServiceLinks: false
       terminationGracePeriodSeconds: {{ $agent.terminationGracePeriodSeconds | default 30 }}
       containers:
@@ -153,6 +205,11 @@ spec:
             - --relay-max-conns={{ $agent.relayMaxConns | default 256 | int64 }}
             - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.sandboxProxyPort" . }}
             - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
+            {{- if $watchDrain }}
+            - --watch-node-drain
+            - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable" }}
+            - --drain-poll-interval={{ $drain.pollInterval | default "10s" }}
+            {{- end }}
             {{- range $agent.extraArgs }}
             - {{ . | quote }}
             {{- end }}

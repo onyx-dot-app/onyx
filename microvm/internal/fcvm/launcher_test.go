@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 )
 
 func TestTailReadsOnlyTheEnd(t *testing.T) {
@@ -23,5 +25,16 @@ func TestTailReadsOnlyTheEnd(t *testing.T) {
 	}
 	if got := tail(short); got != "boot failed" {
 		t.Fatalf("short tail %q", got)
+	}
+}
+
+func TestLauncherLimits(t *testing.T) {
+	l := &Launcher{}
+	if got := l.limits(2, 4096); got != jailer.VMLimits(2, 4096, jailer.DefaultMemOverheadMiB) {
+		t.Errorf("default overhead: %+v", got)
+	}
+	l.MemOverheadMiB = 64
+	if got := l.limits(4, 8192); got.MemoryMaxBytes != (8192+64)<<20 || got.CPUQuotaPercent != 400 {
+		t.Errorf("overhead 64: %+v", got)
 	}
 }

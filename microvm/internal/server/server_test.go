@@ -69,8 +69,25 @@ func TestTypedErrorsOverUnixSocket(t *testing.T) {
 		t.Fatalf("list: %v %v", l, err)
 	}
 	ni, err := c.NodeInfo(ctx, &pb.NodeInfoRequest{})
-	if err != nil || ni.GetMemAvailableMib() != 512 || ni.GetFirecrackerVersion() != "v1.17.0" {
+	if err != nil || ni.GetMemAvailableMib() != 512 || ni.GetFirecrackerVersion() != "v1.17.0" ||
+		ni.GetDrain().GetState() != pb.DrainState_DRAIN_STATE_ACTIVE || ni.GetDrain().GetSince() != nil {
 		t.Fatalf("node info: %v %v", ni, err)
+	}
+
+	// Manual drain: Create gets NODE_DRAINING before any template check.
+	d, err := c.SetDrain(ctx, &pb.SetDrainRequest{Drain: true})
+	if err != nil || d.GetDrain().GetState() != pb.DrainState_DRAIN_STATE_DRAINED || !d.GetDrain().GetManual() || d.GetDrain().GetSince() == nil {
+		t.Fatalf("set drain: %v %v", d, err)
+	}
+	_, err = c.Create(ctx, &pb.CreateRequest{SandboxId: "11111111-1111-4111-8111-111111111111", Attempt: 1, Template: "missing", Vcpus: 2, MemMib: 4096, ScratchGib: 1, TenantId: "public"})
+	if status.Code(err) != codes.FailedPrecondition || apierr.FromStatus(err) != pb.ErrorReason_NODE_DRAINING {
+		t.Fatalf("create while draining: code %s reason %s (%v)", status.Code(err), apierr.FromStatus(err), err)
+	}
+	if ni, err := c.NodeInfo(ctx, &pb.NodeInfoRequest{}); err != nil || ni.GetDrain().GetState() != pb.DrainState_DRAIN_STATE_DRAINED {
+		t.Fatalf("node info while drained: %v %v", ni, err)
+	}
+	if d, err := c.SetDrain(ctx, &pb.SetDrainRequest{}); err != nil || d.GetDrain().GetState() != pb.DrainState_DRAIN_STATE_ACTIVE {
+		t.Fatalf("clear drain: %v %v", d, err)
 	}
 }
 
@@ -128,5 +145,9 @@ func TestBuildTemplateAndTemplateInfo(t *testing.T) {
 	ni, err := svc.NodeInfo(ctx, &pb.NodeInfoRequest{})
 	if err != nil || len(ni.GetTemplates()) != 1 || ni.GetTemplates()[0].GetCompatible() {
 		t.Fatalf("node info %v %v", ni, err)
+	}
+	// WriteFake writes the current layout: its VMs have the balloon.
+	if !ni.GetTemplates()[0].GetBalloon() || ni.GetTemplates()[0].GetManagedSlots() != 2 {
+		t.Fatalf("template info %v", ni.GetTemplates()[0])
 	}
 }

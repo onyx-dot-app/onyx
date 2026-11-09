@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -420,5 +421,50 @@ func TestLayout2StillRestores(t *testing.T) {
 	k.LayoutVersion = 1
 	if err := k.CheckNode(testNode); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE {
 		t.Errorf("layout 1: %v", err)
+	}
+}
+
+// Layout 4 adds only the balloon: same drives and files as layout 3, so the
+// guest devices do not move. Layout 3 templates still restore, without it.
+func TestLayout4Balloon(t *testing.T) {
+	if LayoutVersion != 4 {
+		t.Fatalf("LayoutVersion %d", LayoutVersion)
+	}
+	if !slices.Equal(DrivesFor(4), DrivesFor(3)) || !slices.Equal(FilesFor(4), FilesFor(3)) {
+		t.Error("layout 4 changed the drives or files of layout 3")
+	}
+	for layout, want := range map[int]bool{2: false, 3: false, 4: true, 5: false} {
+		if got := BalloonFor(layout) != nil; got != want {
+			t.Errorf("layout %d balloon %v, want %v", layout, got, want)
+		}
+	}
+	b := BalloonFor(LayoutVersion)
+	if b.AmountMiB != 0 || !b.FreePageReporting || b.FreePageHinting || b.StatsIntervalS <= 0 {
+		t.Errorf("balloon %+v: want amount 0, free page reporting on, hinting off, stats on", *b)
+	}
+	b.AmountMiB = 99
+	if Balloon.AmountMiB != 0 {
+		t.Error("BalloonFor returned the shared config")
+	}
+
+	dir := t.TempDir()
+	if _, err := WriteFakeLayout(dir, "l3", testKey, 3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteFake(dir, "l4", testKey); err != nil {
+		t.Fatal(err)
+	}
+	s := &Store{Dir: dir}
+	for name, want := range map[string]bool{"l3": false, "l4": true} {
+		tpl, err := s.Get(name)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := s.Verify(tpl); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if tpl.HasBalloon() != want || tpl.ManagedSlots() != 2 {
+			t.Errorf("%s: balloon %v slots %d", name, tpl.HasBalloon(), tpl.ManagedSlots())
+		}
 	}
 }

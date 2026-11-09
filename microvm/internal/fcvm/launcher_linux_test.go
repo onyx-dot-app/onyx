@@ -90,7 +90,7 @@ func (h *fakeHost) vmAlive(t *testing.T) bool {
 
 func TestSpawnStopsTheScopeWhenItFailsBeforeAProc(t *testing.T) {
 	h := newFakeHost(t, "not-a-pid")
-	_, err := h.l.Spawn(context.Background(), testID, 1000000, nil)
+	_, err := h.l.Spawn(context.Background(), testID, 1000000, nil, jailer.Limits{})
 	if err == nil || errors.Is(err, agent.ErrVMLeft) {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestSpawnKeepsTheChrootWhenTheVMMayStillRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(h.dir, "fail"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := h.l.Spawn(context.Background(), testID, 1000000, nil)
+	_, err := h.l.Spawn(context.Background(), testID, 1000000, nil, jailer.Limits{})
 	if !errors.Is(err, agent.ErrVMLeft) {
 		t.Fatalf("spawn error %v does not wrap ErrVMLeft", err)
 	}

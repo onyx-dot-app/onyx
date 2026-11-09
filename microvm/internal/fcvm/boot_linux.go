@@ -19,6 +19,9 @@ type BootSpec struct {
 	Drives   []template.Drive
 	VCPUs    uint32
 	MemMiB   uint32
+	// Balloon is the balloon device; nil: none. Firecracker accepts it only
+	// before boot.
+	Balloon *template.BalloonConfig
 }
 
 // Boot starts VM id from files (each a reflink copy; the writable drives
@@ -34,7 +37,7 @@ func (l *Launcher) Boot(ctx context.Context, id string, uid uint32, files []File
 	for i := range files {
 		files[i].VMOwned = writable[files[i].Name]
 	}
-	p, err := l.Spawn(ctx, id, uid, files)
+	p, err := l.Spawn(ctx, id, uid, files, l.limits(s.VCPUs, s.MemMiB))
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +72,15 @@ func (p *Proc) boot(ctx context.Context, s BootSpec) error {
 	cid, uds := int64(template.GuestCID), template.VsockUDS
 	if _, err := api.PutGuestVsockContext(ctx, &operations.PutGuestVsockParams{Body: &models.Vsock{GuestCid: &cid, UdsPath: &uds}}); err != nil {
 		return apiErr("vsock", err)
+	}
+	if b := s.Balloon; b != nil {
+		amount, deflate := b.AmountMiB, b.DeflateOnOOM
+		if _, err := api.PutBalloonContext(ctx, &operations.PutBalloonParams{Body: &models.Balloon{
+			AmountMib: &amount, DeflateOnOom: &deflate, StatsPollingIntervals: b.StatsIntervalS,
+			FreePageReporting: b.FreePageReporting, FreePageHinting: b.FreePageHinting,
+		}}); err != nil {
+			return apiErr("balloon", err)
+		}
 	}
 	start := models.InstanceActionInfoActionTypeInstanceStart
 	_, err := api.CreateSyncActionContext(ctx, &operations.CreateSyncActionParams{Info: &models.InstanceActionInfo{ActionType: &start}})

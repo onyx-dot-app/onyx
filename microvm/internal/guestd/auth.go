@@ -91,6 +91,18 @@ func (s *Server) NewGRPCServer(opts ...grpc.ServerOption) *grpc.Server {
 	return gs
 }
 
+// activity marks an accepted call as VM activity for the idle reclaim and
+// returns the function that ends it. Health is not activity: the node agent
+// and the api_server poll it.
+func (s *Server) activity(method string) func() {
+	r := s.cfg.Reclaimer
+	if r == nil || method == pb.Sandboxd_Health_FullMethodName {
+		return func() {}
+	}
+	r.Begin()
+	return r.End
+}
+
 // serverOptions returns the interceptors that apply check to every call.
 func (s *Server) serverOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{
@@ -98,12 +110,14 @@ func (s *Server) serverOptions() []grpc.ServerOption {
 			if err := s.check(ctx, info.FullMethod); err != nil {
 				return nil, err
 			}
+			defer s.activity(info.FullMethod)()
 			return h(ctx, req)
 		}),
 		grpc.ChainStreamInterceptor(func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, h grpc.StreamHandler) error {
 			if err := s.check(ss.Context(), info.FullMethod); err != nil {
 				return err
 			}
+			defer s.activity(info.FullMethod)()
 			return h(srv, ss)
 		}),
 	}

@@ -80,8 +80,31 @@ type Command struct {
 	LogLevel string
 }
 
-// Argv returns the command line for VM id with jailer UID and GID uid.
-func (c Command) Argv(id string, uid uint32) ([]string, error) {
+// DefaultMemOverheadMiB is the memory a VM scope gets on top of the guest
+// memory: Firecracker itself (its heap, vCPU and device threads) and the
+// page cache of the VM's drives (results/mem-admission.md).
+const DefaultMemOverheadMiB = 128
+
+// Limits are the cgroup limits of a VM scope. Zero means no limit.
+type Limits struct {
+	// MemoryMaxBytes is memory.max (systemd MemoryMax). The guest cannot
+	// use more than its memory, so only a broken or hostile Firecracker
+	// process hits it; the kernel then kills that VM only.
+	MemoryMaxBytes uint64
+	// CPUQuotaPercent is cpu.max as a percent of one CPU (systemd
+	// CPUQuota): 100 per vCPU.
+	CPUQuotaPercent uint32
+}
+
+// VMLimits returns the limits of a VM with vcpus and memMiB of guest
+// memory: memory.max = guest memory + overheadMiB, cpu.max = vcpus CPUs.
+func VMLimits(vcpus, memMiB, overheadMiB uint32) Limits {
+	return Limits{MemoryMaxBytes: (uint64(memMiB) + uint64(overheadMiB)) << 20, CPUQuotaPercent: vcpus * 100}
+}
+
+// Argv returns the command line for VM id with jailer UID and GID uid. The
+// VM's scope gets the limits lim.
+func (c Command) Argv(id string, uid uint32, lim Limits) ([]string, error) {
 	if !ValidID(id) {
 		return nil, fmt.Errorf("invalid VM id %q", id)
 	}
@@ -104,12 +127,18 @@ func (c Command) Argv(id string, uid uint32) ([]string, error) {
 		"--level", level,
 		"--log-path", LogFile,
 	}
-	argv := append([]string{
+	argv := []string{
 		"systemd-run", "--quiet", "--scope", "--collect",
 		"--slice=" + c.Slice,
 		"--unit=" + ScopeUnit(id),
-		"--",
-	}, jail...)
+	}
+	if lim.MemoryMaxBytes > 0 {
+		argv = append(argv, "--property=MemoryMax="+strconv.FormatUint(lim.MemoryMaxBytes, 10))
+	}
+	if lim.CPUQuotaPercent > 0 {
+		argv = append(argv, "--property=CPUQuota="+strconv.FormatUint(uint64(lim.CPUQuotaPercent), 10)+"%")
+	}
+	argv = append(append(argv, "--"), jail...)
 	if c.HostMountNS {
 		argv = append([]string{"nsenter", "-t", "1", "-m", "--"}, argv...)
 	}
