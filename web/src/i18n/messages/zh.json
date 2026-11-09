@@ -17491,6 +17491,8 @@
       "retry": "重试",
       "empty": "暂无版本。",
       "loading": "正在加载版本…",
+      "loadOlder": "加载更早的版本",
+      "loadOlderCompact": "更早版本",
       "files": "文件",
       "noFiles": "没有其他文件。"
     }

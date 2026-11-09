@@ -7,7 +7,9 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
+import { unstable_serialize } from "swr/infinite";
+import { Button } from "@opal/components";
 import SkillVersions from "@/sections/skills/SkillVersions";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import type {
@@ -298,3 +300,190 @@ test.each([3, 4])(
     ).not.toBeInTheDocument();
   }
 );
+
+test.each([
+  { width: 320, count: 55 },
+  { width: 1280, count: 55 },
+  { width: 320, count: 100 },
+  { width: 1280, count: 100 },
+])(
+  "loads $count versions, retries and restores at width $width",
+  async ({ width, count }) => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: width,
+    });
+    try {
+      const history = Array.from(
+        { length: count },
+        (_, index): SkillVersion => {
+          const number = count - index;
+          return {
+            id: `v${number}`,
+            version_number: number,
+            created_at: "2026-11-08T12:00:00Z",
+            created_by: null,
+            is_current: number === count,
+            has_bundle: true,
+            marketplace_revision: null,
+          };
+        }
+      );
+      let olderFailed = false;
+      const olderRequest = deferred<Response>();
+      fetchMock.mockImplementation(async (input, init) => {
+        const url = new URL(String(input), "http://localhost");
+        if (url.pathname === SWR_KEYS.skillVersions(skill.id)) {
+          const before = Number(
+            url.searchParams.get("before_version") ?? Infinity
+          );
+          if (before === count - 49 && !olderFailed) {
+            olderFailed = true;
+            return olderRequest.promise;
+          }
+          return response(
+            history.filter((row) => row.version_number < before).slice(0, 50)
+          );
+        }
+        if (init?.method === "POST") {
+          const latest = history[0];
+          if (!latest)
+            throw new Error("The fixture must have a current version");
+          history[0] = { ...latest, is_current: false };
+          history.unshift({
+            ...latest,
+            id: `v${count + 1}`,
+            version_number: count + 1,
+            is_current: true,
+          });
+          return response({ ...restored, current_version_number: count + 1 });
+        }
+        return response(bundle);
+      });
+      const user = setupUser();
+      showHistory();
+      expect(
+        await screen.findByRole("button", { name: `Preview version ${count}` })
+      ).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: `Preview version ${count - 50}` })
+      ).not.toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await user.click(
+        screen.getByRole("button", { name: "Load older versions" })
+      );
+      expect(
+        screen.getByRole("button", { name: `Preview version ${count}` })
+      ).toBeVisible();
+      await act(async () =>
+        olderRequest.resolve(response({ detail: "Unavailable" }, 503))
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Could not load versions."
+      );
+      expect(
+        screen.getByRole("button", { name: `Preview version ${count}` })
+      ).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "Retry" }));
+      expect(
+        await screen.findByRole("button", { name: "Preview version 1" })
+      ).toBeVisible();
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            width === 320 ? `Version ${count - 50}` : String(count - 50)
+          )
+        ).toHaveFocus()
+      );
+      expect(
+        screen.queryByRole("button", { name: "Load older versions" })
+      ).not.toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "Restore version 1" })
+      );
+      await user.click(screen.getByRole("button", { name: "Restore" }));
+      expect(
+        await screen.findByRole("button", {
+          name: `Preview version ${count + 1}`,
+        })
+      ).toBeVisible();
+      expect(
+        screen.getAllByRole("button", { name: /^Preview version/ })
+      ).toHaveLength(count + 1);
+      expect(
+        screen.getByRole("button", { name: "Preview version 1" })
+      ).toBeVisible();
+      expect(screen.getAllByText("Current")).toHaveLength(1);
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: originalWidth,
+      });
+    }
+  }
+);
+
+test("a background retry does not move focus after an older page fails", async () => {
+  let failOlder = true;
+  const history = Array.from(
+    { length: 55 },
+    (_, index): SkillVersion => ({
+      id: `v${55 - index}`,
+      version_number: 55 - index,
+      created_at: "2026-11-08T12:00:00Z",
+      created_by: null,
+      is_current: index === 0,
+      has_bundle: true,
+      marketplace_revision: null,
+    })
+  );
+  fetchMock.mockImplementation(async (input) => {
+    const url = new URL(String(input), "http://localhost");
+    const before = Number(url.searchParams.get("before_version") ?? Infinity);
+    if (before === 6 && failOlder)
+      return response({ detail: "Unavailable" }, 503);
+    return response(
+      history.filter((row) => row.version_number < before).slice(0, 50)
+    );
+  });
+  function RefreshElsewhere() {
+    const { mutate } = useSWRConfig();
+    return (
+      <Button
+        onClick={() =>
+          void mutate(
+            unstable_serialize(() => [SWR_KEYS.skillVersions(skill.id), null])
+          )
+        }
+      >
+        Refresh elsewhere
+      </Button>
+    );
+  }
+  render(
+    <>
+      <RefreshElsewhere />
+      <SkillVersions
+        skill={skill}
+        onBusyChange={jest.fn()}
+        onRestored={jest.fn()}
+      />
+    </>
+  );
+  const user = setupUser();
+  await user.click(
+    await screen.findByRole("button", { name: "Load older versions" })
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Could not load versions."
+  );
+  failOlder = false;
+  const elsewhere = screen.getByRole("button", { name: "Refresh elsewhere" });
+  await user.click(elsewhere);
+  expect(
+    await screen.findByRole("button", { name: "Preview version 1" })
+  ).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(elsewhere).toHaveFocus();
+});

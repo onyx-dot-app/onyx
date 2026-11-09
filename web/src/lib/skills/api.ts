@@ -292,9 +292,14 @@ export async function deleteUserSkill(skillId: string): Promise<void> {
   await handle<void>(res);
 }
 
-export async function listSkillVersions(skillId: string) {
+export async function listSkillVersions(
+  skillId: string,
+  beforeVersion: number | null = null
+) {
+  const cursor =
+    beforeVersion === null ? "" : `?before_version=${beforeVersion}`;
   const data = await handle<unknown>(
-    await fetch(SWR_KEYS.skillVersions(skillId))
+    await fetch(`${SWR_KEYS.skillVersions(skillId)}${cursor}`)
   );
   return yup
     .array(skillVersionSchema)

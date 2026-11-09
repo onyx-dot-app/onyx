@@ -17491,6 +17491,8 @@
       "retry": "다시 시도",
       "empty": "아직 버전이 없습니다.",
       "loading": "버전 로딩 중…",
+      "loadOlder": "이전 버전 불러오기",
+      "loadOlderCompact": "이전 버전",
       "files": "파일",
       "noFiles": "추가 파일이 없습니다."
     }

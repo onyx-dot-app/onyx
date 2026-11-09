@@ -17491,6 +17491,8 @@
       "retry": "Retry",
       "empty": "No versions yet.",
       "loading": "Loading versions…",
+      "loadOlder": "Load older versions",
+      "loadOlderCompact": "Older",
       "files": "Files",
       "noFiles": "No additional files."
     }

@@ -76,6 +76,9 @@
   History returns at most 50 rows. The positive `before_version` cursor excludes
   that version and loads older rows without shifting when a new version is saved.
   Restore creates a new version unless its content equals the current version.
+  The shared `SkillVersions` panel chains cursor pages and refetches loaded pages after restore.
+  It keeps earlier rows on load errors, announces the error, and moves focus only after an explicit older-page request.
+  Restore loads another page when a new version would hide the oldest displayed row.
   Skill list/detail responses expose `current_version_number` (null without a version).
   History rows expose their `marketplace_revision`; this is source provenance, not an operation audit log.
 - **Synced source metadata.** Skill responses include the marketplace name,

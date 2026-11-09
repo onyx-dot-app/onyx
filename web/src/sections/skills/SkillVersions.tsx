@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
+import useSWRInfinite from "swr/infinite";
 import {
   Button,
   CompactMarkdown,
@@ -108,13 +109,29 @@ export default function SkillVersions({
   const { mutate } = useSWRConfig();
   const allowed = canReadSkillHistory(skill);
   const {
-    data: versions,
+    data: pages,
     error,
     mutate: refreshVersions,
-  } = useSWR<SkillVersion[], Error>(
-    allowed ? SWR_KEYS.skillVersions(skill.id) : null,
-    () => listSkillVersions(skill.id)
+    size,
+    setSize,
+    isValidating,
+  } = useSWRInfinite<SkillVersion[], Error>(
+    (pageIndex: number, previous: SkillVersion[] | null) => {
+      if (!allowed) return null;
+      if (pageIndex === 0) return [SWR_KEYS.skillVersions(skill.id), null];
+      const oldest = previous?.at(-1);
+      return oldest && oldest.version_number > 1
+        ? [SWR_KEYS.skillVersions(skill.id), oldest.version_number]
+        : null;
+    },
+    ([, beforeVersion]: [string, number | null]) =>
+      listSkillVersions(skill.id, beforeVersion)
   );
+  const versions = pages?.flat();
+  const oldest = pages?.at(-1)?.at(-1);
+  const hasMore = oldest !== undefined && oldest.version_number > 1;
+  const olderPageCursor = useRef<number | null>(null);
+  const versionLabels = useRef(new Map<number, HTMLElement>());
   const [view, setView] = useState<HistoryView>({ kind: "list" });
   const [pending, setPending] = useState(false);
   const requestPending = useRef(false);
@@ -132,6 +149,28 @@ export default function SkillVersions({
       returning.current = false;
     }
   }, [view]);
+  useEffect(() => {
+    const cursor = olderPageCursor.current;
+    if (isValidating) return;
+    if (error) {
+      olderPageCursor.current = null;
+      return;
+    }
+    if (cursor === null) return;
+    const firstOlder = pages?.flat().find((row) => row.version_number < cursor);
+    const target = firstOlder
+      ? versionLabels.current.get(firstOlder.version_number)
+      : listTitle.current;
+    target?.focus();
+    olderPageCursor.current = null;
+  }, [pages, isValidating, error]);
+
+  function versionRef(version: SkillVersion) {
+    return (node: HTMLElement | null) => {
+      if (node) versionLabels.current.set(version.version_number, node);
+      else versionLabels.current.delete(version.version_number);
+    };
+  }
 
   function back() {
     if (requestPending.current) return;
@@ -163,9 +202,16 @@ export default function SkillVersions({
         instructions_markdown: restored.instructions_markdown,
         external_app: restored.external_app,
       };
+      async function refreshHistory() {
+        const refreshed = await refreshVersions();
+        const last = refreshed?.at(-1)?.at(-1);
+        if (oldest && last && last.version_number > oldest.version_number) {
+          await setSize(size + 1);
+        }
+      }
       // Seed current content even when its panel has not mounted yet.
       await Promise.allSettled([
-        refreshVersions(),
+        refreshHistory(),
         mutate(SWR_KEYS.editableSkill(skill.id), restored),
         mutate(SWR_KEYS.skillSharing(skill.id), restored),
         mutate(SWR_KEYS.userSkillPreview(skill.id), preview),
@@ -262,7 +308,9 @@ export default function SkillVersions({
       width: { weight: 14, minWidth: 72 },
       cell: (item) => (
         <Section height="auto" alignItems="start" gap={1}>
-          <Text>{format.number(item.version_number)}</Text>
+          <Text tabIndex={-1} ref={versionRef(item)}>
+            {format.number(item.version_number)}
+          </Text>
           {item.is_current && (
             <Text font="secondary-action">{t("current")}</Text>
           )}
@@ -358,16 +406,21 @@ export default function SkillVersions({
         {t("title")}
       </Text>
       {notice && <Text role="status">{notice}</Text>}
-      {error ? (
-        <Section height="auto">
+      {error && (
+        <Section height="auto" role="alert">
           <IllustrationContent title={t("loadError")} />
-          <Button onClick={() => void refreshVersions()}>{t("retry")}</Button>
+          {!versions && (
+            <Button onClick={() => void refreshVersions()}>{t("retry")}</Button>
+          )}
         </Section>
-      ) : !versions ? (
-        <Section height="auto">
-          <IconLoader />
-          <Text>{t("loading")}</Text>
-        </Section>
+      )}
+      {!versions ? (
+        !error && (
+          <Section height="auto">
+            <IconLoader />
+            <Text>{t("loading")}</Text>
+          </Section>
+        )
       ) : versions.length === 0 ? (
         <IllustrationContent title={t("empty")} />
       ) : isSmallScreen ? (
@@ -388,7 +441,13 @@ export default function SkillVersions({
               gap={2}
               className="rounded-lg border border-border-02"
             >
-              <Text font="main-ui-action">{versionLabel(version)}</Text>
+              <Text
+                font="main-ui-action"
+                tabIndex={-1}
+                ref={versionRef(version)}
+              >
+                {versionLabel(version)}
+              </Text>
               {version.is_current && (
                 <Text font="secondary-action">{t("current")}</Text>
               )}
@@ -414,6 +473,27 @@ export default function SkillVersions({
           pageSize={false}
         />
       )}
+      {(hasMore || (error && versions)) && (
+        <Button
+          prominence="secondary"
+          aria-disabled={isValidating}
+          aria-busy={isValidating}
+          aria-label={t(error ? "retry" : "loadOlder")}
+          onClick={() => {
+            if (isValidating) return;
+            if (oldest) {
+              olderPageCursor.current = oldest.version_number;
+            }
+            if (error) void refreshVersions();
+            else if (oldest) void setSize(size + 1);
+          }}
+        >
+          {t(
+            error ? "retry" : isSmallScreen ? "loadOlderCompact" : "loadOlder"
+          )}
+        </Button>
+      )}
+      {versions && isValidating && <Text role="status">{t("loading")}</Text>}
     </Section>
   );
 }
