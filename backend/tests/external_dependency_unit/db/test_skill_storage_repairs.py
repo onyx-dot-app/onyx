@@ -215,3 +215,5 @@ def test_physical_history_absence_clears_link_without_payload_reads(
         assert skill.bundle_file_id is not None
         with store.read_file(skill.bundle_file_id) as source:
             assert source.read() == bundle(skill.name, "Version 2")
+        for file_id in (old_file, current_file, skill.bundle_file_id):
+            store.delete_file(file_id)

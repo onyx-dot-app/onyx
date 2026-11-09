@@ -285,7 +285,8 @@ still propagate unexpected storage errors.
     Repair checks physical object metadata for complete history without downloading
     its payload. Incomplete metadata still needs a bounded bundle read.
     Confirmed missing historical objects lose their file links; current links remain
-    recoverable. Missing buckets, containers, and uncertain errors keep the links.
+    recoverable. Missing primary buckets, containers, and uncertain errors keep the links.
+    A confirmed primary object miss plus an absent legacy bucket confirms absence.
     Historical failures use separate savepoints so current pointer recovery can commit.
     Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
