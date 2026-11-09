@@ -7,10 +7,24 @@ from typing import Literal, Self
 
 _SCHEMA = (
     "CREATE TABLE entries (seq INTEGER PRIMARY KEY, name BLOB NOT NULL, "
-    "record INTEGER NOT NULL, header INTEGER NOT NULL, end_offset INTEGER);"
+    "record INTEGER NOT NULL, header BLOB NOT NULL, end_offset BLOB);"
     "CREATE INDEX entries_by_name ON entries (name, seq);"
     "CREATE INDEX entries_by_header ON entries (header, seq);"
 )
+
+# Header offsets come from 64-bit ZIP64 fields plus the prepended length, so
+# they can fall outside SQLite's 64-bit integers. Biased big-endian bytes keep
+# their order; zipfile lists such entries and fails only when one is read.
+_OFFSET_BIAS = 1 << 88
+_OFFSET_BYTES = 12
+
+
+def _offset_key(offset: int) -> bytes:
+    return (offset + _OFFSET_BIAS).to_bytes(_OFFSET_BYTES, "big")
+
+
+def _offset(key: bytes) -> int:
+    return int.from_bytes(key, "big") - _OFFSET_BIAS
 
 
 # Each entry ends at the next header, with the runtime's tie order.
@@ -41,10 +55,15 @@ class ZipEntryStore:
     ) -> None:
         with self._db:
             self._db.executemany(
-                "INSERT INTO entries VALUES (?, ?, ?, ?, NULL)", entries
+                "INSERT INTO entries VALUES (?, ?, ?, ?, NULL)",
+                (
+                    (seq, name, record, _offset_key(header))
+                    for seq, name, record, header in entries
+                ),
             )
             self._db.execute(
-                _END_OFFSETS.format(order=shared_header_order), (directory_start,)
+                _END_OFFSETS.format(order=shared_header_order),
+                (_offset_key(directory_start),),
             )
 
     def entries(self, *, by_name: bool = False) -> Iterator[tuple[int, int]]:
@@ -53,13 +72,15 @@ class ZipEntryStore:
             if by_name
             else "SELECT record, end_offset FROM entries ORDER BY seq"
         )
-        yield from self._db.execute(query)
+        for record, end_offset in self._db.execute(query):
+            yield record, _offset(end_offset)
 
     def find(self, name: str) -> tuple[int, int] | None:
-        return self._db.execute(
+        row = self._db.execute(
             "SELECT record, end_offset FROM entries WHERE name = ? ORDER BY seq DESC LIMIT 1",
             (name.encode(),),
         ).fetchone()
+        return None if row is None else (row[0], _offset(row[1]))
 
     def close(self) -> None:
         self._db.close()

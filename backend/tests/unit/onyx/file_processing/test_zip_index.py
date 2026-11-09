@@ -367,6 +367,23 @@ def test_overlapped_entries_fail_as_in_zipfile() -> None:
             reference.read("a")
 
 
+@pytest.mark.parametrize("offset", [2**63 - 1, 2**63, 2**64 - 1])
+def test_header_offsets_past_sqlite_integers_fail_as_in_zipfile(offset: int) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        info = zipfile.ZipInfo("a")
+        info.extra = struct.pack("<HHQ", 1, 8, offset)
+        archive.writestr(info, b"x")
+    data = bytearray(output.getvalue())
+    record = data.index(b"PK\x01\x02")
+    data[record + 42 : record + 46] = struct.pack("<L", 0xFFFFFFFF)
+    data = bytes(data)
+    with zipfile.ZipFile(io.BytesIO(data)) as reference, ZipIndex(data) as index:
+        for info, ours in zip(reference.infolist(), index.infos(), strict=True):
+            assert _fields(ours) == _fields(info)
+            assert _member(_index_reader(index), ours) == _member(reference.read, info)
+
+
 def test_metadata_cap_refuses_before_any_entry_exists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
