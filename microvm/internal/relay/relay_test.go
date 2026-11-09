@@ -162,7 +162,8 @@ func TestTokenClaims(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c["sub"] != sub || c["node"] != v.Node || c["gen"] != float64(3) ||
-		c["iat"] != float64(v.Now) || c["exp"] != float64(v.Now+60) || len(c["jti"].(string)) != 32 {
+		c["iat"] != float64(v.Now) || c["exp"] != float64(v.Now+60) || len(c["jti"].(string)) != 32 ||
+		c["aud"] != "sandbox-proxy" {
 		t.Fatalf("claims %s", cl)
 	}
 	want := `{"sub":"` + sub + `","gen":3,"node":"node-a","iat":1800000000,"exp":1800000060,"jti":"`
@@ -177,6 +178,32 @@ func TestTokenClaims(t *testing.T) {
 func readHead(t *testing.T, s string) (*Head, error) {
 	t.Helper()
 	return ReadHead(bufio.NewReader(strings.NewReader(s)))
+}
+
+func TestNewKeyIDIsUnique(t *testing.T) {
+	now := time.Unix(1800000000, 0)
+	a, err := NewKeyID("node-a", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := NewKeyID("node-a", now)
+	if a == b || !strings.HasPrefix(a, "node-a-1800000000-") || len(a) != len("node-a-1800000000-")+8 {
+		t.Fatalf("key ids %q %q", a, b)
+	}
+}
+
+func TestIdleTimeout(t *testing.T) {
+	for _, c := range []struct{ in, want time.Duration }{
+		{0, DefaultIdleTimeout},
+		{-time.Second, DefaultIdleTimeout},
+		{60 * time.Second, MinIdleTimeout},
+		{MinIdleTimeout, MinIdleTimeout},
+		{time.Hour, time.Hour},
+	} {
+		if got := (&Relay{IdleTimeout: c.in}).idle(); got != c.want {
+			t.Errorf("idle(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
 }
 
 func TestHeadStripAndStamp(t *testing.T) {

@@ -14,8 +14,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"time"
 )
+
+// Audience is the token's aud claim: only sandbox-proxy accepts these tokens.
+const Audience = "sandbox-proxy"
 
 // TokenLifetime is the token lifetime. The proxy rejects more than 60 s.
 const TokenLifetime = 60 * time.Second
@@ -28,6 +32,16 @@ func Subject(tenantID, sandboxID string) (string, error) {
 		return "", fmt.Errorf("invalid tenant id %q", tenantID)
 	}
 	return "spiffe://onyx/tenant/" + tenantID + "/sandbox/" + sandboxID, nil
+}
+
+// NewKeyID returns a key ID for a new node key. The random suffix keeps two
+// starts in the same second from reusing a key ID.
+func NewKeyID(nodeID string, now time.Time) (string, error) {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return nodeID + "-" + strconv.FormatInt(now.Unix(), 10) + "-" + hex.EncodeToString(b[:]), nil
 }
 
 // Signer signs identity tokens with the node key.
@@ -60,6 +74,7 @@ type tokenClaims struct {
 	Iat  int64  `json:"iat"`
 	Exp  int64  `json:"exp"`
 	Jti  string `json:"jti"`
+	Aud  string `json:"aud"`
 }
 
 // Token returns a fresh token for one connection of a VM.
@@ -75,7 +90,7 @@ func (s *Signer) Token(subject string, generation uint64) (string, error) {
 	now := s.now()
 	c, err := json.Marshal(tokenClaims{
 		Sub: subject, Gen: generation, Node: s.NodeID,
-		Iat: now.Unix(), Exp: now.Add(TokenLifetime).Unix(), Jti: hex.EncodeToString(jti[:]),
+		Iat: now.Unix(), Exp: now.Add(TokenLifetime).Unix(), Jti: hex.EncodeToString(jti[:]), Aud: Audience,
 	})
 	if err != nil {
 		return "", err

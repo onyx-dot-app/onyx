@@ -88,10 +88,10 @@ func (p *pair) setUp(up net.Conn) bool {
 }
 
 func (r *Relay) idle() time.Duration {
-	if r.IdleTimeout < MinIdleTimeout {
-		return max(r.IdleTimeout, DefaultIdleTimeout)
+	if r.IdleTimeout <= 0 {
+		return DefaultIdleTimeout
 	}
-	return r.IdleTimeout
+	return max(r.IdleTimeout, MinIdleTimeout)
 }
 
 func (r *Relay) maxConns() int {

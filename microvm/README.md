@@ -17,8 +17,9 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 
 | Call | What it does |
 |---|---|
-| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib)` | Restores a VM from a template snapshot and returns it with its `generation`. A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
+| `Create(sandbox_id, attempt, template, vcpus, mem_mib, scratch_gib, tenant_id)` | Restores a VM from a template snapshot and returns it with its `generation`. A repeat call with the same `(sandbox_id, attempt)` returns the existing VM. A different attempt for a sandbox with a VM on the node returns `ATTEMPT_CONFLICT`. An attempt that is not newer than a stopped one returns `STALE_ATTEMPT`. |
 | `Stop(sandbox_id, attempt, generation)` | Stops the VM only if all three match. A repeat Stop of the same instance succeeds with `already_stopped`. |
+| `CloseConnections(sandbox_id, attempt, generation)` | Closes every relay connection of the VM. New connections still work. Stop and VM exit also close them. |
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
 | `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk, CPU model, Firecracker, host kernel and guest kernel versions. |
 
@@ -110,16 +111,16 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   connection.
 - After the head, the relay streams both ways without buffering. When either side ends, both close
   (Firecracker vsock does not carry a half-close). The idle timeout is `--relay-idle-timeout` (default
-  15 min, never under 180 s). Every VM connection gets its own proxy connection.
+  15 min; a value under 180 s becomes 180 s). Every VM connection gets its own proxy connection.
 - One VM can have at most `--relay-max-conns` open relay connections (default 256). The relay closes a
   new connection over the cap at once, so one VM cannot use up the agent's memory or file descriptors.
   An accept error (for example `EMFILE`) does not stop the relay: it waits (5 ms, doubling up to 1 s)
   and accepts again.
 - The token is an EdDSA JWT: header `{"alg":"EdDSA","typ":"JWT","kid"}`, claims `sub`
-  (`spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>`), `gen`, `node`, `iat`, `exp` (60 s), `jti`.
+  (`spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>`), `gen`, `node`, `iat`, `exp` (60 s), `jti`, `aud` (`sandbox-proxy`).
   `internal/relay/testdata/signed_identity_vectors.json` is a copy of the proxy's shared test vectors; a
   test fails if the two differ, or if the proxy file exists but cannot be read.
-- The agent makes a new Ed25519 node key at each start (`kid` = `<node-id>-<unix time>`) and registers it
+- The agent makes a new Ed25519 node key at each start (`kid` = `<node-id>-<unix time>-<8 random hex>`) and registers it
   with `PUT <--api-server-url>/build/sandbox-node/signing-key` and
   `Authorization: Bearer $SANDBOX_NODE_REGISTRATION_SECRET`. It registers again every 20 min (the cache
   TTL is 1 h) and retries every 10 s after a failure.

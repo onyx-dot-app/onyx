@@ -7,7 +7,6 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"strconv"
 	"errors"
 	"flag"
 	"fmt"
@@ -178,7 +177,11 @@ func setupEgress(ctx context.Context, f flags, m *agent.Manager, log *slog.Logge
 	if err != nil {
 		return err
 	}
-	signer := relay.NewSigner(f.nodeID, f.nodeID+"-"+strconv.FormatInt(time.Now().Unix(), 10), key)
+	kid, err := relay.NewKeyID(f.nodeID, time.Now())
+	if err != nil {
+		return err
+	}
+	signer := relay.NewSigner(f.nodeID, kid, key)
 	m.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{
 		Signer: signer, Upstream: f.egressProxy, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, Log: log,
 	}})
