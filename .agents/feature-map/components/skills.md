@@ -617,6 +617,12 @@ The library preview of an external-app skill calls the same renderer
     Removal captures all version/legacy file IDs and sandbox recipients before cascading.
     Commit before dispatch, push or unreferenced-file cleanup. Rollback preserves rows
     and blobs. Replacement and deletion fence workers that already staged content.
+    The shared web client in `web/src/lib/marketplaces/` validates management and
+    preview responses with Yup before components use them. Its types come from
+    those schemas. A queued request stays distinct from an applied revision;
+    confirmation sends only the displayed revision and skill IDs, never an
+    approval flag. Fetch errors retain server status and detail through the common
+    fetcher. The marketplace UI is not yet wired to this client.
 
 
 ---
