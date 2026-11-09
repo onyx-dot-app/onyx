@@ -34,8 +34,8 @@ export interface SkillGroupShare {
   group_id: number;
   group_name: string;
   permission: SkillSharePermission;
-  /** Omitted preserves the policy; null inherits the skill-wide policy. */
-  installation_policy?: SkillInstallationPolicy | null;
+  /** Null inherits the skill-wide policy. */
+  installation_policy: SkillInstallationPolicy | null;
 }
 
 /** Read-only group label. Filtered by the viewer's authority, so it is never

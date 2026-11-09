@@ -17,7 +17,10 @@ import { Permission } from "@/lib/types";
 import { Modal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
-import { SharePermissionMenu } from "@/lib/permissions/components";
+import {
+  SharePermissionMenu,
+  type SharePermissionMenuOption,
+} from "@/lib/permissions/components";
 import {
   useSharePermissionOptions,
   useShareScopeOptions,
@@ -58,6 +61,7 @@ import {
   SvgArrowExchange,
   SvgArrowLeft,
   SvgBlocks,
+  SvgOrganization,
   SvgUser,
   SvgUserManage,
   SvgUsers,
@@ -69,6 +73,12 @@ import SkillVersions from "@/sections/skills/SkillVersions";
 import useScreenSize from "@opal/hooks/useScreenSize";
 
 type ShareModalView = "share" | "transfer" | "reset";
+
+/** Saved group overrides by group id; null inherits the skill setting. */
+type GroupPolicies = Map<number, SkillInstallationPolicy | null>;
+
+const INHERIT = "INHERIT";
+type GroupPolicyChoice = SkillInstallationPolicy | typeof INHERIT;
 
 type SkillShareDraftState = BaseShareDraftState<SkillSharePermission>;
 
@@ -119,6 +129,18 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
   const installationOptions = useInstallationPolicyOptions();
+  const groupPolicyOptions = useMemo(
+    (): SharePermissionMenuOption<GroupPolicyChoice>[] => [
+      {
+        value: INHERIT,
+        label: t("share.groupInstallation.inherit"),
+        description: t("share.groupInstallation.inheritDescription"),
+        icon: SvgOrganization,
+      },
+      ...installationOptions,
+    ],
+    [installationOptions, t]
+  );
   const { data: shareableUsersData } = useShareableUsers({
     includeApiKeys: true,
   });
@@ -127,9 +149,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   });
   const { data: shareableGroupsData } = useShareableGroups();
   const { user: currentUser } = useUser();
-  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
-    Permission.MANAGE_SKILLS
-  );
+  const {
+    isGlobalHolder: canManageCompanySkills,
+    isScopedManager: isScopedSkillManager,
+  } = usePermissionAuthority(Permission.MANAGE_SKILLS);
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
     null
@@ -157,6 +180,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     }
     previousView.current = view;
   }, [view]);
+  const [groupPolicies, setGroupPolicies] = useState<GroupPolicies>(
+    () => new Map()
+  );
+  const [initialGroupPolicies, setInitialGroupPolicies] =
+    useState<GroupPolicies>(() => new Map());
   const [installationPolicy, setInstallationPolicy] =
     useState<SkillInstallationPolicy>("AVAILABLE");
   const [initialPolicy, setInitialPolicy] =
@@ -187,6 +215,14 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       publicPermission: skill.public_permission ?? "VIEWER",
       userShares: skill.user_shares,
     };
+    const savedGroupPolicies: GroupPolicies = new Map(
+      skill.group_shares.map((share) => [
+        share.group_id,
+        share.installation_policy ?? null,
+      ])
+    );
+    setGroupPolicies(savedGroupPolicies);
+    setInitialGroupPolicies(savedGroupPolicies);
     setInstallationPolicy(skill.installation_policy);
     setInitialPolicy(skill.installation_policy);
     setDraftState(nextState);
@@ -239,12 +275,29 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     !!skill &&
     (skill.user_permission === "OWNER" ||
       (canManageCompanySkills && skill.ownership_vacant));
+  // Group overrides need manage-skills for those groups. Scoped managers act
+  // only on private skills; the server checks the exact groups.
+  const canEditGroupPolicies =
+    canEditShares &&
+    (canManageCompanySkills ||
+      (canEditAudience &&
+        isScopedSkillManager &&
+        !!effectiveState &&
+        !effectiveState.isPublic));
+  const groupPolicyOf = (groupId: number) => groupPolicies.get(groupId) ?? null;
+  const savedGroupPolicyOf = (groupId: number) =>
+    initialGroupPolicies.get(groupId) ?? null;
+  const groupPolicyChanged = (groupId: number) =>
+    groupPolicyOf(groupId) !== savedGroupPolicyOf(groupId);
   const isDirty =
     !!effectiveState &&
     !!initialState &&
     (serializeDraftState(effectiveState) !==
       serializeDraftState(initialState) ||
-      installationPolicy !== initialPolicy);
+      installationPolicy !== initialPolicy ||
+      effectiveState.groupShares.some((share) =>
+        groupPolicyChanged(share.group_id)
+      ));
 
   const existingUserIds = useMemo(() => {
     const ids = new Set(draftState?.userShares.map((share) => share.user.id));
@@ -357,6 +410,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     setStagedGroups((currentGroups) =>
       currentGroups.filter((group) => group.id !== groupId)
     );
+    setGroupPolicies((current) => {
+      const next = new Map(current);
+      next.delete(groupId);
+      return next;
+    });
     setDraftState((currentDraftState) =>
       currentDraftState
         ? {
@@ -382,7 +440,23 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       const nextDraft: SkillSharingDraft = {
         ...skill,
         user_shares: effectiveState.userShares,
-        group_shares: effectiveState.groupShares,
+        // Send an override only when it changed: an omitted one keeps the
+        // saved value, which may need authority this user lacks.
+        group_shares: effectiveState.groupShares.map((share) => {
+          const policy = groupPolicyOf(share.group_id);
+          const grant = {
+            group_id: share.group_id,
+            group_name: share.group_name,
+            permission: share.permission,
+          };
+          return (
+            props.mode === "create"
+              ? policy !== null
+              : groupPolicyChanged(share.group_id)
+          )
+            ? { ...grant, installation_policy: policy }
+            : grant;
+        }),
         public_permission: effectiveState.isPublic
           ? effectiveState.publicPermission
           : null,
@@ -641,11 +715,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 onAddUser={(user) => {
                   setStagedUsers((currentUsers) => [...currentUsers, user]);
                 }}
-                onRemoveGroup={(groupId) => {
-                  setStagedGroups((currentGroups) =>
-                    currentGroups.filter((group) => group.id !== groupId)
-                  );
-                }}
+                onRemoveGroup={removeGroupShare}
                 onRemoveUser={(userId) => {
                   setStagedUsers((currentUsers) =>
                     currentUsers.filter((user) => user.id !== userId)
@@ -714,7 +784,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                               permission
                             )
                           }
-                          onRemove={() => removeGroupShare(share.group_id)}
+                          onRemove={
+                            canEditGroupPolicies ||
+                            savedGroupPolicyOf(share.group_id) === null
+                              ? () => removeGroupShare(share.group_id)
+                              : undefined
+                          }
                           options={permissionOptions}
                           value={share.permission}
                         />
@@ -727,6 +802,50 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             )}
           </Section>
         )}
+        {effectiveState.groupShares.length > 0 &&
+          (canEditGroupPolicies ||
+            effectiveState.groupShares.some(
+              (share) => groupPolicyOf(share.group_id) !== null
+            )) && (
+            <Section gap={3} height="auto" alignItems="stretch">
+              <Content
+                font="main-ui-action"
+                title={t("share.groupInstallation.title")}
+                description={t("share.groupInstallation.description")}
+              />
+              <Card border="solid" padding={2}>
+                <Section gap={1} height="auto" alignItems="stretch">
+                  {effectiveState.groupShares.map((share) => (
+                    <ShareAccessRow
+                      avatarIcon={SvgUsers}
+                      icon={SvgUsers}
+                      key={share.group_id}
+                      rightChildren={
+                        <SharePermissionMenu
+                          ariaLabel={t("share.groupInstallation.ariaLabel", {
+                            name: share.group_name,
+                          })}
+                          disabled={!canEditGroupPolicies || saving}
+                          menuWidth={70}
+                          onChange={(value) =>
+                            setGroupPolicies((current) =>
+                              new Map(current).set(
+                                share.group_id,
+                                value === INHERIT ? null : value
+                              )
+                            )
+                          }
+                          options={groupPolicyOptions}
+                          value={groupPolicyOf(share.group_id) ?? INHERIT}
+                        />
+                      }
+                      title={share.group_name}
+                    />
+                  ))}
+                </Section>
+              </Card>
+            </Section>
+          )}
         <Section gap={3} height="auto" alignItems="stretch">
           <Content font="main-ui-action" title={t("share.ownershipTitle")} />
           <Card border="solid" padding={2}>
