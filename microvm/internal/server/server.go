@@ -19,15 +19,25 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
+// KeyInstaller sets the guest daemon key of a running VM.
+type KeyInstaller interface {
+	InstallKey(ctx context.Context, vm agent.VM, key string) error
+}
+
 // Service adapts an agent.Manager to the gRPC API.
 type Service struct {
 	pb.UnimplementedHostAgentServer
 	M *agent.Manager
 	// DialPorts are the guest ports Dial allows. Nil means DefaultDialPorts.
+	// Dial refuses DaemonPort even if it is listed here.
 	DialPorts []uint32
+	// DaemonPort is the guest daemon's vsock port. 0 means DefaultDaemonPort.
+	DaemonPort uint32
 	// MaxDialsPerVM caps the open Dial streams of one VM. 0 means
 	// DefaultMaxDialsPerVM.
 	MaxDialsPerVM int
+	// Keys installs CreateRequest.sandboxd_key. Nil ignores the key.
+	Keys KeyInstaller
 
 	dialMu sync.Mutex
 	dials  map[string]int
@@ -35,6 +45,10 @@ type Service struct {
 
 // Create implements pb.HostAgentServer.
 func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateResponse, error) {
+	key := r.GetSandboxdKey()
+	if err := validateDaemonKey(key); err != nil {
+		return nil, toStatus(apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "sandboxd_key: %v", err))
+	}
 	vm, created, err := s.M.Create(ctx, agent.CreateRequest{
 		SandboxID: r.GetSandboxId(), Attempt: r.GetAttempt(), Template: r.GetTemplate(),
 		VCPUs: r.GetVcpus(), MemMiB: r.GetMemMib(), ScratchGiB: r.GetScratchGib(), TenantID: r.GetTenantId(),
@@ -42,7 +56,29 @@ func (s *Service) Create(ctx context.Context, r *pb.CreateRequest) (*pb.CreateRe
 	if err != nil {
 		return nil, toStatus(err)
 	}
+	if key != "" && s.Keys != nil && vm.State == pb.VMState_VM_STATE_RUNNING {
+		if err := s.Keys.InstallKey(ctx, vm, key); err != nil {
+			return nil, toStatus(err)
+		}
+	}
 	return &pb.CreateResponse{Vm: toVM(vm), Created: created}, nil
+}
+
+// validateDaemonKey applies the daemon's SetKey rules, so that a bad key
+// fails before a VM starts. Empty means no key.
+func validateDaemonKey(key string) error {
+	if key == "" {
+		return nil
+	}
+	if n := len(key); n < 32 || n > 512 {
+		return fmt.Errorf("must be 32 to 512 bytes, got %d", n)
+	}
+	for _, c := range []byte(key) {
+		if c <= ' ' || c > '~' {
+			return errors.New("must be printable ASCII with no spaces")
+		}
+	}
+	return nil
 }
 
 // Stop implements pb.HostAgentServer.

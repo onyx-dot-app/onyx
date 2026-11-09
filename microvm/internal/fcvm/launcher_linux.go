@@ -182,7 +182,7 @@ func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []Fil
 // can still be "jailer" for a moment.
 func (l *Launcher) checkProcess(ctx context.Context, id string, pid int) error {
 	for {
-		comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+		comm, err := os.ReadFile(l.procFile(pid, "comm"))
 		if err != nil {
 			return err
 		}
@@ -199,13 +199,16 @@ func (l *Launcher) checkProcess(ctx context.Context, id string, pid int) error {
 		case <-time.After(time.Millisecond):
 		}
 	}
-	cg, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
+	cg, err := os.ReadFile(l.procFile(pid, "cgroup"))
 	if err != nil {
 		return err
 	}
-	want := "/" + l.Cmd.Slice + "/" + jailer.ScopeUnit(id)
-	if !strings.Contains(string(cg), want) {
-		return fmt.Errorf("pid %d is in cgroup %q, want %s", pid, strings.TrimSpace(string(cg)), want)
+	got, ok, err := l.Cgroups.vmScope(string(cg), l.Cmd.Slice, pid)
+	if err != nil {
+		return err
+	}
+	if !ok || got != id {
+		return fmt.Errorf("pid %d is in cgroup %q, want %s/%s", pid, strings.TrimSpace(string(cg)), l.Cmd.Slice, jailer.ScopeUnit(id))
 	}
 	return nil
 }

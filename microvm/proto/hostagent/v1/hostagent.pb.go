@@ -67,11 +67,22 @@ const (
 	ErrorReason_SANDBOX_IN_DOUBT ErrorReason = 16
 	// Dial: the guest port is not on the agent's allow-list.
 	ErrorReason_PORT_NOT_ALLOWED ErrorReason = 17
-	// Dial: nothing in the VM accepted the connection on that port.
+	// Dial or the guest daemon pass-through: nothing in the VM accepted the
+	// connection on that port.
 	ErrorReason_GUEST_UNREACHABLE ErrorReason = 18
+	// Dial or the guest daemon pass-through: the sandbox has a VM on this node,
+	// but it is not running (starting, stopping or exited).
+	ErrorReason_VM_NOT_RUNNING ErrorReason = 19
 	// Dial: the VM already has the most open Dial streams that the agent
 	// allows (--dial-max-streams).
 	ErrorReason_DIAL_LIMIT ErrorReason = 20
+	// The guest daemon pass-through: only the agent may call this daemon
+	// method (SetKey).
+	ErrorReason_METHOD_NOT_ALLOWED ErrorReason = 21
+	// Create: the guest daemon refused sandboxd_key, for example because it
+	// already has a different key. Do not use the VM: Stop it and create a
+	// new attempt.
+	ErrorReason_GUEST_KEY_REJECTED ErrorReason = 22
 )
 
 // Enum value maps for ErrorReason.
@@ -96,7 +107,10 @@ var (
 		16: "SANDBOX_IN_DOUBT",
 		17: "PORT_NOT_ALLOWED",
 		18: "GUEST_UNREACHABLE",
+		19: "VM_NOT_RUNNING",
 		20: "DIAL_LIMIT",
+		21: "METHOD_NOT_ALLOWED",
+		22: "GUEST_KEY_REJECTED",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED": 0,
@@ -118,7 +132,10 @@ var (
 		"SANDBOX_IN_DOUBT":         16,
 		"PORT_NOT_ALLOWED":         17,
 		"GUEST_UNREACHABLE":        18,
+		"VM_NOT_RUNNING":           19,
 		"DIAL_LIMIT":               20,
+		"METHOD_NOT_ALLOWED":       21,
+		"GUEST_KEY_REJECTED":       22,
 	}
 )
 
@@ -222,7 +239,12 @@ type CreateRequest struct {
 	ScratchGib uint32 `protobuf:"varint,6,opt,name=scratch_gib,json=scratchGib,proto3" json:"scratch_gib,omitempty"`
 	// Tenant of the sandbox (^[A-Za-z0-9_-]+$). The egress relay stamps
 	// spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>.
-	TenantId      string `protobuf:"bytes,7,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	TenantId string `protobuf:"bytes,7,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Secret. The per-VM guest daemon key (craft.sandboxd.v1 SetKey rules:
+	// 32 to 512 bytes, 0x21 to 0x7E). Daemon calls must carry it in
+	// x-sandboxd-key. The agent does not log or store it. Without it, the
+	// daemon answers only Health.
+	SandboxdKey   string `protobuf:"bytes,8,opt,name=sandboxd_key,json=sandboxdKey,proto3" json:"sandboxd_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -302,6 +324,13 @@ func (x *CreateRequest) GetScratchGib() uint32 {
 func (x *CreateRequest) GetTenantId() string {
 	if x != nil {
 		return x.TenantId
+	}
+	return ""
+}
+
+func (x *CreateRequest) GetSandboxdKey() string {
+	if x != nil {
+		return x.SandboxdKey
 	}
 	return ""
 }
@@ -1093,7 +1122,7 @@ var File_hostagent_v1_hostagent_proto protoreflect.FileDescriptor
 
 const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\n" +
-	"\x1chostagent/v1/hostagent.proto\x12\x12craft.hostagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd1\x01\n" +
+	"\x1chostagent/v1/hostagent.proto\x12\x12craft.hostagent.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf4\x01\n" +
 	"\rCreateRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
@@ -1103,7 +1132,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\amem_mib\x18\x05 \x01(\rR\x06memMib\x12\x1f\n" +
 	"\vscratch_gib\x18\x06 \x01(\rR\n" +
 	"scratchGib\x12\x1b\n" +
-	"\ttenant_id\x18\a \x01(\tR\btenantId\"R\n" +
+	"\ttenant_id\x18\a \x01(\tR\btenantId\x12!\n" +
+	"\fsandboxd_key\x18\b \x01(\tR\vsandboxdKey\"R\n" +
 	"\x0eCreateResponse\x12&\n" +
 	"\x02vm\x18\x01 \x01(\v2\x16.craft.hostagent.v1.VMR\x02vm\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"f\n" +
@@ -1175,7 +1205,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\vscratch_gib\x18\x04 \x01(\rR\n" +
 	"scratchGib\x12!\n" +
 	"\fguest_kernel\x18\x05 \x01(\tR\vguestKernel\x12/\n" +
-	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\xc4\x03\n" +
+	"\x13firecracker_version\x18\x06 \x01(\tR\x12firecrackerVersion*\x88\x04\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10INVALID_ARGUMENT\x10\x01\x12\x14\n" +
@@ -1197,9 +1227,12 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\bINTERNAL\x10\x0f\x12\x14\n" +
 	"\x10SANDBOX_IN_DOUBT\x10\x10\x12\x14\n" +
 	"\x10PORT_NOT_ALLOWED\x10\x11\x12\x15\n" +
-	"\x11GUEST_UNREACHABLE\x10\x12\x12\x0e\n" +
+	"\x11GUEST_UNREACHABLE\x10\x12\x12\x12\n" +
+	"\x0eVM_NOT_RUNNING\x10\x13\x12\x0e\n" +
 	"\n" +
-	"DIAL_LIMIT\x10\x14*e\n" +
+	"DIAL_LIMIT\x10\x14\x12\x16\n" +
+	"\x12METHOD_NOT_ALLOWED\x10\x15\x12\x16\n" +
+	"\x12GUEST_KEY_REJECTED\x10\x16*e\n" +
 	"\aVMState\x12\x18\n" +
 	"\x14VM_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11VM_STATE_STARTING\x10\x01\x12\x14\n" +

@@ -21,7 +21,8 @@ import (
 )
 
 // Adopt implements agent.Adopter. The PID must still be our Firecracker:
-// same start time, comm "firecracker", the VM scope as its cgroup and
+// same start time, comm "firecracker", the VM scope as its cgroup (in any
+// cgroup namespace, see CgroupView) and
 // "--id <sandbox_id>" on its command line. Then GET / on its API socket must
 // report "Running".
 func (l *Launcher) Adopt(ctx context.Context, r journal.Record) (agent.Process, error) {
@@ -108,14 +109,9 @@ func (l *Launcher) matchLayout(pid int) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	prefix := "0::/" + l.Cmd.Slice + "/fcvm-"
-	line := strings.TrimSpace(string(cg))
-	if !strings.HasPrefix(line, prefix) || !strings.HasSuffix(line, ".scope") || strings.Contains(line, "\n") {
-		return "", false, nil
-	}
-	id := strings.TrimSuffix(strings.TrimPrefix(line, prefix), ".scope")
-	if !jailer.ValidID(id) {
-		return "", false, nil
+	id, ok, err := l.Cgroups.vmScope(string(cg), l.Cmd.Slice, pid)
+	if err != nil || !ok {
+		return "", false, err
 	}
 	raw, err := os.ReadFile(l.procFile(pid, "cmdline"))
 	if err != nil {

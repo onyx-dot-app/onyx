@@ -12,9 +12,8 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-// DefaultDialPorts are the guest ports Dial allows: the prototype guest
-// daemon (52) and the app preview (3010).
-var DefaultDialPorts = []uint32{52, 3010}
+// DefaultDialPorts are the guest ports Dial allows: the app preview (3010).
+var DefaultDialPorts = []uint32{3010}
 
 // DefaultMaxDialsPerVM is the default cap on open Dial streams per VM.
 const DefaultMaxDialsPerVM = 64
@@ -31,6 +30,11 @@ func (s *Service) Dial(stream pb.HostAgent_DialServer) error {
 		return err
 	}
 	port := first.GetGuestPort()
+	// The daemon port is never allowed: a raw stream there could call SetKey
+	// before the agent does at Create.
+	if port == s.daemonPort() {
+		return toStatus(apierr.New(pb.ErrorReason_PORT_NOT_ALLOWED, "guest port %d is the guest daemon; use the pass-through", port))
+	}
 	if !s.dialAllowed(port) {
 		return toStatus(apierr.New(pb.ErrorReason_PORT_NOT_ALLOWED, "guest port %d is not allowed", port))
 	}
@@ -138,6 +142,13 @@ func (s *Service) acquireDial(sandboxID string) (release func(), err error) {
 			delete(s.dials, sandboxID)
 		}
 	}, nil
+}
+
+func (s *Service) daemonPort() uint32 {
+	if s.DaemonPort == 0 {
+		return DefaultDaemonPort
+	}
+	return s.DaemonPort
 }
 
 func (s *Service) dialAllowed(port uint32) bool {

@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
+	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
 	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
@@ -123,21 +124,11 @@ func TestDialKVM(t *testing.T) {
 	}()
 	t.Logf("Create over mTLS: generation %d", vm.GetGeneration())
 
-	// Guest daemon port (the prototype agent on 52).
-	out, err := dialOnce(ctx, good, vm.GetSandboxId(), 52, "ping\n")
-	if err != nil || strings.TrimSpace(out) != "pong" {
-		t.Fatalf("dial 52: %q %v", out, err)
+	// The guest daemon port is never open to Dial (only the agent sets the
+	// daemon key, through the pass-through and Create).
+	if _, err := dialOnce(ctx, good, vm.GetSandboxId(), server.DefaultDaemonPort, "ping\n"); apierr.FromStatus(err) != pb.ErrorReason_PORT_NOT_ALLOWED {
+		t.Fatalf("dial %d: want PORT_NOT_ALLOWED, got %v", server.DefaultDaemonPort, err)
 	}
-	var lat []float64
-	for i := 0; i < 20; i++ {
-		s := time.Now()
-		out, err := dialOnce(ctx, good, vm.GetSandboxId(), 52, "ping\n")
-		if err != nil || strings.TrimSpace(out) != "pong" {
-			t.Fatalf("dial 52 #%d: %q %v", i, out, err)
-		}
-		lat = append(lat, float64(time.Since(s).Microseconds())/1000)
-	}
-	t.Logf("BENCH dial_ping_ms p50=%.2f p95=%.2f max=%.2f (20 calls)", pct(lat, 0.5), pct(lat, 0.95), pct(lat, 1))
 
 	// Preview port 3010: a web server in the guest, through the prototype
 	// agent's vsock 3010 → 127.0.0.1:3010 forward.
@@ -159,13 +150,23 @@ func TestDialKVM(t *testing.T) {
 		t.Fatalf("dial 3010: %q %v", page, err)
 	}
 	t.Logf("Dial 3010: %s ... preview-ok", strings.SplitN(page, "\r\n", 2)[0])
+	var lat []float64
+	for i := 0; i < 20; i++ {
+		s := time.Now()
+		out, err := dialOnce(ctx, good, vm.GetSandboxId(), 3010, "GET /index.html HTTP/1.0\r\nHost: localhost\r\n\r\n")
+		if err != nil || !strings.Contains(out, "preview-ok") {
+			t.Fatalf("dial 3010 #%d: %q %v", i, out, err)
+		}
+		lat = append(lat, float64(time.Since(s).Microseconds())/1000)
+	}
+	t.Logf("BENCH dial_get_ms p50=%.2f p95=%.2f max=%.2f (20 calls)", pct(lat, 0.5), pct(lat, 0.95), pct(lat, 1))
 
 	// Refused: a client cert from another CA, and a client with no cert.
 	for name, c := range map[string]pb.HostAgentClient{
 		"other CA": mtlsClient(t, addr, certs, certs.BadCert, certs.BadKey),
 		"no cert":  mtlsClient(t, addr, certs, "", ""),
 	} {
-		if _, err := dialOnce(ctx, c, vm.GetSandboxId(), 52, "ping\n"); err == nil {
+		if _, err := dialOnce(ctx, c, vm.GetSandboxId(), 3010, ""); err == nil {
 			t.Errorf("%s: Dial succeeded", name)
 		} else {
 			t.Logf("%s refused: %v", name, err)
@@ -178,7 +179,7 @@ func TestDialKVM(t *testing.T) {
 	if _, err := dialOnce(ctx, good, vm.GetSandboxId(), 22, ""); err == nil {
 		t.Error("port 22 was allowed")
 	}
-	if _, err := dialOnce(ctx, good, newUUID(), 52, "ping\n"); err == nil {
+	if _, err := dialOnce(ctx, good, newUUID(), 3010, ""); err == nil {
 		t.Error("unknown sandbox was dialed")
 	}
 }
