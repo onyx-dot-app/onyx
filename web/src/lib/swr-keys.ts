@@ -267,6 +267,8 @@ export const SWR_KEYS = {
   marketplaces: "/api/marketplaces",
   marketplace: (id: string) => `/api/marketplaces/${encodeURIComponent(id)}`,
   userSkills: "/api/skills",
+  skillLimitMe: "/api/skills/limit/me",
+  skillLimitUsers: "/api/skills/limit/users",
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
   skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
   skillVersion: (skillId: string, versionId: string) =>

@@ -17591,6 +17591,14 @@
         "placeholder": "그룹으로 필터링",
         "all": "모든 그룹"
       }
+    },
+    "limit": {
+      "refusal": {
+        "title": "{limit, select, files {스킬 파일 수 한도에 도달했습니다} other {스킬 크기 한도에 도달했습니다}}",
+        "own": "이 변경으로 스킬이 {size}, {files, plural, one {파일 #개} other {파일 #개}}가 됩니다. 한도는 {maxSize}, {maxFiles, plural, one {파일 #개} other {파일 #개}}입니다.{others, plural, =0 {} one { 다른 사용자 #명도 한도를 넘게 됩니다.} other { 다른 사용자 #명도 한도를 넘게 됩니다.}}",
+        "ownEstimated": "이 변경으로 스킬이 약 {size}, {files, plural, one {파일 #개} other {파일 #개}}가 됩니다. 이 추정치는 아직 측정되지 않은 {unknown, plural, one {스킬 #개} other {스킬 #개}}를 허용되는 최대 크기로 계산합니다. 한도는 {maxSize}, {maxFiles, plural, one {파일 #개} other {파일 #개}}입니다.{others, plural, =0 {} one { 다른 사용자 #명도 한도를 넘게 됩니다.} other { 다른 사용자 #명도 한도를 넘게 됩니다.}}",
+        "affected": "이 변경으로 {count, plural, one {사용자 #명} other {사용자 #명}}이 {limit, select, files {스킬 파일 수 한도} other {스킬 크기 한도}}를 넘게 됩니다."
+      }
     }
   },
   "opensearchHealth": {

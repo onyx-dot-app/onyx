@@ -131,6 +131,16 @@
   Individual grants on ownerless Skills require global management authority;
   scoped managers keep group controls in single and bulk sharing dialogs.
 
+**Write-limit client contracts.** `web/src/lib/skills/limits.ts` validates structured
+413 `PAYLOAD_TOO_LARGE` errors and usage responses with strict Yup schemas.
+`web/src/lib/skills/api.ts` retains the full error body and parses nullable per-item bulk limits.
+`web/src/lib/skills/hooks.ts` formats charged totals, labels unknown sizes as estimates, and keeps
+ordinary errors unchanged. Repeated refusals replace one persistent toast.
+The own-usage hook reads `/api/skills/limit/me`; admin usage requires global
+Manage Skills and a user-bound SWR key. Any failed admin refetch hides cached rows.
+SkillsPage actions revalidate usage through the shared SWR helper. Other write
+surfaces rely on SWR remount and focus revalidation.
+
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
   `.template` file is rejected with a message. A bundle over a size or file

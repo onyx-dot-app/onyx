@@ -17591,6 +17591,14 @@
         "placeholder": "Nach Gruppe filtern",
         "all": "Alle Gruppen"
       }
+    },
+    "limit": {
+      "refusal": {
+        "title": "{limit, select, files {Dateilimit für Skills erreicht} other {Größenlimit für Skills erreicht}}",
+        "own": "Durch diese Änderung hätten Ihre Skills {size} in {files, plural, one {# Datei} other {# Dateien}}. Das Limit beträgt {maxSize} und {maxFiles, plural, one {# Datei} other {# Dateien}}.{others, plural, =0 {} one { Außerdem würde # weiterer Benutzer das Limit überschreiten.} other { Außerdem würden # weitere Benutzer das Limit überschreiten.}}",
+        "ownEstimated": "Durch diese Änderung hätten Ihre Skills geschätzt {size} in {files, plural, one {# Datei} other {# Dateien}}. Die Schätzung zählt {unknown, plural, one {# noch nicht gemessenen Skill} other {# noch nicht gemessene Skills}} mit der größten zulässigen Größe. Das Limit beträgt {maxSize} und {maxFiles, plural, one {# Datei} other {# Dateien}}.{others, plural, =0 {} one { Außerdem würde # weiterer Benutzer das Limit überschreiten.} other { Außerdem würden # weitere Benutzer das Limit überschreiten.}}",
+        "affected": "Durch diese Änderung würden {count, plural, one {# Benutzer} other {# Benutzer}} das {limit, select, files {Dateilimit für Skills} other {Größenlimit für Skills}} überschreiten."
+      }
     }
   },
   "opensearchHealth": {

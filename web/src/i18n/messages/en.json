@@ -17591,6 +17591,14 @@
         "placeholder": "Filter by group",
         "all": "All groups"
       }
+    },
+    "limit": {
+      "refusal": {
+        "title": "{limit, select, files {Skill file limit reached} other {Skill size limit reached}}",
+        "own": "This change would put your skills at {size} in {files, plural, one {# file} other {# files}}. The limit is {maxSize} and {maxFiles, plural, one {# file} other {# files}}.{others, plural, =0 {} one { It would also put # other user over the limit.} other { It would also put # other users over the limit.}}",
+        "ownEstimated": "This change would put your skills at an estimated {size} in {files, plural, one {# file} other {# files}}. The estimate counts {unknown, plural, one {# skill} other {# skills}} not yet measured at the largest allowed size. The limit is {maxSize} and {maxFiles, plural, one {# file} other {# files}}.{others, plural, =0 {} one { It would also put # other user over the limit.} other { It would also put # other users over the limit.}}",
+        "affected": "This change would put {count, plural, one {# user} other {# users}} over the {limit, select, files {skill file limit} other {skill size limit}}."
+      }
     }
   },
   "opensearchHealth": {
