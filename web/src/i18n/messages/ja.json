@@ -14429,8 +14429,8 @@
         "associateButton": "既存のスキルを関連付け",
         "create": {
           "github": {
-            "description": "スキルが GitHub にある場合は、まずスキルページでインポートしてから、このアプリに関連付けてください。",
-            "label": "GitHub からインポート"
+            "description": "スキルページでマーケットプレイスを同期してから、そのスキルをこのアプリに関連付けてください。",
+            "label": "GitHub から同期"
           },
           "scratch": {
             "description": "手順を書き、補助ファイルを追加します。",
@@ -17166,88 +17166,11 @@
           "selected": "{count, plural, one {# 件のスキルバンドルを選択中} other {# 件のスキルバンドルを選択中}}",
           "result": "{imported, plural, one {# 件のスキルをインポートしました} other {# 件のスキルをインポートしました}}。{failed, plural, one {# 件が失敗しました} other {# 件が失敗しました}}。",
           "failure": "{name}: {reason}",
-          "requirement": "複数の ZIP ファイルを選択すると、スキルをまとめてインポートできます。各 ZIP にはスキルを 1 件含めてください。"
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "キャンセル"
-        },
-        "doneButton": {
-          "label": "完了"
-        },
-        "header": {
-          "chooseDescription": "{repository} からスキルを選択してください。",
-          "completeDescription": "スキルに追加された内容を確認してください。",
-          "completeTitle": "GitHub からのインポートが完了しました",
-          "description": "GitHub リポジトリから 1 つ以上のスキルをインポートします。",
-          "title": "GitHub からインポート"
-        },
-        "importError": {
-          "message": "スキルをインポートできませんでした。",
-          "title": "スキルをインポートできませんでした"
-        },
-        "loadError": {
-          "message": "リポジトリを読み込めませんでした。",
-          "title": "リポジトリを読み込めませんでした"
-        },
-        "privateRepos": {
-          "askAdmin": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に、管理者に GitHub の設定を依頼してください。",
-          "connect": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートするには GitHub を接続してください。",
-          "connectButton": {
-            "label": "GitHub を接続"
-          },
-          "connected": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリでは、お使いの GitHub 接続を使用します。",
-          "needsConnection": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリには GitHub 接続が必要です。",
-          "setUp": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に GitHub を設定してください。",
-          "setUpButton": {
-            "label": "GitHub を設定"
-          }
-        },
-        "repositoryInput": {
-          "label": "リポジトリ"
-        },
-        "result": {
-          "disabledCount": "同じ名前のスキルが有効になっているため、{count} 件は無効の状態でインポートしました。",
-          "enabledCount": "{count} 件を自動的に有効にしました。",
-          "failedCount": "{count} 件をインポートできませんでした。",
-          "importedSection": {
-            "title": "インポート済み"
-          },
-          "importedTitle": "{count, plural, one {# 件のスキルをインポートしました} other {# 件のスキルをインポートしました}}",
-          "noneTitle": "インポートされたスキルはありません",
-          "notImportedSection": {
-            "title": "インポートなし"
-          },
-          "notSelectedCount": "{count} 件は選択されていません。"
-        },
-        "selectAll": {
-          "ariaLabel": "インポート可能なすべてのスキルを選択"
-        },
-        "selection": {
-          "label": "インポート可能な{total, plural, one {# 件のスキル} other {# 件のスキル}}のうち {selected} 件を選択中"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} を選択"
-        },
-        "skillTag": {
-          "disabled": "無効",
-          "enabled": "有効"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {スキルをインポート} other {# 件のスキルをインポート}}",
-          "importingLabel": "インポート中…",
-          "searchLabel": "リポジトリを検索",
-          "searchingLabel": "検索中…"
-        },
-        "unavailableFallback": "このスキルはインポートできません。",
-        "unavailableTag": {
-          "label": "インポート不可"
-        },
-        "sharing": {
-          "title": "インポートするスキルのアクセス権",
-          "configureButton": "アクセス権を設定",
-          "description": "これらのアクセス設定は、選択した{count, plural, one {# 件のスキル} other {# 件のスキル}}すべてに適用されます。"
+          "requirement": "複数の ZIP ファイルを選択すると、スキルをまとめてインポートできます。各 ZIP にはスキルを 1 件含めてください。",
+          "configureAccess": "アクセス権を設定",
+          "done": "完了",
+          "importing": "インポート中…",
+          "submit": "{count, plural, one {スキルをインポート} other {# 件のスキルをインポート}}"
         }
       },
       "nameConflict": {
@@ -17635,6 +17558,19 @@
       "loadError": "マーケットプレイスのデフォルト設定を読み込めませんでした。編集内容は保持されています。",
       "companyOnly": "アクセスのデフォルト設定は会社マーケットプレイスでのみ利用できます。",
       "save": "デフォルト設定を保存"
+    },
+    "githubConnection": {
+      "askAdmin": "パブリックリポジトリはそのまま同期できます。プライベートリポジトリを同期する前に、管理者に GitHub の設定を依頼してください。",
+      "connect": "パブリックリポジトリはそのまま同期できます。プライベートリポジトリを同期するには GitHub を接続してください。",
+      "connectButton": {
+        "label": "GitHub を接続"
+      },
+      "connected": "パブリックリポジトリはそのまま同期できます。プライベートリポジトリでは、お使いの GitHub 接続を使用します。",
+      "needsConnection": "パブリックリポジトリはそのまま同期できます。プライベートリポジトリには GitHub 接続が必要です。",
+      "setUp": "パブリックリポジトリはそのまま同期できます。プライベートリポジトリを同期する前に GitHub を設定してください。",
+      "setUpButton": {
+        "label": "GitHub を設定"
+      }
     }
   }
 }

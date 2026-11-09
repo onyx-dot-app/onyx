@@ -14429,8 +14429,8 @@
         "associateButton": "Associate existing",
         "create": {
           "github": {
-            "description": "If your skills are in GitHub, import them on the Skills page first, then associate them with this app.",
-            "label": "Import from GitHub"
+            "description": "Sync a marketplace on the Skills page, then associate its skills with this app.",
+            "label": "Sync from GitHub"
           },
           "scratch": {
             "description": "Write instructions and add supporting files.",
@@ -17166,88 +17166,11 @@
           "selected": "{count, plural, one {# skill bundle selected} other {# skill bundles selected}}",
           "result": "{imported, plural, one {# skill imported} other {# skills imported}}. {failed, plural, one {# failed} other {# failed}}.",
           "failure": "{name}: {reason}",
-          "requirement": "Select multiple ZIP files to import skills together. Each ZIP must contain one skill."
-        }
-      },
-      "importGithub": {
-        "cancelButton": {
-          "label": "Cancel"
-        },
-        "doneButton": {
-          "label": "Done"
-        },
-        "header": {
-          "chooseDescription": "Choose skills from {repository}.",
-          "completeDescription": "Review what was added to your skills.",
-          "completeTitle": "GitHub import complete",
-          "description": "Import one or more skills from a GitHub repository.",
-          "title": "Import from GitHub"
-        },
-        "importError": {
-          "message": "Couldn't import skills.",
-          "title": "Couldn't import skills"
-        },
-        "loadError": {
-          "message": "Couldn't load repository.",
-          "title": "Couldn't load repository"
-        },
-        "privateRepos": {
-          "askAdmin": "Public repositories import directly. Ask an admin to set up GitHub before importing private repositories.",
-          "connect": "Public repositories import directly. Connect GitHub to import private repositories.",
-          "connectButton": {
-            "label": "Connect GitHub"
-          },
-          "connected": "Public repositories import directly. Private repositories use your GitHub connection.",
-          "needsConnection": "Public repositories import directly. Private repositories require a GitHub connection.",
-          "setUp": "Public repositories import directly. Set up GitHub before importing private repositories.",
-          "setUpButton": {
-            "label": "Set up GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "Repository"
-        },
-        "result": {
-          "disabledCount": "{count} imported disabled because another skill with the same name is enabled.",
-          "enabledCount": "{count} enabled automatically.",
-          "failedCount": "{count} could not be imported.",
-          "importedSection": {
-            "title": "Imported"
-          },
-          "importedTitle": "{count, plural, one {# skill imported} other {# skills imported}}",
-          "noneTitle": "No skills were imported",
-          "notImportedSection": {
-            "title": "Not imported"
-          },
-          "notSelectedCount": "{count} not selected."
-        },
-        "selectAll": {
-          "ariaLabel": "Select all importable skills"
-        },
-        "selection": {
-          "label": "{selected} of {total, plural, one {# importable skill} other {# importable skills}} selected"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "Select {name}"
-        },
-        "skillTag": {
-          "disabled": "Disabled",
-          "enabled": "Enabled"
-        },
-        "submitButton": {
-          "importLabel": "{count, plural, one {Import skill} other {Import # skills}}",
-          "importingLabel": "Importing…",
-          "searchLabel": "Search repository",
-          "searchingLabel": "Searching…"
-        },
-        "unavailableFallback": "This skill cannot be imported.",
-        "unavailableTag": {
-          "label": "Can't import"
-        },
-        "sharing": {
-          "title": "Access for Imported Skills",
-          "configureButton": "Configure access",
-          "description": "These access settings apply to all {count, plural, one {# selected skill} other {# selected skills}}."
+          "requirement": "Select multiple ZIP files to import skills together. Each ZIP must contain one skill.",
+          "configureAccess": "Configure access",
+          "done": "Done",
+          "importing": "Importing…",
+          "submit": "{count, plural, one {Import skill} other {Import # skills}}"
         }
       },
       "nameConflict": {
@@ -17635,6 +17558,19 @@
       "loadError": "Could not load marketplace defaults. Your edits are preserved.",
       "companyOnly": "Access defaults are available only for company marketplaces.",
       "save": "Save defaults"
+    },
+    "githubConnection": {
+      "askAdmin": "Public repositories sync directly. Ask an admin to set up GitHub before syncing private repositories.",
+      "connect": "Public repositories sync directly. Connect GitHub to sync private repositories.",
+      "connectButton": {
+        "label": "Connect GitHub"
+      },
+      "connected": "Public repositories sync directly. Private repositories use your GitHub connection.",
+      "needsConnection": "Public repositories sync directly. Private repositories require a GitHub connection.",
+      "setUp": "Public repositories sync directly. Set up GitHub before syncing private repositories.",
+      "setUpButton": {
+        "label": "Set up GitHub"
+      }
     }
   }
 }
