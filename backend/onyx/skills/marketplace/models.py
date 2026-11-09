@@ -1,9 +1,11 @@
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
 from onyx.utils.github import (
     normalize_github_folder,
     validate_github_repository_component,
@@ -83,3 +85,57 @@ class ReconciliationResult(BaseModel):
     blocked_entries: dict[str, str] = Field(default_factory=dict)
     cleanup_file_ids: set[str] = Field(default_factory=set)
     affected_user_ids: set[UUID] = Field(default_factory=set)
+
+
+class MarketplaceGroupAccess(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_group_id: int
+    permission: SkillSharePermission
+    installation_policy: SkillInstallationPolicy | None
+
+
+class MarketplaceManagementSnapshot(BaseModel):
+    """Safe internal read data; never contains login credentials or webhook secrets."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    provider: MarketplaceProvider
+    provider_config: GitHubMarketplaceConfig
+    owner_user_id: UUID | None
+    login_user_id: UUID | None
+    public_permission: SkillSharePermission | None
+    installation_policy: SkillInstallationPolicy
+    group_shares: list[MarketplaceGroupAccess]
+    sync_requested: bool
+    sync_pending: bool = False
+    sync_status: MarketplaceSyncStatus | None
+    last_synced_revision: str | None
+    last_synced_at: datetime | None
+    last_error: str | None
+    blocked_entries: dict[str, str]
+    retirement_proposal: MarketplaceRetirementProposal | None
+    live_skill_count: int = 0
+    retired_skill_count: int = 0
+
+
+class MarketplaceManagedSkill(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    current_version_id: UUID | None
+    retired_at: datetime | None
+    follows_marketplace_access: bool
+
+
+class MarketplaceManagementDetail(BaseModel):
+    marketplace: MarketplaceManagementSnapshot
+    skills: list[MarketplaceManagedSkill]
+
+
+class MarketplaceRemovalResult(BaseModel):
+    cleanup_file_ids: set[str]
+    affected_user_ids: set[UUID]
