@@ -5358,6 +5358,43 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class BundleVersionMixin:
+    """Shared version columns for resources with stored bundles."""
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Pruning removes the bundle reference but keeps the history row.
+    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Existing bundles need an application backfill to compute these values.
+    content_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unpacked_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    marketplace_revision: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SkillVersion(BundleVersionMixin, Base):
+    __tablename__ = "skill_version"
+
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("skill.id", ondelete="CASCADE"), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("skill_id", "version_number", name="uq_skill_version_number"),
+        UniqueConstraint("id", "skill_id", name="uq_skill_version_id_skill_id"),
+    )
+
+
 class Skill(Base):
     """A built-in or custom skill.
 
@@ -5389,6 +5426,10 @@ class Skill(Base):
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Existing custom rows are classified lazily before sandbox hydration.
     is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    current_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -5452,6 +5493,15 @@ class Skill(Base):
             postgresql_where=text("installation_policy <> 'AVAILABLE'"),
         ),
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
+        # Preallocate both IDs, insert the skill, then its version before commit.
+        ForeignKeyConstraint(
+            ["current_version_id", "id"],
+            ["skill_version.id", "skill_version.skill_id"],
+            name="fk_skill_current_version",
+            deferrable=True,
+            initially="DEFERRED",
+            use_alter=True,
+        ),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",
@@ -5645,6 +5695,11 @@ class Skill__UserGroup(Base):
         nullable=False,
         default=SkillSharePermission.VIEWER,
         server_default=SkillSharePermission.VIEWER.value,
+    )
+
+    # NULL preserves the skill-wide policy; group overrides are not exposed yet.
+    installation_policy: Mapped[SkillInstallationPolicy | None] = mapped_column(
+        Enum(SkillInstallationPolicy, native_enum=False), nullable=True
     )
 
     user_group: Mapped["UserGroup"] = relationship("UserGroup")
