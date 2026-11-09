@@ -363,6 +363,7 @@ def test_app_replacement_preserves_retired_association(session: Session) -> None
 def test_retirement_between_load_and_response(session: Session, single: bool) -> None:
     owner = make_user(session, standard_account=True)
     skill = make_skill(session, author_user_id=owner.id)
+    unaffected = make_skill(session, author_user_id=owner.id)
     read_states = response_helpers.skill_user_states
 
     def retire_then_read(
@@ -385,4 +386,6 @@ def test_retirement_between_load_and_response(session: Session, single: bool) ->
         response = client.get(f"/skills/{skill.id}" if single else "/skills")
     assert response.status_code == (404 if single else 200), response.text
     if not single:
-        assert response.json()["customs"] == []
+        ids = {row["id"] for row in response.json()["customs"]}
+        assert str(skill.id) not in ids
+        assert str(unaffected.id) in ids
