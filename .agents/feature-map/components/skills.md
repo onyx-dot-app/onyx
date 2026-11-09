@@ -11,7 +11,8 @@
 
 - **A Craft user** opens the skills library and sees built-in skills and the
   custom skills they can see: their own, shared with them, or published to the
-  organization. The Admin Panel lists custom skills only. They preview a
+  organization. The Admin Panel lists custom skills in a table with access and installation
+  columns; the personal library keeps cards. They preview a
   skill's instructions, and turn custom skills on or off.
 - **Built-in skills** are always on. A built-in that depends on an unavailable
   service, such as image generation with no provider or the browser with
@@ -34,10 +35,16 @@
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
   stay selected. Search changes clear selection.
-  Custom cards show Personal, Shared, or Organization access from
+  Cards and admin rows show Personal, Shared, or Organization access from
   `public_permission` and the server's `is_personal`; share-detail arrays can
-  be hidden, so empty arrays do not mean a skill is personal.
-- **Skill dialog.** Owners and editors open custom cards in a single
+  be hidden, so empty arrays do not mean a skill is personal. The table shows
+  groups only when supplied. Owner identity is not an access grant. The list
+  currently omits share details. The Enable for me column controls personal use.
+  Narrow tables keep names and actions; sharing settings stay in the dialog.
+  The table keeps page ordering and all filtered rows without pagination.
+  `web/src/lib/skills/hooks.ts` is shared by cards and rows for permission, dependency,
+  validity and toggle presentation.
+- **Skill dialog.** Owners and editors open custom cards or rows in a single
   Details/Sharing dialog. Share actions open its Sharing tab directly. Draft
   sharing edits survive tab switches. Other recipients and built-in skills
   keep a preview-only dialog. The sharing endpoint requires EDIT; do not
