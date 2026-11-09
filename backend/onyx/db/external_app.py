@@ -418,16 +418,17 @@ def associate_custom_skill_with_external_app__no_commit(
         )
 
     skill = db_session.scalar(
-        select(Skill).where(Skill.id == skill_id).with_for_update()
+        select(Skill).where(Skill.id == skill_id).with_for_update(of=Skill)
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found.")
+    db_session.refresh(skill, ["current_version"])
     if not skill.is_custom:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
-    if skill.is_valid is False:
+    if skill.current_is_valid is False:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Invalid skill '{skill.name}' cannot be associated with an app.",
@@ -503,7 +504,7 @@ def replace_custom_skill_associations__no_commit(
                 select(Skill)
                 .where(Skill.id.in_(target_ids))
                 .order_by(Skill.id)
-                .with_for_update()
+                .with_for_update(of=Skill)
             )
         )
         if target_ids
@@ -511,13 +512,15 @@ def replace_custom_skill_associations__no_commit(
     )
     if len(target_skills) != len(target_ids):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "One or more skills were not found.")
+    for skill in target_skills:
+        db_session.refresh(skill, ["current_version"])
     if any(not skill.is_custom for skill in target_skills):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
     invalid_skill = next(
-        (skill for skill in target_skills if skill.is_valid is False),
+        (skill for skill in target_skills if skill.current_is_valid is False),
         None,
     )
     if invalid_skill is not None:

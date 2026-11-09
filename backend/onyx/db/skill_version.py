@@ -48,7 +48,7 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
         self.skill = skill
 
     def lock(self, db_session: Session) -> None:
-        db_session.refresh(self.skill, with_for_update=True)
+        db_session.refresh(self.skill, with_for_update={"of": Skill})
 
     def current(self, db_session: Session) -> SkillVersion | None:
         return (
@@ -73,6 +73,7 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
 
     def publish(self, version: SkillVersion) -> None:
         self.skill.current_version_id = version.id
+        self.skill.current_version = version
         self.skill.bundle_file_id = version.bundle_file_id
         self.skill.bundle_sha256 = version.bundle_sha256
         self.skill.is_valid = version.is_valid
@@ -139,6 +140,50 @@ def save_skill_version(
     if version.bundle_file_id != ingested.bundle_file_id:
         stale_file_ids.append(ingested.bundle_file_id)
     return stale_file_ids
+
+
+def skill_bundle_file_ids(skill: Skill, db_session: Session) -> set[str]:
+    file_ids = {
+        file_id
+        for file_id in db_session.scalars(
+            select(SkillVersion.bundle_file_id).where(SkillVersion.skill_id == skill.id)
+        )
+        if file_id is not None
+    }
+    # Keep cleanup compatible with pointerless legacy writes until V7.
+    if skill.bundle_file_id is not None:
+        file_ids.add(skill.bundle_file_id)
+    return file_ids
+
+
+def persist_skill_version_validity(
+    *,
+    skill_id: UUID,
+    version_id: UUID,
+    bundle_file_id: str | None,
+    is_valid: bool,
+    db_session: Session,
+) -> None:
+    skill = db_session.scalar(
+        select(Skill).where(Skill.id == skill_id).with_for_update(of=Skill)
+    )
+    if skill is None:
+        return
+    db_session.refresh(
+        skill, ["current_version_id", "bundle_file_id", "current_version"]
+    )
+    if skill.current_version_id != version_id:
+        return
+    version = skill.current_version
+    if (
+        version is None
+        or version.bundle_file_id != bundle_file_id
+        or version.is_valid is not None
+    ):
+        return
+    version.is_valid = is_valid
+    if skill.bundle_file_id == bundle_file_id:
+        skill.is_valid = is_valid
 
 
 def _unused_skill_bundles(*conditions: ColumnElement[bool]) -> Select[tuple[str]]:

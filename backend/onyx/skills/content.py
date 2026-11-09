@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from onyx.db.models import Skill
+from onyx.db.resource_version import read_version_bundle
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -59,17 +60,19 @@ def read_custom_skill_bundle_bytes(
     skill: Skill,
     file_store: FileStore | None = None,
 ) -> bytes:
-    if skill.bundle_file_id is None:
+    if skill.current_version is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
-            f"Custom skill '{skill.name}' has no bundle.",
+            f"Custom skill '{skill.name}' has no current version.",
         )
-    store = file_store or get_default_file_store()
     try:
-        bundle_bytes = store.read_file(skill.bundle_file_id).read()
+        return read_version_bundle(
+            skill.current_version, file_store or get_default_file_store()
+        )
+    except OnyxError:
+        raise
     except Exception as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Failed to read bundle for skill '{skill.name}'.",
         ) from exc
-    return bundle_bytes
