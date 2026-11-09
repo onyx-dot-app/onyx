@@ -295,9 +295,16 @@ outside that lock. Never combine cached totals with fresh per-entry inputs.
 A user may stay over 500 MiB or 5,000 files when the write does not grow that total.
 Writes that check: enable and disable (a disable can reveal a larger skill
 of the same name), auto-enable after upload, `replace_skill_bundle` (edit,
-restore) and ownership transfer. Group joins do not check. The 413 `PAYLOAD_TOO_LARGE` body
+restore), ownership transfer, marketplace access reset, and every
+`db/resource_access.py:mutate_resource_access` item. That loop captures
+`adapter.capture_skill_limit` before `adapter.write` and calls
+`adapter.assert_skill_limit` inside the item savepoint, so a bulk failure
+keeps old grants and other items. The marketplace adapter checks all live
+followers at once. Group joins do not check. The 413 `PAYLOAD_TOO_LARGE` body
 adds `skill_limit` (`skills/limits.py:SkillLimitViolation`): failed limit,
 affected user count, and the requesting user's proposed usage when they go over.
+Bulk failure rows retain the same nullable `skill_limit` payload beside `detail`,
+for sharing and enable/disable failures. Ordinary failures keep it null.
 
 ## Contracts and traps
 

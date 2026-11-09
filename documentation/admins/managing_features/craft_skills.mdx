@@ -204,17 +204,20 @@ Onyx refuses a change that puts a user past either limit:
 | Change | Result |
 | --- | --- |
 | A user uploads a Skill or turns on a Skill | Refused with HTTP 413. The error shows the user's total. |
+| An admin sets a Skill to Required or Installed by default, changes a group setting, or shares a Skill | Refused with HTTP 413 when an affected user goes past the limit. The error gives the number of users. |
+| An admin sets a Skill to Available to install | Allowed unless restored saved choices increase usage past a write limit. The change then returns HTTP 413. |
 | An edit or a restore makes a Skill larger | Refused when the increase puts a user who has the Skill past the limit. |
 | A user joins a group | Allowed. Craft loads the Skills that fit. |
 
 A user who is already past the limit can turn Skills off and remove access.
-Onyx refuses only a change that makes that user's total larger.
+Onyx refuses only a change that makes that user's total larger. In a bulk change,
+each Skill succeeds or fails separately.
 
 A Skill version that has no recorded size counts as 100 MiB and 500 files until Onyx measures it.
 
 The HTTP 413 response contains `skill_limit` with `failed_limit` (`bytes` or `files`) and `affected_user_count`.
 When your own total goes past the limit, `skill_limit.usage` shows `bytes`, `files`, `unknown_skill_count`, `max_bytes`,
-and `max_files`.
+and `max_files`. A bulk response gives the same `skill_limit` for each refused Skill. Other failures set it to `null`.
 
 ## Review a Skill before publishing
 

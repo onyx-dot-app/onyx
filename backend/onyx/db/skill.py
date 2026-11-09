@@ -2135,6 +2135,16 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
         ) and is_company_marketplace_skill(resource, db_session):
             resource.follows_marketplace_access = False
 
+    def capture_skill_limit(
+        self, resource: Skill, db_session: Session
+    ) -> SkillLimitBaseline:
+        return capture_skill_limit_baseline([resource.id], db_session)
+
+    def assert_skill_limit(
+        self, baseline: SkillLimitBaseline, db_session: Session, actor_id: UUID
+    ) -> None:
+        assert_skill_limit(baseline, db_session, actor_id=actor_id)
+
     def affected_users(
         self, resource_ids: Collection[UUID], db_session: Session
     ) -> dict[UUID, set[UUID]]:

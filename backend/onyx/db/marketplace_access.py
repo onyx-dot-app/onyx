@@ -16,7 +16,12 @@ from onyx.db.resource_access import (
     ResourceAccessState,
     lock_resource_access_user,
 )
-from onyx.db.skill import SkillAccessAdapter, affected_user_ids_for_skills
+from onyx.db.skill import (
+    SkillAccessAdapter,
+    affected_user_ids_for_skills,
+    assert_skill_limit,
+    capture_skill_limit_baseline,
+)
 from onyx.db.skill_mutation import assert_skill_mutable
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.users import lock_group_membership
@@ -24,6 +29,7 @@ from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import Tier
+from onyx.skills.limits import SkillLimitBaseline
 from onyx.utils.variable_functionality import is_ee_available
 
 IS_ENTERPRISE_BUILD = is_ee_available()
@@ -222,6 +228,25 @@ class MarketplaceAccessAdapter(ResourceAccessAdapter[Marketplace]):
         db_session.flush()
         materialize_marketplace_access__no_commit(resource.id, db_session)
 
+    def capture_skill_limit(
+        self, resource: Marketplace, db_session: Session
+    ) -> SkillLimitBaseline:
+        return capture_skill_limit_baseline(
+            db_session.scalars(
+                select(Skill.id).where(
+                    Skill.marketplace_id == resource.id,
+                    Skill.retired_at.is_(None),
+                    Skill.follows_marketplace_access.is_(True),
+                )
+            ).all(),
+            db_session,
+        )
+
+    def assert_skill_limit(
+        self, baseline: SkillLimitBaseline, db_session: Session, actor_id: UUID
+    ) -> None:
+        assert_skill_limit(baseline, db_session, actor_id=actor_id)
+
     def affected_users(
         self, resource_ids: Collection[UUID], db_session: Session
     ) -> dict[UUID, set[UUID]]:
@@ -281,7 +306,9 @@ def reset_marketplace_skill_access__no_commit(
         before = affected_user_ids_for_skills([skill_id], db_session).get(
             skill_id, set()
         )
+        baseline = capture_skill_limit_baseline([skill_id], db_session)
         _copy_access(marketplace, [skill], db_session, reset=True)
+        assert_skill_limit(baseline, db_session, actor_id=actor.id)
         return before | affected_user_ids_for_skills([skill_id], db_session).get(
             skill_id, set()
         )

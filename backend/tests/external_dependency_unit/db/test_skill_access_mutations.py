@@ -349,6 +349,7 @@ def test_bulk_null_and_retired_partial_failure(session: Session) -> None:
         {
             "skill_id": str(retired.id),
             "detail": "This skill is retired and cannot be changed.",
+            "skill_limit": None,
         }
     ]
     grant = session.get(Skill__UserGroup, (live.id, group_id))
