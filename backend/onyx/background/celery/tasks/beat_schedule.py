@@ -46,6 +46,17 @@ CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = [
     {
+        "name": "recover-marketplace-syncs",
+        "task": OnyxCeleryTask.RECOVER_MARKETPLACE_SYNCS,
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "repair-skill-versions",
         "task": OnyxCeleryTask.REPAIR_SKILL_VERSIONS,
         "schedule": timedelta(minutes=5),

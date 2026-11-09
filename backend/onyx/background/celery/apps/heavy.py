@@ -130,6 +130,7 @@ for bootstep in base_bootsteps:
 celery_app.autodiscover_tasks(
     app_base.filter_task_modules(
         [
+            "onyx.background.celery.tasks.marketplace_sync",
             "onyx.background.celery.tasks.pruning",
             # Sandbox tasks (file sync, cleanup; build feature)
             "onyx.background.celery.tasks.build",
