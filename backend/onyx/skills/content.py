@@ -69,11 +69,18 @@ def read_custom_skill_bundle_bytes(
             f"Custom skill '{skill.name}' has no current version.",
         )
     try:
-        bundle_bytes = read_version_bundle(
-            skill.current_version,
-            file_store or get_default_file_store(),
-            max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
-        )
+        try:
+            bundle_bytes = read_version_bundle(
+                skill.current_version,
+                file_store or get_default_file_store(),
+                max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
+            )
+        except FileSizeLimitExceeded as exc:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                f"Stored bundle for skill '{skill.name}' exceeds the "
+                f"{STORED_BUNDLE_LIMITS.max_stored_bytes}-byte read limit.",
+            ) from exc
         compute_bundle_metadata(bundle_bytes, limits=STORED_BUNDLE_LIMITS)
     except (OnyxError, FileSizeLimitExceeded):
         raise

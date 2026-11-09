@@ -29,6 +29,9 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.ingest import IngestedBundle
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # Uploads save the bundle before the row that uses it commits.
 ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
@@ -82,20 +85,21 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
 
 def list_skill_versions(
     skill: Skill, db_session: Session, *, before_version: int | None = None
-) -> list[tuple[SkillVersion, User | None]]:
+) -> list[tuple[SkillVersion, User | None, bool]]:
     """List up to 50 versions of an authorized skill, newest first."""
     statement = (
         SkillVersionAdapter(skill)
         .versions()
-        .add_columns(User)
+        .add_columns(User, (SkillVersion.id == Skill.current_version_id).is_(True))
+        .join(Skill, SkillVersion.skill_id == Skill.id)
         .outerjoin(User, SkillVersion.created_by_user_id == User.id)
         .limit(50)
     )
     if before_version is not None:
         statement = statement.where(SkillVersion.version_number < before_version)
     return [
-        (version, creator)
-        for version, creator in db_session.execute(statement).unique()
+        (version, creator, is_current)
+        for version, creator, is_current in db_session.execute(statement).unique()
     ]
 
 
@@ -346,6 +350,17 @@ def skill_version_repair_batch(
                 SkillVersion.bundle_file_id.is_distinct_from(Skill.bundle_file_id),
                 SkillVersion.bundle_sha256.is_distinct_from(Skill.bundle_sha256),
                 SkillVersion.is_valid.is_distinct_from(Skill.is_valid),
+                exists()
+                .where(
+                    SkillVersion.skill_id == Skill.id,
+                    SkillVersion.bundle_file_id.is_not(None),
+                    or_(
+                        SkillVersion.content_digest.is_(None),
+                        SkillVersion.unpacked_size_bytes.is_(None),
+                        SkillVersion.file_count.is_(None),
+                    ),
+                )
+                .correlate(Skill),
             )
         )
     if after is not None:
@@ -356,9 +371,22 @@ def skill_version_repair_batch(
 def repair_skill_version_metadata(
     skill: Skill, db_session: Session, file_store: FileStore
 ) -> list[str]:
-    repair_skill_version(skill, db_session)
+    current = repair_skill_version(skill, db_session)
     adapter = SkillVersionAdapter(skill)
-    stale_file_ids = prune_resource_bundles(adapter, db_session)
     for version in db_session.scalars(adapter.versions()):
-        repair_version_metadata(version, file_store, limits=STORED_BUNDLE_LIMITS)
-    return stale_file_ids
+        if version.id == current.id:
+            repair_version_metadata(version, file_store, limits=STORED_BUNDLE_LIMITS)
+            continue
+        try:
+            with db_session.begin_nested():
+                repair_version_metadata(
+                    version,
+                    file_store,
+                    limits=STORED_BUNDLE_LIMITS,
+                    clear_missing_bundle=True,
+                )
+        except Exception:
+            logger.exception(
+                "Historical skill metadata repair failed for %s", version.id
+            )
+    return prune_resource_bundles(adapter, db_session)

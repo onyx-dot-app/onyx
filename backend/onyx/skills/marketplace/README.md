@@ -13,7 +13,8 @@ The archive reader also has independent processing safeguards:
 
 - ZIP directory metadata reads are capped at 1 MiB before parsing. Larger
   directories fail even within the entry limit. Only stored and deflated ZIP
-  members are supported; other compression methods fail before member reads.
+  members are supported; other compression methods, encryption and patched-data flags fail
+  before member reads.
 - A gzip stream may expand to at most 1 GiB, including tar headers, padding,
   and unrelated files. The reader inflates it once into a temporary spool.
   Only the first 1 MiB stays in memory; larger spools use temporary disk.
@@ -21,6 +22,9 @@ The archive reader also has independent processing safeguards:
   counts actual returned bytes, including repeated reads and manifests.
   ZIP members outside the selected marketplace need no inflation. All supported
   stream reads, including readinto, lines and iteration, use that budget.
+  ZIP member streams reject seeking because it can decompress bytes outside
+  this budget. Reopen and read within the shared budget instead. TAR members
+  can seek within the already expanded spool; repeated reads still count.
 - `read`, `readline` and `readlines` return at most 4 MiB. An unsized read, a larger sized read,
   one line, or `readlines` fails if its result would be longer. It does
   not truncate the result. Callers must read larger members in chunks.
@@ -28,7 +32,7 @@ The archive reader also has independent processing safeguards:
 - TAR metadata reads share a 16 MiB budget during enumeration, including chained
   extension headers and sparse maps. The headers before one member may use at
   most 32 KiB. This limits chained headers and parser recursion before
-  allocation. Each JSON manifest may use at most 1 MiB.
+  allocation.
   Member data reads use the shared member budget after metadata parsing finishes.
 - Sparse TAR members fail the read after their bounded headers parse. `git
   archive` does not write them. Global PAX comments, long paths and long link
@@ -47,6 +51,9 @@ The archive reader also has independent processing safeguards:
   Plugin counts are checked before discovery. Each explicit path list consumes
   the shared budget before it is scanned or expanded. Repeated paths count again.
 
+Manifest consumers must enforce `MANIFEST_MAX_BYTES` (1 MiB) for each JSON
+manifest. The archive reader does not enforce a per-manifest limit.
+
 The 1 GiB ceiling permits ten full 100 MiB skills plus tar overhead.
 It bounds temporary disk and decompression work for highly compressed inputs.
 It is not the former 100 MiB repository-wide skill limit. Repositories can
@@ -55,7 +62,10 @@ contain more than 100 MiB of valid skill content.
 These safeguards can reject an otherwise valid repository within the compressed
 and entry limits. In particular, a tar archive with large unrelated files can
 fail while a ZIP with those unread files succeeds. Processing failures must
-fail the whole read. A sync must retain the last good state and retire nothing.
+fail the whole read. TAR header errors detected by the parser fail even after valid entries.
+Normal TAR endings remain accepted: a zero header or EOF at a member boundary.
+The format cannot distinguish those endings from some forms of lost data.
+On any processing error, a sync must retain the last good state and retire nothing.
 A future streaming staging API can support larger repositories without retaining
 all output bundles in memory. Raising these limits requires resource measurements.
 

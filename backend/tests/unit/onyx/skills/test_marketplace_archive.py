@@ -539,3 +539,114 @@ def test_long_tar_paths_and_large_members_remain_supported() -> None:
                 assert sum(
                     len(c) for c in iter(lambda: stream.read(65536), b"")
                 ) == len(content)
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+@pytest.mark.parametrize("whence", [io.SEEK_SET, io.SEEK_CUR, io.SEEK_END])
+def test_zip_seeks_cannot_bypass_member_read_budget(
+    compression: int, whence: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(archives, "MEMBER_READ_MAX_BYTES", 4)
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=compression) as archive:
+        archive.writestr("data", b"0123456789")
+    with archives.archive_files(out.getvalue()) as files:
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.read(1) == b"0"
+            with pytest.raises(io.UnsupportedOperation):
+                stream.seek(5, whence)
+            assert not stream.seekable()
+            assert stream.tell() == 1
+            assert stream.read(3) == b"123"
+            with pytest.raises(archives.ArchiveLimitError):
+                stream.read(1)
+
+
+def test_tar_seek_preserves_shared_read_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(archives, "MEMBER_READ_MAX_BYTES", 4)
+    with archives.archive_files(_archive({"data": b"0123456789"}, "tar")) as files:
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.seekable()
+            assert stream.seek(8) == 8
+            assert stream.read(2) == b"89"
+            assert stream.seek(0) == 0
+            assert stream.read(2) == b"01"
+            with pytest.raises(archives.ArchiveLimitError):
+                stream.read(1)
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+@pytest.mark.parametrize("flags", [0x01, 0x20, 0x40, 0x41])
+def test_unsupported_zip_flags_fail_before_listing(
+    compression: int, flags: int
+) -> None:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=compression) as archive:
+        archive.writestr("data", b"content")
+    data = bytearray(out.getvalue())
+    central = data.index(b"PK\x01\x02")
+    data[6] |= flags
+    data[central + 8] |= flags
+    with pytest.raises(archives.ArchiveLimitError, match="ZIP compression"):
+        with archives.archive_files(bytes(data)):
+            pytest.fail("Unsupported members must fail before listing")
+
+
+@pytest.mark.parametrize("damage", ["checksum", "truncated", "short_zero_block"])
+def test_corrupt_later_tar_header_fails_whole_read(damage: str) -> None:
+    data = bytearray(
+        gzip.decompress(_archive({"first": b"ok", "second": b"later"}, "tar"))
+    )
+    second_header = 1024
+    if damage == "checksum":
+        data[second_header] ^= 1
+    elif damage == "short_zero_block":
+        data[second_header:] = bytes(100)
+    else:
+        del data[second_header + 100 :]
+    with pytest.raises(tarfile.ReadError):
+        with archives.archive_files(gzip.compress(data)):
+            pytest.fail("A corrupt header must not produce a partial catalog")
+
+
+@pytest.mark.parametrize("ending", [b"", bytes(512), bytes(1024)])
+def test_tar_accepts_normal_end_after_member(ending: bytes) -> None:
+    header = tarfile.TarInfo("data")
+    header.size = 2
+    data = header.tobuf() + b"ok" + bytes(510) + ending
+    with archives.archive_files(gzip.compress(data)) as files:
+        assert list(files) == ["data"]
+        opener = files["data"]
+        assert opener is not None
+        with opener() as stream:
+            assert stream.read() == b"ok"
+
+
+@pytest.mark.parametrize("damage", ["oversized_pax", "sparse_extension"])
+def test_failed_tar_extension_cannot_hide_as_end_marker(damage: str) -> None:
+    first = tarfile.TarInfo("repo/first.md").tobuf()
+    tail = tarfile.TarInfo("repo/lost.md").tobuf() + bytes(1024)
+    if damage == "oversized_pax":
+        info = tarfile.TarInfo("extension")
+        info.type = tarfile.XHDTYPE
+        info.size = 2 * 1024 * 1024
+        extension = info.tobuf()
+    else:
+        body = (
+            b"21 GNU.sparse.size=1\n23 GNU.sparse.offset=x\n25 GNU.sparse.numbytes=1\n"
+        )
+        info = tarfile.TarInfo("repo/sparse")
+        info.type = tarfile.GNUTYPE_SPARSE
+        header = bytearray(info.tobuf(format=tarfile.GNU_FORMAT))
+        header[482] = 1
+        header[483:495] = b"00000000001\0"
+        header[148:156] = b" " * 8
+        header[148:156] = b"%06o\0 " % sum(header)
+        extension = _extension(tarfile.XHDTYPE, body) + header + bytes(512)
+    with pytest.raises(tarfile.ReadError):
+        with archives.archive_files(gzip.compress(first + extension + tail)):
+            pytest.fail("Failed extension parsing must not return a partial catalog")

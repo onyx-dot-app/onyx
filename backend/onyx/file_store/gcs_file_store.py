@@ -26,6 +26,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_for_update,
@@ -347,10 +348,14 @@ class GCSBackedFileStore(PresignableFileStore):
             try:
                 blob.reload()
             except NotFound as e:
+                # Object and bucket absence both return 404. Confirm the bucket.
+                bucket.reload()
                 raise FileNotFoundError(
                     f"Object for file {file_id} does not exist"
                 ) from e
             return blob.size
+        except FileRecordNotFoundError as e:
+            raise FileNotFoundError(f"File record {file_id} does not exist") from e
         except FileNotFoundError:
             raise
         except Exception as e:
