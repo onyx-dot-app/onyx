@@ -388,7 +388,15 @@ The library preview of an external-app skill calls the same renderer
     fail the read. `read`, `readline` and `readlines` fail above
     `MEMBER_CALL_MAX_BYTES` instead of truncating. `read1` can return less;
     `readinto` fills larger buffers in bounded steps. All reads share the byte budget.
-    It inflates gzip once into a temporary spool. See `backend/onyx/skills/marketplace/README.md` for compatibility costs.
+    It inflates gzip once into a temporary spool.
+    `skills/marketplace/reader.py:read_marketplace_archive` reads only the
+    declared marketplace. Blocked keys retain their current version; a failed
+    read cannot retire anything. Shared paths reuse bundle bytes. Unique output
+    has a separate ceiling, including nested paths. Mixed plugins are unsupported.
+    Completed entries form an immutable snapshot. Present catalog metadata must
+    be an object. Empty declarations cannot hide agent or command Markdown files.
+    See `backend/onyx/skills/marketplace/README.md` for limits and format differences.
+    This pure reader does not change the one-time GitHub import.
 
 ---
 
