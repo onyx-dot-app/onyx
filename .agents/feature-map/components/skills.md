@@ -98,6 +98,8 @@
   the Skill must be private unless the actor is global. Explicit Editor grants
   alone do not allow company sharing. The flag respects token caps and retirement;
   writes still recheck authority. Other editors use a read-only preview.
+  Individual grants on ownerless Skills require global management authority;
+  scoped managers keep group controls in single and bulk sharing dialogs.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a

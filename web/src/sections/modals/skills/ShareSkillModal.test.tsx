@@ -5,10 +5,13 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
-import { Permission } from "@/lib/types";
+import { Permission, type MinimalUserSnapshot } from "@/lib/types";
+import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
+let mockShareableUsers: MinimalUserSnapshot[] = [];
+let mockShareableGroups: MinimalUserGroupSnapshot[] = [];
 let mockIsAdmin = true;
 let mockPermissions: string[] = [];
 let mockAdminCapabilities: string[] = [];
@@ -31,11 +34,11 @@ jest.mock("@/providers/UserProvider", () => ({
 }));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
-  default: () => ({ data: [] }),
+  default: () => ({ data: mockShareableUsers }),
 }));
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: [] }),
+  default: () => ({ data: mockShareableGroups }),
 }));
 jest.mock("@/lib/skills/api", () => ({
   updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
@@ -45,6 +48,8 @@ jest.mock("@/lib/skills/api", () => ({
 
 describe("ShareSkillModal", () => {
   beforeEach(() => {
+    mockShareableUsers = [];
+    mockShareableGroups = [];
     mockIsAdmin = true;
     mockPermissions = [];
     mockAdminCapabilities = [];
@@ -174,6 +179,9 @@ describe("ShareSkillModal", () => {
       mockLoadSkill.mockResolvedValue(
         customFixture({
           user_permission: permission,
+          owner: { id: "owner", email: "owner@example.com" },
+          author_user_id: "owner",
+          ownership_vacant: false,
           public_permission: "VIEWER",
           user_shares: [
             {
@@ -417,6 +425,67 @@ describe("ShareSkillModal", () => {
     folder: "skills/reports",
   };
 
+  it("lets scoped managers edit ownerless group grants but not individual grants", async () => {
+    mockIsAdmin = false;
+    mockAdminCapabilities = [Permission.MANAGE_SKILLS];
+    mockShareableUsers = [{ id: "alice", email: "alice@example.com" }];
+    mockShareableGroups = [{ id: 7, name: "Engineering" }];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "EDITOR",
+        public_permission: null,
+        marketplace: companySource,
+        user_shares: [
+          {
+            user: { id: "bob", email: "bob@example.com" },
+            permission: "VIEWER",
+          },
+        ],
+        group_shares: [
+          {
+            group_id: 7,
+            group_name: "Engineering",
+            permission: "VIEWER",
+          },
+        ],
+      })
+    );
+    const user = setupUser();
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    const search = await screen.findByRole("combobox", {
+      name: "Add users, groups, and accounts",
+    });
+    await user.type(search, "alice");
+    expect(
+      screen.queryByRole("option", { name: /alice@example.com/ })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Update access for bob@example.com" })
+    ).toBeDisabled();
+    await user.click(
+      screen.getByRole("button", { name: "Update access for Engineering" })
+    );
+    fireEvent.click(screen.getByRole("option", { name: "Can edit" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({
+          user_shares: [{ user_id: "bob", permission: "VIEWER" }],
+          group_shares: [{ group_id: 7, permission: "EDITOR" }],
+        })
+      )
+    );
+  });
+
   it("keeps company sharing read-only for an editor without management permission", async () => {
     mockIsAdmin = false;
     mockPermissions = [];
@@ -595,6 +664,8 @@ describe("ShareSkillModal", () => {
   );
 
   it("confirms reset, locks dismissal while pending, and replaces the draft with saved defaults", async () => {
+    mockShareableUsers = [];
+    mockShareableGroups = [];
     mockIsAdmin = true;
     mockLoadSkill.mockResolvedValue(
       customFixture({ user_permission: "EDITOR", marketplace: companySource })
@@ -667,6 +738,8 @@ describe("ShareSkillModal", () => {
   });
 
   it("keeps a failed reset open for retry without discarding the sharing draft", async () => {
+    mockShareableUsers = [];
+    mockShareableGroups = [];
     mockIsAdmin = true;
     mockLoadSkill.mockResolvedValue(
       customFixture({ user_permission: "EDITOR", marketplace: companySource })

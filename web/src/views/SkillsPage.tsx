@@ -931,6 +931,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           selectedItems.every((item) => item.skill.external_app === null) &&
           canManageCompanySkills
         }
+        canChangeUserAccess={
+          canManageCompanySkills ||
+          selectedItems.every((item) => item.skill.owner !== null)
+        }
         open={bulkSharingOpen}
         saving={bulkBusy}
         onClose={() => setBulkSharingOpen(false)}
