@@ -19,15 +19,6 @@ class UnsafeSSOUrl(ValueError):
     """The URL names somewhere the server must not fetch on request."""
 
 
-def _is_ambiguous_url(url: str, netloc: str) -> bool:
-    """HTTP clients may decode or rewrite these hosts, so the address checked
-    here could differ from the address they connect to. urlsplit drops tabs and
-    newlines before parsing, so look for those in the raw URL."""
-    if not netloc.isascii() or "%" in netloc or "\\" in netloc:
-        return True
-    return any(ch.isspace() or not ch.isprintable() for ch in url.strip())
-
-
 def validate_idp_url(url: str, *, field: str) -> None:
     """Require https, no embedded credentials, and an address the SSRF Protection
     setting permits. Checks one DNS resolution, so a redirect-following fetcher
@@ -39,7 +30,15 @@ def validate_idp_url(url: str, *, field: str) -> None:
         raise UnsafeSSOUrl(f"{field}: {e}") from e
     if parts.username or parts.password:
         raise UnsafeSSOUrl(f"{field} must not carry credentials")
-    if _is_ambiguous_url(url, parts.netloc):
+    # HTTP clients may decode or rewrite such hosts, so the address checked here
+    # could differ from the one they connect to. urlsplit drops tabs and
+    # newlines before parsing, so check the raw URL for them.
+    if (
+        not parts.netloc.isascii()
+        or "%" in parts.netloc
+        or "\\" in parts.netloc
+        or any(ch.isspace() or not ch.isprintable() for ch in url.strip())
+    ):
         raise UnsafeSSOUrl(
             f"{field} must name its host in plain ASCII, without percent-encoding,"
             " backslashes, whitespace or control characters"
