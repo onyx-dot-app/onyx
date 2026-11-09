@@ -1184,7 +1184,9 @@ class ConnectorCredentialPair(Base):
     )
 
     # the user id of the user that created this cc pair
-    creator_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    creator_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
     creator: Mapped["User"] = relationship(
         "User",
         back_populates="cc_pairs",

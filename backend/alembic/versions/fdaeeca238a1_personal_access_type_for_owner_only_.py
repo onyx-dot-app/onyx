@@ -3,7 +3,8 @@
 A PRIVATE pair with no data-access group is read by its credential owner only.
 That state now has its own access type, PERSONAL, so PRIVATE always means a
 groups choice. Pairs on an ownerless credential stay PRIVATE. Data-access rows
-on types that take no groups are removed.
+on types that take no groups are removed. creator_id becomes a foreign key
+to the user.
 
 Revision ID: fdaeeca238a1
 Revises: c0de5e7a91b2
@@ -97,8 +98,34 @@ def upgrade() -> None:
         onupdate="CASCADE",
     )
 
+    # creator_id reads a PERSONAL pair on an ownerless credential, so it must
+    # name a real user. Clear ids of deleted users before adding the key.
+    op.execute(
+        """
+        UPDATE connector_credential_pair
+        SET creator_id = NULL
+        WHERE creator_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM "user" WHERE "user".id = connector_credential_pair.creator_id
+          )
+        """
+    )
+    op.create_foreign_key(
+        "connector_credential_pair_creator_id_fkey",
+        "connector_credential_pair",
+        "user",
+        ["creator_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+
 
 def downgrade() -> None:
+    op.drop_constraint(
+        "connector_credential_pair_creator_id_fkey",
+        "connector_credential_pair",
+        type_="foreignkey",
+    )
     op.drop_constraint(
         "fk_cc_pair_data_access_cc_pair_access_type",
         "user_group__cc_pair_data_access",
