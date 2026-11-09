@@ -30,6 +30,11 @@ An operator deploys sandboxes on Kubernetes (the default) or Docker Compose.
 When the pod template, RBAC or network setup is wrong, provisioning fails and
 the user sees Craft fail to start.
 
+A third runtime is in development: Firecracker micro-VMs on KVM nodes, opt-in
+with `SANDBOX_RUNTIME=firecracker` (default `pod`). It is not wired to the API
+server yet, so users and operators do not see it. The Kubernetes and Docker
+paths do not change.
+
 In this document "session workspace" is the directory of one session under
 `/workspace/sessions`. "Workspace" alone, as in "workspace policy", means the
 tenant-wide scope and belongs to [[craft-admin]].
@@ -46,7 +51,12 @@ This component owns:
 - session snapshots, the opencode history archive, and the cleanup of runtime
   resources;
 - the Helm sandbox pod template, RBAC and network policies, and the local
-  Kubernetes dev tooling.
+  Kubernetes dev tooling;
+- the Firecracker runtime in development (Go): the guest daemon and the
+  in-guest egress relay inside each VM, and the node agent on each KVM node.
+  The API server will reach a VM's guest daemon through the node agent: the
+  agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
+  over mTLS and then vsock, without decoding it.
 
 Neighbours:
 - [[craft-sessions]]: sessions, turns and `SessionManager`, which call this

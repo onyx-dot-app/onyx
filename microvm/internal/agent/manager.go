@@ -104,7 +104,21 @@ type VM struct {
 	PID        int
 	UID        uint32
 	StartedAt  time.Time
+	TenantID   string
 }
+
+// Egress connects the VMs to the egress relay. The real one is
+// relay.AgentEgress.
+type Egress interface {
+	// Attach starts relaying the egress of a running VM.
+	Attach(vm VM, info ProcInfo) error
+	// Detach stops the VM's relay listener and closes its connections.
+	Detach(sandboxID string)
+	// CloseAll closes the VM's relay connections and returns the count.
+	CloseAll(sandboxID string) int
+}
+
+var tenantIDRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,63}$`)
 
 type entry struct {
 	vm   VM
@@ -136,6 +150,10 @@ type Manager struct {
 	log       *slog.Logger
 	now       func() time.Time
 	journal   *journal.Journal
+	egress    Egress
+	// releases run when a VM stops or exits, after the egress detach and
+	// before the VM's vsock socket and jailer UID are freed.
+	releases []func(VM)
 	// adopter rescans the processes for the doubt rules (doubt.go).
 	adopter Adopter
 	scanMu  sync.Mutex
@@ -165,6 +183,29 @@ func NewManager(cfg Config, templates *template.Store, launcher Launcher, stats 
 // before Recover and before the API serves.
 func (m *Manager) UseJournal(j *journal.Journal) { m.journal = j }
 
+// UseEgress makes the Manager attach each running VM to the egress relay.
+// Call it before Recover and before the API serves.
+func (m *Manager) UseEgress(e Egress) { m.egress = e }
+
+// OnRelease adds f to the functions that run for a VM that stops, exits or
+// fails to start. Call it before Recover and before the API serves.
+func (m *Manager) OnRelease(f func(VM)) { m.releases = append(m.releases, f) }
+
+// release removes everything that names the VM: first its relay identity
+// and relay connections, then the OnRelease users (the daemon pass-through).
+// Callers kill the process (which frees the vsock socket) and free the UID
+// only after release returns, so a reused UID or socket path never carries
+// the old identity (ENG-4606).
+func (m *Manager) release(vm VM) {
+	if m.egress != nil {
+		m.egress.Detach(vm.SandboxID)
+	}
+	for _, f := range m.releases {
+		f(vm)
+	}
+	m.log.Info("released VM identity", "sandbox_id", vm.SandboxID, "generation", vm.Generation)
+}
+
 func (t tombstone) record() *journal.Tombstone {
 	return &journal.Tombstone{Attempt: t.attempt, Generation: t.generation, StoppedAt: t.at}
 }
@@ -175,7 +216,7 @@ func (m *Manager) record(e *entry, state journal.State, info ProcInfo) journal.R
 		PID: info.PID, PIDStart: info.PIDStart, UID: e.vm.UID,
 		Chroot: info.Chroot, APISock: info.APISock, VsockUDS: info.VsockUDS,
 		Template: e.vm.Template, VCPUs: e.vm.VCPUs, MemMiB: e.vm.MemMiB, ScratchGiB: e.vm.ScratchGiB,
-		StartedAt: e.vm.StartedAt,
+		StartedAt: e.vm.StartedAt, TenantID: e.vm.TenantID,
 	}
 }
 
@@ -203,6 +244,7 @@ type CreateRequest struct {
 	VCPUs      uint32
 	MemMiB     uint32
 	ScratchGiB uint32
+	TenantID   string
 }
 
 // nextGeneration returns a node-unique, increasing generation. It starts from
@@ -223,6 +265,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	}
 	if req.Attempt == 0 {
 		return VM{}, false, apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "attempt must be 1 or more")
+	}
+	if !tenantIDRE.MatchString(req.TenantID) {
+		return VM{}, false, apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "tenant_id %q must match [A-Za-z0-9_-]{1,63}", req.TenantID)
 	}
 	if err := m.checkDoubt(ctx, req.SandboxID, true); err != nil {
 		return VM{}, false, err
@@ -299,7 +344,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		vm: VM{
 			SandboxID: req.SandboxID, Attempt: req.Attempt, Generation: m.nextGeneration(),
 			Template: tpl.Version, VCPUs: req.VCPUs, MemMiB: req.MemMiB, ScratchGiB: req.ScratchGiB,
-			State: pb.VMState_VM_STATE_STARTING, UID: uid, StartedAt: m.now(),
+			State: pb.VMState_VM_STATE_STARTING, UID: uid, StartedAt: m.now(), TenantID: req.TenantID,
 		},
 		busy: make(chan struct{}),
 	}
@@ -323,12 +368,21 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			ID: req.SandboxID, UID: uid, Template: tpl, ScratchBytes: int64(req.ScratchGiB) * scratch.GiB,
 		})
 	}
+	if launchErr == nil && m.egress != nil {
+		if err := m.egress.Attach(e.vm, proc.Info()); err != nil {
+			launchErr = fmt.Errorf("attach egress relay: %w", err)
+		}
+	}
 	if launchErr == nil {
-		if err := m.writeRecord(m.record(e, journal.Running, proc.Info())); err != nil {
-			launchErr = fmt.Errorf("write journal: %w", err)
-			if killErr := proc.Kill(startCtx); killErr != nil {
-				launchErr = fmt.Errorf("%w (kill: %v): %w", launchErr, killErr, ErrVMLeft)
-			}
+		launchErr = m.writeRecord(m.record(e, journal.Running, proc.Info()))
+		if launchErr != nil {
+			launchErr = fmt.Errorf("write journal: %w", launchErr)
+		}
+	}
+	if launchErr != nil && proc != nil {
+		m.release(e.vm)
+		if killErr := proc.Kill(startCtx); killErr != nil {
+			launchErr = fmt.Errorf("%w (kill: %v): %w", launchErr, killErr, ErrVMLeft)
 		}
 	}
 
@@ -467,6 +521,7 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 	// does nothing after one that worked.
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.cfg.StopTimeout)
 	defer cancel()
+	m.release(e.vm)
 	var killErr error
 	if e.proc != nil { // nil: a journaled VM that was gone at start-up
 		killErr = e.proc.Kill(stopCtx)
@@ -498,6 +553,79 @@ func (m *Manager) Stop(ctx context.Context, sandboxID string, attempt, generatio
 	}
 	m.log.Info("stopped", "sandbox_id", sandboxID, "attempt", attempt, "generation", generation)
 	return StopResult{AlreadyStopped: exited}, nil
+}
+
+// DialTarget returns the vsock UDS of a running VM, for Dial. A generation
+// other than 0 must match the running VM.
+func (m *Manager) DialTarget(sandboxID string, generation uint64) (string, error) {
+	t, err := m.GuestTarget(sandboxID)
+	if err != nil {
+		return "", err
+	}
+	if generation != 0 && generation != t.Generation {
+		return "", apierr.New(pb.ErrorReason_INSTANCE_MISMATCH,
+			"sandbox %s runs generation %d, not %d", sandboxID, t.Generation, generation)
+	}
+	return t.VsockUDS, nil
+}
+
+// GuestTarget is the vsock socket of one running VM instance.
+type GuestTarget struct {
+	VsockUDS   string
+	Generation uint64
+}
+
+// GuestTarget returns the vsock socket and generation of a running VM. A VM
+// that is starting, stopping or exited fails with VM_NOT_RUNNING.
+func (m *Manager) GuestTarget(sandboxID string) (GuestTarget, error) {
+	if !sandboxIDRE.MatchString(sandboxID) {
+		return GuestTarget{}, apierr.New(pb.ErrorReason_INVALID_ARGUMENT, "sandbox_id %q is not a lowercase UUID", sandboxID)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e := m.vms[sandboxID]
+	if e == nil {
+		if m.doubt[sandboxID] != nil {
+			return GuestTarget{}, apierr.New(pb.ErrorReason_SANDBOX_IN_DOUBT,
+				"sandbox %s has a Firecracker process that the agent could not verify", sandboxID)
+		}
+		return GuestTarget{}, apierr.New(pb.ErrorReason_SANDBOX_NOT_FOUND, "sandbox %s has no VM on this node", sandboxID)
+	}
+	// busy: a Create, Stop or exit cleanup runs, so the VM is not usable.
+	if e.proc == nil || e.busy != nil || e.vm.State != pb.VMState_VM_STATE_RUNNING {
+		state := e.vm.State.String()
+		if e.busy != nil && e.vm.State == pb.VMState_VM_STATE_RUNNING {
+			state = "stopping"
+		}
+		return GuestTarget{}, apierr.New(pb.ErrorReason_VM_NOT_RUNNING, "sandbox %s VM is %s", sandboxID, state)
+	}
+	return GuestTarget{VsockUDS: e.proc.Info().VsockUDS, Generation: e.vm.Generation}, nil
+}
+
+// CloseConnections closes the egress relay connections of a running VM. It
+// has the preconditions of Stop.
+func (m *Manager) CloseConnections(sandboxID string, attempt, generation uint64) (int, error) {
+	m.mu.Lock()
+	e := m.vms[sandboxID]
+	if e == nil {
+		m.mu.Unlock()
+		return 0, apierr.New(pb.ErrorReason_SANDBOX_NOT_FOUND, "sandbox %s has no VM on this node", sandboxID)
+	}
+	if e.vm.Attempt != attempt || e.vm.Generation != generation {
+		vm := e.vm
+		m.mu.Unlock()
+		return 0, apierr.New(pb.ErrorReason_INSTANCE_MISMATCH,
+			"sandbox %s runs attempt %d generation %d, the request names attempt %d generation %d",
+			sandboxID, vm.Attempt, vm.Generation, attempt, generation)
+	}
+	running := e.vm.State == pb.VMState_VM_STATE_RUNNING
+	m.mu.Unlock()
+	if !running || m.egress == nil {
+		return 0, nil
+	}
+	n := m.egress.CloseAll(sandboxID)
+	m.log.Info("closed relay connections", "sandbox_id", sandboxID, "count", n)
+	return n, nil
 }
 
 // removeLocked drops a stopped entry and keeps a tombstone, also in the
@@ -547,6 +675,7 @@ func (m *Manager) watch(sandboxID string, e *entry) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), m.cfg.StopTimeout)
 	defer cancel()
+	m.release(e.vm)
 	killErr := e.proc.Kill(ctx)
 
 	m.mu.Lock()

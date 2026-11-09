@@ -79,6 +79,7 @@ def _token(
             "iat": now,
             "exp": now + 60,
             "jti": str(uuid4()),
+            "aud": "sandbox-proxy",
         },
         private_key,
         algorithm="EdDSA",

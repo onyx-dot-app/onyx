@@ -16,6 +16,9 @@ type Launcher struct {
 	// ProcFS is the proc file system that Adopt and Scan read. Empty means
 	// /proc. Tests use a fake process table.
 	ProcFS string
+	// Cgroups says how to read the VM cgroups (DetectCgroupView). The zero
+	// value is the host cgroup namespace.
+	Cgroups CgroupView
 }
 
 // FileSource is a file to put in a VM chroot.

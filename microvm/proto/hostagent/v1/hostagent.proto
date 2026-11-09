@@ -16,7 +16,10 @@ service HostAgent {
   // Create restores a VM for (sandbox_id, attempt) from a template on this
   // node. A repeat call with the same (sandbox_id, attempt) returns the
   // existing VM and does not start a second one. A different attempt for a
-  // sandbox that has a VM on this node returns ATTEMPT_CONFLICT.
+  // sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
+  // sandboxd_key set, Create installs that key in the guest daemon (its
+  // SetKey, over vsock) before it returns a running VM; a repeat call
+  // installs it again (the daemon accepts the same key).
   rpc Create(CreateRequest) returns (CreateResponse);
 
   // Stop stops the VM only if sandbox_id, attempt and generation all match
@@ -28,6 +31,20 @@ service HostAgent {
 
   // NodeInfo returns the node capacity, versions and templates.
   rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+
+  // CloseConnections closes every egress relay connection of the VM, with
+  // the same preconditions as Stop. New connections still work. The
+  // api_server calls it in the daemon Init sequence after a restore, so that
+  // pooled client connections in the guest fail fast and reconnect.
+  rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
+
+  // Dial opens a byte stream to a vsock port of a running VM: the guest
+  // daemon or the app preview (3010). The first frame names sandbox_id and
+  // guest_port and may carry data; later frames carry data only. The
+  // response stream carries the guest's bytes and ends when the guest closes
+  // the connection. When the client ends its send side, the agent keeps
+  // reading until the guest closes (Firecracker vsock has no half-close).
+  rpc Dial(stream DialFrame) returns (stream DialFrame);
 }
 
 // The reason of a host agent error (google.rpc.ErrorInfo.reason).
@@ -59,7 +76,8 @@ enum ErrorReason {
   STALE_ATTEMPT = 11;
   // This node has no VM and no record of a stopped VM for the sandbox.
   SANDBOX_NOT_FOUND = 12;
-  // Stop: the attempt or the generation does not match the VM.
+  // Stop: the attempt or the generation does not match the VM. Dial: the
+  // running VM has another generation than the first frame asks for.
   INSTANCE_MISMATCH = 13;
   // The jailer, Firecracker or the snapshot restore failed.
   VMM_FAILED = 14;
@@ -70,6 +88,24 @@ enum ErrorReason {
   // failed start). Create and Stop fail until that process exits, or until an
   // operator fixes the journal record and restarts the agent.
   SANDBOX_IN_DOUBT = 16;
+  // Dial: the guest port is not on the agent's allow-list.
+  PORT_NOT_ALLOWED = 17;
+  // Dial or the guest daemon pass-through: nothing in the VM accepted the
+  // connection on that port.
+  GUEST_UNREACHABLE = 18;
+  // Dial or the guest daemon pass-through: the sandbox has a VM on this node,
+  // but it is not running (starting, stopping or exited).
+  VM_NOT_RUNNING = 19;
+  // Dial: the VM already has the most open Dial streams that the agent
+  // allows (--dial-max-streams).
+  DIAL_LIMIT = 20;
+  // The guest daemon pass-through: only the agent may call this daemon
+  // method (SetKey).
+  METHOD_NOT_ALLOWED = 21;
+  // Create: the guest daemon refused sandboxd_key, for example because it
+  // already has a different key. Do not use the VM: Stop it and create a
+  // new attempt.
+  GUEST_KEY_REJECTED = 22;
 }
 
 enum VMState {
@@ -97,6 +133,14 @@ message CreateRequest {
   // Scratch disk size. Must be at least the template's scratch size. A
   // larger value grows the disk; the guest daemon grows the file system.
   uint32 scratch_gib = 6;
+  // Tenant of the sandbox (^[A-Za-z0-9_-]+$). The egress relay stamps
+  // spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>.
+  string tenant_id = 7;
+  // Secret. The per-VM guest daemon key (craft.sandboxd.v1 SetKey rules:
+  // 32 to 512 bytes, 0x21 to 0x7E). Daemon calls must carry it in
+  // x-sandboxd-key. The agent does not log or store it. Without it, the
+  // daemon answers only Health.
+  string sandboxd_key = 8;
 }
 
 message CreateResponse {
@@ -138,6 +182,29 @@ message VM {
   // Jailer UID and GID of the VM.
   uint32 uid = 10;
   google.protobuf.Timestamp started_at = 11;
+  string tenant_id = 12;
+}
+
+message CloseConnectionsRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+}
+
+message DialFrame {
+  // First frame only.
+  string sandbox_id = 1;
+  // First frame only.
+  uint32 guest_port = 2;
+  bytes data = 3;
+  // First frame only. If set, Dial fails with INSTANCE_MISMATCH unless the
+  // running VM has this generation. 0 means any running VM.
+  uint64 generation = 4;
+}
+
+message CloseConnectionsResponse {
+  // Number of relay connections that were closed.
+  uint32 closed = 1;
 }
 
 message NodeInfoRequest {}

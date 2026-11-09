@@ -22,3 +22,43 @@ func TestCheckRanges(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePortsRejectsAnEmptyList(t *testing.T) {
+	for _, in := range []string{"", ",", " , "} {
+		if ports, err := parsePorts(in); err == nil {
+			t.Errorf("%q: got %v, want an error", in, ports)
+		}
+	}
+	if ports, err := parsePorts("52, 3010"); err != nil || len(ports) != 2 || ports[0] != 52 || ports[1] != 3010 {
+		t.Fatalf("parse: %v %v", ports, err)
+	}
+}
+
+func TestCheckListen(t *testing.T) {
+	tls := flags{listen: ":7443", tlsCert: "c", tlsKey: "k", clientCA: "ca", dialMax: 64}
+	for name, f := range map[string]flags{
+		"unix only": {dialMax: 64},
+		"mtls":      tls,
+	} {
+		if err := checkListen(f); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	noCA := tls
+	noCA.clientCA = ""
+	noListen := tls
+	noListen.listen = ""
+	sansOnly := flags{clientSANs: "spiffe://x", dialMax: 64}
+	noDials := tls
+	noDials.dialMax = 0
+	for name, f := range map[string]flags{
+		"listen without CA":   noCA,
+		"TLS without listen":  noListen,
+		"SANs without listen": sansOnly,
+		"zero dial cap":       noDials,
+	} {
+		if err := checkListen(f); err == nil {
+			t.Errorf("%s: accepted %+v", name, f)
+		}
+	}
+}
