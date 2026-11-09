@@ -260,6 +260,31 @@ holding the push lock; snapshot archives use separate paths.
 
 **Runtime notice.** `Sandbox.skill_runtime_omissions` records omissions with the delivered hash in one write. Failed pushes preserve the previous state. If files are unchanged, a refresh updates changed omissions without a transport call. Session and reload responses include the limits and omissions only for the session owner's sandbox. Reading the notice does not open a bundle. The web session store keeps the notice behind the same revision checks as stale Skills. Turn acceptance refreshes this state without waiting for history; confirmed completion refreshes it again after runtime startup. Refresh and reload responses check session identity, turn generation and revision. Reload fences earlier reads and suppresses background Skill refreshes until it finishes. Completion refresh starts after adopting any queued successor. `SkillRuntimeNotice` shows one persistent error per omission state, with each Skill, its charged size and the failed limit. Only explicit dismissal suppresses an unchanged notice across refetches and remounts. A changed or cleared state resets dismissal in the store, even without a mounted notice. Unmount hides the global toast; returning restores an undismissed notice. Stale sessions defer the notice until their loaded Skills match the sandbox. Scheduled session responses omit the notice when their recorded Skill hash differs from the sandbox. The description and list share a keyboard-scrollable region, with Manage skills and Dismiss below it. Rich toast titles wrap. Plain mobile titles use two lines and offer a keyboard-scrollable expansion; controls stay below the message. Plain errors use an alert region.
 
+**Write limit.** `db/skill.py:skill_usage_for_users` totals each user's runtime
+name winners in one query for any number of users. It reads current-version
+`unpacked_size_bytes` and `file_count`, and built-in sizes from
+`skills/built_in.py:get_builtin_skill_footprints`. Packaged source sizes are
+measured on first use and cached for the process. It reads no bundles. Available Skills count only after the user turns them on. Unknown
+metadata counts as `skills/limits.py:UNKNOWN_SKILL_BYTES` and
+`UNKNOWN_SKILL_FILES`, never as zero. The single-user resolver and this query
+share `_runtime_eligibility` and `_runtime_candidate_order`; predicates take a
+user id or a user column. The usage query joins saved preferences and picks
+each name winner with a grouped minimum over the library class and the
+creation-order position, so it needs no per-user sort window. Past the
+`PER_USER_WINNER_MAX_*` sizes, it finds each name's winner once for a user with
+no rows, then replaces it only for the user and name pairs from
+`_user_specific_skill_names`: preferences, direct and group shares, app
+readiness, authorship and marketplace ownership. Readiness exceptions use the
+same captured input as eligibility, even if credentials change before the usage
+query. Final totals include only existing users; missing IDs retain zero usage.
+Smaller queries expand each user over each name.
+`backend/tests/external_dependency_unit/db/test_skill_limit_equivalence.py`
+runs both shapes. A new
+per-user input to `_runtime_eligibility` or `_runtime_candidate_order` must
+add its table there. App readiness comes from
+`db/external_app.py:get_ready_external_app_ids_for_users`, which applies
+`is_external_app_ready_for_user` to each credential.
+
 ## Contracts and traps
 
 1. `rendering-input-changes-hash` **A new rendering input must change the
