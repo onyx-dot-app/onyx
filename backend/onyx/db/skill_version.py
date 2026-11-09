@@ -28,9 +28,6 @@ from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.skills.ingest import IngestedBundle
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 # Uploads save the bundle before the row that uses it commits.
 ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
@@ -122,15 +119,11 @@ def save_skill_version(
     reuse_current = False
     if not initial:
         current = repair_skill_version(skill, db_session)
-        try:
-            reuse_current = repair_version_metadata(
-                current,
-                get_default_file_store(),
-                verify_bundle=current.content_digest
-                == ingested.metadata.content_digest,
-            )
-        except Exception:
-            logger.warning("Could not read previous skill version: %s", current.id)
+        reuse_current = repair_version_metadata(
+            current,
+            get_default_file_store(),
+            verify_bundle=current.content_digest == ingested.metadata.content_digest,
+        )
     version = write_resource_version(
         adapter,
         bundle_file_id=ingested.bundle_file_id,
