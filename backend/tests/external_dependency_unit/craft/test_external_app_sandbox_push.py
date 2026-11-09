@@ -67,7 +67,7 @@ def test_disconnect_clears_associated_skill_preferences_only(
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     associated_skill = make_skill(
         db_session,
         is_public=True,
@@ -275,14 +275,14 @@ def test_delete_removes_provider_skill_and_refreshes_affected_users(
 
 def test_delete_detaches_custom_skill_and_clears_enablement(
     db_session: Session,
-    test_user: User,
+    standard_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    make_sandbox(db_session, test_user)
+    make_sandbox(db_session, standard_user)
     skill = make_skill(db_session, is_public=True, name="retained-custom-skill")
     set_skill_enabled_for_user(
         skill_id=skill.id,
-        user=test_user,
+        user=standard_user,
         enabled=True,
         db_session=db_session,
     )
@@ -299,7 +299,7 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
     assert skill_id in {
         runtime_skill.id
         for runtime_skill in list_runtime_skills_for_user(
-            user=test_user,
+            user=standard_user,
             db_session=db_session,
         )
     }
@@ -312,27 +312,27 @@ def test_delete_detaches_custom_skill_and_clears_enablement(
 
     api.delete_external_app_admin(
         external_app_id=app_id,
-        _=test_user,
+        _=standard_user,
         db_session=db_session,
     )
 
     db_session.expire_all()
     assert len(calls) == 1
-    assert test_user.id in calls[0]
+    assert standard_user.id in calls[0]
     assert api.get_external_app_by_id(db_session, app_id) is None
     assert db_session.get(Skill, skill_id) is not None
     assert get_external_app_by_skill_id(db_session, skill_id) is None
     assert (
         db_session.get(
             UserSkillPreference,
-            {"user_id": test_user.id, "skill_id": skill_id},
+            {"user_id": standard_user.id, "skill_id": skill_id},
         )
         is None
     )
     assert skill_id not in {
         runtime_skill.id
         for runtime_skill in list_runtime_skills_for_user(
-            user=test_user,
+            user=standard_user,
             db_session=db_session,
         )
     }

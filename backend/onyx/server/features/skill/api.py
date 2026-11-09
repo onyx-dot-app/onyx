@@ -675,7 +675,10 @@ def create_custom_skill_from_editor(
         if external_app_id is not None and not has_global_permission(
             user, Permission.FULL_ADMIN_PANEL_ACCESS
         ):
-            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Only administrators can create a skill for an external app.",
+            )
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         if external_app_id is not None:
             associate_custom_skill_with_external_app__no_commit(

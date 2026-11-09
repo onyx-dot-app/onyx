@@ -23,7 +23,8 @@
   preview of every SKILL.md found. A private repository needs the user's
   GitHub connection in Craft; without it the import is anonymous. The owner
   shares with users or groups as viewer or editor, subject to group scope,
-  or transfers ownership. Publishing requires global `MANAGE_SKILLS`.
+  or transfers ownership of an uploaded skill. Synced skills keep their source ownership.
+  Publishing requires global `MANAGE_SKILLS`.
 - **Global skill managers** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
   and the user cannot turn it off). Global manage-skills permission is required to delete a required skill.
@@ -49,7 +50,8 @@
   reload restarts the agent's runtime with the current skills.
 - **Version history API.** Owners, editors and admins can list custom skill
   versions with their creator and timestamp, preview retained content, and
-  restore it. Viewers can preview current instructions but cannot read history.
+  restore uploaded content. Synced content changes in GitHub and cannot be restored locally.
+  Viewers can preview current instructions but cannot read history.
   Restore creates a new version unless its content equals the current version.
 
 When it fails:
