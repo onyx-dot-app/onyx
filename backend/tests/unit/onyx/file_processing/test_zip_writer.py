@@ -99,6 +99,24 @@ def test_entry_fields_and_streams_match_zipfile(
     _assert_same_bytes(write)
 
 
+@pytest.mark.parametrize("declared_size", [(1 << 31) - 1, 1 << 31, 1 << 32])
+@pytest.mark.parametrize(
+    "compression",
+    [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED, zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA],
+)
+def test_small_stream_with_zip64_size_hint_matches_zipfile(
+    declared_size: int, compression: int
+) -> None:
+    def write(archive: Writer) -> None:
+        info = zipfile.ZipInfo("SKILL.md", (2024, 1, 1, 0, 0, 0))
+        info.file_size = declared_size
+        info.compress_type = compression
+        with archive.open(info, mode="w") as member:
+            member.write(b"small member despite the size hint")
+
+    _assert_same_bytes(write)
+
+
 def test_written_entries_change_as_in_zipfile() -> None:
     def fields(writer: Callable[[io.BytesIO], Writer]) -> list[tuple[object, ...]]:
         infos = [zipfile.ZipInfo(name) for name in ("a", "é", "lz")]

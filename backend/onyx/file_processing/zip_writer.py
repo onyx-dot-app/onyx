@@ -55,7 +55,7 @@ class _Compressor(Protocol):
     def flush(self) -> bytes: ...
 
 
-class _LzmaCompressor:
+class _LzmaCompressor(_Compressor):
     def __init__(self) -> None:
         self._compressor = lzma.LZMACompressor(lzma.FORMAT_RAW, filters=[_LZMA_FILTER])
         self._header = _LZMA_HEADER
