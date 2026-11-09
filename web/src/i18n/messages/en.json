@@ -2968,7 +2968,7 @@
           "sync": "Document access **synced with {source}**",
           "managedByAdmins": "Managed by **admins**",
           "managedByGroups": "Managed by **{count, plural, one {# group} other {# groups}}**",
-          "onlyMe": "Documents visible to **only the account owner**",
+          "onlyMe": "Documents visible to **only the credential owner**",
           "syncRestricted": "Document access **synced with {source}**, restricted to **{count, plural, one {# group} other {# groups}}**",
           "groupsPending": "Documents shared with **specific groups**",
           "syncRestrictedPending": "Document access **synced with {source}**, restricted to **specific groups**"
@@ -3753,7 +3753,7 @@
             "title": "Everyone in Your Organization"
           },
           "onlyMe": {
-            "description": "Only the person whose account this connector uses can see its documents.",
+            "description": "Only the user who owns this connector's credential can see its documents.",
             "title": "Only Me"
           },
           "specificGroups": {

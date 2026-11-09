@@ -2968,7 +2968,7 @@
           "sync": "ドキュメントへのアクセスは**{source} と同期**",
           "managedByAdmins": "**管理者**が管理",
           "managedByGroups": "**{count, plural, one {# 件のグループ} other {# 件のグループ}}**が管理",
-          "onlyMe": "ドキュメントは**アカウント所有者のみ**に表示されます",
+          "onlyMe": "ドキュメントは**認証情報の所有者のみ**に表示されます",
           "syncRestricted": "ドキュメントへのアクセスは**{source} と同期**し、**{count, plural, one {# 件のグループ} other {# 件のグループ}}**に制限",
           "groupsPending": "ドキュメントは**特定のグループ**と共有",
           "syncRestrictedPending": "ドキュメントへのアクセスは**{source} と同期**し、**特定のグループ**に制限"
@@ -3753,7 +3753,7 @@
             "title": "組織内の全員"
           },
           "onlyMe": {
-            "description": "このコネクタが使用するアカウントの所有者だけがドキュメントを閲覧できます。",
+            "description": "このコネクタの認証情報を所有するユーザーだけがドキュメントを閲覧できます。",
             "title": "自分のみ"
           },
           "specificGroups": {

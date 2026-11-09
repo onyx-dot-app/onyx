@@ -2968,7 +2968,7 @@
           "sync": "Acesso aos documentos **sincronizado com {source}**",
           "managedByAdmins": "Gerenciado por **administradores**",
           "managedByGroups": "Gerenciado por **{count, plural, one {# grupo} other {# grupos}}**",
-          "onlyMe": "Documentos visíveis **somente para o titular da conta**",
+          "onlyMe": "Documentos visíveis **somente para o dono da credencial**",
           "syncRestricted": "Acesso aos documentos **sincronizado com {source}**, restrito a **{count, plural, one {# grupo} other {# grupos}}**",
           "groupsPending": "Documentos compartilhados com **grupos específicos**",
           "syncRestrictedPending": "Acesso aos documentos **sincronizado com {source}**, restrito a **grupos específicos**"
@@ -3753,7 +3753,7 @@
             "title": "Todos na sua organização"
           },
           "onlyMe": {
-            "description": "Somente a pessoa cuja conta este conector usa pode ver seus documentos.",
+            "description": "Somente o usuário dono da credencial deste conector pode ver seus documentos.",
             "title": "Somente eu"
           },
           "specificGroups": {

@@ -112,12 +112,16 @@ export default function DocumentAccessField({
       description: t("specificGroups.description"),
       icon: SvgUsers,
     });
-    built.push({
-      value: "personal",
-      title: t("onlyMe.title"),
-      description: t("onlyMe.description"),
-      icon: SvgUser,
-    });
+    // Only Me reads through the credential's owner. A source with no
+    // credential form uses an ownerless placeholder, so it cannot offer it.
+    if (getCredentialSpec(connector) !== null) {
+      built.push({
+        value: "personal",
+        title: t("onlyMe.title"),
+        description: t("onlyMe.description"),
+        icon: SvgUser,
+      });
+    }
     return built;
   }, [isSyncDisabledByAuth, connector, t, appName]);
   // A scoped manager's authority stops at the groups they manage, so the
