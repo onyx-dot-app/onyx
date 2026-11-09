@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.auth.scoped_permissions import within_scope
 from onyx.db.enums import (
     Permission,
     PermissionAuthority,
@@ -145,6 +146,21 @@ def skill_response_for_user(
             external_app=_dependency_response(state.external_app_dependency),
         )
 
+    if user_group_ids is None:
+        user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    if (
+        allow_management
+        and managed_user_group_ids is None
+        and has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
+    ):
+        managed_user_group_ids = fetch_managed_group_ids(user, db_session)
+    user_permission = user_permission_for_skill(
+        skill,
+        user,
+        user_group_ids,
+        managed_user_group_ids,
+        allow_management=allow_management,
+    )
     marketplace = None
     if skill.marketplace_id is not None:
         sources = (
@@ -155,31 +171,38 @@ def skill_response_for_user(
         source = sources.get(skill.marketplace_id)
         if source is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill source no longer exists")
+        if source.personal:
+            can_share = skill.author_user_id == user.id or (
+                allow_management
+                and has_global_permission(user, Permission.MANAGE_SKILLS)
+            )
+        else:
+            can_share = allow_management and within_scope(
+                user,
+                db_session,
+                permission=Permission.MANAGE_SKILLS,
+                current_group_ids=[share.user_group_id for share in skill.group_shares],
+                requested_group_ids=[],
+                is_non_public=skill.public_permission is None,
+                managed_group_ids=managed_user_group_ids or set(),
+            )
         marketplace = SkillMarketplaceResponse(
             id=source.id,
             name=source.name,
             personal=source.personal,
             folder=skill.marketplace_path,
             follows_access=skill.follows_marketplace_access,
+            can_share=(
+                can_share
+                and skill.retired_at is None
+                and user_permission in {SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR}
+            ),
         )
-    if user_group_ids is None:
-        user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    if (
-        managed_user_group_ids is None
-        and has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
-    ):
-        managed_user_group_ids = fetch_managed_group_ids(user, db_session)
     return SkillResponse.from_custom(
         skill,
         enabled=state.enabled,
         can_toggle=state.can_toggle,
-        user_permission=user_permission_for_skill(
-            skill,
-            user,
-            user_group_ids,
-            managed_user_group_ids,
-            allow_management=allow_management,
-        ),
+        user_permission=user_permission,
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
         marketplace=marketplace,
@@ -198,7 +221,8 @@ def skills_list_response_for_user(
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
     managed_user_group_ids = (
         fetch_managed_group_ids(user, db_session)
-        if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
+        if allow_management
+        and has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
         else set()
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)

@@ -36,6 +36,7 @@ export interface SkillMarketplace {
   personal: boolean;
   folder: string | null;
   follows_access: boolean;
+  can_share: boolean;
 }
 
 export interface Skill {

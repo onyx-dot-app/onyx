@@ -24,6 +24,7 @@ import { useSharePermissionOptions } from "@/sections/modals/shareAccessConstant
 interface BulkSkillSharingModalProps {
   count: number;
   canChangeOrgAccess: boolean;
+  canChangeUserAccess: boolean;
   open: boolean;
   saving: boolean;
   onClose: () => void;
@@ -33,6 +34,7 @@ interface BulkSkillSharingModalProps {
 export default function BulkSkillSharingModal({
   count,
   canChangeOrgAccess,
+  canChangeUserAccess,
   open,
   saving,
   onClose,
@@ -62,7 +64,7 @@ export default function BulkSkillSharingModal({
   const changed =
     effectiveScope !== "KEEP" ||
     (canManageCompanySkills && policy !== "KEEP") ||
-    stagedUsers.length > 0 ||
+    (canChangeUserAccess && stagedUsers.length > 0) ||
     stagedGroups.length > 0;
 
   // The parent keeps this modal mounted, so a generic close (X, backdrop)
@@ -83,7 +85,7 @@ export default function BulkSkillSharingModal({
         effectiveScope === "PUBLIC" ? publicPermission : null;
     if (canManageCompanySkills && policy !== "KEEP")
       sharing.installation_policy = policy;
-    if (stagedUsers.length)
+    if (canChangeUserAccess && stagedUsers.length)
       sharing.user_shares = stagedUsers.map((user) => ({
         user_id: user.id,
         permission,
@@ -182,9 +184,9 @@ export default function BulkSkillSharingModal({
                 disabled={saving}
                 existingUserIds={new Set()}
                 existingGroupIds={new Set()}
-                users={users ?? []}
+                users={canChangeUserAccess ? (users ?? []) : []}
                 groups={groups ?? []}
-                stagedUsers={stagedUsers}
+                stagedUsers={canChangeUserAccess ? stagedUsers : []}
                 stagedGroups={stagedGroups}
                 stagedPermission={permission}
                 onStagedPermissionChange={setPermission}

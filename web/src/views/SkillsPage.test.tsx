@@ -8,9 +8,18 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
+import { marketplace } from "@/sections/marketplaces/__fixtures__/marketplace";
 import { Permission } from "@/lib/types";
 import type { BulkSkillResult } from "@/lib/skills/api";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
+
+const mockListMarketplaces = jest.fn();
+jest.mock("@/lib/marketplaces/api", () => ({
+  ...jest.requireActual<typeof import("@/lib/marketplaces/api")>(
+    "@/lib/marketplaces/api"
+  ),
+  listMarketplaces: () => mockListMarketplaces(),
+}));
 
 let mockPermissions: string[] = [];
 let mockAdminCapabilities: string[] = [];
@@ -145,12 +154,12 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     ) : null,
 }));
 
-jest.mock("@/sections/modals/skills/ImportSkillsFromGitHubModal", () => ({
+jest.mock("@/sections/marketplaces/SyncFromGitHubDialog", () => ({
   __esModule: true,
   default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
     open ? (
       <button type="button" onClick={onClose}>
-        GitHub import open
+        GitHub sync open
       </button>
     ) : null,
 }));
@@ -228,6 +237,7 @@ describe("SkillsPage preference toggles", () => {
   }
 
   beforeEach(() => {
+    mockListMarketplaces.mockResolvedValue([]);
     mockPermissions = [];
     mockAdminCapabilities = [];
     Element.prototype.scrollIntoView = jest.fn();
@@ -260,6 +270,33 @@ describe("SkillsPage preference toggles", () => {
     mockStageSkillCreationDraft.mockReset();
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
   });
+
+  it.each([true, false])(
+    "keeps app Skill descriptions visible when readiness is %s",
+    (ready) => {
+      skillsData.customs = [
+        {
+          ...customSkill("app-review", "review-pull-requests"),
+          description: "Review pull requests before merging",
+          external_app: {
+            external_app_id: 7,
+            name: "GitHub",
+            enabled: true,
+            ready,
+          },
+        },
+      ];
+      render(<SkillsPage admin />);
+      expect(
+        screen.getByText("Review pull requests before merging")
+      ).toBeVisible();
+      expect(
+        screen.getByText(
+          ready ? "Uses app “GitHub”" : "Connect app “GitHub” to enable"
+        )
+      ).toBeVisible();
+    }
+  );
 
   it("keeps mobile duplicate names and descriptions within one row", () => {
     const originalWidth = window.innerWidth;
@@ -1130,7 +1167,50 @@ describe("SkillsPage preference toggles", () => {
     expect(mockRefresh).not.toHaveBeenCalled();
   });
 
-  it("offers GitHub import from the create menu", async () => {
+  it.each([false, true])(
+    "shows failed empty sources on the Skills page (admin=%s)",
+    async (admin) => {
+      skillsData = { builtins: [], customs: [] };
+      mockListMarketplaces.mockResolvedValue([
+        {
+          ...marketplace,
+          sync_requested: false,
+          sync_pending: false,
+          sync_status: "failed",
+          last_error: "Repository unavailable",
+        },
+      ]);
+      render(<SkillsPage admin={admin} />);
+      expect(await screen.findByText("Team tools")).toBeInTheDocument();
+      expect(screen.getByText("Repository unavailable")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "View details for Team tools" })
+      ).toBeEnabled();
+    }
+  );
+
+  it("opens a read-only preview for a company editor without management permission", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("synced", "company-skill"),
+        marketplace: {
+          id: "source",
+          name: "Team tools",
+          personal: false,
+          folder: "skills/company",
+          follows_access: true,
+          can_share: false,
+        },
+      },
+    ];
+    render(<SkillsPage />);
+    await setupUser().click(
+      screen.getByRole("button", { name: "Preview company-skill" })
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent("Skill instructions");
+  });
+
+  it("offers GitHub sync from the Add menu", async () => {
     const user = setupUser();
     render(<SkillsPage />);
 
@@ -1138,7 +1218,7 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getAllByText("Sync from GitHub")[0]!);
 
     expect(
-      screen.getByRole("button", { name: "GitHub import open" })
+      screen.getByRole("button", { name: "GitHub sync open" })
     ).toBeInTheDocument();
   });
 
@@ -1467,10 +1547,14 @@ describe("SkillsPage preference toggles", () => {
       screen.getByRole("switch", { name: "other-skill" })
     ).toBeInTheDocument();
   });
-  it.each([false, true])(
-    "keeps synced row and bulk actions within authority (personal=%s)",
-    async (personal) => {
-      mockPermissions = personal ? [] : [Permission.MANAGE_SKILLS];
+  it.each([
+    { personal: false, manager: false },
+    { personal: false, manager: true },
+    { personal: true, manager: false },
+  ])(
+    "keeps synced row and bulk actions within authority ($personal, $manager)",
+    async ({ personal, manager }) => {
+      mockPermissions = manager ? [Permission.MANAGE_SKILLS] : [];
       const user = setupUser();
       skillsData = {
         builtins: [],
@@ -1484,6 +1568,7 @@ describe("SkillsPage preference toggles", () => {
               personal,
               folder: "skills/synced-skill",
               follows_access: true,
+              can_share: manager,
             },
           },
         ],
@@ -1500,7 +1585,7 @@ describe("SkillsPage preference toggles", () => {
       expect(
         screen.queryByRole("menuitem", { name: "Delete skill" })
       ).not.toBeInTheDocument();
-      if (personal)
+      if (!manager)
         expect(
           screen.queryByRole("menuitem", { name: "Edit sharing" })
         ).not.toBeInTheDocument();
@@ -1508,7 +1593,7 @@ describe("SkillsPage preference toggles", () => {
       await user.click(
         screen.getByRole("checkbox", { name: "Select synced-skill" })
       );
-      if (personal)
+      if (!manager)
         expect(screen.getByRole("button", { name: "Share" })).toBeDisabled();
       await user.click(screen.getByRole("button", { name: "More actions" }));
       expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
