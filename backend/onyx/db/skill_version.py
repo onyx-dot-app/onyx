@@ -33,9 +33,6 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.skills.bundle import STORED_BUNDLE_LIMITS
 from onyx.skills.ingest import IngestedBundle
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
 
 # Uploads save the bundle before the row that uses it commits.
 ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
@@ -190,15 +187,18 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
 
 
 def list_skill_versions(
-    skill: Skill, db_session: Session
+    skill: Skill, db_session: Session, *, before_version: int | None = None
 ) -> list[tuple[SkillVersion, User | None]]:
-    """List history for a skill the caller has authorized for editing."""
+    """List up to 50 versions of an authorized skill, newest first."""
     statement = (
         SkillVersionAdapter(skill)
         .versions()
         .add_columns(User)
         .outerjoin(User, SkillVersion.created_by_user_id == User.id)
+        .limit(50)
     )
+    if before_version is not None:
+        statement = statement.where(SkillVersion.version_number < before_version)
     return [
         (version, creator)
         for version, creator in db_session.execute(statement).unique()
