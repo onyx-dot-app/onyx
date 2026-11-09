@@ -17,6 +17,7 @@ from onyx.tools.tool_implementations.code_mode.store import (
     MAX_PATH_KEY_CHARS,
     ProgramStore,
     changed_writes,
+    commit_limit_error,
     json_value,
     lost_store_writes,
     store_snapshot,
@@ -119,6 +120,20 @@ def test_a_commit_applies_only_after_the_commit_it_follows() -> None:
     assert store_snapshot(messages).committed_bytes == len("c") + len("3")
 
 
+def test_a_deletion_committed_meanwhile_leaves_room_for_writes_at_the_limit() -> None:
+    filler = "x" * (MAX_COMMITTED_BYTES - len('a""') - len("b1"))
+    messages: list[Message] = [
+        _execution("1", StoreCommit(ordinal=1, follows=0, writes={"a": filler})),
+        _execution("2", StoreCommit(ordinal=2, follows=1, writes={"a": None})),
+    ]
+    snapshot = store_snapshot(messages)
+    # The write fills the chat's limit exactly.
+    assert commit_limit_error(snapshot, {"b": 1}) is None
+    program = ProgramStore(snapshot)
+    program.store("b", 1)
+    assert program.writes == {"b": 1}
+
+
 def test_dropped_commits_are_listed_until_an_observation_reports_them() -> None:
     dropped = StoreCommit(ordinal=2, follows=1, writes={"b": 2, "gone": None})
     messages: list[Message] = [_execution("2", dropped)]
@@ -212,8 +227,8 @@ def test_snapshot_counts_committed_bytes_and_the_chat_limit_applies() -> None:
         _execution("1", StoreCommit(ordinal=1, follows=0, writes={"a": "xy"})),
         _execution("2", StoreCommit(ordinal=2, follows=1, writes={"a": None})),
     ]
-    # 'a' + '"xy"', then the deleted key 'a'.
-    assert store_snapshot(messages).committed_bytes == 5 + 1
+    # 'a' + '"xy"'; the deleted key does not count.
+    assert store_snapshot(messages).committed_bytes == 5
 
     full = ProgramStore(
         StoreSnapshot(values={"k": "v"}, committed_bytes=MAX_COMMITTED_BYTES)
