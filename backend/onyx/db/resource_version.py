@@ -14,11 +14,17 @@ from sqlalchemy.orm import Session
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import BundleVersionMixin
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, is_missing_object
 from onyx.file_store.models import BundleMetadata
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# The current version and the newest older versions keep their bundle files.
+BUNDLES_KEPT = 10
+VERSION_FILES_NOT_KEPT = "The files of this version are no longer kept."
 
 
 class ResourceVersionAdapter[Version: BundleVersionMixin](Protocol):
@@ -65,6 +71,26 @@ def fill_version_metadata(
     version.file_count = metadata.file_count
 
 
+def read_version_bundle(version: BundleVersionMixin, file_store: FileStore) -> bytes:
+    """Raises NOT_FOUND when pruning removed the bundle, also during a race."""
+    if version.bundle_file_id is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT)
+    try:
+        with file_store.read_file(version.bundle_file_id) as source:
+            return source.read()
+    except (
+        FileRecordNotFoundError,
+        FileNotFoundError,
+        ResourceNotFoundError,
+        NotFound,
+    ) as exc:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
+    except ClientError as exc:
+        if not is_missing_object(exc):
+            raise
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
+
+
 def repair_version_metadata(
     version: BundleVersionMixin, file_store: FileStore, *, verify_bundle: bool = False
 ) -> bool:
@@ -80,19 +106,8 @@ def repair_version_metadata(
     ):
         return True
     try:
-        with file_store.read_file(version.bundle_file_id) as source:
-            bundle_bytes = source.read()
-    except (
-        FileRecordNotFoundError,
-        FileNotFoundError,
-        ResourceNotFoundError,
-        NotFound,
-    ):
-        logger.warning("Version bundle is missing: %s", version.id)
-        return False
-    except ClientError as exc:
-        if not is_missing_object(exc):
-            raise
+        bundle_bytes = read_version_bundle(version, file_store)
+    except OnyxError:
         logger.warning("Version bundle is missing: %s", version.id)
         return False
     try:
@@ -108,6 +123,33 @@ def repair_version_metadata(
         return False
     fill_version_metadata(version, metadata)
     return True
+
+
+def prune_resource_bundles[Version: BundleVersionMixin](
+    adapter: ResourceVersionAdapter[Version], db_session: Session
+) -> list[str]:
+    """Empty the bundle file ids of versions older than the newest kept ones.
+    Call under the adapter lock; delete the returned files only after commit."""
+    current = adapter.current(db_session)
+    cutoff = db_session.scalars(
+        adapter.versions().offset(BUNDLES_KEPT - 1).limit(1)
+    ).first()
+    if current is None or cutoff is None:
+        return []
+    version_model = type(cutoff)
+    candidates = adapter.versions().where(
+        version_model.version_number < cutoff.version_number,
+        version_model.bundle_file_id.is_not(None),
+        version_model.id != current.id,
+    )
+    pruned: list[str] = []
+    for version in db_session.scalars(candidates):
+        if version.bundle_file_id is None:
+            continue
+        pruned.append(version.bundle_file_id)
+        version.bundle_file_id = None
+    db_session.flush()
+    return pruned
 
 
 def write_resource_version[Version: BundleVersionMixin](
