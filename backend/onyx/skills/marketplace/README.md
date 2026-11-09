@@ -32,7 +32,7 @@ The archive reader also has independent processing safeguards:
 - TAR metadata reads share a 16 MiB budget during enumeration, including chained
   extension headers and sparse maps. The headers before one member may use at
   most 32 KiB. This limits chained headers and parser recursion before
-  allocation. Each JSON manifest may use at most 1 MiB.
+  allocation.
   Member data reads use the shared member budget after metadata parsing finishes.
 - Sparse TAR members fail the read after their bounded headers parse. `git
   archive` does not write them. Global PAX comments, long paths and long link
@@ -43,6 +43,9 @@ The archive reader also has independent processing safeguards:
   of each key and value. This is a conservative estimate, not exact memory use.
   Global headers count for every copy, including GitHub commit headers.
   Path limits apply before unbounded prefix allocation.
+
+Manifest consumers must enforce `MANIFEST_MAX_BYTES` (1 MiB) for each JSON
+manifest. The archive reader does not enforce a per-manifest limit.
 
 The 1 GiB ceiling permits ten full 100 MiB skills plus tar overhead.
 It bounds temporary disk and decompression work for highly compressed inputs.
