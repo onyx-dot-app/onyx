@@ -3758,7 +3758,6 @@
           },
           "specificGroups": {
             "description": "Indiquez les groupes qui peuvent accéder aux documents de ce connecteur.",
-            "required": "Choisissez au moins un groupe.",
             "title": "Groupes spécifiques"
           },
           "sync": {

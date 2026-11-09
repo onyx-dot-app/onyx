@@ -791,9 +791,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           confluenceScopeRequired: t(
             "connectors.confluence.fields.space.required"
           ),
-          specificGroupsRequired: t(
-            "settings.documentAccess.specificGroups.required"
-          ),
           restrictionGroupsRequired: t(
             "settings.documentAccess.sync.restrictionRequired"
           ),
