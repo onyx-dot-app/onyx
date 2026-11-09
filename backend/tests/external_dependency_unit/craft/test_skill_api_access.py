@@ -9,7 +9,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import UploadFile
+from fastapi import Request, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -76,6 +76,7 @@ def test_curator_without_group_scope_cannot_patch_shared_skill(
             SkillPatchRequest(description="unauthorized edit"),
             user=curator,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
@@ -192,6 +193,7 @@ def test_viewer_share_cannot_patch_skill(
             SkillPatchRequest(description="unauthorized edit"),
             user=shared_user,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
@@ -436,6 +438,7 @@ def test_admin_can_set_installation_policy(
         SkillShareRequest.model_validate({"installation_policy": policy}),
         user=admin,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert response.installation_policy == policy
     assert response.enabled == (policy != SkillInstallationPolicy.AVAILABLE)
@@ -452,6 +455,7 @@ def test_skill_owner_cannot_change_installation_policy(db_session: Session) -> N
             SkillShareRequest(installation_policy=SkillInstallationPolicy.REQUIRED),
             user=owner,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
     assert error.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
@@ -464,13 +468,19 @@ def test_required_skill_owner_cannot_delete_or_change_company_access(
     skill.installation_policy = SkillInstallationPolicy.REQUIRED
     db_session.flush()
     with pytest.raises(OnyxError):
-        delete_current_user_skill(skill.id, user=owner, db_session=db_session)
+        delete_current_user_skill(
+            skill.id,
+            user=owner,
+            db_session=db_session,
+            http_request=Request({"type": "http"}),
+        )
     with pytest.raises(OnyxError) as error:
         patch_current_user_skill(
             skill.id,
             SkillPatchRequest(public_permission=None),
             user=owner,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
     assert error.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
@@ -550,13 +560,21 @@ def test_sharing_metadata_requires_edit_access_without_reading_bundle(
     )
     if editor:
         response = fetch_custom_skill_sharing(
-            skill.id, user=invited, db_session=db_session
+            skill.id,
+            user=invited,
+            db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
         assert response.owner is not None and response.owner.id == owner.id
         assert [share.user.id for share in response.user_shares] == [invited.id]
     else:
         with pytest.raises(OnyxError) as error:
-            fetch_custom_skill_sharing(skill.id, user=invited, db_session=db_session)
+            fetch_custom_skill_sharing(
+                skill.id,
+                user=invited,
+                db_session=db_session,
+                http_request=Request({"type": "http"}),
+            )
         assert error.value.error_code == OnyxErrorCode.NOT_FOUND
     read_bundle.assert_not_called()
 
@@ -594,6 +612,7 @@ def test_required_creation_preserves_same_name_personal_preference(
         SkillShareRequest(installation_policy=SkillInstallationPolicy.DEFAULT),
         user=owner,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     states = skill_user_states(owner, [personal.id, response.id], db_session)
     assert states[personal.id].enabled
@@ -620,6 +639,7 @@ def test_sharing_without_policy_preserves_existing_policy(
         SkillShareRequest.model_validate(sharing),
         user=owner,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     assert response.installation_policy == SkillInstallationPolicy.REQUIRED
     db_session.refresh(skill)

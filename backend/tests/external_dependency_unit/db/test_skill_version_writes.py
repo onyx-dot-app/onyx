@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from azure.core.exceptions import ResourceNotFoundError
 from botocore.exceptions import ClientError
-from fastapi import UploadFile
+from fastapi import Request, UploadFile
 from google.api_core.exceptions import NotFound
 from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Engine
@@ -238,14 +238,30 @@ def test_all_writers(creation: str, session: Session, user: User) -> None:
     api.remove_current_user_skill_file(skill.id, "notes.txt", user, session)
     assert len(versions(skill, session)) == 4
     request = SkillPatchRequest(instructions_markdown="Edited instructions")
-    api.patch_current_user_skill(skill.id, request, user, session)
+    api.patch_current_user_skill(
+        skill.id,
+        request,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert len(versions(skill, session)) == 5
     current_file = skill.bundle_file_id
-    api.patch_current_user_skill(skill.id, request, user, session)
+    api.patch_current_user_skill(
+        skill.id,
+        request,
+        user,
+        session,
+        http_request=Request({"type": "http"}),
+    )
     assert len(versions(skill, session)) == 5
     assert skill.bundle_file_id == current_file
     api.patch_current_user_skill(
-        skill.id, SkillPatchRequest(description="Version test"), user, session
+        skill.id,
+        SkillPatchRequest(description="Version test"),
+        user,
+        session,
+        http_request=Request({"type": "http"}),
     )
     assert len(versions(skill, session)) == 5
     for version in versions(skill, session):
@@ -312,6 +328,7 @@ def test_lazy_validity_keeps_one_version(
             SkillPatchRequest(instructions_markdown="First instructions"),
             user,
             session,
+            http_request=Request({"type": "http"}),
         )
     else:
         repair_skill_version(skill, session)
@@ -729,6 +746,7 @@ def test_noop_cleans_staged_bundle_before_push_failure(
                     SkillPatchRequest(instructions_markdown="First instructions"),
                     user,
                     session,
+                    http_request=Request({"type": "http"}),
                 )
     assert set(session.scalars(select(FileRecord.file_id))) == file_ids
     assert len(versions(skill, session)) == 2
@@ -861,7 +879,9 @@ def test_delete_skill_with_twelve_versions(session: Session, user: User) -> None
     skill_id = skill.id
     assert len(versions(skill, session)) == 12
     assert len(stored_bundles(session)) == 10
-    api.delete_current_user_skill(skill_id, user, session)
+    api.delete_current_user_skill(
+        skill_id, user, session, http_request=Request({"type": "http"})
+    )
     count = select(func.count()).where(SkillVersion.skill_id == skill_id)
     assert session.scalar(count) == 0
     assert stored_bundles(session) == set()
@@ -877,6 +897,7 @@ def test_bulk_delete_removes_every_retained_bundle(
         SkillBulkActionRequest(skill_ids=[first.id, second.id], action="delete"),
         user,
         session,
+        http_request=Request({"type": "http"}),
     )
     assert response.failed == []
     assert session.scalar(select(func.count()).select_from(SkillVersion)) == 0
@@ -889,7 +910,9 @@ def test_cleanup_task_retries_failed_deletes(
     skill = skill_with_versions(session, user, 2)
     with monkeypatch.context() as patch:
         patch.setattr(staging, "get_default_file_store", FailingStore)
-        api.delete_current_user_skill(skill.id, user, session)
+        api.delete_current_user_skill(
+            skill.id, user, session, http_request=Request({"type": "http"})
+        )
     leaked = stored_bundles(session)
     assert len(leaked) == 2
     # Younger than one hour: an upload may not have committed its row yet.
@@ -921,7 +944,9 @@ def test_cleanup_keeps_files_in_use(session: Session, user: User) -> None:
         io.BytesIO(b"chat"), "chat.txt", FileOrigin.CHAT_UPLOAD, "text/plain"
     )
     session.commit()
-    api.delete_current_user_skill(deleted.id, user, session)
+    api.delete_current_user_skill(
+        deleted.id, user, session, http_request=Request({"type": "http"})
+    )
     in_use = stored_bundles(session)
     assert {legacy.bundle_file_id, shared} <= in_use
     make_old(in_use | {other_origin}, session)

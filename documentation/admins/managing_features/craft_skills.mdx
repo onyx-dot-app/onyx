@@ -240,8 +240,8 @@ enable or disable the Skill, and delete it.
 An uploaded Skill associated with an App stays visible to the organization.
 Company marketplace Skills keep their access settings when linked to an App.
 
-Company visibility changes require global manage-skills permission, including changes by the owner.
-Owners without that permission can still share with individual users.
+For uploaded Skills and company synced Skills, company visibility changes require global manage-skills permission,
+including changes by the owner. Owners without that permission can still share with individual users.
 Group sharing follows the user's group permissions.
 Editing instructions or individual access preserves existing organization access.
 If another edit changes the Skill while you edit instructions or files, retry your edit.
@@ -332,6 +332,17 @@ When sync retires a Skill, it disappears from libraries, App skill lists, and fu
 Its name becomes available for another Skill. Existing sessions use the normal reload flow to receive skill changes.
 Retirement preserves version history for internal retention and cleanup.
 Retired Skills reject all user changes except deletion.
+Only the personal owner or a global manage-skills user can delete a retired synced Skill.
+An editor grant alone does not permit deletion. The same rule applies to bulk deletion.
+
+Through the sharing API, only the owner can change a personal synced Skill's audience,
+including company visibility and group grants. This also applies when the owner is a group manager.
+Changing installation settings still requires the appropriate manage-skills authority.
+Other editors and admins cannot change that audience.
+A manager can change installation settings while preserving the existing grants. For sharing reads,
+sharing changes and PATCH, API tokens must include manage-skills scope to use management authority.
+A Basic-only token retains the user's ownership and explicit editor grants.
+It cannot use the user's admin or group-manager role to change installation settings or company access.
 
 ## Marketplace sync recovery
 
@@ -364,7 +375,8 @@ Remove a user's personal marketplaces and transfer or delete their private uploa
 
 For a Skill from a company marketplace,
 use `POST /api/skills/custom/{skill_id}/reset-marketplace-access` with no request body.
-The request requires global permission to manage Skills. It returns the Skill and its sharing details.
+The request requires global permission to manage Skills and sufficient token scope.
+It returns the Skill and its sharing details.
 
 Reset removes individual user shares and restores the marketplace's company visibility, group access,
 and installation settings. Later marketplace access changes apply to the Skill again.

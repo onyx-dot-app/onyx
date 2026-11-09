@@ -37,7 +37,10 @@ def test_runtime_cloud_404_requires_confirmed_absence(
     metadata: Literal["unknown", "exists", "missing", "outage"],
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("retryable-reader")), True, user, session
+        upload(bundle("retryable-reader")),
+        True,
+        user,
+        session,
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -88,7 +91,10 @@ def test_runtime_definitive_storage_errors(
     session: Session, user: User, error: Exception, expected: bool | None
 ) -> None:
     response = api.create_custom_skill(
-        upload(bundle("definitive-reader")), True, user, session
+        upload(bundle("definitive-reader")),
+        True,
+        user,
+        session,
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
