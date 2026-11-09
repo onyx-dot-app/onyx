@@ -214,8 +214,7 @@ Use these rules when you fix findings from human or bot reviewers.
   example the `cli-review` skill. Handle its findings the same way.
 - **Push fixes together.** After a review round, push all fixes at one time. Request another full
   bot round only if the round had P1 or P2 findings, or if a fix changed logic. For P3 and
-  doc-wording fixes, review the diff yourself and push without a new request. cubic and CodeRabbit
-  still review each push.
+  doc-wording fixes, review the diff yourself and push without a new request.
 
 ## Best Practices
 
