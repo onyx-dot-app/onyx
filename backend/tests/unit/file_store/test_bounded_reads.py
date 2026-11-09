@@ -10,6 +10,7 @@ from azure.core.exceptions import HttpResponseError
 from botocore.response import StreamingBody
 from google.api_core.exceptions import RequestRangeNotSatisfiable
 
+from onyx.file_processing.zip_stream import ZipMemberReader
 from onyx.file_store import azure_blob_file_store as azure
 from onyx.file_store import file_store as storage
 from onyx.file_store import gcs_file_store as gcs
@@ -185,18 +186,18 @@ def test_expansion_stops_on_actual_bytes_and_closes_entries(
         archive.writestr("a", b"x" * 100000)
         archive.writestr("b", b"y" * 100000)
     consumed = 0
-    sources: list[zipfile.ZipExtFile] = []
-    read = zipfile.ZipExtFile.read
+    sources: list[ZipMemberReader] = []
+    read = ZipMemberReader.read
 
-    def measured(source: zipfile.ZipExtFile, n: int = -1) -> bytes:
+    def measured(source: ZipMemberReader, n: int | None = -1) -> bytes:
         nonlocal consumed
-        assert 0 < n <= 65536
+        assert n is not None and 0 < n <= 65536
         sources.append(source)
         chunk = read(source, n)
         consumed += len(chunk)
         return chunk
 
-    monkeypatch.setattr(zipfile.ZipExtFile, "read", measured)
+    monkeypatch.setattr(ZipMemberReader, "read", measured)
     limits = BundleLimits(
         max_stored_bytes=100000,
         max_file_bytes=100000 if total else 99999,

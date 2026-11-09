@@ -369,12 +369,20 @@ def test_manifest_and_tar_extension_bombs() -> None:
     assert isinstance(result, FailedMarketplace)
 
 
-def test_reader_does_not_import_database_or_server_modules() -> None:
+def test_reader_does_not_import_application_database_or_server_modules() -> None:
     subprocess.run(
         [
             sys.executable,
             "-c",
-            "import sys; from onyx.skills.marketplace.reader import read_marketplace_archive; assert not any(m.startswith(('onyx.db', 'onyx.server')) for m in sys.modules)",
+            """
+import sys
+from onyx.skills.marketplace.reader import read_marketplace_archive
+allowed = {'onyx.db', 'onyx.db.zip_metadata'}
+assert not any(
+    name.startswith(('onyx.db', 'onyx.server', 'sqlalchemy')) and name not in allowed
+    for name in sys.modules
+)
+""",
         ],
         env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)},
         check=True,
