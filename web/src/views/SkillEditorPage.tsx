@@ -198,7 +198,7 @@ export default function SkillEditorPage({
   const isSynced = Boolean(skill?.marketplace);
   const canEditContent = canManageSkill && !isSynced && !skill?.retired_at;
   const canDelete = skill && canDeleteSkill({ skill, canManageCompanySkills });
-  const canShare = skill && canShareSkill({ skill, canManageCompanySkills });
+  const canShare = skill && canShareSkill({ skill });
 
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload

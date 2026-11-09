@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "저장소에서 하나 이상의 스킬을 가져오세요.",
-          "title": "GitHub에서 가져오기"
+          "description": "GitHub 저장소의 스킬을 최신 상태로 유지합니다.",
+          "title": "GitHub에서 동기화"
         },
         "scratch": {
           "description": "{appName}에서 지침을 작성하고 지원 파일을 추가하세요.",
-          "title": "처음부터 만들기"
+          "title": "스킬 만들기"
         },
         "trigger": {
-          "label": "스킬 만들기"
+          "label": "추가"
         },
         "upload": {
           "description": "SKILL.md 파일, ZIP 파일 또는 스킬 폴더를 가져오세요.",

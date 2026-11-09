@@ -66,17 +66,18 @@ The exact list you see depends on what your organization has enabled.
 ## Create a personal skill
 
 Create a personal Skill when you have instructions, examples, or reference files you want to reuse across sessions.
-Open **Skills**, select **Create skill**, then choose how you want to begin:
+Open **Skills**, select **Add**, then choose how you want to begin:
 
 | Starting point | Choose | What happens |
 | --- | --- | --- |
-| You want to write the Skill in Onyx | **Start from scratch** | The Skill editor opens so you can write the details and instructions, then add supporting files. |
+| You want to write the Skill in Onyx | **Create a skill** | The Skill editor opens so you can write the details and instructions, then add supporting files. |
 | You already have a Skill | **Upload a skill** | Upload `SKILL.md`, a ZIP, or a Skill folder. Onyx reads the instructions and creates the Skill for you. |
-| The Skill lives in a GitHub repository | **Import from GitHub** | Enter the repository. Onyx lists the importable Skills it finds, and you choose which ones to import. |
+| The Skills live in a GitHub marketplace | **Sync from GitHub** | Preview the catalog, then request a sync. The source stays available for later updates. |
 
-Every new Skill is personal and private. After creating it, you can share it from the Skill editor.
+Uploaded and authored Skills start personal and private. After creation, you can share them from the Skill editor.
+Global skill managers can also create company marketplaces with explicit access defaults.
 
-### Start from scratch
+### Create a skill
 
 <Steps>
   <Step title="Add the details">
@@ -143,22 +144,23 @@ description: Create a concise weekly customer update from meeting notes and acco
   </Step>
 
   <Step title="Upload the Skill">
-    Open **Skills**, select **Create skill** > **Upload a skill**, and select `SKILL.md` or a ZIP. For one Skill,
+    Open **Skills**, select **Add** > **Upload a skill**, and select `SKILL.md` or a ZIP. For one Skill,
     review the editor and configure **Edit sharing** before creating it. To import several Skills together,
     select multiple ZIP files. Each ZIP must contain one Skill. Configure access once for the batch before importing it.
   </Step>
 </Steps>
 
-### Import from GitHub
+### Sync from GitHub
 
-Select **Create skill** > **Import from GitHub** and enter the repository, such as `owner/repo`.
-Onyx scans the repository for folders that contain a `SKILL.md` and lists the importable Skills.
-Select the Skills you want. Select **Configure access** to share them with people, groups, or your organization.
-The access settings apply to all selected Skills. Import the selection and review the results.
-Onyx shows which Skills it imported and which it could not.
+Select **Add** > **Sync from GitHub**. Enter a name, repository owner, repository name, and branch, tag, or commit.
+Enter a folder if the marketplace catalog is below the repository root. Connect GitHub when prompted.
+Select **Preview** to review ready, blocked, and unsupported entries. A missing catalog shows a sample you can add.
+Select **Request sync** to save the source and start its first sync.
 
-Public repositories work without setup. To import from a private repository, use **Connect GitHub** in the
-import dialog. If GitHub is not set up for your workspace, ask an admin.
+**Sync requested** means the request was saved. Skills appear after the background sync completes.
+The **Marketplaces** list shows progress and errors, including sources with no imported Skills.
+Open a source to request another sync, replace its GitHub login, or review a retirement proposal.
+Change synced instructions and files in GitHub, then sync again. Their Onyx content page is read-only.
 
 ### Update a Skill
 
@@ -178,11 +180,13 @@ change its sharing, transfer ownership, or delete it.
 Custom Skill cards show **Personal**, **Shared**, or **Organization** access.
 **Shared** means specific people or groups have access. **Organization** means everyone in the organization has access.
 
-Open a Skill to view its instructions.
-Owners and editors can switch between **Details** and **Sharing** to manage access.
+Open a Skill to view its instructions. Users who can manage sharing can switch between **Details** and **Sharing**.
+Company synced Skills require global skill management or group management within the Skill's existing group scope.
+Other editors get a read-only preview. Personal synced owners control the audience;
+global managers can change installation settings.
 Company access and installation settings require global manage-skills permission, even for owners.
-This applies during creation, GitHub import, ZIP upload, and later sharing changes.
-Owners can still manage individual access. Group sharing follows their group permissions.
+This applies during creation, ZIP upload, and later sharing changes. Owners can still manage individual access.
+Group sharing follows their group permissions.
 Editing a public Skill without global permission preserves its organization access.
 Choose who can use it and give each person or group **Can use** or **Can edit** access. Under **Installation**,
 choose how the Skill is installed for people with access:

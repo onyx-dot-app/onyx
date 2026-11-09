@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "Importieren Sie einen oder mehrere Skills aus einem Repository.",
-          "title": "Aus GitHub importieren"
+          "description": "Skills aus einem GitHub-Repository aktuell halten.",
+          "title": "Mit GitHub synchronisieren"
         },
         "scratch": {
           "description": "Schreiben Sie die Anweisungen und fügen Sie unterstützende Dateien in {appName} hinzu.",
-          "title": "Von Grund auf neu beginnen"
+          "title": "Skill erstellen"
         },
         "trigger": {
-          "label": "Skill erstellen"
+          "label": "Hinzufügen"
         },
         "upload": {
           "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",

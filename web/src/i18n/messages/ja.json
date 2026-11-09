@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "リポジトリから1つ以上のスキルをインポートします。",
-          "title": "GitHubからインポート"
+          "description": "GitHub リポジトリのスキルを最新の状態に保ちます。",
+          "title": "GitHub から同期"
         },
         "scratch": {
           "description": "{appName}で指示を書き、サポートファイルを追加します。",
-          "title": "最初から作成"
+          "title": "スキルを作成"
         },
         "trigger": {
-          "label": "スキルを作成"
+          "label": "追加"
         },
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",

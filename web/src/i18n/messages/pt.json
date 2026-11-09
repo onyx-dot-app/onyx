@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "Importe uma ou mais habilidades de um repositório.",
-          "title": "Importar do GitHub"
+          "description": "Mantenha as habilidades atualizadas a partir de um repositório do GitHub.",
+          "title": "Sincronizar do GitHub"
         },
         "scratch": {
           "description": "Escreva as instruções e adicione arquivos de apoio no {appName}.",
-          "title": "Começar do zero"
+          "title": "Criar uma habilidade"
         },
         "trigger": {
-          "label": "Criar habilidade"
+          "label": "Adicionar"
         },
         "upload": {
           "description": "Importe um arquivo SKILL.md, um arquivo ZIP ou uma pasta de habilidade.",

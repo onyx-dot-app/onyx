@@ -56,7 +56,9 @@ import SkillCard, {
 import SkillsTable from "@/sections/skills/SkillsTable";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
-import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
+import SyncFromGitHubDialog from "@/sections/marketplaces/SyncFromGitHubDialog";
+import MarketplaceList from "@/sections/marketplaces/MarketplaceList";
+import CompanyMarketplaceAccessModal from "@/sections/marketplaces/CompanyMarketplaceAccessModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
@@ -109,7 +111,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [builtinsOpen, setBuiltinsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [githubImportOpen, setGitHubImportOpen] = useState(false);
+  const [githubSyncOpen, setGitHubSyncOpen] = useState(false);
+  const [accessMarketplaceId, setAccessMarketplaceId] = useState<string | null>(
+    null
+  );
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [skillDialog, setSkillDialog] = useState<{
     item: SkillCardItem;
@@ -427,9 +432,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   );
   const canManageSelected =
     selectedItems.length > 0 &&
-    selectedItems.every((item) =>
-      canShareSkill({ skill: item.skill, canManageCompanySkills })
-    );
+    selectedItems.every((item) => canShareSkill({ skill: item.skill }));
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
   // A card toggle still in flight must settle before a bulk action may race it.
   const bulkLocked =
@@ -507,8 +510,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
   const editablePreview =
     previewTarget?.source === "custom" &&
-    (previewTarget.skill.user_permission === "OWNER" ||
-      previewTarget.skill.user_permission === "EDITOR")
+    canShareSkill({ skill: previewTarget.skill })
       ? previewTarget
       : null;
   const previewUnavailableReason =
@@ -714,6 +716,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
               items={[
                 {
                   kind: "action",
+                  id: "upload",
+                  icon: SvgUploadCloud,
+                  title: t("page.createMenu.upload.title"),
+                  description: t("page.createMenu.upload.description"),
+                  onSelect: () => setCreateOpen(true),
+                },
+                {
+                  kind: "action",
                   id: "scratch",
                   icon: SvgEdit,
                   title: t("page.createMenu.scratch.title"),
@@ -724,19 +734,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                 },
                 {
                   kind: "action",
-                  id: "upload",
-                  icon: SvgUploadCloud,
-                  title: t("page.createMenu.upload.title"),
-                  description: t("page.createMenu.upload.description"),
-                  onSelect: () => setCreateOpen(true),
-                },
-                {
-                  kind: "action",
                   id: "github",
                   icon: SvgGitHub,
                   title: t("page.createMenu.github.title"),
                   description: t("page.createMenu.github.description"),
-                  onSelect: () => setGitHubImportOpen(true),
+                  onSelect: () => setGitHubSyncOpen(true),
                 },
               ]}
             />
@@ -748,6 +750,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
 
       <StickyBox.Root ref={bodyRef}>
         <SettingsLayouts.Body gap={admin ? 4 : 8}>
+          <MarketplaceList
+            onChanged={() => void revalidateSkills()}
+            onConfigureAccess={
+              canManageCompanySkills
+                ? (row) => setAccessMarketplaceId(row.id)
+                : undefined
+            }
+          />
           {admin && (
             <StickyBox.Item stick="top" shadow ref={adminControlsRef}>
               <Section height="auto" gap={1} className="bg-background-tint-01">
@@ -994,11 +1004,19 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         }}
       />
 
-      {githubImportOpen && (
-        <ImportSkillsFromGitHubModal
+      {githubSyncOpen && (
+        <SyncFromGitHubDialog
           open
-          onClose={() => setGitHubImportOpen(false)}
-          onImported={() => void revalidateSkills()}
+          onClose={() => setGitHubSyncOpen(false)}
+          onSyncRequested={() => void revalidateSkills()}
+        />
+      )}
+      {accessMarketplaceId && (
+        <CompanyMarketplaceAccessModal
+          open
+          marketplaceId={accessMarketplaceId}
+          onClose={() => setAccessMarketplaceId(null)}
+          onSaved={() => void revalidateSkills()}
         />
       )}
 

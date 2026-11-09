@@ -413,8 +413,37 @@ describe("ShareSkillModal", () => {
     name: "Team tools",
     personal: false,
     follows_access: false,
+    can_share: true,
     folder: "skills/reports",
   };
+
+  it("keeps company sharing read-only for an editor without management permission", async () => {
+    mockIsAdmin = false;
+    mockPermissions = [];
+    mockAdminCapabilities = [];
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "EDITOR",
+        public_permission: "EDITOR",
+        marketplace: { ...companySource, can_share: false },
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByRole("button", { name: "Change sharing scope" })
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Save" })
+    ).not.toBeInTheDocument();
+  });
 
   it.each([false, true])(
     "lets a personal synced owner publish without installation authority (scoped=%s)",
@@ -481,7 +510,7 @@ describe("ShareSkillModal", () => {
               permission: "EDITOR",
             },
           ],
-          marketplace: { ...companySource, personal: true },
+          marketplace: { ...companySource, personal: true, can_share: global },
         })
       );
       const user = setupUser();

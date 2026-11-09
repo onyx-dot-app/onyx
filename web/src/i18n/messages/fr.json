@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "Importez une ou plusieurs compétences depuis un dépôt.",
-          "title": "Importer depuis GitHub"
+          "description": "Maintenez les compétences à jour depuis un dépôt GitHub.",
+          "title": "Synchroniser depuis GitHub"
         },
         "scratch": {
           "description": "Rédigez les instructions et ajoutez des fichiers annexes dans {appName}.",
-          "title": "Partir de zéro"
+          "title": "Créer une compétence"
         },
         "trigger": {
-          "label": "Créer une compétence"
+          "label": "Ajouter"
         },
         "upload": {
           "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",

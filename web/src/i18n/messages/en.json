@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "Import one or more skills from a repository.",
-          "title": "Import from GitHub"
+          "description": "Keep skills up to date from a GitHub repository.",
+          "title": "Sync from GitHub"
         },
         "scratch": {
           "description": "Write the instructions and add supporting files in {appName}.",
-          "title": "Start from scratch"
+          "title": "Create a skill"
         },
         "trigger": {
-          "label": "Create skill"
+          "label": "Add"
         },
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",

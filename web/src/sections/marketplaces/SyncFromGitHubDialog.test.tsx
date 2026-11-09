@@ -1,5 +1,6 @@
 import {
   act,
+  copy,
   render,
   screen,
   setupUser,
@@ -18,6 +19,13 @@ jest.mock("@/providers/UserProvider", () => ({ useUser: jest.fn() }));
 const actualUseUser = jest.requireActual<
   typeof import("@/providers/UserProvider")
 >("@/providers/UserProvider").useUser;
+// Jest omits the dropdown portal CSS used inside modal dialogs.
+const dropdownStyle = document.createElement("style");
+beforeAll(() => {
+  dropdownStyle.textContent = ".opal-dropdown { pointer-events: auto; }";
+  document.head.appendChild(dropdownStyle);
+});
+afterAll(() => dropdownStyle.remove());
 let fetchSpy: jest.SpiedFunction<typeof fetch>;
 beforeEach(() => {
   jest.mocked(useUser).mockImplementation(actualUseUser);
@@ -27,11 +35,16 @@ beforeEach(() => {
       async (url) =>
         new Response(
           JSON.stringify(
-            url === SWR_KEYS.buildExternalApps
-              ? []
-              : url === `${SWR_KEYS.marketplaces}/preview`
-                ? preview
-                : marketplace
+            url === SWR_KEYS.settings
+              ? { tier: "business", ee_features_enabled: true }
+              : url === SWR_KEYS.enterpriseSettings
+                ? {}
+                : url === SWR_KEYS.shareableGroups ||
+                    url === SWR_KEYS.buildExternalApps
+                  ? []
+                  : url === `${SWR_KEYS.marketplaces}/preview`
+                    ? preview
+                    : marketplace
           )
         )
     );
@@ -159,14 +172,10 @@ it("shows server errors and allows retry", async () => {
   expect(await screen.findByText("alpha")).toBeInTheDocument();
 });
 
-it("only offers company scope to global holders with an atomic host creator", async () => {
-  const create = jest
-    .fn()
-    .mockResolvedValue({ ...marketplace, owner_user_id: null });
+it("only offers company scope to global holders and creates with atomic access defaults", async () => {
   const props = {
     onClose: jest.fn(),
     onSyncRequested: jest.fn(),
-    company: { create, ready: true, controls: null },
   };
   jest.mocked(useUser).mockImplementation(() => ({
     ...actualUseUser(),
@@ -184,19 +193,34 @@ it("only offers company scope to global holders with an atomic host creator", as
   await user.click(
     screen.getByRole("checkbox", { name: /Company Marketplace/ })
   );
+  const policy = screen.getByRole("combobox", {
+    name: copy("skills.modals.share.installation.title"),
+  });
+  await waitFor(() => expect(policy).toBeEnabled());
+  await user.click(policy);
+  await user.click(screen.getByRole("option", { name: /^Required/ }));
   await user.click(screen.getByRole("button", { name: "Preview" }));
   await screen.findByText("alpha");
   await user.click(screen.getByRole("button", { name: "Request sync" }));
-  await waitFor(() =>
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ personal: false })
-    )
+  await waitFor(() => expect(props.onSyncRequested).toHaveBeenCalled());
+  const creates = fetchSpy.mock.calls.filter(
+    ([url, init]) => url === SWR_KEYS.marketplaces && init?.method === "POST"
   );
-  expect(
-    fetchSpy.mock.calls.filter(
-      ([url, init]) => url === SWR_KEYS.marketplaces && init?.method === "POST"
-    )
-  ).toHaveLength(0);
+  expect(creates).toHaveLength(1);
+  expect(JSON.parse(creates[0]?.[1]?.body?.toString() ?? "{}")).toEqual({
+    provider: "github",
+    provider_config: marketplace.provider_config,
+    name: "Team tools",
+    personal: false,
+    access: {
+      public_permission: "VIEWER",
+      installation_policy: "REQUIRED",
+      group_shares: [],
+    },
+  });
+  expect(fetchSpy.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(
+    false
+  );
 });
 
 it("explains personal ownership and supports keyboard dismissal", async () => {
@@ -231,4 +255,36 @@ it("invalidates a completed preview after source edits", async () => {
   );
   expect(screen.queryByText("alpha")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Preview" })).toBeEnabled();
+});
+
+it("resets company defaults when a creation session is reopened", async () => {
+  jest.mocked(useUser).mockImplementation(() => ({
+    ...actualUseUser(),
+    permissions: [Permission.MANAGE_SKILLS],
+  }));
+  const props = { onClose: jest.fn(), onSyncRequested: jest.fn() };
+  const view = render(<SyncFromGitHubDialog open {...props} />);
+  const user = setupUser();
+  await user.click(
+    screen.getByRole("checkbox", { name: /Company Marketplace/ })
+  );
+  const label = copy("skills.modals.share.installation.title");
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: label })).toBeEnabled()
+  );
+  await user.click(screen.getByRole("combobox", { name: label }));
+  await user.click(screen.getByRole("option", { name: /Required/ }));
+  expect(screen.getByRole("combobox", { name: label })).toHaveValue("Required");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  view.rerender(<SyncFromGitHubDialog open={false} {...props} />);
+  view.rerender(<SyncFromGitHubDialog open {...props} />);
+  expect(
+    screen.getByRole("checkbox", { name: /Company Marketplace/ })
+  ).not.toBeChecked();
+  await user.click(
+    screen.getByRole("checkbox", { name: /Company Marketplace/ })
+  );
+  expect(screen.getByRole("combobox", { name: label })).toHaveValue(
+    copy("skills.modals.share.installation.available")
+  );
 });

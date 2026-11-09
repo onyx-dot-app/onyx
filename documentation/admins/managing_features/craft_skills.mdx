@@ -29,7 +29,7 @@ The admin table shows each Skill's description, access, and installation policy.
 Use its **More actions** menu to edit, share, or delete it.
 The **Enable for me** column controls your personal enablement. Required Skills have no switch. On narrow screens,
 the column is named **For me**. Names can use two lines. Duplicate names use one line and keep their descriptions.
-Use the **Create skill** plus button beside the title to create or import a Skill.
+Use the **Add** plus button beside the title to create, upload, or sync Skills.
 Open **Edit sharing** for access and installation settings.
 
 <img className="rounded-image" src="/assets/admins/managing_features/skills-table.webp" alt="Admin Skills table with access, installation policies, and row actions"/>
@@ -66,9 +66,10 @@ The confirmation lists each selected Skill before deletion.
 
 ### Set access during import
 
-In the GitHub import dialog, select **Configure access** before importing the selected Skills.
-The access settings apply to the full selection. For example,
-select 80 Skills and configure organization access to share all 80 during import.
+Select **Add** > **Sync from GitHub** to preview a marketplace catalog.
+Global skill managers can select **Company Marketplace** and set organization access, installation, and group defaults.
+The initial defaults are organization Viewer access, Available installation, and no groups.
+Onyx saves the source and its selected defaults together before requesting its first sync.
 
 You can also select several ZIP files in **Upload a skill**. Each ZIP must contain one Skill.
 Configure access once before importing the batch. Onyx reports invalid bundles separately.
@@ -211,9 +212,9 @@ Publishing means reviewing that Skill and then sharing it with the intended audi
 
 <Steps>
   <Step title="Create the personal Skill">
-    Open **Craft → Skills** and select **Create skill**. Choose **Start from scratch** to write the Skill in Onyx,
+    Open **Craft → Skills** and select **Add**. Choose **Create a skill** to write the Skill in Onyx,
     **Upload a skill** to import `SKILL.md`, a ZIP, or a Skill folder,
-    or **Import from GitHub** to import one or more Skills from a repository. You can set sharing in the same editor.
+    or **Sync from GitHub** to add a marketplace source. Uploaded and authored Skills support sharing in the editor.
   </Step>
 
   <Step title="Review the Skill">
@@ -336,6 +337,12 @@ A version ID from another Skill also returns `404`.
 
 ## Synced marketplace Skills
 
+Both Skills pages show **Marketplaces** above the library. Open a source to inspect status, errors, and Skills.
+**Request sync** saves work for the background worker. The list refreshes until the worker finishes.
+A failed or pending source remains visible even when it has no Skills. Use **Sync now** for another request,
+or **Replace login** to use your connected GitHub account.
+Company managers can open the source's access settings to change defaults for following Skills.
+
 Synced Skills show their marketplace name and repository folder in the library.
 Owners and editors can select **View content** to read instructions and inspect the file list.
 The content page is read-only. To change instructions or files, edit the GitHub repository and sync the marketplace.
@@ -345,6 +352,8 @@ Skill list and detail responses include `marketplace` for synced Skills and `nul
 It contains the source `id`, `name`, `personal` scope, Skill `folder`, and `follows_access` flag.
 The folder is relative to the repository root. The response does not include source credentials or login details.
 For company sources, `follows_access` indicates whether marketplace default changes apply to this Skill.
+`marketplace.can_share` indicates whether the current user and token can open sharing controls for a synced Skill.
+It includes group scope even when the response omits group details. Every write checks authority again.
 
 Change a synced Skill's instructions and files in its GitHub repository. Onyx rejects manual content changes,
 version restores, ownership transfers, and deletion while the synced Skill remains active.

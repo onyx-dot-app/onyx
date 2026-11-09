@@ -20,9 +20,8 @@
   after the user connects that app. Until then the user cannot turn it on, and
   the library says why.
 - **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
-  or a single SKILL.md, or imports skills from a GitHub repository after a
-  preview of every SKILL.md found. A private repository needs the user's
-  GitHub connection in Craft; without it the import is anonymous. The owner
+  or a single SKILL.md, or syncs a marketplace from GitHub after a catalog preview.
+  Sync uses the user's GitHub connection in Craft. The owner
   shares with users or groups as viewer or editor, subject to group scope,
   or transfers ownership of an uploaded skill. Synced skills keep their source ownership.
   Publishing requires global `MANAGE_SKILLS`.
@@ -92,6 +91,12 @@
   the draft with saved defaults; failures keep the draft. Personal synced owners
   control audience, while other managers can change installation policy only.
   Synced ownership transfer is hidden. Non-owner personal editors have no sharing action.
+  `marketplace.can_share` supplies synced sharing eligibility to every row,
+  editor, preview and bulk action. The server reuses `within_scope` with preloaded
+  managed groups for company Skills; all current groups must be managed and
+  the Skill must be private unless the actor is global. Explicit Editor grants
+  alone do not allow company sharing. The flag respects token caps and retirement;
+  writes still recheck authority. Other editors use a read-only preview.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
@@ -676,7 +681,8 @@ The library preview of an external-app skill calls the same renderer
     unsupported entries and offers a sample for a missing catalog. Connection
     guidance uses the existing Apps flow and cache. The sync dialog requires an
     explicit ref and invalidates preview on edits and close. Company creation
-    requires global authority and a host callback that saves access atomically.
+    requires global authority. The dialog owns a fresh access draft and saves
+    source and defaults in one creation request.
     Acceptance means sync requested. Shared summaries separate pending work
     from the last applied revision. Hosts can override or hide skill counts
     without inferring unsupported plugin data. Detail polls pending work while
@@ -692,10 +698,13 @@ The library preview of an external-app skill calls the same renderer
     Creation submits it atomically. Readiness requires global MANAGE_SKILLS and
     known settings; a settings failure never implies Community. Community allows
     organization Viewer access without groups. Group lookup failures preserve
-    grants and per-group policies, including unresolved IDs. The host resets the
-    creation session on close. The list owns its SWR read and accepts host kind
+    grants and per-group policies, including unresolved IDs. Closing the dialog
+    resets its creation session. The list owns its SWR read and accepts host kind
     filters and count labels. Pending work polls every three seconds while
-    visible; polling never requests source sync. Pages are not wired yet.
+    visible; polling never requests source sync. Both Skills pages mount the list
+    before the library controls. Add offers Upload a skill, Create a skill, and
+    Sync from GitHub. Pending and failed sources stay visible with zero Skills.
+    Opening company defaults closes source detail first.
 
 
 ---
@@ -720,7 +729,7 @@ The library preview of an external-app skill calls the same renderer
   are available through the API. Plugin membership is not modeled yet; its access
   guard belongs in `SkillAccessAdapter.load`.
   Company inheritance/reset and personal owner audience controls are wired in the
-  skill sharing dialog. Source creation/list pages and retired-skill management remain pending.
+  skill sharing dialog. Source creation/list pages are wired. Retired-skill management and live browser acceptance remain pending.
 
 - **GitHub import checks a skill's shape, not its content.** Import enforces
   archive size and member limits, path safety and frontmatter rules. Nothing

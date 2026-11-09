@@ -17382,15 +17382,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "استورد مهارة واحدة أو أكثر من مستودع.",
-          "title": "استيراد من GitHub"
+          "description": "حافظ على تحديث المهارات من مستودع GitHub.",
+          "title": "المزامنة من GitHub"
         },
         "scratch": {
           "description": "اكتب التعليمات وأضف الملفات الداعمة في {appName}.",
-          "title": "البدء من الصفر"
+          "title": "إنشاء مهارة"
         },
         "trigger": {
-          "label": "إنشاء مهارة"
+          "label": "إضافة"
         },
         "upload": {
           "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",

@@ -203,8 +203,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     marketplace?.personal && skill?.user_permission === "OWNER";
   const canEditShares =
     props.mode === "edit"
-      ? !!loadedSkill &&
-        canShareSkill({ skill: loadedSkill, canManageCompanySkills })
+      ? !!loadedSkill && canShareSkill({ skill: loadedSkill })
       : skill?.user_permission === "OWNER" ||
         skill?.user_permission === "EDITOR";
   const canEditAudience =
