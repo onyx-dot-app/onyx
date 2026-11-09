@@ -159,7 +159,7 @@ function ExistingProviderCard({
         )}
       </providerModal.Provider>
 
-      {deleteModal.isOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={markdown(t("deleteModal.title", { provider: displayName }))}
@@ -197,7 +197,7 @@ function ExistingProviderCard({
             )}
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
       <Hoverable.Root
         group="ExistingProviderCard"

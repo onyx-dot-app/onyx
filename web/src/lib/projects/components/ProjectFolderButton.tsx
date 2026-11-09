@@ -13,6 +13,7 @@ import {
   Button,
   Dropdown,
   SidebarTab,
+  useCreateModal,
   type DropdownMenuItem,
 } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -151,8 +152,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   const isOpenProject =
     urlProjectId !== null ? urlProjectId === project.id : isActiveProject;
   const [open, setOpen] = useState(isActiveProject);
-  const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
-    useState(false);
+  const deleteConfirmationModal = useCreateModal();
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -199,7 +199,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
           icon: SvgTrash,
           danger: true,
           title: t("projects.folder.delete.label"),
-          onSelect: () => setDeleteConfirmationModalOpen(true),
+          onSelect: () => deleteConfirmationModal.toggle(true),
         },
       ],
     },
@@ -214,16 +214,16 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       )}
     >
       {/* Confirmation Modal (only for deletion) */}
-      {deleteConfirmationModalOpen && (
+      <deleteConfirmationModal.Provider>
         <ConfirmationModalLayout
           title={t("projects.folder.deleteModal.title")}
           icon={SvgTrash}
-          onClose={() => setDeleteConfirmationModalOpen(false)}
+          onClose={() => deleteConfirmationModal.toggle(false)}
           submit={
             <Button
               variant="danger"
               onClick={() => {
-                setDeleteConfirmationModalOpen(false);
+                deleteConfirmationModal.toggle(false);
                 deleteProject(project.id);
               }}
             >
@@ -233,7 +233,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
         >
           {t("projects.folder.deleteModal.message")}
         </ConfirmationModalLayout>
-      )}
+      </deleteConfirmationModal.Provider>
 
       {/* Project Folder */}
       <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>

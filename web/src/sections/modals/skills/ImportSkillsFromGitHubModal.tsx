@@ -12,6 +12,7 @@ import {
   Modal,
   Badge,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
 import { Section } from "@opal/layouts";
@@ -72,7 +73,7 @@ export default function ImportSkillsFromGitHubModal({
   const [error, setError] = useState<string | null>(null);
   const { isAdmin, user } = useUser();
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
-  const [sharingOpen, setSharingOpen] = useState(false);
+  const sharingModal = useCreateModal();
   const sharingDraft =
     sharing ??
     emptySkillSharingDraft(
@@ -89,8 +90,8 @@ export default function ImportSkillsFromGitHubModal({
     setResult(null);
     setError(null);
     setSharing(null);
-    setSharingOpen(false);
-  }, [open]);
+    sharingModal.toggle(false);
+  }, [open, sharingModal.toggle]);
 
   async function submit() {
     if (loading || !repository.trim()) return;
@@ -154,17 +155,17 @@ export default function ImportSkillsFromGitHubModal({
         onSelectedPathsChange={setSelectedPaths}
         onSubmit={() => void submit()}
         sharing={sharingDraft}
-        onConfigureSharing={() => setSharingOpen(true)}
+        onConfigureSharing={() => sharingModal.toggle(true)}
       />
-      {sharingOpen && (
+      <sharingModal.Provider>
         <ShareSkillModal
           mode="create"
           open
           draft={sharingDraft}
           onSaveDraft={setSharing}
-          onClose={() => setSharingOpen(false)}
+          onClose={() => sharingModal.toggle(false)}
         />
-      )}
+      </sharingModal.Provider>
     </>
   );
 }
