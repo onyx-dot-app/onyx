@@ -17751,6 +17751,7 @@
       "enable": "Enable push updates",
       "enableAction": "Enable",
       "refreshAction": "Refresh"
-    }
+    },
+    "skillLimitBlock": "Not synced: this skill would put {count, plural, one {# user} other {# users}} over the {limit, select, files {skill file limit} other {skill size limit}}."
   }
 }

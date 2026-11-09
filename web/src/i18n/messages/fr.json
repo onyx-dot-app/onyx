@@ -17751,6 +17751,7 @@
       "enable": "Activer les mises à jour par push",
       "enableAction": "Activer",
       "refreshAction": "Actualiser"
-    }
+    },
+    "skillLimitBlock": "Non synchronisée : cette compétence ferait dépasser {limit, select, files {la limite de fichiers des compétences} other {la limite de taille des compétences}} à {count, plural, one {# utilisateur} other {# utilisateurs}}."
   }
 }

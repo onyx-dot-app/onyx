@@ -249,6 +249,42 @@ test("confirms restore and preserves errors for retry without calling the parent
   expect(onRestored).toHaveBeenCalledTimes(1);
 });
 
+test("explains a restore the Skill limit refused, with an estimated usage", async () => {
+  const user = setupUser();
+  const { onRestored } = showHistory();
+  await user.click(
+    await screen.findByRole("button", { name: "Restore version 1" })
+  );
+  fetchMock.mockResolvedValueOnce(
+    response(
+      {
+        error_code: "PAYLOAD_TOO_LARGE",
+        detail: "This would put your skills at 600.0 MB",
+        skill_limit: {
+          failed_limit: "bytes",
+          affected_user_count: 1,
+          usage: {
+            bytes: 500 * 1024 * 1024,
+            files: 10,
+            unknown_skill_count: 1,
+            charged_bytes: 600 * 1024 * 1024,
+            charged_files: 510,
+            max_bytes: 500 * 1024 * 1024,
+            max_files: 5000,
+          },
+        },
+      },
+      413
+    )
+  );
+  await user.click(screen.getByRole("button", { name: "Restore" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "This change would put your skills at an estimated 600 MB in 510 files. The estimate counts 1 skill not yet measured at the largest allowed size. The limit is 500 MB and 5,000 files."
+  );
+  expect(onRestored).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Restore" })).toBeEnabled();
+});
+
 function CurrentContent() {
   const { data: detail } = useSWR<SkillEditableDetail>(
     SWR_KEYS.editableSkill(skill.id),

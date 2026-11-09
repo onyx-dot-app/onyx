@@ -17751,6 +17751,7 @@
       "enable": "Push-Aktualisierungen aktivieren",
       "enableAction": "Aktivieren",
       "refreshAction": "Erneuern"
-    }
+    },
+    "skillLimitBlock": "Nicht synchronisiert: Dieser Skill würde {count, plural, one {# Benutzer} other {# Benutzer}} über das {limit, select, files {Dateilimit für Skills} other {Größenlimit für Skills}} bringen."
   }
 }

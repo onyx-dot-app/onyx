@@ -17751,6 +17751,7 @@
       "enable": "启用推送更新",
       "enableAction": "启用",
       "refreshAction": "刷新"
-    }
+    },
+    "skillLimitBlock": "未同步：此技能将使 {count, plural, one {# 位用户} other {# 位用户}}超出{limit, select, files {技能文件数上限} other {技能大小上限}}。"
   }
 }

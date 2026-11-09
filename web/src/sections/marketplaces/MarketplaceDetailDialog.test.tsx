@@ -289,6 +289,61 @@ it("shows blocked entries and queues manual sync without claiming completion", a
   expect(fetchSpy).toHaveBeenCalledWith(`${url}/sync`, { method: "POST" });
 });
 
+it("names the failed Skill limit per entry and keeps other blocked reasons", async () => {
+  fetchSpy.mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        ...detail,
+        marketplace: {
+          ...marketplace,
+          sync_requested: false,
+          sync_pending: false,
+          blocked_entries: {
+            "skills/big": "skill limit",
+            "skills/many": "skill limit",
+            "skills/broken": "Invalid skill bundle",
+            "skills/legacy": "skill limit",
+          },
+          skill_limit_blocks: {
+            "skills/big": {
+              failed_limit: "bytes",
+              affected_user_count: 1,
+              usage: null,
+            },
+            "skills/many": {
+              failed_limit: "files",
+              affected_user_count: 12,
+              usage: null,
+            },
+          },
+        },
+      })
+    )
+  );
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={jest.fn()}
+    />
+  );
+  expect(
+    await screen.findByText(
+      "Not synced: this skill would put 1 user over the skill size limit."
+    )
+  ).toBeInTheDocument();
+  expect(screen.getByText("skills/big")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Not synced: this skill would put 12 users over the skill file limit."
+    )
+  ).toBeInTheDocument();
+  expect(screen.getByText("Invalid skill bundle")).toBeInTheDocument();
+  // Without structured data the generic reason stays visible.
+  expect(screen.getByText("skills/legacy")).toBeInTheDocument();
+  expect(screen.getByText("skill limit")).toBeInTheDocument();
+});
+
 it("handles unauthorized detail and retries without showing mutation actions", async () => {
   const user = setupUser();
   fetchSpy.mockResolvedValue(

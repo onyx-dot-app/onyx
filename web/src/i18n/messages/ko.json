@@ -17751,6 +17751,7 @@
       "enable": "푸시 업데이트 활성화",
       "enableAction": "활성화",
       "refreshAction": "새로 고침"
-    }
+    },
+    "skillLimitBlock": "동기화되지 않음: 이 스킬로 인해 {count, plural, one {사용자 #명} other {사용자 #명}}이 {limit, select, files {스킬 파일 수 한도} other {스킬 크기 한도}}를 넘게 됩니다."
   }
 }

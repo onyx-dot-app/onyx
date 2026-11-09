@@ -133,13 +133,20 @@
 
 **Write-limit client contracts.** `web/src/lib/skills/limits.ts` validates structured
 413 `PAYLOAD_TOO_LARGE` errors and usage responses with strict Yup schemas.
-`web/src/lib/skills/api.ts` retains the full error body and parses nullable per-item bulk limits.
+`web/src/lib/skills/api.ts` retains the full error body and parses nullable per-item bulk and ZIP upload limits.
+Batch upload results show localized limit feedback beside each refused ZIP; ordinary failures retain their detail.
 `web/src/lib/skills/hooks.ts` formats charged totals, labels unknown sizes as estimates, and keeps
 ordinary errors unchanged. Repeated refusals replace one persistent toast.
 The own-usage hook reads `/api/skills/limit/me`; admin usage requires global
 Manage Skills and a user-bound SWR key. Any failed admin refetch hides cached rows.
 SkillsPage actions revalidate usage through the shared SWR helper. Other write
 surfaces rely on SWR remount and focus revalidation.
+Creation, editor saves and uploads, sharing, ownership transfer, restore,
+marketplace access and bulk actions use the shared refusal feedback. Failure
+keeps drafts and bulk selection. Library toggles roll back their optimistic state.
+Marketplace response schemas validate per-entry blocks before the detail dialog
+shows the failed limit and affected count. Generic blocked reasons remain visible.
+These messages do not grant authority or replace server write checks.
 `web/src/sections/skills/SkillLimitUsers.tsx` mounts in the global manager's
 admin Skills page. It distinguishes charged estimates from last-delivery
 omissions, including null for no recorded delivery. Narrow rows stack their
@@ -322,6 +329,7 @@ adds `skill_limit` (`skills/limits.py:SkillLimitViolation`): failed limit,
 affected user count, and the requesting user's proposed usage when they go over.
 Bulk failure rows retain the same nullable `skill_limit` payload beside `detail`,
 for sharing and enable/disable failures. Ordinary failures keep it null.
+Batch uploads retain it beside `reason` in each `not_imported` item.
 App connection never fails for the limit.
 `db/skill.py:connect_external_app_within_skill_limit__no_commit` wraps the
 credential upsert in both connect routes (form and OAuth callback). It

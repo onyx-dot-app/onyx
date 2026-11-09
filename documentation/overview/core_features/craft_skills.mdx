@@ -244,6 +244,22 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
   Review every script and file before uploading a bundle you did not create.
 </Warning>
 
+## Write limits
+
+A change that increases enabled Skills can exceed the per-user limit of 500 MiB or 5,000 files.
+Onyx refuses the change and explains the failed limit where you made it. The message gives your proposed total,
+when applicable, and the number of other affected users. Unknown sizes appear as estimates.
+The server checks the limit for each write.
+
+Refused saves keep your editor or sharing draft. Bulk actions keep failed Skills selected for retry.
+For multiple ZIP uploads, each refused ZIP shows its limit message. Successful imports remain saved.
+A refused restore keeps its confirmation open. Limit notifications remain until dismissed;
+another refusal replaces the previous notification. Turn off Skills you do not need, reduce their content,
+or adjust sharing, then retry.
+
+A marketplace lists each blocked entry with the failed limit and affected user count.
+Other sync errors keep their original explanation. A later sync retries blocked entries.
+
 ## Skill usage API
 
 `GET /api/skills/limit/me` returns measured usage and the totals used to check write limits.

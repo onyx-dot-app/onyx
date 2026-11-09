@@ -160,9 +160,7 @@ def _import_skill_bundles(
                 ingested = source.ingest(file_store)
             except OnyxError as exc:
                 not_imported.append(
-                    SkillNotImported(
-                        path=source.path, name=source.name, reason=exc.detail
-                    )
+                    SkillNotImported.from_error(source.path, source.name, exc)
                 )
                 continue
             staged.append((source, ingested))
@@ -187,9 +185,7 @@ def _import_skill_bundles(
             except OnyxError as exc:
                 rejected.append(ingested.bundle_file_id)
                 not_imported.append(
-                    SkillNotImported(
-                        path=source.path, name=source.name, reason=exc.detail
-                    )
+                    SkillNotImported.from_error(source.path, source.name, exc)
                 )
                 continue
             created.append((skill, enabled))

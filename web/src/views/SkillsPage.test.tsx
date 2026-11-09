@@ -7,10 +7,11 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import SkillsPage from "@/views/SkillsPage";
 import { marketplace } from "@/sections/marketplaces/__fixtures__/marketplace";
 import { Permission } from "@/lib/types";
-import type { BulkSkillResult } from "@/lib/skills/api";
+import { SkillRequestError, type BulkSkillResult } from "@/lib/skills/api";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 
 const mockListMarketplaces = jest.fn();
@@ -595,6 +596,40 @@ describe("SkillsPage preference toggles", () => {
     expect(failures).toHaveLength(2);
     expect(failures[0]).toHaveTextContent("first-skill: Skill not found");
     expect(failures[1]).toHaveTextContent("second-skill: Unavailable");
+  });
+
+  it("explains bulk items the Skill limit refused and keeps them selected", async () => {
+    mockBulkUpdateSkills.mockResolvedValueOnce({
+      succeeded: ["first-id"],
+      failed: [
+        {
+          skill_id: "second-id",
+          detail: "This change would put 3 users past the limit.",
+          skill_limit: {
+            failed_limit: "files",
+            affected_user_count: 3,
+            usage: null,
+          },
+        },
+      ],
+    });
+    render(<SkillsPage admin />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
+    );
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByRole("listitem")).toHaveTextContent(
+      "second-skill: This change would put 3 users over the skill file limit."
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Select second-skill" })
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select first-skill" })
+    ).not.toBeChecked();
   });
 
   it.each([
@@ -1547,6 +1582,37 @@ describe("SkillsPage preference toggles", () => {
     ).toBeInTheDocument();
   });
 
+  it.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])(
+    "refreshes usage after a single toggle settles (enable: %s, success: %s)",
+    async (enabled, success) => {
+      const mutation = deferred<CustomSkill>();
+      mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
+      skillsData.customs = skillsData.customs.map((skill) => ({
+        ...skill,
+        enabled: !enabled,
+      }));
+      render(<SkillsPage />);
+      await setupUser().click(
+        screen.getByRole("switch", { name: "first-skill" })
+      );
+      expect(mockMutate).not.toHaveBeenCalled();
+      await act(async () => {
+        if (success) mutation.resolve({ ...enabledCustomAt(0), enabled });
+        else mutation.reject(new Error("Refused"));
+      });
+      await waitFor(() => expect(mockMutate).toHaveBeenCalled());
+      const matcher: (key: unknown) => boolean = mockMutate.mock.calls[0][0];
+      expect(matcher(SWR_KEYS.skillLimitMe)).toBe(true);
+      expect(matcher([SWR_KEYS.skillLimitUsers, "admin-id"])).toBe(true);
+      expect(matcher(SWR_KEYS.marketplaces)).toBe(false);
+    }
+  );
+
   it("optimistically enables and disables only the pending skill switch", async () => {
     const user = setupUser();
     const mutation = deferred<CustomSkill>();
@@ -1650,6 +1716,69 @@ describe("SkillsPage preference toggles", () => {
       expect(firstSwitch).toBeEnabled();
     });
     expect(mockToastError).toHaveBeenCalledWith("Preference update failed");
+  });
+
+  it("explains a Skill limit refusal with the requester's usage and rolls back", async () => {
+    const user = setupUser();
+    mockSetSkillEnabled.mockRejectedValueOnce(
+      new SkillRequestError(
+        "This would put your skills at 520.0 MB",
+        413,
+        {
+          error_code: "PAYLOAD_TOO_LARGE",
+          detail: "This would put your skills at 520.0 MB",
+          skill_limit: {
+            failed_limit: "bytes",
+            affected_user_count: 1,
+            usage: {
+              bytes: 520 * 1024 * 1024,
+              files: 12,
+              unknown_skill_count: 0,
+              charged_bytes: 520 * 1024 * 1024,
+              charged_files: 12,
+              max_bytes: 500 * 1024 * 1024,
+              max_files: 5000,
+            },
+          },
+        },
+        "PAYLOAD_TOO_LARGE"
+      )
+    );
+    render(<SkillsPage />);
+
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("Skill size limit reached", {
+        id: "skill-limit-refusal",
+        description:
+          "This change would put your skills at 520 MB in 12 files. The limit is 500 MB and 5,000 files.",
+        duration: Infinity,
+      })
+    );
+    expect(screen.getByRole("switch", { name: "first-skill" })).toHaveAttribute(
+      "aria-checked",
+      "false"
+    );
+  });
+
+  it("keeps an ordinary 413 without limit data as its server detail", async () => {
+    const user = setupUser();
+    mockSetSkillEnabled.mockRejectedValueOnce(
+      new SkillRequestError(
+        "Upload is too large",
+        413,
+        { error_code: "PAYLOAD_TOO_LARGE", detail: "Upload is too large" },
+        "PAYLOAD_TOO_LARGE"
+      )
+    );
+    render(<SkillsPage />);
+
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith("Upload is too large")
+    );
   });
 
   it("keeps a successful update when background revalidation fails", async () => {

@@ -17751,6 +17751,7 @@
       "enable": "プッシュ更新を有効化",
       "enableAction": "有効化",
       "refreshAction": "更新"
-    }
+    },
+    "skillLimitBlock": "同期されていません: このスキルにより、{count, plural, one {# 人のユーザー} other {# 人のユーザー}}が{limit, select, files {スキルのファイル数の上限} other {スキルのサイズの上限}}を超えます。"
   }
 }

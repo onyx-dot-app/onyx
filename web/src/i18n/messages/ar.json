@@ -17751,6 +17751,7 @@
       "enable": "تفعيل تحديثات الدفع",
       "enableAction": "تفعيل",
       "refreshAction": "تحديث"
-    }
+    },
+    "skillLimitBlock": "لم تتم المزامنة: ستجعل هذه المهارة {count, plural, one {مستخدمًا واحدًا (#)} other {# مستخدمين}} يتجاوزون {limit, select, files {حد ملفات المهارات} other {حد حجم المهارات}}."
   }
 }

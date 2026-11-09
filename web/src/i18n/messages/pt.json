@@ -17751,6 +17751,7 @@
       "enable": "Ativar atualizações por push",
       "enableAction": "Ativar",
       "refreshAction": "Atualizar"
-    }
+    },
+    "skillLimitBlock": "Não sincronizada: esta habilidade deixaria {count, plural, one {# usuário} other {# usuários}} acima do {limit, select, files {limite de arquivos de habilidades} other {limite de tamanho de habilidades}}."
   }
 }

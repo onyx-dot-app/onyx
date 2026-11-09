@@ -44,6 +44,7 @@ import {
 } from "@/lib/skills/api";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
+import { useSkillErrorToast } from "@/lib/skills/hooks";
 import {
   discardSkillCreationDraft,
   getSkillCreationDraft,
@@ -86,6 +87,7 @@ export default function SkillEditorPage({
   externalAppName,
 }: SkillEditorPageProps) {
   const t = useTranslations("skills");
+  const skillErrorToast = useSkillErrorToast();
   const isCreating = skillId === undefined;
   const hasAppContext = externalAppId !== undefined;
   const isCreatingForApp = isCreating && hasAppContext;
@@ -312,9 +314,7 @@ export default function SkillEditorPage({
         return;
       }
       console.error("Failed to save skill", err);
-      toast.error(
-        err instanceof Error ? err.message : t("editor.toasts.saveFailed")
-      );
+      skillErrorToast(err, t("editor.toasts.saveFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -363,11 +363,7 @@ export default function SkillEditorPage({
       toast.success(t("editor.toasts.filesUpdated", { name: updated.name }));
     } catch (err) {
       console.error("Failed to update skill files", err);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : t("editor.toasts.filesUpdateFailed")
-      );
+      skillErrorToast(err, t("editor.toasts.filesUpdateFailed"));
     } finally {
       setIsUploadingFiles(false);
     }
