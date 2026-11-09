@@ -383,12 +383,14 @@ def list_skills(
     policy: SkillManagementPolicy,
     db_session: Session,
     user: User,
+    allow_management: bool = True,
 ) -> list[Skill]:
     stmt = _skill_select_for_management_policy(
         policy=policy,
         db_session=db_session,
         user=user,
         order_by_name=True,
+        allow_management=allow_management,
     )
     return list(db_session.scalars(stmt))
 
@@ -627,6 +629,7 @@ def set_skill_enabled_for_user(
     replace_conflict: bool = False,
     user: User,
     db_session: Session,
+    allow_management: bool = True,
 ) -> Skill:
     _lock_user_skill_preferences(user.id, db_session)
     user = lock_resource_access_user(user.id, db_session)
@@ -636,6 +639,7 @@ def set_skill_enabled_for_user(
         user=user,
         db_session=db_session,
         lock_for_update=True,
+        allow_management=allow_management,
     )
     if skill is None:
         raise OnyxError(
@@ -909,7 +913,10 @@ class SkillAccessAdapter(ResourceAccessAdapter[Skill]):
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         if is_company_marketplace_skill(skill, db_session):
             if not allow_management:
-                raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
+                raise OnyxError(
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    "API token lacks manage-skills scope.",
+                )
             assert_within_scope(
                 user,
                 db_session,
@@ -1011,7 +1018,10 @@ def delete_skill_for_user__no_commit(
     if (
         skill.retired_at is None
         and skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.MANAGE_SKILLS)
+        and not (
+            allow_global_management
+            and has_global_permission(user, Permission.MANAGE_SKILLS)
+        )
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -1027,6 +1037,8 @@ def create_skill_from_bundle__no_commit(
     auto_enable: bool,
     user: User,
     db_session: Session,
+    *,
+    allow_management: bool = True,
 ) -> tuple[Skill, bool, set[UUID]]:
     """Create a skill from a stored bundle inside a savepoint, so a name
     conflict or a rejected access change rolls back this skill only. Returns
@@ -1036,7 +1048,9 @@ def create_skill_from_bundle__no_commit(
         skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         affected: set[UUID] = set()
         if change is not None:
-            affected = share_skill__no_commit(skill, change, user, db_session)
+            affected = share_skill__no_commit(
+                skill, change, user, db_session, allow_management=allow_management
+            )
         enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         )
@@ -1063,6 +1077,7 @@ def bulk_update_skill__no_commit(
                 enabled=action == "enable",
                 user=user,
                 db_session=db_session,
+                allow_management=allow_global_management,
             )
             return {user.id}, []
         user = lock_resource_access_user(user.id, db_session)
@@ -1073,6 +1088,7 @@ def bulk_update_skill__no_commit(
             db_session=db_session,
             lock_for_update=True,
             allow_retired=action == "delete",
+            allow_management=allow_global_management,
         )
         if skill is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")

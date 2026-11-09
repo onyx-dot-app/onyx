@@ -337,8 +337,10 @@ Through the sharing API, only the owner can change a personal synced Skill's aud
 including company visibility and group grants. This also applies when the owner is a group manager.
 Changing installation settings still requires the appropriate manage-skills authority.
 Other editors and admins cannot change that audience.
-A manager can change installation settings while preserving the existing grants. For sharing reads,
-sharing changes and PATCH, API tokens must include manage-skills scope to use management authority.
+A manager can change installation settings while preserving the existing grants.
+API tokens need manage-skills scope to use management authority. This applies to reads, sharing, creation, import,
+content, version history, enable, ownership transfer, and deletion.
+Creating a Skill for an App also requires full-admin token scope.
 A Basic-only token retains the user's ownership and explicit editor grants.
 It cannot use the user's admin or group-manager role to change installation settings or company access.
 

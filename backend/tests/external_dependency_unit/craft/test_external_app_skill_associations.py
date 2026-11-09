@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -369,6 +370,7 @@ def test_editor_creation_with_app_context_is_atomic_and_not_auto_enabled(
         external_app_id=app_id,
         user=admin,
         db_session=db_session,
+        http_request=Request({"type": "http"}),
     )
     skill = db_session.scalar(select(Skill).where(Skill.id == response.id))
     assert skill is not None
@@ -412,6 +414,7 @@ def test_editor_app_context_requires_an_admin_before_writing_skill_content(
             external_app_id=app_id,
             user=user,
             db_session=db_session,
+            http_request=Request({"type": "http"}),
         )
 
     assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
