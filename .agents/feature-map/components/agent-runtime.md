@@ -62,18 +62,41 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call hooks)
+       before_tool_call / after_tool_call / on_finish / on_suspend hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
-          ToolBatch only waits on ChildRunWait -> _suspend (capture_state)
+          ToolBatch only waits on ChildRunWait
+            -> _suspend (on_suspend amendments, capture_state)
             -> child ends -> _wake_execution on a new "agent-run" thread
   AgentCoordinator: children, RunStore / RunOwnership / AgentDirectory adapters
   handoff(save=...) -> ExecutionCheckpoint -> Agent.resume(snapshot) elsewhere
+  end of run: on_finish(results) -> ToolResultAmendment list
+            -> recorded results replaced, ToolResultAmendedEvent each
+            -> AgentEndEvent -> save
 ```
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
   (`_advance_step`).
+- `Agent.on_finish` runs once at the end of every run, without the execution
+  lock, with the run's recorded tool results.
+  `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
+  `agents/models.py:ToolResultAmendment` list, and `Run._apply_amendments`
+  sets those results and publishes `ToolResultAmendedEvent` for each,
+  after the partial messages end and before `AgentEndEvent` and the save. An
+  amendment can also give a call that Stop interrupted its result. An
+  amendment that names no started call is logged and skipped. An amendment
+  inside the span of the compaction checkpoint drops the checkpoint, so the
+  next request builds its context from the amended result, and compacts only
+  when that context is over budget. A hook that fails or stops for
+  cancellation sets no results; the run still ends.
+  `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
+  amendments before it captures state. A suspend hook that fails sets no
+  results and the run still suspends. A suspend hook that stops for
+  cancellation finishes the run as cancelled.
+  `chat/presentation.py:ResponsePresenter` completes a call that has no
+  ended card with the amended result; an ended card keeps what it showed.
+  Replay renders only the saved (amended) result.
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary

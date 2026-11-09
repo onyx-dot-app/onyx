@@ -11,6 +11,7 @@ from onyx.agents.events import (
     MessageStartEvent,
     MessageUpdateEvent,
     ToolEndEvent,
+    ToolResultAmendedEvent,
     ToolStartEvent,
     ToolUpdateEvent,
 )
@@ -404,6 +405,25 @@ class ResponsePresenter:
                 output = tool.update(event.progress.details, event.progress.content)
             else:
                 output = tool.complete(event.result)
+        elif isinstance(event, ToolResultAmendedEvent):
+            if event.tool_call.name in HIDDEN_TOOLS:
+                return
+            key = (event.run_id, event.message_id, event.tool_call.id)
+            tool = self.tools.get(key)
+            if tool is None:
+                # A call recorded before a restore has no card in this stream;
+                # the amended result renders in a new card, which later
+                # amendments reuse. An ended card keeps what it showed; replay
+                # shows the saved result.
+                renderer = self.renderers.get(event.run_id)
+                tool = self.tools[key] = ToolRenderer(
+                    event.tool_call,
+                    renderer.tool_placement(event.tool_call.id)
+                    if renderer is not None
+                    else self.layout.next_section(parent.placement if parent else None),
+                    self.tool_ids.get(event.tool_call.name),
+                )
+            output = tool.complete(event.result)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
