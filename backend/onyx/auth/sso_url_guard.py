@@ -22,8 +22,12 @@ class UnsafeSSOUrl(ValueError):
 def validate_idp_url(url: str, *, field: str) -> None:
     """Require https, no embedded credentials, and an address the SSRF Protection
     setting permits. Checks one DNS resolution, so a redirect-following fetcher
-    must re-check each hop."""
-    parts = urlsplit(url)
+    must re-check each hop. Every rejection, also of a URL that does not parse,
+    raises UnsafeSSOUrl."""
+    try:
+        parts = urlsplit(url)
+    except ValueError as e:
+        raise UnsafeSSOUrl(f"{field}: {e}") from e
     if parts.username or parts.password:
         raise UnsafeSSOUrl(f"{field} must not carry credentials")
 

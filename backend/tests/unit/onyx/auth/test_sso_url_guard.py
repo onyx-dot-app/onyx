@@ -44,6 +44,15 @@ def test_rejects_unencrypted_or_credentialed_urls(url: str) -> None:
         validate_idp_url(url, field="openid_config_url")
 
 
+@pytest.mark.parametrize(
+    "url", ["https://idp.example.com%40[::1]/", "https://[::1]\\@127.0.0.1/"]
+)
+def test_a_url_that_does_not_parse_is_an_unsafe_url(url: str) -> None:
+    """Callers catch UnsafeSSOUrl to answer with a clear error."""
+    with _at_level(SSRFProtectionLevel.VALIDATE_ALL), pytest.raises(UnsafeSSOUrl):
+        validate_idp_url(url, field="openid_config_url")
+
+
 def test_strict_level_allows_a_public_address() -> None:
     with _at_level(SSRFProtectionLevel.VALIDATE_ALL):
         validate_idp_url(f"https://8.8.8.8{_CONFIG_PATH}", field="openid_config_url")
