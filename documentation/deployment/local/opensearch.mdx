@@ -59,6 +59,25 @@ auth:
 | `OPENSEARCH_ADMIN_PASSWORD` | Compose default | Password for HTTP basic auth. |
 | `USING_AWS_MANAGED_OPENSEARCH` | `false` | Set to `true` for an Amazon OpenSearch Service domain. |
 
+## Startup after a restart
+
+On a self-hosted OpenSearch, Onyx creates the document index with the `index.store.preload` setting.
+When OpenSearch starts, it reads the vector, graph, and keyword files of the index into memory.
+The index accepts searches after this read is complete. Search then runs at full speed from the first query.
+
+Without the preload, the index accepts searches sooner,
+but each early search reads its own parts of the index from disk. On a large index,
+search can then stay slow for several minutes after a restart.
+
+The preload makes startup longer. The extra time is the preloaded file size divided by the disk read speed. For example,
+15 GB at 125 MB/s (the base throughput of an AWS gp3 volume) takes about 2 minutes.
+
+- The setting applies to indexes that Onyx creates. An existing index keeps its settings until a reindex
+  creates a new index.
+- Onyx does not set it when `USING_AWS_MANAGED_OPENSEARCH` is `true`.
+- Give OpenSearch enough memory to hold the preloaded files. If memory is too small, OpenSearch removes them
+  from memory again during search. See [Resourcing](/deployment/getting_started/resourcing).
+
 ## If using your own managed OpenSearch
 
 [If you provisioned a managed instance](/deployment/local/terraform#opensearch-optional),
