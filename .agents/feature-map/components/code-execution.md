@@ -526,7 +526,9 @@ health calls are not retried.
     keeps `details`). Limits (`MAX_STORED_VALUE_BYTES` 256 KB per value,
     `MAX_STORE_BYTES` 1 MB in total, `MAX_COMMITTED_BYTES` 16 MB of commits per
     chat, as JSON) raise in the program when `store()` would exceed them, so
-    saved writes stay bounded; the saved-call bounds do not cut them. A commit
+    saved writes stay bounded; the saved-call bounds do not cut them. The
+    chat-limit check counts stored values only, not deleted keys, in both
+    `store()` and the commit. A commit
     that would exceed `MAX_STORE_BYTES` or `MAX_COMMITTED_BYTES` with the commits
     that other cells made meanwhile is discarded instead
     (`tools/tool_implementations/code_mode/cells.py:_StoreCommits.commit`), and

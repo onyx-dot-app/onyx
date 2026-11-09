@@ -18,6 +18,7 @@ from onyx.tools.tool_implementations.code_mode.store import (
     MAX_VALUE_DEPTH,
     ProgramStore,
     changed_writes,
+    commit_limit_error,
     json_value,
     lost_store_writes,
     store_snapshot,
@@ -267,3 +268,15 @@ def test_snapshot_counts_committed_bytes_and_the_chat_limit_applies() -> None:
     full.store("k", None)
     assert full.load("k") is None
     assert full.writes == {"k": None}
+
+
+def test_a_deletion_after_a_store_at_the_chat_limit_still_commits() -> None:
+    snapshot = StoreSnapshot(
+        values={"old": "x"}, committed_bytes=MAX_COMMITTED_BYTES - len('k"v"')
+    )
+    program = ProgramStore(snapshot)
+    # Fills the chat limit exactly, then deletes a key.
+    program.store("k", "v")
+    program.store("old", None)
+
+    assert commit_limit_error(snapshot, program.changed_writes) is None

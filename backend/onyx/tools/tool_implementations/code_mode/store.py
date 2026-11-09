@@ -295,10 +295,12 @@ def store_limit_error(
     *, before: int, after: int, committed: int, stores_values: bool
 ) -> str | None:
     """Why the store cannot change from `before` to `after` bytes while the
-    chat's saved writes reach `committed` bytes, or None if it can.
+    chat's saved writes and the values that the change stores reach `committed`
+    bytes, or None if it can.
 
     A change that does not grow the store passes the store limit, and writes
-    that only delete keys pass the chat limit.
+    that only delete keys pass the chat limit. Deleted keys do not count toward
+    `committed`, so a deletion never makes a later check fail.
     """
     if after > MAX_STORE_BYTES and after > before:
         return (
@@ -338,7 +340,11 @@ def commit_limit_error(
         before=before,
         after=after,
         committed=current.committed_bytes
-        + sum(entry_bytes(key, value) for key, value in writes.items()),
+        + sum(
+            entry_bytes(key, value)
+            for key, value in writes.items()
+            if value is not None
+        ),
         stores_values=any(value is not None for value in writes.values()),
     )
     # Each store() call passed, so the cause is what other programs committed.
@@ -381,7 +387,7 @@ class ProgramStore:
         }
         self._total = sum(self._sizes.values())
         self._writes: dict[str, JsonValue] = {}
-        # Bytes that each changed key adds to the commit, and their sum.
+        # Bytes of each changed value that the commit stores, and their sum.
         self._write_sizes: dict[str, int] = {}
         self._write_total = 0
 
@@ -410,13 +416,10 @@ class ProgramStore:
             value, f'Cannot store "{valid_key}": the value', MAX_STORED_VALUE_BYTES
         )
         stored = copied.value
-        write_bytes = len(valid_key.encode("utf-8")) + (
-            0 if stored is None else copied.size
-        )
-        size = 0 if stored is None else write_bytes
+        size = 0 if stored is None else len(valid_key.encode("utf-8")) + copied.size
         total = self._total - self._sizes.get(valid_key, 0) + size
         write_size = (
-            write_bytes
+            size
             if _differs(self._snapshot.values.get(valid_key), stored, copied.text)
             else 0
         )
