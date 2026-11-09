@@ -25,6 +25,7 @@ Unmount or key the session on close/reopen. Keep controls disabled throughout cr
 
 `DEFAULT_COMPANY_MARKETPLACE_ACCESS` explicitly selects organization Viewer access, Available installation, and no groups.
 The controls display that choice before creation. Hosts can supply another explicit initial draft.
+Switching to private and back restores the session's last organization permission.
 `marketplaceAccessDraft(snapshot)` converts snapshot `user_group_id` values to request `group_id` values, retaining group policies.
 
 The shared dialog uses `access.ready` and submits `createMarketplace({ ...source, personal: false, access: access.draft })`.

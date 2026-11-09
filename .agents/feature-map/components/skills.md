@@ -695,6 +695,7 @@ The library preview of an external-app skill calls the same renderer
     detail caches and calls the host to refresh Skills.
     `CompanyMarketplaceAccessControls` and
     `useCompanyMarketplaceAccess` provide a session-owned company draft.
+    Visibility changes preserve the session's last organization permission.
     Creation submits it atomically. Readiness requires global MANAGE_SKILLS and
     known settings; a settings failure never implies Community. Community allows
     organization Viewer access without groups. Group lookup failures preserve

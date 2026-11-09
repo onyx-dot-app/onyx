@@ -136,6 +136,37 @@ it("presents the chosen creation defaults and changes visibility, permissions an
   }
 });
 
+it.each(["saved", "edited"])(
+  "preserves %s organization edit access across visibility changes",
+  async (source) => {
+    const onSubmit = jest.fn();
+    const user = setupUser();
+    render(
+      <Harness
+        initial={{
+          ...DEFAULT_COMPANY_MARKETPLACE_ACCESS,
+          public_permission: source === "saved" ? "EDITOR" : "VIEWER",
+        }}
+        onSubmit={onSubmit}
+      />
+    );
+    await ready();
+    if (source === "edited") await chooseMenu(orgPermission, "Can edit");
+    await chooseMenu(scope, privateScope);
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      ...DEFAULT_COMPANY_MARKETPLACE_ACCESS,
+      public_permission: null,
+    });
+    await chooseMenu(scope, organization);
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      ...DEFAULT_COMPANY_MARKETPLACE_ACCESS,
+      public_permission: "EDITOR",
+    });
+  }
+);
+
 it("adds and removes groups while preserving policies on edited and unresolved grants", async () => {
   const onSubmit = jest.fn();
   const user = setupUser();

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
@@ -36,6 +37,9 @@ export default function CompanyMarketplaceAccessControls({
   const { data: groups, isLoading, error } = useShareableGroups();
   const { mutate } = useSWRConfig();
   const { draft, setDraft, status, ready } = access;
+  const [lastPublicPermission, setLastPublicPermission] = useState(
+    draft.public_permission ?? "VIEWER"
+  );
   const paid = status === "paid";
   const locked = disabled || !ready;
   const policies = [
@@ -98,9 +102,14 @@ export default function CompanyMarketplaceAccessControls({
             disabled={locked || !paid}
             onValueChange={(scope) => {
               if (scope === "PUBLIC" || scope === "PRIVATE") {
+                if (draft.public_permission !== null)
+                  setLastPublicPermission(draft.public_permission);
                 setDraft({
                   ...draft,
-                  public_permission: scope === "PUBLIC" ? "VIEWER" : null,
+                  public_permission:
+                    scope === "PUBLIC"
+                      ? (draft.public_permission ?? lastPublicPermission)
+                      : null,
                 });
               }
             }}
