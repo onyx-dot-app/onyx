@@ -36,14 +36,27 @@ from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 def test_timed_out_child_preserves_successful_sibling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("onyx.deep_research.agent.RESEARCH_AGENT_TIMEOUT_SECONDS", 0.1)
     child_cancelled = Event()
+    child_started = Event()
+    sibling_completed = Event()
     timers: list[Timer] = []
 
     class RecordedTimer(Timer):
         def start(self) -> None:
             timers.append(self)
             super().start()
+
+        def run(self) -> None:
+            # Wait for both the cancellation listener and the successful sibling.
+            assert child_started.wait(5)
+            assert sibling_completed.wait(5)
+            if not self.finished.is_set():
+                self.function(*self.args, **self.kwargs)
+            self.finished.set()
+
+        def cancel(self) -> None:
+            super().cancel()
+            sibling_completed.set()
 
     monkeypatch.setattr("onyx.agents.agent_coordination.threading.Timer", RecordedTimer)
 
@@ -74,6 +87,7 @@ def test_timed_out_child_preserves_successful_sibling(
             )
         if any(m.text == "slow" for m in request.messages):
             with signal.on_cancel(child_cancelled.set):
+                child_started.set()
                 assert child_cancelled.wait(5)
             signal.check()
         if any(m.text == "fast" for m in request.messages):
