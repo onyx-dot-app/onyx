@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Skill, User
+from onyx.db.models import Skill, SkillVersion, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -37,15 +37,13 @@ def _skill(
     name: str = "canonical-name",
     is_valid: bool | None = None,
 ) -> Skill:
-    return cast(
-        Skill,
-        SimpleNamespace(
-            id=uuid4(),
-            name=name,
-            bundle_file_id="bundle-id",
-            built_in_skill_id=None,
-            is_valid=is_valid,
-        ),
+    version = SkillVersion(id=uuid4(), bundle_file_id="bundle-id", is_valid=is_valid)
+    return Skill(
+        id=uuid4(),
+        name=name,
+        built_in_skill_id=None,
+        current_version_id=version.id,
+        current_version=version,
     )
 
 
@@ -90,11 +88,13 @@ def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
     assert files["canonical-name/scripts/run.py"] == b"print('hello')\n"
     assert b"license: Apache-2.0" in files["canonical-name/SKILL.md"]
     assert b"x-custom: retained" in files["canonical-name/SKILL.md"]
-    assert skill.is_valid is None
+    assert skill.current_version is not None
+    assert skill.current_version.is_valid is None
     persist.assert_called_once_with(
         [
             push.SkillValidityUpdate(
                 skill_id=skill.id,
+                version_id=skill.current_version.id,
                 bundle_file_id="bundle-id",
                 is_valid=True,
             )
@@ -117,11 +117,13 @@ def test_assemble_marks_invalid_legacy_name_and_does_not_hydrate(
     files = push._assemble_fileset([skill], user, MagicMock(spec=Session))
 
     assert files == {}
-    assert skill.is_valid is None
+    assert skill.current_version is not None
+    assert skill.current_version.is_valid is None
     persist.assert_called_once_with(
         [
             push.SkillValidityUpdate(
                 skill_id=skill.id,
+                version_id=skill.current_version.id,
                 bundle_file_id="bundle-id",
                 is_valid=False,
             )

@@ -139,7 +139,7 @@ def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None
         logger.warning(
             "Failed to unpack bundle for skill %s (%s), skipping",
             skill.name,
-            skill.bundle_file_id,
+            skill.current_version_id,
             exc_info=True,
         )
 
@@ -209,16 +209,18 @@ def _assemble_fileset(
 
     for skill in skills:
         if skill.built_in_skill_id is None:
-            if skill.is_valid is False:
+            version = skill.current_version
+            if version is None or version.is_valid is False:
                 continue
 
-            if skill.is_valid is None:
+            if version.is_valid is None:
                 validation = validate_stored_custom_skill(skill, file_store)
                 if validation.is_valid is not None:
                     validity_updates.append(
                         SkillValidityUpdate(
                             skill_id=skill.id,
-                            bundle_file_id=skill.bundle_file_id,
+                            version_id=version.id,
+                            bundle_file_id=version.bundle_file_id,
                             is_valid=validation.is_valid,
                         )
                     )
@@ -232,10 +234,10 @@ def _assemble_fileset(
                 bundle_bytes = validation.normalized_bundle
             else:
                 try:
-                    if skill.bundle_file_id is None:
+                    if version.bundle_file_id is None:
                         continue
                     bundle_bytes = load_stored_custom_skill_bundle(
-                        skill.bundle_file_id,
+                        version.bundle_file_id,
                         file_store,
                     ).content
                 except Exception as exc:

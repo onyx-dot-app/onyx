@@ -189,7 +189,8 @@ still propagate unexpected storage errors.
    `_assemble_fileset` unzips a custom bundle only when `is_valid` is true, or
    after `skills/validation.py:validate_stored_custom_skill` passes for an
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
-   and still point at the same bundle.
+   and still point at the observed version and bundle. The skill lock serializes
+   this update with replacement; the legacy validity column is dual-written.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
@@ -198,6 +199,7 @@ still propagate unexpected storage errors.
    skip the upload ZIP-size and file-count limits. Their separate
    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` allowance must cover previously accepted ZIPs.
    Upload ZIP limits cannot exceed that allowance; lowering an upload limit must not lower it.
+   Current-content reads return 413 with the stored read limit when that allowance is exceeded.
    Stored reads retain the existing per-file and expanded-total limits.
    Version metadata repair also bounds compressed reads at the storage backend
    and expanded work per file and in total, without applying upload file counts.
@@ -266,19 +268,24 @@ still propagate unexpected storage errors.
     migration that deletes its rows.** `_assemble_fileset` skips, with a
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
-15. `version-rollout-reads` **Runtime reads still use the bundle columns on
-    `db/models.py:Skill`.** Custom writers call `db/skill_version.py`, which
+15. `version-rollout-reads` **Custom readers use `Skill.current_version`.**
+    Its eager outer join retains built-ins, which have no versions. A custom
+    row without a pointer cannot load or enable. Locks on joined skill queries
+    must specify `of=Skill`. Reload `current_version` after a locking read before
+    using its content or validity. A statement that waits on a concurrent edit
+    can combine the new skill pointer with the old joined version snapshot.
+    Publishing also refreshes the loaded relationship. Custom writers call `db/skill_version.py`, which
     adapts the generic `db/resource_version.py` service. A row lock serializes
     version numbers. The version, pointer and legacy columns change in one
     transaction. Equal content digests keep the current version and stored-byte
     hash. `utils/bundle.py:compute_bundle_metadata` computes the digest without
     database imports; ZIP timestamps and entry order do not affect it. See
     [[#bundle-retention]] for which bundle files stay.
-    Legacy columns remain authoritative during rollout. A save repairs a stale
+    Legacy columns remain for V2 compatibility and repair. A save repairs a stale
     or missing pointer before writing its new content. A recovery snapshot has
     no creator; a user content change follows it. Runtime classification updates
-    legacy validity. The next save or repair copies validity onto the existing
-    version without creating history or duplicating its blob.
+    the observed current version only while it remains unclassified. It also
+    updates legacy validity when the bundle links match, without creating history.
     Identical saves verify the existing bundle before reusing it. A missing,
     changed or corrupt current file creates a fresh version from the upload.
     Unexpected storage errors abort the save and keep the current version.
@@ -303,7 +310,8 @@ still propagate unexpected storage errors.
     null-safe comparisons. This catches old-writer edits and pointerless
     inserts below the cursor. The completed flag means only the initial scan
     finished. Before switching readers, drain old writers and require a fresh
-    empty drift query, not that flag. No migration reads blobs.
+    empty drift query, not that flag. Follow [[#cut-over-version-readers]].
+    No migration reads blobs.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
@@ -443,11 +451,33 @@ still propagate unexpected storage errors.
   ([[#affected-users-before-change]]).
 - `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
   `list_runtime_skills_for_user` one at a time for that user: visibility,
-  `_is_enabled_for_user`, app readiness, `Skill.is_valid`, and built-in
+  `_is_enabled_for_user`, app readiness, `Skill.current_is_valid`, and built-in
   availability. Then compare `Sandbox.skills_hash` with
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log
   for `Skill push failed` for a failed push.
+- `cut-over-version-readers` **Gate version readers after legacy writers drain.**
+  First deploy version writers and the version repair task everywhere. Stop and drain every API,
+  worker, Lite poller and script that can still write only legacy columns.
+  Keep current-version readers off until the following check passes for every tenant and shard.
+  Run the existing repair task until a fresh drift query returns no rows.
+  The repair completed marker does not authorize cutover. Old writers can create
+  drift after that marker is set.
+
+  Use the target shard's database configuration and the application's backend path:
+
+  ```bash
+  PYTHONPATH=backend uv run python backend/scripts/check_skill_version_cutover.py --tenant-id public
+  ```
+
+  Substitute each tenant schema for `public`. Exit 1 reports the first batch of
+  drifted skill IDs; a database error also blocks deployment. Run the existing
+  `repair_skill_versions` task for that tenant, then repeat the check in a new
+  process. Do not replace missing blobs with empty bundles. Recover their source
+  and upload again when repair cannot recover them. The query checks database
+  drift, not blob availability. Retain the command output, tenant, shard and
+  deployed writer revision. Deploy current-version readers only after every check exits 0 and legacy
+  writers remain stopped. Keep legacy dual writes and version repair through this release.
 - `test-skill-setup` **Set up skills for a test.** Use the integration manager
   `backend/tests/integration/common_utils/managers/skill.py`. A real push
   needs the Kubernetes harness in `backend/tests/integration/tests/craft/k8s/`.
