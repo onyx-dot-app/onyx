@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from onyx.db.enums import SkillSharePermission
 from onyx.server.features.skill.models import (
+    SkillBundleInspectResponse,
     SkillCreateRequest,
     SkillEditableDetailResponse,
     SkillGroupShareRequest,
@@ -18,6 +19,7 @@ from onyx.server.features.skill.models import (
     SkillShareRequest,
     SkillsList,
     SkillUserShareRequest,
+    SkillVersionResponse,
     TransferSkillOwnershipRequest,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -55,6 +57,36 @@ def build_minimal_bundle(
 
 
 class SkillManager:
+    @staticmethod
+    def list_versions(skill_id: UUID, user: DATestUser) -> list[SkillVersionResponse]:
+        response = client.get(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions", headers=user.headers
+        )
+        response.raise_for_status()
+        return [SkillVersionResponse.model_validate(item) for item in response.json()]
+
+    @staticmethod
+    def preview_version(
+        skill_id: UUID, version_id: UUID, user: DATestUser
+    ) -> SkillBundleInspectResponse:
+        response = client.get(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}",
+            headers=user.headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillBundleInspectResponse)
+
+    @staticmethod
+    def restore_version(
+        skill_id: UUID, version_id: UUID, user: DATestUser
+    ) -> SkillEditableDetailResponse:
+        response = client.post(
+            f"{API_SERVER_URL}/skills/custom/{skill_id}/versions/{version_id}/restore",
+            headers=user.headers,
+        )
+        response.raise_for_status()
+        return _response_model(response, SkillEditableDetailResponse)
+
     @staticmethod
     def create_from_editor(
         user_performing_action: DATestUser,

@@ -47,6 +47,12 @@
 - **In a running Craft session**, a skill change does not reach the agent at
   once. The session shows a stale-skills notice with a reload action. The
   reload restarts the agent's runtime with the current skills.
+- **Version history API.** Owners, editors and admins can list custom skill
+  versions with their creator and timestamp, preview retained content, and
+  restore it. Viewers can preview current instructions but cannot read history.
+  History returns at most 50 rows. The positive `before_version` cursor excludes
+  that version and loads older rows without shifting when a new version is saved.
+  Restore creates a new version unless its content equals the current version.
 
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
@@ -348,6 +354,18 @@ The library preview of an external-app skill calls the same renderer
     `read_version_bundle`, which gives NOT_FOUND "The files of this version are
     no longer kept." for a pruned bundle, also when pruning wins a race. A
     restore that copies an old version must read it under the version lock.
+20. `history-requires-edit` **History uses EDIT access, including its reads.**
+    The `/skills/custom/{skill_id}/versions` family calls `fetch_skill` with
+    `SkillManagementPolicy.EDIT` before listing or reading any history.
+    `db/skill_version.py:fetch_skill_version` scopes version ids to that skill.
+    Preview returns the historical bundle's description, instructions, and file
+    list through `SkillBundleInspectResponse`; it validates expansion before inspection.
+    Restore locks the skill, then reads the selected version and calls
+    `server/features/skill/api.py:_replace_skill_bundle_from_editor`.
+    Ingestion validates current upload limits and stages a new blob. The shared
+    replacement refreshes the description and applies digest equality and retention.
+    Never reuse the historical blob: this restore can prune its source version.
+    Cleanup stays after the content commit and before the sandbox push.
 
 ---
 
