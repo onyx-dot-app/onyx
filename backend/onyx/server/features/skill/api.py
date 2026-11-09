@@ -12,15 +12,13 @@ from onyx.auth.permissions import (
     has_global_permission,
     require_permission,
 )
-from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccountType,
-    ExternalAppType,
     Permission,
 )
 from onyx.db.external_app import (
     associate_custom_skill_with_external_app__no_commit,
-    get_built_in_external_app,
     get_external_app_by_id,
 )
 from onyx.db.models import Skill, User
@@ -45,8 +43,6 @@ from onyx.db.skill_version import delete_unreferenced_skill_bundles
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.credentials import resolve_injection_headers
-from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
@@ -88,6 +84,7 @@ from onyx.skills.bundle import (
     update_custom_bundle_files,
 )
 from onyx.skills.content import read_custom_skill_bundle_bytes
+from onyx.skills.github_auth import github_authorization_header
 from onyx.skills.ingest import (
     IngestedBundle,
     delete_bundle_blob,
@@ -194,23 +191,6 @@ def _import_response(
         ],
         not_imported=not_imported,
     )
-
-
-def _github_authorization_header(user: User) -> str | None:
-    tenant_id = get_current_tenant_id()
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
-        if github_app is None or not github_app.enabled:
-            return None
-        github_app_id = github_app.id
-
-    ensure_fresh_credentials(tenant_id, github_app_id, user.id)
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        return resolve_injection_headers(
-            db_session,
-            github_app_id,
-            user.id,
-        ).get("Authorization")
 
 
 def _editable_skill_response(
@@ -443,7 +423,7 @@ def preview_github_skills(
 ) -> GitHubSkillsPreviewResponse:
     repository, skills = fetch_github_skill_bundles(
         request.repository,
-        _github_authorization_header(user),
+        github_authorization_header(get_current_tenant_id(), user.id),
     )
     return GitHubSkillsPreviewResponse(
         repository=f"{repository.owner}/{repository.repo}",
@@ -469,7 +449,7 @@ def import_github_skills(
 ) -> GitHubSkillsImportResponse:
     _, discovered_skills = fetch_github_skill_bundles(
         request.repository,
-        _github_authorization_header(user),
+        github_authorization_header(get_current_tenant_id(), user.id),
         revision=request.revision,
         subpath=request.subpath,
         selected_paths=set(request.paths),

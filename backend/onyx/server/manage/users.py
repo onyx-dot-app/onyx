@@ -889,6 +889,9 @@ async def delete_user(
                 "onyx.db.license", "invalidate_license_cache", None
             )()
 
+    except OnyxError:
+        db_session.rollback()
+        raise
     except Exception as e:
         db_session.rollback()
         logger.error("Error deleting user %s: %s", user_to_delete.email, str(e))

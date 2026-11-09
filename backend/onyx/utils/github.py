@@ -9,6 +9,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.url import SSRFException, ssrf_safe_get
 
+GITHUB_ARCHIVE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
+
 GITHUB_COMMIT_SHA_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{40}$")
 
 _GITHUB_FETCH_TIMEOUT_SECONDS: Final[int] = 30
@@ -34,6 +36,27 @@ class GitHubSource:
 class GitHubRevision:
     revision: str
     subpath: str | None
+
+
+def validate_github_repository_component(value: str) -> str:
+    if value in {".", ".."} or not _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(
+        value
+    ):
+        raise ValueError("Invalid GitHub repository name.")
+    return value
+
+
+def normalize_github_folder(value: str | None) -> str | None:
+    if not value:
+        return None
+    folder = value.rstrip("/")
+    if (
+        "\\" in folder
+        or (len(folder) >= 3 and folder[0].isalpha() and folder[1:3] == ":/")
+        or any(part in {"", ".", ".."} for part in folder.split("/"))
+    ):
+        raise ValueError("Use a relative repository folder without dot segments.")
+    return folder
 
 
 def parse_github_source(
@@ -72,8 +95,11 @@ def parse_github_source(
                 OnyxErrorCode.INVALID_INPUT,
                 "Enter an HTTPS github.com repository URL.",
             )
-        source_parts = tuple(unquote(part) for part in parsed.path.split("/") if part)
-        if len(source_parts) < 2:
+        source_parts = tuple(
+            unquote(part)
+            for part in parsed.path.removeprefix("/").rstrip("/").split("/")
+        )
+        if len(source_parts) < 2 or any(not part for part in source_parts):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "Invalid GitHub repository URL.",
@@ -92,13 +118,14 @@ def parse_github_source(
                     ),
                 )
 
-    if not all(
-        _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part) for part in (owner, repo)
-    ):
+    try:
+        validate_github_repository_component(owner)
+        validate_github_repository_component(repo)
+    except ValueError as exc:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Invalid GitHub repository URL.",
-        )
+        ) from exc
     return GitHubSource(owner=owner, repo=repo, tree_tail=tree_tail)
 
 
@@ -151,15 +178,13 @@ def resolve_github_revision(
     subpath: str | None = None,
 ) -> GitHubRevision:
     """Resolve a repository source to an immutable commit and optional subpath."""
-    normalized_subpath = subpath.rstrip("/") if subpath else None
-    if normalized_subpath and (
-        "\\" in normalized_subpath
-        or any(part in {"", ".", ".."} for part in normalized_subpath.split("/"))
-    ):
+    try:
+        normalized_subpath = normalize_github_folder(subpath)
+    except ValueError as exc:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Invalid repository folder.",
-        )
+        ) from exc
     if revision is not None:
         if not GITHUB_COMMIT_SHA_PATTERN.fullmatch(revision):
             raise OnyxError(
@@ -212,6 +237,12 @@ def resolve_github_revision(
                     OnyxErrorCode.BAD_GATEWAY,
                     "GitHub returned an invalid repository revision. Try again.",
                 )
+            try:
+                candidate_subpath = normalize_github_folder(candidate_subpath)
+            except ValueError as exc:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "Invalid repository folder."
+                ) from exc
             return GitHubRevision(
                 revision=sha.lower(),
                 subpath=candidate_subpath,
