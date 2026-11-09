@@ -2,6 +2,7 @@
 
 import sys
 from collections.abc import Generator
+from datetime import datetime, timezone
 from threading import Event
 from time import monotonic, sleep
 from types import FrameType
@@ -25,7 +26,9 @@ from onyx.db.marketplace_sync import (
 from onyx.db.models import (
     ExternalApp,
     ExternalAppUserCredential,
+    FileRecord,
     Marketplace,
+    Sandbox,
     Skill,
     SkillVersion,
     User,
@@ -35,17 +38,21 @@ from onyx.db.models import (
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.resource_access import ResourceAccessChange, mutate_resource_access
 from onyx.db.skill import SkillAccessAdapter
+from onyx.db.skill_version import delete_unreferenced_skill_bundles
 from onyx.db.user_preferences import deactivate_user
 from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.settings.models import Tier
+from onyx.skills.ingest import ingest_skill_bundle, save_skill_bundle_bytes
 from onyx.skills.marketplace.models import (
     GitHubMarketplaceConfig,
     MarketplaceProvider,
     MarketplaceRetirementProposal,
     MarketplaceSyncStatus,
 )
+from onyx.skills.marketplace.read_models import ReadySkill
 from onyx.utils.threadpool_concurrency import start_thread_future
 from tests.external_dependency_unit.craft.db_helpers import (
     make_sandbox,
@@ -62,6 +69,7 @@ from tests.external_dependency_unit.db.test_skill_access_mutations import manage
 from tests.external_dependency_unit.db.test_skill_access_mutations import (
     session as session,
 )
+from tests.external_dependency_unit.db.test_skill_version_writes import bundle
 
 pytestmark = pytest.mark.usefixtures("tenant_context", "enable_ee")
 CONFIG = GitHubMarketplaceConfig(owner="acme", repo="tools", ref="main")
@@ -567,3 +575,159 @@ def test_global_defaults_preserve_overrides_and_audience(session: Session) -> No
         management.set_marketplace_default_access__no_commit(
             personal.id, change, admin, session, tier=Tier.BUSINESS
         )
+
+
+@pytest.mark.usefixtures("initialize_file_store")
+def test_remove_cascades_cleanup_audience_rollback_and_fence(
+    db_session: Session,
+) -> None:
+    owner = make_user(db_session, standard_account=True)
+    recipient = make_user(db_session, standard_account=True)
+    outsider = make_user(db_session, standard_account=True)
+    connect(db_session, owner)
+    row = create(db_session, owner)
+    db_session.commit()
+    store = get_default_file_store()
+    read = catalog("retained")
+    entry = read.entries[0]
+    assert isinstance(entry, ReadySkill)
+    staged = ingest_skill_bundle(entry.bundle_bytes, "retained.zip", store)
+    apply(db_session, row, read, staged={"tools/retained": staged})
+    db_session.commit()
+    read = catalog("retained", body=b"new")
+    entry = read.entries[0]
+    assert isinstance(entry, ReadySkill)
+    newer = ingest_skill_bundle(entry.bundle_bytes, "retained.zip", store)
+    apply(
+        db_session,
+        row,
+        read,
+        revision="new",
+        staged={"tools/retained": newer},
+    )
+    skill = skills(db_session, row)[0]
+    mutate_resource_access(
+        [skill.id],
+        ResourceAccessChange(user_shares={recipient.id: Share.VIEWER}),
+        owner,
+        db_session,
+        SkillAccessAdapter(),
+    )
+    skill.retired_at = datetime.now(timezone.utc)
+    db_session.commit()
+    legacy = save_skill_bundle_bytes(
+        bundle("legacy"), display_name="legacy.zip", file_store=store
+    )
+    skill.bundle_file_id = legacy
+    shared = make_skill(db_session, author_user_id=outsider.id)
+    shared.bundle_file_id = staged.bundle_file_id
+    for user in (owner, recipient, outsider):
+        make_sandbox(db_session, user)
+    db_session.commit()
+    row_id, skill_id = row.id, skill.id
+    versions = set(
+        db_session.scalars(
+            select(SkillVersion.id).where(SkillVersion.skill_id == skill_id)
+        )
+    )
+    old_worker = claim_marketplace_sync(row_id, db_session)
+    assert old_worker is not None
+    expected_files = {staged.bundle_file_id, newer.bundle_file_id, legacy}
+    result = management.remove_marketplace__no_commit(row_id, owner, db_session)
+    assert result.cleanup_file_ids == expected_files and result.affected_user_ids == {
+        owner.id,
+        recipient.id,
+    }
+    db_session.rollback()
+    assert (
+        db_session.get(Marketplace, row_id) is not None
+        and db_session.get(Skill, skill_id) is not None
+    )
+    assert (
+        set(
+            db_session.scalars(
+                select(SkillVersion.id).where(SkillVersion.skill_id == skill_id)
+            )
+        )
+        == versions
+    )
+    assert (
+        set(
+            db_session.scalars(
+                select(FileRecord.file_id).where(FileRecord.file_id.in_(expected_files))
+            )
+        )
+        == expected_files
+    )
+    management.remove_marketplace__no_commit(row_id, owner, db_session)
+    db_session.commit()
+    db_session.expire_all()
+    assert (
+        db_session.get(Marketplace, row_id) is None
+        and db_session.get(Skill, skill_id) is None
+    )
+    assert not list(
+        db_session.scalars(
+            select(SkillVersion.id).where(SkillVersion.skill_id == skill_id)
+        )
+    )
+    with pytest.raises(MarketplaceSyncLeaseLost):
+        fence_marketplace_sync(row_id, old_worker, db_session)
+    db_session.rollback()
+    delete_unreferenced_skill_bundles(list(result.cleanup_file_ids), db_session)
+    assert set(
+        db_session.scalars(
+            select(FileRecord.file_id).where(FileRecord.file_id.in_(expected_files))
+        )
+    ) == {staged.bundle_file_id}
+
+    db_session.execute(
+        delete(Sandbox).where(
+            Sandbox.user_id.in_([owner.id, recipient.id, outsider.id])
+        )
+    )
+    db_session.execute(delete(Skill).where(Skill.id == shared.id))
+    db_session.commit()
+    delete_unreferenced_skill_bundles(list(expected_files), db_session)
+
+
+@pytest.mark.parametrize("change", ["basic", "inactive", "owner"])
+def test_personal_owner_rechecked_after_io(db_session: Session, change: str) -> None:
+    owner = make_user(db_session, standard_account=True)
+    other = make_user(db_session, standard_account=True)
+    connect(db_session, owner)
+    row = create(db_session, owner)
+    row.sync_requested = False
+    db_session.commit()
+    row_id, owner_id, other_id = row.id, owner.id, other.id
+    with get_session_with_current_tenant() as auth:
+        stale = auth.get(User, owner_id)
+        assert stale is not None
+        with get_session_with_current_tenant() as writer:
+            lock_group_membership(writer)
+            if change == "owner":
+                writer.execute(
+                    update(Marketplace)
+                    .where(Marketplace.id == row_id)
+                    .values(owner_user_id=other_id)
+                )
+            elif change == "basic":
+                writer.execute(
+                    delete(User__UserGroup).where(User__UserGroup.user_id == owner_id)
+                )
+                recompute_user_permissions__no_commit(owner_id, writer)
+            else:
+                current = writer.get(User, owner_id)
+                assert current is not None
+                current.is_active = False
+            writer.commit()
+        for operation in (
+            management.request_managed_marketplace_sync__no_commit,
+            management.replace_marketplace_login__no_commit,
+            management.remove_marketplace__no_commit,
+            management.fetch_managed_marketplace,
+        ):
+            with pytest.raises(OnyxError):
+                operation(row_id, stale, db_session)
+        db_session.commit()
+        assert not row.sync_requested and row.login_user_id == owner_id
