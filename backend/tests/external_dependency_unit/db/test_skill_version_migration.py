@@ -179,11 +179,21 @@ def test_version_constraints(
     if schema_source == "migration":
         with Operations.context(MigrationContext.configure(connection)):
             revision.module.upgrade()
+            connection.execute(text("CREATE TABLE user_group (id integer PRIMARY KEY)"))
+            scripts = ScriptDirectory(
+                str(Path(__file__).resolve().parents[3] / "alembic")
+            )
+            marketplace_revision = scripts.get_revision("1c894e757414")
+            assert marketplace_revision is not None
+            marketplace_revision.module.upgrade()
     else:
         connection.execute(text("DROP TABLE skill"))
         Base.metadata.create_all(
             connection,
-            tables=[Base.metadata.tables[name] for name in ("skill", "skill_version")],
+            tables=[
+                Base.metadata.tables[name]
+                for name in ("marketplace", "skill", "skill_version")
+            ],
         )
     creator = uuid4()
     connection.execute(text('INSERT INTO "user" VALUES (:id)'), {"id": creator})
