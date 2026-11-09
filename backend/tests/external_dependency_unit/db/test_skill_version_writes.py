@@ -1238,3 +1238,34 @@ def test_failed_repair_commit_keeps_pruned_files(
         get_kv_store().load(PROGRESS_KEY, refresh_cache=True)
     repair_skill_versions.run(tenant_id=tenant)
     assert len(stored_bundles(session)) == 10
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ClientError({"Error": {"Code": "AccessDenied"}}, "GetObject"),
+        RuntimeError("unexpected read failure"),
+    ],
+)
+def test_replacement_preserves_history_on_unexpected_read_failure(
+    error: Exception, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    content = bundle("failed-verification")
+    response = api.create_custom_skill(upload(content), False, user, session)
+    skill = session.get(Skill, response.id)
+    assert skill is not None
+    original_id = skill.current_version_id
+    file_ids = set(session.scalars(select(FileRecord.file_id)))
+
+    def failed_read(*_args: object, **_kwargs: object) -> Never:
+        raise error
+
+    monkeypatch.setattr(get_default_file_store(), "read_file", failed_read)
+    with pytest.raises(type(error)) as caught:
+        api.replace_current_user_skill_bundle(skill.id, upload(content), user, session)
+    assert caught.value is error
+    session.rollback()
+    session.refresh(skill)
+    assert skill.current_version_id == original_id
+    assert len(versions(skill, session)) == 1
+    assert set(session.scalars(select(FileRecord.file_id))) == file_ids
