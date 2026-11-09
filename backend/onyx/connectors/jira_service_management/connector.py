@@ -229,11 +229,14 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             if status_code != 200:
                 raise RuntimeError(f"JSM API error HTTP {status_code}: {payload}")
 
+            token_val = payload.get("nextPageToken")
+            if next_page_token is not None and token_val == next_page_token:
+                raise RuntimeError(
+                    f"Infinite JSM pagination loop detected with unchanged nextPageToken: {token_val}"
+                )
+
             raw_issues = payload.get("issues")
             issues = raw_issues if isinstance(raw_issues, list) else []
-            if not issues:
-                break
-
             batch = [
                 self._parse_issue(issue)
                 for issue in issues
@@ -242,7 +245,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             if batch:
                 yield batch
 
-            token_val = payload.get("nextPageToken")
             is_last = bool(payload.get("isLast", False))
             if is_last or not isinstance(token_val, str) or not token_val:
                 break
@@ -293,7 +295,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             url = f"{self.base_url}/rest/api/3/issue/{urllib.parse.quote(issue_key)}/comment?{params}"
             status_code, payload = self.transport(url, self._headers())
             if status_code != 200:
-                break
+                raise RuntimeError(
+                    f"JSM comment fetch failed for {issue_key}: HTTP {status_code}"
+                )
             page_raw = payload.get("comments")
             page = [
                 c
