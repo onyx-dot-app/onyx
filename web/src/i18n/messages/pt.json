@@ -6367,6 +6367,34 @@
           "name": "Básico",
           "description": "Grupo padrão para todos os usuários com permissões básicas."
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {Nenhum Skill segue este marketplace} one {# Skill segue este marketplace} other {# Skills seguem este marketplace}}"
+        },
+        "skill": {
+          "fromMarketplace": "De {marketplace}"
+        },
+        "select": {
+          "label": "Configuração de instalação de {name}"
+        },
+        "option": {
+          "inherit": "Configuração da empresa ({policy})",
+          "inheritDescription": "Seguir a configuração da empresa, também quando ela mudar."
+        },
+        "status": {
+          "inherited": "Este grupo segue a configuração da empresa: {policy}.",
+          "overridden": "Este grupo usa {policy} no lugar da configuração da empresa, {company}.",
+          "readOnly": "Você pode ver esta configuração, mas não alterá-la. Você só pode alterar Skills e marketplaces privados compartilhados apenas com grupos que você gerencia.",
+          "saving": "Salvando…",
+          "saved": "Salvo.",
+          "failed": "{choice} não foi salvo. {reason}",
+          "failedReason": "Tente novamente."
+        },
+        "retry": {
+          "button": "Tentar novamente",
+          "label": "Tentar novamente a configuração de {name}"
+        }
       }
     },
     "hooks": {

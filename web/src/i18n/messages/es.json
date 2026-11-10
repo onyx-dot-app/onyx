@@ -6367,6 +6367,34 @@
           "name": "Básico",
           "description": "Grupo predeterminado para todos los usuarios con permisos básicos."
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {Ningún Skill sigue este marketplace} one {# Skill sigue este marketplace} other {# Skills siguen este marketplace}}"
+        },
+        "skill": {
+          "fromMarketplace": "De {marketplace}"
+        },
+        "select": {
+          "label": "Ajuste de instalación de {name}"
+        },
+        "option": {
+          "inherit": "Ajuste de la empresa ({policy})",
+          "inheritDescription": "Seguir el ajuste de la empresa, también cuando cambie."
+        },
+        "status": {
+          "inherited": "Este grupo sigue el ajuste de la empresa: {policy}.",
+          "overridden": "Este grupo usa {policy} en lugar del ajuste de la empresa, {company}.",
+          "readOnly": "Puedes ver este ajuste, pero no cambiarlo. Solo puedes cambiar Skills y marketplaces privados que solo se comparten con grupos que gestionas.",
+          "saving": "Guardando…",
+          "saved": "Guardado.",
+          "failed": "{choice} no está guardado. {reason}",
+          "failedReason": "Inténtalo de nuevo."
+        },
+        "retry": {
+          "button": "Reintentar",
+          "label": "Reintentar el ajuste de {name}"
+        }
       }
     },
     "hooks": {
