@@ -15305,6 +15305,27 @@
         "reloadFailed": "세션을 다시 불러오지 못했습니다"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "닫기"
+      },
+      "item": {
+        "bytesLabel": "{name}: {size}",
+        "filesLabel": "{name}: {size}, {files, plural, one {파일 #개} other {파일 #개}}",
+        "directoriesLabel": "{name}: {size} — 세션의 폴더 수 제한인 {limit, number}개를 초과합니다",
+        "pathsLabel": "{name}: {size} — 경로가 UTF-8 기준 {limit, number}바이트를 초과하거나 파일 또는 폴더 이름이 {componentLimit, number}바이트를 초과합니다"
+      },
+      "list": {
+        "label": "불러오지 못한 스킬"
+      },
+      "manage": {
+        "button": "스킬 관리"
+      },
+      "toast": {
+        "description": "스킬은 {maxSize} 및 {maxFiles, plural, one {#개 파일} other {#개 파일}} 이내여야 합니다. 개별 파일, 폴더 및 경로 제한도 적용됩니다. 이 스킬은 전달 제한을 초과하여 에이전트가 이 세션에서 사용할 수 없습니다.",
+        "title": "{count, plural, one {스킬 #개를 불러오지 못했습니다} other {스킬 #개를 불러오지 못했습니다}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "하위 에이전트를 찾을 수 없습니다."

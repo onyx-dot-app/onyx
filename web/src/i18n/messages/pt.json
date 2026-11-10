@@ -15305,6 +15305,27 @@
         "reloadFailed": "Falha ao recarregar a sessão"
       }
     },
+    "skillRuntimeNotice": {
+      "dismiss": {
+        "button": "Dispensar"
+      },
+      "item": {
+        "bytesLabel": "{name}: {size}",
+        "filesLabel": "{name}: {size}, {files, plural, one {# arquivo} other {# arquivos}}",
+        "directoriesLabel": "{name}: {size} — excede o limite de {limit, number} pastas por sessão",
+        "pathsLabel": "{name}: {size} — o caminho excede {limit, number} bytes UTF-8, ou um nome de arquivo ou pasta excede {componentLimit, number} bytes"
+      },
+      "list": {
+        "label": "Skills que não foram carregadas"
+      },
+      "manage": {
+        "button": "Gerenciar skills"
+      },
+      "toast": {
+        "description": "Suas skills devem caber em {maxSize} e {maxFiles, plural, one {# arquivo} other {# arquivos}}. Também há limites por arquivo, pasta e caminho. Estas skills excedem um limite de entrega, por isso o agente não pode usá-las nesta sessão.",
+        "title": "{count, plural, one {# skill não foi carregada} other {# skills não foram carregadas}}"
+      }
+    },
     "subagentView": {
       "notFound": {
         "label": "Subagente não encontrado."
