@@ -39,12 +39,14 @@ type HistoryView =
   | { kind: "list" }
   | { kind: "preview" | "confirm"; version: SkillVersion };
 
-interface SkillVersionsProps {
-  skill: CustomSkill;
+type SkillVersionsProps = {
   onBusyChange: (busy: boolean) => void;
   onRestored: (skill: SkillEditableDetail) => void;
   restoreDisabled?: boolean;
-}
+} & (
+  | { kind?: "active"; skill: CustomSkill }
+  | { kind: "retired"; skillId: string }
+);
 
 function VersionPreview({
   skillId,
@@ -106,17 +108,15 @@ function VersionPreview({
   );
 }
 
-export default function SkillVersions({
-  skill,
-  onBusyChange,
-  onRestored,
-  restoreDisabled,
-}: SkillVersionsProps) {
+export default function SkillVersions(props: SkillVersionsProps) {
+  const { onBusyChange, onRestored } = props;
+  const skillId = props.kind === "retired" ? props.skillId : props.skill.id;
+  const canRestore = props.kind !== "retired" && !props.skill.marketplace;
   const t = useTranslations("skills.versions");
   const format = useFormatter();
   const { isSmallScreen } = useScreenSize();
   const { mutate } = useSWRConfig();
-  const allowed = canReadSkillHistory(skill);
+  const allowed = props.kind === "retired" || canReadSkillHistory(props.skill);
   const {
     data: pages,
     error,
@@ -127,11 +127,11 @@ export default function SkillVersions({
   } = useSWRInfinite<HistoryPage, Error>(
     (pageIndex: number, previous: HistoryPage | null) => {
       if (!allowed) return null;
-      if (pageIndex === 0) return [SWR_KEYS.skillVersions(skill.id), null];
+      if (pageIndex === 0) return [SWR_KEYS.skillVersions(skillId), null];
       const oldest =
         previous?.kind === "available" ? previous.versions.at(-1) : undefined;
       return oldest && oldest.version_number > 1
-        ? [SWR_KEYS.skillVersions(skill.id), oldest.version_number]
+        ? [SWR_KEYS.skillVersions(skillId), oldest.version_number]
         : null;
     },
     async ([, beforeVersion]: [
@@ -141,7 +141,7 @@ export default function SkillVersions({
       try {
         return {
           kind: "available",
-          versions: await listSkillVersions(skill.id, beforeVersion),
+          versions: await listSkillVersions(skillId, beforeVersion),
         };
       } catch (error) {
         if (isAuthStatusError(error) || isNotFoundError(error))
@@ -176,7 +176,7 @@ export default function SkillVersions({
     const boundary = restoreBoundary.current;
     if (!boundary || pending || isValidating || error) return;
     if (
-      boundary.skillId !== skill.id ||
+      boundary.skillId !== skillId ||
       accessDenied ||
       !oldest ||
       oldest.version_number <= boundary.version
@@ -185,31 +185,30 @@ export default function SkillVersions({
       return;
     }
     void setSize((count) => count + 1).catch(() => undefined);
-  }, [skill.id, pending, isValidating, error, accessDenied, oldest, setSize]);
+  }, [skillId, pending, isValidating, error, accessDenied, oldest, setSize]);
   useEffect(() => {
     if (allowed && !accessDenied) return;
     setView({ kind: "list" });
     const denied: HistoryPage = { kind: "denied" };
     // Replace both the infinite list and its pages so remounts cannot reuse rows.
     void mutate(
-      (key) =>
-        Array.isArray(key) && key[0] === SWR_KEYS.skillVersions(skill.id),
+      (key) => Array.isArray(key) && key[0] === SWR_KEYS.skillVersions(skillId),
       denied,
       { revalidate: false }
     );
     void mutate(
-      unstable_serialize(() => [SWR_KEYS.skillVersions(skill.id), null]),
+      unstable_serialize(() => [SWR_KEYS.skillVersions(skillId), null]),
       [denied],
       { revalidate: false }
     );
     void mutate(
       (key) =>
         typeof key === "string" &&
-        key.startsWith(`${SWR_KEYS.skillVersions(skill.id)}/`),
+        key.startsWith(`${SWR_KEYS.skillVersions(skillId)}/`),
       undefined,
       { revalidate: true }
     );
-  }, [allowed, accessDenied, mutate, skill.id]);
+  }, [allowed, accessDenied, mutate, skillId]);
   useEffect(() => {
     if (view.kind === "list" && returning.current) {
       listTitle.current?.focus();
@@ -253,8 +252,8 @@ export default function SkillVersions({
       requestPending.current ||
       !allowed ||
       accessDenied ||
-      skill.marketplace ||
-      restoreDisabled ||
+      !canRestore ||
+      props.restoreDisabled ||
       !version.has_bundle
     )
       return;
@@ -263,7 +262,7 @@ export default function SkillVersions({
     onBusyChange(true);
     setRestoreError(null);
     try {
-      const restored = await restoreSkillVersion(skill.id, version.id);
+      const restored = await restoreSkillVersion(skillId, version.id);
       const preview: SkillPreview = {
         source: restored.source,
         id: restored.id,
@@ -274,22 +273,19 @@ export default function SkillVersions({
         external_app: restored.external_app,
       };
       if (oldest)
-        restoreBoundary.current = {
-          skillId: skill.id,
-          version: oldest.version_number,
-        };
+        restoreBoundary.current = { skillId, version: oldest.version_number };
       // Seed current content even when its panel has not mounted yet.
       await Promise.allSettled([
         refreshVersions(),
-        mutate(SWR_KEYS.editableSkill(skill.id), restored),
-        mutate(SWR_KEYS.skillSharing(skill.id), restored),
-        mutate(SWR_KEYS.userSkillPreview(skill.id), preview),
+        mutate(SWR_KEYS.editableSkill(skillId), restored),
+        mutate(SWR_KEYS.skillSharing(skillId), restored),
+        mutate(SWR_KEYS.userSkillPreview(skillId), preview),
         mutate<SkillsList>(SWR_KEYS.userSkills, (current) =>
           current
             ? {
                 ...current,
                 customs: current.customs.map((row) =>
-                  row.id === skill.id ? { ...row, ...restored } : row
+                  row.id === skillId ? { ...row, ...restored } : row
                 ),
               }
             : current
@@ -352,9 +348,9 @@ export default function SkillVersions({
         >
           {t("preview")}
         </Button>
-        {!skill.marketplace && !version.is_current && (
+        {canRestore && !version.is_current && (
           <Button
-            disabled={restoreDisabled}
+            disabled={props.restoreDisabled}
             size="sm"
             prominence="secondary"
             aria-label={t("restoreVersion", {
@@ -442,7 +438,7 @@ export default function SkillVersions({
             : versionLabel(view.version)}
         </Text>
         {view.kind === "preview" ? (
-          <VersionPreview skillId={skill.id} version={view.version} />
+          <VersionPreview skillId={skillId} version={view.version} />
         ) : (
           <Text>{t("confirmDescription")}</Text>
         )}
@@ -463,7 +459,7 @@ export default function SkillVersions({
           </Button>
           {view.kind === "confirm" && (
             <Button
-              disabled={pending || restoreDisabled}
+              disabled={pending || props.restoreDisabled}
               onClick={() => void restore(view.version)}
             >
               {t(pending ? "restoring" : "restore")}
@@ -474,7 +470,7 @@ export default function SkillVersions({
     );
   return (
     <Section height="auto" alignItems="stretch" gap={3}>
-      {!skill.marketplace && restoreDisabled && (
+      {canRestore && props.restoreDisabled && (
         <Text role="status">{t("saveBeforeRestore")}</Text>
       )}
       <Text
