@@ -6367,6 +6367,34 @@
           "name": "Basique",
           "description": "Groupe par défaut pour tous les utilisateurs avec des autorisations de base."
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {Aucun Skill ne suit cette marketplace} one {# Skill suit cette marketplace} other {# Skills suivent cette marketplace}}"
+        },
+        "skill": {
+          "fromMarketplace": "De {marketplace}"
+        },
+        "select": {
+          "label": "Paramètre d’installation de {name}"
+        },
+        "option": {
+          "inherit": "Paramètre de l’entreprise ({policy})",
+          "inheritDescription": "Suivre le paramètre de l’entreprise, même s’il change."
+        },
+        "status": {
+          "inherited": "Ce groupe suit le paramètre de l’entreprise : {policy}.",
+          "overridden": "Ce groupe utilise {policy} à la place du paramètre de l’entreprise, {company}.",
+          "readOnly": "Vous pouvez voir ce paramètre, mais pas le modifier. Vous pouvez modifier uniquement les Skills et marketplaces privés partagés seulement avec les groupes que vous gérez.",
+          "saving": "Enregistrement…",
+          "saved": "Enregistré.",
+          "failed": "{choice} n’est pas enregistré. {reason}",
+          "failedReason": "Réessayez."
+        },
+        "retry": {
+          "button": "Réessayer",
+          "label": "Réessayer le paramètre de {name}"
+        }
       }
     },
     "hooks": {

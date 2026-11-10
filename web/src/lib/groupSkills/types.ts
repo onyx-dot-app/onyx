@@ -1,4 +1,8 @@
 import * as yup from "yup";
+import {
+  SKILL_INSTALLATION_POLICIES,
+  type SkillInstallationPolicy,
+} from "@/lib/skills/types";
 
 // Matches UserGroupSkills in ee/onyx/server/user_group/models.py.
 const identifier = yup.string().uuid().defined();
@@ -7,15 +11,11 @@ const sharePermission = yup
   .oneOf(["VIEWER", "EDITOR"])
   .defined();
 
-export type GroupInstallationPolicy =
-  | "AVAILABLE"
-  | "DEFAULT"
-  | "REQUIRED"
-  | "NOT_AVAILABLE";
+export type GroupInstallationPolicy = SkillInstallationPolicy;
 
 const installationPolicy = yup
   .string<GroupInstallationPolicy>()
-  .oneOf(["AVAILABLE", "DEFAULT", "REQUIRED", "NOT_AVAILABLE"])
+  .oneOf(SKILL_INSTALLATION_POLICIES)
   .defined();
 
 const settingFields = {

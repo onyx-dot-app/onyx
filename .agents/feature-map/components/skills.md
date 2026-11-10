@@ -916,6 +916,10 @@ still propagate unexpected storage errors.
     after an authorization or not-found response. Only an authorized response
     restores rows, including after a transient failure or remount. A delayed PUT
     cannot replace a cached denial or write into a different group after navigation.
+    `GroupSkillSettingRow` uses shared policy choices, saves one override at a time,
+    and keeps failed choices for retry. The saving guard blocks duplicate writes
+    without disabling the focused select. Read-only rows follow `can_edit`.
+    Dropdown width stays inside the available viewport, including at enlarged text.
 
 
 ---

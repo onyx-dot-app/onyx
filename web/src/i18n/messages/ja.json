@@ -6367,6 +6367,34 @@
           "name": "基本",
           "description": "基本権限を持つ全ユーザーのデフォルトグループ。"
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {このマーケットプレイスに従うスキルはありません} other {#件のスキルがこのマーケットプレイスに従っています}}"
+        },
+        "skill": {
+          "fromMarketplace": "{marketplace} から"
+        },
+        "select": {
+          "label": "{name} のインストール設定"
+        },
+        "option": {
+          "inherit": "会社の設定（{policy}）",
+          "inheritDescription": "会社の設定に従います。会社の設定が変わった場合も従います。"
+        },
+        "status": {
+          "inherited": "このグループは会社の設定に従っています: {policy}。",
+          "overridden": "このグループは会社の設定（{company}）の代わりに {policy} を使用しています。",
+          "readOnly": "この設定は表示できますが、変更できません。変更できるのは、管理しているグループとのみ共有されている非公開のスキルとマーケットプレイスだけです。",
+          "saving": "保存中…",
+          "saved": "保存しました。",
+          "failed": "{choice} は保存されていません。{reason}",
+          "failedReason": "もう一度お試しください。"
+        },
+        "retry": {
+          "button": "再試行",
+          "label": "{name} の設定を再試行"
+        }
       }
     },
     "hooks": {

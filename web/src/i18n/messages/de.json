@@ -6367,6 +6367,34 @@
           "name": "Basis",
           "description": "Standardgruppe für alle Benutzer mit Basisberechtigungen."
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {Keine Skills folgen diesem Marketplace} one {# Skill folgt diesem Marketplace} other {# Skills folgen diesem Marketplace}}"
+        },
+        "skill": {
+          "fromMarketplace": "Aus {marketplace}"
+        },
+        "select": {
+          "label": "Installationseinstellung für {name}"
+        },
+        "option": {
+          "inherit": "Unternehmenseinstellung ({policy})",
+          "inheritDescription": "Der Unternehmenseinstellung folgen, auch wenn sie sich ändert."
+        },
+        "status": {
+          "inherited": "Diese Gruppe folgt der Unternehmenseinstellung: {policy}.",
+          "overridden": "Diese Gruppe verwendet {policy} anstelle der Unternehmenseinstellung {company}.",
+          "readOnly": "Sie können diese Einstellung sehen, aber nicht ändern. Sie können nur private Skills und Marketplaces ändern, die nur mit von Ihnen verwalteten Gruppen geteilt sind.",
+          "saving": "Wird gespeichert…",
+          "saved": "Gespeichert.",
+          "failed": "{choice} ist nicht gespeichert. {reason}",
+          "failedReason": "Versuchen Sie es erneut."
+        },
+        "retry": {
+          "button": "Erneut versuchen",
+          "label": "Einstellung für {name} erneut versuchen"
+        }
       }
     },
     "hooks": {
