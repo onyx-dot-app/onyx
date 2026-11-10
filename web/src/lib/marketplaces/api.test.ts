@@ -89,6 +89,22 @@ test.each(["AVAILABLE", "NOT_AVAILABLE"] as const)(
   }
 );
 
+test("reads Not available defaults and group overrides", async () => {
+  const row = {
+    ...marketplace,
+    installation_policy: "NOT_AVAILABLE",
+    group_shares: [
+      {
+        user_group_id: 7,
+        permission: "VIEWER",
+        installation_policy: "NOT_AVAILABLE",
+      },
+    ],
+  } satisfies Marketplace;
+  jest.spyOn(global, "fetch").mockResolvedValueOnce(Response.json([row]));
+  await expect(listMarketplaces()).resolves.toEqual([row]);
+});
+
 test("preserves every preview outcome without treating blocked entries as ready", async () => {
   const preview = {
     status: "complete",

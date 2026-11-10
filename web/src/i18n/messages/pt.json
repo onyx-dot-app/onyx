@@ -17275,7 +17275,9 @@
           "availableDescription": "Os usuários podem instalar ou desinstalar a qualquer momento.",
           "defaultDescription": "Instalado automaticamente. Os usuários podem desativar ou desinstalar a qualquer momento.",
           "requiredDescription": "Instalado automaticamente. Os usuários não podem desativar nem desinstalar.",
-          "description": "Escolha como esta habilidade é instalada para quem tem acesso."
+          "description": "Escolha como esta habilidade é instalada para quem tem acesso.",
+          "notAvailable": "Não disponível",
+          "notAvailableDescription": "Oculta na biblioteca e para o agente, a menos que uma configuração de grupo a torne disponível. Proprietários e pessoas com compartilhamento direto ainda a veem."
         },
         "description": "Escolha quem pode usar esta habilidade e como ela é instalada.",
         "accessTitle": "Quem pode acessar",
@@ -17332,7 +17334,8 @@
       "empty": {
         "noMatches": {
           "description": "Tente uma pesquisa diferente.",
-          "title": "Nenhuma habilidade correspondente"
+          "title": "Nenhuma habilidade correspondente",
+          "groupDescription": "Nenhuma habilidade deste grupo corresponde. Tente outro grupo ou outra pesquisa."
         },
         "noSkills": {
           "title": "Ainda não há habilidades personalizadas",
@@ -17504,6 +17507,17 @@
       "loadOlderCompact": "Anteriores",
       "files": "Arquivos",
       "noFiles": "Nenhum arquivo adicional."
+    },
+    "groups": {
+      "columnTitle": "Grupos",
+      "marketplace": "Marketplace",
+      "marketplacePolicy": "{policy} · Marketplace",
+      "more": "{count, plural, one {+# outro grupo} other {+# outros grupos}}",
+      "compact": "{count, plural, one {Grupo: {names}} other {Grupos: {names}}}",
+      "filter": {
+        "placeholder": "Filtrar por grupo",
+        "all": "Todos os grupos"
+      }
     }
   },
   "opensearchHealth": {

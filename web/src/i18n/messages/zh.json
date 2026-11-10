@@ -17275,7 +17275,9 @@
           "availableDescription": "用户可以随时安装或卸载。",
           "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
           "requiredDescription": "自动安装。用户无法禁用或卸载。",
-          "description": "选择此技能对所有有访问权限的用户的安装方式。"
+          "description": "选择此技能对所有有访问权限的用户的安装方式。",
+          "notAvailable": "不可用",
+          "notAvailableDescription": "除非群组设置允许使用，否则在技能库和代理中隐藏。所有者和直接共享的用户仍可看到。"
         },
         "description": "选择谁可以使用此技能及其安装方式。",
         "accessTitle": "谁可以访问",
@@ -17332,7 +17334,8 @@
       "empty": {
         "noMatches": {
           "description": "请尝试其他搜索。",
-          "title": "没有匹配的技能"
+          "title": "没有匹配的技能",
+          "groupDescription": "此群组中没有匹配的技能。请尝试其他群组或搜索。"
         },
         "noSkills": {
           "title": "暂无自定义技能",
@@ -17504,6 +17507,17 @@
       "loadOlderCompact": "更早版本",
       "files": "文件",
       "noFiles": "没有其他文件。"
+    },
+    "groups": {
+      "columnTitle": "群组",
+      "marketplace": "市场",
+      "marketplacePolicy": "{policy} · 市场",
+      "more": "{count, plural, other {另外 # 个群组}}",
+      "compact": "{count, plural, other {群组：{names}}}",
+      "filter": {
+        "placeholder": "按群组筛选",
+        "all": "所有群组"
+      }
     }
   },
   "opensearchHealth": {

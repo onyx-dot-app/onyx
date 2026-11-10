@@ -17275,7 +17275,9 @@
           "availableDescription": "사용자는 언제든지 설치하거나 제거할 수 있습니다.",
           "defaultDescription": "자동으로 설치됩니다. 사용자는 언제든지 비활성화하거나 제거할 수 있습니다.",
           "requiredDescription": "자동으로 설치됩니다. 사용자는 비활성화하거나 제거할 수 없습니다.",
-          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요."
+          "description": "액세스 권한이 있는 모든 사용자의 스킬 설치 방법을 선택하세요.",
+          "notAvailable": "사용 불가",
+          "notAvailableDescription": "그룹 설정에서 사용을 허용하지 않는 한 라이브러리와 에이전트에서 숨겨집니다. 소유자와 직접 공유받은 사용자는 계속 볼 수 있습니다."
         },
         "description": "이 스킬을 사용할 수 있는 사용자와 설치 방법을 선택하세요.",
         "accessTitle": "액세스 범위",
@@ -17332,7 +17334,8 @@
       "empty": {
         "noMatches": {
           "description": "다른 검색어를 사용해 보세요.",
-          "title": "일치하는 스킬 없음"
+          "title": "일치하는 스킬 없음",
+          "groupDescription": "이 그룹에서 일치하는 스킬이 없습니다. 다른 그룹이나 검색어를 사용해 보세요."
         },
         "noSkills": {
           "title": "아직 사용자 지정 스킬이 없습니다",
@@ -17504,6 +17507,17 @@
       "loadOlderCompact": "이전 버전",
       "files": "파일",
       "noFiles": "추가 파일이 없습니다."
+    },
+    "groups": {
+      "columnTitle": "그룹",
+      "marketplace": "마켓플레이스",
+      "marketplacePolicy": "{policy} · 마켓플레이스",
+      "more": "{count, plural, other {그룹 #개 더 보기}}",
+      "compact": "{count, plural, other {그룹: {names}}}",
+      "filter": {
+        "placeholder": "그룹으로 필터링",
+        "all": "모든 그룹"
+      }
     }
   },
   "opensearchHealth": {
