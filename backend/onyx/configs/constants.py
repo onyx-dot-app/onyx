@@ -159,6 +159,30 @@ def lock_timeout_from_env(name: str, default: int, minimum: int = 1) -> int:
     return default
 
 
+def positive_int_from_env(name: str, default: int) -> int | None:
+    """A positive integer that an operator may set through the env.
+
+    Unset or empty is ``default``. Any other value that is not a positive
+    integer logs an error and returns ``None``, so the caller disables the
+    feature that needs it instead of failing at import."""
+    raw: str | None = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if value > 0:
+        return value
+    logging.getLogger(__name__).error(
+        "Ignoring invalid %s=%r (must be a positive integer); "
+        "the features that need it are disabled.",
+        name,
+        raw,
+    )
+    return None
+
+
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 # Beat lock for one document-index sync pass, reacquired every quarter of its

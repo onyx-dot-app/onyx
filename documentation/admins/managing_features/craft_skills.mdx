@@ -132,11 +132,39 @@ Craft skips that Skill and logs a warning. The saved bundle stays unchanged. Oth
 | Slug                | Generated from the Skill name when written in Onyx or uploaded as `SKILL.md`; otherwise, the folder name or ZIP filename without `.zip`.     |
 | Root instructions   | One UTF-8 `SKILL.md` with valid YAML frontmatter at the Skill root.                                                                         |
 | Skills per ZIP      | One. Select multiple ZIP files to import a batch.                                                                                            |
-| Maximum file size   | 25 MB per file in the extracted bundle.                                                                                                     |
-| Maximum bundle size | 100 MB total.                                                                                                                               |
+| Maximum ZIP size    | 25 MiB for the ZIP file.                                                                                                                     |
+| Maximum file count  | 500 files. Folders do not count.                                                                                                            |
+| Maximum file size   | 25 MiB per file in the extracted bundle.                                                                                                     |
+| Maximum bundle size | 100 MiB total in the extracted bundle.                                                                                                       |
 
-Self-hosted operators can change the size limits with `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and
-`SKILL_BUNDLE_TOTAL_MAX_BYTES`.
+Onyx checks each limit separately and counts the bytes that it extracts.
+The file count includes metadata that Onyx removes: `__MACOSX/`, `.DS_Store`, `Thumbs.db`, and `._*` files.
+Folders do not count. The ZIP limit applies to both the uploaded ZIP and the ZIP that Onyx stores after normalization.
+Standalone files use the per-file limit before compression.
+Each Skill from a GitHub repository must also pass these limits.
+Single-bundle uploads over a limit return HTTP 413 with `limit` and `limit_value`.
+Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `not_imported`,
+with a `reason` for each refusal.
+Repository-wide GitHub size checks can reject the whole request with HTTP 413 before individual Skills are inspected.
+Previously saved Skills keep the existing per-file and expanded-total limits.
+Lowering the upload ZIP-size or file-count limit does not change stored-bundle validation.
+Stored ZIP reads have a separate allowance, set by `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. By default,
+the allowance is the larger of 100 MiB and the expanded-total limit, plus space for ZIP overhead.
+Keep this allowance large enough for your existing bundles when you lower upload limits.
+If you previously allowed ZIPs above this default, set this allowance before upgrading.
+Onyx applies the limits when you save the Skill again.
+
+Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,
+`SKILL_BUNDLE_PER_FILE_MAX_BYTES` and `SKILL_BUNDLE_TOTAL_MAX_BYTES`. If your reverse proxy sets a request size limit,
+allow space for the bundle and multipart form data.
+The effective upload ZIP limit cannot exceed the stored ZIP allowance. To accept larger ZIPs,
+raise both `SKILL_BUNDLE_ZIP_MAX_BYTES` and `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`.
+Each of these five settings must be a positive integer. If a setting has a different value,
+Onyx logs an error and disables custom Skill bundles until you correct the value. Single-bundle uploads, edits,
+GitHub previews and imports, and stored-bundle reads return HTTP 503.
+Batch uploads return HTTP 200 with each Skill in `not_imported`.
+Sandboxes skip custom Skills while a limit is invalid or a stored ZIP exceeds its allowance.
+They load these Skills again after you correct the settings.
 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
