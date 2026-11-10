@@ -11,6 +11,8 @@ func TestObsFlagsCheck(t *testing.T) {
 		"defaults off":      {ok, true},
 		"metrics":           {obsFlags{metricsListen: ":9464", guestLogRate: 1, guestLogBurst: 1, guestLogNode: 1}, true},
 		"shipping off":      {obsFlags{guestLogBurst: 1, guestLogNode: 1}, true},
+		"metrics token":     {obsFlags{metricsListen: ":9464", metricsToken: "/t", guestLogRate: 1, guestLogBurst: 1, guestLogNode: 1}, true},
+		"token and no auth": {obsFlags{metricsToken: "/t", metricsNoAuth: true, guestLogRate: 1, guestLogBurst: 1, guestLogNode: 1}, false},
 		"bad address":       {obsFlags{metricsListen: "9464", guestLogRate: 1, guestLogBurst: 1, guestLogNode: 1}, false},
 		"negative rate":     {obsFlags{guestLogRate: -1, guestLogBurst: 1, guestLogNode: 1}, false},
 		"zero node budget":  {obsFlags{guestLogRate: 1, guestLogBurst: 1}, false},

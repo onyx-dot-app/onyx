@@ -281,9 +281,17 @@ start-up and does not start without it.
 To scrape the agent metrics, set `craft.hostAgent.metrics.enabled: true`
 (port `craft.hostAgent.metrics.port`, default 9464). With
 `monitoring.serviceMonitors.enabled: true`, the chart also makes a
-ServiceMonitor in the agent namespace. The metrics port has no auth. Limit
-who reaches it with `craft.hostAgent.metrics.networkPolicyFrom` (empty: any
-source). The agent writes each VM's serial console and Firecracker log to its
+ServiceMonitor in the agent namespace. Auth follows the API server `/metrics`:
+with `auth.metricsAuth.enabled`, the agent requires the same bearer token and
+the ServiceMonitor sends it. The chart copies `auth.metricsAuth.values` into
+the agent namespace, because Secrets are namespaced. If `auth.metricsAuth`
+uses `existingSecret`, create a Secret with the same key in the agent
+namespace and set `craft.hostAgent.metrics.authExistingSecret`. With
+`configMap.DISABLE_METRICS_AUTH: "true"` the agent has no auth. With neither,
+every scrape gets 401. The NetworkPolicy lets only Prometheus Operator pods
+(`app.kubernetes.io/name: prometheus`) in the release namespace reach the
+port. If Prometheus runs in another namespace, set
+`craft.hostAgent.metrics.networkPolicyFrom`. The agent writes each VM's serial console and Firecracker log to its
 stdout as JSON lines (`kind=guest_log`), and an audit line for every API call
 to stderr (`kind=audit`), so the cluster log pipeline collects both.
 

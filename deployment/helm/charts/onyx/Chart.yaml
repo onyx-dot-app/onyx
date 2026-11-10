@@ -22,8 +22,9 @@ annotations:
   artifacthub.io/changes: |
     - kind: added
       description: Craft Firecracker host agent (off by default) can expose
-        Prometheus metrics with craft.hostAgent.metrics, and a ServiceMonitor
-        with monitoring.serviceMonitors.enabled.
+        Prometheus metrics with craft.hostAgent.metrics, behind the
+        auth.metricsAuth token, and a ServiceMonitor with
+        monitoring.serviceMonitors.enabled.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

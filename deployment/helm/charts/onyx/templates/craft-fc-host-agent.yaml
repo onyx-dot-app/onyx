@@ -28,7 +28,12 @@ Agent flags and node requirements: microvm/README.md.
   Node has a drain taint. Off: no ServiceAccount token in the pod.
 - craft.hostAgent.metrics.enabled adds a plain HTTP /metrics port
   (--metrics-listen); the ServiceMonitor is in
-  craft-fc-host-agent-servicemonitor.yaml.
+  craft-fc-host-agent-servicemonitor.yaml. /metrics uses the api_server
+  /metrics auth: the auth.metricsAuth bearer token (the chart copies it into
+  the agent namespace, or craft.hostAgent.metrics.authExistingSecret), or
+  none with configMap.DISABLE_METRICS_AUTH=true. With neither, every scrape
+  gets 401. The agent reads the token file on each scrape, so a rotated
+  Secret applies without a restart.
 */}}
 {{- $craft := .Values.craft | default dict }}
 {{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
@@ -73,6 +78,14 @@ Agent flags and node requirements: microvm/README.md.
 {{- $tolerations := $agent.tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $metricsPort := $metrics.port | default 9464 }}
+{{- $metricsAuthMode := include "onyx.craftHostAgentMetricsAuth" . }}
+{{- $metricsToken := and $metrics.enabled (eq $metricsAuthMode "token") }}
+{{- $metricsKey := include "onyx.craftHostAgentMetricsKey" . }}
+{{- $metricsAuth := (.Values.auth | default dict).metricsAuth | default dict }}
+{{- $metricsValue := dig "values" $metricsKey "" $metricsAuth }}
+{{- if and $metricsToken (not $metrics.authExistingSecret) (or $metricsAuth.existingSecret (not $metricsValue)) }}
+{{- fail "craft.hostAgent.metrics.authExistingSecret is required when auth.metricsAuth uses existingSecret or has no value" }}
+{{- end }}
 {{- if ne (toString $agent.createNamespace) "false" }}
 apiVersion: v1
 kind: Namespace
@@ -139,6 +152,20 @@ subjects:
   - kind: ServiceAccount
     name: {{ $name }}
     namespace: {{ $ns }}
+---
+{{- end }}
+{{- if and $metricsToken (not $metrics.authExistingSecret) }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "onyx.craftHostAgentMetricsSecret" . }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+type: Opaque
+stringData:
+  {{ $metricsKey }}: {{ $metricsValue | quote }}
 ---
 {{- end }}
 apiVersion: apps/v1
@@ -217,6 +244,11 @@ spec:
             {{- end }}
             {{- if $metrics.enabled }}
             - --metrics-listen=:{{ $metricsPort }}
+            {{- if eq $metricsAuthMode "disabled" }}
+            - --metrics-auth-disabled
+            {{- else if $metricsToken }}
+            - --metrics-token-file=/etc/craft-fc/metrics-auth/{{ $metricsKey }}
+            {{- end }}
             {{- end }}
             {{- range $agent.extraArgs }}
             - {{ . | quote }}
@@ -262,6 +294,12 @@ spec:
             - name: tls
               mountPath: /etc/craft-fc/tls
               readOnly: true
+            {{- if $metricsToken }}
+            {{- /* No subPath: the kubelet updates the file when the Secret changes. */}}
+            - name: metrics-auth
+              mountPath: /etc/craft-fc/metrics-auth
+              readOnly: true
+            {{- end }}
       volumes:
         - name: data
           hostPath:
@@ -275,6 +313,12 @@ spec:
           secret:
             secretName: {{ $tls.existingSecret }}
             defaultMode: 0400
+        {{- if $metricsToken }}
+        - name: metrics-auth
+          secret:
+            secretName: {{ include "onyx.craftHostAgentMetricsSecret" . }}
+            defaultMode: 0400
+        {{- end }}
 ---
 {{- /* Headless: the api_server reaches the agent on a node by its pod IP. */}}
 apiVersion: v1
@@ -330,13 +374,21 @@ spec:
         - protocol: TCP
           port: {{ $port }}
     {{- if $metrics.enabled }}
-    {{- /* No from: any source may scrape, unless networkPolicyFrom is set. */}}
-    - ports:
+    {{- /* Default: Prometheus Operator pods (the ServiceMonitor scrapers) in
+    the release namespace, where kube-prometheus-stack runs next to Onyx. */}}
+    - from:
+        {{- with $metrics.networkPolicyFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- else }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+        {{- end }}
+      ports:
         - protocol: TCP
           port: {{ $metricsPort }}
-      {{- with $metrics.networkPolicyFrom }}
-      from:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
     {{- end }}
 {{- end }}

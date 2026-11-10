@@ -305,6 +305,37 @@ true
 {{- end }}
 
 {{/*
+Craft Firecracker host agent /metrics auth, the same rules as the api_server
+/metrics: "disabled" with configMap.DISABLE_METRICS_AUTH=true, "token" with
+auth.metricsAuth.enabled, else "locked" (every scrape gets 401).
+*/}}
+{{- define "onyx.craftHostAgentMetricsAuth" -}}
+{{- $metricsAuth := (.Values.auth | default dict).metricsAuth | default dict -}}
+{{- if eq (lower (toString ((.Values.configMap | default dict).DISABLE_METRICS_AUTH | default ""))) "true" -}}
+disabled
+{{- else if dig "enabled" false $metricsAuth -}}
+token
+{{- else -}}
+locked
+{{- end -}}
+{{- end }}
+
+{{/*
+Key of the metrics token in auth.metricsAuth's Secret; the agent namespace
+copy uses the same key.
+*/}}
+{{- define "onyx.craftHostAgentMetricsKey" -}}
+{{- default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" ((.Values.auth | default dict).metricsAuth | default dict)) -}}
+{{- end }}
+
+{{/*
+Secret with the metrics token in the agent namespace (Secrets are namespaced).
+*/}}
+{{- define "onyx.craftHostAgentMetricsSecret" -}}
+{{- (dig "hostAgent" "metrics" "authExistingSecret" "" (.Values.craft | default dict)) | default (printf "%s-metrics-auth" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end }}
+
+{{/*
 Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
 and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods
 actually use if both resolve to the identical reference, and a drift here is

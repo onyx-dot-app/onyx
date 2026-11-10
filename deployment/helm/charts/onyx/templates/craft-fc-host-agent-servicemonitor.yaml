@@ -1,7 +1,8 @@
 {{- /* ServiceMonitor for the Craft Firecracker host agent metrics (ENG-4570).
 Needs craft.sandboxRuntime=firecracker, craft.hostAgent.metrics.enabled and
-monitoring.serviceMonitors.enabled. The agent serves /metrics without auth;
-the host agent NetworkPolicy limits who reaches the port. */}}
+monitoring.serviceMonitors.enabled. Same auth as the api_server
+ServiceMonitor: with auth.metricsAuth, Prometheus sends the token from the
+agent namespace copy (craft-fc-host-agent.yaml). */}}
 {{- $agent := (.Values.craft | default dict).hostAgent | default dict }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- if and (eq (include "onyx.craftSandboxRuntime" .) "firecracker") $metrics.enabled .Values.monitoring.serviceMonitors.enabled }}
@@ -33,4 +34,10 @@ spec:
       relabelings:
         - sourceLabels: [__meta_kubernetes_pod_node_name]
           targetLabel: node
+      {{- if eq (include "onyx.craftHostAgentMetricsAuth" .) "token" }}
+      authorization:
+        credentials:
+          name: {{ include "onyx.craftHostAgentMetricsSecret" . }}
+          key: {{ include "onyx.craftHostAgentMetricsKey" . }}
+      {{- end }}
 {{- end }}

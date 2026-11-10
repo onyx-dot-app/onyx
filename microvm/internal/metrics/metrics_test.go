@@ -162,7 +162,7 @@ func TestHandlerServesText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(m.Server("").Handler)
+	srv := httptest.NewServer(m.Server("", BearerAuth{Disabled: true}).Handler)
 	defer srv.Close()
 	resp, err := srv.Client().Get(srv.URL + "/metrics")
 	if err != nil {

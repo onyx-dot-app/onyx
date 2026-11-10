@@ -118,10 +118,10 @@ func (m *Metrics) Handler() http.Handler {
 	return promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{Registry: m.reg})
 }
 
-// Server returns an HTTP server for /metrics on addr.
-func (m *Metrics) Server(addr string) *http.Server {
+// Server returns an HTTP server for /metrics on addr, behind auth.
+func (m *Metrics) Server(addr string, auth BearerAuth) *http.Server {
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", m.Handler())
+	mux.Handle("/metrics", auth.Wrap(m.Handler()))
 	return &http.Server{
 		Addr: addr, Handler: mux,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second,

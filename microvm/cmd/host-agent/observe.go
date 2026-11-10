@@ -24,6 +24,8 @@ import (
 // obsFlags are the metrics, audit and guest log flags (ENG-4570).
 type obsFlags struct {
 	metricsListen string
+	metricsToken  string
+	metricsNoAuth bool
 	guestLogRate  int
 	guestLogBurst int
 	guestLogNode  int
@@ -32,6 +34,8 @@ type obsFlags struct {
 
 func (o *obsFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&o.metricsListen, "metrics-listen", "", "plain HTTP address for Prometheus /metrics (for example :9464); empty: off")
+	fs.StringVar(&o.metricsToken, "metrics-token-file", "", "file with the bearer token that /metrics requires (the Onyx METRICS_AUTH_TOKEN), read on each scrape; with no token every scrape gets 401")
+	fs.BoolVar(&o.metricsNoAuth, "metrics-auth-disabled", false, "serve /metrics with no auth (like DISABLE_METRICS_AUTH)")
 	fs.IntVar(&o.guestLogRate, "guest-log-rate", guestlog.DefaultVMRate, "bytes per second of serial console and Firecracker log shipped to stdout per VM; 0 turns shipping off")
 	fs.IntVar(&o.guestLogBurst, "guest-log-burst", guestlog.DefaultVMBurst, "guest log burst per VM, in bytes")
 	fs.IntVar(&o.guestLogNode, "guest-log-node-rate", guestlog.DefaultNodeRate, "guest log bytes per second for the whole node")
@@ -41,6 +45,9 @@ func (o *obsFlags) register(fs *flag.FlagSet) {
 func (o obsFlags) check() error {
 	if o.guestLogRate < 0 || o.guestLogBurst < 1 || o.guestLogNode < 1 || o.guestLogMax < 0 {
 		return errors.New("--guest-log-rate and --guest-log-max-file-bytes must be 0 or more, --guest-log-burst and --guest-log-node-rate 1 or more")
+	}
+	if o.metricsToken != "" && o.metricsNoAuth {
+		return errors.New("--metrics-token-file and --metrics-auth-disabled exclude each other")
 	}
 	if o.metricsListen != "" {
 		if _, _, err := net.SplitHostPort(o.metricsListen); err != nil {
@@ -116,7 +123,10 @@ func (o *observability) start(ctx context.Context, svc *server.Service) error {
 	if err != nil {
 		return fmt.Errorf("--metrics-listen: %w", err)
 	}
-	srv := o.metrics.Server(o.f.metricsListen)
+	if !o.f.metricsNoAuth && o.f.metricsToken == "" {
+		o.log.Warn("/metrics has no token: every scrape gets 401; set --metrics-token-file or --metrics-auth-disabled")
+	}
+	srv := o.metrics.Server(o.f.metricsListen, metrics.BearerAuth{TokenFile: o.f.metricsToken, Disabled: o.f.metricsNoAuth})
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			o.log.Error("metrics listener", "err", err)

@@ -238,7 +238,11 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 ### Metrics, guest logs and audit
 
 - **Metrics (ENG-4570).** `--metrics-listen` (for example `:9464`, default off) serves Prometheus
-  `/metrics` over plain HTTP, without auth. The VM table, node memory, allocated memory, open relay
+  `/metrics` over plain HTTP. Auth is the same as the api_server `/metrics`
+  (`backend/onyx/server/metrics/metrics_auth.py`): scrapers send `Authorization: Bearer <token>`, where
+  `--metrics-token-file` holds the Onyx `METRICS_AUTH_TOKEN`. The agent reads the file on each scrape,
+  so a rotated Secret applies without a restart. With no token (no flag, or a missing or empty file)
+  every scrape gets 401. `--metrics-auth-disabled` (like `DISABLE_METRICS_AUTH=true`) removes auth. The VM table, node memory, allocated memory, open relay
   connections and open Dial streams are read at scrape time, in one pass, like the observable gauges of
   E2B's orchestrator (`e2b-dev/infra`, Apache-2.0). No metric has a sandbox or tenant label.
 
