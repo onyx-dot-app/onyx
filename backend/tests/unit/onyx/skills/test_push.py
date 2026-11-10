@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from onyx.db.models import Skill, SkillVersion, User
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
+from onyx.skills.built_in import BuiltInSkillDefinition
 
 
 def _bundle(name: str, *, wrapper: str | None = None) -> bytes:
@@ -268,6 +270,7 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
     list_runtime_skills.assert_called_once_with(
         user=user,
         db_session=db_session,
+        include_fallbacks=True,
     )
     assemble_fileset.assert_called_once_with(
         [valid_skill, invalid_skill],
@@ -315,3 +318,47 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
     assert validity_updates[0].is_valid is True
     file_store.save_file.assert_not_called()
     assert output.getvalue() == stored
+
+
+@pytest.mark.parametrize("failure", ["read", "render", "missing_instructions"])
+def test_assemble_discards_partial_builtin_before_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
+) -> None:
+    definition = BuiltInSkillDefinition(built_in_skill_id="test-builtin")
+    source = tmp_path / definition.built_in_skill_id
+    source.mkdir()
+    (source / "orphan.txt").write_bytes(b"Must not reach the fallback")
+    if failure == "render":
+        (source / "SKILL.md.template").write_text("Template")
+    elif failure == "read":
+        (source / "SKILL.md").write_bytes(b"Partial instructions")
+        original_read = Path.read_bytes
+
+        def read(path: Path) -> bytes:
+            if path.name == "orphan.txt":
+                raise OSError("file became unreadable")
+            return original_read(path)
+
+        monkeypatch.setattr(Path, "read_bytes", read)
+    monkeypatch.setattr("onyx.skills.built_in.BUILTIN_SKILLS_PATH", tmp_path)
+    monkeypatch.setitem(push.BUILT_IN_SKILLS, definition.built_in_skill_id, definition)
+    monkeypatch.setattr(
+        push, "_render_template", MagicMock(side_effect=ValueError("render failed"))
+    )
+    preferred = Skill(
+        id=uuid4(),
+        name="canonical-name",
+        built_in_skill_id=definition.built_in_skill_id,
+    )
+    store = MagicMock(spec=FileStore)
+    store.read_file.return_value = io.BytesIO(_bundle("canonical-name"))
+    monkeypatch.setattr(push, "get_default_file_store", lambda: store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    files = push._assemble_fileset(
+        [preferred, _skill(is_valid=True), _skill(is_valid=True)],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+    assert set(files) == {"canonical-name/SKILL.md", "canonical-name/scripts/run.py"}
+    assert files["canonical-name/SKILL.md"].endswith(b"Body\n")
+    store.read_file.assert_called_once()

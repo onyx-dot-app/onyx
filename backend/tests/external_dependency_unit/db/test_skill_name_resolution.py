@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillInstallationPolicy as Policy
 from onyx.db.models import Marketplace, Skill, Skill__User, UserSkillPreference
+from onyx.db.resource_version import write_resource_version
 from onyx.db.skill import (
     SkillManagementPolicy,
     list_runtime_skills_for_user,
@@ -24,7 +25,7 @@ from onyx.db.skill import (
     set_skill_enabled_for_user,
     skill_user_states,
 )
-from onyx.db.skill_version import repair_skill_version
+from onyx.db.skill_version import SkillVersionAdapter
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -154,8 +155,9 @@ def test_group_duplicates_push_one_complete_bundle(
 @pytest.mark.parametrize(
     "reason", ["off", "invalid", "missing_version", "app", "retired", "not_available"]
 )
+@pytest.mark.parametrize("include_fallbacks", [False, True])
 def test_unusable_company_skill_does_not_hide_own(
-    db_session: Session, reason: str
+    db_session: Session, reason: str, include_fallbacks: bool
 ) -> None:
     user = make_user(db_session, standard_account=True)
     company = make_skill(db_session, is_public=True)
@@ -181,7 +183,9 @@ def test_unusable_company_skill_does_not_hide_own(
     else:
         company.installation_policy = Policy.NOT_AVAILABLE
     db_session.flush()
-    runtime = list_runtime_skills_for_user(user=user, db_session=db_session)
+    runtime = list_runtime_skills_for_user(
+        user=user, db_session=db_session, include_fallbacks=include_fallbacks
+    )
     assert {row.id for row in runtime if row.name == company.name} == {own.id}
 
 
@@ -335,10 +339,15 @@ def test_company_default_hides_but_preserves_explicit_own_choice(
 
 
 def _publish(session: Session, skill: Skill, bundle_file_id: str) -> None:
-    skill.bundle_file_id = bundle_file_id
-    skill.is_valid = True
-    session.flush()
-    repair_skill_version(skill, session)
+    write_resource_version(
+        SkillVersionAdapter(skill),
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=None,
+        is_valid=True,
+        metadata=None,
+        created_by_user_id=None,
+        db_session=session,
+    )
 
 
 def test_delivery_reads_the_version_its_access_check_saw(

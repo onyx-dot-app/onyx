@@ -14,6 +14,7 @@ from onyx.db.models import (
     ExternalApp,
     Marketplace,
     Skill,
+    SkillVersion,
     User,
     User__UserGroup,
 )
@@ -22,6 +23,7 @@ from onyx.db.skill import (
     create_skill_from_bundle__no_commit,
     create_skill_from_ingested_bundle,
 )
+from onyx.db.skill_version import save_skill_version
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import BundleMetadata
@@ -174,3 +176,30 @@ def test_concurrent_creation(
         )
         db_session.execute(delete(User).where(User.__table__.c.id.in_(owner_ids)))
         db_session.commit()
+
+
+def test_direct_version_writer_rejects_renaming(db_session: Session) -> None:
+    user = make_user(db_session, standard_account=True)
+    ingested = bundle(f"g3-{uuid4().hex}")
+    skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
+    version_id = skill.current_version_id
+    with (
+        pytest.raises(OnyxError, match="name cannot change"),
+        db_session.begin_nested(),
+    ):
+        save_skill_version(
+            skill,
+            ingested._replace(canonical_name="different-name"),
+            user.id,
+            db_session,
+            initial=True,
+        )
+    assert skill.current_version_id == version_id
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(SkillVersion)
+            .where(SkillVersion.skill_id == skill.id)
+        )
+        == 1
+    )

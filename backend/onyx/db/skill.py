@@ -556,11 +556,8 @@ def _runtime_name_winners(
     include_skill_id: UUID | None = None,
     required_only: bool = False,
     dependencies: Mapping[UUID, SkillExternalAppDependencyState] | None = None,
-) -> Select[tuple[UUID, UUID]]:
-    """Map each eligible skill to its name winner, including hidden duplicates.
-
-    An explicit enable can include one not-yet-enabled skill for conflict checks.
-    """
+) -> Select[tuple[UUID, UUID, int]]:
+    """Select each eligible skill, its name winner and its resolution position."""
     external_app_dependencies = (
         dependencies
         if dependencies is not None
@@ -579,13 +576,16 @@ def _runtime_name_winners(
         (library_owner == user.id, 1),
         else_=2,
     )
+    candidate_order = (priority, Skill.created_at, Skill.id)
     stmt = (
         select(
-            Skill.id,
-            func.first_value(Skill.id).over(
-                partition_by=Skill.name,
-                order_by=(priority, Skill.created_at, Skill.id),
-            ),
+            Skill.id.label("skill_id"),
+            func.first_value(Skill.id)
+            .over(partition_by=Skill.name, order_by=candidate_order)
+            .label("winner_id"),
+            func.row_number()
+            .over(order_by=(Skill.name, *candidate_order))
+            .label("position"),
         )
         .outerjoin(Skill.current_version)
         .outerjoin(Marketplace, Skill.marketplace_id == Marketplace.id)
@@ -620,31 +620,43 @@ def resolve_skill_runtime_names(
     required_only: bool = False,
     dependencies: Mapping[UUID, SkillExternalAppDependencyState] | None = None,
 ) -> dict[UUID, UUID]:
-    """Map each eligible skill to its name winner, including hidden duplicates."""
-    stmt = _runtime_name_winners(
+    """Map each eligible skill to its name winner, including hidden duplicates.
+
+    Entries follow name, library priority, creation time, then UUID order.
+    An explicit enable can include one not-yet-enabled skill for conflict checks.
+    """
+    winners = _runtime_name_winners(
         user,
         db_session,
         include_skill_id=include_skill_id,
         required_only=required_only,
         dependencies=dependencies,
+    ).subquery()
+    rows = db_session.execute(
+        select(winners.c.skill_id, winners.c.winner_id).order_by(winners.c.position)
     )
-    return dict(db_session.execute(stmt).tuples().all())
+    return dict(rows.tuples().all())
 
 
 def list_runtime_skills_for_user(
     *,
     db_session: Session,
     user: User,
+    include_fallbacks: bool = False,
 ) -> list[Skill]:
-    """Return one usable skill per name, in company/own/shared priority order."""
+    """Return database-known winners, or all ordered candidates for delivery.
+
+    Delivery can discover unreadable bundles; it must try the next candidate.
+    """
     # One statement, so a concurrent revoke cannot ship a version it did not check.
     winners = _runtime_name_winners(user, db_session).subquery()
-    skill_id, winner_id = winners.c
     stmt = (
-        _skill_select_with_eager_load(order_by_name=True)
-        .join(winners, skill_id == Skill.id)
-        .where(winner_id == Skill.id)
+        _skill_select_with_eager_load(order_by_name=False)
+        .join(winners, winners.c.skill_id == Skill.id)
+        .order_by(winners.c.position)
     )
+    if not include_fallbacks:
+        stmt = stmt.where(winners.c.winner_id == Skill.id)
     return list(db_session.scalars(stmt))
 
 

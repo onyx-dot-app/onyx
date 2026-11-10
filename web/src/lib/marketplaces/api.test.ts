@@ -48,35 +48,46 @@ const marketplace = {
 
 afterEach(() => jest.restoreAllMocks());
 
-test("reads source counts, blocked entries and retained skills", async () => {
-  const row = {
-    ...marketplace,
-    live_skill_count: 2,
-    retired_skill_count: 1,
-    blocked_entries: { "skills/broken": "Bundle exceeds the file limit" },
-  };
-  const detail = {
-    marketplace: row,
-    skills: [
-      {
-        id: skillId,
-        name: "retired-skill",
-        current_version_id: null,
-        retired_at: "2026-11-08T12:00:00Z",
-        follows_marketplace_access: true,
-      },
-    ],
-  };
-  // GET list, then GET detail.
-  const fetch = jest
-    .spyOn(global, "fetch")
-    .mockResolvedValueOnce(Response.json([row]))
-    .mockResolvedValueOnce(Response.json(detail));
-  await expect(listMarketplaces()).resolves.toEqual([row]);
-  await expect(getMarketplace(id)).resolves.toEqual(detail);
-  expect(fetch).toHaveBeenNthCalledWith(1, "/api/marketplaces");
-  expect(fetch).toHaveBeenNthCalledWith(2, `/api/marketplaces/${id}`);
-});
+test.each(["AVAILABLE"] as const)(
+  "reads %s source settings, counts and retained skills",
+  async (installation_policy) => {
+    const row = {
+      ...marketplace,
+      installation_policy,
+      group_shares: [
+        {
+          user_group_id: 7,
+          permission: "VIEWER",
+          installation_policy,
+        },
+      ],
+      live_skill_count: 2,
+      retired_skill_count: 1,
+      blocked_entries: { "skills/broken": "Bundle exceeds the file limit" },
+    };
+    const detail = {
+      marketplace: row,
+      skills: [
+        {
+          id: skillId,
+          name: "retired-skill",
+          current_version_id: null,
+          retired_at: "2026-11-08T12:00:00Z",
+          follows_marketplace_access: true,
+        },
+      ],
+    };
+    // GET list, then GET detail.
+    const fetch = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(Response.json([row]))
+      .mockResolvedValueOnce(Response.json(detail));
+    await expect(listMarketplaces()).resolves.toEqual([row]);
+    await expect(getMarketplace(id)).resolves.toEqual(detail);
+    expect(fetch).toHaveBeenNthCalledWith(1, "/api/marketplaces");
+    expect(fetch).toHaveBeenNthCalledWith(2, `/api/marketplaces/${id}`);
+  }
+);
 
 test("preserves every preview outcome without treating blocked entries as ready", async () => {
   const preview = {
