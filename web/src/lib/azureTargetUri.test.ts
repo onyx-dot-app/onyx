@@ -63,3 +63,45 @@ describe("buildTargetUri", () => {
     expect(parsed.url.origin).toBe("https://my-resource.openai.azure.com");
   });
 });
+
+describe("Azure v1 target URIs", () => {
+  it.each([
+    "https://my-resource.openai.azure.com/openai/v1/",
+    "https://my-resource.openai.azure.com/openai/v1",
+    "https://my-resource.openai.azure.com/openai/v1/chat/completions",
+  ])("accepts %s and defaults api_version to v1", (uri) => {
+    expect(isValidAzureTargetUri(uri)).toBe(true);
+
+    const parsed = parseAzureTargetUri(uri);
+    expect(parsed.apiVersion).toBe("v1");
+    expect(parsed.deploymentName).toBe("");
+    expect(parsed.url.origin).toBe("https://my-resource.openai.azure.com");
+  });
+
+  it("keeps an explicit api-version on a v1 URL", () => {
+    const parsed = parseAzureTargetUri(
+      "https://my-resource.openai.azure.com/openai/v1/?api-version=preview"
+    );
+    expect(parsed.apiVersion).toBe("preview");
+  });
+
+  it("still rejects other paths without an api-version", () => {
+    expect(
+      isValidAzureTargetUri("https://my-resource.openai.azure.com/openai/v10/")
+    ).toBe(false);
+    expect(
+      isValidAzureTargetUri(
+        "https://my-resource.openai.azure.com/openai/responses"
+      )
+    ).toBe(false);
+  });
+
+  it("round-trips a provider saved with api_version v1", () => {
+    const uri = buildTargetUri({ ...baseProvider, api_version: "v1" });
+
+    expect(uri).toBe("https://my-resource.openai.azure.com/openai/v1/");
+    const parsed = parseAzureTargetUri(uri);
+    expect(parsed.apiVersion).toBe("v1");
+    expect(parsed.deploymentName).toBe("");
+  });
+});
