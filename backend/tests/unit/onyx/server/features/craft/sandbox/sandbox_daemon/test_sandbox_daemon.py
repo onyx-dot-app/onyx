@@ -17,6 +17,7 @@ import shutil
 import sqlite3
 import sys
 import tarfile
+import tempfile
 import time
 from collections.abc import Generator
 from pathlib import Path
@@ -533,14 +534,14 @@ def test_push_over_size_cap_returns_413(
     configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
     client: TestClient,
 ) -> None:
-    """Content-Length > 100 MiB -> 413, body never streamed."""
-    extract_mod, _, priv, allowed_root = configured_sandbox_daemon
+    """Content-Length over the archive limit -> 413, body never streamed."""
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
     mount_path = str(allowed_root / "skills")
 
     # Use a small body but advertise a huge Content-Length. The daemon rejects
     # based on the header before reading the body.
     body = _build_targz_bytes({"x": b"x"})
-    huge = str(extract_mod.MAX_BUNDLE_BYTES + 1)
+    huge = str(server_mod.PUSH_MAX_ARCHIVE_BYTES + 1)
     sha = hashlib.sha256(body).hexdigest()
     ts = str(int(time.time()))
     sig = _sign(priv, mount_path=mount_path, sha256_hex=sha, timestamp=ts)
@@ -558,6 +559,219 @@ def test_push_over_size_cap_returns_413(
         },
     )
     assert resp.status_code == 413
+
+
+def _signed_push_headers(
+    priv: Ed25519PrivateKey, mount_path: str, sha256_hex: str
+) -> dict[str, str]:
+    ts = str(int(time.time()))
+    return {
+        "Content-Type": "application/gzip",
+        "X-Bundle-Sha256": sha256_hex,
+        "X-Push-Signature": _sign(
+            priv, mount_path=mount_path, sha256_hex=sha256_hex, timestamp=ts
+        ),
+        "X-Push-Timestamp": ts,
+    }
+
+
+@pytest.fixture
+def spool_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox_daemon_modules: tuple[ModuleType, ModuleType],
+) -> Path:
+    """Directory that receives the daemon's spooled request bodies."""
+    path = tmp_path / "spool"
+    path.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(path))
+    monkeypatch.setattr(
+        sandbox_daemon_modules[1], "_PUSH_SPOOL_DIR", path, raising=False
+    )
+    return path
+
+
+def _push_live_tree(
+    client: TestClient, priv: Ed25519PrivateKey, mount_path: str
+) -> Path:
+    resp = _push_request(
+        client,
+        priv=priv,
+        mount_path=mount_path,
+        body=_build_targz_bytes({"keep.txt": b"keep"}),
+    )
+    assert resp.status_code == 200, resp.text
+    return Path(mount_path).resolve()
+
+
+@pytest.mark.parametrize("valid_body", [True, False])
+def test_push_reclaims_archive_left_by_killed_sidecar(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+    valid_body: bool,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    stale = spool_dir / "interrupted.tar.gz"
+    stale.write_bytes(b"incomplete previous upload")
+    directory = spool_dir / "stale-folder"
+    directory.mkdir()
+    (directory / "partial").write_bytes(b"incomplete")
+    unrelated = spool_dir.parent / "unrelated-snapshot.tar.gz"
+    unrelated.write_bytes(b"keep")
+    (spool_dir / "outside-link").symlink_to(unrelated.parent, target_is_directory=True)
+    body = (
+        _build_targz_bytes({"SKILL.md": b"instructions"}) if valid_body else b"bad gzip"
+    )
+
+    response = _push_request(
+        client,
+        priv=priv,
+        mount_path=str(allowed_root / "skills"),
+        body=body,
+    )
+
+    assert response.status_code == (200 if valid_body else 400)
+    assert list(spool_dir.iterdir()) == []
+    assert unrelated.read_bytes() == b"keep"
+
+
+def test_push_with_malformed_content_length_returns_400(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    body = _build_targz_bytes({"x": b"x"})
+    headers = _signed_push_headers(priv, mount_path, hashlib.sha256(body).hexdigest())
+
+    resp = client.post(
+        "/push",
+        params={"mount_path": mount_path},
+        content=body,
+        headers={**headers, "Content-Length": "abc"},
+    )
+
+    assert resp.status_code == 400
+    assert "Content-Length" in resp.text
+
+
+def test_streamed_push_over_limit_returns_413_and_keeps_old_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A chunked body has no Content-Length, so the running count rejects it."""
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    live = _push_live_tree(client, priv, mount_path)
+    body = _build_targz_bytes({"big.bin": os.urandom(8192)})
+    monkeypatch.setattr(server_mod, "PUSH_MAX_ARCHIVE_BYTES", len(body) - 1)
+
+    def chunks() -> Generator[bytes, None, None]:
+        for start in range(0, len(body), 1000):
+            yield body[start : start + 1000]
+
+    resp = client.post(
+        "/push",
+        params={"mount_path": mount_path},
+        content=chunks(),
+        headers=_signed_push_headers(
+            priv, mount_path, hashlib.sha256(body).hexdigest()
+        ),
+    )
+
+    assert resp.status_code == 413
+    assert Path(mount_path).resolve() == live
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_push_rejected_extraction_keeps_old_tree_and_spool_is_removed(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    live = _push_live_tree(client, priv, mount_path)
+    body = _build_targz_bytes({"../escape.txt": b"oops"})
+
+    resp = _push_request(client, priv=priv, mount_path=mount_path, body=body)
+
+    assert resp.status_code == 400
+    assert "traversal" in resp.text
+    assert Path(mount_path).resolve() == live
+    assert (live / "keep.txt").read_bytes() == b"keep"
+    assert list(live.parent.iterdir()) == [live]
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_push_with_corrupt_gzip_returns_400(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    live = _push_live_tree(client, priv, mount_path)
+    body = _build_targz_bytes({"a.bin": os.urandom(65536)})
+    body = body[: len(body) // 2]
+
+    resp = _push_request(client, priv=priv, mount_path=mount_path, body=body)
+
+    assert resp.status_code == 400
+    assert Path(mount_path).resolve() == live
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_push_sha_mismatch_removes_spooled_body(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    body = _build_targz_bytes({"a.txt": b"a"})
+
+    resp = client.post(
+        "/push",
+        params={"mount_path": mount_path},
+        content=body,
+        headers=_signed_push_headers(priv, mount_path, "0" * 64),
+    )
+
+    assert resp.status_code == 400
+    assert list(spool_dir.iterdir()) == []
+    assert not os.path.lexists(mount_path)
+
+
+def test_interrupted_push_removes_spooled_body_and_keeps_old_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    live = _push_live_tree(client, priv, mount_path)
+    body = _build_targz_bytes({"a.bin": os.urandom(4 * 1024 * 1024)})
+
+    def interrupted() -> Generator[bytes, None, None]:
+        yield body[: len(body) // 2]
+        raise ConnectionResetError("client went away")
+
+    resp = client.post(
+        "/push",
+        params={"mount_path": mount_path},
+        content=interrupted(),
+        headers=_signed_push_headers(
+            priv, mount_path, hashlib.sha256(body).hexdigest()
+        ),
+    )
+
+    assert resp.status_code == 500
+    assert Path(mount_path).resolve() == live
+    assert list(spool_dir.iterdir()) == []
 
 
 def test_push_to_mount_path_outside_allowed_prefix_returns_400(
@@ -1624,3 +1838,44 @@ def test_output_manifest_client_and_daemon_contract(
     assert json.loads(bodies[0]) == expected_body
     assert result.entries[0].mtime_ns == (outputs / "deck.pptx").stat().st_mtime_ns
     assert result.entries[0].ctime_ns == (outputs / "deck.pptx").stat().st_ctime_ns
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="Needs the Linux PATH_MAX of 4096 bytes"
+)
+def test_push_filesystem_path_boundaries_keep_previous_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+) -> None:
+    from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+        PUSH_VERSION_NAME_BYTES,
+        push_path_byte_limit,
+        push_version_directory,
+    )
+
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    root = push_version_directory(mount_path, "0" * PUSH_VERSION_NAME_BYTES)
+    limit = push_path_byte_limit(str(root))
+    prefix = ("a" * 200 + "/") * ((limit - 1) // 201)
+    path = prefix + "b" * (limit - len(prefix))
+    body = _build_targz_bytes({path: b"boundary", "c" * 255: b"component"})
+    response = _push_request(client, priv=priv, mount_path=mount_path, body=body)
+    assert response.status_code == 200, response.text
+    live = Path(mount_path).resolve()
+    assert len(live.name.encode()) == PUSH_VERSION_NAME_BYTES
+    assert (live / path).read_bytes() == b"boundary"
+    for invalid in [path + "x", "c" * 256, "é" * 128]:
+        response = _push_request(
+            client,
+            priv=priv,
+            mount_path=mount_path,
+            body=_build_targz_bytes({invalid: b"invalid"}),
+        )
+        assert response.status_code == 400, response.text
+        assert "Path" in response.text
+        assert Path(mount_path).resolve() == live
+        assert (live / path).read_bytes() == b"boundary"
+        assert list(live.parent.iterdir()) == [live]
+        assert list(spool_dir.iterdir()) == []

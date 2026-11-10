@@ -1,10 +1,12 @@
 """Receiver admission must not block fallback, other users, or session startup."""
 
+import hashlib
+import importlib
 import io
-import tarfile
 import zipfile
 from functools import partial
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
@@ -13,12 +15,28 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, SkillVersion, User
 from onyx.file_store.file_store import FileStore
-from onyx.server.features.build.sandbox.image.sandbox_daemon import extract
+from onyx.server.features.build.sandbox.image.sandbox_daemon import (
+    models as receiver_models,
+)
 from onyx.server.features.build.sandbox.kubernetes import kubernetes_sandbox_manager
-from onyx.server.features.build.sandbox.models import FatalWriteError, FileSet
+from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.session import sandbox_lifecycle
 from onyx.skills import bundle, push, validation
 from tests.common.craft.stubs import StubSandboxManager
+from tests.common.paths import find_ancestor_containing
+
+_DAEMON_PARENT = (
+    find_ancestor_containing("backend/onyx")
+    / "backend/onyx/server/features/build/sandbox/image"
+)
+
+
+@pytest.fixture
+def extract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    monkeypatch.syspath_prepend(str(_DAEMON_PARENT))
+    module = importlib.import_module("sandbox_daemon.extract")
+    monkeypatch.setattr(module, "ALLOWED_PREFIX", str(tmp_path) + "/")
+    return module
 
 
 class SkillBundles:
@@ -71,25 +89,29 @@ def bundles(monkeypatch: pytest.MonkeyPatch) -> SkillBundles:
 class ReceivingSandbox(StubSandboxManager):
     """Use the real tar encoder and receiver checks, without network I/O."""
 
-    def __init__(self) -> None:
+    def __init__(self, root: Path, extract: ModuleType) -> None:
         super().__init__()
+        self.root = root
+        self.extract = extract
         self.delivered: dict[UUID, FileSet] = {}
 
     def write_files_to_sandbox(
         self, *, sandbox_id: UUID, mount_path: str, files: FileSet
     ) -> None:
-        raw, _digest = kubernetes_sandbox_manager._build_targz(files)
-        received: FileSet = {}
-        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
-            total = 0
-            for member in archive:
-                extract._validate_member(member, mount_path)
-                total += member.size
-                if total > extract.MAX_BUNDLE_BYTES:
-                    raise FatalWriteError("Receiver total exceeded")
-                stream = archive.extractfile(member)
-                assert stream is not None
-                received[member.name] = stream.read()
+        archive_path = self.root / f"{sandbox_id}.tar.gz"
+        with archive_path.open("w+b") as archive:
+            digest = kubernetes_sandbox_manager._build_targz(
+                files, archive, mount_path=mount_path
+            )
+            archive.seek(0)
+            assert hashlib.file_digest(archive, "sha256").hexdigest() == digest
+        mount = self.root / str(sandbox_id)
+        self.extract.safe_extract_then_atomic_swap(archive_path, str(mount))
+        received = {
+            path.relative_to(mount).as_posix(): path.read_bytes()
+            for path in mount.rglob("*")
+            if path.is_file()
+        }
         assert received == files
         self.delivered[sandbox_id] = received
 
@@ -152,24 +174,39 @@ def test_aggregate_limit_uses_resolved_bytes_and_allows_fallback(
     assert replace.call_count == (2 - excess if placeholder else 0)
 
 
-def test_receiver_accepts_assembled_payload_at_real_100_mib_limit(
-    bundles: SkillBundles, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_stream_receiver_accepts_whole_candidates_under_bounded_limit(
+    bundles: SkillBundles,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    extract: ModuleType,
 ) -> None:
-    assert push.MAX_BUNDLE_BYTES == extract.MAX_BUNDLE_BYTES == 100 * 1024 * 1024
+    assert (
+        push.MAX_BUNDLE_BYTES
+        == receiver_models.PUSH_MAX_CONTENT_BYTES
+        == extract.PUSH_MAX_CONTENT_BYTES
+        == kubernetes_sandbox_manager.PUSH_MAX_CONTENT_BYTES
+    )
+    limit = 1024 * 1024 + 4096
+    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", limit)
+    monkeypatch.setattr(extract, "PUSH_MAX_CONTENT_BYTES", limit)
+    monkeypatch.setattr(kubernetes_sandbox_manager, "PUSH_MAX_CONTENT_BYTES", limit)
+    monkeypatch.setattr(extract, "ALLOWED_PREFIX", str(tmp_path) + "/")
     skills = [
-        bundles.add(f"skill-{index}", files={"data": b"x" * (20 * 1024 * 1024)})
+        bundles.add(f"skill-{index}", files={"data": b"x" * (256 * 1024)})
         for index in range(6)
     ]
     files = push._assemble_fileset(skills, User(id=uuid4()), MagicMock(spec=Session))
-    raw, _digest = kubernetes_sandbox_manager._build_targz(files)
     assert set(files) == {
         f"skill-{index}/{name}" for index in range(4) for name in ("SKILL.md", "data")
     }
-    monkeypatch.setattr(extract, "ALLOWED_PREFIX", str(tmp_path) + "/")
-    mount = tmp_path / "skills"
-    extract.safe_extract_then_atomic_swap(raw, str(mount))
+    sandbox_id = uuid4()
+    manager = ReceivingSandbox(tmp_path, extract)
+    manager.write_files_to_sandbox(
+        sandbox_id=sandbox_id, mount_path=push.SKILLS_MOUNT_PATH, files=files
+    )
+    mount = tmp_path / str(sandbox_id)
     assert mount.is_symlink()
-    assert (mount / "skill-3/data").stat().st_size == 20 * 1024 * 1024
+    assert (mount / "skill-3/data").stat().st_size == 256 * 1024
     assert not (mount / "skill-4").exists()
 
 
@@ -180,6 +217,8 @@ def test_oversized_user_does_not_abort_batch_or_startup(
     monkeypatch: pytest.MonkeyPatch,
     all_omitted: bool,
     operation: str,
+    tmp_path: Path,
+    extract: ModuleType,
 ) -> None:
     first = bundles.add("first", files={"data": b"a" * 200})
     second = bundles.add("second", files={"data": b"b" * 200})
@@ -195,13 +234,15 @@ def test_oversized_user_does_not_abort_batch_or_startup(
 
     limit = 100 if all_omitted else 400
     monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", limit)
-    monkeypatch.setattr(extract, "MAX_BUNDLE_BYTES", limit)
+    monkeypatch.setattr(extract, "PUSH_MAX_CONTENT_BYTES", limit)
+    monkeypatch.setattr(kubernetes_sandbox_manager, "PUSH_MAX_CONTENT_BYTES", limit)
+    monkeypatch.setattr(extract, "ALLOWED_PREFIX", str(tmp_path) + "/")
     monkeypatch.setattr(push, "list_runtime_skills_for_user", resolve)
     monkeypatch.setattr(push, "get_sandbox_user_map", lambda *_args: sandboxes)
     monkeypatch.setattr(push, "lock_sandbox_skills_hashes", lambda *_args: {})
     record = MagicMock()
     monkeypatch.setattr(push, "set_sandbox_skills_hashes__no_commit", record)
-    manager = ReceivingSandbox()
+    manager = ReceivingSandbox(tmp_path, extract)
     monkeypatch.setattr(push, "get_sandbox_manager", lambda: manager)
     db = MagicMock(spec=Session)
     apps_section = push.build_connectable_apps_list([])
@@ -282,6 +323,8 @@ def test_receiver_file_boundary_preserves_fallback_and_other_users(
     valid: bool | None,
     offset: int,
     kind: str,
+    tmp_path: Path,
+    extract: ModuleType,
 ) -> None:
     receiver_limit = 25 * 1024 * 1024
     assert push.MAX_FILE_BYTES == extract.MAX_FILE_BYTES == receiver_limit
@@ -320,7 +363,7 @@ def test_receiver_file_boundary_preserves_fallback_and_other_users(
     monkeypatch.setattr(push, "set_sandbox_skills_hashes__no_commit", record)
     replace = MagicMock(wraps=push.resolve_skill_dir_placeholder)
     monkeypatch.setattr(push, "resolve_skill_dir_placeholder", replace)
-    manager = ReceivingSandbox()
+    manager = ReceivingSandbox(tmp_path, extract)
     monkeypatch.setattr(push, "get_sandbox_manager", lambda: manager)
     db = MagicMock(spec=Session)
 

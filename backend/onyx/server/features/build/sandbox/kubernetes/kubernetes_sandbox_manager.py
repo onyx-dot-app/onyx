@@ -51,7 +51,7 @@ import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import cast
+from typing import IO, cast
 from uuid import UUID
 
 from kubernetes import client, watch
@@ -79,6 +79,11 @@ from onyx.server.features.build.sandbox.base import (
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
+    PUSH_MAX_ARCHIVE_BYTES,
+    PUSH_MAX_CONTENT_BYTES,
+    PUSH_MAX_DIRECTORIES,
+    PUSH_MAX_FILES,
+    PUSH_VERSION_NAME_BYTES,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
@@ -87,7 +92,11 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     FilesystemEntry,
     OutputsManifestResponse,
     SnapshotCreateRequest,
+    push_parent_directories,
+    push_path_byte_limit,
+    push_version_directory,
     sidecar_snapshot_restore_path,
+    validate_push_path,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
     build_runtime_api_client,
@@ -200,17 +209,37 @@ _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
 _PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
 
 
-_MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
-
-
-def _build_targz(files: FileSet) -> tuple[bytes, str]:
-    total = sum(len(v) for v in files.values())
-    if total > _MAX_BUNDLE_BYTES:
+def _build_targz(files: FileSet, archive_file: IO[bytes], *, mount_path: str) -> str:
+    """Write ``files`` as tar.gz into ``archive_file`` and return its SHA-256."""
+    if len(files) > PUSH_MAX_FILES:
         raise FatalWriteError(
-            f"Bundle size {total} exceeds {_MAX_BUNDLE_BYTES} byte limit"
+            f"Bundle has {len(files)} files, more than {PUSH_MAX_FILES}"
         )
-    buf = io.BytesIO()
-    with gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6, mtime=0) as gzip_file:
+    total = sum(len(v) for v in files.values())
+    if total > PUSH_MAX_CONTENT_BYTES:
+        raise FatalWriteError(
+            f"Bundle size {total} exceeds {PUSH_MAX_CONTENT_BYTES} byte limit"
+        )
+    path_limit = push_path_byte_limit(
+        str(push_version_directory(mount_path, "0" * PUSH_VERSION_NAME_BYTES))
+    )
+    directories: set[str] = set()
+    for path in files:
+        try:
+            validate_push_path(path, path_limit)
+        except ValueError as exc:
+            raise FatalWriteError(str(exc)) from exc
+        for directory in push_parent_directories(path):
+            if directory in directories:
+                break
+            directories.add(directory)
+            if len(directories) > PUSH_MAX_DIRECTORIES:
+                raise FatalWriteError(
+                    f"Bundle has more than {PUSH_MAX_DIRECTORIES} folders"
+                )
+    with gzip.GzipFile(
+        filename="", fileobj=archive_file, mode="wb", compresslevel=6, mtime=0
+    ) as gzip_file:
         with tarfile.open(fileobj=gzip_file, mode="w") as tar:
             for name in sorted(files):
                 data = files[name]
@@ -221,8 +250,15 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
                 info.gid = 0
                 info.mode = 0o644
                 tar.addfile(info, io.BytesIO(data))
-    raw = buf.getvalue()
-    return raw, hashlib.sha256(raw).hexdigest()
+    archive_size = archive_file.tell()
+    if archive_size > PUSH_MAX_ARCHIVE_BYTES:
+        raise FatalWriteError(
+            f"Archive size {archive_size} exceeds {PUSH_MAX_ARCHIVE_BYTES} byte limit"
+        )
+    archive_file.seek(0)
+    return hashlib.file_digest(
+        cast(io.BufferedRandom, archive_file), "sha256"
+    ).hexdigest()
 
 
 class KubernetesSandboxManager(SandboxManager):
@@ -2741,19 +2777,21 @@ fi
         mount_path: str,
         files: FileSet,
     ) -> None:
-        """Build tar.gz, POST to the in-pod daemon."""
+        """Build tar.gz on disk and stream it to the in-pod daemon."""
         pod_name = self._get_pod_name(sandbox_id)
-        tar_bytes, sha256_hex = _build_targz(files)
 
         try:
-            self._sidecar_client.push_archive(
-                sandbox_id=sandbox_id,
-                mount_path=mount_path,
-                archive=tar_bytes,
-                sha256_hex=sha256_hex,
-                operation_label=pod_name,
-                timeout_seconds=RPC_TIMEOUT_SECONDS,
-            )
+            # Spool to disk so the archive is not a second in-memory copy.
+            with tempfile.TemporaryFile() as archive_file:
+                sha256_hex = _build_targz(files, archive_file, mount_path=mount_path)
+                self._sidecar_client.push_archive(
+                    sandbox_id=sandbox_id,
+                    mount_path=mount_path,
+                    archive_file=archive_file,
+                    sha256_hex=sha256_hex,
+                    operation_label=pod_name,
+                    timeout_seconds=BULK_TRANSFER_TIMEOUT_SECONDS,
+                )
         except SidecarRequestError as e:
             raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
         except SidecarStatusError as e:
