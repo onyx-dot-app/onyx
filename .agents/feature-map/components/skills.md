@@ -184,6 +184,8 @@ The library preview of an external-app skill calls the same renderer
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
    read cap; ZIP uploads use the ZIP cap.
    Stored-bundle reads follow `bundle-size-limits`.
+   Skill deletion collects every retained bundle before cascading version deletion.
+   Cleanup runs after commit and checks both legacy and version references.
 8. `templates-built-in-only` **Only built-ins use templates.**
    `skills/bundle.py:normalize_custom_bundle` and
    `skills/bundle.py:update_custom_bundle_files` reject `.template` files. If
@@ -246,19 +248,31 @@ The library preview of an external-app skill calls the same renderer
     warning, a `skill` row whose `built_in_skill_id` is not in
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `version-rollout-reads` **Runtime reads still use the bundle columns on
-    `db/models.py:Skill`.** The version schema alone does not capture new
-    writes. A custom skill can have no current pointer until version writes
-    and their repair task ship. An old writer can also leave a stale pointer
-    and delete its version's bundle. Before readers switch, the repair task
-    must compare the legacy columns with the current version, append a version
-    from the legacy columns when they differ, and tolerate missing old files.
-    Built-ins have no version. Each version also stores its root SKILL.md
-    outside the bundle: `name` (the frontmatter name), `frontmatter` (the
-    parsed YAML as JSON) and `skill_md` (the raw file, loaded on access only).
-    The initial snapshot copies database values without opening bundles; its
-    unpacked size, file count and SKILL.md columns stay NULL until an
-    application backfill.
-    Do not use these snapshots as runtime content during this rollout.
+    `db/models.py:Skill`.** Custom writers call
+    `db/skill_version.py:write_skill_version`. A row lock serializes
+    version numbers. The version, pointer and legacy columns change in one
+    transaction. Every save and upload adds a version, also when its content
+    is equal to the current version; there is no content digest. Replacement
+    never deletes a historical bundle. Cleanup of staged, unused blobs stays
+    with ingestion and the caller.
+    Legacy columns remain authoritative during rollout. A save repairs a stale
+    or missing pointer before writing its new content. A recovery snapshot has
+    no creator; a user content change follows it. Runtime classification updates
+    legacy validity. The next save or repair copies validity onto the existing
+    version without creating history or duplicating its blob.
+    Unexpected storage errors abort the save and keep the current version.
+    Missing or corrupt historical files retain unknown metadata. Each version
+    also stores its root SKILL.md outside the bundle: `name` (the frontmatter
+    name), `frontmatter` (the parsed YAML as JSON) and `skill_md` (the raw file,
+    loaded on access only). The raw `skill_md` is authoritative; `frontmatter`
+    is a derived JSON copy with dates as ISO strings. A value that PostgreSQL
+    cannot store (NaN, non-string keys, NUL, binary) leaves that column NULL
+    and marks the version `metadata_unrepairable`. Writers fill them from the
+    ingest parse in the same transaction. The initial and recovery snapshots
+    keep them NULL until repair.
+    Built-ins have no versions. Before readers switch, the version repair task must repair
+    every tenant, and a fresh drift check must pass after old writers drain.
+    No migration reads blobs.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the

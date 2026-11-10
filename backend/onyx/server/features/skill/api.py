@@ -27,10 +27,10 @@ from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillManagementPolicy,
     SkillSharingChange,
-    add_new_skill__no_commit,
     affected_user_ids_for_skill,
     bulk_update_skill__no_commit,
     create_skill_from_bundle__no_commit,
+    create_skill_from_ingested_bundle,
     delete_skill_for_user__no_commit,
     enable_new_skill_if_name_available__no_commit,
     ensure_can_edit_org_visibility,
@@ -41,6 +41,7 @@ from onyx.db.skill import (
     share_skill__no_commit,
     transfer_skill_ownership,
 )
+from onyx.db.skill_version import delete_unreferenced_skill_bundles
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -79,7 +80,6 @@ from onyx.skills.bundle import (
     SKILL_MD_NAME,
     build_single_file_bundle,
     build_skill_md,
-    compute_bundle_sha256,
     inspect_custom_bundle,
     normalize_custom_bundle,
     read_bundle_file,
@@ -93,7 +93,6 @@ from onyx.skills.ingest import (
     delete_bundle_blob,
     ingest_skill_bundle,
     ingested_skill_bundle,
-    save_skill_bundle_bytes,
 )
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 from onyx.skills.metadata import parse_skill_document
@@ -247,11 +246,10 @@ def _replace_skill_bundle_from_editor(
         file_store,
         expected_name=skill.name,
     ) as ingested:
-        old_file_id = replace_skill_bundle(
+        replace_skill_bundle(
             skill=skill,
-            new_bundle_file_id=ingested.bundle_file_id,
-            new_bundle_sha256=ingested.bundle_sha256,
-            new_description=ingested.description,
+            ingested=ingested,
+            creator_id=user.id,
             db_session=db_session,
         )
         db_session.commit()
@@ -259,7 +257,6 @@ def _replace_skill_bundle_from_editor(
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
-    delete_bundle_blob(file_store, old_file_id)
     return _editable_skill_response(skill, user, db_session)
 
 
@@ -296,7 +293,7 @@ def bulk_update_skills(
     deleted_file_ids: list[str] = []
     for skill_id in sorted(set(request.skill_ids)):
         try:
-            item_affected, deleted_file_id = bulk_update_skill__no_commit(
+            item_affected, item_file_ids = bulk_update_skill__no_commit(
                 skill_id, request.action, change, user, db_session
             )
         except OnyxError as exc:
@@ -304,15 +301,11 @@ def bulk_update_skills(
             continue
         succeeded.append(skill_id)
         affected |= item_affected
-        if deleted_file_id is not None:
-            deleted_file_ids.append(deleted_file_id)
+        deleted_file_ids.extend(item_file_ids)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    if deleted_file_ids:
-        file_store = get_default_file_store()
-        for file_id in deleted_file_ids:
-            delete_bundle_blob(file_store, file_id)
+    delete_unreferenced_skill_bundles(deleted_file_ids, db_session)
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
 
@@ -383,17 +376,7 @@ def create_custom_skill(
         bundle.filename,
         file_store,
     ) as ingested:
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=ingested.canonical_name,
-                description=ingested.description,
-                bundle_file_id=ingested.bundle_file_id,
-                bundle_sha256=ingested.bundle_sha256,
-                is_valid=True,
-                author_user_id=user.id,
-            ),
-            db_session,
-        )
+        skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         if auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
@@ -601,17 +584,7 @@ def create_custom_skill_from_editor(
         file_store,
         expected_name=canonical_name,
     ) as ingested:
-        skill = add_new_skill__no_commit(
-            Skill(
-                name=ingested.canonical_name,
-                description=ingested.description,
-                bundle_file_id=ingested.bundle_file_id,
-                bundle_sha256=ingested.bundle_sha256,
-                is_valid=True,
-                author_user_id=user.id,
-            ),
-            db_session,
-        )
+        skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
         if external_app_id is not None:
             associate_custom_skill_with_external_app__no_commit(
                 db_session,
@@ -710,11 +683,10 @@ def replace_current_user_skill_bundle(
         file_store,
         expected_name=skill.name,
     ) as ingested:
-        old_file_id = replace_skill_bundle(
+        replace_skill_bundle(
             skill=skill,
-            new_bundle_file_id=ingested.bundle_file_id,
-            new_bundle_sha256=ingested.bundle_sha256,
-            new_description=ingested.description,
+            ingested=ingested,
+            creator_id=user.id,
             db_session=db_session,
         )
         db_session.commit()
@@ -722,7 +694,6 @@ def replace_current_user_skill_bundle(
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
-    delete_bundle_blob(file_store, old_file_id)
     return skill_response_for_user(
         skill,
         user,
@@ -817,7 +788,6 @@ def patch_current_user_skill(
     before_affected = affected_user_ids_for_skill(skill, db_session)
     file_store = get_default_file_store() if patch_req.has_details_update else None
     new_bundle_file_id: str | None = None
-    old_bundle_file_id: str | None = None
 
     try:
         if file_store is not None:
@@ -838,16 +808,17 @@ def patch_current_user_skill(
                 description=description,
                 instructions_markdown=instructions_markdown,
             )
-            new_bundle_file_id = save_skill_bundle_bytes(
+            ingested = ingest_skill_bundle(
                 new_bundle_bytes,
-                display_name=f"{skill.name}.zip",
-                file_store=file_store,
+                f"{skill.name}.zip",
+                file_store,
+                expected_name=skill.name,
             )
-            old_bundle_file_id = replace_skill_bundle(
+            new_bundle_file_id = ingested.bundle_file_id
+            replace_skill_bundle(
                 skill=skill,
-                new_bundle_file_id=new_bundle_file_id,
-                new_bundle_sha256=compute_bundle_sha256(new_bundle_bytes),
-                new_description=description,
+                ingested=ingested,
+                creator_id=user.id,
                 db_session=db_session,
             )
 
@@ -875,8 +846,6 @@ def patch_current_user_skill(
         push_skills_for_users(before_affected | after_affected, db_session)
         db_session.commit()
 
-    if file_store is not None and old_bundle_file_id is not None:
-        delete_bundle_blob(file_store, old_bundle_file_id)
     return skill_response_for_user(
         skill,
         user,
@@ -1034,10 +1003,9 @@ def delete_current_user_skill(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    affected, old_file_id = delete_skill_for_user__no_commit(skill, user, db_session)
+    affected, file_ids = delete_skill_for_user__no_commit(skill, user, db_session)
     db_session.commit()
 
     push_skills_for_users(affected, db_session)
     db_session.commit()
-    if old_file_id is not None:
-        delete_bundle_blob(get_default_file_store(), old_file_id)
+    delete_unreferenced_skill_bundles(file_ids, db_session)

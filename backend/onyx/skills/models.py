@@ -1,5 +1,5 @@
 import re
-from typing import Final
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -61,6 +61,8 @@ class SkillDocument(BaseModel):
 
     metadata: SkillMetadata
     instructions_markdown: str
+    # The frontmatter mapping as parsed, including keys the schema does not name.
+    frontmatter: dict[str, Any]
 
 
 class SkillBundleFile(BaseModel):

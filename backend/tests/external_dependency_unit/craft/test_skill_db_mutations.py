@@ -29,6 +29,8 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.models import BundleMetadata
+from onyx.skills.ingest import IngestedBundle
 from tests.common.craft.skill_table_isolation import (
     restore_skill_tables,
     snapshot_skill_tables,
@@ -600,9 +602,14 @@ def test_installation_policies_preserve_choices_through_updates(
     )
     replace_skill_bundle(
         skill=skill,
-        new_bundle_file_id="updated-bundle",
-        new_bundle_sha256="new-hash",
-        new_description="Updated",
+        ingested=IngestedBundle(
+            skill.name,
+            "updated-bundle",
+            "new-hash",
+            "Updated",
+            BundleMetadata(unpacked_size_bytes=1, file_count=1),
+        ),
+        creator_id=user.id,
         db_session=db_session,
     )
     assert not skill_user_states(user, [skill.id], db_session)[skill.id].enabled

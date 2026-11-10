@@ -144,6 +144,7 @@ def parse_skill_document(
     return SkillDocument(
         metadata=metadata,
         instructions_markdown=instructions_markdown.strip(),
+        frontmatter=frontmatter,
     )
 
 

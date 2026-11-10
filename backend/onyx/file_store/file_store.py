@@ -159,7 +159,7 @@ def s3_error_code(e: ClientError) -> str | None:
 
 
 def is_missing_object(e: ClientError) -> bool:
-    return s3_error_code(e) in ("404", "NoSuchKey", "NotFound")
+    return s3_error_code(e) in ("404", "NoSuchKey", "NoSuchObject", "NotFound")
 
 
 # A failed legacy write leaves a marker at this prefix plus the key in the

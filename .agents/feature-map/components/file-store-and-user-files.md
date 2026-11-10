@@ -157,6 +157,7 @@ preview.
    `background/celery/tasks/user_file_processing/tasks.py:delete_user_file_impl` keeps the row when a blob delete fails, because the
    row is the only handle a retry has. Blob deletes use
    `error_on_missing=False`, so a retry after a partial delete is safe.
+   Postgres missing-object handling follows [[file-store-and-user-files#postgres-missing-object]].
    `server/features/projects/api.py:delete_user_file` refuses while any project or agent link exists and
    returns `has_associations=True` with a 200, not an error.
 6. `file-id-write-once` **A file id is write-once.** On S3, GCS and Azure,
@@ -166,6 +167,8 @@ preview.
    instead. Both `change_file_id` and `delete_file` lock the record, and
    `change_file_id` returns false when a delete won. The serving cache also
    assumes immutable content.
+   PostgreSQL large-object access uses a savepoint. Missing objects become
+   `FileNotFoundError` only after an existence check; other failures propagate.
 7. `upload-rejects-indexing-does-not` **Upload rejects what extraction cannot
    read; indexing does not.**
    `server/features/projects/projects_file_utils.py:categorize_uploaded_files` rejects a file with
@@ -232,6 +235,14 @@ preview.
     leaves the marker instead
     (`file_store/file_store.py:S3BackedFileStore._on_presigned_upload_finalized`),
     and a file only in MinIO gets no download URL.
+
+14. `postgres-missing-object` **Distinguish missing blobs from storage failures.**
+    `file_store/postgres_file_store.py:PostgresBackedFileStore.read_file` and
+    `PostgresBackedFileStore.delete_file` use savepoints for large-object operations.
+    After a driver error, they check the object catalog. A missing object raises
+    `FileNotFoundError` on read and permits record cleanup on delete. Other errors
+    propagate and preserve records for retry. `PostgresBackedFileStore.get_file_size`
+    also checks the catalog, so a surviving content row cannot hide a missing blob.
 
 ---
 
