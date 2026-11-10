@@ -1134,7 +1134,9 @@ def skill_usage_for_users(
         exclude_skill_ids=exclude_skill_ids,
         names=names,
     )
-    for user_id, _, total_bytes, total_files, unknown_count in db_session.execute(stmt):
+    for user_id, _, total_bytes, total_files, unknown_count, _ in db_session.execute(
+        stmt
+    ):
         usage[user_id] = SkillUsage(
             int(total_bytes), int(total_files), int(unknown_count)
         )
@@ -1151,12 +1153,13 @@ def skill_usage_statement(
     names: Collection[str] | None = None,
     version_overrides: Mapping[UUID, UUID | None] = {},
     per_name: bool = False,
-) -> Select[tuple[UUID, str | None, int, int, int]]:
+) -> Select[tuple[UUID, str | None, int, int, int, Sequence[int] | None]]:
     """Build usage at the caller's statement snapshot, with explicit readiness.
 
     A None override makes a staged custom Skill absent. Per-name rows contain
     generic winners plus exact replacements (including zero) for user/name
     exceptions. The generic id must have no user row and must be in ``ready``.
+    Per-name rows also retain the ranked winner; totals return None for it.
     Totals contain only existing users. Neither mode executes a query.
     """
     shared = (
@@ -1232,7 +1235,7 @@ def _skill_usage_from_winners(
     names: Collection[str] | None,
     version_overrides: Mapping[UUID, UUID | None],
     per_name: bool,
-) -> Select[tuple[UUID, str | None, int, int, int]]:
+) -> Select[tuple[UUID, str | None, int, int, int, Sequence[int] | None]]:
     """Each user's total: the ``generic`` winners, with ``pairs`` replaced.
 
     Without ``generic``, ``pairs`` must hold every user and name.
@@ -1266,6 +1269,7 @@ def _skill_usage_from_winners(
                     func.coalesce(specific.c.winner[index], 0).label(name)
                     for index, name in zip((3, 4, 5), amount_names, strict=True)
                 ),
+                specific.c.winner,
             )
             .select_from(pairs)
             .outerjoin(
@@ -1286,6 +1290,7 @@ def _skill_usage_from_winners(
                     generic.c.winner[index].label(name)
                     for index, name in zip((3, 4, 5), amount_names, strict=True)
                 ),
+                generic.c.winner,
             ),
             replacements_by_name,
         ).subquery()
@@ -1341,6 +1346,7 @@ def _skill_usage_from_winners(
                 ).label(name)
                 for name in amount_names
             ),
+            literal(None, ARRAY(BigInteger)).label("winner"),
         )
         .outerjoin(deltas, deltas.c.user_id == user_id)
         .where(user_id == any_(uuid_array(user_ids)))
