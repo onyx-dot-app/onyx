@@ -353,7 +353,7 @@
         "clientMetadataRejected": "공급자가 클라이언트 메타데이터 문서를 사용할 수 없습니다. 이 인스턴스가 공용 인터넷에서 접근할 수 없다면 ‘클라이언트 메타데이터 문서 사용’을 끄고 다시 연결하세요.",
         "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
         "connectionFailed": "서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
-        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요.",
+        "oauthFailed": "OAuth 로그인에 실패했습니다. 다시 시도하거나 서버의 OAuth 설정을 확인하세요.",
         "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
       },
       "header": {
@@ -14233,6 +14233,11 @@
       },
       "completeFailed": {
         "message": "인증을 완료하지 못했습니다"
+      },
+      "desktopHandoff": {
+        "button": "Onyx 열기",
+        "description": "연결을 완료하기 위해 브라우저가 Onyx 데스크톱 앱을 엽니다. 앱이 열리면 이 탭을 닫아도 됩니다.",
+        "title": "Onyx로 돌아가기"
       },
       "genericError": {
         "description": "OAuth 과정에서 오류가 발생했습니다. 다시 시도해 주세요.",

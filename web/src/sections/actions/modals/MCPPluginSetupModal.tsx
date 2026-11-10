@@ -3,6 +3,7 @@ import { useNavigation } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Formik } from "formik";
 import { useTranslations } from "next-intl";
+import type { Route } from "next";
 import { useSWRConfig } from "swr";
 import {
   Button,
@@ -13,7 +14,12 @@ import {
   Modal,
   Text,
 } from "@opal/components";
-import { InputVertical, Section } from "@opal/layouts";
+import { InputVertical, Section, toast } from "@opal/layouts";
+import {
+  isSilentOAuthOutcome,
+  oauthFailureDetail,
+  openOAuthAuthorization,
+} from "@/lib/oauth/launch";
 import { SvgCheck, SvgMinus, SvgX } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import type { RichStr } from "@opal/types";
@@ -134,6 +140,8 @@ interface MCPPluginSetupModalProps {
     note?: string | RichStr;
   };
 }
+
+const ADMIN_MCP_DETAIL_PREFIX = "/admin/plugins/mcp/";
 
 export default function MCPPluginSetupModal({
   open,
@@ -385,7 +393,27 @@ function MCPSetupSession({
                         : details.values.users,
                     });
                     if (result.status === "authorization_required") {
-                      navigation.load(result.authorization_url);
+                      openOAuthAuthorization(result.authorization_url).then(
+                        ({ redirectPath }) => {
+                          if (redirectPath?.startsWith(ADMIN_MCP_DETAIL_PREFIX))
+                            navigation.go(redirectPath as Route);
+                          return Promise.all([
+                            mutate(SWR_KEYS.adminMcpServers),
+                            refreshMemberPluginCaches(mutate),
+                          ]);
+                        },
+                        (error: unknown) => {
+                          if (isSilentOAuthOutcome(error)) return;
+                          const detail = oauthFailureDetail(error);
+                          if (detail)
+                            toast.error(detail.title, {
+                              description: detail.description,
+                            });
+                          else
+                            toast.error(t("mcpAuthModal.errors.oauthFailed"));
+                        }
+                      );
+                      onClose();
                       return;
                     }
                     await Promise.all([
