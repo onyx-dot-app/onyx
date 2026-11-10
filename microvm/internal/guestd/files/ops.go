@@ -388,6 +388,9 @@ type ListSpec struct {
 // MaxListEntries caps ListSpec.MaxEntries.
 const MaxListEntries = 100_000
 
+// listScanCap caps the entries List reads from one directory.
+var listScanCap = MaxListEntries
+
 // List returns the entries of a directory (or a tree), directories first
 // and then by name, per directory. truncated is true if a limit cut it.
 func (s *Store) List(ctx context.Context, sessionID string, spec ListSpec) ([]Info, bool, error) {
@@ -430,12 +433,11 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	ents, err := readDir(l.t.root, rel, MaxListEntries)
+	ents, err := readDir(l.t.root, rel, listScanCap)
 	if errors.Is(err, errDirTooBig) {
+		// List the entries read before the cap, marked truncated.
 		l.truncated = true
-		return nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return fsErr(err)
 	}
 	var subdirs []string
@@ -484,21 +486,25 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 var errDirTooBig = fmt.Errorf("%w: directory has too many entries", ErrLimit)
 
 // readDir returns the entries of dir: directories first, then by name
-// (case-insensitive, then exact). It reads in batches and fails with
-// errDirTooBig past max entries, so one huge directory cannot use unbounded
-// memory.
+// (case-insensitive, then exact). It reads in batches, so one huge directory
+// cannot use unbounded memory: past max entries it returns the first max
+// entries read (sorted) with errDirTooBig. O_DIRECTORY|O_NONBLOCK keeps a
+// FIFO that replaced dir from blocking the open.
 func readDir(root *os.Root, dir string, max int) ([]fs.DirEntry, error) {
-	d, err := root.Open(dir)
+	d, err := root.OpenFile(dir, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
 	var ents []fs.DirEntry
+	var tooBig error
 	for {
 		batch, err := d.ReadDir(1024)
 		ents = append(ents, batch...)
 		if len(ents) > max {
-			return nil, fmt.Errorf("%w: %s has more than %d", errDirTooBig, dir, max)
+			ents = ents[:max]
+			tooBig = fmt.Errorf("%w: %s has more than %d", errDirTooBig, dir, max)
+			break
 		}
 		if errors.Is(err, io.EOF) || (err == nil && len(batch) == 0) {
 			break
@@ -519,7 +525,7 @@ func readDir(root *os.Root, dir string, max int) ([]fs.DirEntry, error) {
 		}
 		return strings.Compare(a.Name(), b.Name())
 	})
-	return ents, nil
+	return ents, tooBig
 }
 
 func setOf(names []string) map[string]bool {

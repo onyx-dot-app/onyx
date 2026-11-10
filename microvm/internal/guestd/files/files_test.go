@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -309,6 +310,49 @@ func TestListAndDelete(t *testing.T) {
 	}
 	if _, err := s.Delete(sid, "", true); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("delete the session: %v", err)
+	}
+}
+
+func TestListLargeDirectory(t *testing.T) {
+	s, base := newStore(t, Config{})
+	for _, n := range []string{"e", "d", "c", "b", "a"} {
+		put(t, base, "outputs/"+n+".txt", n)
+	}
+	orig := listScanCap
+	t.Cleanup(func() { listScanCap = orig })
+	listScanCap = 3
+	ents, trunc, err := s.List(context.Background(), sid, ListSpec{Path: "outputs", MaxEntries: 10})
+	if err != nil || !trunc {
+		t.Fatalf("err %v truncated %v", err, trunc)
+	}
+	if len(ents) != 3 {
+		t.Fatalf("got %d entries, want the 3 scanned", len(ents))
+	}
+}
+
+func TestReadDirFIFO(t *testing.T) {
+	_, base := newStore(t, Config{})
+	put(t, base, "outputs/a.txt", "a")
+	if err := syscall.Mkfifo(filepath.Join(base, "outputs", "pipe"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = root.Close() })
+	done := make(chan error, 1)
+	go func() {
+		_, err := readDir(root, "outputs/pipe", 10)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("readDir of a FIFO did not fail")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("readDir blocked on a FIFO")
 	}
 }
 
@@ -726,6 +770,32 @@ func TestRestoreRecoversInterruptedSwap(t *testing.T) {
 		if strings.HasPrefix(e.Name(), ".craft-") {
 			t.Fatalf("leftover %s", e.Name())
 		}
+	}
+}
+
+func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
+	s, base := newStore(t, Config{})
+	trash := oldPrefix + "x"
+	put(t, base, trash+"/outputs/a.txt", "old a")
+	orig := rename
+	t.Cleanup(func() { rename = orig })
+	rename = func(root *os.Root, from, to string) error {
+		if strings.HasPrefix(from, oldPrefix) {
+			return errors.New("injected")
+		}
+		return orig(root, from, to)
+	}
+	_, _ = restore(s, sid, []byte("not zstd at all"), RestoreSpec{})
+	if b, err := os.ReadFile(filepath.Join(base, trash, "outputs/a.txt")); err != nil || string(b) != "old a" {
+		t.Fatalf("trash copy = %q %v", b, err)
+	}
+	rename = orig
+	_, _ = restore(s, sid, []byte("not zstd at all"), RestoreSpec{})
+	if b, err := os.ReadFile(filepath.Join(base, "outputs/a.txt")); err != nil || string(b) != "old a" {
+		t.Fatalf("outputs/a.txt = %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(base, trash)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("trash not removed: %v", err)
 	}
 }
 

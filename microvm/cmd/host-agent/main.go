@@ -153,7 +153,7 @@ func main() {
 	flag.StringVar(&f.advertise, "advertise-address", "", "host:port the api_server dials for --listen, sent with the node key registration (default $POD_IP:<--listen port>)")
 	flag.DurationVar(&f.captureTTL, "capture-ttl", server.DefaultCaptureTTL, "delete a spooled session capture that is not uploaded after this long")
 	flag.Int64Var(&f.captureMax, "capture-max-bytes", server.DefaultCaptureMaxBytes, "largest session archive (stored bytes) that CaptureSession spools")
-	flag.DurationVar(&f.transferTO, "transfer-timeout", 10*time.Minute, "limit for one presigned upload or download")
+	flag.DurationVar(&f.transferTO, "transfer-timeout", 10*time.Minute, "limit for one presigned upload, or for one whole restore download (all range parts)")
 	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs (test object stores only)")
 	flag.IntVar(&f.transferPar, "transfer-parallel", 8, "range GETs at once for a session restore download (1: one plain GET)")
 	flag.Int64Var(&f.transferPart, "transfer-part-bytes", 8<<20, "bytes per range GET; a restore holds up to --transfer-parallel of them in memory")

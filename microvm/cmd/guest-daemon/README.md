@@ -161,12 +161,15 @@ Session saves:
   names, `..`, unclean names, names outside the roots, links, devices, FIFOs, sparse members and
   duplicate files, and stops at the limits (`LIMIT_EXCEEDED`), at a zstd window over 64 MiB and at a
   decoded stream larger than the files plus 16 KiB per member and 64 KiB after the tar end. Modes are
-  `& 0777`; the owner is root. On any error the session does not change: if one root fails to swap,
-  the roots already swapped move back. If the daemon stops during the swap, the next restore puts back
-  any old root that has no replacement (no root is lost, but old and new roots can be mixed).
-- File calls and saves open files with `O_NONBLOCK` and use only regular files, so a FIFO cannot block
-  them. A directory listing reads at most 100,000 entries of one directory (more: `truncated`);
-  capture and zip fail with `LIMIT_EXCEEDED` on a directory over their entry limit.
+  `& 0777`; the owner is root. An error before the swap does not change the session. If one root
+  fails to swap, the daemon tries to move the roots already swapped back. If a rollback rename fails,
+  or the daemon stops during the swap, old and new roots can be mixed. The old roots then stay in a
+  `.craft-old-*` trash directory, and the next restore puts back each old root that has no
+  replacement. The daemon deletes a trash directory only after it recovers all of its roots.
+- File calls and saves open files with `O_NONBLOCK` and directories with `O_DIRECTORY|O_NONBLOCK`,
+  and use only regular files, so a FIFO cannot block them. A directory listing reads at most 100,000
+  entries of one directory; past that it returns the entries it read and sets `truncated`. Capture
+  and zip fail with `LIMIT_EXCEEDED` on a directory over their entry limit.
 - A capture and a restore of one session run one at a time.
 
 Errors are gRPC statuses with one `google.rpc.ErrorInfo`: domain `sandboxd.craft.onyx.app`, reason an

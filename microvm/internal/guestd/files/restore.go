@@ -150,10 +150,10 @@ var rename = func(root *os.Root, from, to string) error { return root.Rename(fro
 
 // swapRoots moves each restored root from staging into place. An old root
 // goes to a trash directory first. If any step fails, the roots already
-// swapped are moved back, so the call changes nothing. One rename is atomic
-// for one root only: if the daemon stops during the swap, the next restore
-// (removeLeftovers) puts back any old root that has no replacement, so no
-// root is lost, but the session can keep a mix of old and new roots.
+// swapped are moved back (best effort). If a rollback rename fails, or the
+// daemon stops during the swap, the session can keep a mix of old and new
+// roots; the trash then stays, and the next restore (removeLeftovers) puts
+// back any old root that has no replacement.
 func swapRoots(root *os.Root, staging string, roots []string, present map[string]bool) error {
 	trash := randName(oldPrefix)
 	if err := root.Mkdir(trash, 0o700); err != nil {
@@ -213,31 +213,48 @@ func swapRoots(root *os.Root, staging string, roots []string, present map[string
 }
 
 // removeLeftovers cleans up after a restore that did not finish (the daemon
-// stopped). It first moves back each old root whose place is empty, then
-// removes the staging and trash directories.
+// stopped, or a rollback rename failed). It moves back each old root whose
+// place is empty, then removes the staging directories and each trash
+// directory whose recovery succeeded. A trash directory that still holds an
+// unrecovered old root stays for the next attempt.
 func removeLeftovers(root *os.Root) {
 	ents, err := readDir(root, ".", MaxListEntries)
 	if err != nil {
 		return
 	}
 	for _, e := range ents {
-		if n := e.Name(); e.IsDir() && strings.HasPrefix(n, oldPrefix) {
-			olds, err := readDir(root, n, MaxListEntries)
-			if err != nil {
-				continue
-			}
-			for _, o := range olds {
-				if _, err := root.Lstat(o.Name()); errors.Is(err, fs.ErrNotExist) {
-					_ = root.Rename(n+"/"+o.Name(), o.Name())
-				}
-			}
+		n := e.Name()
+		if !e.IsDir() {
+			continue
 		}
-	}
-	for _, e := range ents {
-		if n := e.Name(); e.IsDir() && (strings.HasPrefix(n, stagingPrefix) || strings.HasPrefix(n, oldPrefix)) {
+		if strings.HasPrefix(n, stagingPrefix) {
+			_ = root.RemoveAll(n)
+		} else if strings.HasPrefix(n, oldPrefix) && recoverOld(root, n) {
 			_ = root.RemoveAll(n)
 		}
 	}
+}
+
+// recoverOld moves each old root in trash back to its place if the place is
+// empty. It returns false if an old root could not be moved back.
+func recoverOld(root *os.Root, trash string) bool {
+	olds, err := readDir(root, trash, MaxListEntries)
+	if err != nil {
+		return false
+	}
+	for _, o := range olds {
+		_, err := root.Lstat(o.Name())
+		if err == nil {
+			continue // a restored root replaced it
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return false
+		}
+		if err := rename(root, trash+"/"+o.Name(), o.Name()); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 const (

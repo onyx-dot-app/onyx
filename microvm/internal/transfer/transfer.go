@@ -38,7 +38,8 @@ type Request struct {
 type Client struct {
 	// HTTP is the client. Nil means a client with Timeout.
 	HTTP *http.Client
-	// Timeout bounds one whole request (body included). 0 means 10 min.
+	// Timeout bounds one whole request (body included), or one whole ranged
+	// download (all parts). 0 means 10 min.
 	Timeout time.Duration
 	// AllowHTTP allows plain http URLs (a test MinIO). Default https only.
 	AllowHTTP bool

@@ -142,7 +142,9 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
   SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
   does not change.
 - URLs and redirect targets must be `https`, unless `--transfer-allow-http` (a test object store).
-  `--transfer-timeout` (default 10 min) bounds one request, and stops a ranged restore that waits on it. Errors and logs show the URL without its query string.
+  `--transfer-timeout` (default 10 min) bounds one upload or one single-GET restore. A ranged restore
+  uses one timeout for the whole download (all parts, queued parts included), so set it for the
+  longest expected restore. Errors and logs show the URL without its query string.
 - Order for the api_server: `CaptureSession` → `presign_upload(size_bytes, sha256)` → `UploadCapture` →
   `finalize_presigned_upload` → commit the new archive → only then delete old archives.
 
