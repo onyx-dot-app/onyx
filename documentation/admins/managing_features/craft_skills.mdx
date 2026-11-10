@@ -346,6 +346,33 @@ Deleting an App detaches its custom Skills and changes automatic organization an
 Not available settings and hidden choices remain. Opt-outs remain.
 Changed synced Skill settings stop following the marketplace defaults.
 
+### Set install settings for one group
+
+Open **Admin Panel → Groups**, select a group, and open its **Skills** tab.
+The tab shows one setting for each company marketplace shared with the group and one setting for each Skill shared
+directly with the group. Skills that follow a marketplace use the marketplace setting.
+
+Each setting has five choices:
+
+| Choice | Effect for members of the group |
+| --- | --- |
+| **Company setting** | The group follows the company setting. The current company setting shows in the choice. |
+| **Required** | Onyx selects the Skill automatically. Members cannot turn it off directly. Same-name library priority still applies. |
+| **Installed by default** | Onyx installs the Skill. Members can turn it off. |
+| **Available to install** | Members can install the Skill. |
+| **Not available** | The group does not grant access. Another group can grant Available to install, Installed by default, or Required. Owners and direct user grants keep access. |
+
+<img className="rounded-image" src="/assets/admins/user_management/group_skills.webp" alt="Group Skills tab with a Required setting and an inherited company setting"/>
+
+A setting saves when you change it. **Save Changes** saves only the **Group** tab. If a save fails,
+the tab keeps your choice and shows the reason. Select **Retry** to send it again.
+Keyboard focus returns to the setting while the retry runs. A temporary refresh failure keeps unsaved choices.
+If access is lost, the tab clears them.
+
+The **Skills** tab requires manage-skills permission and Craft.
+Group managers with manage-skills permission can change only private Skills and marketplaces that are shared only with
+groups they manage. Other rows are read-only and show why.
+
 ## Maintain a Skill
 
 Open a custom Skill to manage its lifecycle:

@@ -6212,6 +6212,10 @@
           "syncing": "Diese Gruppe wird gerade synchronisiert. Bitte warten Sie einen Moment und versuchen Sie es erneut.",
           "updateFailed": "Die Gruppe konnte nicht aktualisiert werden",
           "updated": "Gruppe \"{name}\" aktualisiert"
+        },
+        "tabs": {
+          "group": "Gruppe",
+          "skills": "Skills"
         }
       },
       "form": {
@@ -6369,6 +6373,26 @@
         }
       },
       "skills": {
+        "intro": "Legen Sie fest, wie Skills für Mitglieder dieser Gruppe installiert werden. Jede Einstellung wird gespeichert, sobald Sie sie ändern. „Änderungen speichern“ speichert diese Einstellungen nicht.",
+        "marketplaces": {
+          "title": "Unternehmens-Marketplaces",
+          "description": "Skills, die einem Marketplace folgen, verwenden dessen Einstellung für diese Gruppe.",
+          "empty": "Mit dieser Gruppe sind keine Unternehmens-Marketplaces geteilt."
+        },
+        "direct": {
+          "title": "Geteilte Skills",
+          "description": "Skills, die einzeln mit dieser Gruppe geteilt sind.",
+          "empty": "Mit dieser Gruppe sind keine Skills direkt geteilt."
+        },
+        "empty": {
+          "title": "Keine Skills mit dieser Gruppe geteilt",
+          "description": "Teilen Sie auf der Skills-Seite einen Unternehmens-Marketplace oder einen Skill mit dieser Gruppe."
+        },
+        "noAccess": {
+          "title": "Skill-Einstellungen nicht verfügbar",
+          "description": "Sie haben keine Berechtigung, Skills für diese Gruppe zu verwalten."
+        },
+        "loadFailed": "Die Skill-Einstellungen für diese Gruppe konnten nicht geladen werden.",
         "marketplace": {
           "followers": "{count, plural, =0 {Keine Skills folgen diesem Marketplace} one {# Skill folgt diesem Marketplace} other {# Skills folgen diesem Marketplace}}"
         },

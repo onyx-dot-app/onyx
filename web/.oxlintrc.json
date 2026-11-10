@@ -628,7 +628,6 @@
         "src/views/admin/CostOverridesPanel.tsx",
         "src/views/admin/CraftPage/index.tsx",
         "src/views/admin/CraftPreferencesPage/index.tsx",
-        "src/views/admin/GroupsPage/EditGroupPage.tsx",
         "src/views/admin/GroupsPage/SharedGroupResources/ResourceContent.tsx",
         "src/views/admin/GroupsPage/SharedGroupResources/index.tsx",
         "src/views/admin/GroupsPage/TokenLimitSection.tsx",
