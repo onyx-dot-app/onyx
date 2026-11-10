@@ -134,6 +134,11 @@ func TestAdvertiseAddress(t *testing.T) {
 		"host the API rejects":     {flags{listen: ":7443", advertise: "agent_0.local:7443"}, ""},
 		"IPv6 zone":                {flags{listen: ":7443", advertise: "[fe80::1%eth0]:7443"}, ""},
 		"bad pod IP":               {flags{listen: ":7443"}, "not-an-ip"},
+		"leading-zero listen port": {flags{listen: ":00007443"}, "10.0.3.7"},
+		"leading-zero listen host": {flags{listen: "10.0.0.5:07443"}, ""},
+		"listen port 0":            {flags{listen: ":0"}, "10.0.3.7"},
+		"named listen port":        {flags{listen: ":https"}, "10.0.3.7"},
+		"wildcard bad port":        {flags{listen: ":00007443"}, ""},
 	} {
 		if got, err := advertiseAddress(c.f, c.podIP); err == nil {
 			t.Errorf("%s: got %q, want an error", name, got)

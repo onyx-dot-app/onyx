@@ -520,8 +520,7 @@ func advertiseAddress(f flags, podIP string) (string, error) {
 		if err != nil || (net.ParseIP(host) == nil && !dnsHost.MatchString(host)) {
 			return "", fmt.Errorf("--advertise-address %q must be host:port with a DNS name or IP address", f.advertise)
 		}
-		// Canonical decimal only: the api_server rejects ports over five digits.
-		if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 || strconv.FormatUint(n, 10) != port {
+		if !canonicalPort(port) {
 			return "", fmt.Errorf("--advertise-address %q has a bad port", f.advertise)
 		}
 		return f.advertise, nil
@@ -529,6 +528,9 @@ func advertiseAddress(f flags, podIP string) (string, error) {
 	host, port, err := net.SplitHostPort(f.listen)
 	if err != nil {
 		return "", fmt.Errorf("--listen %q: %w", f.listen, err)
+	}
+	if !canonicalPort(port) {
+		return "", fmt.Errorf("--listen %q needs a port from 1 to 65535 in plain decimal", f.listen)
 	}
 	if podIP != "" {
 		if net.ParseIP(podIP) == nil {
@@ -540,6 +542,13 @@ func advertiseAddress(f flags, podIP string) (string, error) {
 		return "", nil
 	}
 	return net.JoinHostPort(host, port), nil
+}
+
+// canonicalPort reports a port in 1-65535 in plain decimal, the form the
+// api_server accepts in agent_address.
+func canonicalPort(port string) bool {
+	n, err := strconv.ParseUint(port, 10, 16)
+	return err == nil && n != 0 && strconv.FormatUint(n, 10) == port
 }
 
 func splitList(s string) []string {
