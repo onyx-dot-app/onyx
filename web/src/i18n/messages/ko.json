@@ -353,7 +353,7 @@
         "clientMetadataRejected": "공급자가 클라이언트 메타데이터 문서를 사용할 수 없습니다. 이 인스턴스가 공용 인터넷에서 접근할 수 없다면 ‘클라이언트 메타데이터 문서 사용’을 끄고 다시 연결하세요.",
         "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
         "connectionFailed": "서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
-        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요.",
+        "oauthFailed": "OAuth 로그인에 실패했습니다. 다시 시도하거나 서버의 OAuth 설정을 확인하세요.",
         "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
       },
       "header": {
@@ -2621,8 +2621,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "모든 사용자가 소스에서 동기화된 접근 권한을 유지합니다.",
-          "title": "그룹을 추가하기 전까지 제한 없음"
+          "description": "제한하려면 그룹이 필요합니다. 소스에서 동기화된 액세스를 유지하려면 제한을 끄세요.",
+          "title": "그룹을 하나 이상 선택하세요"
         },
         "loadError": "그룹을 불러오지 못했습니다. 페이지를 새로고침한 후 다시 시도하세요.",
         "memberCount": "{count, plural, other {멤버 #명}}",
@@ -2968,6 +2968,7 @@
           "sync": "문서 접근 권한이 **{source}와 동기화됨**",
           "managedByAdmins": "**관리자**가 관리",
           "managedByGroups": "**{count, plural, one {그룹 #개} other {그룹 #개}}**가 관리",
+          "onlyMe": "이 커넥터를 통한 문서는 **소유자만** 볼 수 있습니다",
           "syncRestricted": "문서 접근 권한이 **{source}와 동기화됨**, **{count, plural, one {그룹 #개} other {그룹 #개}}**로 제한됨",
           "groupsPending": "문서가 **특정 그룹**과 공유됨",
           "syncRestrictedPending": "문서 접근 권한이 **{source}와 동기화됨**, **특정 그룹**으로 제한됨"
@@ -3751,15 +3752,19 @@
             "description": "이 커넥터로 인덱싱된 문서는 조직의 모든 구성원이 사용할 수 있습니다.",
             "title": "조직의 모든 사용자"
           },
+          "onlyMe": {
+            "description": "이 커넥터를 통해서는 자격 증명 소유자만 액세스할 수 있습니다. 자격 증명이 없는 소스는 커넥터를 만든 사람만 액세스할 수 있습니다.",
+            "title": "나만"
+          },
           "specificGroups": {
             "description": "이 커넥터의 문서에 액세스할 수 있는 그룹을 지정합니다.",
-            "required": "그룹을 하나 이상 선택하세요.",
             "title": "특정 그룹"
           },
           "sync": {
             "description": "{appName}이(가) 소스와 권한을 동기화합니다. 사용자는 소스에서 볼 수 있는 항목만 검색할 수 있습니다.",
             "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
-            "title": "{source}와(과) 동기화"
+            "title": "{source}와(과) 동기화",
+            "restrictionRequired": "그룹을 하나 이상 선택하거나 제한을 끄세요."
           },
           "title": "문서 액세스"
         },
@@ -7496,7 +7501,8 @@
           "public": "조직 전체에 공개",
           "private": "{count, plural, =0 {비공개} other {그룹 #개와 공유됨}}",
           "sync": "권한 자동 동기화",
-          "sync_restricted": "권한 자동 동기화"
+          "sync_restricted": "권한 자동 동기화",
+          "personal": "나만"
         },
         "detail": {
           "queued": "대기열 {position, selectordinal, other {#}}번째",
@@ -14259,6 +14265,11 @@
       },
       "completeFailed": {
         "message": "인증을 완료하지 못했습니다"
+      },
+      "desktopHandoff": {
+        "button": "Onyx 열기",
+        "description": "연결을 완료하기 위해 브라우저가 Onyx 데스크톱 앱을 엽니다. 앱이 열리면 이 탭을 닫아도 됩니다.",
+        "title": "Onyx로 돌아가기"
       },
       "genericError": {
         "description": "OAuth 과정에서 오류가 발생했습니다. 다시 시도해 주세요.",

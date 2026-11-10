@@ -1,7 +1,7 @@
 """Store pending chat messages and accepted generation inputs.
 
 Revision ID: b7a9d1e3f502
-Revises: c0de5e7a91b2
+Revises: fdaeeca238a1
 Create Date: 2026-11-09 12:00:00.000000
 """
 
@@ -10,7 +10,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "b7a9d1e3f502"
-down_revision = "c0de5e7a91b2"
+down_revision = "fdaeeca238a1"
 branch_labels = None
 depends_on = None
 

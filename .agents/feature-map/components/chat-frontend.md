@@ -49,6 +49,8 @@
   tab-separated text so a spreadsheet keeps the columns. A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
+- **The incognito start button** appears only on the new chat page when
+  incognito is available and unlocked.
 - **A user in incognito** cannot turn incognito on or off once the session
   exists, and answers show no rating buttons. Leaving the chat, reloading or
   closing the tab ends it. If an explicit exit fails, an error shows and the user stays in

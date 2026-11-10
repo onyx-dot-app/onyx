@@ -252,6 +252,15 @@ of only markers stays empty.
     The research agents do the same with their own feature state. Put new
     citation state in that feature state, or a resumed turn reuses numbers. A
     changed `include_citations` makes the restoration fail.
+14. `token-split-invariant` **The output must not depend on where tokens
+    split.** `chat/citation_processor.py:DynamicCitationProcessor` holds a
+    marker that later text can still change: a partial marker, `[n]` right
+    after an opening bracket (it can become `[[n]]`), and a marker on an
+    unfinished line that can open a code fence. The end of the stream
+    (`process_token(None)`) processes what it holds. Only `REMOVE` spacing can
+    differ, because it cannot take back a space that it already streamed.
+    `backend/tests/unit/onyx/chat/test_citation_processor_properties.py`
+    checks this.
 
 ---
 

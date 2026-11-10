@@ -141,6 +141,7 @@ dev = [
     "celery-types==0.26.0",
     "faker==40.38.0",
     "hatchling==1.28.0",
+    "hypothesis==6.170.14",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",

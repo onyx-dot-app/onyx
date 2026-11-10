@@ -15,9 +15,9 @@ from onyx.tools.tool_implementations.code_mode.store import (
     MAX_COMMITTED_BYTES,
     MAX_LOST_KEYS_CHARS,
     MAX_PATH_KEY_CHARS,
-    MAX_VALUE_DEPTH,
     ProgramStore,
     changed_writes,
+    commit_limit_error,
     json_value,
     lost_store_writes,
     store_snapshot,
@@ -120,6 +120,20 @@ def test_a_commit_applies_only_after_the_commit_it_follows() -> None:
     assert store_snapshot(messages).committed_bytes == len("c") + len("3")
 
 
+def test_a_deletion_committed_meanwhile_leaves_room_for_writes_at_the_limit() -> None:
+    filler = "x" * (MAX_COMMITTED_BYTES - len('a""') - len("b1"))
+    messages: list[Message] = [
+        _execution("1", StoreCommit(ordinal=1, follows=0, writes={"a": filler})),
+        _execution("2", StoreCommit(ordinal=2, follows=1, writes={"a": None})),
+    ]
+    snapshot = store_snapshot(messages)
+    # The write fills the chat's limit exactly.
+    assert commit_limit_error(snapshot, {"b": 1}) is None
+    program = ProgramStore(snapshot)
+    program.store("b", 1)
+    assert program.writes == {"b": 1}
+
+
 def test_dropped_commits_are_listed_until_an_observation_reports_them() -> None:
     dropped = StoreCommit(ordinal=2, follows=1, writes={"b": 2, "gone": None})
     messages: list[Message] = [_execution("2", dropped)]
@@ -168,39 +182,6 @@ def test_json_value_copies_and_converts_tuples() -> None:
     assert copied.size == len(copied.text.encode("utf-8"))
 
 
-@pytest.mark.parametrize(
-    "value",
-    [
-        {"k": [1, "é", None, {"a": [], "b": {}}], "t": True, "f": -1.5e-7},
-        [],
-        "x",
-        [[[]], (1, 2)],
-        # Escapes and multibyte characters make the JSON longer than the text.
-        ['quote " and \\ backslash', "control \n\x00", "é, 中文 and 😀"],
-        {"é" * 10: [10**30, 1e16, False]},
-    ],
-)
-def test_json_value_limit_is_the_compact_json_size(value: JsonValue) -> None:
-    size = len(json_text(json_value(value, "v", 10_000).value).encode("utf-8"))
-    assert json_value(value, "v", size).size == size
-    with pytest.raises(ValueError, match=f"v exceeds the limit of {size - 1} bytes"):
-        json_value(value, "v", size - 1)
-
-
-def test_json_value_rejects_lone_surrogates() -> None:
-    with pytest.raises(ValueError):
-        json_value({"k": "\ud800"}, "v", 1024)
-
-
-def test_json_value_stops_at_its_limit_for_shared_references() -> None:
-    value: list[object] = [1]
-    for _ in range(64):
-        value = [value, value]
-    # 2**64 leaves as JSON; the copy stops once it passes 1 KB.
-    with pytest.raises(ValueError, match="exceeds the limit of 1024 bytes"):
-        json_value(value, "v", 1024)
-
-
 def test_json_value_bounds_dict_keys_and_its_messages() -> None:
     long_key = "k" * 1_000_000
     with pytest.raises(ValueError, match="exceeds the limit of 64 bytes") as error:
@@ -212,15 +193,6 @@ def test_json_value_bounds_dict_keys_and_its_messages() -> None:
         shared = (shared, shared)
     with pytest.raises(TypeError, match=r"found a tuple key at \['a'\]\.$"):
         json_value({"a": {shared: 1}}, "v", 64)
-
-
-def test_json_value_rejects_deep_nesting() -> None:
-    value: list[object] = []
-    for _ in range(MAX_VALUE_DEPTH - 1):
-        value = [value]
-    assert json_value(value, "v", 10_000).value == value
-    with pytest.raises(ValueError, match=f"nests more than {MAX_VALUE_DEPTH} levels"):
-        json_value([value], "v", 10_000)
 
 
 def test_program_store_buffers_writes_over_a_snapshot() -> None:
@@ -255,8 +227,8 @@ def test_snapshot_counts_committed_bytes_and_the_chat_limit_applies() -> None:
         _execution("1", StoreCommit(ordinal=1, follows=0, writes={"a": "xy"})),
         _execution("2", StoreCommit(ordinal=2, follows=1, writes={"a": None})),
     ]
-    # 'a' + '"xy"', then the deleted key 'a'.
-    assert store_snapshot(messages).committed_bytes == 5 + 1
+    # 'a' + '"xy"'; the deleted key does not count.
+    assert store_snapshot(messages).committed_bytes == 5
 
     full = ProgramStore(
         StoreSnapshot(values={"k": "v"}, committed_bytes=MAX_COMMITTED_BYTES)

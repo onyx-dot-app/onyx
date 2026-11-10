@@ -26,7 +26,11 @@ interface MemberPluginConnectionDialogProps {
 type ConnectionAttempt =
   | { kind: "idle" }
   | { kind: "pending" }
-  | { kind: "error"; reason: MemberPluginConnectionError["reason"] };
+  | {
+      kind: "error";
+      reason: MemberPluginConnectionError["reason"];
+      detail?: MemberPluginConnectionError["detail"];
+    };
 
 export function MemberPluginConnectionContent({
   plugin,
@@ -83,6 +87,10 @@ export function MemberPluginConnectionContent({
             error instanceof MemberPluginConnectionError
               ? error.reason
               : "request_failed",
+          detail:
+            error instanceof MemberPluginConnectionError
+              ? error.detail
+              : undefined,
         });
       }
     }
@@ -169,8 +177,13 @@ export function MemberPluginConnectionContent({
           {attempt.kind === "error" && (
             <div role="alert">
               <Text as="p" font="secondary-body" color="status-error-05">
-                {t(`errors.${attempt.reason}`)}
+                {attempt.detail?.title ?? t(`errors.${attempt.reason}`)}
               </Text>
+              {attempt.detail && (
+                <Text as="p" font="secondary-body" color="text-03">
+                  {attempt.detail.description}
+                </Text>
+              )}
             </div>
           )}
         </form>

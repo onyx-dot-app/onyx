@@ -112,8 +112,12 @@ captured tools in order and applies these gates:
      (`DEFAULT_PERSONA_ID`). The MCP branch then applies
      `user_can_access_mcp_server` in Default Chat only
      ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
-     credentials once per server, and builds every `MCPTool` of that server
-     from the captured rows.
+     credentials once per server, including unavailable servers, and applies
+     the same `can_authenticate_with_headers` gate
+     as execution before building `MCPTool` instances from the captured rows.
+     Missing or rejected credentials exclude the server's tools; refreshable
+     OAuth grants and request-supplied credentials remain usable
+     ([[mcp-and-custom-tools]]).
 
 Two tools are added outside this loop. `SearchTool` is added when the request
 forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
@@ -369,9 +373,6 @@ Their control functions, such as `think_tool`, `generate_report` and
 - **A step with more than 64 tool calls fails the run.**
   `agents/tool_execution.py:ToolBatch` raises `ValueError` above
   `MAX_TOOL_CALLS_PER_STEP`.
-- **A failed MCP credential lookup hides the server's tools with no user
-  error.** `_construct_tools_impl` catches `MCPCredentialsError`, logs a
-  warning and skips the server.
 - **Qualified tool names can still collide.** `disambiguate_tool_names` does
   one pass. A configured name that already matches another tool's qualified
   name can still conflict ([[#tool-name-is-lookup-key]]).

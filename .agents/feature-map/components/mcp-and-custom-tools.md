@@ -30,12 +30,13 @@
 - **A member connects an account.** On a per-user server, each member connects
   their own API key or OAuth account. One member's connection never serves
   another member.
-- **A user in chat** sees each call as a tool step. A missing, expired or
-  rejected credential gives an error that tells the user to connect from the
-  MCP menu. When Onyx cannot resolve any credential for a server, that
-  server's tools are left out of the turn with no message. A down MCP server gives "Tool execution failed" with the reason. An
-  OpenAPI tool says that it could not reach its server. Only that call fails;
-  the turn continues.
+- **A user in chat** sees each call as a tool step. When Onyx cannot
+  authenticate a server, its tools are left out of the turn. The composer
+  prompts the user to connect. Credentials that expire or are rejected during
+  a call produce an error that tells the user to connect from the MCP menu.
+  A down MCP server gives "Tool execution failed" with the reason. An OpenAPI
+  tool says that it could not reach its server. Only that call fails; the turn
+  continues.
 
 The plugin screens, Default Chat selection and personal preferences are in
 [[plugins]].
@@ -132,8 +133,12 @@ The admin's choice at setup decides the scope, and the `MCPServer` row shows it:
 - `NONE`: no credential. A header template with required fields asks each user
   for values (`web/src/lib/mcp/auth.ts:getMcpAuthenticationFlow`).
 
-When resolution raises `MCPCredentialsError`, `_construct_tools_impl` leaves
-that server's tools out of the turn and logs a warning. The user sees no error.
+`_construct_tools_impl` and `MCPTool._run` both use
+`ResolvedMCPCredentials.can_authenticate_with_headers`. Construction excludes
+servers with missing or rejected credentials before exposing tools to the model.
+Refreshable OAuth tokens remain available. Request-supplied headers can replace
+missing credentials, but denylisted headers and grants that need reauthentication
+cannot pass this gate. Resolution errors also exclude the server and log a warning.
 
 **Outbound safety.** `server/features/mcp/ssrf.py:mcp_ssrf_httpx_client_factory`
 checks every request the MCP SDK makes, redirects included, at the admin SSRF

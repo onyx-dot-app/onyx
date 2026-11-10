@@ -70,8 +70,12 @@ An admin picks a **Document Access** option for each connector:
 | --- | --- | --- |
 | **Everyone in Your Organization** | Every Onyx user | All editions |
 | **Specific Groups** | Members of the selected user groups | Business or Enterprise |
+| **Only Me** | Only the Onyx user who owns the connector's credential, or the connector's creator for sources without a credential | Business or Enterprise |
 | **Sync with (source)** | Users who can see the document in the source system (Google Drive, Confluence, Slack, and so on) | Business or Enterprise |
 | **Sync with (source)**, restricted to groups | Users who pass both the source permissions and a user group check. Turn on **Allow Group Restrictions on Permission-Synced Connectors** under **Security & Hardening** first. | Business or Enterprise |
+
+A document that more than one connector indexes is visible to the readers of each of those connectors. For example,
+if a public connector indexes the same document as an **Only Me** connector, every user can see it.
 
 Permission sync mirrors the source permissions on a schedule.
 An admin can also start a sync with **Sync Permissions** on the connector page.
@@ -85,7 +89,8 @@ or visible only to the user who owns the connector credential.
 - **Allow Anonymous Users** (**Admin Panel > Chat Preferences**) lets signed-out visitors chat with
   public documents only. It is off by default.
 - **Incognito Chats** (**Admin Panel > Security & Hardening**) lets users start chats that Onyx does not
-  store. The admin chooses who may use it. It is off by default.
+  store. The admin chooses who may use it. It is off by default. The incognito button appears only on the new chat page,
+  before the chat starts, when the admin allows it.
 
 ## Audit trail
 

@@ -39,7 +39,7 @@ test("provider denial consumes the staged attempt and keeps the cancelled screen
     )
   );
   expect(
-    screen.getByText(messages.actions.mcpOauthCallback.cancelled.title)
+    await screen.findByText(messages.actions.mcpOauthCallback.cancelled.title)
   ).toBeVisible();
   expect(mockReplace).not.toHaveBeenCalled();
 });

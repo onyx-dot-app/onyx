@@ -288,6 +288,19 @@ class ResolvedMCPCredentials(BaseModel):
             else MCPConnectionStatus.NOT_CONNECTED
         )
 
+    def can_authenticate_with_headers(
+        self,
+        additional_headers: Mapping[str, str] | None,
+    ) -> bool:
+        """Apply the same credential gate at tool construction and execution."""
+        if self.can_authenticate():
+            return True
+        # Request headers cannot replace a rejected or unrefreshable grant.
+        return not self.needs_reauth() and any(
+            name.lower() not in DENYLISTED_MCP_HEADERS
+            for name in (additional_headers or {})
+        )
+
     def can_authenticate(self) -> bool:
         """Whether these credentials can authenticate a call now (lazy refresh
         of an expired-but-refreshable OAuth token still allowed downstream)."""

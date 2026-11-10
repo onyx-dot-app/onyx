@@ -187,7 +187,12 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync" | "sync_restricted";
+export type AccessType =
+  | "public"
+  | "private"
+  | "sync"
+  | "sync_restricted"
+  | "personal";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 

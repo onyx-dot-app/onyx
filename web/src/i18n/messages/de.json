@@ -353,7 +353,7 @@
         "clientMetadataRejected": "Der Anbieter konnte das Client-Metadatendokument nicht verwenden. Wenn diese Instanz nicht über das öffentliche Internet erreichbar ist, deaktivieren Sie „Client-Metadatendokument verwenden“ und verbinden Sie sich erneut.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
         "connectionFailed": "Der Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
-        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut.",
+        "oauthFailed": "Die OAuth-Anmeldung ist fehlgeschlagen. Versuchen Sie es erneut oder prüfen Sie die OAuth-Einstellungen des Servers.",
         "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}"
       },
       "header": {
@@ -2621,8 +2621,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Alle behalten den aus der Quelle synchronisierten Zugriff.",
-          "title": "Keine Beschränkung, bis Gruppen hinzugefügt werden"
+          "description": "Eine Einschränkung braucht eine Gruppe. Schalte sie aus, um den aus der Quelle synchronisierten Zugriff zu behalten.",
+          "title": "Wähle mindestens eine Gruppe aus"
         },
         "loadError": "Gruppen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
         "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
@@ -2968,6 +2968,7 @@
           "sync": "Dokumentzugriff **mit {source} synchronisiert**",
           "managedByAdmins": "Verwaltet von **Admins**",
           "managedByGroups": "Verwaltet von **{count, plural, one {# Gruppe} other {# Gruppen}}**",
+          "onlyMe": "Dokumente über diesen Connector sichtbar für **nur seinen Inhaber**",
           "syncRestricted": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **{count, plural, one {# Gruppe} other {# Gruppen}}**",
           "groupsPending": "Dokumente freigegeben für **bestimmte Gruppen**",
           "syncRestrictedPending": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **bestimmte Gruppen**"
@@ -3751,15 +3752,19 @@
             "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation verfügbar.",
             "title": "Alle in Ihrer Organisation"
           },
+          "onlyMe": {
+            "description": "Nur der Inhaber der Anmeldedaten dieses Connectors erhält darüber Zugriff; bei einer Quelle ohne Anmeldedaten nur die Person, die ihn erstellt hat.",
+            "title": "Nur ich"
+          },
           "specificGroups": {
             "description": "Benennen Sie Gruppen, die auf Dokumente dieses Konnektors zugreifen können.",
-            "required": "Wählen Sie mindestens eine Gruppe aus.",
             "title": "Bestimmte Gruppen"
           },
           "sync": {
             "description": "{appName} synchronisiert Berechtigungen mit der Quelle. Nutzer können nur durchsuchen, was sie in der Quelle sehen können.",
             "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechseln Sie zu einer unterstützten Authentifizierungsmethode.",
-            "title": "Mit {source} synchronisieren"
+            "title": "Mit {source} synchronisieren",
+            "restrictionRequired": "Wähle mindestens eine Gruppe aus oder schalte die Einschränkung aus."
           },
           "title": "Dokumentzugriff"
         },
@@ -7496,7 +7501,8 @@
           "public": "Öffentlich für Ihre Organisation",
           "private": "{count, plural, =0 {Privat} one {Mit # Gruppe geteilt} other {Mit # Gruppen geteilt}}",
           "sync": "Automatische Berechtigungssynchronisierung",
-          "sync_restricted": "Automatische Berechtigungssynchronisierung"
+          "sync_restricted": "Automatische Berechtigungssynchronisierung",
+          "personal": "Nur ich"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.}} in der Warteschlange",
@@ -14259,6 +14265,11 @@
       },
       "completeFailed": {
         "message": "Autorisierung konnte nicht abgeschlossen werden"
+      },
+      "desktopHandoff": {
+        "button": "Onyx öffnen",
+        "description": "Ihr Browser öffnet die Onyx-Desktop-App, um die Verbindung abzuschließen. Sie können diesen Tab schließen, sobald die App geöffnet ist.",
+        "title": "Zurück zu Onyx"
       },
       "genericError": {
         "description": "Während des OAuth-Vorgangs ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",

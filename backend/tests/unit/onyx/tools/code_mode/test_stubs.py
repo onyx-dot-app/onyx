@@ -1,9 +1,11 @@
 import ast
 import json
+from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel, Field, JsonValue, create_model
+from pydantic_monty import Monty, MontyTypingError
 
 from onyx.llm.models import ToolResult
 from onyx.tools.models import (
@@ -439,6 +441,62 @@ def test_docstring_text_cannot_end_the_docstring() -> None:
         for node in class_def.body
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
     ] == ['Ends with "a quote"']
+
+
+@pytest.fixture(scope="module")
+def type_checker() -> Iterator[Monty]:
+    with Monty(min_processes=1, max_processes=1) as pool:
+        yield pool
+
+
+@pytest.mark.parametrize("name", ["\x00", "a\rb", "\ud800"])
+def test_control_characters_in_a_tool_name_keep_the_stubs_valid(
+    name: str, type_checker: Monty
+) -> None:
+    stubs = build_tool_stubs([FakeTool(name, _unused), FakeTool("plain", _unused)])
+
+    module = ast.parse(_full_text(stubs))
+
+    docstrings = [
+        ast.get_docstring(node, clean=False)
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef)
+    ]
+    assert any(f"Tool name: {name}\n" in (text or "") for text in docstrings)
+
+    # The sandbox's type checker reads the same stubs: a wrong argument to the
+    # ordinary tool is its only diagnostic.
+    code = "await plain(value=1)\n"
+    with (
+        type_checker.checkout(
+            type_check=True,
+            type_check_stubs=stubs.program_text(code),
+            type_check_format="concise",
+        ) as session,
+        pytest.raises(MontyTypingError) as error,
+    ):
+        session.feed_run(code)
+    assert str(error.value).strip().splitlines() == [
+        "main.py:1:13: error[invalid-argument-type] Argument to function `plain` "
+        "is incorrect: Expected `str`, found `Literal[1]`"
+    ]
+
+
+@pytest.mark.parametrize("description", ["\x00", "a\rb", "\ud800"])
+def test_control_characters_in_a_field_description_keep_the_model_valid(
+    description: str,
+) -> None:
+    model = create_model("Odd", value=(str, Field(description=description)))
+
+    [declaration] = model_declarations(model)
+
+    [class_def] = ast.parse(declaration).body
+    assert isinstance(class_def, ast.ClassDef)
+    assert [
+        node.value.value
+        for node in class_def.body
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+    ] == [description]
 
 
 def test_an_invalid_schema_type_renders_as_any_without_failing_other_tools() -> None:

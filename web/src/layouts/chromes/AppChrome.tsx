@@ -501,20 +501,18 @@ function Header() {
               <div className="flex flex-1 justify-end items-center">
                 {(appPosition.isChat() || appPosition.isNewSession()) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
-                    {incognitoAvailable && !incognitoEnabled && (
-                      <Button
-                        icon={SvgEyeOff}
-                        prominence="tertiary"
-                        onClick={toggleIncognito}
-                        disabled={incognitoLocked}
-                        aria-label={t("incognitoStart.ariaLabel")}
-                        tooltip={
-                          incognitoLocked
-                            ? t("incognitoStart.lockedTooltip")
-                            : t("incognitoStart.tooltip")
-                        }
-                      />
-                    )}
+                    {appPosition.isNewSession() &&
+                      incognitoAvailable &&
+                      !incognitoEnabled &&
+                      !incognitoLocked && (
+                        <Button
+                          icon={SvgEyeOff}
+                          prominence="tertiary"
+                          onClick={toggleIncognito}
+                          aria-label={t("incognitoStart.ariaLabel")}
+                          tooltip={t("incognitoStart.tooltip")}
+                        />
+                      )}
                     {/* On mobile widths the reading-width cap never applies
                         (chat is always full width), so the toggle is hidden. */}
                     {!isMobile && (

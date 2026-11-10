@@ -48,7 +48,11 @@ def test_concurrent_removals_keep_one_group_on_a_restricted_pair(
     cc_pair.access_type = AccessType.SYNC_RESTRICTED
     for group in (first, second):
         db_session.add(
-            UserGroup__CCPairDataAccess(cc_pair_id=cc_pair.id, user_group_id=group.id)
+            UserGroup__CCPairDataAccess(
+                cc_pair_id=cc_pair.id,
+                user_group_id=group.id,
+                access_type=cc_pair.access_type,
+            )
         )
     db_session.commit()
 

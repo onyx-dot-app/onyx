@@ -138,9 +138,10 @@ The web client blocks pages separately, through
 (`backend/ee/onyx/server/license/api.py:downgrade_to_community`) runs only while
 `is_access_gated` is true, the same rule that sets `GATED_ACCESS` in settings. In
 one commit (`backend/ee/onyx/db/community_downgrade.py`):
-- `make_all_cc_pairs_public__no_commit` sets every pair that is not PUBLIC to
-  PUBLIC, clears the sync options and timestamps, deletes the data-access group
-  links and the external group rows, clears the external ACL columns on documents
+- `make_all_cc_pairs_public__no_commit` deletes the data-access group links
+  first (their foreign key rejects a pair leaving a group type while it has
+  them), sets every pair that is not PUBLIC to PUBLIC, clears the sync options
+  and timestamps, deletes the external group rows, clears the external ACL columns on documents
   and hierarchy nodes, and marks the pairs' documents for the metadata sync.
   Chunk ACLs stay old until that sync runs ([[document-index]]). A permission sync
   already in flight can write some rows back; they grant nothing on a public pair.

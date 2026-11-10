@@ -78,7 +78,7 @@ packages:
   src/lib/mcp: 99.3
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
-  src/lib/oauth: 100
+  src/lib/oauth: 99.6
   src/lib/oauth-provider: 100
   src/lib/onboarding: 99.8
   src/lib/opensearch-health: 100

@@ -2,6 +2,8 @@
 
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
+import { leaveOAuthCallback, reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { SvgCheck, SvgAlertTriangle } from "@opal/icons";
@@ -33,7 +35,7 @@ interface OAuthCallbackPageProps {
   config: OAuthCallbackConfig;
 }
 
-export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
+function OAuthCallbackPageContent({ config }: OAuthCallbackPageProps) {
   const t = useTranslations("common.oauthCallback");
   const navigation = useNavigation();
   const searchParams = useSearchParams();
@@ -98,10 +100,14 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     const handleOAuthCallback = async () => {
       // Handle OAuth error from provider
       if (error) {
-        setStatusMessage(config.errorMessage || t("authorizationFailed.title"));
-        setStatusDetails(
-          errorDescription || t("authorizationFailed.description")
-        );
+        const failure = {
+          title: config.errorMessage || t("authorizationFailed.title"),
+          description: errorDescription || t("authorizationFailed.description"),
+        };
+        if (state && reportOAuthCallback(state, false, undefined, failure))
+          return;
+        setStatusMessage(failure.title);
+        setStatusDetails(failure.description);
         setIsError(true);
         setIsLoading(false);
         return;
@@ -155,6 +161,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
 
         // Parse the response to get service and redirect information
         const responseData = await response.json();
+        if (reportOAuthCallback(state, true)) return;
         const result = {
           success: true,
           serviceName:
@@ -191,10 +198,16 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
         setIsLoading(false);
       } catch (error) {
         console.error("OAuth callback error:", error);
-        setStatusMessage(config.errorMessage || t("genericError.title"));
-        setStatusDetails(
-          error instanceof Error ? error.message : t("genericError.description")
-        );
+        const failure = {
+          title: config.errorMessage || t("genericError.title"),
+          description:
+            error instanceof Error
+              ? error.message
+              : t("genericError.description"),
+        };
+        if (reportOAuthCallback(state, false, undefined, failure)) return;
+        setStatusMessage(failure.title);
+        setStatusDetails(failure.description);
         setIsError(true);
         setIsLoading(false);
       }
@@ -262,11 +275,15 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
               {isError && (
                 <div className="flex flex-col space-y-2">
                   <Button
-                    onClick={() => {
-                      const target =
-                        redirectPath || config.defaultRedirectPath || "/app";
-                      navigation.go(target as Route);
-                    }}
+                    onClick={() =>
+                      leaveOAuthCallback(() =>
+                        navigation.go(
+                          (redirectPath ||
+                            config.defaultRedirectPath ||
+                            "/app") as Route
+                        )
+                      )
+                    }
                     width="full"
                   >
                     {config.backButtonText || t("backButton.label")}
@@ -286,3 +303,5 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     </div>
   );
 }
+
+export default withDesktopOAuthHandoff(OAuthCallbackPageContent);
