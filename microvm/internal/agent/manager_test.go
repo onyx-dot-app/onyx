@@ -328,6 +328,20 @@ func TestTemplateCheckedBeforeEveryRestore(t *testing.T) {
 	}
 }
 
+func TestBuildSlotChecksMemory(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.cfg.MinFreeMemMiB = 512
+	f.stats.availMiB = 4096 + 511
+	_, _, err := f.m.BuildSlot("tpl-abc", 4096)
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	f.stats.availMiB = 4096 + 512
+	_, done, err := f.m.BuildSlot("tpl-abc", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done(false)
+}
+
 func TestTemplatesInUseAndBuildSlot(t *testing.T) {
 	f := newFixture(t, 2)
 	ctx := context.Background()
@@ -337,11 +351,11 @@ func TestTemplatesInUseAndBuildSlot(t *testing.T) {
 	if in := f.m.TemplatesInUse(); !in["tpl-1"] || len(in) != 1 {
 		t.Fatalf("in use %v", in)
 	}
-	uid, done, err := f.m.BuildSlot("tpl-abc")
+	uid, done, err := f.m.BuildSlot("tpl-abc", 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := f.m.BuildSlot("tpl-abc"); err == nil {
+	if _, _, err := f.m.BuildSlot("tpl-abc", 1024); err == nil {
 		t.Fatal("second build slot for the same id")
 	}
 	// The pool has 2 UIDs: one VM and one build.
@@ -352,7 +366,7 @@ func TestTemplatesInUseAndBuildSlot(t *testing.T) {
 		t.Fatalf("build UID %d was not freed", uid)
 	}
 	f.uids.Put(uid)
-	_, done2, err := f.m.BuildSlot("tpl-def")
+	_, done2, err := f.m.BuildSlot("tpl-def", 1024)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,10 +376,10 @@ func TestTemplatesInUseAndBuildSlot(t *testing.T) {
 	// The build VM is in doubt until a scan finds no process for it.
 	table := &fakeTable{cands: []Candidate{{ID: "tpl-def", PID: 700, UID: uid}}}
 	f.m.adopter = table
-	_, _, err = f.m.BuildSlot("tpl-def")
+	_, _, err = f.m.BuildSlot("tpl-def", 1024)
 	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
 	table.set(nil, nil)
-	_, done3, err := f.m.BuildSlot("tpl-def")
+	_, done3, err := f.m.BuildSlot("tpl-def", 1024)
 	if err != nil {
 		t.Fatalf("build slot after the doubt cleared: %v", err)
 	}

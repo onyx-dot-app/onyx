@@ -311,6 +311,28 @@ func TestRecoverScanErrorBlocksCreateUntilAScanWorks(t *testing.T) {
 	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
 }
 
+// A template build waits for a working scan, as Create does: an
+// unverified Firecracker may hold any UID.
+func TestRecoverScanErrorBlocksBuildSlot(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.UseJournal(&journal.Journal{Dir: t.TempDir()})
+	table := &fakeTable{scanErr: errors.New("no /proc")}
+	if _, err := f.m.Recover(context.Background(), table); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := f.m.BuildSlot("tpl-0123456789ab", 1024)
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	table.set([]Candidate{{ID: idOrphan, PID: 9, UID: 1000003}}, nil)
+	uid, done, err := f.m.BuildSlot("tpl-0123456789ab", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done(false)
+	if uid == 1000003 {
+		t.Fatal("the build VM got the untracked VM's UID")
+	}
+}
+
 func TestCrashDuringAStartKeepsTheStoppedAttempt(t *testing.T) {
 	f := newFixture(t, 10)
 	jdir := t.TempDir()
@@ -407,7 +429,7 @@ func TestRescanSkipsTemplateBuildVM(t *testing.T) {
 	if _, err := f.m.Recover(context.Background(), table); err != nil {
 		t.Fatal(err)
 	}
-	uid, done, err := f.m.BuildSlot("tpl-0123456789ab")
+	uid, done, err := f.m.BuildSlot("tpl-0123456789ab", 1024)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -64,7 +64,7 @@ type VMM interface {
 // Slots hands out jailer UIDs and tells which templates VMs use. The real
 // one is agent.Manager.
 type Slots interface {
-	BuildSlot(id string) (uint32, func(left bool), error)
+	BuildSlot(id string, memMiB uint32) (uint32, func(left bool), error)
 	TemplatesInUse() map[string]bool
 }
 
@@ -272,7 +272,7 @@ func (b *Builder) build(ctx context.Context, r *Rootfs, key template.Key, name s
 		files = append(files, File{Name: d.File, Src: filepath.Join(stage, d.File)})
 	}
 	id := "tpl-" + key.Hash()[:12]
-	uid, done, err := b.Slots.BuildSlot(id)
+	uid, done, err := b.Slots.BuildSlot(id, b.MemMiB)
 	if err != nil {
 		return nil, 0, err
 	}

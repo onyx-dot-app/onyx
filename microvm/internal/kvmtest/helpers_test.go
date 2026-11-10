@@ -140,8 +140,10 @@ func kitRootfs(t *testing.T, imgDir, args string) *tplbuild.Rootfs {
 
 type kvmSlots struct{}
 
-func (kvmSlots) BuildSlot(string) (uint32, func(bool), error) { return 999999, func(bool) {}, nil }
-func (kvmSlots) TemplatesInUse() map[string]bool              { return nil }
+func (kvmSlots) BuildSlot(string, uint32) (uint32, func(bool), error) {
+	return 999999, func(bool) {}, nil
+}
+func (kvmSlots) TemplatesInUse() map[string]bool { return nil }
 
 // kernelPath installs the guest kernel of the artifacts dir like the agent.
 func kernelPath(t *testing.T, e env) string {

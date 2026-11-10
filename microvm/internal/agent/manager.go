@@ -181,8 +181,9 @@ type Manager struct {
 	// known, so Create waits for a scan that works.
 	doubt    map[string]*doubt
 	needScan bool
-	// building holds the jailer IDs of template build VMs (BuildSlot).
-	building map[string]bool
+	// building maps the jailer IDs of template build VMs (BuildSlot) to
+	// their guest memory in MiB.
+	building map[string]uint32
 }
 
 // NewManager returns a Manager with an empty VM table.
@@ -192,7 +193,7 @@ func NewManager(cfg Config, templates *template.Store, launcher Launcher, stats 
 		cfg: cfg, templates: templates, launcher: launcher, stats: stats, uids: uids,
 		versions: versions, log: log, now: time.Now,
 		vms: map[string]*entry{}, tombs: map[string]tombstone{}, doubt: map[string]*doubt{},
-		building: map[string]bool{},
+		building: map[string]uint32{},
 	}
 }
 
@@ -742,24 +743,34 @@ func (m *Manager) TemplatesInUse() map[string]bool {
 	return out
 }
 
-// BuildSlot gives a template build VM with jailer ID id a jailer UID. The
-// process scan does not count the VM as untracked while it runs. Call done
-// when the VM is gone; done(true) puts the VM in doubt with its UID, for a
-// VM that may still run, and a later scan frees the UID once it is gone.
-func (m *Manager) BuildSlot(id string) (uint32, func(left bool), error) {
-	if err := m.checkDoubt(context.Background(), id, false); err != nil {
+// BuildSlot gives a template build VM with jailer ID id and memMiB of guest
+// memory a jailer UID. It refuses the build when the node lacks the memory,
+// as Create does. The process scan does not count the VM as untracked while
+// it runs. Call done when the VM is gone; done(true) puts the VM in doubt
+// with its UID, for a VM that may still run, and a later scan frees the UID
+// once it is gone.
+func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), error) {
+	if err := m.checkDoubt(context.Background(), id, true); err != nil {
 		return 0, nil, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.building[id] || m.vms[id] != nil || m.doubt[id] != nil {
+	if _, ok := m.building[id]; ok || m.vms[id] != nil || m.doubt[id] != nil {
 		return 0, nil, apierr.New(pb.ErrorReason_INTERNAL, "build VM %s already runs", id)
+	}
+	_, avail, err := m.stats.MemInfo()
+	if err != nil {
+		return 0, nil, fmt.Errorf("read memory info: %w", err)
+	}
+	if avail < uint64(memMiB)+m.cfg.MinFreeMemMiB {
+		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
+			"node has %d MiB available, the template build VM needs %d MiB plus a %d MiB reserve", avail, memMiB, m.cfg.MinFreeMemMiB)
 	}
 	uid, ok := m.uids.Get()
 	if !ok {
 		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS, "no free jailer UID for the template build")
 	}
-	m.building[id] = true
+	m.building[id] = memMiB
 	done := func(left bool) {
 		m.mu.Lock()
 		defer m.mu.Unlock()

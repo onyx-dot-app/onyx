@@ -84,7 +84,7 @@ type fakeSlots struct {
 	freed int
 }
 
-func (s *fakeSlots) BuildSlot(id string) (uint32, func(bool), error) {
+func (s *fakeSlots) BuildSlot(id string, _ uint32) (uint32, func(bool), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.held == nil {
