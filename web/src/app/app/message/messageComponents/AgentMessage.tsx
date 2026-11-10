@@ -18,8 +18,8 @@ import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
 import { HumanMessageBubble } from "@/app/app/message/HumanMessage";
-import type { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
-import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import type { TurnGroup } from "@/lib/timeline/chat/transformers";
+import type { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
 import { handleCopy } from "@/app/app/message/copyingUtils";
 import {
   type AuthError,
@@ -28,13 +28,13 @@ import {
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { GeneratedImageGrid } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
-import { usePacketProcessor } from "@/app/app/message/messageComponents/timeline/hooks/usePacketProcessor";
-import { usePacedTurnGroups } from "@/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups";
+import { usePacketProcessor } from "@/lib/timeline/chat/hooks/usePacketProcessor";
+import { usePacedTurnGroups } from "@/lib/timeline/chat/hooks/usePacedTurnGroups";
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/types";
 import { Text } from "@opal/components";
-import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/AgentTimeline";
+import { AgentTimeline } from "@/lib/timeline/chat/AgentTimeline";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";

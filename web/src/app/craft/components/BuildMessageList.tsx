@@ -12,7 +12,7 @@ import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import TextChunk from "@/app/craft/components/TextChunk";
-import CraftTimeline from "@/app/craft/components/CraftTimeline";
+import CraftTimeline from "@/lib/timeline/craft/components/CraftTimeline";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
@@ -27,7 +27,7 @@ import {
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
 import { StreamItem, TodoListState } from "@/app/craft/types/displayTypes";
-import { buildCraftTranscript } from "@/app/craft/utils/timelineEntries";
+import { buildCraftTranscript } from "@/lib/timeline/craft/timelineEntries";
 
 interface BuildMessageListProps {
   sessionId: string | null;

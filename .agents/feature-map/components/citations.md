@@ -99,7 +99,7 @@ end of the previous step, so this reuse works only across steps. Two tools in
 one step that return the same document give it two numbers.
 
 **Web rendering.** Inline links resolve through
-`web/src/app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:handleCitationPacket`,
+`web/src/lib/timeline/chat/hooks/packetProcessor.ts:handleCitationPacket`,
 which builds `citationMap`.
 `web/src/app/app/message/messageComponents/AgentMessage.tsx` merges it with
 `chatState.citations` as `mergedCitations` and passes the map to
@@ -164,7 +164,7 @@ of only markers stays empty.
    the answer. This works only because
    `handleCitationPacket` and `getCitations` fold packets into a map in any
    order
-   (`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:handleCitationPacket`,
+   (`lib/timeline/chat/hooks/packetProcessor.ts:handleCitationPacket`,
    `app/app/services/packetUtils.ts:getCitations`) and the link renders as
    nothing until its number arrives ([[#unresolved-citation-silent]]). Keep
    both properties. Only `HYPERLINK` mode yields `CitationInfo`; the other
