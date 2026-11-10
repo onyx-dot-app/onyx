@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID
 
 import pytest
 import requests
@@ -76,6 +78,17 @@ def _successful_token_response() -> requests.Response:
     return response
 
 
+def _connect_without_limit_check(
+    _external_app_id: int,
+    _user_id: UUID,
+    connect: Callable[[], object],
+    _db_session: Session,
+) -> dict[UUID, object]:
+    """The Skill limit wrapper needs a database; these tests check the OAuth flow."""
+    connect()
+    return {}
+
+
 def _configure_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[ExternalApp, _OrganizationCredentials, MagicMock, MagicMock]:
@@ -93,8 +106,13 @@ def _configure_route(
     monkeypatch.setattr(oauth_route.requests, "post", token_post)
     monkeypatch.setattr(
         oauth_route,
-        "upsert_external_app_user_credential",
+        "upsert_external_app_user_credential__no_commit",
         persist_credentials,
+    )
+    monkeypatch.setattr(
+        oauth_route,
+        "connect_external_app_within_skill_limit__no_commit",
+        _connect_without_limit_check,
     )
     monkeypatch.setattr(oauth_route, "push_skills_for_users", MagicMock())
     return app, credentials, db_session, token_post
@@ -280,9 +298,15 @@ def test_callback_preserves_provider_exchange_and_grant(
     app, _, db_session, token_post = _configure_route(monkeypatch)
     app.app_type = app_type
     owner = _user("owner")
-    persist = MagicMock()
-    push = MagicMock()
-    monkeypatch.setattr(oauth_route, "upsert_external_app_user_credential", persist)
+    events: list[str] = []
+    persist = MagicMock(
+        side_effect=lambda *_args, **_kwargs: events.append("credential")
+    )
+    push = MagicMock(side_effect=lambda *_args: events.append("push"))
+    db_session.commit.side_effect = lambda: events.append("commit")
+    monkeypatch.setattr(
+        oauth_route, "upsert_external_app_user_credential__no_commit", persist
+    )
     monkeypatch.setattr(oauth_route, "push_skills_for_users", push)
     info_response = MagicMock(spec=requests.Response)
     info_response.json.return_value = {"scopes": expected_scopes}
@@ -342,7 +366,9 @@ def test_callback_preserves_provider_exchange_and_grant(
     assert persisted["granted_scopes"] == expected_scopes
     assert persisted["user_id"] == owner.id
     push.assert_called_once_with({owner.id}, db_session)
-    db_session.commit.assert_called_once()
+    # The credential commits before the push; the push state commits after it.
+    assert db_session.commit.call_count == 2
+    assert events == ["credential", "commit", "push", "commit"]
 
 
 @pytest.mark.parametrize("malformed_body", [None, [], "not-an-object"])
@@ -449,7 +475,9 @@ def test_callback_rejects_invalid_provider_credentials(
     app, _, db_session, token_post = _configure_route(monkeypatch)
     app.app_type = app_type
     persist = MagicMock()
-    monkeypatch.setattr(oauth_route, "upsert_external_app_user_credential", persist)
+    monkeypatch.setattr(
+        oauth_route, "upsert_external_app_user_credential__no_commit", persist
+    )
     owner = _user("owner")
     query = _authorize_query(app=app, user=owner, db_session=db_session)
     token_post.return_value.json.return_value = token_body
@@ -474,7 +502,9 @@ def test_callback_does_not_follow_token_redirects(
 ) -> None:
     app, _, db_session, token_post = _configure_route(monkeypatch)
     persist = MagicMock()
-    monkeypatch.setattr(oauth_route, "upsert_external_app_user_credential", persist)
+    monkeypatch.setattr(
+        oauth_route, "upsert_external_app_user_credential__no_commit", persist
+    )
     owner = _user("owner")
     query = _authorize_query(app=app, user=owner, db_session=db_session)
     token_post.return_value.status_code = status_code

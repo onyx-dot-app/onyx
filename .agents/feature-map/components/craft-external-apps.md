@@ -189,7 +189,12 @@ restores injection with the old secrets.
 attempt to the user, app and a fingerprint of the resolved OAuth
 configuration: client, redirect and endpoints. The callback consumes the
 attempt once, rejects it when the configuration changed after the start,
-stores the credential, and pushes the user's skills. Providers with
+stores the credential, and pushes the user's skills. Both connect routes store
+it through `db/skill.py:connect_external_app_within_skill_limit__no_commit`:
+the app always connects, and app skills past the user's Skill limit stay off
+([[skills]]). The credential upsert refreshes any loaded credential object from
+its returned row. Readiness checks in the same session must use the replacement,
+including a replacement with no keys. Providers with
 per-account hosts (Zendesk) resolve OAuth endpoints from organization
 credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 

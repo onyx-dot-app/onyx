@@ -288,7 +288,7 @@ each name winner with a grouped minimum over the library class and the
 creation-order position, so it needs no per-user sort window. Past the
 `PER_USER_WINNER_MAX_*` sizes, it finds each name's winner once for a user with
 no rows, then replaces it only for the user and name pairs from
-`_user_specific_skill_names`: preferences, direct and group shares, app
+`_user_specific_skill_names`: preferences, direct and group shares, blocks, app
 readiness, authorship and marketplace ownership. Readiness exceptions use the
 same captured input as eligibility, even if credentials change before the usage
 query. Final totals include only existing users; missing IDs retain zero usage.
@@ -313,6 +313,22 @@ of the same name), auto-enable after upload, `replace_skill_bundle` (edit,
 restore) and ownership transfer. Group joins do not check. The 413 `PAYLOAD_TOO_LARGE` body
 adds `skill_limit` (`skills/limits.py:SkillLimitViolation`): failed limit,
 affected user count, and the requesting user's proposed usage when they go over.
+App connection never fails for the limit.
+`db/skill.py:connect_external_app_within_skill_limit__no_commit` wraps the
+credential upsert in both connect routes (form and OAuth callback). It
+keeps the credentials and writes `UserSkillLimitBlock` rows for app skills
+that do not fit, in name order. A Skill left off is retried after a later one
+turns on, because that one can replace a larger Skill of its name. The check
+locks the app row (`FOR NO KEY UPDATE`) after membership and before it reads the app's
+Skills, so association writers wait. A failed check logs and adds no block. The
+runtime gate (`_runtime_eligibility`) skips blocked pairs, and
+`SkillUserState.skill_limit_block` shows them as off with the failed limit,
+whatever the policy. A new connection or an explicit enable retries a block;
+disconnect deletes it. Removing an app association also clears blocks for the
+unlinked Skill across users. Reconnect clears previous blocks before its checking
+savepoint, so a failed check retains the connection without restoring stale blocks.
+Token refresh does not run the check, because it does
+not change readiness.
 
 ## Contracts and traps
 
