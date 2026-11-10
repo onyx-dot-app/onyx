@@ -53,12 +53,12 @@ import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
     Example:
     `https://onyxazureai.openai.azure.com/openai/deployments/gpt-4.1/chat/completions?api-version=2025-01-01-preview`
 
-    The URI must include the `api-version` query parameter and either a deployment name in the path or the
-    `/openai/responses` path.
+    The URI must have one of these forms:
 
-    You can also paste the base URL of the Azure OpenAI v1 API,
-    for example `https://onyxazureai.openai.azure.com/openai/v1/`. This URL does not need an `api-version`.
-    Onyx uses the `v1` API version for it.
+    - The base URL of the Azure OpenAI v1 API, for example `https://onyxazureai.openai.azure.com/openai/v1/`.
+    This URL does not need an `api-version`. Onyx uses the `v1` API version for it.
+    - A URL with the `api-version` query parameter and either a deployment name in the path or the
+    `/openai/responses` path.
 
     Paste your **API Key**.
 
