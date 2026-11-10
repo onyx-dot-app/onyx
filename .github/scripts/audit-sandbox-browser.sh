@@ -22,14 +22,12 @@ if ! installed="$(jq -er '
   echo "Invalid sandbox browser inventory: expected one Chrome component with a version-specific Google Chrome CPE." >&2
   exit 1
 fi
-if ! latest="$(curl --fail --silent --show-error --location --retry 3 \
-  https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json \
-  | jq -er '.channels.Stable.version | select(type == "string" and length > 0)')"; then
+if ! latest="$("$(dirname "$0")/chrome-stable-version.sh")"; then
   echo "Could not read the current stable Chrome version." >&2
   exit 1
 fi
 if [ "$installed" != "$latest" ]; then
-  echo "Sandbox Chrome ${installed} is not current stable ${latest}; update install-browser.sh and both archive hashes." >&2
+  echo "Sandbox Chrome ${installed} is not current stable ${latest}; run .github/scripts/update-sandbox-browser.sh on install-browser.sh." >&2
   exit 1
 fi
 docker_args=(--rm --env GRYPE_CHECK_FOR_APP_UPDATE=false)
