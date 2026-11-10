@@ -1,0 +1,23 @@
+---
+title: "Set User Group Marketplace Install Setting"
+openapi: "PUT /manage/admin/user-group/{user_group_id}/marketplaces/{marketplace_id}/installation-policy"
+---
+
+import BusinessEditionInfo from "/snippets/business-edition-info.mdx";
+
+<BusinessEditionInfo />
+
+<Info>
+  **Required permission:** Manage Skills (`manage:skills`).
+  A group manager can change a private resource shared only with groups they manage.
+  API tokens must also allow Manage Skills.
+</Info>
+
+Send `{"installation_policy": "NOT_AVAILABLE"}` to set the group's install setting for a company marketplace.
+Send `null` to remove the group setting, so the group uses the marketplace's company setting.
+Onyx copies the change to each Skill that follows the marketplace access.
+Skills with their own access keep their settings.
+The request does not change who can access the marketplace or the settings of other groups.
+
+The marketplace must be shared with the group. Personal marketplaces are refused.
+The response is the updated group Skills list.

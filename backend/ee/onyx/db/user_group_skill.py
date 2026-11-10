@@ -1,6 +1,7 @@
 """Group skill settings: direct Skill shares and company marketplace defaults.
 
-Reads list one row per company marketplace and per direct Skill share."""
+Reads list one row per company marketplace and per direct Skill share. Writes
+change one group installation setting through the shared access mutation."""
 
 from collections import defaultdict
 from collections.abc import Collection
@@ -9,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, not_, select
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.user_group import fetch_user_group
 from ee.onyx.server.user_group.models import (
     GroupMarketplaceSetting,
     GroupSkillSetting,
@@ -17,13 +19,16 @@ from ee.onyx.server.user_group.models import (
 )
 from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import (
+    assert_within_scope,
     get_scoped_groups,
     within_scope,
 )
 from onyx.db.enums import (
     Permission,
     PermissionAuthority,
+    SkillInstallationPolicy,
 )
+from onyx.db.marketplace_access import MarketplaceAccessAdapter
 from onyx.db.models import (
     Marketplace,
     Marketplace__UserGroup,
@@ -31,6 +36,17 @@ from onyx.db.models import (
     Skill__UserGroup,
     User,
 )
+from onyx.db.resource_access import (
+    ResourceAccessChange,
+    lock_resource_access_user,
+    mutate_resource_access,
+)
+from onyx.db.skill import SkillAccessAdapter
+from onyx.db.skill_mutation import is_company_marketplace_skill
+from onyx.db.user_group import assert_group_config_is_editable
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.settings.models import Tier
 
 
 def _skill_group_ids(
@@ -210,3 +226,85 @@ def list_user_group_skills(
             )
         )
     return UserGroupSkills(marketplaces=marketplaces, skills=skills)
+
+
+class GroupSkillAccessAdapter(SkillAccessAdapter):
+    """Changes only the Skills that the group list shows as direct rows."""
+
+    def load(
+        self,
+        resource_id: UUID,
+        user: User,
+        db_session: Session,
+        *,
+        allow_management: bool,
+    ) -> Skill:
+        skill = super().load(
+            resource_id, user, db_session, allow_management=allow_management
+        )
+        if skill.follows_marketplace_access and is_company_marketplace_skill(
+            skill, db_session
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This skill uses its marketplace setting. Change the marketplace instead.",
+            )
+        return skill
+
+
+def _lock_group_target(user_group_id: int, user: User, db_session: Session) -> User:
+    actor = lock_resource_access_user(user.id, db_session)
+    assert_within_scope(
+        actor,
+        db_session,
+        permission=Permission.MANAGE_SKILLS,
+        current_group_ids=[user_group_id],
+        requested_group_ids=[],
+        is_non_public=True,
+    )
+    if fetch_user_group(db_session, user_group_id) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    assert_group_config_is_editable(db_session, user_group_id, "share skills with")
+    return actor
+
+
+def set_group_skill_installation_policy__no_commit(
+    user_group_id: int,
+    skill_id: UUID,
+    installation_policy: SkillInstallationPolicy | None,
+    user: User,
+    db_session: Session,
+) -> set[UUID]:
+    """Caller commits, then pushes the returned audience."""
+    actor = _lock_group_target(user_group_id, user, db_session)
+    return mutate_resource_access(
+        [skill_id],
+        ResourceAccessChange(
+            group_installation_policies={user_group_id: installation_policy}
+        ),
+        actor,
+        db_session,
+        GroupSkillAccessAdapter(),
+    ).affected
+
+
+def set_group_marketplace_installation_policy__no_commit(
+    user_group_id: int,
+    marketplace_id: UUID,
+    installation_policy: SkillInstallationPolicy | None,
+    user: User,
+    db_session: Session,
+    *,
+    tier: Tier,
+) -> set[UUID]:
+    """Resolve tier before entering. Caller commits, then pushes the returned audience."""
+    actor = _lock_group_target(user_group_id, user, db_session)
+    return mutate_resource_access(
+        [marketplace_id],
+        ResourceAccessChange(
+            group_installation_policies={user_group_id: installation_policy}
+        ),
+        actor,
+        db_session,
+        MarketplaceAccessAdapter(tier),
+    ).affected

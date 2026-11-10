@@ -1,0 +1,22 @@
+---
+title: "Set User Group Skill Install Setting"
+openapi: "PUT /manage/admin/user-group/{user_group_id}/skills/{skill_id}/installation-policy"
+---
+
+import BusinessEditionInfo from "/snippets/business-edition-info.mdx";
+
+<BusinessEditionInfo />
+
+<Info>
+  **Required permission:** Manage Skills (`manage:skills`).
+  A group manager can change a private resource shared only with groups they manage.
+  API tokens must also allow Manage Skills.
+</Info>
+
+Send `{"installation_policy":
+"REQUIRED"}` to set the group's install setting for a Skill that the group list shows as a Skill row.
+Send `null` to remove the group setting, so the group uses the company setting.
+The request does not change who can access the Skill or the settings of other groups.
+
+The Skill must be shared with the group. A company marketplace Skill that follows its marketplace access is refused:
+change the marketplace row instead. Retired Skills are refused. The response is the updated group Skills list.

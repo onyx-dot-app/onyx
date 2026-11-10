@@ -86,7 +86,7 @@ covers new files that match it.
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py` | access-control |
 | `backend/onyx/db/document_set.py`, `backend/onyx/db/user_group.py`, `backend/onyx/server/features/document_set/`, `backend/ee/onyx/db/document_set.py` | access-control |
 | `backend/ee/onyx/server/user_group/`, `backend/ee/onyx/db/user_group.py` | access-control, authorization |
-| `backend/ee/onyx/db/user_group_skill.py` | skills, access-control |
+| `backend/ee/onyx/db/user_group_skill.py`, `web/src/lib/groupSkills/` | skills, access-control |
 | `backend/ee/onyx/external_permissions/`, `backend/onyx/db/permission_sync_attempt.py` | permission-sync |
 | `backend/ee/onyx/external_permissions/post_query_censoring.py` | access-control |
 | `backend/ee/onyx/background/celery/tasks/doc_permission_syncing/`, `backend/ee/onyx/background/celery/tasks/external_group_syncing/`, `backend/ee/onyx/db/external_perm.py`, `backend/ee/onyx/db/document.py` | permission-sync |

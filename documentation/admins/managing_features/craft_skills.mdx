@@ -290,6 +290,9 @@ Explicitly enabling another same-name Skill clears the previous enabled choice.
 The Skills API returns the organization setting in `installation_policy` and your resolved setting in
 `effective_installation_policy`. Removing a group share also removes its setting.
 Removing a nonempty setting requires the same management authority as changing it.
+The group Skills API lists and changes one group's settings.
+It shows one row for each company marketplace and for each directly shared Skill.
+See [Get User Group Skills](/developers/api_reference/user_groups/get_user_group_skills).
 Personal synced owners can still change audience grants that have no setting.
 When you add users to a group or remove them, Onyx requires updated sandbox Skills before admitting another message.
 If Onyx cannot update a sandbox, the message fails and asks the user to try again.

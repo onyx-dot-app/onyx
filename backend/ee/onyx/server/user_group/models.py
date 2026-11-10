@@ -262,3 +262,8 @@ class GroupSkillSetting(BaseModel):
 class UserGroupSkills(BaseModel):
     marketplaces: list[GroupMarketplaceSetting]
     skills: list[GroupSkillSetting]
+
+
+class GroupInstallationPolicyUpdate(BaseModel):
+    # None removes the group setting, so the group inherits the company setting.
+    installation_policy: SkillInstallationPolicy | None

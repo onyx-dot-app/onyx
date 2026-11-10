@@ -34,10 +34,13 @@ from ee.onyx.db.user_group import (
 from ee.onyx.db.user_group import delete_user_group as db_delete_user_group
 from ee.onyx.db.user_group_skill import (
     list_user_group_skills,
+    set_group_marketplace_installation_policy__no_commit,
+    set_group_skill_installation_policy__no_commit,
 )
 from ee.onyx.server.user_group.models import (
     AddUsersToUserGroupRequest,
     BulkSetPermissionsRequest,
+    GroupInstallationPolicyUpdate,
     GroupManagedCCPairsUpdateRequest,
     ManagedCCPairEntry,
     MinimalUserGroupSnapshot,
@@ -94,6 +97,7 @@ from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
+from onyx.server.settings.tier_order import get_current_tier
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.audit import (
     AuditAction,
@@ -859,3 +863,52 @@ def get_user_group_skills(
     if fetch_user_group(db_session, user_group_id) is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
     return list_user_group_skills(user_group_id, user, db_session)
+
+
+@router.put("/admin/user-group/{user_group_id}/skills/{skill_id}/installation-policy")
+def set_user_group_skill_installation_policy(
+    user_group_id: int,
+    skill_id: UUID,
+    update: GroupInstallationPolicyUpdate,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> UserGroupSkills:
+    """Set or clear the group's installation setting for one direct Skill."""
+    affected = set_group_skill_installation_policy__no_commit(
+        user_group_id, skill_id, update.installation_policy, user, db_session
+    )
+    db_session.commit()
+    push_skills_for_users(affected, db_session)
+    db_session.commit()
+    return get_user_group_skills(user_group_id, user, db_session)
+
+
+@router.put(
+    "/admin/user-group/{user_group_id}/marketplaces/{marketplace_id}/installation-policy"
+)
+def set_user_group_marketplace_installation_policy(
+    user_group_id: int,
+    marketplace_id: UUID,
+    update: GroupInstallationPolicyUpdate,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SKILLS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> UserGroupSkills:
+    """Set or clear the group's installation setting for one company marketplace.
+    Its following Skills get the change."""
+    tier = get_current_tier()
+    affected = set_group_marketplace_installation_policy__no_commit(
+        user_group_id,
+        marketplace_id,
+        update.installation_policy,
+        user,
+        db_session,
+        tier=tier,
+    )
+    db_session.commit()
+    push_skills_for_users(affected, db_session)
+    db_session.commit()
+    return get_user_group_skills(user_group_id, user, db_session)
