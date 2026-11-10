@@ -296,7 +296,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     user can retry. The record expires with the opencode permission wait
     (`backend/onyx/server/features/build/connect_app.py:_PENDING_TTL_S`). "Connected" only allows the permission;
     it does not check that a credential exists. The proxy still gates the
-    later calls.
+    later calls. The session index outlives its longest pending record, including
+    the cache backend's whole-second TTL rounding.
 
 ---
 

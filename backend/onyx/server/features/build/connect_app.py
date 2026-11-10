@@ -132,10 +132,14 @@ def stash_pending(
         requests = list_pending_requests(pending.build_session_id, cache)
         request_ids = {request.request_id for request in requests}
         request_ids.add(request_id)
+        # Cache TTLs round to seconds; keep the index past each record's expiry.
         index_ttl = max(
             [
                 ttl,
-                *(cache.ttl(_pending_key(request.request_id)) for request in requests),
+                *(
+                    cache.ttl(_pending_key(request.request_id)) + 1
+                    for request in requests
+                ),
             ]
         )
         cache.set(
