@@ -1,4 +1,5 @@
 import { BroadcastChannel as NativeBroadcastChannel } from "node:worker_threads";
+import { isDesktopOAuthCallback } from "@/lib/oauth/desktopCallback";
 import {
   desktopOAuthReturnUrl,
   launchOAuth,
@@ -38,6 +39,7 @@ afterEach(() => {
 function openPopup() {
   const popup = {
     close: jest.fn(),
+    opener: window as Window | null,
     location: { href: "about:blank" },
     sessionStorage: { setItem: jest.fn() },
   };
@@ -65,6 +67,7 @@ test("opens a new tab and resolves on the matching same-origin message", async (
   expect(window.open).toHaveBeenCalledWith("about:blank", "_blank");
   await flush();
   expect(popup.location.href).toBe(authUrl);
+  expect(popup.opener).toBeNull();
   expect(popup.sessionStorage.setItem).toHaveBeenCalledWith(
     "onyx:oauth-launch",
     "abc_123"
@@ -219,6 +222,31 @@ test("older desktop builds without the flag keep the in-app tab", async () => {
   expect(popup.location.href).toBe(authUrl);
   notifyOAuthComplete("abc_123");
   await promise;
+});
+
+test("desktop callbacks are recognised only on allowlisted paths", () => {
+  expect(
+    isDesktopOAuthCallback("/craft/v1/apps/oauth/callback", "s.desktop")
+  ).toBe(true);
+  expect(
+    isDesktopOAuthCallback(
+      "/admin/connectors/google_drive/oauth/callback",
+      "s.desktop"
+    )
+  ).toBe(true);
+  expect(
+    isDesktopOAuthCallback("/connector/oauth/callback/slack", "s.desktop")
+  ).toBe(true);
+  expect(isDesktopOAuthCallback("/craft/v1/apps/oauth/callback", "s")).toBe(
+    false
+  );
+  expect(isDesktopOAuthCallback("/craft/v1/apps/oauth/callback", null)).toBe(
+    false
+  );
+  expect(isDesktopOAuthCallback("/admin/users", "s.desktop")).toBe(false);
+  expect(
+    isDesktopOAuthCallback("/admin/connectors/../oauth/callback", "s.desktop")
+  ).toBe(false);
 });
 
 test("only a tab that launchOAuth opened closes itself", () => {

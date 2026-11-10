@@ -1,5 +1,6 @@
 import * as yup from "yup";
 import { loadPage } from "@opal/navigation";
+import { DESKTOP_STATE_SUFFIX } from "@/lib/oauth/desktopCallback";
 
 export type OAuthLaunchFailure =
   | "popup_blocked"
@@ -30,8 +31,7 @@ export interface OAuthLaunchOptions {
   onOpened?: () => void;
 }
 
-// "." is outside the base64url alphabet every state generator uses.
-export const DESKTOP_STATE_SUFFIX = ".desktop";
+export { DESKTOP_STATE_SUFFIX };
 export const DESKTOP_OAUTH_RETURN_URL = "onyx://oauth-callback";
 const LAUNCH_TIMEOUT_MS = 10 * 60 * 1000;
 // A claimed callback that never reports must not leave a spinner running.
@@ -314,6 +314,10 @@ export function launchOAuth(
           try {
             popup.sessionStorage.setItem(LAUNCHED_TAB_KEY, rawState);
           } catch {}
+          // The provider page must not reach back into this tab. Completion
+          // comes over the channel; the desktop in-app popup still needs the
+          // opener for postMessage.
+          if (channel && tauriInternals() === null) popup.opener = null;
           popup.location.href = url.href;
           onOpened?.();
           return;
