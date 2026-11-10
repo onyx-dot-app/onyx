@@ -25,6 +25,12 @@ import {
  */
 export const NEW_ACCOUNT_FIELD = "new_account";
 
+/**
+ * The add-connector form's key for the picked saved account. A form control,
+ * never connector config: Create sends the account as the pair's credential.
+ */
+export const SAVED_ACCOUNT_FIELD = "saved_account";
+
 /** The new account's display name, kept apart from its credential values. */
 export const NEW_ACCOUNT_NAME_FIELD = "name";
 
