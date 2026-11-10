@@ -5,6 +5,8 @@ export interface ErrorResponseBody {
   detail?: string;
   error_code?: string;
   message?: string;
+  /** Skill limit fields of a refused write; parse with `skillLimitViolationOf`. */
+  skill_limit?: unknown;
 }
 
 export class FetchError extends Error {

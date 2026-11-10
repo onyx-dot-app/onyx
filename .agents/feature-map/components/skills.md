@@ -134,6 +134,16 @@
   Individual grants on ownerless Skills require global management authority;
   scoped managers keep group controls in single and bulk sharing dialogs.
 
+**Write-limit client contracts.** `web/src/lib/skills/limits.ts` validates structured
+413 `PAYLOAD_TOO_LARGE` errors and usage responses with strict Yup schemas.
+`web/src/lib/skills/api.ts` retains the full error body and parses nullable per-item bulk limits.
+`web/src/lib/skills/hooks.ts` formats charged totals, labels unknown sizes as estimates, and keeps
+ordinary errors unchanged. Repeated refusals replace one persistent toast.
+The own-usage hook reads `/api/skills/limit/me`; admin usage requires global
+Manage Skills and a user-bound SWR key. Any failed admin refetch hides cached rows.
+SkillsPage actions revalidate usage through the shared SWR helper. Other write
+surfaces rely on SWR remount and focus revalidation.
+
 When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
   `.template` file is rejected with a message. A bundle over a size or file
@@ -368,6 +378,14 @@ version helper. Refused bundle files remain unused and eligible for cleanup.
 Limit refusals retain `SKILL_LIMIT_BLOCK_REASON` and `Marketplace.skill_limit_blocks`
 with failed limit and user count. `skills/sync.py` fetches again while blocks exist,
 so the next sync retries the same revision.
+Reads: `GET /skills/limit/me` returns the caller's `SkillUsageSummary`;
+`GET /skills/limit/users` (global manage-skills) lists users past the limit
+through `db/skill.py:users_over_skill_limit`, one usage query for all users.
+Both return measured totals plus `charged_bytes` and `charged_files`, which include
+the conservative unknown-size allowance. The admin rows also return
+`last_delivery_omitted_skill_count`: the persisted omission count for the last
+successful delivery, or null when no delivery is recorded. It is not a forecast
+from current usage.
 
 ## Contracts and traps
 

@@ -244,6 +244,20 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
   Review every script and file before uploading a bundle you did not create.
 </Warning>
 
+## Skill usage API
+
+`GET /api/skills/limit/me` returns measured usage and the totals used to check write limits.
+`charged_bytes` and `charged_files` include an allowance for each Skill whose size is unknown.
+`unknown_skill_count` identifies these estimates. The response also includes `max_bytes` and `max_files`.
+
+`GET /api/skills/limit/users` requires global Manage Skills and lists users above a write limit.
+Each row includes the omission count from the last successful delivery. A null count means no delivery is recorded.
+This count does not predict the next delivery.
+
+A refused write returns HTTP 413 with `skill_limit`: the failed limit, affected user count,
+and your proposed usage when applicable. Bulk failures include the same nullable field for each refused Skill.
+Ordinary errors retain their normal explanation.
+
 ## Session limits
 
 Craft loads whole Skills within 900 MiB, 10,000 files, and 10,000 folders per session.

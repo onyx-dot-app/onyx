@@ -17600,6 +17600,14 @@
         "placeholder": "按群组筛选",
         "all": "所有群组"
       }
+    },
+    "limit": {
+      "refusal": {
+        "title": "{limit, select, files {已达到技能文件数上限} other {已达到技能大小上限}}",
+        "own": "此更改将使你的技能达到 {size}，共 {files, plural, one {# 个文件} other {# 个文件}}。上限为 {maxSize} 和 {maxFiles, plural, one {# 个文件} other {# 个文件}}。{others, plural, =0 {} one {另有 # 位用户也会超出上限。} other {另有 # 位用户也会超出上限。}}",
+        "ownEstimated": "此更改将使你的技能估计达到 {size}，共 {files, plural, one {# 个文件} other {# 个文件}}。该估计将 {unknown, plural, one {# 个尚未测量的技能} other {# 个尚未测量的技能}} 按允许的最大大小计算。上限为 {maxSize} 和 {maxFiles, plural, one {# 个文件} other {# 个文件}}。{others, plural, =0 {} one {另有 # 位用户也会超出上限。} other {另有 # 位用户也会超出上限。}}",
+        "affected": "此更改将使 {count, plural, one {# 位用户} other {# 位用户}}超出{limit, select, files {技能文件数上限} other {技能大小上限}}。"
+      }
     }
   },
   "opensearchHealth": {
