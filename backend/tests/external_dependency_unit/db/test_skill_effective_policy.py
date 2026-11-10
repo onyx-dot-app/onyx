@@ -9,12 +9,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from ee.onyx.db import user_group as user_group_db
 from ee.onyx.db.user_group import fetch_user_group_member_ids
 from ee.onyx.server.user_group import api as user_group_api
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import SkillInstallationPolicy as Policy
-from onyx.db.models import UserSkillPreference
+from onyx.db.models import User, UserSkillPreference
 from onyx.db.skill import (
     SkillManagementPolicy,
     list_runtime_skills_for_user,
@@ -315,6 +316,48 @@ def test_membership_changes_push_group_skills_after_commit(
     response = client.patch(path, json={"user_ids": [str(stayer.id)]})
     assert response.status_code == 200, response.text
     assert pushed == [(joiner.id, False, {stayer.id})]
+
+    # Another request adds the user immediately before this mutation gets its lock.
+    # Capture must follow the lock, or the later removal misses this recipient.
+    interleaved = False
+
+    def lock_after_add(session: Session, *, nowait: bool = False) -> None:
+        nonlocal interleaved
+        if session is db_session and not interleaved:
+            interleaved = True
+            with get_session_with_current_tenant() as other:
+                user_group_api.add_users(
+                    group.id,
+                    user_group_api.AddUsersToUserGroupRequest(user_ids=[joiner.id]),
+                    other.get_one(User, admin.id),
+                    other,
+                )
+        lock_group_membership(session, nowait=nowait)
+
+    monkeypatch.setattr(
+        user_group_api, "lock_group_membership", lock_after_add, raising=False
+    )
+    monkeypatch.setattr(user_group_db, "lock_group_membership", lock_after_add)
+    pushed.clear()
+    response = client.patch(path, json={"user_ids": [str(stayer.id)]})
+    assert response.status_code == 200, response.text
+    assert pushed == [
+        (joiner.id, True, {joiner.id, stayer.id}),
+        (joiner.id, False, {stayer.id}),
+    ]
+
+    # Even an already-present add must release its lock before the refresh helper.
+    original_push = user_group_api.push_skills_for_users
+
+    def unlocked_push(user_ids: set[UUID], session: Session) -> None:
+        with get_session_with_current_tenant() as other:
+            lock_group_membership(other, nowait=True)
+            other.rollback()
+        original_push(user_ids, session)
+
+    monkeypatch.setattr(user_group_api, "push_skills_for_users", unlocked_push)
+    response = client.post(f"{path}/add-users", json={"user_ids": [str(stayer.id)]})
+    assert response.status_code == 200, response.text
 
     pushed.clear()
     response = client.delete(path)

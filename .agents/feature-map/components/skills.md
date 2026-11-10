@@ -291,8 +291,10 @@ still propagate unexpected storage errors.
    `hidden_reason="same_name"` for losing candidates. Reads must resolve against
    all eligible skills, even when the caller requests one row.
    Invalid, unavailable, retired, disabled and disconnected-app skills cannot
-   hide a usable competitor. `list_runtime_skills_for_user` returns only winners,
-   so duplicate automatic names no longer fail a sandbox push.
+   hide a usable competitor. `list_runtime_skills_for_user` returns database-known
+   winners by default. Delivery requests all eligible candidates in the same order
+   with `include_fallbacks=True`, using one resolver query. Library reads perform
+   no storage I/O, so temporary read failures do not change duplicate metadata.
    The partial
    unique index `uq_user_skill_preference_name` allows one enabled choice per
    user and name. No automatic-name index exists. Retirement disables
@@ -317,8 +319,11 @@ still propagate unexpected storage errors.
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
-   `skills/push.py:_assemble_fileset` also skips repeated names defensively.
-   Do not bypass the resolver when assembling production payloads.
+   `skills/push.py:_assemble_fileset` stages each candidate separately and claims
+   its name only after complete assembly, including rendering, size admission and path replacement.
+   Failed candidates leave no files; delivery tries the next eligible candidate.
+   After success, it never reads losing bundles for that name. Temporary storage
+   failures do not persist invalidity. Do not bypass the shared resolver.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
    match (`skills/metadata.py:parse_skill_document`). Storage removes the
@@ -376,7 +381,8 @@ still propagate unexpected storage errors.
    you convert a built-in's SKILL.md into a template, add its renderer branch
    in `skills/push.py:_render_template` in the same change. The
    static copy skips template sources, and a templated built-in with no
-   renderer only logs a warning, so the skill ships no SKILL.md.
+   renderer logs a warning. Assembly rejects a candidate without root SKILL.md
+   and tries the next eligible candidate.
 9. `unresolved-marker-fails` **An unresolved `{{` marker fails the render.**
    `skills/rendering.py:render_external_app_skill` raises rather than send broken instructions.
    Other `.template` files in an app skill get only `{{APP:...}}` values and no
@@ -550,11 +556,13 @@ still propagate unexpected storage errors.
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
-    placeholder. Before substitution, the push checks the predicted instruction
-    size against both the configured file limit and the receiver file limit.
-    Expansion must also fit the receiver total, including other Skills. An
-    oversized expansion skips that whole Skill, logs a warning and continues.
-    Files without placeholders keep their previous delivery behavior.
+    placeholder. Before substitution, assembly checks every predicted file size
+    against both the configured file limit and the receiver file limit.
+    Assembly checks predicted bytes against the receiver total, including already
+    accepted Skills, before substitution. This includes files without placeholders.
+    A size refusal skips the whole candidate, logs a warning and tries the next
+    eligible candidate without claiming the name. Assembly does not raise for
+    size refusals, so session preparation and other users' pushes can continue.
     The sent bytes feed the runtime hash. OpenCode adds the base
     folder line and the relative-path rule itself, so the push adds neither.
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox

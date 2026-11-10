@@ -15,13 +15,24 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.scim.api import create_group, delete_group, replace_group
+from ee.onyx.db.scim import ScimDAL
+from ee.onyx.server.scim.api import (
+    create_group,
+    delete_group,
+    patch_group,
+    replace_group,
+)
 from ee.onyx.server.scim.models import (
     ScimGroupMember,
     ScimGroupResource,
+    ScimPatchOperation,
+    ScimPatchRequest,
 )
 from ee.onyx.server.scim.providers.base import get_default_provider
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ScimToken, User, UserGroup
+from onyx.db.users import lock_group_membership
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.audit import AuditAction
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
@@ -201,3 +212,67 @@ def test_membership_changes_refresh_changed_members_after_commit(
 
     assert pushes == [{dropped.id, joined.id}, {kept.id, joined.id}]
     delete_test_user(db_session, kept, dropped, joined)
+
+
+@pytest.mark.parametrize("operation", ["replace", "patch", "delete"])
+def test_membership_snapshot_is_locked_until_commit(
+    db_session: Session,
+    token: ScimToken,
+    member_factory: Callable[[], User],
+    operation: str,
+) -> None:
+    member = member_factory()
+    name = f"scim-locked-{uuid4().hex[:12]}"
+    group_id = _create(db_session, token, _resource(name, member))
+    original = ScimDAL.get_group_members
+    checked = False
+    pushes: list[set[UUID]] = []
+
+    def locked_members(dal: ScimDAL, group_id: int) -> list[tuple[UUID, str | None]]:
+        nonlocal checked
+        if not checked:
+            with get_session_with_current_tenant() as other:
+                with pytest.raises(OnyxError, match="Access is being changed"):
+                    lock_group_membership(other, nowait=True)
+                other.rollback()
+            checked = True
+        return original(dal, group_id)
+
+    def push(user_ids: set[UUID], session: Session) -> None:
+        assert not session.in_transaction()
+        with get_session_with_current_tenant() as other:
+            lock_group_membership(other, nowait=True)
+            other.rollback()
+        pushes.append(user_ids)
+
+    with (
+        patch.object(ScimDAL, "get_group_members", locked_members),
+        patch("ee.onyx.server.scim.api.push_skills_for_users", side_effect=push),
+    ):
+        if operation == "replace":
+            replace_group(
+                str(group_id),
+                _resource(name),
+                token,
+                get_default_provider(),
+                db_session,
+            )
+        elif operation == "patch":
+            patch_group(
+                str(group_id),
+                ScimPatchRequest(
+                    Operations=[
+                        ScimPatchOperation(
+                            op="remove", path=f'members[value eq "{member.id}"]'
+                        )
+                    ]
+                ),
+                token,
+                get_default_provider(),
+                db_session,
+            )
+        else:
+            delete_group(str(group_id), token, db_session)
+    assert checked
+    assert pushes == [{member.id}]
+    delete_test_user(db_session, member)
