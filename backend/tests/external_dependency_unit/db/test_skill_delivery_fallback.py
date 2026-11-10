@@ -81,7 +81,7 @@ def test_delivery_uses_own_after_company_bundle_failure(
     monkeypatch.setattr(push, "get_default_file_store", lambda: store)
     monkeypatch.setattr(push, "persist_skill_validity", persist)
     if payload:
-        _, files = push.build_user_skills_payload(user, db_session)
+        files = push.build_user_skills_payload(user, db_session).files
     else:
         files = push.build_skills_fileset_for_user(user, db_session)
     assert {p: b for p, b in files.items() if p.startswith(own.name + "/")} == {
