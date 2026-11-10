@@ -46,6 +46,7 @@ var version = "dev"
 const longestSock = "/v.sock_65535"
 
 type flags struct {
+	obs           obsFlags
 	dataDir       string
 	artifactsDir  string
 	socket        string
@@ -93,6 +94,7 @@ type flags struct {
 
 func main() {
 	var f flags
+	f.obs.register(flag.CommandLine)
 	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/craft-fc", "XFS (reflink) data dir; must be the same path on the host and in the container")
 	flag.StringVar(&f.artifactsDir, "artifacts-dir", "/opt/craft-fc", "directory with the firecracker and jailer binaries")
 	flag.StringVar(&f.socket, "socket", "", "API Unix socket (default <data-dir>/run/host-agent.sock)")
@@ -231,6 +233,10 @@ func run(f flags, log *slog.Logger) error {
 	if err := startDrainWatch(ctx, f, m, log); err != nil {
 		return err
 	}
+	obs, err := newObservability(f.obs, m, lay, hostinfo.Stats{DataDir: f.dataDir}, log)
+	if err != nil {
+		return err
+	}
 	t0 := time.Now()
 	rep, err := m.Recover(context.Background(), launcher)
 	if err != nil {
@@ -273,12 +279,15 @@ func run(f flags, log *slog.Logger) error {
 			return builder.Build(context.WithoutCancel(ctx), rf)
 		}
 	}
+	if err := obs.start(ctx, svc); err != nil {
+		return err
+	}
 	ln, err := server.ListenUnix(f.socket)
 	if err != nil {
 		return err
 	}
 	// Both listeners serve the HostAgent API and the daemon pass-through.
-	servers := []*grpc.Server{server.NewServer(svc, pt.ServerOptions()...)}
+	servers := []*grpc.Server{server.NewServer(svc, append(pt.ServerOptions(), obs.serverOptions()...)...)}
 	listeners := []net.Listener{ln}
 	if f.listen != "" {
 		creds, err := (&server.MTLS{
@@ -291,7 +300,7 @@ func run(f flags, log *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		servers = append(servers, server.NewServer(svc, append(pt.ServerOptions(), grpc.Creds(creds))...))
+		servers = append(servers, server.NewServer(svc, append(append(pt.ServerOptions(), obs.serverOptions()...), grpc.Creds(creds))...))
 		listeners = append(listeners, tln)
 	}
 	go func() {

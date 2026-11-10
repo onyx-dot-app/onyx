@@ -163,3 +163,14 @@ func (s *Service) dialAllowed(port uint32) bool {
 	}
 	return false
 }
+
+// OpenDials returns the open Dial streams of all VMs.
+func (s *Service) OpenDials() int {
+	s.dialMu.Lock()
+	defer s.dialMu.Unlock()
+	n := 0
+	for _, c := range s.dials {
+		n += c
+	}
+	return n
+}
