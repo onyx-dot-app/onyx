@@ -1381,8 +1381,14 @@ def get_chat_session_processing_status(
             )
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
+    cache = get_cache_backend()
+    stream_id = get_processing_stream_id(session_id, cache)
     return ChatSessionProcessingStatus(
-        is_processing=is_chat_session_processing(session_id, get_cache_backend())
+        is_processing=stream_id is not None
+        or is_chat_session_processing(session_id, cache),
+        current_stream=CurrentStreamInfo(stream_id=stream_id)
+        if stream_id is not None
+        else None,
     )
 
 

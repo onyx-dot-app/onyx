@@ -12454,6 +12454,16 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurer la voix",
           "tooltip": "La voix n'est pas configurée. Configurez-la dans les paramètres d'administration."
+        },
+        "pendingMessages": {
+          "queueHint": "Mettre en file pour le prochain tour · Entrée",
+          "sendHint": "Envoyer à la prochaine étape · Ctrl/⌘ + Entrée",
+          "sendLabel": "Envoyer maintenant",
+          "keyboardHint": "Entrée pour mettre en file · Ctrl/⌘ + Entrée pour envoyer maintenant",
+          "preparingHint": "Vous pouvez mettre des messages en file dès que la réponse commence.",
+          "attachmentsHint": "Envoyez les pièces jointes une fois cette réponse terminée.",
+          "chooseResponseHint": "Choisissez une réponse avant de mettre un message en file.",
+          "incognitoHint": "Attendez la fin de la réponse dans le chat incognito."
         }
       },
       "baseInputBar": {
@@ -12562,6 +12572,10 @@
         },
         "removeHint": {
           "label": "retirer"
+        },
+        "editButton": {
+          "tooltip": "Modifier le message en file",
+          "clearDraftTooltip": "Videz votre brouillon pour modifier un message en file"
         }
       },
       "sharedAppInputBar": {
@@ -12571,6 +12585,12 @@
         "startSessionButton": {
           "label": "Démarrer une nouvelle session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Impossible d’envoyer le message. Votre brouillon a été conservé.",
+        "withdrawFailed": "Impossible de retirer le message en attente.",
+        "loadFailed": "Impossible de charger les messages en attente.",
+        "alreadyAccepted": "Ce message a déjà été accepté et ne peut plus être modifié ni retiré."
       }
     },
     "mcpApiKey": {
@@ -12665,6 +12685,9 @@
         },
         "timedOut": {
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
+        },
+        "acceptedInput": {
+          "label": "Envoyé pendant cette réponse"
         }
       },
       "codeBlock": {

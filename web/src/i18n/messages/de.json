@@ -12454,6 +12454,16 @@
         "voiceSetupButton": {
           "ariaLabel": "Sprachfunktion einrichten",
           "tooltip": "Sprachfunktion nicht konfiguriert. Richten Sie sie in den Administrator-Einstellungen ein."
+        },
+        "pendingMessages": {
+          "queueHint": "Für die nächste Runde einreihen · Eingabe",
+          "sendHint": "Beim nächsten Schritt senden · Strg/⌘ + Eingabe",
+          "sendLabel": "Jetzt senden",
+          "keyboardHint": "Eingabe zum Einreihen · Strg/⌘ + Eingabe zum sofortigen Senden",
+          "preparingHint": "Nach Beginn der Antwort können Sie Nachrichten einreihen.",
+          "attachmentsHint": "Senden Sie angehängte Dateien nach dieser Antwort.",
+          "chooseResponseHint": "Wählen Sie eine Antwort aus, bevor Sie eine Nachricht einreihen.",
+          "incognitoHint": "Warten Sie im Inkognito-Chat, bis die Antwort fertig ist."
         }
       },
       "baseInputBar": {
@@ -12562,6 +12572,10 @@
         },
         "removeHint": {
           "label": "entfernen"
+        },
+        "editButton": {
+          "tooltip": "Eingereihte Nachricht bearbeiten",
+          "clearDraftTooltip": "Leeren Sie Ihren Entwurf, um eine eingereihte Nachricht zu bearbeiten"
         }
       },
       "sharedAppInputBar": {
@@ -12571,6 +12585,12 @@
         "startSessionButton": {
           "label": "Neue Sitzung starten"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Die Nachricht konnte nicht gesendet werden. Ihr Entwurf wurde behalten.",
+        "withdrawFailed": "Die ausstehende Nachricht konnte nicht entfernt werden.",
+        "loadFailed": "Ausstehende Nachrichten konnten nicht geladen werden.",
+        "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und kann nicht bearbeitet oder entfernt werden."
       }
     },
     "mcpApiKey": {
@@ -12665,6 +12685,9 @@
         },
         "timedOut": {
           "text": "Die Antwort wurde gestoppt, weil sie ihr Zeitlimit erreicht hat."
+        },
+        "acceptedInput": {
+          "label": "Während dieser Antwort gesendet"
         }
       },
       "codeBlock": {

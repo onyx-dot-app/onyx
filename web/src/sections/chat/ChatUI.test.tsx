@@ -329,3 +329,41 @@ test("readiness errors do not offer regeneration before input is available", () 
     screen.queryByRole("button", { name: /regenerate|retry/i })
   ).not.toBeInTheDocument();
 });
+
+test.each([false, true])(
+  "accepted instructions remain visible after loading a response (multi-model: %s)",
+  (multiModel) => {
+    const restored = processRawChatHistory(
+      [
+        {
+          ...saved,
+          accepted_user_messages: [
+            { id: "instruction", message: "Use the latest report" },
+          ],
+        },
+      ],
+      [[]]
+    );
+    restored.set(
+      1,
+      multiModel ? { ...question, childrenNodeIds: [2, 3] } : question
+    );
+    if (multiModel) {
+      restored.set(3, {
+        ...failed,
+        nodeId: 3,
+        messageId: 3,
+        modelDisplayName: "Other model",
+      });
+    }
+    useChatSessionStore
+      .getState()
+      .updateSessionMessageTree("session", restored);
+    const view = render(<ChatUI {...props} />);
+    expect(screen.getAllByText("Sent during this response")).toHaveLength(1);
+    expect(screen.getAllByText("Use the latest report")).toHaveLength(1);
+    view.unmount();
+    render(<ChatUI {...props} />);
+    expect(screen.getAllByText("Use the latest report")).toHaveLength(1);
+  }
+);

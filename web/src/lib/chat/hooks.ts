@@ -13,6 +13,158 @@ import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
+import useSWR, { useSWRConfig } from "swr";
+import { useTranslations } from "next-intl";
+import { toast } from "@opal/layouts";
+import {
+  errorHandlingFetcher,
+  errorHandlingFetchWith,
+  fetchErrorDetail,
+  FetchError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
+import { refreshChatSession } from "@/lib/chat/settleChatSession";
+import type { PendingChatMessage } from "@/lib/chat/types";
+
+const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
+const PENDING_MESSAGES_POLL_MS = 1000;
+
+/** The server owns acceptance and ordering; this cache only displays pending input. */
+export function usePendingChatMessages(
+  sessionId: string | null,
+  enabled: boolean
+) {
+  const t = useTranslations("chat.input.pendingMessages");
+  const tReadiness = useTranslations("chat.readiness");
+  const key =
+    enabled && sessionId
+      ? `/api/chat/chat-session/${sessionId}/pending-messages`
+      : null;
+  const { mutate: mutateCache } = useSWRConfig();
+  const activeKey = useRef(key);
+  useEffect(() => {
+    activeKey.current = key;
+  }, [key]);
+  const [submittingSession, setSubmittingSession] = useState<string | null>(
+    null
+  );
+  const submitting = useRef(false);
+  const withdrawing = useRef(new Set<string>());
+  const previous = useRef<{ key: string | null; ids: Set<string> }>({
+    key: null,
+    ids: new Set(),
+  });
+  const { data, error, isLoading } = useSWR<PendingChatMessage[], Error>(
+    key,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (messages) =>
+        messages?.length ? PENDING_MESSAGES_POLL_MS : 0,
+      onErrorRetry: skipRetryOnAuthError,
+      onSuccess: (messages) => {
+        if (activeKey.current !== key) return;
+        const ids = new Set(messages.map((message) => message.id));
+        const accepted =
+          previous.current.key === key &&
+          [...previous.current.ids].some((id) => !ids.has(id));
+        previous.current = { key, ids };
+        if (accepted && sessionId) {
+          void refreshChatSession(sessionId, tReadiness("checkFailed"));
+        }
+      },
+    }
+  );
+
+  async function submit(
+    message: string,
+    delivery: PendingChatMessage["delivery"],
+    targetResponseId: number
+  ): Promise<boolean> {
+    if (!key || !sessionId || submitting.current) return false;
+    submitting.current = true;
+    setSubmittingSession(sessionId);
+    try {
+      const pending = await errorHandlingFetchWith<PendingChatMessage>(key, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          delivery,
+          target_response_id: targetResponseId,
+        }),
+      });
+      // Revalidation may already omit an input accepted before the POST returned.
+      await mutateCache<PendingChatMessage[]>(
+        key,
+        (messages = []) => [
+          ...messages.filter((item) => item.id !== pending.id),
+          pending,
+        ],
+        { revalidate: false }
+      );
+      if (activeKey.current === key) {
+        previous.current = {
+          key,
+          ids: new Set([
+            ...(previous.current.key === key ? previous.current.ids : []),
+            pending.id,
+          ]),
+        };
+      }
+      void mutateCache(key).catch((failure: unknown) =>
+        console.error("Failed to refresh pending messages", failure)
+      );
+      return true;
+    } catch (failure) {
+      toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
+      return false;
+    } finally {
+      submitting.current = false;
+      setSubmittingSession(null);
+    }
+  }
+
+  async function withdraw(id: string): Promise<PendingChatMessage | null> {
+    if (!key || !sessionId || withdrawing.current.has(id)) return null;
+    withdrawing.current.add(id);
+    try {
+      const withdrawn = await errorHandlingFetchWith<PendingChatMessage>(
+        `${key}/${id}`,
+        { method: "DELETE" }
+      );
+      await mutateCache<PendingChatMessage[]>(
+        key,
+        (messages = []) => messages.filter((item) => item.id !== id),
+        { revalidate: false }
+      );
+      if (previous.current.key === key) previous.current.ids.delete(id);
+      void refreshChatSession(sessionId, tReadiness("checkFailed"));
+      return withdrawn;
+    } catch (failure) {
+      toast.error(
+        failure instanceof FetchError && failure.status === 409
+          ? t("alreadyAccepted")
+          : (fetchErrorDetail(failure) ?? t("withdrawFailed"))
+      );
+      return null;
+    } finally {
+      withdrawing.current.delete(id);
+      void mutateCache(key).catch((failure: unknown) =>
+        console.error("Failed to refresh pending messages", failure)
+      );
+    }
+  }
+
+  return {
+    messages: data ?? EMPTY_PENDING_MESSAGES,
+    isLoading,
+    isSubmitting: submittingSession === sessionId && submittingSession !== null,
+    error: error ? t("loadFailed") : null,
+    submit,
+    withdraw,
+  };
+}
+
 interface UseSendChatMessageFromURLProps {
   /** From `useChatController`, which needs more than this hook can see. */
   onSubmit: (props: OnSubmitProps) => void;

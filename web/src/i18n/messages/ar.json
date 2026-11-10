@@ -12454,6 +12454,16 @@
         "voiceSetupButton": {
           "ariaLabel": "إعداد الصوت",
           "tooltip": "الصوت غير مهيأ. قم بإعداده في إعدادات المسؤول."
+        },
+        "pendingMessages": {
+          "queueHint": "إضافة إلى قائمة الانتظار للجولة التالية · Enter",
+          "sendHint": "إرسال عند الخطوة التالية · Ctrl/⌘ + Enter",
+          "sendLabel": "إرسال الآن",
+          "keyboardHint": "Enter للإضافة إلى قائمة الانتظار · Ctrl/⌘ + Enter للإرسال الآن",
+          "preparingHint": "يمكن إضافة الرسائل إلى قائمة الانتظار بعد بدء الرد.",
+          "attachmentsHint": "أرسل الملفات المرفقة بعد انتهاء هذا الرد.",
+          "chooseResponseHint": "اختر ردًا قبل إضافة رسالة إلى قائمة الانتظار.",
+          "incognitoHint": "انتظر انتهاء الرد في المحادثة المتخفية."
         }
       },
       "baseInputBar": {
@@ -12562,6 +12572,10 @@
         },
         "removeHint": {
           "label": "إزالة"
+        },
+        "editButton": {
+          "tooltip": "تعديل رسالة في قائمة الانتظار",
+          "clearDraftTooltip": "امسح المسودة لتعديل رسالة في قائمة الانتظار"
         }
       },
       "sharedAppInputBar": {
@@ -12571,6 +12585,12 @@
         "startSessionButton": {
           "label": "بدء جلسة جديدة"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "تعذر إرسال الرسالة. تم الاحتفاظ بالمسودة.",
+        "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
+        "loadFailed": "تعذر تحميل الرسائل المعلقة.",
+        "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولا يمكن تعديلها أو إزالتها."
       }
     },
     "mcpApiKey": {
@@ -12665,6 +12685,9 @@
         },
         "timedOut": {
           "text": "توقف الرد لأنه بلغ الحد الزمني."
+        },
+        "acceptedInput": {
+          "label": "أُرسلت أثناء هذا الرد"
         }
       },
       "codeBlock": {

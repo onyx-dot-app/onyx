@@ -5,9 +5,7 @@ import {
   nameChatSession,
   processRawChatHistory,
   patchMessageToBeLatest,
-  resumeStream,
 } from "@/app/app/services/lib";
-import { Packet } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
   getMessageByMessageId,
@@ -38,14 +36,11 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   preserveFailedMessages,
   settleChatSession,
+  resumeChatSession,
 } from "@/lib/chat/settleChatSession";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation";
-
-// Runs currently being re-attached; module-level so effect re-runs (incl.
-// strict mode) can't start a second tail for the same run.
-const resumingRuns = new Set<number>();
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -319,6 +314,11 @@ export default function useChatSessionController({
           retained?.replayCursor !== undefined
             ? {
                 ...retained,
+                acceptedUserMessages:
+                  (resumedMessage.acceptedUserMessages?.length ?? 0) >
+                  (retained.acceptedUserMessages?.length ?? 0)
+                    ? resumedMessage.acceptedUserMessages
+                    : retained.acceptedUserMessages,
                 nodeId: resumedMessage.nodeId,
                 parentNodeId: resumedMessage.parentNodeId,
                 childrenNodeIds: resumedMessage.childrenNodeIds,
@@ -373,130 +373,17 @@ export default function useChatSessionController({
         });
       }
 
-      // Replay single-model output; multi-model sessions wait for saved history.
-      async function resumeInFlightRun(
-        sessionId: string,
-        runId: number,
-        messageMap: Map<number, Message>
-      ) {
-        const retained = getMessageByMessageId(messageMap, runId);
-        if (!retained || resumingRuns.has(runId)) {
-          return;
-        }
-        const node = { ...retained };
-        // Added and deleted in this function only, so an entry can never
-        // outlive its tail.
-        resumingRuns.add(runId);
-        let resolveReaderFinished: () => void = () => {};
-        const readerFinished = new Promise<void>((resolve) => {
-          resolveReaderFinished = resolve;
-        });
-        useChatSessionStore.getState().updateSessionData(sessionId, {
-          readerFinished,
-        });
-        const accumulated: Packet[] = [...node.packets];
-        let restoring = true;
-        let pendingRestore: Message | undefined;
-        // Keep replay attached across navigation without changing the selected chat.
-        const ownsStream = () => {
-          const session = useChatSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          return (
-            session !== undefined &&
-            session.abortController === sessionOwner &&
-            session.chatState !== "input"
-          );
-        };
-        const publishResponse = (response: Message) => {
-          if (!ownsStream()) return;
-          messageMap.set(response.nodeId, response);
-          useChatSessionStore
-            .getState()
-            .updateSessionMessageTree(sessionId, new Map(messageMap));
-        };
-        const abortController = new AbortController();
-        try {
-          for await (const rawPacket of resumeStream(
-            sessionId,
-            runId,
-            node.replayCursor ?? 0,
-            abortController.signal
-          )) {
-            if (!ownsStream()) {
-              return;
-            }
-            if ("next_cursor" in rawPacket) {
-              if (rawPacket.stream_id !== runId) {
-                throw new Error("Replay cursor belongs to another response");
-              }
-              if (restoring) {
-                node.restoredPacketCount = accumulated.length;
-                restoring = !rawPacket.replay_complete;
-              }
-              // Store content and cursor together, only after a complete batch.
-              node.replayCursor = rawPacket.next_cursor;
-              const response: Message = {
-                ...node,
-                packets: [...accumulated],
-                packetCount: accumulated.length,
-              };
-              if (restoring) {
-                pendingRestore = response;
-                continue;
-              }
-              pendingRestore = undefined;
-              publishResponse(response);
-              continue;
-            }
-            if ("error" in rawPacket && rawPacket.error) {
-              const store = useChatSessionStore.getState();
-              store.updateSessionData(sessionId, {
-                queuedMessagesPaused: true,
-              });
-              // Keep the error on its reserved row through readiness retries.
-              node.type = "error";
-              node.errorMessage = rawPacket.error;
-              if (!("message_id" in rawPacket)) {
-                node.errorCode = rawPacket.error_code;
-                node.stackTrace = rawPacket.stack_trace;
-                node.isRetryable = rawPacket.is_retryable ?? true;
-                node.errorDetails = rawPacket.details;
-              }
-              node.is_generating = false;
-            }
-            if (!("obj" in rawPacket)) {
-              continue;
-            }
-            const packet = rawPacket;
-            // Heartbeats are liveness ticks for the ownership check above,
-            // not run state — never render them.
-            if (packet.obj.type === "chat_heartbeat") {
-              continue;
-            }
-            accumulated.push(packet);
-          }
-        } catch (error) {
-          console.error("Failed to resume in-flight run", { runId, error });
-        } finally {
-          abortController.abort();
-          try {
-            // A lost tail must not discard earlier acknowledged cache batches.
-            if (pendingRestore) publishResponse(pendingRestore);
-          } finally {
-            resumingRuns.delete(runId);
-            resolveReaderFinished();
-            await settleSession(sessionId);
-          }
-        }
-      }
-
       if (currentStream && resumedMessage?.type === "assistant") {
-        void resumeInFlightRun(
-          chatSession.chat_session_id,
-          currentStream.stream_id,
-          newMessageMap
-        );
+        if (sessionOwner) {
+          void resumeChatSession({
+            sessionId: chatSession.chat_session_id,
+            streamId: currentStream.stream_id,
+            messageMap: newMessageMap,
+            controller: sessionOwner,
+            errorMessage: tReadiness("checkFailed"),
+            mode: recovering ? "recovery" : "completion",
+          });
+        }
       } else if (
         sessionBusy ||
         useChatSessionStore.getState().sessions.get(chatSession.chat_session_id)

@@ -12454,6 +12454,16 @@
         "voiceSetupButton": {
           "ariaLabel": "Set up voice",
           "tooltip": "Voice not configured. Set up in admin settings."
+        },
+        "pendingMessages": {
+          "queueHint": "Queue for the next turn · Enter",
+          "sendHint": "Send at the next step · Ctrl/⌘ + Enter",
+          "sendLabel": "Send now",
+          "keyboardHint": "Enter to queue · Ctrl/⌘ + Enter to send now",
+          "preparingHint": "Queueing is available once the response starts.",
+          "attachmentsHint": "Send attached files after this response finishes.",
+          "chooseResponseHint": "Choose a response before queueing a message.",
+          "incognitoHint": "Wait for the response to finish in incognito chat."
         }
       },
       "baseInputBar": {
@@ -12562,6 +12572,10 @@
         },
         "removeHint": {
           "label": "remove"
+        },
+        "editButton": {
+          "tooltip": "Edit queued message",
+          "clearDraftTooltip": "Clear your draft to edit a queued message"
         }
       },
       "sharedAppInputBar": {
@@ -12571,6 +12585,12 @@
         "startSessionButton": {
           "label": "Start New Session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Could not submit the message. Your draft was kept.",
+        "withdrawFailed": "Could not remove the pending message.",
+        "loadFailed": "Could not load pending messages.",
+        "alreadyAccepted": "This message was already accepted and cannot be edited or removed."
       }
     },
     "mcpApiKey": {
@@ -12660,6 +12680,9 @@
     },
     "messages": {
       "agentMessage": {
+        "acceptedInput": {
+          "label": "Sent during this response"
+        },
         "stoppedGeneration": {
           "text": "User has stopped generation"
         },

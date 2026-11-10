@@ -16,7 +16,8 @@ import {
 } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
-import { FeedbackType } from "@/app/app/types";
+import { AcceptedUserMessage, FeedbackType } from "@/app/app/types";
+import { Section } from "@opal/layouts";
 import { handleCopy } from "@/app/app/message/copyingUtils";
 import { useAuthErrors } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
@@ -34,8 +35,6 @@ import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import { cn } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { getLatestMessageChain } from "@/app/app/services/messageTree";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -46,6 +45,7 @@ export type RegenerationFactory = (regenerationRequest: {
 
 export interface AgentMessageProps {
   rawPackets: Packet[];
+  acceptedUserMessages?: readonly AcceptedUserMessage[];
   restoredPacketCount?: number;
   packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
   chatState: FullChatState;
@@ -67,7 +67,6 @@ export interface AgentMessageProps {
   disableTTS?: boolean;
   /** When on, drop the message's reading-width padding so it sits flush with the chat edge. */
   fullWidthChat?: boolean;
-  onComplete?: (nodeId: number) => void;
 }
 
 // TODO: Consider more robust comparisons:
@@ -80,6 +79,7 @@ function arePropsEqual(
 ): boolean {
   return (
     prev.nodeId === next.nodeId &&
+    prev.acceptedUserMessages === next.acceptedUserMessages &&
     prev.messageId === next.messageId &&
     prev.currentFeedback === next.currentFeedback &&
     // Compare packetCount (primitive) instead of rawPackets.length
@@ -99,8 +99,7 @@ function arePropsEqual(
     prev.processingDurationSeconds === next.processingDurationSeconds &&
     prev.hideFooter === next.hideFooter &&
     prev.disableTTS === next.disableTTS &&
-    prev.fullWidthChat === next.fullWidthChat &&
-    prev.onComplete === next.onComplete
+    prev.fullWidthChat === next.fullWidthChat
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
   );
@@ -108,6 +107,7 @@ function arePropsEqual(
 
 const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
+  acceptedUserMessages,
   packetCount,
   restoredPacketCount: replayPacketCount = 0,
   chatState,
@@ -123,7 +123,6 @@ const AgentMessage = React.memo(function AgentMessage({
   hideFooter,
   disableTTS,
   fullWidthChat,
-  onComplete,
 }: AgentMessageProps) {
   // Returning to a mounted session restores its retained output immediately.
   const mountedPrefix = useRef({ nodeId, count: rawPackets.length });
@@ -158,34 +157,6 @@ const AgentMessage = React.memo(function AgentMessage({
     finalAnswerComing,
     toolProcessingDuration,
   } = usePacketProcessor(rawPackets, nodeId);
-
-  const sessionIdAtMount = useRef(
-    useChatSessionStore.getState().currentSessionId
-  );
-  const requestAtMount = useRef(
-    useChatSessionStore.getState().sessions.get(sessionIdAtMount.current ?? "")
-      ?.abortController
-  );
-  useEffect(() => {
-    if (!isComplete) return;
-    if (onComplete) {
-      onComplete(nodeId);
-      return;
-    }
-    const sessionId = sessionIdAtMount.current;
-    if (!sessionId) return;
-    const store = useChatSessionStore.getState();
-    const session = store.sessions.get(sessionId);
-    if (
-      !session ||
-      session.abortController !== requestAtMount.current ||
-      session.chatState === "loading"
-    )
-      return;
-    if (getLatestMessageChain(session.messageTree).at(-1)?.nodeId === nodeId) {
-      store.setLatestMessageRenderComplete(sessionId, true);
-    }
-  }, [isComplete, nodeId, onComplete]);
 
   const restoredPrefix = useRef<{
     nodeId: number;
@@ -398,6 +369,22 @@ const AgentMessage = React.memo(function AgentMessage({
       className="flex flex-col gap-3"
       data-testid={isComplete ? "onyx-ai-message" : undefined}
     >
+      {acceptedUserMessages?.map((message) => (
+        <Section
+          key={message.id}
+          gap={1}
+          padding={3}
+          alignItems="start"
+          className="rounded-12 bg-background-neutral-02 whitespace-pre-wrap"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("agentMessage.acceptedInput.label")}
+          </Text>
+          <Text as="p" font="main-content-body" color="text-04">
+            {message.message}
+          </Text>
+        </Section>
+      ))}
       {/* Row 1: Two-column layout for tool steps */}
 
       <AgentTimeline

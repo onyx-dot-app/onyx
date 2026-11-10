@@ -1,261 +1,136 @@
-import { test, expect, Page, Route } from "@playwright/test";
-import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
-import { sendMessage } from "@tests/e2e/utils/chatActions";
-import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { test, expect } from "@tests/e2e/chat/fixtures";
+import {
+  addMockLlmConversation,
+  mockLlmNonce,
+  releaseMockLlmGate,
+} from "@tests/e2e/utils/mockLlm";
 
-// Send a message and hold the API response so chatState stays non-"input".
-// Returns a release function that lets the held response proceed.
-async function sendAndHoldResponse(
-  page: Page,
-  message: string
-): Promise<() => void> {
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  const routePattern = "**/api/chat/send-chat-message";
-  let intercepted = false;
-
-  const handler = async (route: Route) => {
-    if (intercepted) {
-      await route.continue();
-      return;
+const pendingTest = test.extend<{
+  heldResponse: { sessionId: string; question: string; gateId: string };
+}>({
+  heldResponse: async ({ api, chatPage }, use) => {
+    const sessionId = await api.createChatSession("Pending messages");
+    const gateId = mockLlmNonce();
+    const question = `Explain queued messages. ${gateId}`;
+    await addMockLlmConversation({
+      name: gateId,
+      conditions: { prompt_contains: [gateId] },
+      replies: [
+        {
+          text: "Working on the first answer.\n\nFirst answer complete.",
+          pause_after_first_chunk: gateId,
+        },
+        { text: "The additional instruction was received." },
+      ],
+    });
+    try {
+      await chatPage.goto(sessionId);
+      await chatPage.inputBar.fill(question);
+      await chatPage.inputBar.send();
+      await chatPage.expectAnswerParagraph("Working on the first answer.");
+      await use({ sessionId, question, gateId });
+    } finally {
+      await releaseMockLlmGate(gateId);
+      await api.deleteChatSession(sessionId);
     }
-    intercepted = true;
-    await held;
-    await route.continue();
-  };
+  },
+});
 
-  await page.route(routePattern, handler);
-
-  const textarea = page.locator("#onyx-chat-input-textbox");
-  await textarea.fill(message);
-  await page.locator("#onyx-chat-input-send-button").click();
-
-  // Wait for the submit flow to process (textarea cleared by resetInputBar)
-  await expect(textarea).toHaveText("", { timeout: 5000 });
-
-  return () => {
-    release();
-  };
-}
-
-async function queueMessage(page: Page, message: string) {
-  const textarea = page.locator("#onyx-chat-input-textbox");
-  await textarea.fill(message);
-  await textarea.press("Enter");
-  await expect(textarea).toHaveText("", { timeout: 2000 });
-}
-
-test.describe("Queued Messages", () => {
-  test.beforeEach(async ({ page }, testInfo) => {
-    await page.context().clearCookies();
-    await loginAsWorkerUser(page, testInfo.workerIndex);
-    await page.goto("/app");
-    await page.waitForLoadState("networkidle");
-  });
-
-  test.afterEach(async ({ page }) => {
-    await page.unrouteAll({ behavior: "ignoreErrors" });
-  });
-
-  test("queues a message during streaming and auto-sends on completion", async ({
-    page,
-  }) => {
-    await sendMessage(page, "Hi, tell me a joke");
-
-    const release = await sendAndHoldResponse(page, "Tell me another joke");
-
-    await queueMessage(page, "And one more please");
-
-    const queueBars = page.locator("[data-testid='queued-message-bar']");
-    await expect(queueBars).toHaveCount(1);
-    await expect(queueBars.first()).toContainText("And one more please");
-
-    release();
-
-    // Held response completes, then the queued message auto-sends
-    await new ChatPage(page).expectSavedTurns([
-      "Hi, tell me a joke",
-      "Tell me another joke",
-      "And one more please",
-    ]);
-
-    await expect(queueBars).toHaveCount(0);
-  });
-
-  test("queues multiple messages and sends them in order", async ({ page }) => {
-    await sendMessage(page, "Hello");
-
-    const release = await sendAndHoldResponse(page, "Tell me about dogs");
-
-    await queueMessage(page, "First queued");
-    await queueMessage(page, "Second queued");
-    await queueMessage(page, "Third queued");
-
-    const queueBars = page.locator("[data-testid='queued-message-bar']");
-    await expect(queueBars).toHaveCount(3);
-    await expect(queueBars.nth(0)).toContainText("First queued");
-    await expect(queueBars.nth(1)).toContainText("Second queued");
-    await expect(queueBars.nth(2)).toContainText("Third queued");
-
-    release();
-
-    // The original, the held and the 3 queued messages, in order
-    await new ChatPage(page).expectSavedTurns([
-      "Hello",
-      "Tell me about dogs",
+pendingTest(
+  "queued messages survive reload and execute in order",
+  async ({ chatPage, heldResponse }) => {
+    await chatPage.inputBar.submitPending("First queued");
+    await chatPage.inputBar.submitPending("Second queued");
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
+    await chatPage.reload();
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
+    await expect(chatPage.inputBar.queuedMessages.nth(0)).toContainText(
+      "First queued"
+    );
+    await expect(chatPage.inputBar.queuedMessages.nth(1)).toContainText(
+      "Second queued"
+    );
+    await releaseMockLlmGate(heldResponse.gateId);
+    await chatPage.expectSavedTurns([
+      heldResponse.question,
       "First queued",
       "Second queued",
-      "Third queued",
     ]);
-    await expect(queueBars).toHaveCount(0);
-  });
+    await chatPage.expectCompleteAnswers(3);
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
+  }
+);
 
-  test("discards queued message via trash icon", async ({ page }) => {
-    await sendMessage(page, "Hello");
-
-    const release = await sendAndHoldResponse(page, "Tell me about cats");
-
-    await queueMessage(page, "First queued");
-    await queueMessage(page, "Second queued");
-
-    const queueBars = page.locator("[data-testid='queued-message-bar']");
-    await expect(queueBars).toHaveCount(2);
-
-    // Click trash on the first bar
-    await queueBars.nth(0).locator("button").click();
-
-    await expect(queueBars).toHaveCount(1);
-    await expect(queueBars.first()).toContainText("Second queued");
-
-    release();
-
-    // The original, the held and the remaining queued message
-    await new ChatPage(page).expectSavedTurns([
-      "Hello",
-      "Tell me about cats",
-      "Second queued",
+pendingTest(
+  "withdraws pending messages before editing and resubmitting them",
+  async ({ chatPage, heldResponse }) => {
+    await chatPage.inputBar.submitPending("Discard this");
+    await chatPage.inputBar.submitPending("Edit this");
+    await chatPage.inputBar.discardPending(0);
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+    await chatPage.inputBar.textbox.press("ArrowUp");
+    await chatPage.inputBar.textbox.press("Enter");
+    await expect(chatPage.inputBar.textbox).toHaveText("Edit this");
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
+    await chatPage.reload();
+    await expect(chatPage.inputBar.textbox).toHaveText("Edit this");
+    await chatPage.inputBar.submitPending("Edited instruction");
+    await releaseMockLlmGate(heldResponse.gateId);
+    await chatPage.expectSavedTurns([
+      heldResponse.question,
+      "Edited instruction",
     ]);
-  });
+    await chatPage.expectCompleteAnswers(2);
+  }
+);
 
-  test("navigates queued messages with arrow keys and edits with Enter", async ({
-    page,
-  }) => {
-    await sendMessage(page, "Hello");
-
-    const release = await sendAndHoldResponse(page, "Second message");
-
-    await queueMessage(page, "First queued");
-    await queueMessage(page, "Second queued");
-
-    const textarea = page.locator("#onyx-chat-input-textbox");
-    const queueBars = page.locator("[data-testid='queued-message-bar']");
-
-    // Up arrow: highlights last bar
-    await textarea.press("ArrowUp");
-    await expect(queueBars.nth(1)).toContainText("edit ·");
-
-    // Up again: highlights first bar
-    await textarea.press("ArrowUp");
-    await expect(queueBars.nth(0)).toContainText("edit ·");
-    await expect(queueBars.nth(1)).not.toContainText("edit ·");
-
-    // Down: back to second bar
-    await textarea.press("ArrowDown");
-    await expect(queueBars.nth(1)).toContainText("edit ·");
-
-    // Enter: move highlighted message into textarea
-    await textarea.press("Enter");
-    await expect(textarea).toHaveText("Second queued");
-    await expect(queueBars).toHaveCount(1);
-    await expect(queueBars.first()).toContainText("First queued");
-
-    release();
-  });
-
-  test("deletes highlighted message with Backspace", async ({ page }) => {
-    await sendMessage(page, "Hello");
-
-    const release = await sendAndHoldResponse(page, "Second message");
-
-    await queueMessage(page, "First queued");
-    await queueMessage(page, "Second queued");
-
-    const textarea = page.locator("#onyx-chat-input-textbox");
-    const queueBars = page.locator("[data-testid='queued-message-bar']");
-
-    // Highlight last bar and delete it
-    await textarea.press("ArrowUp");
-    await expect(queueBars.nth(1)).toContainText("edit ·");
-
-    await textarea.press("Backspace");
-    await expect(queueBars).toHaveCount(1);
-    await expect(queueBars.first()).toContainText("First queued");
-
-    release();
-  });
-
-  test("Escape exits navigation mode without modifying queue", async ({
-    page,
-  }) => {
-    await sendMessage(page, "Hello");
-
-    const release = await sendAndHoldResponse(page, "Second message");
-
-    await queueMessage(page, "Queued message");
-
-    const textarea = page.locator("#onyx-chat-input-textbox");
-    const queueBars = page.locator("[data-testid='queued-message-bar']");
-
-    // Enter navigation, then escape
-    await textarea.press("ArrowUp");
-    await expect(queueBars.first()).toContainText("edit ·");
-
-    await textarea.press("Escape");
-    await expect(queueBars).toHaveCount(1);
-    await expect(queueBars.first()).not.toContainText("edit ·");
-
-    release();
-  });
-
-  test("shows queued message placeholder text", async ({ page }) => {
-    await sendMessage(page, "Hello");
-
-    const release = await sendAndHoldResponse(page, "Second message");
-
-    await queueMessage(page, "Queued message");
-
-    const textarea = page.locator("#onyx-chat-input-textbox");
-    await expect(textarea).toHaveAttribute(
-      "data-placeholder",
-      "Press up to edit queued messages"
+pendingTest(
+  "Ctrl or Cmd Enter adds an instruction to the active response",
+  async ({ page, chatPage, heldResponse }) => {
+    const instruction = "Focus on durability";
+    await chatPage.inputBar.submitPending(instruction, "send");
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+    await releaseMockLlmGate(heldResponse.gateId);
+    await chatPage.expectAnswerParagraph(
+      "The additional instruction was received."
     );
+    await chatPage.expectCompleteAnswers(1);
+    await chatPage.expectSavedTurns([heldResponse.question]);
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(
+          `/api/chat/get-chat-session/${heldResponse.sessionId}`
+        );
+        expect(response.ok()).toBe(true);
+        return response.json();
+      })
+      .toMatchObject({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            accepted_user_messages: [
+              expect.objectContaining({ message: instruction }),
+            ],
+          }),
+        ]),
+      });
+    await chatPage.reload();
+    await expect(chatPage.aiMessage()).toContainText(instruction);
+  }
+);
 
-    release();
-  });
-
-  test("enforces queue limit of 5 messages", async ({ page }) => {
-    await sendMessage(page, "Hello");
-
-    const release = await sendAndHoldResponse(page, "Second message");
-
-    for (let i = 1; i <= 5; i++) {
-      await queueMessage(page, `Message ${i}`);
-    }
-
-    const queueBars = page.locator("[data-testid='queued-message-bar']");
-    await expect(queueBars).toHaveCount(5);
-
-    // 6th message should NOT queue — textarea keeps the text
-    const textarea = page.locator("#onyx-chat-input-textbox");
-    await textarea.fill("Message 6");
-    await textarea.press("Enter");
-
-    await expect(textarea).toHaveText("Message 6");
-    await expect(queueBars).toHaveCount(5);
-
-    release();
-  });
-});
+pendingTest(
+  "Stop leaves the queued message pending",
+  async ({ chatPage, heldResponse }) => {
+    await chatPage.inputBar.submitPending("Keep for later");
+    await chatPage.stop();
+    await releaseMockLlmGate(heldResponse.gateId);
+    await chatPage.expectCompleteAnswers(1);
+    await chatPage.reload();
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+    await expect(chatPage.inputBar.queuedMessages).toContainText(
+      "Keep for later"
+    );
+    await chatPage.expectSavedTurns([heldResponse.question]);
+  }
+);

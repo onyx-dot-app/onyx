@@ -19,7 +19,7 @@ interface UseQueuedMessageNavigationParams {
   /** Remove the queued message at `index`. */
   onRemove: (index: number) => void;
   /** Pull a queued message's text back into the input for editing. */
-  onEdit: (text: string) => void;
+  onEdit: (index: number) => void;
 }
 
 export interface QueuedMessageNavigation {
@@ -73,8 +73,7 @@ export function useQueuedMessageNavigation({
           event.preventDefault();
           const queued = messages[highlightedIndex];
           if (queued) {
-            onRemove(highlightedIndex);
-            onEdit(queued.text);
+            onEdit(highlightedIndex);
           }
           setHighlightedIndex(null);
           return true;

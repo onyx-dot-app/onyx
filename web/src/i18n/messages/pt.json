@@ -12454,6 +12454,16 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurar voz",
           "tooltip": "A voz não está configurada. Configure nas configurações de administração."
+        },
+        "pendingMessages": {
+          "queueHint": "Colocar na fila para o próximo turno · Enter",
+          "sendHint": "Enviar na próxima etapa · Ctrl/⌘ + Enter",
+          "sendLabel": "Enviar agora",
+          "keyboardHint": "Enter para colocar na fila · Ctrl/⌘ + Enter para enviar agora",
+          "preparingHint": "Você pode colocar mensagens na fila quando a resposta começar.",
+          "attachmentsHint": "Envie os arquivos anexados após esta resposta terminar.",
+          "chooseResponseHint": "Escolha uma resposta antes de colocar uma mensagem na fila.",
+          "incognitoHint": "Aguarde a resposta terminar no chat anônimo."
         }
       },
       "baseInputBar": {
@@ -12562,6 +12572,10 @@
         },
         "removeHint": {
           "label": "remover"
+        },
+        "editButton": {
+          "tooltip": "Editar mensagem na fila",
+          "clearDraftTooltip": "Limpe seu rascunho para editar uma mensagem na fila"
         }
       },
       "sharedAppInputBar": {
@@ -12571,6 +12585,12 @@
         "startSessionButton": {
           "label": "Iniciar nova sessão"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Não foi possível enviar a mensagem. Seu rascunho foi mantido.",
+        "withdrawFailed": "Não foi possível remover a mensagem pendente.",
+        "loadFailed": "Não foi possível carregar as mensagens pendentes.",
+        "alreadyAccepted": "Esta mensagem já foi aceita e não pode ser editada nem removida."
       }
     },
     "mcpApiKey": {
@@ -12665,6 +12685,9 @@
         },
         "timedOut": {
           "text": "A resposta parou porque atingiu o limite de tempo."
+        },
+        "acceptedInput": {
+          "label": "Enviado durante esta resposta"
         }
       },
       "codeBlock": {

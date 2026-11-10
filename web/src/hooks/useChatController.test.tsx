@@ -5,7 +5,7 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { createChatSession, sendMessage } from "@/app/app/services/lib";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
-import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
+import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 
 jest.mock("next/navigation", () => {
@@ -62,7 +62,7 @@ jest.mock("@/app/app/services/lib", () => ({
   ChatSendRejectedError: class extends Error {},
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
-  waitForChatSessionIdle: jest.fn(async () => {}),
+  waitForChatResponseEnd: jest.fn(async () => null),
   fetchSettledChatSession: jest.fn(async () => ({
     messages: [],
     packets: [],
@@ -283,7 +283,7 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
       expect.objectContaining({ method: "POST" })
     )
   );
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("cancelling");
@@ -534,3 +534,106 @@ test.each([false, true])(
     );
   }
 );
+
+test("live output retains accepted instructions through later deltas and completion", async () => {
+  const nextChunk = Promise.withResolvers<void>();
+  const finish = Promise.withResolvers<void>();
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+    yield {
+      placement: { turn_index: 0 },
+      obj: { type: "message_delta", content: "First chunk" },
+    };
+    await nextChunk.promise;
+    yield {
+      placement: { turn_index: 1 },
+      obj: { type: "message_delta", content: " Later chunk" },
+    };
+    await finish.promise;
+    yield { placement: { turn_index: 1 }, obj: { type: "stop" } };
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Question",
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  const store = useChatSessionStore.getState();
+  try {
+    await waitFor(() => {
+      expect(
+        [
+          ...useChatSessionStore
+            .getState()
+            .sessions.get("session")!
+            .messageTree.values(),
+        ].find((message) => message.messageId === 12)?.packets
+      ).toEqual([
+        expect.objectContaining({
+          obj: { type: "message_delta", content: "First chunk" },
+        }),
+      ]);
+    });
+    const current = useChatSessionStore
+      .getState()
+      .sessions.get("session")!.messageTree;
+    const response = [...current.values()].find(
+      (message) => message.messageId === 12
+    )!;
+    const acceptedUserMessages = [
+      { id: "instruction", message: "Use the latest report" },
+    ];
+    act(() => {
+      const updated = new Map(current);
+      updated.set(response.nodeId, { ...response, acceptedUserMessages });
+      store.updateSessionMessageTree("session", updated);
+      nextChunk.resolve();
+    });
+    await waitFor(() => {
+      const updated = useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.get(response.nodeId);
+      expect(updated?.packets.at(-1)?.obj).toEqual({
+        type: "message_delta",
+        content: " Later chunk",
+      });
+      expect(updated?.acceptedUserMessages).toEqual(acceptedUserMessages);
+    });
+    await act(async () => {
+      finish.resolve();
+      await sending;
+    });
+    const completed = useChatSessionStore.getState().sessions.get("session")!;
+    expect(completed.chatState).toBe("input");
+    expect(
+      completed.messageTree.get(response.nodeId)?.acceptedUserMessages
+    ).toEqual(acceptedUserMessages);
+  } finally {
+    await act(async () => {
+      nextChunk.resolve();
+      finish.resolve();
+      await sending;
+    });
+  }
+});

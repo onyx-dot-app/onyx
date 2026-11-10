@@ -12454,6 +12454,16 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurar voz",
           "tooltip": "La voz no está configurada. Actívala en la configuración de administración."
+        },
+        "pendingMessages": {
+          "queueHint": "Poner en cola para el siguiente turno · Intro",
+          "sendHint": "Enviar en el siguiente paso · Ctrl/⌘ + Intro",
+          "sendLabel": "Enviar ahora",
+          "keyboardHint": "Intro para poner en cola · Ctrl/⌘ + Intro para enviar ahora",
+          "preparingHint": "Puedes poner mensajes en cola cuando comience la respuesta.",
+          "attachmentsHint": "Envía los archivos adjuntos cuando termine esta respuesta.",
+          "chooseResponseHint": "Elige una respuesta antes de poner un mensaje en cola.",
+          "incognitoHint": "Espera a que termine la respuesta en el chat de incógnito."
         }
       },
       "baseInputBar": {
@@ -12562,6 +12572,10 @@
         },
         "removeHint": {
           "label": "quitar"
+        },
+        "editButton": {
+          "tooltip": "Editar mensaje en cola",
+          "clearDraftTooltip": "Borra tu borrador para editar un mensaje en cola"
         }
       },
       "sharedAppInputBar": {
@@ -12571,6 +12585,12 @@
         "startSessionButton": {
           "label": "Iniciar nueva sesión"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "No se pudo enviar el mensaje. Se conservó el borrador.",
+        "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
+        "loadFailed": "No se pudieron cargar los mensajes pendientes.",
+        "alreadyAccepted": "Este mensaje ya se aceptó y no se puede editar ni eliminar."
       }
     },
     "mcpApiKey": {
@@ -12665,6 +12685,9 @@
         },
         "timedOut": {
           "text": "La respuesta se detuvo porque alcanzó su límite de tiempo."
+        },
+        "acceptedInput": {
+          "label": "Enviado durante esta respuesta"
         }
       },
       "codeBlock": {

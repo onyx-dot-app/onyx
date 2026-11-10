@@ -1,5 +1,5 @@
 import { Packet } from "@/app/app/services/streamingModels";
-import { FeedbackType } from "@/app/app/types";
+import { AcceptedUserMessage, FeedbackType } from "@/app/app/types";
 
 export interface MultiModelResponse {
   modelIndex: number;
@@ -7,6 +7,7 @@ export interface MultiModelResponse {
   modelName: string;
   displayName: string;
   packets: Packet[];
+  acceptedUserMessages?: AcceptedUserMessage[];
   packetCount: number;
   nodeId: number;
   messageId?: number;

@@ -352,10 +352,13 @@ const ChatUI = React.memo(
                   initiallyMounted={initiallyMounted}
                   heightCache={rowHeightCache}
                 >
-                  {(message.type !== "error" || message.packets.length > 0) && (
+                  {(message.type !== "error" ||
+                    message.packets.length > 0 ||
+                    Boolean(message.acceptedUserMessages?.length)) && (
                     <AgentMessage
                       fullWidthChat={fullWidthChat}
                       rawPackets={message.packets}
+                      acceptedUserMessages={message.acceptedUserMessages}
                       packetCount={message.packetCount}
                       restoredPacketCount={message.restoredPacketCount}
                       chatState={chatStateData}

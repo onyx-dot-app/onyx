@@ -9,8 +9,12 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.chat_backend import get_chat_session_processing_status
 
 
-@pytest.mark.parametrize("processing", [False, True])
-def test_status_checks_session_access_before_processing(processing: bool) -> None:
+@pytest.mark.parametrize(
+    "processing, stream_id", [(False, None), (True, None), (True, 12)]
+)
+def test_status_checks_session_access_before_processing(
+    processing: bool, stream_id: int | None
+) -> None:
     session_id = uuid4()
     user = User(id=uuid4(), email="reader@example.com")
     cache = MagicMock()
@@ -26,6 +30,10 @@ def test_status_checks_session_access_before_processing(processing: bool) -> Non
             return_value=cache,
         ),
         patch(
+            "onyx.server.query_and_chat.chat_backend.get_processing_stream_id",
+            return_value=stream_id,
+        ),
+        patch(
             "onyx.server.query_and_chat.chat_backend.is_chat_session_processing",
             return_value=processing,
         ) as check,
@@ -36,8 +44,14 @@ def test_status_checks_session_access_before_processing(processing: bool) -> Non
         user_id=user.id,
         db_session=database.return_value.__enter__.return_value,
     )
-    check.assert_called_once_with(session_id, cache)
-    assert response.is_processing is processing
+    if stream_id is None:
+        check.assert_called_once_with(session_id, cache)
+    else:
+        check.assert_not_called()
+    assert response.model_dump() == {
+        "is_processing": processing,
+        "current_stream": {"stream_id": stream_id} if stream_id is not None else None,
+    }
 
 
 def test_status_does_not_disclose_inaccessible_session() -> None:

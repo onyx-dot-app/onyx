@@ -261,6 +261,11 @@ class ChatSessionsResponse(BaseModel):
     has_more: bool = False
 
 
+class AcceptedUserMessage(BaseModel):
+    id: str
+    message: str
+
+
 class ChatMessageDetail(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int
@@ -268,6 +273,7 @@ class ChatMessageDetail(BaseModel):
     latest_child_message: int | None = None
     message: str
     reasoning_tokens: str | None = None
+    accepted_user_messages: list[AcceptedUserMessage] = Field(default_factory=list)
     message_type: MessageType
     context_docs: list[SavedSearchDoc] | None = None
     # Dict mapping citation number to document_id
@@ -309,6 +315,7 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
+    current_stream: CurrentStreamInfo | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):

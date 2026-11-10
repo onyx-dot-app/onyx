@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { Text, Button } from "@opal/components";
-import { SvgTrash } from "@opal/icons";
+import { SvgTrash, SvgEdit } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { QueuedMessage } from "@/app/app/types";
 
@@ -11,6 +11,9 @@ interface QueuedMessageBarProps {
   highlightedIndex: number | null;
   onDiscard: (index: number) => void;
   onHighlight: (index: number | null) => void;
+  onEdit?: (index: number) => void;
+  disabled?: boolean;
+  canEdit?: boolean;
 }
 
 function QueuedMessageBar({
@@ -18,6 +21,9 @@ function QueuedMessageBar({
   highlightedIndex,
   onDiscard,
   onHighlight,
+  onEdit,
+  disabled = false,
+  canEdit = true,
 }: QueuedMessageBarProps) {
   const t = useTranslations("chat.input");
   const isEmpty = messages.length === 0;
@@ -79,7 +85,25 @@ function QueuedMessageBar({
                     </Text>
                   </div>
                 )}
+                {onEdit && (
+                  <Button
+                    icon={SvgEdit}
+                    prominence="tertiary"
+                    size="xs"
+                    disabled={disabled || !canEdit}
+                    tooltip={t(
+                      canEdit
+                        ? "queuedMessageBar.editButton.tooltip"
+                        : "queuedMessageBar.editButton.clearDraftTooltip"
+                    )}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEdit(index);
+                    }}
+                  />
+                )}
                 <Button
+                  disabled={disabled}
                   icon={SvgTrash}
                   prominence="tertiary"
                   size="xs"

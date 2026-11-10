@@ -69,6 +69,7 @@ from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
+    AcceptedUserMessage,
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
@@ -1316,6 +1317,16 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
         reasoning_tokens=get_chat_message_reasoning(chat_message),
+        accepted_user_messages=[
+            AcceptedUserMessage(id=message.message_id, message=message.content)
+            for item in sorted(
+                chat_message.response_items, key=lambda item: item.step_index
+            )
+            for message in item.inputs
+            if message.source == InputSource.HUMAN
+        ]
+        if chat_message.response_status is not None
+        else [],
         request_params=request_params,
         message_type=chat_message.message_type,
         context_docs=top_documents,

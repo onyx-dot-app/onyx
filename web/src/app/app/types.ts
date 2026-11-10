@@ -9,7 +9,7 @@ import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 export type FeedbackType = "like" | "dislike";
 
 export interface QueuedMessage {
-  id: number;
+  id: number | string;
   text: string;
 }
 
@@ -148,6 +148,11 @@ export interface SearchSession {
   description: string;
 }
 
+export interface AcceptedUserMessage {
+  id: string;
+  message: string;
+}
+
 export interface Message {
   // Null means no saved SDK outcome; absent means an older API.
   responseStatus?:
@@ -158,6 +163,7 @@ export interface Message {
     | "cancelled"
     | "error"
     | null;
+  acceptedUserMessages?: AcceptedUserMessage[];
   is_generating?: boolean;
   messageId?: number;
   nodeId: number; // Unique identifier for tree structure (can be negative for temp messages)
@@ -245,6 +251,7 @@ export function toChatSession(backend: BackendChatSession): ChatSession {
 }
 
 export interface BackendMessage {
+  accepted_user_messages?: AcceptedUserMessage[];
   response_status?: Message["responseStatus"];
   message_id: number;
   message_type: string;

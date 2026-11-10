@@ -175,6 +175,8 @@ receives that output as a message before its next model call.
 to the response item that consumed them. Starting a new run moves its pending
 instruction into the existing user-message tree in the same transaction.
 The runtime records an input only after its acceptance transaction commits.
+Session reads expose accepted human inputs on their response as
+`accepted_user_messages`, so the UI can retain instructions sent between steps.
 Human input needs no invoking tool call. Main Chat accepts text only, without
 request headers or serialized request settings. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. A queued

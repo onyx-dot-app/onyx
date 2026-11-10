@@ -489,6 +489,7 @@ export function processRawChatHistory(
       nodeId: messageInfo.message_id,
       messageId: messageInfo.message_id,
       responseStatus: messageInfo.response_status,
+      acceptedUserMessages: messageInfo.accepted_user_messages,
       message: messageInfo.message,
       errorMessage: messageInfo.error_info?.error ?? messageInfo.error,
       errorCode: messageInfo.error_info?.error_code,

@@ -28,6 +28,7 @@ export class InputBar {
   readonly textbox: Locator;
   readonly sendButton: Locator;
   readonly processingFileChips: Locator;
+  readonly queuedMessages: Locator;
 
   readonly tile: Locator;
   readonly tileRemoveButton: Locator;
@@ -44,6 +45,7 @@ export class InputBar {
     this.textbox = page.locator("#onyx-chat-input-textbox");
     this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.processingFileChips = this.container.getByText("Processing...");
+    this.queuedMessages = page.getByTestId("queued-message-bar");
 
     this.tile = page.locator("[data-rich-tile]");
     this.tileRemoveButton = page.locator("[data-rich-tile-remove]");
@@ -171,6 +173,24 @@ export class InputBar {
 
   async send(): Promise<void> {
     await this.page.keyboard.press("Enter");
+  }
+
+  async submitPending(
+    text: string,
+    delivery: "queue" | "send" = "queue"
+  ): Promise<void> {
+    await this.textbox.fill(text);
+    await this.textbox.press(
+      delivery === "send" ? "ControlOrMeta+Enter" : "Enter"
+    );
+    await expect(this.textbox).toHaveText("");
+  }
+
+  async discardPending(index: number): Promise<void> {
+    await this.queuedMessages
+      .nth(index)
+      .getByRole("button", { name: "Remove queued message" })
+      .click();
   }
 
   async clickSend(): Promise<void> {

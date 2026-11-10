@@ -21,6 +21,7 @@ from onyx.chat.models import PendingChatMessage
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.enums import HookPoint, IncognitoRecordMode
 from onyx.db.models import ChatInput, ChatMessage, ChatSession, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -495,6 +496,14 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
             ("Answer 2", RunStatus.COMPLETE),
             ("Answer 3", RunStatus.COMPLETE),
             ("Answer 4", RunStatus.COMPLETE),
+        ]
+        assert [
+            detail.model_dump()["accepted_user_messages"]
+            for detail in map(translate_db_message_to_chat_message_detail, responses)
+        ] == [
+            [{"id": submitted[0].id, "message": "Accepted Use the latest source"}],
+            [],
+            [],
         ]
         assert len(requests) == 4
         assert any(

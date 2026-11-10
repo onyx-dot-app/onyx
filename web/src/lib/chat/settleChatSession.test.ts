@@ -5,7 +5,7 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import {
   fetchSettledChatSession,
-  waitForChatSessionIdle,
+  waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
 
 jest.mock("@/app/app/services/lib", () => ({
@@ -13,7 +13,7 @@ jest.mock("@/app/app/services/lib", () => ({
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
   fetchSettledChatSession: jest.fn(),
-  waitForChatSessionIdle: jest.fn(),
+  waitForChatResponseEnd: jest.fn(),
 }));
 
 const errorMessage = "Check again";
@@ -37,9 +37,8 @@ beforeEach(() => {
   store.createSession("session");
   store.updateSessionData("session", {
     chatState: "cancelling",
-    queuedMessagesPaused: true,
   });
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   jest.mocked(fetchSettledChatSession).mockResolvedValue({
     chat_session_id: "session",
     description: "Existing chat",
@@ -79,18 +78,17 @@ test("explicit recovery checks server state after acknowledgement fails", async 
   });
   try {
     await settle();
-    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(waitForChatResponseEnd).not.toHaveBeenCalled();
     expect(fetchSettledChatSession).not.toHaveBeenCalled();
     expect(
       useChatSessionStore.getState().sessions.get("session")
     ).toMatchObject({
       chatState: "unconfirmed",
-      queuedMessagesPaused: true,
     });
 
-    const idle = Promise.withResolvers<void>();
+    const idle = Promise.withResolvers<number | null>();
     const polling = Promise.withResolvers<void>();
-    jest.mocked(waitForChatSessionIdle).mockImplementation(() => {
+    jest.mocked(waitForChatResponseEnd).mockImplementation(() => {
       polling.resolve();
       return idle.promise;
     });
@@ -103,7 +101,7 @@ test("explicit recovery checks server state after acknowledgement fails", async 
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("unconfirmed");
 
-    idle.resolve();
+    idle.resolve(null);
     await recovery;
     expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
     expect(
@@ -112,7 +110,6 @@ test("explicit recovery checks server state after acknowledgement fails", async 
       chatState: "input",
       sendAcknowledged: undefined,
       messageTree: saved,
-      queuedMessagesPaused: true,
       uncaughtError: null,
     });
   } finally {
@@ -128,10 +125,10 @@ test("explicit recovery still waits for a pending send acknowledgement", async (
   });
   const recovery = settle("recovery");
   await Promise.resolve();
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   acknowledgement.resolve(42);
   await recovery;
-  expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+  expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", 42);
   expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
 });
 
@@ -155,13 +152,12 @@ test("a rejected send without a reserved row keeps its submitted text and error"
   const session = useChatSessionStore.getState().sessions.get("session")!;
   expect(session.messageTree).toEqual(tree);
   expect(session.chatState).toBe("input");
-  expect(session.queuedMessagesPaused).toBe(true);
 });
 
 test("stopping waits for saved history and preserves error retry details", async () => {
-  const idle = Promise.withResolvers<void>();
+  const idle = Promise.withResolvers<number | null>();
   const history = Promise.withResolvers<BackendChatSession>();
-  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+  jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
   jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
   const failed = {
     ...message(-2, "error", "Partial answer"),
@@ -180,7 +176,7 @@ test("stopping waits for saved history and preserves error retry details", async
     );
   const pending = settle();
   expect(fetchSettledChatSession).not.toHaveBeenCalled();
-  idle.resolve();
+  idle.resolve(null);
   await Promise.resolve();
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
@@ -325,8 +321,8 @@ test.each([
 );
 
 test("a late failed readiness check cannot change a newer request", async () => {
-  const idle = Promise.withResolvers<void>();
-  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+  const idle = Promise.withResolvers<number | null>();
+  jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
   const pending = settle();
   useChatSessionStore
     .getState()
@@ -350,7 +346,7 @@ test.each(["readiness", "history"])(
     useChatSessionStore.getState().updateSessionMessageTree("session", tree);
     if (stage === "readiness") {
       jest
-        .mocked(waitForChatSessionIdle)
+        .mocked(waitForChatResponseEnd)
         .mockRejectedValueOnce(new Error("Offline"));
     } else {
       jest
@@ -363,7 +359,6 @@ test.each(["readiness", "history"])(
         useChatSessionStore.getState().sessions.get("session")
       ).toMatchObject({
         chatState: "unconfirmed",
-        queuedMessagesPaused: true,
         uncaughtError: errorMessage,
         messageTree: tree,
       });
@@ -422,8 +417,8 @@ test.each(["completion", "recovery"] as const)(
     const store = useChatSessionStore.getState();
     store.updateSessionData("session", { incognito: true, messageTree: tree });
     await settle(mode);
-    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
-    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined);
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
     expect(processRawChatHistory).not.toHaveBeenCalled();
     expect(
       useChatSessionStore.getState().sessions.get("session")
@@ -486,7 +481,7 @@ test.each([false, true])(
     const recovery = settle("recovery");
     await Promise.resolve();
     await Promise.resolve();
-    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(waitForChatResponseEnd).not.toHaveBeenCalled();
     expect(store.sessions.get("session")?.chatState).not.toBe("input");
     store.updateSessionMessageTree(
       "session",
@@ -519,7 +514,7 @@ test("an old reader finishing cannot release another request", async () => {
   controller.abort();
   reader.resolve();
   await settling;
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("cancelling");

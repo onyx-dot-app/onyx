@@ -12454,6 +12454,16 @@
         "voiceSetupButton": {
           "ariaLabel": "设置语音",
           "tooltip": "未配置语音。请在管理员设置中配置。"
+        },
+        "pendingMessages": {
+          "queueHint": "加入下一轮队列 · Enter",
+          "sendHint": "在下一步发送 · Ctrl/⌘ + Enter",
+          "sendLabel": "立即发送",
+          "keyboardHint": "Enter 加入队列 · Ctrl/⌘ + Enter 立即发送",
+          "preparingHint": "回复开始后即可加入队列。",
+          "attachmentsHint": "请在此回复结束后发送附件。",
+          "chooseResponseHint": "请先选择回复，再将消息加入队列。",
+          "incognitoHint": "在无痕聊天中，请等待回复结束。"
         }
       },
       "baseInputBar": {
@@ -12562,6 +12572,10 @@
         },
         "removeHint": {
           "label": "移除"
+        },
+        "editButton": {
+          "tooltip": "编辑队列中的消息",
+          "clearDraftTooltip": "请清空草稿后再编辑队列中的消息"
         }
       },
       "sharedAppInputBar": {
@@ -12571,6 +12585,12 @@
         "startSessionButton": {
           "label": "开始新会话"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "无法提交消息。草稿已保留。",
+        "withdrawFailed": "无法移除待处理消息。",
+        "loadFailed": "无法加载待处理消息。",
+        "alreadyAccepted": "此消息已被接受，无法编辑或移除。"
       }
     },
     "mcpApiKey": {
@@ -12665,6 +12685,9 @@
         },
         "timedOut": {
           "text": "回复已达到时间限制，因此已停止。"
+        },
+        "acceptedInput": {
+          "label": "在此回复期间发送"
         }
       },
       "codeBlock": {

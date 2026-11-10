@@ -18,13 +18,28 @@ function getStorage(): Storage | null {
   }
 }
 
-export function clearDraft(key: string) {
+export function clearDraft<T>(key: string, expectedValue?: T) {
   const storage = getStorage();
   if (!storage) return;
   try {
+    if (
+      expectedValue !== undefined &&
+      storage.getItem(key) !== JSON.stringify(expectedValue)
+    )
+      return;
     storage.removeItem(key);
   } catch {
     // ignore
+  }
+}
+
+export function saveDraft<T>(key: string, value: T) {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Drafts are optional when storage is unavailable.
   }
 }
 
@@ -98,16 +113,10 @@ export function useDraft<T>({
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       const write = () => {
         timerRef.current = null;
-        const storage = getStorage();
-        if (!storage) return;
-        try {
-          if (isEmptyRef.current(value)) {
-            storage.removeItem(key);
-          } else {
-            storage.setItem(key, JSON.stringify(value));
-          }
-        } catch {
-          // ignore
+        if (isEmptyRef.current(value)) {
+          clearDraft(key);
+        } else {
+          saveDraft(key, value);
         }
       };
       if (debounceMs === 0) write();
