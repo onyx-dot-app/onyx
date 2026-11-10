@@ -23,8 +23,8 @@ from onyx.external_apps.providers.registry import (
     uses_cloud_scope,
     withheld_on_cloud,
 )
+from onyx.skills.built_in import iter_builtin_skill_files
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
-from onyx.skills.content import iter_builtin_skill_files
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

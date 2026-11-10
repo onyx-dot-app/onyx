@@ -263,10 +263,11 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
     monkeypatch.setattr(push, "get_connectable_apps_for_user", lambda *_args: [])
     monkeypatch.setattr(push, "build_connectable_apps_list", lambda _apps: "apps")
 
-    apps_section, files = push.build_user_skills_payload(user, db_session)
+    payload = push.build_user_skills_payload(user, db_session)
 
-    assert apps_section == "apps"
-    assert files == {"canonical-name/SKILL.md": b"content"}
+    assert payload.connectable_apps_section == "apps"
+    assert payload.omissions == ()
+    assert payload.files == {"canonical-name/SKILL.md": b"content"}
     list_runtime_skills.assert_called_once_with(
         user=user,
         db_session=db_session,

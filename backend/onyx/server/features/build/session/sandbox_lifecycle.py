@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.cache.interface import CacheLock
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
+from onyx.db.skill_runtime_models import SkillRuntimeOmission
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -157,6 +158,8 @@ class ManagedContentPayload:
 
     connectable_apps_section: str
     skills_files: FileSet
+    # Whole Skills left out by the runtime limit, for the session notice.
+    skill_omissions: tuple[SkillRuntimeOmission, ...]
     skills_hash: str
     mcp_fingerprint: str
 
@@ -239,11 +242,14 @@ def build_managed_content_payload(
     Callers lock the sandbox row first (``lock_sandbox_skills_hashes``) and keep
     it through the push and the record: a Skill change that commits between
     the build and the record would otherwise get the old payload's hash."""
-    connectable_apps_section, skills_files = build_user_skills_payload(user, db_session)
+    skills = build_user_skills_payload(user, db_session)
     return ManagedContentPayload(
-        connectable_apps_section=connectable_apps_section,
-        skills_files=skills_files,
-        skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        connectable_apps_section=skills.connectable_apps_section,
+        skills_files=skills.files,
+        skill_omissions=skills.omissions,
+        skills_hash=compute_skill_runtime_hash(
+            skills.files, skills.connectable_apps_section
+        ),
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),
