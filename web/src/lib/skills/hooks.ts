@@ -1,11 +1,53 @@
 "use client";
 
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { SvgEyeOff, SvgLock, SvgOrganization, SvgUser } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import type { SkillCardItem } from "@/sections/cards/SkillCard";
 import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
+import {
+  SKILL_INSTALLATION_POLICIES,
+  type SkillInstallationPolicy,
+} from "@/lib/skills/types";
+
+export interface InstallationPolicyOption {
+  value: SkillInstallationPolicy;
+  label: string;
+  description: string;
+  icon: IconFunctionComponent;
+}
+
+const POLICY_COPY = {
+  AVAILABLE: { key: "available", icon: SvgUser },
+  DEFAULT: { key: "default", icon: SvgOrganization },
+  REQUIRED: { key: "required", icon: SvgLock },
+  NOT_AVAILABLE: { key: "notAvailable", icon: SvgEyeOff },
+} as const satisfies Record<
+  SkillInstallationPolicy,
+  { key: string; icon: IconFunctionComponent }
+>;
+
+/** Every installation policy, in display order, with its label. */
+export function useInstallationPolicyOptions(): InstallationPolicyOption[] {
+  const t = useTranslations("skills.modals.share.installation");
+  return useMemo(
+    () =>
+      SKILL_INSTALLATION_POLICIES.map((value) => {
+        const { key, icon } = POLICY_COPY[value];
+        return {
+          value,
+          label: t(key),
+          description: t(`${key}Description`),
+          icon,
+        };
+      }),
+    [t]
+  );
+}
 
 export function useSkillPresentation(
   item: SkillCardItem,
@@ -17,7 +59,8 @@ export function useSkillPresentation(
     Permission.MANAGE_SKILLS
   );
   const isRequired =
-    item.source === "custom" && item.skill.installation_policy === "REQUIRED";
+    item.source === "custom" &&
+    item.skill.effective_installation_policy === "REQUIRED";
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
