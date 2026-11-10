@@ -14,24 +14,30 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db import skill as skill_db
+from onyx.db.enums import AccountType, SkillSharePermission
 from onyx.db.enums import SkillInstallationPolicy as Policy
-from onyx.db.enums import SkillSharePermission
+from onyx.db.external_app import get_ready_external_app_ids_for_users
 from onyx.db.models import (
     ExternalAppUserCredential,
     Marketplace,
     Skill,
     Skill__User,
     Skill__UserGroup,
+    SkillVersion,
     User,
     UserSkillLimitBlock,
     UserSkillPreference,
 )
 from onyx.db.skill import (
+    _skill_reaches_user,
+    available_built_in_skills,
     capture_skill_limit_baseline,
     resolve_skill_runtime_names,
+    skill_audience_rows,
     skill_audience_user_ids,
     skill_limit_violations,
     skill_usage_for_users,
+    skill_usage_statement,
 )
 from onyx.skills.built_in import get_builtin_skill_footprints
 from onyx.skills.limits import SkillLimit, SkillUsage, failed_skill_limit
@@ -436,3 +442,98 @@ def test_missing_users_have_no_skill_usage(clean: Session) -> None:
         user.id: SkillUsage(bytes=123, files=1),
         missing: SkillUsage(),
     }
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_staged_version_usage_matches_published_pointers(
+    session: Session, seed: int
+) -> None:
+    """Overrides and compressed name rows equal real pointer changes in both shapes."""
+    world = _World(session, seed)
+    users = [user.id for user in world.users]
+    audience = set(
+        session.execute(
+            skill_audience_rows([skill.id for skill in world.skills])
+        ).tuples()
+    )
+    audience_users = session.scalars(
+        select(User.__table__.c.id).where(
+            User.__table__.c.is_active.is_(True),
+            User.account_type.not_in([AccountType.BOT, AccountType.EXT_PERM_USER]),
+        )
+    )
+    expected_audience = {
+        (skill_id, user_id)
+        for user_id in audience_users
+        for skill_id in session.scalars(
+            select(Skill.id).where(
+                Skill.id.in_([skill.id for skill in world.skills]),
+                _skill_reaches_user(user_id),
+            )
+        )
+    }
+    assert audience == expected_audience
+    generic = uuid4()
+    ready = get_ready_external_app_ids_for_users(session, [*users, generic])
+    available = available_built_in_skills(session)
+    overrides: dict[UUID, UUID | None] = {}
+    originals: dict[UUID, UUID | None] = {}
+    for index, skill in enumerate(world.skills[:6]):
+        originals[skill.id] = skill.current_version_id
+        version = SkillVersion(
+            id=uuid4(),
+            skill_id=skill.id,
+            version_number=2,
+            bundle_file_id=f"staged-{uuid4()}",
+            bundle_sha256="0" * 64,
+            is_valid=index % 3 != 0,
+            unpacked_size_bytes=index * MIB,
+            file_count=index + 1,
+        )
+        session.add(version)
+        overrides[skill.id] = version.id
+    # A staged new custom row must have a pointer, but was absent before sync.
+    absent = sized_skill(session, size=10 * MIB, files=5, name="staged-new")
+    overrides[absent.id] = None
+    session.flush()
+    totals = {
+        user: SkillUsage(int(size), int(files), int(unknown))
+        for user, _, size, files, unknown, _ in session.execute(
+            skill_usage_statement(
+                users,
+                ready,
+                generic,
+                built_in_available=available,
+                version_overrides=overrides,
+            )
+        )
+    }
+    names = {skill.name for skill in world.skills} | {absent.name}
+    by_name = {
+        (user, name): SkillUsage(int(size), int(files), int(unknown))
+        for user, name, size, files, unknown, _ in session.execute(
+            skill_usage_statement(
+                users,
+                ready,
+                generic,
+                built_in_available=available,
+                version_overrides=overrides,
+                names=names,
+                per_name=True,
+            )
+        )
+    }
+    for skill in world.skills[:6]:
+        skill.current_version_id = overrides[skill.id]
+    session.flush()
+    assert totals == skill_usage_for_users(
+        users, session, exclude_skill_ids=[absent.id]
+    )
+    for name in names:
+        expected = skill_usage_for_users(
+            users, session, names=[name], exclude_skill_ids=[absent.id]
+        )
+        assert {
+            user: by_name.get((user, name), by_name.get((generic, name), SkillUsage()))
+            for user in users
+        } == expected

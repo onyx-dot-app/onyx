@@ -1,26 +1,38 @@
 """Apply a complete read using staged bundles; the caller owns commit and cleanup."""
 
 from collections.abc import Collection, Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import Permission
 from onyx.db.marketplace_access import materialize_marketplace_access__no_commit
+from onyx.db.marketplace_limits import (
+    MarketplaceVersionProposal,
+    marketplace_version_decisions,
+)
 from onyx.db.marketplace_sync import request_marketplace_sync__no_commit
 from onyx.db.models import Marketplace, Skill, SkillVersion, User, UserSkillPreference
 from onyx.db.resource_access import lock_resource_access_user
 from onyx.db.resource_version import prune_resource_bundles, write_resource_version
-from onyx.db.skill import affected_user_ids_for_skills
+from onyx.db.skill import (
+    affected_user_ids_for_skills,
+)
 from onyx.db.skill_library import lock_skill_library_names, skill_library_owner
 from onyx.db.skill_version import SkillVersionAdapter
 from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.ingest import IngestedBundle
+from onyx.skills.limits import (
+    SKILL_LIMIT_BLOCK_REASON,
+    SkillLimitBlocks,
+    SkillLimitViolation,
+)
 from onyx.skills.marketplace.models import (
     MarketplaceRetirementProposal,
     MarketplaceSyncStatus,
@@ -33,6 +45,16 @@ from onyx.skills.marketplace.read_models import (
     ReadySkill,
     UnsupportedPlugin,
 )
+
+
+@dataclass(frozen=True)
+class _StagedMarketplaceEntry:
+    skill: Skill
+    version: SkillVersion
+    proposal: MarketplaceVersionProposal
+    key: str
+    entry: ReadySkill
+    bundle: IngestedBundle
 
 
 def fetch_marketplace_sync_state(
@@ -96,6 +118,101 @@ def confirm_marketplace_retirement__no_commit(
     marketplace.retirement_proposal = proposal.model_copy(update={"approved": True})
     db_session.flush()
     request_marketplace_sync__no_commit(marketplace_id, db_session)
+
+
+def _stage_marketplace_entry__no_commit(
+    marketplace: Marketplace,
+    key: str,
+    entry: ReadySkill,
+    skill: Skill | None,
+    bundle: IngestedBundle,
+    *,
+    revision: str,
+    created_by_user_id: UUID | None,
+    db_session: Session,
+) -> _StagedMarketplaceEntry:
+    """Stage under membership, marketplace, library-name and Skill locks.
+
+    Existing pointers stay unchanged until decisions finish. A new custom row
+    needs its pointer for ck_skill_definition_source; the decision query models
+    that row as absent before publication. No bundle I/O occurs here.
+    """
+    current = skill.current_version if skill is not None else None
+    initial_version_id = uuid4() if skill is None else None
+    if skill is None:
+        skill = Skill(
+            name=bundle.canonical_name,
+            description=bundle.description,
+            author_user_id=marketplace.owner_user_id,
+            marketplace_id=marketplace.id,
+            marketplace_entry_key=key,
+            current_version_id=initial_version_id,
+        )
+        db_session.add(skill)
+        db_session.flush()
+    adapter = SkillVersionAdapter(skill, initial_version_id=initial_version_id)
+    version = write_resource_version(
+        adapter,
+        bundle_file_id=bundle.bundle_file_id,
+        bundle_sha256=bundle.bundle_sha256,
+        is_valid=True,
+        metadata=bundle.metadata,
+        created_by_user_id=created_by_user_id,
+        marketplace_revision=revision,
+        db_session=db_session,
+    )
+    if current is not None:
+        adapter.publish(current)
+        db_session.flush()
+    return _StagedMarketplaceEntry(
+        skill,
+        version,
+        MarketplaceVersionProposal(
+            skill.id, skill.name, version.id, initial_version_id is not None
+        ),
+        key,
+        entry,
+        bundle,
+    )
+
+
+def _publish_marketplace_entries(
+    pending: Collection[_StagedMarketplaceEntry],
+    refusals: Mapping[UUID, SkillLimitViolation | str],
+    blocked: dict[str, str],
+    limit_blocks: dict[str, SkillLimitViolation],
+    db_session: Session,
+) -> tuple[list[UUID], set[str], set[str]]:
+    accepted: list[UUID] = []
+    used: set[str] = set()
+    cleanup: set[str] = set()
+    for item in pending:
+        refusal = refusals.get(item.skill.id)
+        if refusal is not None:
+            if isinstance(refusal, SkillLimitViolation):
+                blocked[item.key] = SKILL_LIMIT_BLOCK_REASON
+                limit_blocks[item.key] = refusal
+            else:
+                blocked[item.key] = refusal
+            if item.proposal.is_new:
+                db_session.delete(item.skill)
+            else:
+                db_session.execute(
+                    delete(SkillVersion).where(SkillVersion.id == item.version.id)
+                )
+            continue
+        SkillVersionAdapter(item.skill).publish(item.version)
+        item.skill.description = item.bundle.description
+        item.skill.marketplace_path = item.entry.path
+        used.add(item.bundle.bundle_file_id)
+        accepted.append(item.skill.id)
+    db_session.flush()
+    for item in pending:
+        if item.skill.id not in refusals:
+            cleanup.update(
+                prune_resource_bundles(SkillVersionAdapter(item.skill), db_session)
+            )
+    return accepted, cleanup, used
 
 
 def reconcile_marketplace__no_commit(
@@ -238,6 +355,8 @@ def reconcile_marketplace__no_commit(
                     skill.marketplace_path = entry.path
                     changed.append(skill.id)
         used: set[str] = set()
+        limit_blocks: dict[str, SkillLimitViolation] = {}
+        pending: list[_StagedMarketplaceEntry] = []
         for key, entry in ready.items():
             name = entry.path.rsplit("/", 1)[-1]
             skill = live.get(key)
@@ -261,36 +380,36 @@ def reconcile_marketplace__no_commit(
                 raise ValueError(
                     f"Changed marketplace entry needs a staged bundle: {key}"
                 )
-            initial_version_id = uuid4() if skill is None else None
-            if skill is None:
-                skill = Skill(
-                    name=name,
-                    description=bundle.description,
-                    author_user_id=marketplace.owner_user_id,
-                    marketplace_id=marketplace.id,
-                    marketplace_entry_key=key,
-                    current_version_id=initial_version_id,
+            pending.append(
+                _stage_marketplace_entry__no_commit(
+                    marketplace,
+                    key,
+                    entry,
+                    skill,
+                    bundle,
+                    revision=revision,
+                    created_by_user_id=created_by_user_id,
+                    db_session=db_session,
                 )
-                db_session.add(skill)
-                db_session.flush()
-                names.add(name)
-            adapter = SkillVersionAdapter(skill, initial_version_id=initial_version_id)
-            write_resource_version(
-                adapter,
-                bundle_file_id=bundle.bundle_file_id,
-                bundle_sha256=bundle.bundle_sha256,
-                is_valid=True,
-                metadata=bundle.metadata,
-                created_by_user_id=created_by_user_id,
-                marketplace_revision=revision,
-                db_session=db_session,
             )
-            skill.description = bundle.description
-            skill.marketplace_path = entry.path
-            cleanup.update(prune_resource_bundles(adapter, db_session))
-            used.add(bundle.bundle_file_id)
-            changed.append(skill.id)
-        access_changed = materialize_marketplace_access__no_commit(
+        new_ids = [item.skill.id for item in pending if item.proposal.is_new]
+        new_access = (
+            materialize_marketplace_access__no_commit(
+                marketplace.id, db_session, skill_ids=new_ids
+            )
+            if new_ids
+            else set()
+        )
+        refusals = marketplace_version_decisions(
+            [item.proposal for item in pending], names, db_session
+        )
+        accepted, pruned, used = _publish_marketplace_entries(
+            pending, refusals, blocked, limit_blocks, db_session
+        )
+        changed.extend(accepted)
+        cleanup.update(pruned)
+        new_access.difference_update(refusals)
+        access_changed = new_access | materialize_marketplace_access__no_commit(
             marketplace_id, db_session
         )
         affected_skills = (
@@ -303,6 +422,7 @@ def reconcile_marketplace__no_commit(
             for user_id in before.get(skill_id, set()) | after.get(skill_id, set())
         }
         marketplace.blocked_entries = blocked
+        marketplace.skill_limit_blocks = SkillLimitBlocks(limit_blocks)
         marketplace.retirement_proposal = None
         marketplace.last_error = None
         marketplace.last_synced_revision = revision
@@ -314,5 +434,6 @@ def reconcile_marketplace__no_commit(
             affected_user_ids=affected,
             retired_skill_ids=[skill.id for skill in missing],
             blocked_entries=blocked,
+            skill_limit_blocks=limit_blocks,
             cleanup_file_ids=cleanup - used,
         )

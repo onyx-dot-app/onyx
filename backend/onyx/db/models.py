@@ -154,7 +154,7 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
-from onyx.skills.limits import SkillLimit
+from onyx.skills.limits import SkillLimit, SkillLimitBlocks
 from onyx.skills.marketplace.models import (
     GitHubMarketplaceConfig,
     MarketplaceProvider,
@@ -5523,6 +5523,13 @@ class Marketplace(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     blocked_entries: Mapped[dict[str, str]] = mapped_column(
         PGJSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    # The blocked entries that would put users over the Skill write limit.
+    skill_limit_blocks: Mapped[SkillLimitBlocks] = mapped_column(
+        PydanticType(SkillLimitBlocks),
+        nullable=False,
+        default=SkillLimitBlocks,
+        server_default=text("'{}'::jsonb"),
     )
     retirement_proposal: Mapped[MarketplaceRetirementProposal | None] = mapped_column(
         PydanticType(MarketplaceRetirementProposal, none_as_null=True), nullable=True
