@@ -302,7 +302,10 @@ and your own Skill takes precedence over a Skill shared by another user. The old
 invalid bundles, removed built-ins, and Skills with disconnected apps do not hide a usable Skill.
 This order also applies to Required Skills and saved choices. A company Default can hide your explicitly enabled Skill.
 Your own enabled Skill can hide a Required Skill shared by another user. The saved choices remain in place.
+If a bundle cannot load, Onyx tries the next eligible Skill in the same order.
 The Skills API identifies duplicates with `hidden_reason: "same_name"` and the selected Skill's `hidden_by_skill_id`.
+These fields use saved validity information.
+A temporary storage failure can change the delivered Skill without changing these fields.
 
 ## Maintain a Skill
 

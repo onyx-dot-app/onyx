@@ -275,6 +275,10 @@ def save_skill_version(
     adapter.lock(db_session)
     db_session.refresh(skill, ["current_version"])
     assert_skill_content_editable(skill)
+    if ingested.canonical_name != skill.name:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "A skill name cannot change across versions."
+        )
     reuse_current = False
     if not initial:
         matches = (
