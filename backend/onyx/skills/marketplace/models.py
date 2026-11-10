@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
+from onyx.skills.limits import SkillLimitBlocks, SkillLimitViolation
 from onyx.utils.github import (
     normalize_github_folder,
     validate_github_repository_component,
@@ -100,6 +101,7 @@ class ReconciliationResult(BaseModel):
     changed_skill_ids: list[UUID] = Field(default_factory=list)
     retired_skill_ids: list[UUID] = Field(default_factory=list)
     blocked_entries: dict[str, str] = Field(default_factory=dict)
+    skill_limit_blocks: dict[str, SkillLimitViolation] = Field(default_factory=dict)
     cleanup_file_ids: set[str] = Field(default_factory=set)
     affected_user_ids: set[UUID] = Field(default_factory=set)
 
@@ -133,6 +135,8 @@ class MarketplaceManagementSnapshot(BaseModel):
     last_synced_at: datetime | None
     last_error: str | None
     blocked_entries: dict[str, str]
+    # Entries in blocked_entries that would put users over the Skill limit.
+    skill_limit_blocks: SkillLimitBlocks = SkillLimitBlocks()
     retirement_proposal: MarketplaceRetirementProposal | None
     live_skill_count: int = 0
     retired_skill_count: int = 0
