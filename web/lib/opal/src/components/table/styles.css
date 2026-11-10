@@ -24,6 +24,21 @@
   @apply h-6 px-0;
 }
 
+table.tbl[data-row-height="content"]
+  > :is(thead, tbody, tfoot)
+  > tr
+  > .tbl-cell
+  > .tbl-cell-inner[data-size="2.75"] {
+  @apply h-auto min-h-10;
+}
+table.tbl[data-row-height="content"]
+  > :is(thead, tbody, tfoot)
+  > tr
+  > .tbl-cell
+  > .tbl-cell-inner[data-size="2.25"] {
+  @apply h-auto min-h-6;
+}
+
 /* ---- TableHead ---- */
 
 .table-head {

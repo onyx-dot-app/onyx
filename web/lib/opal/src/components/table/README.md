@@ -82,6 +82,9 @@ function UsersTable({ users }: { users: User[] }) {
 | `emptyState`              | `ReactNode`                                        | —                                  | Empty state content                                                                                     |
 | `header`                  | `boolean`                                          | `true`                             | Show the header row. Hiding it also hides header sorting, resizing, select-all and the actions popovers |
 
+Set `rowHeight="content"` for multiline cells. Rows grow to fit their content,
+with `size` as the minimum height. The default, `"fixed"`, keeps the selected size.
+
 ## Columns
 
 | `kind`        | Fields                                                                                                                                                                     |

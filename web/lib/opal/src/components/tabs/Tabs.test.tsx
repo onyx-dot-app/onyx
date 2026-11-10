@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -6,6 +7,80 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import { Button, Tabs } from "@opal/components";
+
+it.each([
+  { direction: "ltr", left: 300, offset: 220 },
+  { direction: "rtl", left: -100, offset: -100 },
+  { direction: "ltr", left: 20, offset: 0 },
+] as const)(
+  "keeps the selected tab visible after resizing ($direction, $left)",
+  async ({ direction, left, offset }) => {
+    const resizeCallbacks = new Map<Element, () => void>();
+    const disconnect = jest.fn();
+    const observerMock = jest
+      .spyOn(globalThis, "ResizeObserver")
+      .mockImplementation((callback) => {
+        const observer: ResizeObserver = {
+          observe: (element) => {
+            resizeCallbacks.set(element, () => callback([], observer));
+          },
+          unobserve: (element) => {
+            resizeCallbacks.delete(element);
+          },
+          disconnect,
+        };
+        return observer;
+      });
+    try {
+      const { unmount } = render(
+        <Tabs variant="underline" defaultValue="history" dir={direction}>
+          <Tabs.List enableScrollArrows>
+            <Tabs.Trigger value="details">Details</Tabs.Trigger>
+            <Tabs.Trigger value="history">Versions</Tabs.Trigger>
+          </Tabs.List>
+        </Tabs>
+      );
+      const selected = screen.getByRole("tab", { name: "Versions" });
+      const container = selected.parentElement;
+      if (!container) throw new Error("Missing tab scroll container");
+      Object.defineProperty(container, "clientWidth", { value: 180 });
+      jest
+        .spyOn(container, "getBoundingClientRect")
+        .mockReturnValue(new DOMRect(0, 0, 180, 40));
+      jest
+        .spyOn(selected, "getBoundingClientRect")
+        .mockReturnValue(new DOMRect(left, 0, 100, 40));
+      const scroll = jest.fn();
+      container.scrollBy = scroll;
+      await act(async () => resizeCallbacks.get(container)?.());
+      if (offset)
+        expect(scroll).toHaveBeenCalledWith({
+          left: offset,
+          behavior: "instant",
+        });
+      else expect(scroll).not.toHaveBeenCalled();
+      scroll.mockClear();
+      await act(async () => {
+        fireEvent.scroll(container);
+      });
+      expect(scroll).not.toHaveBeenCalled();
+      expect(resizeCallbacks.has(selected)).toBe(true);
+      await act(async () => resizeCallbacks.get(selected)?.());
+      expect(scroll).not.toHaveBeenCalled();
+      const child = document.createElement("span");
+      await act(async () => {
+        container.appendChild(child);
+      });
+      expect(resizeCallbacks.has(child)).toBe(true);
+      await act(async () => resizeCallbacks.get(child)?.());
+      expect(scroll).not.toHaveBeenCalled();
+      unmount();
+      expect(disconnect).toHaveBeenCalledTimes(observerMock.mock.calls.length);
+    } finally {
+      observerMock.mockRestore();
+    }
+  }
+);
 
 function ConditionalTabs({ showPermissions }: { showPermissions: boolean }) {
   return (

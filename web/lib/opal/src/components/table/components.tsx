@@ -154,6 +154,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
     draggable,
     footer,
     size = 2.75,
+    rowHeight = "fixed",
     prominence = "primary",
     selectionBehavior = "no-select",
     onSelectionChange,
@@ -382,6 +383,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
         >
           <TableElement
             aria-label={label}
+            data-row-height={rowHeight}
             selectionBehavior={selectionBehavior}
             width={
               Object.keys(columnWidths).length > 0
