@@ -212,6 +212,26 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   `results/prebuild.md`); new connections still work. Stop and VM exit also close them. After an agent
   restart, the agent attaches the relay to each adopted VM again.
 
+### Node state report
+
+The agent pushes its VM list to the api_server; the api_server reconciles the node's placement records
+on each report (`backend/onyx/microvm/node_report.py`). Nothing on the api_server side polls the agents.
+
+- After the first successful key registration, and then every `--state-report-interval` (default 15 s,
+  `0` turns it off), the agent sends `POST <--api-server-url>/microvm/node/state` with `node_id` and
+  `vms`: one entry per VM of `List` (`sandbox_id`, `tenant_id`, `attempt`, `generation`, `state`,
+  `template`, `vcpus`, `mem_mib`, `scratch_gib`, `pid`, `started_at`).
+- `Authorization: Bearer <token>`: an EdDSA JWT signed with the registered node key. Header `kid` = the
+  registered key id. Claims `node`, `iat`, `exp` (60 s), `jti` (single use), `aud`
+  (`onyx-api-server-node-report`, never `sandbox-proxy`) and `body_sha256` (hex SHA-256 of the body).
+  The registration secret is not sent.
+- At most 1024 VMs and 1 MiB. A larger report is not sent, because a cut list would make the api_server
+  clear live records. The api_server applies the same caps.
+- A failed report is logged. The next one waits twice as long, up to 2 min, then the interval again.
+- The api_server answers `409` while the node has no registered `agent_address`: it needs the address to
+  check a VM again before it clears a record. The placement record TTL (`SANDBOX_FC_PLACEMENT_TTL_SECONDS`,
+  300 s) is about 20 report intervals; a node that stops reporting loses its records when they expire.
+
 ### Node requirements
 
 - Linux, root, `/dev/kvm`, cgroup v2, systemd on the host.

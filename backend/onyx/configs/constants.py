@@ -624,8 +624,6 @@ class OnyxRedisLocks:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
-    # Firecracker VM reconcile (cluster-wide, shared cache)
-    MICROVM_RECONCILE_BEAT_LOCK = "da_lock:microvm_reconcile_beat"
     SESSION_CREATE_LOCK_PREFIX = "session_create"
 
 
@@ -786,8 +784,6 @@ class OnyxCeleryTask:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
-    # Firecracker VM reconcile (SANDBOX_RUNTIME=firecracker)
-    MICROVM_RECONCILE = "microvm_reconcile"
 
     # Scheduled tasks (Craft)
     SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"

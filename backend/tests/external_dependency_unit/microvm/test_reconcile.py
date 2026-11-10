@@ -1,4 +1,7 @@
-"""Two-way reconcile against Postgres, Redis and fake host agents (ENG-4576)."""
+"""Per-node reconcile against Postgres, Redis and fake host agents (ENG-4576).
+
+Each pass gets the VM list that the node would report.
+"""
 
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -19,11 +22,13 @@ from onyx.microvm.lifecycle import (
 )
 from onyx.microvm.models import AgentVm, ReconcileReport
 from onyx.microvm.placement import record_placement
-from onyx.microvm.reconcile import reconcile_microvms
+from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
     SandboxPlacement,
+    get_registered_node,
     get_sandbox_placement,
     list_indexed_placements,
+    list_registered_nodes,
     set_sandbox_daemon_key,
 )
 from tests.external_dependency_unit.microvm.conftest import (
@@ -53,13 +58,26 @@ def _reconcile(
     checkpointer: SandboxCheckpointer | None = None,
     activity: SandboxActivityProbe | None = None,
 ) -> ReconcileReport:
-    return reconcile_microvms(
-        shared_cache,
-        client_factory,
-        checkpointer or NoCheckpointSupport(),
-        activity or UnknownActivity(),
-        now=NOW,
-    )
+    """Every registered node reports its `List` once."""
+    merged = ReconcileReport()
+    for node in list_registered_nodes(shared_cache):
+        report = reconcile_node(
+            shared_cache,
+            client_factory,
+            checkpointer or NoCheckpointSupport(),
+            activity or UnknownActivity(),
+            node=node,
+            vms=client_factory.client(node.address).list_vms(),
+            now=NOW,
+        )
+        merged.failed += report.failed
+        merged.refreshed += report.refreshed
+        merged.adopted += report.adopted
+        merged.cleared += report.cleared
+        merged.orphans_marked += report.orphans_marked
+        merged.orphans_stopped += report.orphans_stopped
+        merged.slept += report.slept
+    return merged
 
 
 def _node(prefix: str) -> str:
@@ -197,7 +215,7 @@ def test_orphan_on_second_node_is_not_stopped_when_record_points_elsewhere(
     )
 
 
-def test_unreachable_node_keeps_its_records(
+def test_record_stays_when_the_second_list_fails(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
@@ -215,10 +233,21 @@ def test_unreachable_node_keeps_its_records(
         sandbox_id=sandbox_id,
         placement=placement,
     )
+    node = get_registered_node(shared_cache, node_id)
+    assert node is not None
 
-    report = _reconcile(shared_cache, client_factory)
+    # The report does not list the VM, but the liveness check cannot reach
+    # the agent: keep the record (its TTL ends it if the node is gone).
+    report = reconcile_node(
+        shared_cache,
+        client_factory,
+        NoCheckpointSupport(),
+        UnknownActivity(),
+        node=node,
+        vms=[],
+        now=NOW,
+    )
 
-    assert report.unreachable_nodes == [node_id]
     assert report.cleared == []
     assert get_sandbox_placement(tenant_cache, sandbox_id) == placement
 
@@ -320,7 +349,8 @@ def test_lease_is_checked_before_every_vm(
     add_node: AddNode,
     make_db_sandbox: MakeSandbox,
 ) -> None:
-    node = add_node(_node("lease"))
+    node_id = _node("lease")
+    node = add_node(node_id)
     for sandbox in (make_db_sandbox(), make_db_sandbox()):
         node.agent.add_vm(sandbox_id=str(sandbox.id), tenant_id=TENANT_ID, attempt=1)
         set_sandbox_daemon_key(
@@ -330,18 +360,21 @@ def test_lease_is_checked_before_every_vm(
 
     def check_lease() -> None:
         checks.append(1)
-        # The node step and the first VM pass; the lease is lost before the
-        # second VM of the same node.
-        if len(checks) == 3:
+        # The first VM passes; the lease is lost before the second VM.
+        if len(checks) == 2:
             raise TimeoutError("deadline")
 
+    registered = get_registered_node(shared_cache, node_id)
+    assert registered is not None
     with pytest.raises(TimeoutError):
-        reconcile_microvms(
+        reconcile_node(
             shared_cache,
             client_factory,
             NoCheckpointSupport(),
             UnknownActivity(),
+            node=registered,
+            vms=client_factory.client(registered.address).list_vms(),
             now=NOW,
             check_lease=check_lease,
         )
-    assert len(checks) == 3
+    assert len(checks) == 2

@@ -24,7 +24,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, SecretStr
 
-from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLockAcquisitionError
+from onyx.cache.interface import (
+    TTL_NO_EXPIRY,
+    CacheBackend,
+    CacheLock,
+    CacheLockAcquisitionError,
+)
 from onyx.microvm.models import IndexedPlacement, RegisteredNode
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 
@@ -305,3 +310,28 @@ def refresh_sandbox_daemon_key(
 
 def clear_sandbox_daemon_key(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
     tenant_cache.delete(_DAEMON_KEY_PREFIX + str(sandbox_id))
+
+
+_NODE_REPORT_LEASE_PREFIX = "sandbox_fc:node_report_lease:"
+_NODE_REPORT_JTI_PREFIX = "sandbox_fc:node_report_jti:"
+
+
+def node_report_lease(
+    shared_cache: CacheBackend, node_id: str, timeout_seconds: float
+) -> CacheLock:
+    """Serializes the state reports of one node across api_server replicas.
+
+    Not `_node_lock`: a long reconcile must not delay a key registration.
+    """
+    return shared_cache.lock(
+        _NODE_REPORT_LEASE_PREFIX + node_id, timeout=timeout_seconds
+    )
+
+
+def claim_node_report_token(
+    shared_cache: CacheBackend, *, node_id: str, jti: str, ttl_seconds: int
+) -> bool:
+    """Record a report token's `jti`. False if it was already used."""
+    return shared_cache.set_if_absent(
+        f"{_NODE_REPORT_JTI_PREFIX}{node_id}:{jti}", "1", ex=ttl_seconds
+    )

@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -770,5 +771,43 @@ func TestAttachRegistersTheListenerBeforeItReturns(t *testing.T) {
 	_, _ = io.WriteString(c, "GET http://x/ HTTP/1.1\r\nHost: x\r\n\r\n")
 	if _, err := http.ReadResponse(bufio.NewReader(c), nil); err != nil {
 		t.Fatalf("after a second Attach: %v", err)
+	}
+}
+
+func TestRegistrarRegisteredClosesAfterFirstSuccess(t *testing.T) {
+	var ok atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !ok.Load() {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+		}
+	}))
+	defer srv.Close()
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := &Registrar{BaseURL: srv.URL, Secret: "s", Signer: NewSigner("node-a", "node-a-1", key), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	ready := g.Registered()
+	if err := g.Register(t.Context()); err == nil {
+		t.Fatal("a failed registration returned nil")
+	}
+	select {
+	case <-ready:
+		t.Fatal("Registered closed after a failure")
+	default:
+	}
+	ok.Store(true)
+	for i := 0; i < 2; i++ {
+		if err := g.Register(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case <-ready:
+	default:
+		t.Fatal("Registered did not close after a success")
+	}
+	if g.Registered() != ready {
+		t.Fatal("Registered returned another channel")
 	}
 }

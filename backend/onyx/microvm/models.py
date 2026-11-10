@@ -140,8 +140,6 @@ class NodeRefusal(BaseModel):
 
 
 class ReconcileReport(BaseModel):
-    nodes: int = 0
-    unreachable_nodes: list[str] = Field(default_factory=list)
     # Steps that raised; the pass logged them and went on.
     failed: list[str] = Field(default_factory=list)
     refreshed: list[str] = Field(default_factory=list)
@@ -150,3 +148,57 @@ class ReconcileReport(BaseModel):
     orphans_marked: list[str] = Field(default_factory=list)
     orphans_stopped: list[str] = Field(default_factory=list)
     slept: list[str] = Field(default_factory=list)
+
+
+# Node state report (agent → api_server, `POST /microvm/node/state`). The agent
+# (microvm/internal/nodereport) applies the same caps before it sends.
+NODE_REPORT_MAX_BODY_BYTES = 1 << 20
+NODE_REPORT_MAX_VMS = 1024
+
+
+class ReportedVm(BaseModel):
+    """One VM of the agent's `List`, as the agent reports it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    sandbox_id: str = Field(min_length=1, max_length=64)
+    # Empty or not a tenant of this deployment: the pass skips the VM.
+    tenant_id: str = Field(max_length=128, pattern=r"^[A-Za-z0-9_-]*$")
+    attempt: int = Field(ge=0)
+    generation: int = Field(ge=0)
+    state: VmState
+    template: str = Field(max_length=256)
+    vcpus: int = Field(ge=0)
+    mem_mib: int = Field(ge=0)
+    scratch_gib: int = Field(ge=0)
+    pid: int = Field(ge=0)
+    started_at: datetime | None = None
+
+    def to_agent_vm(self) -> AgentVm:
+        return AgentVm(
+            sandbox_id=self.sandbox_id,
+            attempt=self.attempt,
+            generation=self.generation,
+            template=self.template,
+            vcpus=self.vcpus,
+            mem_mib=self.mem_mib,
+            scratch_gib=self.scratch_gib,
+            state=self.state,
+            pid=self.pid,
+            tenant_id=self.tenant_id,
+            started_at=self.started_at,
+        )
+
+
+class NodeStateReport(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    node_id: str = Field(min_length=1, max_length=253)
+    vms: list[ReportedVm] = Field(max_length=NODE_REPORT_MAX_VMS)
+
+
+class NodeStateReportResult(BaseModel):
+    # False when another replica is reconciling this node, or the pass ran
+    # out of time; the next report runs it again.
+    reconciled: bool
+    report: ReconcileReport | None = None

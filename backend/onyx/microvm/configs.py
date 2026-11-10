@@ -72,13 +72,12 @@ SANDBOX_FC_CREATE_GUEST_RETRIES = _fc_env_int(
 SANDBOX_FC_PLACEMENT_CANDIDATES = _fc_env_int(
     "SANDBOX_FC_PLACEMENT_CANDIDATES", 3, minimum=1
 )
-# The placement record expires unless the reconcile loop or a heartbeat
-# refreshes it. Keep it well above the reconcile interval.
+# The placement record expires unless a node state report or a heartbeat
+# refreshes it. Keep it many times the agent's --state-report-interval
+# (default 15 s): the default 300 s survives about 20 missed reports. A node
+# that stops reporting loses its records when they expire.
 SANDBOX_FC_PLACEMENT_TTL_SECONDS = _fc_env_int(
     "SANDBOX_FC_PLACEMENT_TTL_SECONDS", 300, minimum=1
-)
-SANDBOX_FC_RECONCILE_INTERVAL_SECONDS = _fc_env_int(
-    "SANDBOX_FC_RECONCILE_INTERVAL_SECONDS", 15, minimum=1
 )
 # P4: a VM can sleep after this long without a heartbeat.
 SANDBOX_FC_IDLE_TIMEOUT_SECONDS = _fc_env_int(

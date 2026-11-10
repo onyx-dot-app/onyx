@@ -31,6 +31,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
 	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
+	"github.com/onyx-dot-app/onyx/microvm/internal/nodereport"
 	"github.com/onyx-dot-app/onyx/microvm/internal/nodewatch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
@@ -62,6 +63,7 @@ type flags struct {
 	nodeID        string
 	egressProxy   string
 	apiServerURL  string
+	stateReport   time.Duration
 	relayIdle     time.Duration
 	relayMaxConns int
 	listen        string
@@ -109,6 +111,7 @@ func main() {
 	flag.StringVar(&f.nodeID, "node-id", os.Getenv("NODE_NAME"), "node name in the signed egress identity (default $NODE_NAME)")
 	flag.StringVar(&f.egressProxy, "egress-proxy", "", "sandbox-proxy relay listener host:port; empty turns VM egress off")
 	flag.StringVar(&f.apiServerURL, "api-server-url", "", "api_server URL for the node key registration (needs $SANDBOX_NODE_REGISTRATION_SECRET)")
+	flag.DurationVar(&f.stateReport, "state-report-interval", nodereport.DefaultInterval, "how often the agent sends its VM list to --api-server-url, signed with the node key (0 = off)")
 	flag.DurationVar(&f.relayIdle, "relay-idle-timeout", relay.DefaultIdleTimeout, "close a relay connection after this long without traffic (at least 180s)")
 	flag.IntVar(&f.relayMaxConns, "relay-max-conns", relay.DefaultMaxConns, "most open relay connections per VM; new ones over the cap are closed")
 	flag.StringVar(&f.listen, "listen", "", "mTLS TCP address for the api_server (for example :7443); empty: Unix socket only")
@@ -411,7 +414,34 @@ func setupEgress(ctx context.Context, f flags, m *agent.Manager, log *slog.Logge
 	}
 	g := &relay.Registrar{BaseURL: f.apiServerURL, Secret: secret, Signer: signer, Log: log}
 	go g.Run(ctx)
+	if f.stateReport <= 0 {
+		log.Warn("--state-report-interval is 0: the api_server does not reconcile this node's VMs")
+		return nil
+	}
+	r := &nodereport.Reporter{
+		BaseURL: f.apiServerURL, Signer: signer, List: func() []nodereport.VM { return reportVMs(m.List()) },
+		Ready: g.Registered(), Log: log, Interval: f.stateReport,
+	}
+	go r.Run(ctx)
 	return nil
+}
+
+// reportVMs converts the Manager's List for the node state report.
+func reportVMs(vms []agent.VM) []nodereport.VM {
+	out := make([]nodereport.VM, 0, len(vms))
+	for _, vm := range vms {
+		v := nodereport.VM{
+			SandboxID: vm.SandboxID, TenantID: vm.TenantID, Attempt: vm.Attempt, Generation: vm.Generation,
+			State: strings.TrimPrefix(vm.State.String(), "VM_STATE_"), Template: vm.Template,
+			VCPUs: vm.VCPUs, MemMiB: vm.MemMiB, ScratchGiB: vm.ScratchGiB, PID: vm.PID,
+		}
+		if !vm.StartedAt.IsZero() {
+			t := vm.StartedAt.UTC()
+			v.StartedAt = &t
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 func preflight(f flags, lay jailer.Layout) error {

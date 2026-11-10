@@ -20,10 +20,6 @@ from onyx.configs.constants import (
 from onyx.document_index.opensearch.constants import (
     RESOURCE_CHECK_INTERVAL_SECONDS,
 )
-from onyx.microvm.configs import (
-    FIRECRACKER_ENABLED,
-    SANDBOX_FC_RECONCILE_INTERVAL_SECONDS,
-)
 from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import is_ee_available
@@ -598,25 +594,6 @@ if not DISABLE_VECTOR_DB:
         beat_cloud_tasks.append(_resource_health_task)
     else:
         tasks_to_schedule.append(_resource_health_task)
-
-if FIRECRACKER_ENABLED:
-    # Cluster-wide: the host agents serve every tenant.
-    _microvm_reconcile_task: dict[str, Any] = {
-        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_microvm-reconcile"
-        if MULTI_TENANT
-        else "microvm-reconcile",
-        "task": OnyxCeleryTask.MICROVM_RECONCILE,
-        "schedule": timedelta(seconds=SANDBOX_FC_RECONCILE_INTERVAL_SECONDS),
-        "options": {
-            "queue": OnyxCeleryQueues.SANDBOX,
-            "priority": OnyxCeleryPriority.MEDIUM,
-            "expires": SANDBOX_FC_RECONCILE_INTERVAL_SECONDS,
-        },
-    }
-    if MULTI_TENANT:
-        beat_cloud_tasks.append(_microvm_reconcile_task)
-    else:
-        tasks_to_schedule.append(_microvm_reconcile_task)
 
 
 def generate_cloud_tasks(

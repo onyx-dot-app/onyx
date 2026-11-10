@@ -18,7 +18,7 @@ import re
 import time
 from collections.abc import Callable
 from enum import Enum
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 import jwt
@@ -109,7 +109,7 @@ def parse_signed_identity_header(header_value: str | None) -> str | None:
     return rest.strip()
 
 
-def _tenant_allowed(tenant_id: str) -> bool:
+def is_allowed_tenant_id(tenant_id: str) -> bool:
     if MULTI_TENANT:
         return validate_tenant_id(tenant_id)
     return tenant_id == POSTGRES_DEFAULT_SCHEMA
@@ -119,7 +119,7 @@ def _parse_subject(subject: object) -> tuple[str, UUID]:
     if not isinstance(subject, str):
         raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
     match = _SUBJECT_PATTERN.match(subject)
-    if match is None or not _tenant_allowed(match["tenant"]):
+    if match is None or not is_allowed_tenant_id(match["tenant"]):
         raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
     try:
         sandbox_id = UUID(match["sandbox"])
@@ -156,41 +156,12 @@ class SignedIdentityVerifier:
 
     def verify_claims(self, token: str) -> SandboxClaims:
         """Signature, freshness and claim checks only (no replay or placement)."""
-        if not token or len(token) > _MAX_TOKEN_BYTES:
-            raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
-        try:
-            header = jwt.get_unverified_header(token)
-        except jwt.PyJWTError:
-            raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
-        key_id = header.get("kid")
-        if header.get("alg") != "EdDSA" or not isinstance(key_id, str):
-            raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
-
-        signing_key = self._signing_keys.get(key_id)
-        if signing_key is None:
-            raise SignedIdentityError(SignedIdentityRejection.UNKNOWN_SIGNING_KEY)
-
-        try:
-            # Time claims are checked below against the injected clock.
-            payload = jwt.decode(
-                token,
-                key=signing_key.public_key,
-                algorithms=["EdDSA"],
-                audience=SIGNED_IDENTITY_AUDIENCE,
-                options={
-                    "require": _REQUIRED_CLAIMS,
-                    "strict_aud": True,
-                    "verify_exp": False,
-                    "verify_iat": False,
-                    "verify_nbf": False,
-                },
-            )
-        except (jwt.InvalidSignatureError, jwt.DecodeError):
-            raise SignedIdentityError(SignedIdentityRejection.BAD_SIGNATURE)
-        except jwt.PyJWTError:
-            raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
-
-        now = self._clock()
+        payload, signing_key = decode_node_token(
+            token,
+            self._signing_keys,
+            audience=SIGNED_IDENTITY_AUDIENCE,
+            required_claims=_REQUIRED_CLAIMS,
+        )
         issued_at, expires_at = payload["iat"], payload["exp"]
         generation, node_id, jti = payload["gen"], payload["node"], payload["jti"]
         if (
@@ -206,14 +177,7 @@ class SignedIdentityVerifier:
             or len(jti) > 128
         ):
             raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
-        if expires_at + CLOCK_SKEW_SECONDS <= now:
-            raise SignedIdentityError(SignedIdentityRejection.EXPIRED)
-        if issued_at > now + CLOCK_SKEW_SECONDS:
-            raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
-        if expires_at <= issued_at:
-            raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
-        if expires_at - issued_at > MAX_TOKEN_LIFETIME_SECONDS:
-            raise SignedIdentityError(SignedIdentityRejection.LIFETIME_TOO_LONG)
+        check_token_times(issued_at, expires_at, self._clock())
         if node_id != signing_key.node_id:
             raise SignedIdentityError(SignedIdentityRejection.NODE_MISMATCH)
 
@@ -226,3 +190,60 @@ class SignedIdentityVerifier:
             jti=jti,
             expires_at=expires_at,
         )
+
+
+def decode_node_token(
+    token: str,
+    signing_keys: NodeSigningKeyLookup,
+    *,
+    audience: str,
+    required_claims: list[str],
+) -> tuple[dict[str, Any], NodeSigningKey]:
+    """Size, header, key lookup, EdDSA signature and `aud` checks of a token
+    signed by a node key. The caller checks the claim types and times."""
+    if not token or len(token) > _MAX_TOKEN_BYTES:
+        raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
+    try:
+        header = jwt.get_unverified_header(token)
+    except jwt.PyJWTError:
+        raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
+    key_id = header.get("kid")
+    if header.get("alg") != "EdDSA" or not isinstance(key_id, str):
+        raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
+
+    signing_key = signing_keys.get(key_id)
+    if signing_key is None:
+        raise SignedIdentityError(SignedIdentityRejection.UNKNOWN_SIGNING_KEY)
+
+    try:
+        # The caller checks the time claims against its own clock.
+        payload = jwt.decode(
+            token,
+            key=signing_key.public_key,
+            algorithms=["EdDSA"],
+            audience=audience,
+            options={
+                "require": required_claims,
+                "strict_aud": True,
+                "verify_exp": False,
+                "verify_iat": False,
+                "verify_nbf": False,
+            },
+        )
+    except (jwt.InvalidSignatureError, jwt.DecodeError):
+        raise SignedIdentityError(SignedIdentityRejection.BAD_SIGNATURE)
+    except jwt.PyJWTError:
+        raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
+    return payload, signing_key
+
+
+def check_token_times(issued_at: int, expires_at: int, now: float) -> None:
+    """Freshness and the lifetime cap, with `CLOCK_SKEW_SECONDS` of slack."""
+    if expires_at + CLOCK_SKEW_SECONDS <= now:
+        raise SignedIdentityError(SignedIdentityRejection.EXPIRED)
+    if issued_at > now + CLOCK_SKEW_SECONDS:
+        raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
+    if expires_at <= issued_at:
+        raise SignedIdentityError(SignedIdentityRejection.MALFORMED)
+    if expires_at - issued_at > MAX_TOKEN_LIFETIME_SECONDS:
+        raise SignedIdentityError(SignedIdentityRejection.LIFETIME_TOO_LONG)

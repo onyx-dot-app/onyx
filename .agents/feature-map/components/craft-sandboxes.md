@@ -205,8 +205,12 @@ the stored token on each request, so a new token takes effect at once.
   no known outcome pins the sandbox to its node until the outcome is known.
 - `backend/onyx/microvm/lifecycle.py`: wake on the first tool call, Init,
   idle sleep, stop only after a saved checkpoint.
-- `backend/onyx/microvm/reconcile.py`: the cluster-wide reconcile pass, run by
-  `backend/onyx/background/celery/tasks/microvm/tasks.py`.
+- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass. No
+  background task polls the agents. Each agent pushes its VM list to
+  `POST /microvm/node/state`, signed with its registered key
+  (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
+  node under a per-node lease. A node that stops reporting loses its
+  placement records when their TTL ends.
 
 Agents become reachable when their signing-key registration carries
 `agent_address`. No sandbox manager uses this code yet (ENG-4575).

@@ -1,6 +1,8 @@
 """Two-way reconcile of host agent VMs and placement records (ENG-4576).
 
-One pass, cluster-wide, run by the `microvm_reconcile` beat task under a lease:
+One pass per node. The node's agent pushes its VM list (`List`) to the
+api_server every few seconds; the report route runs this pass for that node
+under a per-node lease (`onyx.microvm.node_report`):
 
 - A live VM whose record matches: refresh the record TTL, then apply the idle
   sleep rules.
@@ -12,7 +14,9 @@ One pass, cluster-wide, run by the `microvm_reconcile` beat task under a lease:
   checkpoint and a second liveness check. Without checkpoint support
   (before ENG-4580) orphans are only marked.
 - A record whose VM is gone or exited: clear it, after a second `List` of the
-  node. Records on a node that does not answer stay; their TTL ends them.
+  node over mTLS (the report may predate a new VM). If that `List` fails, the
+  record stays. Records of a node that stops reporting are not refreshed, so
+  their TTL (`SANDBOX_FC_PLACEMENT_TTL_SECONDS`) ends them.
 """
 
 import time
@@ -47,9 +51,9 @@ from onyx.microvm.registry import (
     get_sandbox_daemon_key,
     get_sandbox_placement,
     list_indexed_placements,
-    list_registered_nodes,
     unindex_sandbox_placement,
 )
+from onyx.sandbox_proxy.sandbox_identity.signed import is_allowed_tenant_id
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 from onyx.utils.logger import setup_logger
 
@@ -162,11 +166,7 @@ class _Pass:
             )
             return None
 
-    def node(self, node: RegisteredNode) -> None:
-        vms = self.list_vms(node)
-        if vms is None:
-            self.report.unreachable_nodes.append(node.node_id)
-            return
+    def node(self, node: RegisteredNode, vms: list[AgentVm]) -> None:
         for vm in vms:
             try:
                 sandbox_id = UUID(vm.sandbox_id)
@@ -175,6 +175,14 @@ class _Pass:
                     "sandbox_fc_reconcile_bad_sandbox_id node=%s id=%r",
                     node.node_id,
                     vm.sandbox_id,
+                )
+                continue
+            if not is_allowed_tenant_id(vm.tenant_id):
+                logger.error(
+                    "sandbox_fc_reconcile_bad_tenant_id node=%s sandbox=%s tenant=%r",
+                    node.node_id,
+                    vm.sandbox_id,
+                    vm.tenant_id,
                 )
                 continue
             self.step(
@@ -366,26 +374,26 @@ class _Pass:
         self.report.cleared.append(str(sandbox_id))
 
 
-def reconcile_microvms(
+def reconcile_node(
     shared_cache: CacheBackend,
     client_factory: HostAgentClientFactory,
     checkpointer: SandboxCheckpointer,
     activity: SandboxActivityProbe,
     *,
+    node: RegisteredNode,
+    vms: list[AgentVm],
     now: datetime,
     check_lease: Callable[[], None] | None = None,
 ) -> ReconcileReport:
-    """One reconcile pass over every registered node. `check_lease` runs
-    before each node, VM and record, and raises to end the pass. Any other
+    """One reconcile pass over the VMs that `node` reported. `check_lease`
+    runs before each VM and record, and raises to end the pass. Any other
     error ends only its step."""
     report = ReconcileReport()
     run = _Pass(
         shared_cache, client_factory, checkpointer, activity, now, report, check_lease
     )
     try:
-        for node in list_registered_nodes(shared_cache):
-            report.nodes += 1
-            run.step(f"node {node.node_id}", partial(run.node, node))
+        run.node(node, vms)
     except _PassEnded as ended:
         raise ended.cause from None
     return report
