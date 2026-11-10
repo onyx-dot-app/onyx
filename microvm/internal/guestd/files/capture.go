@@ -101,6 +101,11 @@ func (s *Store) Capture(ctx context.Context, spec CaptureSpec, w io.Writer) (Cap
 		return sum, err
 	}
 	defer func() { _ = root.Close() }()
+	// An interrupted restore can leave an old root only in the trash; an
+	// archive without it would lose those files.
+	if err := removeLeftovers(root); err != nil {
+		return sum, fmt.Errorf("recover an interrupted restore: %w", err)
+	}
 
 	lw := &limitWriter{w: w, h: sha256.New(), max: lim.StoredBytes}
 	zw, err := zstd.NewWriter(lw, zstd.WithEncoderLevel(s.cfg.ZstdLevel),

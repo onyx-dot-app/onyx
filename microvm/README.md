@@ -134,8 +134,8 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
 - `UploadCapture` fails with `ARCHIVE_MISMATCH` if the signed `Content-Length` is not the spool size, and
   with `TRANSFER_FAILED` on a network error or a non-2xx status. The spool stays for a retry with a new
   URL. On success the agent deletes it. `CAPTURE_NOT_FOUND`: capture again.
-- `RestoreSession` downloads with `--transfer-parallel` (default 8) range GETs of `--transfer-part-bytes`
-  (default 8 MiB) at once, in order, and streams the bytes into the daemon in 1 MiB messages while it
+- `RestoreSession` downloads with `--transfer-parallel` (default 8, 1 to 64) range GETs of
+  `--transfer-part-bytes` (default 8 MiB, 1 MiB to 256 MiB; other values stop the agent at start-up) at once, in order, and streams the bytes into the daemon in 1 MiB messages while it
   hashes them. One S3 stream gives about 100 MB/s; 8 ranges made the 1 GiB restore 9.3 s → 5.7 s (KVM).
   A restore holds at most `--transfer-parallel` + 1 parts in memory. The daemon
   extracts into a staging directory and replaces the session's capture roots only after the size and

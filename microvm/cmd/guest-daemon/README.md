@@ -128,10 +128,12 @@ Commands:
 
 Files (ENG-4572, `internal/guestd/files`):
 
-- Every path is relative to `/workspace/sessions/<session_id>/` (`--sessions-root`). The daemon opens
-  that directory as an `os.Root`: `..`, an absolute path or a symlink that leaves it fails with
-  `INVALID_ARGUMENT`. A leading `/` is dropped. Only `ReadFile`, `ListFiles` and `ZipFiles` follow a
-  top-level session link into `--read-link-roots` (default `/workspace/managed`, for `user_library`).
+- Every path is relative to `/workspace/sessions/<session_id>/` (`--sessions-root`). Leading `/` are
+  dropped, so `/outputs/a.txt` is `outputs/a.txt`. The daemon opens that directory as an `os.Root`. A
+  path with a `..` part, a NUL byte or bad UTF-8, a path over 4096 bytes, a name over 255 bytes, or a
+  symlink that leaves the directory fails with `INVALID_ARGUMENT`. Only `ReadFile`, `ListFiles` and
+  `ZipFiles` follow a top-level session link into `--read-link-roots` (default `/workspace/managed`,
+  for `user_library`).
 - `ReadFile` streams the file info, then 64 KiB chunks. `offset`/`length` read a range. More than
   `--max-file-bytes` (1 GiB) in one call fails with `LIMIT_EXCEEDED`.
 - `WriteFile` and `UploadFile`: a header with the exact size (at most `--max-file-bytes`) and an optional
@@ -164,8 +166,9 @@ Session saves:
   `& 0777`; the owner is root. An error before the swap does not change the session. If one root
   fails to swap, the daemon tries to move the roots already swapped back. If a rollback rename fails,
   or the daemon stops during the swap, old and new roots can be mixed. The old roots then stay in a
-  `.craft-old-*` trash directory, and the next restore puts back each old root that has no
-  replacement. The daemon deletes a trash directory only after it recovers all of its roots.
+  `.craft-old-*` trash directory, and the next restore or capture puts back each old root that has no
+  replacement. The daemon deletes a trash directory only after it recovers all of its roots. A
+  capture fails if it cannot put back an old root, so an archive never misses those files.
 - File calls and saves open files with `O_NONBLOCK` and directories with `O_DIRECTORY|O_NONBLOCK`,
   and use only regular files, so a FIFO cannot block them. A directory listing reads at most 100,000
   entries of one directory; past that it returns the entries it read and sets `truncated`. Capture

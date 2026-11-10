@@ -92,7 +92,8 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 		return sum, err
 	}
 	defer func() { _ = root.Close() }()
-	removeLeftovers(root)
+	// The swap below replaces the roots, so a trash that stays is not fatal.
+	_ = removeLeftovers(root)
 
 	staging := randName(stagingPrefix)
 	if err := root.Mkdir(staging, 0o700); err != nil {
@@ -216,12 +217,13 @@ func swapRoots(root *os.Root, staging string, roots []string, present map[string
 // stopped, or a rollback rename failed). It moves back each old root whose
 // place is empty, then removes the staging directories and each trash
 // directory whose recovery succeeded. A trash directory that still holds an
-// unrecovered old root stays for the next attempt.
-func removeLeftovers(root *os.Root) {
+// unrecovered old root stays for the next attempt, and the error names it.
+func removeLeftovers(root *os.Root) error {
 	ents, err := readDir(root, ".", MaxListEntries)
 	if err != nil {
-		return
+		return err
 	}
+	var failed []string
 	for _, e := range ents {
 		n := e.Name()
 		if !e.IsDir() {
@@ -229,10 +231,18 @@ func removeLeftovers(root *os.Root) {
 		}
 		if strings.HasPrefix(n, stagingPrefix) {
 			_ = root.RemoveAll(n)
-		} else if strings.HasPrefix(n, oldPrefix) && recoverOld(root, n) {
-			_ = root.RemoveAll(n)
+		} else if strings.HasPrefix(n, oldPrefix) {
+			if recoverOld(root, n) {
+				_ = root.RemoveAll(n)
+			} else {
+				failed = append(failed, n)
+			}
 		}
 	}
+	if len(failed) > 0 {
+		return fmt.Errorf("cannot recover old roots from %s", strings.Join(failed, ", "))
+	}
+	return nil
 }
 
 // recoverOld moves each old root in trash back to its place if the place is

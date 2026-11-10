@@ -799,6 +799,35 @@ func TestRestoreKeepsTrashWhenRecoveryFails(t *testing.T) {
 	}
 }
 
+func TestCaptureRecoversInterruptedSwap(t *testing.T) {
+	s, base := newStore(t, Config{})
+	trash := oldPrefix + "x"
+	put(t, base, trash+"/outputs/a.txt", "old a")
+	orig := rename
+	t.Cleanup(func() { rename = orig })
+	rename = func(root *os.Root, from, to string) error {
+		if strings.HasPrefix(from, oldPrefix) {
+			return errors.New("injected")
+		}
+		return orig(root, from, to)
+	}
+	if _, err := s.Capture(context.Background(), CaptureSpec{SessionID: sid}, io.Discard); err == nil {
+		t.Fatal("capture did not fail with an unrecovered root")
+	}
+	rename = orig
+	archive, _ := capture(t, s, CaptureSpec{SessionID: sid})
+	other := "a6f1b1a2-0000-4000-8000-000000000008"
+	if _, err := restore(s, other, archive, RestoreSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(filepath.Dir(base), other, "outputs/a.txt")); err != nil || string(b) != "old a" {
+		t.Fatalf("outputs/a.txt = %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(base, trash)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("trash not removed: %v", err)
+	}
+}
+
 func TestRestoreTailBomb(t *testing.T) {
 	s, _ := newStore(t, Config{})
 	var buf bytes.Buffer

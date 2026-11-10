@@ -549,6 +549,10 @@ func checkRanges(f flags) error {
 		return fmt.Errorf("bad managed limits --managed-keep %d --managed-max-zip-mib %d --managed-max-mib %d --managed-max-files %d --managed-max-builds %d --managed-swap-timeout %v",
 			f.managedKeep, f.managedZipMiB, f.managedMaxMiB, f.managedFiles, f.managedBuilds, f.swapTimeout)
 	}
+	if f.transferPar < 1 || f.transferPar > 64 || f.transferPart < 1<<20 || f.transferPart > 256<<20 {
+		return fmt.Errorf("bad transfer settings --transfer-parallel %d (1 to 64) --transfer-part-bytes %d (1 MiB to 256 MiB)",
+			f.transferPar, f.transferPart)
+	}
 	if f.memOverhead < 16 || f.memOverhead > 4096 {
 		return fmt.Errorf("--vm-mem-overhead-mib %d must be 16 to 4096", f.memOverhead)
 	}
