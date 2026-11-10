@@ -27,7 +27,7 @@ Width presets map to CSS variables defined by the app (`--app-container-*`):
 
 Sticky page header with icon, title, optional description, and action slots.
 Automatically shows a scroll shadow when the page has scrolled down.
-Headers are only sticky when `actions` is non-empty.
+Headers are sticky when `actions` is non-empty or Cancel is enabled. Set `sticky` to override this behavior.
 
 | Prop                   | Type                      | Default   | Description                                                                                                                                               |
 | ---------------------- | ------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -42,6 +42,7 @@ Headers are only sticky when `actions` is non-empty.
 | `onTitleChange`        | `(title: string) => void` | —         | Called when the user commits a title edit                                                                                                                 |
 | `actions`              | `ReactNode[]`             | —         | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
 | `children`             | `ReactNode`               | —         | Content below the title row (e.g. search bar, filters)                                                                                                    |
+| `sticky` | `boolean` | Automatic | Override whether the header stays visible while scrolling. |
 | `cancel`               | `boolean \| string \| () => void` | `false` | Render a secondary Cancel as the first action. `true` goes back within the app, or to `/` from a page not reached within it; a path does the same with that path as the fallback; a function replaces the action |
 | `divider`              | `boolean`                 | `false`   | Show a horizontal divider at the bottom of the header                                                                                                     |
 | `stackActionsOnMobile` | `boolean`                 | `false`   | Place actions below the title on a full-width row on narrow screens                                                                                       |

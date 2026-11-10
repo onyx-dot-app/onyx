@@ -66,7 +66,7 @@ function SkillName({
       >
         {item.name}
       </Text>
-      {(!isMobile || showDescription || isInvalid || dependencyStatus) && (
+      {(!isMobile || showDescription || isInvalid) && (
         <Text
           font="secondary-body"
           color={isInvalid ? "status-warning-05" : "text-03"}
@@ -264,7 +264,7 @@ export default function SkillsTable({
         hideable: false,
         cell: ({ item: { skill } }) => (
           <Text
-            font="secondary-body"
+            font="main-ui-body"
             color="text-04"
             maxLines={1}
             overflowTooltip
