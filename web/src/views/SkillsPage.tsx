@@ -49,7 +49,9 @@ import useUserSkills from "@/hooks/useUserSkills";
 import SkillCard, {
   type CustomSkillCardItem,
   type SkillCardItem,
+  type SkillCardProps,
 } from "@/sections/cards/SkillCard";
+import SkillsTable from "@/sections/skills/SkillsTable";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
@@ -477,9 +479,41 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         t("page.preview.unavailableFallback"))
       : null;
 
+  function getItemProps(item: CustomSkillCardItem): SkillCardProps {
+    return {
+      item,
+      selection: {
+        checked: selectedIds.has(item.id),
+        disabled: bulkBusy,
+        onCheckedChange: (checked) =>
+          setSelectedIds((current) => {
+            const next = new Set(current);
+            if (checked) next.add(item.id);
+            else next.delete(item.id);
+            return next;
+          }),
+      },
+      hasEnabledNameConflict: !item.enabled && enabledItemByName.has(item.name),
+      onEdit: handleEdit,
+      onShare: (skill) => setSkillDialog({ item: skill, tab: "sharing" }),
+      onDelete: (skill) => {
+        setDeleteTarget(skill);
+        deleteModal.toggle(true);
+      },
+      onClick: (skill) => setSkillDialog({ item: skill, tab: "details" }),
+      onEnabledChange: (skill, enabled) =>
+        void updateSkillEnabled(skill, enabled),
+      enablementPending: bulkBusy || pendingSkillIds.has(item.id),
+    };
+  }
+
   return (
-    <SettingsLayouts.Root data-testid="SkillsPage/container">
+    <SettingsLayouts.Root
+      width={admin ? "lg" : "md"}
+      data-testid="SkillsPage/container"
+    >
       <SettingsLayouts.Header
+        stackActionsOnMobile={admin}
         icon={SvgBlocks}
         title={t("page.header.title")}
         description={
@@ -710,45 +744,19 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                           </Section>
                         )}
                       </Section>
-                      <CardGrid>
-                        {selectableItems.map((item) => (
-                          <SkillCard
-                            key={item.id}
-                            selection={{
-                              checked: selectedIds.has(item.id),
-                              disabled: bulkBusy,
-                              onCheckedChange: (checked) =>
-                                setSelectedIds((current) => {
-                                  const next = new Set(current);
-                                  if (checked) next.add(item.id);
-                                  else next.delete(item.id);
-                                  return next;
-                                }),
-                            }}
-                            item={item}
-                            hasEnabledNameConflict={
-                              !item.enabled && enabledItemByName.has(item.name)
-                            }
-                            onEdit={handleEdit}
-                            onShare={(skill) =>
-                              setSkillDialog({ item: skill, tab: "sharing" })
-                            }
-                            onDelete={(skill) => {
-                              setDeleteTarget(skill);
-                              deleteModal.toggle(true);
-                            }}
-                            onClick={(skill) =>
-                              setSkillDialog({ item: skill, tab: "details" })
-                            }
-                            onEnabledChange={(skill, enabled) =>
-                              void updateSkillEnabled(skill, enabled)
-                            }
-                            enablementPending={
-                              bulkBusy || pendingSkillIds.has(item.id)
-                            }
-                          />
-                        ))}
-                      </CardGrid>
+                      {admin ? (
+                        <SkillsTable
+                          items={selectableItems}
+                          selectedIds={selectedIds}
+                          getItemProps={getItemProps}
+                        />
+                      ) : (
+                        <CardGrid>
+                          {selectableItems.map((item) => (
+                            <SkillCard key={item.id} {...getItemProps(item)} />
+                          ))}
+                        </CardGrid>
+                      )}
                     </Section>
                     <TextSeparator
                       count={selectableItems.length}
