@@ -97,6 +97,7 @@ onyx-cli validate-config
 | `onyx-cli ask` | Ask a one-shot question (non-interactive) |
 | `onyx-cli search` | Search company knowledge and return ranked documents |
 | `onyx-cli agents` | List available Agents |
+| `onyx-cli document-sets` | List the Document Sets you can search |
 | `onyx-cli image` | Generate or edit images with the configured image provider |
 | `onyx-cli validate-config` | Validate configuration and test connection |
 | `onyx-cli install-skill` | Install the Onyx CLI skill file for AI coding agents |
@@ -145,11 +146,13 @@ Search your indexed knowledge and get ranked documents without an answer:
 ```shell
 onyx-cli search "deployment rollback procedure"
 onyx-cli search --source slack,google_drive --days 30 "release checklist"
+onyx-cli search --document-set "Engineering Wiki" "on-call runbook"
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--source <list>` | Filter by source type (comma-separated, such as `slack,google_drive`) |
+| `--document-set <name>` | Filter by Document Set name (repeat the flag for more than one) |
 | `--days <int>` | Only return results from the last N days |
 | `--agent-id <int>` / `--agent-name <string>` | Search with an Agent's knowledge scope |
 | `--raw` | Output the full API response |
@@ -172,6 +175,16 @@ onyx-cli agents --json
 ```
 
 Prints a table of available Agent IDs, names, and descriptions.
+
+### List Document Sets
+
+```shell
+onyx-cli document-sets
+onyx-cli document-sets --json
+```
+
+Prints the IDs, names, and descriptions of the Document Sets you can search.
+Use the names with `onyx-cli search --document-set`.
 
 ### Serve over SSH
 

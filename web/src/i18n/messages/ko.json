@@ -7629,7 +7629,7 @@
             "targetUriParseFailed": "대상 URI를 분석하지 못했습니다 — 원래 값을 사용합니다."
           },
           "validation": {
-            "targetUriInvalid": "대상 URI는 api-version 쿼리 파라미터를 포함하고 경로에 배포 이름 또는 /openai/responses가 있는 유효한 URL이어야 합니다",
+            "targetUriInvalid": "대상 URI는 유효한 URL이어야 합니다: /openai/v1/ URL이거나, api-version 쿼리 파라미터를 포함하고 경로에 배포 이름 또는 /openai/responses가 있는 URL",
             "targetUriRequired": "대상 URI는 필수입니다"
           }
         },
