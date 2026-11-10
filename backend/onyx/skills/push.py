@@ -24,9 +24,11 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_hashes__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
-    MAX_BUNDLE_BYTES,
-    MAX_FILE_BYTES,
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    PUSH_MAX_CONTENT_BYTES as MAX_BUNDLE_BYTES,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    PUSH_MAX_FILE_BYTES as MAX_FILE_BYTES,
 )
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (

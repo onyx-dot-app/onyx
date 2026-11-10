@@ -133,6 +133,17 @@ helm upgrade --install onyx onyx/onyx \
   --values craft-values.yaml
 ```
 
+## Upgrade existing sandboxes
+
+Before resuming Craft traffic after this upgrade, cycle all existing sandbox pods.
+Their replacements must use the new sandbox image and resource limits described below.
+Updating the pod template alone does not update running pods. Old receivers reject large Skill pushes.
+Check that no pods with the old image or resource limits remain before resuming traffic.
+
+<Warning>
+  Cycling active sandbox pods ends their sessions and can discard unsaved workspace changes.
+</Warning>
+
 ## Plan sandbox capacity
 
 Each active user receives a sandbox pod. The main sandbox container has these defaults:
@@ -144,7 +155,11 @@ Each active user receives a sandbox pod. The main sandbox container has these de
 | Ephemeral storage | `5Gi` | `20Gi` |
 
 The pod also includes initialization and sidecar containers for network setup, file transfer, snapshots, and restore.
-To change the main container resources, merge these `configMap` entries into your deployment values or Craft overlay:
+The sidecar has a `1Gi` memory limit and a `6Gi` ephemeral storage limit.
+The sidecar receives up to 900 MiB of Skill files in one push. It writes the push to disk, not to memory.
+Kubernetes adds the sidecar limit to the pod storage limit. The storage covers the live Skill files, the incoming push,
+and the archive that the sidecar is extracting. To change the main container resources,
+merge these `configMap` entries into your deployment values or Craft overlay:
 
 ```yaml
 configMap:
