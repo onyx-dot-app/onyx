@@ -10,7 +10,7 @@ import { useUser } from "@/providers/UserProvider";
 
 /** Uses the existing Apps connection flow and rechecks its shared SWR cache. */
 export default function GitHubConnection() {
-  const t = useTranslations("skills.modals.importGithub.privateRepos");
+  const t = useTranslations("marketplaces.githubConnection");
   const common = useTranslations("marketplaces");
   const navigation = useNavigation();
   const { isAdmin } = useUser();

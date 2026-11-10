@@ -195,7 +195,7 @@ export function CreateSkillModalContent({
             title={t("create.batch.selected", { count: batchFiles.length })}
             draft={sharingDraft}
             count={batchFiles.length}
-            configureLabel={t("importGithub.sharing.configureButton")}
+            configureLabel={t("create.batch.configureAccess")}
             disabled={busy}
             onConfigure={() => sharingModal.toggle(true)}
           >
@@ -280,9 +280,7 @@ export function CreateSkillModalContent({
       </Modal.Body>
       <Modal.Footer>
         {result ? (
-          <Button onClick={handleClose}>
-            {t("importGithub.doneButton.label")}
-          </Button>
+          <Button onClick={handleClose}>{t("create.batch.done")}</Button>
         ) : (
           <>
             <Button
@@ -299,10 +297,10 @@ export function CreateSkillModalContent({
             >
               {inspecting
                 ? batchFiles.length > 0
-                  ? t("importGithub.submitButton.importingLabel")
+                  ? t("create.batch.importing")
                   : t("create.continueButton.loadingLabel")
                 : batchFiles.length > 0
-                  ? t("importGithub.submitButton.importLabel", {
+                  ? t("create.batch.submit", {
                       count: batchFiles.length,
                     })
                   : t("create.continueButton.label")}
