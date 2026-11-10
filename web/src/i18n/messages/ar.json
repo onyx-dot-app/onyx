@@ -17695,6 +17695,17 @@
       "setUpButton": {
         "label": "إعداد GitHub"
       }
+    },
+    "pushUpdates": {
+      "title": "تحديثات الدفع",
+      "description": "المزامنة بعد عمليات الدفع إلى GitHub. تتطلب صلاحية مسؤول المستودع وعنوان webhook عامًا.",
+      "configured": "تم إعداد تحديثات الدفع",
+      "lastDelivery": "آخر تسليم تم التحقق منه: {date}",
+      "awaitingDelivery": "في انتظار أول تسليم تم التحقق منه",
+      "refresh": "تحديث إعداد الدفع",
+      "enable": "تفعيل تحديثات الدفع",
+      "enableAction": "تفعيل",
+      "refreshAction": "تحديث"
     }
   }
 }

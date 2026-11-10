@@ -45,7 +45,13 @@ export default function MarketplaceList({
     listMarketplaces,
     {
       refreshInterval: (rows) =>
-        visible && rows?.some((row) => row.sync_pending) ? 3000 : 0,
+        !visible
+          ? 0
+          : rows?.some((row) => row.sync_pending)
+            ? 3000
+            : rows?.some((row) => row.webhook_enabled)
+              ? 10000
+              : 0,
       refreshWhenHidden: false,
       onErrorRetry: skipRetryOnAuthError,
       errorRetryCount: 2,

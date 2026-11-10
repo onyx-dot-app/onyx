@@ -216,6 +216,50 @@ it("closes source detail before opening company access controls", async () => {
   );
 });
 
+it("refreshes the library when a push changes an idle registered source", async () => {
+  jest.useFakeTimers();
+  const visibility = jest
+    .spyOn(document, "visibilityState", "get")
+    .mockReturnValue("visible");
+  const registered = {
+    ...marketplace,
+    sync_pending: false,
+    sync_requested: false,
+    webhook_enabled: true,
+    last_synced_revision: "before",
+  };
+  fetchSpy.mockResolvedValue(new Response(JSON.stringify([registered])));
+  const onChanged = jest.fn();
+  const view = render(<MarketplaceList onChanged={onChanged} />);
+  expect(await screen.findByText("Team tools")).toBeInTheDocument();
+  expect(onChanged).not.toHaveBeenCalled();
+  const initialReads = fetchSpy.mock.calls.length;
+  fetchSpy.mockResolvedValue(
+    new Response(
+      JSON.stringify([
+        { ...registered, last_synced_revision: "after", live_skill_count: 1 },
+      ])
+    )
+  );
+  visibility.mockReturnValue("hidden");
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(10100);
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(initialReads);
+  visibility.mockReturnValue("visible");
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(10100);
+  });
+  expect(onChanged).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Applied revision: after")).toBeInTheDocument();
+  const updatedReads = fetchSpy.mock.calls.length;
+  view.rerender(<MarketplaceList visible={false} onChanged={onChanged} />);
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(10100);
+  });
+  expect(fetchSpy).toHaveBeenCalledTimes(updatedReads);
+});
+
 it("forgets source detail when its host tab is hidden", async () => {
   const user = setupUser();
   fetchSpy.mockImplementation(

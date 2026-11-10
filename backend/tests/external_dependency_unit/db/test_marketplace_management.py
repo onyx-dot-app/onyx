@@ -89,7 +89,6 @@ def no_management_io() -> Generator[None, None, None]:
                 part in path
                 for part in (
                     "/onyx/file_store/file_store.py",
-                    "/onyx/skills/marketplace/provider.py",
                     "/requests/",
                     "/httpx/",
                     "/urllib/",
@@ -278,7 +277,7 @@ def test_safe_batched_reads_include_retired(session: Session) -> None:
     assert detail.marketplace.blocked_entries == first.blocked_entries
     assert detail.marketplace.retirement_proposal == first.retirement_proposal
     assert (
-        "webhook" not in detail.model_dump_json()
+        "webhook_secret" not in detail.model_dump_json()
         and "credential" not in detail.model_dump_json()
     )
 

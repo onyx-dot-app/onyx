@@ -27,6 +27,7 @@ from onyx.skills.marketplace.models import (
     MarketplaceRetirementProposal,
     MarketplaceSyncStatus,
 )
+from onyx.skills.marketplace.provider import GitHubMarketplaceAdapter
 from onyx.skills.marketplace.read_models import CompleteMarketplace
 from onyx.skills.marketplace.reader import read_marketplace_archive
 from onyx.skills.sync import sync_marketplace
@@ -549,13 +550,18 @@ def test_access_updates_followers_and_pushes_after_commit(db_session: Session) -
         )
 
 
+@pytest.mark.parametrize(
+    ("hook_id", "hook_failure"), [(None, False), ("17", False), ("17", True)]
+)
 def test_remove_deletes_skills_and_bundles_after_commit(
-    db_session: Session, github: GitHub
+    db_session: Session, github: GitHub, hook_id: str | None, hook_failure: bool
 ) -> None:
     actor = make_user(db_session, standard_account=True)
     connect(db_session, actor)
     make_sandbox(db_session, actor)
     row = create(db_session, actor)
+    row.webhook_id = hook_id
+    config = row.provider_config
     identifier = row.id
     db_session.commit()
     sync_marketplace(identifier, get_current_tenant_id())
@@ -576,13 +582,42 @@ def test_remove_deletes_skills_and_bundles_after_commit(
             )
         raise RuntimeError("push unavailable")
 
+    cleanup_inputs: list[Marketplace] = []
+    cleanup_observations: list[tuple[bool, bool]] = []
+
+    def remove_hook(adapter: GitHubMarketplaceAdapter) -> None:
+        cleanup_inputs.append(adapter.marketplace)
+        with get_session_with_current_tenant() as observer:
+            cleanup_observations.append(
+                (
+                    db_session.in_transaction(),
+                    observer.get(Marketplace, identifier) is None,
+                )
+            )
+        if hook_failure:
+            raise RuntimeError("GitHub unavailable")
+
     with (
         client_for(actor, db_session) as client,
         patch.object(api, "push_skills_for_users", side_effect=published) as push,
+        patch.object(
+            GitHubMarketplaceAdapter,
+            "remove_webhook",
+            autospec=True,
+            side_effect=remove_hook,
+        ) as cleanup_hook,
     ):
         response = client.delete(f"/marketplaces/{identifier}")
     assert response.status_code == 200, response.text
     push.assert_called_once()
+    assert cleanup_hook.call_count == (1 if hook_id is not None else 0)
+    if hook_id is not None:
+        assert cleanup_observations == [(False, True)]
+        cleanup_input = cleanup_inputs[0]
+        assert cleanup_input.webhook_id == hook_id
+        assert cleanup_input.provider_config == config
+        assert cleanup_input.login_user_id == actor.id
+        assert cleanup_input.webhook_secret is None
     assert not list(
         db_session.scalars(
             select(SkillVersion.id).where(SkillVersion.skill_id.in_(skill_ids))
@@ -593,6 +628,27 @@ def test_remove_deletes_skills_and_bundles_after_commit(
             select(FileRecord.file_id).where(FileRecord.file_id.in_(bundle_ids))
         )
     )
+
+
+def test_remove_keeps_webhook_when_local_commit_fails(db_session: Session) -> None:
+    actor = make_user(db_session, standard_account=True)
+    connect(db_session, actor)
+    row = create(db_session, actor)
+    row.webhook_id = "17"
+    identifier = row.id
+    db_session.commit()
+    with (
+        client_for(actor, db_session) as client,
+        patch.object(db_session, "commit", side_effect=RuntimeError("commit failed")),
+        patch.object(GitHubMarketplaceAdapter, "remove_webhook") as cleanup_hook,
+    ):
+        with pytest.raises(RuntimeError, match="commit failed"):
+            client.delete(f"/marketplaces/{identifier}")
+    cleanup_hook.assert_not_called()
+    db_session.rollback()
+    with get_session_with_current_tenant() as observer:
+        stored = observer.get(Marketplace, identifier)
+        assert stored is not None and stored.webhook_id == "17"
 
 
 def test_reads_and_preview_do_not_serialize_membership_writes(

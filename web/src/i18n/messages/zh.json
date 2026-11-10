@@ -17695,6 +17695,17 @@
       "setUpButton": {
         "label": "设置 GitHub"
       }
+    },
+    "pushUpdates": {
+      "title": "推送更新",
+      "description": "在 GitHub 推送后同步。需要仓库管理员权限和公开的 Webhook 地址。",
+      "configured": "推送更新已配置",
+      "lastDelivery": "上次验证的投递：{date}",
+      "awaitingDelivery": "等待首次验证的投递",
+      "refresh": "刷新推送设置",
+      "enable": "启用推送更新",
+      "enableAction": "启用",
+      "refreshAction": "刷新"
     }
   }
 }

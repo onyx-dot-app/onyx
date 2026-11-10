@@ -61,6 +61,14 @@ export async function replaceMarketplaceLogin(id: string) {
   return marketplaceSchema.validateSync(data, strict);
 }
 
+export async function setupMarketplaceWebhook(id: string) {
+  const data = await errorHandlingFetchWith<unknown>(
+    `${SWR_KEYS.marketplace(id)}/webhook`,
+    { method: "POST" }
+  );
+  return marketplaceSchema.validateSync(data, strict);
+}
+
 export async function confirmMarketplaceRetirements({
   id,
   confirmation,

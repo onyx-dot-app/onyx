@@ -83,6 +83,10 @@ export const marketplaceSchema = yup
       .defined(),
     sync_requested: yup.boolean().defined(),
     sync_pending: yup.boolean().defined(),
+    webhook_available: yup.boolean().defined(),
+    webhook_enabled: yup.boolean().defined(),
+    webhook_ref: yup.string().nullable().defined(),
+    webhook_last_delivery_at: yup.string().nullable().defined(),
     sync_status: yup
       .string<"applied" | "failed" | "needs_confirmation">()
       .oneOf(["applied", "failed", "needs_confirmation"])

@@ -23,6 +23,7 @@ from onyx.db.marketplace_webhook import receive_marketplace_webhook__no_commit
 from onyx.db.models import Marketplace
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.marketplace.models import GitHubMarketplaceConfig
 from onyx.webhook_server import marketplace as receiver
 from onyx.webhook_server.api import create_webhook_app
 from tests.external_dependency_unit.db.test_marketplace_reconciliation import (
@@ -101,6 +102,46 @@ def test_push_commits_before_dispatch(
     dispatch.assert_called_once_with(tenant, hook.id)
 
 
+@pytest.mark.parametrize("saved_id", [None, "123"])
+def test_setup_ping_is_acknowledged_without_claiming_verified_delivery(
+    client: TestClient,
+    session: Session,
+    hook: Marketplace,
+    dispatch: Mock,
+    saved_id: str | None,
+) -> None:
+    hook.webhook_id = saved_id
+    session.commit()
+    body = json.dumps(PUSH).encode()
+    headers = signed_headers(body, "ping") | {"x-github-hook-id": "456"}
+    response = client.post(url(hook.id), content=body, headers=headers)
+    assert response.status_code == 200 and response.json() == {"queued": False}
+    session.refresh(hook)
+    assert hook.webhook_last_delivery_at is None
+    assert hook.webhook_id == saved_id and not hook.sync_requested
+    hook.webhook_id = "456"
+    session.commit()
+    response = client.post(url(hook.id), content=body, headers=headers)
+    assert response.status_code == 200 and response.json() == {"queued": False}
+    session.refresh(hook)
+    assert hook.webhook_last_delivery_at is not None
+    assert not hook.sync_requested
+    dispatch.assert_not_called()
+
+
+def test_push_before_registration_does_not_record_delivery(
+    client: TestClient, session: Session, hook: Marketplace, dispatch: Mock
+) -> None:
+    hook.webhook_id = None
+    session.commit()
+    body = json.dumps(PUSH).encode()
+    response = client.post(url(hook.id), content=body, headers=signed_headers(body))
+    assert response.status_code == 200 and response.json() == {"queued": False}
+    session.refresh(hook)
+    assert hook.webhook_last_delivery_at is None and not hook.sync_requested
+    dispatch.assert_not_called()
+
+
 @pytest.mark.parametrize("case", ["ping", "other_branch", "other_tag", "other_event"])
 def test_valid_unrelated_delivery_does_not_request_sync(
     client: TestClient, session: Session, hook: Marketplace, dispatch: Mock, case: str
@@ -158,6 +199,19 @@ def test_rejected_delivery_writes_nothing(
     dispatch.assert_not_called()
 
 
+@pytest.mark.parametrize("ref", ["feature/a", "refs/heads/feature/a", "refs/tags/v1"])
+def test_exact_registered_ref_matches(
+    client: TestClient, session: Session, hook: Marketplace, ref: str
+) -> None:
+    resolved = ref if ref.startswith("refs/") else f"refs/heads/{ref}"
+    hook.provider_config = GitHubMarketplaceConfig(owner="ACME", repo="TOOLS", ref=ref)
+    hook.webhook_ref = resolved
+    session.commit()
+    body = json.dumps(PUSH | {"ref": resolved}).encode()
+    response = client.post(url(hook.id), content=body, headers=signed_headers(body))
+    assert response.status_code == 200 and response.json() == {"queued": True}
+
+
 def test_bad_signature_does_not_wait_for_marketplace_lock(
     session: Session, hook: Marketplace
 ) -> None:
@@ -178,6 +232,18 @@ def test_bad_signature_does_not_wait_for_marketplace_lock(
         assert error.value.error_code == OnyxErrorCode.UNAUTHENTICATED
 
 
+@pytest.mark.parametrize("ref", ["a" * 40, "other"])
+def test_stale_hook_or_pinned_commit_cannot_request_sync(
+    client: TestClient, session: Session, hook: Marketplace, dispatch: Mock, ref: str
+) -> None:
+    hook.provider_config = GitHubMarketplaceConfig(owner="acme", repo="tools", ref=ref)
+    session.commit()
+    body = json.dumps(PUSH).encode()
+    response = client.post(url(hook.id), content=body, headers=signed_headers(body))
+    assert response.status_code == 200 and response.json() == {"queued": False}
+    dispatch.assert_not_called()
+
+
 def test_dispatch_failure_keeps_durable_request(
     client: TestClient, session: Session, hook: Marketplace, dispatch: Mock
 ) -> None:
@@ -187,6 +253,21 @@ def test_dispatch_failure_keeps_durable_request(
     assert response.status_code == 200 and response.json() == {"queued": True}
     session.refresh(hook)
     assert hook.sync_requested and hook.webhook_last_delivery_at is not None
+
+
+def test_ping_can_arrive_before_registration_response(
+    client: TestClient, session: Session, hook: Marketplace, dispatch: Mock
+) -> None:
+    hook.webhook_id = None
+    session.commit()
+    body = json.dumps(PUSH).encode()
+    response = client.post(
+        url(hook.id), content=body, headers=signed_headers(body, "ping")
+    )
+    assert response.status_code == 200 and response.json() == {"queued": False}
+    session.refresh(hook)
+    assert hook.webhook_last_delivery_at is None
+    dispatch.assert_not_called()
 
 
 @pytest.mark.parametrize("case", ["cloud", "missing", "unregistered", "oversized"])
