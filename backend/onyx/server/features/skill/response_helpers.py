@@ -138,7 +138,7 @@ def skill_response_for_user(
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-        return SkillResponse.from_builtin(
+        response = SkillResponse.from_builtin(
             skill,
             definition,
             db_session,
@@ -148,6 +148,8 @@ def skill_response_for_user(
             hidden_by_skill_id=state.hidden_by_skill_id,
             external_app=_dependency_response(state.external_app_dependency),
         )
+        response.skill_limit_block = state.skill_limit_block
+        return response
 
     if user_group_ids is None:
         user_group_ids = get_user_group_ids_for_user(db_session, user.id)
@@ -212,6 +214,7 @@ def skill_response_for_user(
         external_app=_dependency_response(state.external_app_dependency),
         marketplace=marketplace,
     )
+    response.skill_limit_block = state.skill_limit_block
     visible_group_ids = user_group_ids | (managed_user_group_ids or set())
     response.group_summaries = sorted(
         (

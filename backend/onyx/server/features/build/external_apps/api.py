@@ -35,11 +35,14 @@ from onyx.db.external_app import (
     replace_custom_skill_associations__no_commit,
     required_user_credential_keys,
     update_external_app,
-    upsert_external_app_user_credential,
+    upsert_external_app_user_credential__no_commit,
     validate_auth_template,
 )
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
-from onyx.db.skill import affected_user_ids_for_skill
+from onyx.db.skill import (
+    affected_user_ids_for_skill,
+    connect_external_app_within_skill_limit__no_commit,
+)
 from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -61,6 +64,7 @@ from onyx.server.features.build.external_apps.models import (
     CreateCustomExternalAppRequest,
     ExternalAppAdminResponse,
     ExternalAppAssociatedSkill,
+    ExternalAppConnectResponse,
     ExternalAppUserResponse,
     UpdateExternalAppRequest,
     UpsertUserCredentialsRequest,
@@ -454,10 +458,12 @@ def upsert_user_credentials(
     request: UpsertUserCredentialsRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> None:
+) -> ExternalAppConnectResponse:
     """Set or replace the calling user's credentials for the given external app.
 
-    Returns 404 if no app with `external_app_id` exists.
+    The app always connects. Its skills that would pass the user's skill limit
+    stay off; the response lists them. Returns 404 if no app with
+    `external_app_id` exists.
     """
     app = _get_app_or_404(db_session, external_app_id)
     if not app.enabled:
@@ -466,17 +472,24 @@ def upsert_user_credentials(
             "This app is currently disabled by an admin.",
         )
 
-    upsert_external_app_user_credential(
-        db_session=db_session,
-        external_app_id=external_app_id,
-        user_id=user.id,
-        user_credentials=request.user_credentials,
-        resolve_masked_values=True,
+    blocked = connect_external_app_within_skill_limit__no_commit(
+        external_app_id,
+        user.id,
+        lambda: upsert_external_app_user_credential__no_commit(
+            db_session=db_session,
+            external_app_id=external_app_id,
+            user_id=user.id,
+            user_credentials=request.user_credentials,
+            resolve_masked_values=True,
+        ),
+        db_session,
     )
+    db_session.commit()
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
     push_skills_for_users({user.id}, db_session)
     db_session.commit()
+    return ExternalAppConnectResponse(skill_limit_blocked_skill_ids=sorted(blocked))
 
 
 @router.delete("/apps/{external_app_id}/credentials")

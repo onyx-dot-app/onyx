@@ -25,6 +25,7 @@ from onyx.db.models import (
     ExternalAppUserCredential,
     Skill,
     User,
+    UserSkillLimitBlock,
 )
 from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
 from onyx.db.users import lock_group_membership
@@ -664,6 +665,11 @@ def replace_custom_skill_associations__no_commit(
     removed_ids = current_ids - target_ids
     if removed_ids:
         db_session.execute(
+            delete(UserSkillLimitBlock).where(
+                UserSkillLimitBlock.skill_id.in_(removed_ids)
+            )
+        )
+        db_session.execute(
             delete(ExternalApp__Skill).where(
                 ExternalApp__Skill.external_app_id == app.id,
                 ExternalApp__Skill.skill_id.in_(removed_ids),
@@ -821,6 +827,11 @@ def delete_external_app(
         )
     )
     custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
+    db_session.execute(
+        delete(UserSkillLimitBlock).where(
+            UserSkillLimitBlock.skill_id.in_(custom_skill_ids)
+        )
+    )
     clear_enabled_skill_preferences__no_commit(custom_skill_ids, db_session)
     automatic = {SkillInstallationPolicy.DEFAULT, SkillInstallationPolicy.REQUIRED}
     for skill in skills:
@@ -851,7 +862,28 @@ def upsert_external_app_user_credential(
     granted_scopes: list[str] | None | UnsetType = UNSET,
     resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
-    """Create or replace the calling user's credentials for the app, and commit.
+    """Create or replace the user's credentials for the app, and commit."""
+    cred = upsert_external_app_user_credential__no_commit(
+        db_session,
+        external_app_id=external_app_id,
+        user_id=user_id,
+        user_credentials=user_credentials,
+        granted_scopes=granted_scopes,
+        resolve_masked_values=resolve_masked_values,
+    )
+    db_session.commit()
+    return cred
+
+
+def upsert_external_app_user_credential__no_commit(
+    db_session: Session,
+    external_app_id: int,
+    user_id: UUID,
+    user_credentials: dict[str, Any],
+    granted_scopes: list[str] | None | UnsetType = UNSET,
+    resolve_masked_values: bool = False,
+) -> ExternalAppUserCredential:
+    """Create or replace the calling user's credentials for the app.
     Atomic via ON CONFLICT on (external_app_id, user_id). Raises
     ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
     is for user form submissions that may echo masked display values; internal
@@ -904,9 +936,7 @@ def upsert_external_app_user_credential(
         set_=update_set,
     ).returning(ExternalAppUserCredential)
 
-    cred = db_session.scalars(stmt).one()
-    db_session.commit()
-    return cred
+    return db_session.scalars(stmt.execution_options(populate_existing=True)).one()
 
 
 def disconnect_external_app_for_user(
@@ -937,5 +967,11 @@ def disconnect_external_app_for_user(
     )
     clear_enabled_skill_preferences__no_commit(
         associated_skill_ids, db_session, user_id=user_id
+    )
+    db_session.execute(
+        delete(UserSkillLimitBlock).where(
+            UserSkillLimitBlock.user_id == user_id,
+            UserSkillLimitBlock.skill_id.in_(associated_skill_ids),
+        )
     )
     db_session.flush()

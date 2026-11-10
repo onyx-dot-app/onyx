@@ -154,6 +154,7 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
+from onyx.skills.limits import SkillLimit
 from onyx.skills.marketplace.models import (
     GitHubMarketplaceConfig,
     MarketplaceProvider,
@@ -923,6 +924,28 @@ class UserSkillPreference(Base):
             postgresql_where=text("enabled"),
         ),
     )
+
+
+class UserSkillLimitBlock(Base):
+    """An app skill that stays off because connecting the app would pass the
+    user's write limit. A new connection or an explicit enable tries again."""
+
+    __tablename__ = "user_skill_limit_block"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        ForeignKey("skill.id", ondelete="CASCADE"), primary_key=True
+    )
+    failed_limit: Mapped[SkillLimit] = mapped_column(
+        Enum(SkillLimit, native_enum=False), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_user_skill_limit_block_skill_id", "skill_id"),)
 
 
 class DocumentSet__User(Base):

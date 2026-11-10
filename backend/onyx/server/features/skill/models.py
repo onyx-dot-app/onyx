@@ -16,6 +16,7 @@ from onyx.db.models import Skill
 from onyx.db.skill import SkillSharingChange
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.skills.limits import SkillLimit
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
 from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
@@ -70,6 +71,8 @@ class SkillResponse(BaseModel):
     can_toggle: bool
     hidden_by_skill_id: UUID | None = None
     hidden_reason: Literal["same_name"] | None = None
+    # The limit that kept this app skill off when the user connected its app.
+    skill_limit_block: SkillLimit | None = None
     installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
     effective_installation_policy: SkillInstallationPolicy
     author_user_id: UUID | None = None
