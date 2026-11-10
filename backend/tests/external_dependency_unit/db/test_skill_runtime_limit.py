@@ -340,6 +340,14 @@ def test_session_start_and_three_sandbox_push_share_one_bounded_payload(
         assert sandbox.skills_hash == push.compute_skill_runtime_hash(
             sent[sandbox.id], apps[sandbox.id]
         )
+        # The oldest enabled Skill is the one the file limit left out.
+        assert [o.failed_limit for o in sandbox.skill_runtime_omissions] == [
+            push.SkillRuntimeLimit.FILES
+        ]
+        assert not any(
+            path.startswith(f"{sandbox.skill_runtime_omissions[0].name}/")
+            for path in sent[sandbox.id]
+        )
 
 
 def test_group_join_past_write_limit_still_loads_every_fitting_skill(

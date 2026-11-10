@@ -72,6 +72,7 @@ from onyx.server.features.build.session.models import (
     SessionUpdateRequest,
     SetSessionSharingRequest,
     SetSessionSharingResponse,
+    SkillRuntimeNoticeResponse,
     SnapshotResponse,
     WebappInfo,
 )
@@ -217,7 +218,12 @@ def reload_session_skills(
 ) -> SessionSkillsStateResponse:
     skills_stale = SessionManager(db_session).reload_session_skills(session_id, user)
     db_session.commit()
-    return SessionSkillsStateResponse(skills_stale=skills_stale)
+    return SessionSkillsStateResponse(
+        skills_stale=skills_stale,
+        skill_runtime_notice=SkillRuntimeNoticeResponse.for_owner(
+            user.id, get_sandbox_by_user_id(db_session, user.id)
+        ),
+    )
 
 
 @router.get("/{session_id}/sandbox-status")
