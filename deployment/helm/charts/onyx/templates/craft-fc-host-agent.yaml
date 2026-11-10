@@ -214,6 +214,10 @@ spec:
       {{- end }}
       enableServiceLinks: false
       terminationGracePeriodSeconds: {{ $agent.terminationGracePeriodSeconds | default 30 }}
+      {{- with $agent.extraInitContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: host-agent
           image: "{{ $image.repository | default "onyxdotapp/craft-fc-host-agent" }}:{{ $image.tag }}"

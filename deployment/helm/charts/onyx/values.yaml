@@ -2101,6 +2101,10 @@ craft:
       pollInterval: 10s
     # Extra host-agent flags, for example ["--max-scratch-gib=200"].
     extraArgs: []
+    # Init containers that run before the agent, for example one that copies a
+    # root drive into <dataDir>/rootfs (deployment/craft-fc/push-dev-ecr.sh
+    # rootfs). They can mount the "data" volume (the dataDir hostPath).
+    extraInitContainers: []
     # Prometheus metrics on a plain HTTP port (--metrics-listen). With
     # monitoring.serviceMonitors.enabled the chart also makes a ServiceMonitor
     # in the agent namespace. Auth is the api_server /metrics auth: the

@@ -1,0 +1,9 @@
+# onyxdotapp/craft-fc-rootfs: a VM root drive for one deployment's egress CA,
+# delivered to nodes by a host agent init container. Built by
+# deployment/craft-fc/push-dev-ecr.sh rootfs (context: its staging directory
+# with rootfs.ext4, its .sha256, manifest.json, egress-ca.crt and install-rootfs.sh).
+ARG BASE_IMAGE_REGISTRY=docker.io
+FROM ${BASE_IMAGE_REGISTRY}/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
+COPY install-rootfs.sh /usr/local/bin/install-rootfs
+COPY rootfs.ext4 rootfs.ext4.sha256 manifest.json egress-ca.crt /craft-fc-rootfs/
+ENTRYPOINT ["/usr/local/bin/install-rootfs"]

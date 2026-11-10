@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.36
+version: 0.9.37
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,10 +21,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Craft Firecracker host agent (off by default) can expose
-        Prometheus metrics with craft.hostAgent.metrics, behind the
-        auth.metricsAuth token, and a ServiceMonitor with
-        monitoring.serviceMonitors.enabled.
+      description: Craft Firecracker host agent (off by default) takes init
+        containers with craft.hostAgent.extraInitContainers, for example to
+        copy a VM root drive into its data directory.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

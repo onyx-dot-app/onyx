@@ -82,6 +82,32 @@ To publish, run the workflow manually on `main`. The publish job:
 If you change `kernel/config-fragment` but not the versions, set the `revision`
 input (for example `r2`). The tag then becomes `<tag>-r2`.
 
+## Dev cluster images (ECR stopgap)
+
+Until the Docker Hub images exist (ENG-4536), `push-dev-ecr.sh` builds the
+images for a dev cluster on your machine and pushes them to a private ECR
+registry (default: the Onyx Cloud dev account, us-west-2). No CI role can push
+there. Run it from a clean checkout. The tag is the short commit, and the
+script never replaces a tag.
+
+```bash
+bash deployment/craft-fc/push-dev-ecr.sh artifacts    # craft-fc-artifacts:<sha> and <sha>-source
+bash deployment/craft-fc/push-dev-ecr.sh host-agent   # craft-fc-host-agent:<sha>
+bash deployment/craft-fc/push-dev-ecr.sh rootfs --image onyxdotapp/sandbox:v5.1.1 \
+  --ca egress-ca.crt --suffix craftdev                # craft-fc-rootfs:<sha>-craftdev
+```
+
+- `--ca` is the public certificate of the deployment's egress proxy CA, for
+  example `ca.crt` of the `sandbox-proxy-ca` Secret. Each CA needs its own
+  rootfs image.
+- The rootfs image holds `rootfs.ext4`, `manifest.json` and `egress-ca.crt`.
+  Its entrypoint (`rootfs/install-rootfs.sh`) copies them into the agent's
+  `--rootfs-dir`. Run it as a `craft.hostAgent.extraInitContainers` entry
+  that mounts the `data` volume, and pass `--rootfs-dir` and `--egress-ca`
+  in `craft.hostAgent.extraArgs`.
+- `runtime` pushes `craft-runtime` (`deployment/craft-runtime`) when the
+  checkout has it.
+
 ## GPL-2.0 source obligation
 
 The guest kernel is GPL-2.0. Each published `vmlinux` must have its complete
