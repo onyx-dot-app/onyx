@@ -284,6 +284,19 @@ class SkillNotImported(BaseModel):
     path: str
     name: str
     reason: str
+    skill_limit: SkillLimitViolation | None = None
+
+    @classmethod
+    def from_error(cls, path: str, name: str, error: OnyxError) -> "SkillNotImported":
+        limit = error.extra.get("skill_limit") if error.extra else None
+        return cls(
+            path=path,
+            name=name,
+            reason=error.detail,
+            skill_limit=(
+                SkillLimitViolation.model_validate(limit) if limit is not None else None
+            ),
+        )
 
 
 class SkillImportResponse(BaseModel):

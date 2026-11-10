@@ -18,6 +18,7 @@ import {
 import type {
   CustomSkill,
   SkillImportResult,
+  SkillNotImported,
   Skill,
   SkillBundleContents,
   SkillEditableDetail,
@@ -73,9 +74,19 @@ export async function uploadSkillBundles(
   const form = new FormData();
   for (const bundle of bundles) form.append("bundles", bundle);
   if (sharing) form.append("sharing", JSON.stringify(sharing));
-  return handle<SkillImportResult>(
-    await fetch("/api/skills/custom/batch", { method: "POST", body: form })
-  );
+  const result = await handle<{
+    imported: SkillImportResult["imported"];
+    not_imported: (Omit<SkillNotImported, "skill_limit"> & {
+      skill_limit?: unknown;
+    })[];
+  }>(await fetch("/api/skills/custom/batch", { method: "POST", body: form }));
+  return {
+    ...result,
+    not_imported: result.not_imported.map((item) => ({
+      ...item,
+      skill_limit: parseSkillLimitViolation(item.skill_limit),
+    })),
+  };
 }
 
 export type BulkSkillRequest = {

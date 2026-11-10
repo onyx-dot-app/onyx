@@ -4,6 +4,7 @@
  */
 
 import * as yup from "yup";
+import type { SkillLimitViolation } from "@/lib/skills/limits";
 
 export type SkillInstallationPolicy =
   | "AVAILABLE"
@@ -150,6 +151,7 @@ export interface SkillNotImported {
   path: string;
   name: string;
   reason: string;
+  skill_limit?: SkillLimitViolation | null;
 }
 
 export interface SkillImportResult {

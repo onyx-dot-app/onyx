@@ -228,6 +228,37 @@ it("keeps failed saves and edits visible without refreshing resources, then retr
   expect(patches()[1]?.[1]?.body).toEqual(patches()[0]?.[1]?.body);
 });
 
+it("explains an access save the Skill limit refused and keeps the draft", async () => {
+  const user = setupUser();
+  const { onSaved } = mount();
+  await ready();
+  await chooseScope(organization);
+  fetchSpy.mockImplementation(async (path, init) =>
+    init?.method === "PATCH"
+      ? new Response(
+          JSON.stringify({
+            error_code: "PAYLOAD_TOO_LARGE",
+            detail: "This change would put 7 users past the limit.",
+            skill_limit: {
+              failed_limit: "bytes",
+              affected_user_count: 7,
+              usage: null,
+            },
+          }),
+          { status: 413 }
+        )
+      : respond(path)
+  );
+  await user.click(screen.getByRole("button", { name: "Save defaults" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "This change would put 7 users over the skill size limit."
+  );
+  expect(screen.getByRole("combobox", { name: scope })).toHaveValue(
+    organization
+  );
+  expect(onSaved).not.toHaveBeenCalled();
+});
+
 it("resets edits on close/reopen and waits for fresh defaults before editing", async () => {
   const user = setupUser();
   const props = { marketplaceId: company.id, onClose: jest.fn() };
