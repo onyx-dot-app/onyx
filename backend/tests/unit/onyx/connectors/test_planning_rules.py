@@ -273,6 +273,18 @@ def test_every_rule_reads_the_config_class_of_its_source() -> None:
             _JIRA_SITE | {"project_key": "B"},
             {"project_key": ScopeDirection.BOTH},
         ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"jql_query": "q", "project_key": "A"},
+            _JIRA_SITE | {"jql_query": "q", "project_key": "B"},
+            {},
+        ),
+        (
+            DocumentSource.JIRA_SERVICE_MANAGEMENT,
+            _JIRA_SITE | {"project_key": "A"},
+            _JIRA_SITE | {"project_key": "B"},
+            {"project_key": ScopeDirection.BOTH},
+        ),
         # ClickUp: a workspace connector sends no container filter.
         (
             DocumentSource.CLICKUP,

@@ -97,6 +97,10 @@ const SOURCE_META: Record<DocumentSource, SourceMeta> = {
   oci_storage: { icon: SvgOracle, displayName: "Oracle Storage" },
   r2: { icon: SvgCloudflare, displayName: "R2" },
   jira: { icon: SvgJira, displayName: "Jira" },
+  jira_service_management: {
+    icon: SvgJira,
+    displayName: "Jira Service Management",
+  },
   zendesk: { icon: SvgZendesk, displayName: "Zendesk" },
   airtable: { icon: SvgAirtable, displayName: "Airtable" },
   linear: { icon: SvgLinear, displayName: "Linear" },
