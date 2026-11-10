@@ -275,8 +275,6 @@ def _seed_custom_skill(
         current_version_id=initial_version_id,
         name=name,
         description=f"Seeded skill {name}",
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
         public_permission=SkillSharePermission.VIEWER if public else None,
     )
     db_session.add(skill)

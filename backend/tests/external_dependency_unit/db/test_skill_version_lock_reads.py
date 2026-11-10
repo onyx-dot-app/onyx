@@ -75,7 +75,7 @@ def test_waiting_edit_reads_committed_version(
     version_id = skill.current_version.id
     bundle_file_id = skill.current_version.bundle_file_id
     if operation in {"validity", "validity-new-version"}:
-        skill.current_version.is_valid = skill.is_valid = None
+        skill.current_version.is_valid = None
         session.commit()
     waiting_pid: Queue[int] = Queue()
 
@@ -188,7 +188,7 @@ def test_waiting_edit_reads_committed_version(
             assert skill.current_version.bundle_file_id != bundle_file_id
         else:
             assert skill.current_version_id == version_id
-        assert skill.current_is_valid is True and skill.is_valid is True
+        assert skill.current_is_valid is True
         return
     paths = {
         file.path

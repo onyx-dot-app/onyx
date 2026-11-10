@@ -176,7 +176,7 @@ def test_skill_constraints_and_group_null(
     with pytest.raises(IntegrityError, match="ck_skill_definition_source"):
         with db_session.begin_nested():
             db_session.execute(
-                text("UPDATE skill SET bundle_file_id = NULL WHERE id = :id"),
+                text("UPDATE skill SET current_version_id = NULL WHERE id = :id"),
                 {"id": skill.id},
             )
     replacement = make_skill(db_session, is_public=True)
