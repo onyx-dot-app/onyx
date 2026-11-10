@@ -154,6 +154,15 @@ class SkillsList(BaseModel):
     customs: list[SkillResponse]
 
 
+class SkillVersionResponse(BaseModel):
+    id: UUID
+    version_number: int
+    created_at: datetime.datetime
+    created_by: MinimalUserSnapshot | None
+    is_current: bool
+    has_bundle: bool
+
+
 class SkillPreviewResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID

@@ -18,7 +18,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import FileRecord, Skill, SkillVersion
+from onyx.db.models import FileRecord, Skill, SkillVersion, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import (
@@ -267,6 +267,37 @@ def write_skill_version(
         _publish_skill_version(skill, version)
         db_session.flush()
         return version
+
+
+def list_skill_versions(
+    skill: Skill, db_session: Session, *, before_version: int | None = None
+) -> list[tuple[SkillVersion, User | None, bool]]:
+    """List up to 50 versions of an authorized skill, newest first."""
+    statement = (
+        skill_versions(skill)
+        .add_columns(User, (SkillVersion.id == Skill.current_version_id).is_(True))
+        .join(Skill, SkillVersion.skill_id == Skill.id)
+        .outerjoin(User, SkillVersion.created_by_user_id == User.id)
+        .limit(50)
+    )
+    if before_version is not None:
+        statement = statement.where(SkillVersion.version_number < before_version)
+    return [
+        (version, creator, is_current)
+        for version, creator, is_current in db_session.execute(statement).unique()
+    ]
+
+
+def fetch_skill_version(
+    skill: Skill, version_id: UUID, db_session: Session
+) -> SkillVersion:
+    """Resolve a version only within the caller's authorized skill."""
+    version = db_session.scalar(
+        skill_versions(skill).where(SkillVersion.id == version_id)
+    )
+    if version is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found")
+    return version
 
 
 def repair_skill_version(skill: Skill, db_session: Session) -> SkillVersion:

@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from pathlib import Path
 
-from onyx.db.models import Skill
+from onyx.db.models import Skill, SkillVersion
 from onyx.db.skill_version import read_version_bundle
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -58,6 +58,22 @@ def read_custom_skill_bundle_instructions(
     return read_custom_bundle_instructions(bundle_bytes)
 
 
+def read_stored_version_bundle(
+    skill: Skill, version: SkillVersion, file_store: FileStore
+) -> bytes:
+    """Read a version under the stored ZIP allowance; overflow is a 413."""
+    try:
+        return read_version_bundle(
+            version, file_store, max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes
+        )
+    except FileSizeLimitExceeded as exc:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            f"Stored bundle for skill '{skill.name}' exceeds the "
+            f"{STORED_BUNDLE_LIMITS.max_stored_bytes}-byte read limit.",
+        ) from exc
+
+
 def read_custom_skill_bundle_bytes(
     skill: Skill,
     file_store: FileStore | None = None,
@@ -68,17 +84,9 @@ def read_custom_skill_bundle_bytes(
             f"Custom skill '{skill.name}' has no current version.",
         )
     try:
-        return read_version_bundle(
-            skill.current_version,
-            file_store or get_default_file_store(),
-            max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
+        return read_stored_version_bundle(
+            skill, skill.current_version, file_store or get_default_file_store()
         )
-    except FileSizeLimitExceeded as exc:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            f"Stored bundle for skill '{skill.name}' exceeds the "
-            f"{STORED_BUNDLE_LIMITS.max_stored_bytes}-byte read limit.",
-        ) from exc
     except OnyxError as exc:
         # Pruning never removes the current bundle, so a missing one is a fault.
         if exc.error_code == OnyxErrorCode.NOT_FOUND:
