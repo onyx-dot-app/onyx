@@ -382,7 +382,9 @@ chart's OpenSearch subchart runs on the tainted index pool.
 Federation lets IAM name a Kubernetes service account directly. The bucket
 grant goes to the `workload_identity_principal` output. There is no Google
 service account to impersonate and no annotation on the Kubernetes service
-account. Use the same output to grant access to other resources.
+account. Use the same output to grant access to other resources. The exception
+is `craft_sandbox_runtime = "firecracker"`; see [Craft sandboxes on
+Firecracker](#craft-sandboxes-on-firecracker).
 
 **Cloud Armor attaches only to an L7 load balancer.** The chart's
 ingress-nginx controller sits behind a Service of type `LoadBalancer`, which is
@@ -404,7 +406,9 @@ it keeps them off.
 **The composition enables the project APIs.** A new project has most of them
 off. `enable_project_apis` turns on Compute, GKE, Cloud SQL Admin, Memorystore,
 Service Networking, Storage, Monitoring, Logging, IAM and Resource Manager.
-With `enable_l7_ingress` it also turns on Certificate Manager. It never turns
+With `enable_l7_ingress` it also turns on Certificate Manager. With
+`craft_sandbox_runtime = "firecracker"` it also turns on IAM Credentials, for
+GCS signed URLs. It never turns
 them off on destroy, because other workloads may use them.
 
 ## Installing the Onyx Helm chart (after Terraform)
@@ -649,7 +653,38 @@ With `"firecracker"`, the `gke` module:
 - turns on nested virtualization for the sandbox pool;
 - sets `vm.max_map_count` to `1048576` (COS ships `65530`);
 - adds the label `onyx.app/kvm=true`;
-- keeps Shielded VM secure boot on.
+- keeps Shielded VM secure boot on;
+- creates a Google service account for the Onyx workloads (see below).
+
+### Signed GCS URLs
+
+Craft Firecracker gives sandboxes signed GCS URLs. Without a key file, a signed
+URL is signed through the IAM `signBlob` API, which needs a Google service
+account. The direct Workload Identity principal has none, so with `"firecracker"`
+the `gke` module:
+
+- creates the Google service account `<cluster name>-workload` (shortened with
+  a digest for long names);
+- maps `onyx-workload-access` to it: the
+  `iam.gke.io/gcp-service-account` annotation and
+  `roles/iam.workloadIdentityUser` for that Kubernetes service account only;
+- grants the account `roles/iam.serviceAccountTokenCreator` on itself, which
+  holds `iam.serviceAccounts.signBlob`.
+
+The pods then act as the Google service account, so `workload_identity_principal`
+becomes `serviceAccount:<email>` and the file store bucket grant moves to it.
+The `workload_google_service_account_email` output names the account. It is
+null with `"pod"`. Grants that you made to the old `principal://` member on
+other resources do not move; grant them again to the new member.
+
+If you set `create_workload_service_account = false` on the `gke` module, the
+chart creates the Kubernetes service account. Add the annotation in the values:
+
+```yaml
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: <workload_google_service_account_email output>
+```
 
 The default, `"pod"`, leaves the pool as it is. GCP turns on nested
 virtualization only when it creates a pool, so a change to

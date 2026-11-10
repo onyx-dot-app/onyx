@@ -58,13 +58,26 @@ output "workload_service_account_name" {
 # IAM names a Kubernetes service account by project number, not project ID.
 # Built from the inputs rather than the created objects, so a caller can key a
 # for_each on it: the value is known at plan time and does not need the
-# account to exist yet.
+# account to exist yet. With the Firecracker runtime the pods act as the
+# Google service account, so grants go to it instead.
 output "workload_identity_principal" {
-  description = "IAM member for the workload service account. Use it as the member of a role binding, for example on a bucket, to grant that access to pods running as the account."
-  value       = "principal://iam.googleapis.com/projects/${data.google_project.this.number}/locations/global/workloadIdentityPools/${local.workload_pool}/subject/ns/${var.workload_namespace}/sa/${var.workload_service_account_name}"
+  description = "IAM member for the workload service account. Use it as the member of a role binding, for example on a bucket, to grant that access to pods running as the account. With craft_sandbox_runtime = \"firecracker\" this is serviceAccount:<workload_google_service_account_email>."
+  value       = local.workload_google_service_account ? "serviceAccount:${local.workload_google_service_account_email}" : local.workload_principal
 
   # GKE creates the identity pool with the first cluster that enables workload
   # identity. A grant made before then fails with "Identity Pool does not
-  # exist", so consumers wait for the cluster. The value stays known at plan.
-  depends_on = [google_container_cluster.this]
+  # exist", so consumers wait for the cluster, and for the Google account when
+  # it is the member. The value stays known at plan.
+  depends_on = [google_container_cluster.this, google_service_account.workload]
+}
+
+output "workload_google_service_account_email" {
+  description = "Google service account the workload service account maps to, which signs GCS URLs. Null unless craft_sandbox_runtime = \"firecracker\" with the sandbox pool on."
+  value       = local.workload_google_service_account ? local.workload_google_service_account_email : null
+
+  # The workload identity and signBlob grants must exist before pods use it.
+  depends_on = [
+    google_service_account_iam_member.workload_identity_user,
+    google_service_account_iam_member.workload_token_creator,
+  ]
 }
