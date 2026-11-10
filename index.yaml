@@ -4,6 +4,68 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: added
+          description: Add craft.hostAgent.drainWatch (on with the Craft Firecracker
+            host agent) and its ServiceAccount with get on nodes, so the agent
+            refuses new VMs on a cordoned node.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-11-10T18:47:13.424765241Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.10
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 008862c0a788f56fd97ef0a6452f56a544515d7659bb46b4d35a5e2cdeafdcda
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.9.35/onyx-0.9.35.tgz
+    version: 0.9.35
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
           description: Add craft.sandboxRuntime and the opt-in Craft Firecracker
             host agent DaemonSet (off by default; the runtime is not usable yet).
       category: Productivity
@@ -10984,4 +11046,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-11-09T21:01:07.947370399Z"
+generated: "2026-11-10T18:47:13.425081046Z"
