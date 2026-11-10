@@ -8,6 +8,7 @@ import {
   resetSkillMarketplaceAccess,
   setSkillEnabled,
   SkillRequestError,
+  uploadSkillBundles,
 } from "@/lib/skills/api";
 import { skillLimitViolationOf } from "@/lib/skills/limits";
 
@@ -22,6 +23,44 @@ describe("skills API", () => {
       json: async () => ({ id: "created-skill" }),
     } as Response);
     global.fetch = fetchMock;
+  });
+
+  it("parses per-ZIP limit feedback and keeps ordinary upload failures", async () => {
+    const limit = {
+      failed_limit: "files",
+      affected_user_count: 3,
+      usage: null,
+    };
+    const failures = [
+      {
+        path: "limited.zip",
+        name: "limited.zip",
+        reason: "Server detail",
+        skill_limit: limit,
+      },
+      { path: "bad.zip", name: "bad.zip", reason: "Invalid archive" },
+      {
+        path: "odd.zip",
+        name: "odd.zip",
+        reason: "Upload refused",
+        skill_limit: { failed_limit: "folders" },
+      },
+    ];
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          imported: [{ skill: { id: "accepted" } }],
+          not_imported: failures,
+        })
+      )
+    );
+    const result = await uploadSkillBundles([new File(["zip"], "limited.zip")]);
+    expect(result.imported).toEqual([{ skill: { id: "accepted" } }]);
+    expect(result.not_imported).toEqual([
+      failures[0],
+      { ...failures[1], skill_limit: null },
+      { ...failures[2], skill_limit: null },
+    ]);
   });
 
   it("resets access through the dedicated route and returns saved settings", async () => {

@@ -13,6 +13,8 @@ import { Permission } from "@/lib/types";
 import SkillEditorPage from "@/views/SkillEditorPage";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { toast } from "@opal/layouts";
+import { SkillRequestError } from "@/lib/skills/api";
 
 let mockPermissions: string[] = [];
 jest.mock("@/providers/UserProvider", () => ({
@@ -401,6 +403,47 @@ describe("SkillEditorPage", () => {
         "/admin/craft/apps?editAppId=42"
       )
     );
+  });
+
+  it("keeps the draft and explains a Skill limit refusal on create", async () => {
+    const user = setupUser();
+    const toastError = jest.spyOn(toast, "error");
+    mockCreateCustomSkillFromEditor.mockRejectedValue(
+      new SkillRequestError(
+        "This change would put 2 users past the limit.",
+        413,
+        {
+          error_code: "PAYLOAD_TOO_LARGE",
+          detail: "This change would put 2 users past the limit.",
+          skill_limit: {
+            failed_limit: "bytes",
+            affected_user_count: 2,
+            usage: null,
+          },
+        },
+        "PAYLOAD_TOO_LARGE"
+      )
+    );
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Skill size limit reached", {
+        id: "skill-limit-refusal",
+        description: "This change would put 2 users over the skill size limit.",
+        duration: Infinity,
+      })
+    );
+    expect(screen.getByPlaceholderText("Name your skill")).toHaveValue(
+      "report-writer"
+    );
+    expect(
+      screen.getByPlaceholderText("Write the skill instructions.")
+    ).toHaveValue("Write the requested report.");
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+    toastError.mockRestore();
   });
 
   it("keeps an app-associated creation open with a clear name conflict", async () => {

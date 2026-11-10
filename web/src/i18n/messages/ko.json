@@ -17607,6 +17607,31 @@
         "own": "이 변경으로 스킬이 {size}, {files, plural, one {파일 #개} other {파일 #개}}가 됩니다. 한도는 {maxSize}, {maxFiles, plural, one {파일 #개} other {파일 #개}}입니다.{others, plural, =0 {} one { 다른 사용자 #명도 한도를 넘게 됩니다.} other { 다른 사용자 #명도 한도를 넘게 됩니다.}}",
         "ownEstimated": "이 변경으로 스킬이 약 {size}, {files, plural, one {파일 #개} other {파일 #개}}가 됩니다. 이 추정치는 아직 측정되지 않은 {unknown, plural, one {스킬 #개} other {스킬 #개}}를 허용되는 최대 크기로 계산합니다. 한도는 {maxSize}, {maxFiles, plural, one {파일 #개} other {파일 #개}}입니다.{others, plural, =0 {} one { 다른 사용자 #명도 한도를 넘게 됩니다.} other { 다른 사용자 #명도 한도를 넘게 됩니다.}}",
         "affected": "이 변경으로 {count, plural, one {사용자 #명} other {사용자 #명}}이 {limit, select, files {스킬 파일 수 한도} other {스킬 크기 한도}}를 넘게 됩니다."
+      },
+      "admin": {
+        "title": "{count, plural, one {사용자 #명이 스킬 한도를 넘었습니다} other {사용자 #명이 스킬 한도를 넘었습니다}}",
+        "description": "이 사용자들의 스킬이 {maxSize} 또는 {maxFiles, plural, one {파일 #개} other {파일 #개}}를 넘었습니다. 한도 안으로 돌아올 때까지 스킬을 추가하거나 켤 수 없으며, 세션에서 일부 스킬이 빠질 수 있습니다.",
+        "tableLabel": "스킬 한도를 넘은 사용자",
+        "columns": {
+          "user": "사용자",
+          "size": "스킬 크기",
+          "files": "파일",
+          "omitted": "마지막 세션에서 로드되지 않음"
+        },
+        "size": {
+          "estimated": "약 {size} (추정: 측정되지 않은 {unknown, plural, one {스킬 #개} other {스킬 #개}})"
+        },
+        "files": {
+          "measured": "{files, number}",
+          "estimated": "약 {files, number}(추정)"
+        },
+        "omitted": {
+          "none": "아직 세션 없음",
+          "count": "{count, plural, one {스킬 #개} other {스킬 #개}}"
+        },
+        "loadError": "스킬 사용량을 불러올 수 없습니다",
+        "retry": "다시 시도",
+        "loading": "스킬 사용량 확인 중…"
       }
     }
   },
@@ -17735,6 +17760,7 @@
       "enable": "푸시 업데이트 활성화",
       "enableAction": "활성화",
       "refreshAction": "새로 고침"
-    }
+    },
+    "skillLimitBlock": "동기화되지 않음: 이 스킬로 인해 {count, plural, one {사용자 #명} other {사용자 #명}}이 {limit, select, files {스킬 파일 수 한도} other {스킬 크기 한도}}를 넘게 됩니다."
   }
 }

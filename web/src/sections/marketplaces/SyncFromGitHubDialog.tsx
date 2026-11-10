@@ -21,6 +21,7 @@ import type {
   MarketplacePreview as Preview,
 } from "@/lib/marketplaces/types";
 import { fetchErrorDetail } from "@/lib/fetcher";
+import { useSkillLimitFeedback } from "@/lib/skills/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
@@ -52,6 +53,7 @@ export default function SyncFromGitHubDialog(props: SyncFromGitHubDialogProps) {
 
 function SyncSession({ onClose, onSyncRequested }: SyncFromGitHubDialogProps) {
   const t = useTranslations("marketplaces");
+  const skillLimit = useSkillLimitFeedback();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_SKILLS);
   const { mutate } = useSWRConfig();
   const access = useCompanyMarketplaceAccess(
@@ -147,7 +149,10 @@ function SyncSession({ onClose, onSyncRequested }: SyncFromGitHubDialogProps) {
       if (ticket === request.current)
         setState({
           kind: "error",
-          message: fetchErrorDetail(error) ?? t("requestError"),
+          message:
+            skillLimit(error)?.description ??
+            fetchErrorDetail(error) ??
+            t("requestError"),
         });
     }
   }

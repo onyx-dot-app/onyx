@@ -17607,6 +17607,31 @@
         "own": "Durch diese Änderung hätten Ihre Skills {size} in {files, plural, one {# Datei} other {# Dateien}}. Das Limit beträgt {maxSize} und {maxFiles, plural, one {# Datei} other {# Dateien}}.{others, plural, =0 {} one { Außerdem würde # weiterer Benutzer das Limit überschreiten.} other { Außerdem würden # weitere Benutzer das Limit überschreiten.}}",
         "ownEstimated": "Durch diese Änderung hätten Ihre Skills geschätzt {size} in {files, plural, one {# Datei} other {# Dateien}}. Die Schätzung zählt {unknown, plural, one {# noch nicht gemessenen Skill} other {# noch nicht gemessene Skills}} mit der größten zulässigen Größe. Das Limit beträgt {maxSize} und {maxFiles, plural, one {# Datei} other {# Dateien}}.{others, plural, =0 {} one { Außerdem würde # weiterer Benutzer das Limit überschreiten.} other { Außerdem würden # weitere Benutzer das Limit überschreiten.}}",
         "affected": "Durch diese Änderung würden {count, plural, one {# Benutzer} other {# Benutzer}} das {limit, select, files {Dateilimit für Skills} other {Größenlimit für Skills}} überschreiten."
+      },
+      "admin": {
+        "title": "{count, plural, one {# Benutzer überschreitet das Skill-Limit} other {# Benutzer überschreiten das Skill-Limit}}",
+        "description": "Die Skills dieser Benutzer umfassen mehr als {maxSize} oder {maxFiles, plural, one {# Datei} other {# Dateien}}. Sie können keine weiteren Skills hinzufügen oder aktivieren, bis sie unter dem Limit liegen, und Sitzungen können einige ihrer Skills auslassen.",
+        "tableLabel": "Benutzer über dem Skill-Limit",
+        "columns": {
+          "user": "Benutzer",
+          "size": "Skill-Größe",
+          "files": "Dateien",
+          "omitted": "In letzter Sitzung nicht geladen"
+        },
+        "size": {
+          "estimated": "Etwa {size} (geschätzt: {unknown, plural, one {# Skill} other {# Skills}} nicht gemessen)"
+        },
+        "files": {
+          "measured": "{files, number}",
+          "estimated": "Etwa {files, number} (geschätzt)"
+        },
+        "omitted": {
+          "none": "Noch keine Sitzung",
+          "count": "{count, plural, one {# Skill} other {# Skills}}"
+        },
+        "loadError": "Skill-Nutzung konnte nicht geladen werden",
+        "retry": "Erneut versuchen",
+        "loading": "Skill-Nutzung wird geprüft …"
       }
     }
   },
@@ -17735,6 +17760,7 @@
       "enable": "Push-Aktualisierungen aktivieren",
       "enableAction": "Aktivieren",
       "refreshAction": "Erneuern"
-    }
+    },
+    "skillLimitBlock": "Nicht synchronisiert: Dieser Skill würde {count, plural, one {# Benutzer} other {# Benutzer}} über das {limit, select, files {Dateilimit für Skills} other {Größenlimit für Skills}} bringen."
   }
 }

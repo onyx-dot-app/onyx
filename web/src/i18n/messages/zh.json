@@ -17607,6 +17607,31 @@
         "own": "此更改将使你的技能达到 {size}，共 {files, plural, one {# 个文件} other {# 个文件}}。上限为 {maxSize} 和 {maxFiles, plural, one {# 个文件} other {# 个文件}}。{others, plural, =0 {} one {另有 # 位用户也会超出上限。} other {另有 # 位用户也会超出上限。}}",
         "ownEstimated": "此更改将使你的技能估计达到 {size}，共 {files, plural, one {# 个文件} other {# 个文件}}。该估计将 {unknown, plural, one {# 个尚未测量的技能} other {# 个尚未测量的技能}} 按允许的最大大小计算。上限为 {maxSize} 和 {maxFiles, plural, one {# 个文件} other {# 个文件}}。{others, plural, =0 {} one {另有 # 位用户也会超出上限。} other {另有 # 位用户也会超出上限。}}",
         "affected": "此更改将使 {count, plural, one {# 位用户} other {# 位用户}}超出{limit, select, files {技能文件数上限} other {技能大小上限}}。"
+      },
+      "admin": {
+        "title": "{count, plural, one {# 位用户超出了技能上限} other {# 位用户超出了技能上限}}",
+        "description": "这些用户的技能超过了 {maxSize} 或 {maxFiles, plural, one {# 个文件} other {# 个文件}}。在回到上限以内之前，他们无法添加或启用更多技能，会话也可能遗漏他们的部分技能。",
+        "tableLabel": "超出技能上限的用户",
+        "columns": {
+          "user": "用户",
+          "size": "技能大小",
+          "files": "文件",
+          "omitted": "上次会话中未加载"
+        },
+        "size": {
+          "estimated": "约 {size}（估计值：{unknown, plural, one {# 个技能} other {# 个技能}}尚未测量）"
+        },
+        "files": {
+          "measured": "{files, number}",
+          "estimated": "约 {files, number}（估计值）"
+        },
+        "omitted": {
+          "none": "尚无会话",
+          "count": "{count, plural, one {# 个技能} other {# 个技能}}"
+        },
+        "loadError": "无法加载技能用量",
+        "retry": "重试",
+        "loading": "正在检查技能用量…"
       }
     }
   },
@@ -17735,6 +17760,7 @@
       "enable": "启用推送更新",
       "enableAction": "启用",
       "refreshAction": "刷新"
-    }
+    },
+    "skillLimitBlock": "未同步：此技能将使 {count, plural, one {# 位用户} other {# 位用户}}超出{limit, select, files {技能文件数上限} other {技能大小上限}}。"
   }
 }

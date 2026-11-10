@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
+import { useSkillErrorMessage } from "@/lib/skills/hooks";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite, { unstable_serialize } from "swr/infinite";
 import {
@@ -113,6 +114,7 @@ export default function SkillVersions(props: SkillVersionsProps) {
   const skillId = props.kind === "retired" ? props.skillId : props.skill.id;
   const canRestore = props.kind !== "retired" && !props.skill.marketplace;
   const t = useTranslations("skills.versions");
+  const skillErrorMessage = useSkillErrorMessage();
   const format = useFormatter();
   const { isSmallScreen } = useScreenSize();
   const { mutate } = useSWRConfig();
@@ -296,9 +298,7 @@ export default function SkillVersions(props: SkillVersionsProps) {
       setView({ kind: "list" });
       onRestored(restored);
     } catch (error) {
-      setRestoreError(
-        error instanceof Error ? error.message : t("restoreError")
-      );
+      setRestoreError(skillErrorMessage(error, t("restoreError")));
     } finally {
       requestPending.current = false;
       setPending(false);

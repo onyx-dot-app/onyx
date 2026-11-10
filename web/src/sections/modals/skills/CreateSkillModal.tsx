@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSkillErrorMessage, useSkillLimitText } from "@/lib/skills/hooks";
 import {
   Button,
   MessageCard,
@@ -57,6 +58,8 @@ export function CreateSkillModalContent({
   validateDraft,
 }: CreateSkillModalContentProps) {
   const t = useTranslations("skills.modals");
+  const skillErrorMessage = useSkillErrorMessage();
+  const skillLimitText = useSkillLimitText();
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [inspecting, setInspecting] = useState(false);
@@ -112,7 +115,7 @@ export function CreateSkillModalContent({
         if (imported.imported.length > 0) onImported?.();
       } catch (error) {
         setErrorMessage(
-          error instanceof Error ? error.message : t("create.readError.message")
+          skillErrorMessage(error, t("create.readError.message"))
         );
       } finally {
         setInspecting(false);
@@ -236,18 +239,36 @@ export function CreateSkillModalContent({
                 )}
               </Section>
             ))}
-            {result.not_imported.map((item) => (
-              <Text
-                key={item.path}
-                font="secondary-body"
-                color="status-error-05"
-              >
-                {t("create.batch.failure", {
-                  name: item.name,
-                  reason: item.reason,
-                })}
-              </Text>
-            ))}
+            {result.not_imported.map((item) => {
+              if (item.skill_limit) {
+                const feedback = skillLimitText(item.skill_limit);
+                return (
+                  <MessageCard
+                    key={item.path}
+                    variant="error"
+                    outerPadding={1}
+                    innerPadding={1}
+                    title={t("create.batch.failure", {
+                      name: item.name,
+                      reason: feedback.title,
+                    })}
+                    description={feedback.description}
+                  />
+                );
+              }
+              return (
+                <Text
+                  key={item.path}
+                  font="secondary-body"
+                  color="status-error-05"
+                >
+                  {t("create.batch.failure", {
+                    name: item.name,
+                    reason: item.reason,
+                  })}
+                </Text>
+              );
+            })}
           </Section>
         )}
         {!result && (

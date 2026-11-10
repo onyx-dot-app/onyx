@@ -75,6 +75,12 @@ import {
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
 import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
+import {
+  revalidateSkillUsage,
+  useSkillErrorToast,
+  useSkillLimitText,
+} from "@/lib/skills/hooks";
+import SkillLimitUsers from "@/sections/skills/SkillLimitUsers";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -83,6 +89,8 @@ interface SkillsPageProps {
 export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
+  const skillErrorToast = useSkillErrorToast();
+  const describeSkillLimit = useSkillLimitText();
   const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
     Permission.MANAGE_SKILLS
   );
@@ -103,10 +111,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       : null;
   const { data, error, isLoading, refresh } = useUserSkills();
   // Revalidation after a successful change is best effort.
+  const { mutate } = useSWRConfig();
   function revalidateSkills() {
+    void revalidateSkillUsage(mutate).catch(() => undefined);
     return refresh().catch(() => undefined);
   }
-  const { mutate } = useSWRConfig();
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
   );
@@ -325,17 +334,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         switchModal.toggle(true);
         return;
       }
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t(
-              enabled
-                ? "page.toasts.enableFailed"
-                : "page.toasts.disableFailed",
-              { name: item.name }
-            )
+      skillErrorToast(
+        error,
+        t(enabled ? "page.toasts.enableFailed" : "page.toasts.disableFailed", {
+          name: item.name,
+        })
       );
     } finally {
+      void revalidateSkillUsage(mutate).catch(() => undefined);
       setOptimisticEnabledById((current) => {
         const next = new Map(current);
         affectedIds.forEach((id) => next.delete(id));
@@ -530,7 +536,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           name:
             targets.find((item) => item.id === failure.skill_id)?.name ??
             failure.skill_id,
-          detail: failure.detail,
+          detail: failure.skill_limit
+            ? describeSkillLimit(failure.skill_limit).description
+            : failure.detail,
         }))
       );
       if (result.failed.length === 0 && result.succeeded.length > 0)
@@ -831,6 +839,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
 
       <StickyBox.Root ref={bodyRef}>
         <SettingsLayouts.Body gap={admin ? 4 : 8}>
+          {admin && canManageCompanySkills && <SkillLimitUsers />}
           <MarketplaceList
             onChanged={() => void revalidateSkills()}
             onConfigureAccess={
