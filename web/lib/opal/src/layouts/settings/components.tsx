@@ -300,7 +300,7 @@ function SettingsHeader({
             <div
               className={cn(
                 "flex shrink-0 items-start justify-end gap-2",
-                stackActionsOnMobile && "w-full sm:w-auto"
+                stackActionsOnMobile && "w-full flex-wrap sm:w-auto"
               )}
             >
               {onCancel && (

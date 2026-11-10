@@ -557,9 +557,8 @@ export function useDropdownOverlay({
               fixed !== undefined
                 ? { width: fixed, minWidth: fixed }
                 : {
-                    width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px`,
-                    // Back from a fixed width: the stylesheet's floor again.
-                    minWidth: "",
+                    width: `${Math.min(rects.reference.width + 2 * PUNCH_OUT_PX, Math.max(0, availableWidth))}px`,
+                    minWidth: `min(var(--block-width-dropdown-min), ${Math.max(0, availableWidth)}px)`,
                   }
             );
           },

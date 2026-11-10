@@ -6367,6 +6367,34 @@
           "name": "기본",
           "description": "기본 권한을 가진 모든 사용자의 기본 그룹입니다."
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {이 마켓플레이스를 따르는 스킬이 없습니다} other {스킬 #개가 이 마켓플레이스를 따릅니다}}"
+        },
+        "skill": {
+          "fromMarketplace": "{marketplace}에서"
+        },
+        "select": {
+          "label": "{name} 설치 설정"
+        },
+        "option": {
+          "inherit": "회사 설정({policy})",
+          "inheritDescription": "회사 설정이 바뀌어도 회사 설정을 따릅니다."
+        },
+        "status": {
+          "inherited": "이 그룹은 회사 설정을 따릅니다: {policy}.",
+          "overridden": "이 그룹은 회사 설정({company}) 대신 {policy}을(를) 사용합니다.",
+          "readOnly": "이 설정을 볼 수 있지만 변경할 수 없습니다. 관리하는 그룹과만 공유된 비공개 스킬과 마켓플레이스만 변경할 수 있습니다.",
+          "saving": "저장 중…",
+          "saved": "저장되었습니다.",
+          "failed": "{choice}이(가) 저장되지 않았습니다. {reason}",
+          "failedReason": "다시 시도하세요."
+        },
+        "retry": {
+          "button": "다시 시도",
+          "label": "{name} 설정 다시 시도"
+        }
       }
     },
     "hooks": {
