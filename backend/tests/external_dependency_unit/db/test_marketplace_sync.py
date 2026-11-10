@@ -110,6 +110,34 @@ def run(marketplace: Marketplace, tenant: str) -> ReconciliationResult:
     return result
 
 
+@pytest.mark.parametrize(
+    "manifest", [".claude-plugin/plugin.json", ".codex-plugin/plugin.json"]
+)
+def test_sync_creates_and_updates_a_skill_at_the_plugin_root(
+    session: Session,
+    marketplace: Marketplace,
+    tenant: str,
+    github: GitHub,
+    manifest: str,
+) -> None:
+    files = {
+        CLAUDE: _catalog(source="./solo"),
+        f"solo/{manifest}": b'{"name":"solo"}',
+        "solo/SKILL.md": _md("solo"),
+    }
+    github.archive = _archive(files)
+    assert len(run(marketplace, tenant).changed_skill_ids) == 1
+    skill = rows(session)[0]
+    assert skill.name == "solo"
+    version = skill.current_version_id
+    github.revision = "b" * 40
+    github.archive = _archive(
+        files | {"solo/SKILL.md": _md("solo") + b"New instructions"}
+    )
+    assert run(marketplace, tenant).changed_skill_ids == [skill.id]
+    assert rows(session)[0].current_version_id != version
+
+
 def test_success_and_noop(
     session: Session,
     marketplace: Marketplace,

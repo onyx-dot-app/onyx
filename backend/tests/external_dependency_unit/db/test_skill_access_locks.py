@@ -121,11 +121,17 @@ def test_content_storage_does_not_hold_membership(
         file_store: FileStore,
         *,
         expected_name: str | None = None,
+        reject_plugins: bool = True,
         stored: bool = False,
     ) -> IngestedBundle:
         check_lock()
         return original_ingest(
-            content, filename, file_store, expected_name=expected_name, stored=stored
+            content,
+            filename,
+            file_store,
+            expected_name=expected_name,
+            reject_plugins=reject_plugins,
+            stored=stored,
         )
 
     def delete(file_store: FileStore, file_id: str) -> None:
@@ -241,6 +247,7 @@ def test_staged_patch_rechecks_content_and_access(
         file_store: FileStore,
         *,
         expected_name: str | None = None,
+        reject_plugins: bool = True,
         stored: bool = False,
     ) -> IngestedBundle:
         nonlocal raced, before
@@ -288,7 +295,12 @@ def test_staged_patch_rechecks_content_and_access(
                     other.commit()
                 before = stored_bundles(other)
         return ingest(
-            content, filename, file_store, expected_name=expected_name, stored=stored
+            content,
+            filename,
+            file_store,
+            expected_name=expected_name,
+            reject_plugins=reject_plugins,
+            stored=stored,
         )
 
     try:

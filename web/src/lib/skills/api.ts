@@ -12,7 +12,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 
 import type {
   CustomSkill,
-  GitHubSkillsImportResult,
+  SkillImportResult,
   Skill,
   SkillBundleContents,
   SkillEditableDetail,
@@ -52,11 +52,11 @@ async function handle<T>(res: Response): Promise<T> {
 export async function uploadSkillBundles(
   bundles: File[],
   sharing?: SkillShareUpdatePayload
-): Promise<GitHubSkillsImportResult> {
+): Promise<SkillImportResult> {
   const form = new FormData();
   for (const bundle of bundles) form.append("bundles", bundle);
   if (sharing) form.append("sharing", JSON.stringify(sharing));
-  return handle<GitHubSkillsImportResult>(
+  return handle<SkillImportResult>(
     await fetch("/api/skills/custom/batch", { method: "POST", body: form })
   );
 }

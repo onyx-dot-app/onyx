@@ -141,20 +141,20 @@ export interface SkillBundleContents {
   files: SkillBundleFile[];
 }
 
-export interface GitHubImportedSkill {
+export interface ImportedSkill {
   skill: CustomSkill;
   disabled_reason: string | null;
 }
 
-export interface GitHubSkillNotImported {
+export interface SkillNotImported {
   path: string;
   name: string;
   reason: string;
 }
 
-export interface GitHubSkillsImportResult {
-  imported: GitHubImportedSkill[];
-  not_imported: GitHubSkillNotImported[];
+export interface SkillImportResult {
+  imported: ImportedSkill[];
+  not_imported: SkillNotImported[];
 }
 
 export const skillVersionSchema = yup.object({
