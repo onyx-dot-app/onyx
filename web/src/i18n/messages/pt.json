@@ -17600,6 +17600,14 @@
         "placeholder": "Filtrar por grupo",
         "all": "Todos os grupos"
       }
+    },
+    "limit": {
+      "refusal": {
+        "title": "{limit, select, files {Limite de arquivos de habilidades atingido} other {Limite de tamanho de habilidades atingido}}",
+        "own": "Esta alteração deixaria suas habilidades com {size} em {files, plural, one {# arquivo} other {# arquivos}}. O limite é {maxSize} e {maxFiles, plural, one {# arquivo} other {# arquivos}}.{others, plural, =0 {} one { Também deixaria # outro usuário acima do limite.} other { Também deixaria # outros usuários acima do limite.}}",
+        "ownEstimated": "Esta alteração deixaria suas habilidades com cerca de {size} em {files, plural, one {# arquivo} other {# arquivos}}. A estimativa conta {unknown, plural, one {# habilidade ainda não medida} other {# habilidades ainda não medidas}} com o tamanho máximo permitido. O limite é {maxSize} e {maxFiles, plural, one {# arquivo} other {# arquivos}}.{others, plural, =0 {} one { Também deixaria # outro usuário acima do limite.} other { Também deixaria # outros usuários acima do limite.}}",
+        "affected": "Esta alteração deixaria {count, plural, one {# usuário} other {# usuários}} acima do {limit, select, files {limite de arquivos de habilidades} other {limite de tamanho de habilidades}}."
+      }
     }
   },
   "opensearchHealth": {
