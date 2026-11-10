@@ -310,9 +310,16 @@ outside that lock. Never combine cached totals with fresh per-entry inputs.
 A user may stay over 500 MiB or 5,000 files when the write does not grow that total.
 Writes that check: enable and disable (a disable can reveal a larger skill
 of the same name), auto-enable after upload, `replace_skill_bundle` (edit,
-restore) and ownership transfer. Group joins do not check. The 413 `PAYLOAD_TOO_LARGE` body
+restore), ownership transfer, marketplace access reset, and every
+`db/resource_access.py:mutate_resource_access` item. That loop captures
+`adapter.capture_skill_limit` before `adapter.write` and calls
+`adapter.assert_skill_limit` inside the item savepoint, so a bulk failure
+keeps old grants and other items. The marketplace adapter checks all live
+followers at once. Group joins do not check. The 413 `PAYLOAD_TOO_LARGE` body
 adds `skill_limit` (`skills/limits.py:SkillLimitViolation`): failed limit,
 affected user count, and the requesting user's proposed usage when they go over.
+Bulk failure rows retain the same nullable `skill_limit` payload beside `detail`,
+for sharing and enable/disable failures. Ordinary failures keep it null.
 App connection never fails for the limit.
 `db/skill.py:connect_external_app_within_skill_limit__no_commit` wraps the
 credential upsert in both connect routes (form and OAuth callback). It
@@ -351,7 +358,8 @@ new names get separate proposal variants; only acceptance reserves the name.
 Saved duplicate names use the winner ranks from accepted variants in that same
 snapshot. A hidden update cannot charge or refund the original winner twice.
 A validity change committed before the statement must affect every decision.
-A change during it is outside that statement's snapshot.
+A change during it is outside that statement's snapshot. The concurrency tests
+check both boundaries; the old mixed per-entry timing is not a snapshot contract.
 Accepted pointers publish atomically. Refused staged versions are deleted; old
 pointers and history remain. Accepted history is pruned through the existing
 version helper. Refused bundle files remain unused and eligible for cleanup.
