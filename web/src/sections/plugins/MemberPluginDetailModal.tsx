@@ -611,6 +611,12 @@ export function MemberPluginDetailContent({
           skillId={preview.id}
           fallbackTitle={preview.name}
           unavailableReason={preview.unavailable_reason}
+          historySkill={
+            preview.source === "custom"
+              ? { ...preview, source: "custom" }
+              : undefined
+          }
+          onBusyChange={setSaving}
           closeLabel={actions("mcpSetup.back")}
           onClose={() => setPreview(null)}
         />

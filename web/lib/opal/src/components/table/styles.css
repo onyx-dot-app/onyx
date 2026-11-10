@@ -62,6 +62,26 @@ table.tbl[data-row-height="content"]
   @apply py-1;
 }
 
+table.tbl[data-row-height="content"]
+  > thead
+  > tr
+  > .table-head
+  > div
+  > .table-head-label {
+  @apply min-w-0;
+}
+
+table.tbl[data-row-height="content"]
+  > thead
+  > tr
+  > .table-head
+  > div
+  > .table-head-label
+  > span {
+  @apply whitespace-normal;
+  overflow-wrap: anywhere;
+}
+
 /* Sort button wrapper */
 .table-head[data-size="2.75"] .table-head-sort {
   @apply py-1.5;

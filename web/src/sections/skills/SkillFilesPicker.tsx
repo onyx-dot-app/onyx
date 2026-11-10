@@ -47,9 +47,7 @@ export default function SkillFilesPicker({
         onChange(await prepareSkillFilesUpload(files));
       } catch (error) {
         console.error("Failed to prepare skill files", error);
-        onError(
-          error instanceof Error ? error.message : t("upload.error.readFailed")
-        );
+        onError(t("upload.error.readFailed"));
       } finally {
         setPreparing(false);
         onPreparingChange?.(false);

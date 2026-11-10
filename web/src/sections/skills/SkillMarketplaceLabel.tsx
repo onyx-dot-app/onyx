@@ -22,14 +22,16 @@ export default function SkillMarketplaceLabel({
         tooltip={t("source", { name: marketplace.name })}
       />
       {marketplace.folder && (
-        <Text
-          font="secondary-body"
-          color="text-03"
-          maxLines={1}
-          overflowTooltip
-        >
-          {marketplace.folder}
-        </Text>
+        <Section height="auto" alignItems="stretch" className="min-w-0">
+          <Text
+            font="secondary-body"
+            color="text-03"
+            maxLines={1}
+            overflowTooltip
+          >
+            {marketplace.folder}
+          </Text>
+        </Section>
       )}
     </Section>
   );

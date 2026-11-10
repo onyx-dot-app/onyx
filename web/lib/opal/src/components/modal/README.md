@@ -55,6 +55,8 @@ flow opens. Single-screen modals can keep the default `Modal.Content` overlay.
 | `description`                    | `string \| RichStr`            | Optional, also wired to `aria-describedby`                                                                                           |
 | `onClose`                        | `() => void`                   | Renders the close button, with a "Close" tooltip on its start side on pointer hover (not on focus, so Escape still closes the modal) |
 
+`reserveCloseSpace` (default `false`) reserves space beside the heading for the close button. Use it for narrow, icon-less headers.
+
 `children` render below the title stack (e.g. a search input).
 
 Use `maxHeight` to cap a content-sized modal, for example `height="fit" maxHeight="80dvh"`. The viewport limit still applies.

@@ -40,9 +40,10 @@ import {
   transferSkillOwnership,
   resetSkillMarketplaceAccess,
 } from "@/lib/skills/api";
-import { canShareSkill } from "@/lib/skills/permissions";
+import { canReadSkillHistory, canShareSkill } from "@/lib/skills/permissions";
 import type {
   CustomSkill,
+  SkillEditableDetail,
   SkillSharePermission,
   SkillInstallationPolicy,
 } from "@/lib/skills/types";
@@ -65,6 +66,9 @@ import {
 import { markdown } from "@opal/utils";
 import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
 
+import SkillVersions from "@/sections/skills/SkillVersions";
+import useScreenSize from "@opal/hooks/useScreenSize";
+
 type ShareModalView = "share" | "transfer" | "reset";
 
 type SkillShareDraftState = BaseShareDraftState<SkillSharePermission>;
@@ -84,14 +88,19 @@ type ShareSkillModalProps = {
       initialTab?: "details" | "sharing";
       fallbackTitle?: string | RichStr;
       onSaved: () => void;
+      onRestored?: (skill: SkillEditableDetail) => void;
+      restoreDisabled?: boolean;
     }
 );
 
 export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { open, onClose } = props;
+  const { isSmallScreen } = useScreenSize();
   const initialTab =
     props.mode === "edit" ? (props.initialTab ?? "sharing") : "sharing";
-  const [tab, setTab] = useState<"details" | "sharing">(initialTab);
+  const [tab, setTab] = useState<"details" | "sharing" | "versions">(
+    initialTab
+  );
   const [detailsVisited, setDetailsVisited] = useState(
     initialTab === "details"
   );
@@ -153,7 +162,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const [initialPolicy, setInitialPolicy] =
     useState<SkillInstallationPolicy>("AVAILABLE");
   const [showIndividualAccess, setShowIndividualAccess] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [sharingSaving, setSaving] = useState(false);
+  const [versionSaving, setVersionSaving] = useState(false);
+  const saving = sharingSaving || versionSaving;
   const [resetError, setResetError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
@@ -791,6 +802,40 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     );
   }
 
+  const header = (
+    <Modal.Header
+      padding={isSmallScreen ? 0 : 2}
+      reserveCloseSpace={isSmallScreen}
+      icon={
+        isSmallScreen
+          ? undefined
+          : view === "transfer"
+            ? SvgArrowExchange
+            : SvgBlocks
+      }
+      title={
+        view === "reset"
+          ? t("share.marketplace.reset")
+          : !skill
+            ? props.mode === "edit"
+              ? (props.fallbackTitle ?? t("preview.fallbackTitle"))
+              : t("share.accessTitle")
+            : view === "transfer"
+              ? markdown(t("share.header.transferTitle", { name: skill.name }))
+              : skill.name
+      }
+      description={
+        view !== "share" || (props.mode === "edit" && tab === "versions")
+          ? undefined
+          : props.mode === "edit"
+            ? loadedSkill?.description
+            : t("share.description")
+      }
+      gap={1}
+      onClose={saving ? undefined : closeModal}
+    />
+  );
+
   return (
     <Modal
       open={open}
@@ -802,32 +847,13 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         width={view === "share" ? "lg" : "sm"}
         maxHeight="80dvh"
       >
-        <Modal.Header
-          icon={view === "transfer" ? SvgArrowExchange : SvgBlocks}
-          title={
-            view === "reset"
-              ? t("share.marketplace.reset")
-              : !skill
-                ? props.mode === "edit"
-                  ? (props.fallbackTitle ?? t("preview.fallbackTitle"))
-                  : t("share.accessTitle")
-                : view === "transfer"
-                  ? markdown(
-                      t("share.header.transferTitle", { name: skill.name })
-                    )
-                  : skill.name
-          }
-          description={
-            view !== "share"
-              ? undefined
-              : props.mode === "edit"
-                ? loadedSkill?.description
-                : t("share.description")
-          }
-          gap={1}
-          onClose={saving ? undefined : closeModal}
-        />
-        <Modal.Body twoTone={false} alignItems="stretch">
+        {!isSmallScreen && header}
+        <Modal.Body
+          twoTone={false}
+          alignItems="stretch"
+          padding={isSmallScreen ? 2 : 4}
+        >
+          {isSmallScreen && header}
           {loadError ? (
             <Text>{skillCopy("editor.loadError.description")}</Text>
           ) : !skill || !draftState ? (
@@ -856,22 +882,32 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           ) : props.mode === "edit" ? (
             <Tabs
               value={tab}
-              variant="contained"
-              gap={6}
+              variant="underline"
+              gap={isSmallScreen ? 3 : 6}
               onValueChange={(value) => {
-                if (saving || (value !== "details" && value !== "sharing"))
+                if (
+                  saving ||
+                  (value !== "details" &&
+                    value !== "sharing" &&
+                    value !== "versions")
+                )
                   return;
                 setTab(value);
                 if (value === "details") setDetailsVisited(true);
               }}
             >
-              <Tabs.List>
+              <Tabs.List enableScrollArrows>
                 <Tabs.Trigger value="details" disabled={saving}>
                   {t("tabs.details")}
                 </Tabs.Trigger>
                 <Tabs.Trigger value="sharing" disabled={saving}>
                   {t("tabs.sharing")}
                 </Tabs.Trigger>
+                {loadedSkill && canReadSkillHistory(loadedSkill) && (
+                  <Tabs.Trigger value="versions" disabled={saving}>
+                    {skillCopy("versions.title")}
+                  </Tabs.Trigger>
+                )}
               </Tabs.List>
               <Tabs.Content
                 value="details"
@@ -885,6 +921,19 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   />
                 )}
               </Tabs.Content>
+              {loadedSkill && canReadSkillHistory(loadedSkill) && (
+                <Tabs.Content value="versions">
+                  <SkillVersions
+                    skill={loadedSkill}
+                    onBusyChange={setVersionSaving}
+                    restoreDisabled={props.restoreDisabled}
+                    onRestored={(restored) => {
+                      props.onRestored?.(restored);
+                      props.onSaved();
+                    }}
+                  />
+                </Tabs.Content>
+              )}
               <Tabs.Content
                 value="sharing"
                 keepMounted
@@ -897,7 +946,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             renderSharingContent()
           )}
         </Modal.Body>
-        <Modal.Footer justifyContent="between">
+        <Modal.Footer justifyContent="between" padding={isSmallScreen ? 2 : 4}>
           {view !== "share" ? (
             <Button
               disabled={saving}
