@@ -5262,7 +5262,7 @@
             "targetUriParseFailed": "No se pudo analizar el URI de destino — se usan los valores originales."
           },
           "validation": {
-            "targetUriInvalid": "El URI de destino debe ser una URL válida con el parámetro de consulta api-version y, o bien un nombre de implementación en la ruta, o bien /openai/responses",
+            "targetUriInvalid": "El URI de destino debe ser una URL válida: una URL /openai/v1/ o una URL con el parámetro de consulta api-version y, o bien un nombre de implementación en la ruta, o bien /openai/responses",
             "targetUriRequired": "El URI de destino es obligatorio"
           }
         },
