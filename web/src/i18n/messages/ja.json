@@ -12210,6 +12210,10 @@
         "connectApp": "このスキルを使用するには、アプリページでアプリ「{app}」を接続してください。",
         "invalid": "このスキルは無効です。削除して新しいスキルを作成してください。",
         "unavailable": "このスキルは現在利用できません。クリックすると詳細を表示します。"
+      },
+      "limit": {
+        "retry": "オフ: スキルが{limit, select, files {ファイル数の上限} other {サイズの上限}}を超えます。空きを作ってからオンにしてください。",
+        "reconnect": "オフ: スキルが{limit, select, files {ファイル数の上限} other {サイズの上限}}を超えます。空きを作ってから {app} を再接続してください。"
       }
     }
   },
@@ -17632,6 +17636,14 @@
         "loadError": "スキルの使用量を読み込めませんでした",
         "retry": "再試行",
         "loading": "スキルの使用量を確認しています…"
+      },
+      "app": {
+        "title": "{count, plural, one {{app} の # 件のスキルがオフです} other {{app} の # 件のスキルがオフです}}",
+        "description": "{app} は接続されましたが、これらのスキルによりスキルが{limit, select, files {ファイル数の上限} other {サイズの上限}}を超えます。{retry, select, toggle {空きを作ってからオンにしてください。} other {空きを作ってから {app} を再接続してください。}}",
+        "usage": "スキルの使用量は {maxSize} 中 {size}、{maxFiles, number} 中 {files, plural, one {# ファイル} other {# ファイル}} です。",
+        "usageEstimated": "スキルの使用量は推定で {maxSize} 中 {size}、{maxFiles, number} 中 {files, plural, one {# ファイル} other {# ファイル}} です。この推定では、まだ測定されていないスキルを許容される最大サイズとして数えています。",
+        "manage": "スキルを管理",
+        "disconnectToReconnect": "切断して再接続"
       }
     }
   },

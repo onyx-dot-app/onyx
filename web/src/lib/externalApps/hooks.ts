@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import isEqual from "lodash/isEqual";
 import useUserSkills from "@/hooks/useUserSkills";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
+import type { Skill } from "@/lib/skills/types";
 
 export function useSyncedAssociatedSkillIds(
   app: ExternalAppAdminResponse | null
@@ -44,4 +45,21 @@ export function useExternalAppsWithSkillIssues(enabled = true): Set<number> {
 
 export function useExternalAppSkillIssues(appId: number): boolean {
   return useExternalAppsWithSkillIssues().has(appId);
+}
+
+/** The app's Skills that its connection left off for the Skill limit. */
+export function useExternalAppSkillLimitBlocks(
+  appId: number,
+  enabled = true
+): Skill[] {
+  const { data } = useUserSkills(enabled);
+  return useMemo(
+    () =>
+      [...(data?.builtins ?? []), ...(data?.customs ?? [])].filter(
+        (skill) =>
+          skill.external_app?.external_app_id === appId &&
+          Boolean(skill.skill_limit_block)
+      ),
+    [data, appId]
+  );
 }

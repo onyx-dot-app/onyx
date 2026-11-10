@@ -372,6 +372,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         is_available: b.is_available,
         unavailable_reason: b.unavailable_reason,
         external_app: b.external_app,
+        skill_limit_block: b.skill_limit_block,
       }));
     const customItems: SkillCardItem[] = data.customs
       .filter((c): c is CustomSkill => c.source === "custom")
@@ -386,6 +387,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
         can_toggle: c.can_toggle,
         external_app: c.external_app,
+        skill_limit_block: c.skill_limit_block,
       }));
     const groupRank = (item: SkillCardItem): number => {
       switch (item.source) {

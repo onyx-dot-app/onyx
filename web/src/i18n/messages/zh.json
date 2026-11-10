@@ -12210,6 +12210,10 @@
         "connectApp": "请在“应用”页面连接应用“{app}”，以使用此技能。",
         "invalid": "此技能无效。请删除它并创建新技能。",
         "unavailable": "技能当前不可用。点击查看详情。"
+      },
+      "limit": {
+        "retry": "已关闭：它会使你的技能超出{limit, select, files {文件数上限} other {大小上限}}。请先腾出空间，然后再开启。",
+        "reconnect": "已关闭：它会使你的技能超出{limit, select, files {文件数上限} other {大小上限}}。请先腾出空间，然后重新连接 {app}。"
       }
     }
   },
@@ -17632,6 +17636,14 @@
         "loadError": "无法加载技能用量",
         "retry": "重试",
         "loading": "正在检查技能用量…"
+      },
+      "app": {
+        "title": "{count, plural, one {{app} 的 # 个技能已关闭} other {{app} 的 # 个技能已关闭}}",
+        "description": "{app} 已连接，但这些技能会使你的技能超出{limit, select, files {文件数上限} other {大小上限}}。{retry, select, toggle {请先腾出空间，然后再开启它们。} other {请先腾出空间，然后重新连接 {app}。}}",
+        "usage": "你的技能使用了 {maxSize} 中的 {size}，以及 {maxFiles, number} 个文件中的 {files, plural, one {# 个} other {# 个}}。",
+        "usageEstimated": "你的技能估计使用了 {maxSize} 中的 {size}，以及 {maxFiles, number} 个文件中的 {files, plural, one {# 个} other {# 个}}。该估计将尚未测量的技能按允许的最大大小计算。",
+        "manage": "管理技能",
+        "disconnectToReconnect": "断开后重新连接"
       }
     }
   },

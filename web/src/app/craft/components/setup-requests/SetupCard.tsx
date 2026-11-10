@@ -25,6 +25,7 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import SkillLimitAppNotice from "@/sections/skills/SkillLimitAppNotice";
 
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
@@ -54,6 +55,7 @@ export default function SetupCard({
 }: SetupCardProps) {
   const t = useTranslations("craft.setupCard");
   const tActionPolicies = useTranslations("craft.actionPolicies");
+  const tLimit = useTranslations("skills.limit.app");
   const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
@@ -102,6 +104,7 @@ export default function SetupCard({
       if (result === "connected") {
         void mutate(SWR_KEYS.buildExternalApps);
         void mutate(SWR_KEYS.userSkills);
+        void mutate(SWR_KEYS.skillLimitMe);
       }
     },
     [requestId, mutate, t]
@@ -242,6 +245,22 @@ export default function SetupCard({
               {tActionPolicies("title")}
             </Button>
           )}
+          {connected && (
+            <SkillLimitAppNotice
+              appId={externalAppId}
+              appName={appName}
+              action={
+                <Button
+                  prominence="secondary"
+                  {...navigation.linkTo(
+                    `/craft/v1/skills?externalAppId=${externalAppId}`
+                  )}
+                >
+                  {tLimit("manage")}
+                </Button>
+              }
+            />
+          )}
         </div>
       </CometEdge>
     );
@@ -298,7 +317,9 @@ export default function SetupCard({
             logo={getAppTypeLogo(userApp.app_type)}
             credentialKeys={userApp.credential_keys}
             credentialValues={userApp.credential_values}
-            save={(values) => upsertUserCredentials(userApp.id, values)}
+            save={async (values) => {
+              await upsertUserCredentials(userApp.id, values);
+            }}
           />
         )}
       </div>

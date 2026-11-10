@@ -12210,6 +12210,10 @@
         "connectApp": "이 스킬을 사용하려면 앱 페이지에서 앱 “{app}”을(를) 연결하세요.",
         "invalid": "이 스킬은 잘못되었습니다. 삭제하고 새 스킬을 만드세요.",
         "unavailable": "현재 이 스킬을 사용할 수 없습니다. 클릭하여 자세히 보세요."
+      },
+      "limit": {
+        "retry": "꺼짐: 스킬이 {limit, select, files {파일 수 한도} other {크기 한도}}를 넘게 됩니다. 공간을 확보한 후 켜세요.",
+        "reconnect": "꺼짐: 스킬이 {limit, select, files {파일 수 한도} other {크기 한도}}를 넘게 됩니다. 공간을 확보한 후 {app}을(를) 다시 연결하세요."
       }
     }
   },
@@ -17632,6 +17636,14 @@
         "loadError": "스킬 사용량을 불러올 수 없습니다",
         "retry": "다시 시도",
         "loading": "스킬 사용량 확인 중…"
+      },
+      "app": {
+        "title": "{count, plural, one {{app}의 스킬 #개가 꺼져 있습니다} other {{app}의 스킬 #개가 꺼져 있습니다}}",
+        "description": "{app}이(가) 연결되었지만 이 스킬들로 인해 스킬이 {limit, select, files {파일 수 한도} other {크기 한도}}를 넘게 됩니다. {retry, select, toggle {공간을 확보한 후 켜세요.} other {공간을 확보한 후 {app}을(를) 다시 연결하세요.}}",
+        "usage": "스킬이 {maxSize} 중 {size}, {maxFiles, number}개 중 {files, plural, one {파일 #개} other {파일 #개}}를 사용합니다.",
+        "usageEstimated": "스킬이 {maxSize} 중 약 {size}, {maxFiles, number}개 중 {files, plural, one {파일 #개} other {파일 #개}}를 사용합니다. 이 추정치는 아직 측정되지 않은 스킬을 허용되는 최대 크기로 계산합니다.",
+        "manage": "스킬 관리",
+        "disconnectToReconnect": "연결 해제 후 다시 연결"
       }
     }
   },

@@ -3,6 +3,7 @@ import {
   disconnectUserFromApp,
   updateExternalApp,
   startExternalAppOAuth,
+  upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 
 describe("createCustomExternalApp", () => {
@@ -66,5 +67,20 @@ describe("createCustomExternalApp", () => {
         associated_skill_ids: ["skill-a", "skill-b"],
       }),
     });
+  });
+});
+
+describe("upsertUserCredentials", () => {
+  it("returns app Skills a successful connection left off for the limit", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ skill_limit_blocked_skill_ids: ["skill-a"] })
+        )
+      );
+    await expect(
+      upsertUserCredentials(17, { token: "secret" })
+    ).resolves.toEqual({ skill_limit_blocked_skill_ids: ["skill-a"] });
   });
 });

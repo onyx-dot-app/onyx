@@ -413,6 +413,54 @@ describe("SkillCard", () => {
     ).toBeChecked();
   });
 
+  it.each([
+    {
+      can_toggle: true,
+      limit: "bytes" as const,
+      text: "Off: it would put your skills over the size limit. Make room, then turn it on.",
+      switch: true,
+    },
+    {
+      can_toggle: false,
+      limit: "files" as const,
+      text: "Off: it would put your skills over the file limit. Make room, then reconnect Acme CRM.",
+      switch: false,
+    },
+  ])(
+    "explains an app skill the $limit limit left off (toggle: $can_toggle)",
+    ({ can_toggle, limit, text, switch: hasSwitch }) => {
+      render(
+        <SkillCard
+          item={{
+            ...custom({
+              enabled: false,
+              can_toggle,
+              external_app: {
+                external_app_id: 42,
+                name: "Acme CRM",
+                enabled: true,
+                ready: true,
+              },
+            }),
+            skill_limit_block: limit,
+          }}
+        />
+      );
+
+      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(screen.queryByText("Uses app “Acme CRM”")).not.toBeInTheDocument();
+      if (hasSwitch) {
+        expect(
+          screen.getByRole("switch", {
+            name: "Enable Report Writer for Acme CRM",
+          })
+        ).not.toBeChecked();
+      } else {
+        expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      }
+    }
+  );
+
   it("shows a selected ready associated skill as active", () => {
     const { container } = render(
       <SkillCard

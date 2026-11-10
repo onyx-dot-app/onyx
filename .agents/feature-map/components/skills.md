@@ -150,6 +150,14 @@ keeps drafts and bulk selection. Library toggles roll back their optimistic stat
 Marketplace response schemas validate per-entry blocks before the detail dialog
 shows the failed limit and affected count. Generic blocked reasons remain visible.
 These messages do not grant authority or replace server write checks.
+App blocks use the server's `skill_limit_block` and `can_toggle`; the client
+never makes Required or built-in Skills toggleable. App details offer Review
+skills for toggleable blocks. Required or built-in blocks on user-owned
+connections open the existing disconnect confirmation through Disconnect to
+reconnect. Mixed blocks offer both actions. Cancel leaves the connection intact. The notice shows current
+charged usage, separately from last-delivery omission counts. Connection
+completion refreshes Skill and own-usage caches. Shared TextButton actions use
+native buttons for keyboard activation without submitting surrounding forms.
 `web/src/sections/skills/SkillLimitUsers.tsx` mounts in the global manager's
 admin Skills page. It distinguishes charged estimates from last-delivery
 omissions, including null for no recorded delivery. Narrow rows stack their

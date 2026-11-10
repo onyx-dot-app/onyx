@@ -32,6 +32,10 @@ already has credentials. It shows Connected only after the decision succeeds,
 and stays retryable after a failure. When the user declines, the agent gets a
 rejection and can choose another way.
 
+A connected app can show a Skill write-limit warning without losing its connection.
+The client lists blocked Skills and offers retry or confirmed reconnect according
+to the server's toggle authority. See [[skills]] for usage and refusal contracts.
+
 The user can set personal Auto-approve, Ask or Disabled choices per action when
 the admin allows it. A scheduled task has its own choices
 ([[craft-scheduled-tasks]]).

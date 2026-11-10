@@ -15,5 +15,5 @@
 ============================================================================ */
 
 .opal-text-label {
-  @apply bg-transparent;
+  @apply min-w-0 max-w-full bg-transparent text-start;
 }

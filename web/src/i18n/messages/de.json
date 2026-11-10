@@ -12210,6 +12210,10 @@
         "connectApp": "Verbinden Sie die App “{app}” auf der Apps-Seite, um diesen Skill zu verwenden.",
         "invalid": "Dieser Skill ist ungültig. Löschen Sie ihn und erstellen Sie einen neuen Skill.",
         "unavailable": "Der Skill ist derzeit nicht verfügbar. Klicken Sie, um Details anzuzeigen."
+      },
+      "limit": {
+        "retry": "Aus: Ihre Skills würden das {limit, select, files {Dateilimit} other {Größenlimit}} überschreiten. Schaffen Sie Platz und aktivieren Sie ihn dann.",
+        "reconnect": "Aus: Ihre Skills würden das {limit, select, files {Dateilimit} other {Größenlimit}} überschreiten. Schaffen Sie Platz und verbinden Sie {app} dann erneut."
       }
     }
   },
@@ -17632,6 +17636,14 @@
         "loadError": "Skill-Nutzung konnte nicht geladen werden",
         "retry": "Erneut versuchen",
         "loading": "Skill-Nutzung wird geprüft …"
+      },
+      "app": {
+        "title": "{count, plural, one {# Skill für {app} ist aus} other {# Skills für {app} sind aus}}",
+        "description": "{app} ist verbunden, aber diese Skills würden Ihre Skills über das {limit, select, files {Dateilimit} other {Größenlimit}} bringen. {retry, select, toggle {Schaffen Sie Platz und aktivieren Sie sie dann.} other {Schaffen Sie Platz und verbinden Sie {app} dann erneut.}}",
+        "usage": "Ihre Skills belegen {size} von {maxSize} und {files, plural, one {# Datei} other {# Dateien}} von {maxFiles, number}.",
+        "usageEstimated": "Ihre Skills belegen geschätzt {size} von {maxSize} und {files, plural, one {# Datei} other {# Dateien}} von {maxFiles, number}. Die Schätzung zählt noch nicht gemessene Skills mit der größten zulässigen Größe.",
+        "manage": "Skills verwalten",
+        "disconnectToReconnect": "Trennen und erneut verbinden"
       }
     }
   },
