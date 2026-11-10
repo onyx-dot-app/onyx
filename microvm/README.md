@@ -353,6 +353,10 @@ message). The image ID is the zip's SHA256. The agent:
 4. writes `<id>.json` (ext4 SHA256, size, UUID, file count). A repeat upload of the same zip returns the
    image without reading the data.
 
+At most `--managed-max-builds` (default 1) uploads do steps 1 to 4 at once on a node; the others wait
+before they read their data. So the disk and tmpfs use of uploads together stays within one bundle limit
+per build.
+
 GC (after each upload and swap) keeps the `--managed-keep` (default 3) newest images, every image that
 a VM has behind a slot, and the image of a swap that runs. It does not touch an image while its upload
 runs. Each VM chroot has its own reflink copy, so GC never changes a running VM.
@@ -388,7 +392,7 @@ the guest does not mount or read the device during the change: the idle slot che
 the device fails with `EBUSY` while any mount holds it) gives that.
 
 Flags: `--managed-keep` (3), `--managed-max-zip-mib` (256), `--managed-max-mib` (512),
-`--managed-max-files` (50000), `--managed-swap-timeout` (30 s per VM).
+`--managed-max-files` (50000), `--managed-max-builds` (1), `--managed-swap-timeout` (30 s per VM).
 
 Errors: `MANAGED_IMAGE_MISSING`, `MANAGED_BUNDLE_INVALID`, `MANAGED_SWAP_UNSUPPORTED` (layout 2 template,
 or a daemon without `MountManaged`), `MANAGED_SLOT_BUSY`, `MANAGED_MOUNT_FAILED` (the old drive stays

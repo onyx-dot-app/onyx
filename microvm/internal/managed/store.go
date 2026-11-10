@@ -86,8 +86,13 @@ type Store struct {
 	Mkfs   Mkfs
 	Log    *slog.Logger
 	Now    func() time.Time
+	// MaxBuilds is the most uploads that receive and build at once on the
+	// node (0 means 1). The per-bundle limits do not bound their sum.
+	MaxBuilds int
 
 	mu sync.Mutex
+	// slots holds one token per running upload (MaxBuilds).
+	slots chan struct{}
 	// building serializes builds of the same image.
 	building map[string]*sync.Mutex
 	// verified holds the file identity of images whose hash was checked.
@@ -210,6 +215,22 @@ func (s *Store) lockID(id string) func() {
 	return l.Unlock
 }
 
+// acquire waits for a node-wide upload slot or for ctx to end.
+func (s *Store) acquire(ctx context.Context) (func(), error) {
+	s.mu.Lock()
+	if s.slots == nil {
+		s.slots = make(chan struct{}, max(s.MaxBuilds, 1))
+	}
+	slots := s.slots
+	s.mu.Unlock()
+	select {
+	case slots <- struct{}{}:
+		return func() { <-slots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 // Put reads a bundle zip of size bytes with SHA256 id from r and builds its
 // image, unless the image is already there. It returns built false then.
 // Errors that wrap ErrBundle are the caller's fault.
@@ -225,6 +246,11 @@ func (s *Store) Put(ctx context.Context, id string, size int64, r io.Reader) (Im
 	if img, err := s.Get(id); err == nil {
 		return img, false, nil
 	}
+	release, err := s.acquire(ctx)
+	if err != nil {
+		return Image{}, false, err
+	}
+	defer release()
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return Image{}, false, err
 	}

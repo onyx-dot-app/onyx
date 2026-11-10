@@ -82,6 +82,7 @@ type flags struct {
 	managedZipMiB int64
 	managedMaxMiB int64
 	managedFiles  int
+	managedBuilds int
 	swapTimeout   time.Duration
 }
 
@@ -124,6 +125,7 @@ func main() {
 	flag.Int64Var(&f.managedZipMiB, "managed-max-zip-mib", managed.DefaultLimits.MaxZipBytes>>20, "largest managed bundle zip")
 	flag.Int64Var(&f.managedMaxMiB, "managed-max-mib", managed.DefaultLimits.MaxBytes>>20, "most file content of a managed bundle after unzip (the tmpfs stage size)")
 	flag.IntVar(&f.managedFiles, "managed-max-files", managed.DefaultLimits.MaxEntries, "most files and directories in a managed bundle")
+	flag.IntVar(&f.managedBuilds, "managed-max-builds", 1, "most managed bundle uploads that receive and build at once")
 	flag.DurationVar(&f.swapTimeout, "managed-swap-timeout", 30*time.Second, "limit for the managed drive swap of one VM")
 	flag.Parse()
 
@@ -238,7 +240,8 @@ func run(f flags, log *slog.Logger) error {
 	}
 	mstore := &managed.Store{
 		Dir: filepath.Join(f.dataDir, "managed"), Stager: managed.TmpfsStager{}, Log: log,
-		Limits: managed.Limits{MaxZipBytes: f.managedZipMiB << 20, MaxBytes: f.managedMaxMiB << 20, MaxEntries: f.managedFiles},
+		Limits:    managed.Limits{MaxZipBytes: f.managedZipMiB << 20, MaxBytes: f.managedMaxMiB << 20, MaxEntries: f.managedFiles},
+		MaxBuilds: f.managedBuilds,
 	}
 	if err := mstore.CleanStaging(managed.Unmount); err != nil {
 		return err
@@ -411,9 +414,9 @@ func checkRanges(f flags) error {
 		return fmt.Errorf("bad template shape --template-vcpus %d --template-mem-mib %d --template-scratch-gib %d --template-keep %d",
 			f.tplVCPUs, f.tplMemMiB, f.tplScratchGiB, f.tplKeep)
 	}
-	if f.managedKeep < 1 || f.managedZipMiB < 1 || f.managedMaxMiB < 1 || f.managedFiles < 1 || f.swapTimeout <= 0 {
-		return fmt.Errorf("bad managed limits --managed-keep %d --managed-max-zip-mib %d --managed-max-mib %d --managed-max-files %d --managed-swap-timeout %v",
-			f.managedKeep, f.managedZipMiB, f.managedMaxMiB, f.managedFiles, f.swapTimeout)
+	if f.managedKeep < 1 || f.managedZipMiB < 1 || f.managedMaxMiB < 1 || f.managedFiles < 1 || f.managedBuilds < 1 || f.swapTimeout <= 0 {
+		return fmt.Errorf("bad managed limits --managed-keep %d --managed-max-zip-mib %d --managed-max-mib %d --managed-max-files %d --managed-max-builds %d --managed-swap-timeout %v",
+			f.managedKeep, f.managedZipMiB, f.managedMaxMiB, f.managedFiles, f.managedBuilds, f.swapTimeout)
 	}
 	if f.maxScratchGiB > math.MaxUint32 {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)

@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -333,6 +334,70 @@ func TestStoreGCKeepsPinnedAndBuildingImages(t *testing.T) {
 	}
 	if _, err := os.Stat(stray); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("GC left an unfinished image file: %v", err)
+	}
+}
+
+type signalReader struct {
+	r    *bytes.Reader
+	read chan struct{}
+	once sync.Once
+}
+
+func (r *signalReader) Read(p []byte) (int, error) {
+	r.once.Do(func() { close(r.read) })
+	return r.r.Read(p)
+}
+
+// Uploads of different bundles share one node-wide slot: the second does
+// not read its data while the first builds.
+func TestStorePutSharesNodeLimit(t *testing.T) {
+	var calls []string
+	mkfs := fakeMkfs(&calls)
+	inMkfs, finish := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s := &Store{Dir: t.TempDir(), Limits: DefaultLimits, Mkfs: func(ctx context.Context, path, dir string, size int64, uuid string, inodes int) error {
+		once.Do(func() { close(inMkfs); <-finish })
+		return mkfs(ctx, path, dir, size, uuid, inodes)
+	}}
+	z1 := makeZip(t, entry{name: "a", data: "1"})
+	z2 := makeZip(t, entry{name: "b", data: "2"})
+	first := make(chan error, 1)
+	go func() {
+		_, _, err := s.Put(context.Background(), sum(z1), int64(len(z1)), bytes.NewReader(z1))
+		first <- err
+	}()
+	<-inMkfs
+	r2 := &signalReader{r: bytes.NewReader(z2), read: make(chan struct{})}
+	second := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_, _, err := s.Put(ctx, sum(z2), int64(len(z2)), r2)
+		second <- err
+	}()
+	select {
+	case <-r2.read:
+		t.Fatal("the second upload read its data while the first one built")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(finish)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-second; err != nil {
+		t.Fatal(err)
+	}
+	// A waiting upload ends with its context.
+	release, err := s.acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	cctx, ccancel := context.WithCancel(context.Background())
+	ccancel()
+	z3 := makeZip(t, entry{name: "c", data: "3"})
+	if _, _, err := s.Put(cctx, sum(z3), int64(len(z3)), bytes.NewReader(z3)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("waiting upload with a cancelled context: %v", err)
 	}
 }
 
