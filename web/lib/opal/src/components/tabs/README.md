@@ -97,6 +97,10 @@ Every label renders as an Opal `Content` with `color="interactive"`: each tab is
 
 When tabs overflow the available width, show navigation arrows:
 
+Resizing the row keeps the selected tab in view. Scrolling with the arrows
+does not change the selection or move the page vertically.
+Changing a tab's width without resizing the row preserves the user's scroll position.
+
 ```tsx
 <Tabs variant="pill">
   <Tabs.List enableScrollArrows>

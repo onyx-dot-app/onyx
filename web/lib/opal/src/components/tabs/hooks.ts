@@ -170,7 +170,24 @@ export function useHorizontalScroll(
 
     const rafId = requestAnimationFrame(updateScrollState);
     container.addEventListener("scroll", updateScrollState);
-    const resizeObserver = new ResizeObserver(updateScrollState);
+    let previousWidth = container.clientWidth;
+    const resizeObserver = new ResizeObserver(() => {
+      const widthChanged = container.clientWidth !== previousWidth;
+      previousWidth = container.clientWidth;
+      const selected = container.querySelector<HTMLElement>(
+        '[role="tab"][data-state="active"]'
+      );
+      if (selected && widthChanged) {
+        const frame = container.getBoundingClientRect();
+        const tab = selected.getBoundingClientRect();
+        const left = frame.left + container.clientLeft;
+        const right = left + container.clientWidth;
+        const offset =
+          tab.left < left ? tab.left - left : Math.max(0, tab.right - right);
+        if (offset) container.scrollBy({ left: offset, behavior: "instant" });
+      }
+      updateScrollState();
+    });
     resizeObserver.observe(container);
     Array.from(container.children).forEach((child) =>
       resizeObserver.observe(child)
