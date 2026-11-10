@@ -12,7 +12,10 @@ import {
   Modal,
   Tabs,
   Text,
+  TextButton,
 } from "@opal/components";
+import { Section } from "@opal/layouts";
+import useScreenSize from "@opal/hooks/useScreenSize";
 import useSWR, { useSWRConfig } from "swr";
 import type {
   MCPUserPreferences,
@@ -41,9 +44,14 @@ import {
   getActionIcon,
 } from "@/lib/tools/utils";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
-import { useExternalAppSkillIssues } from "@/lib/externalApps/hooks";
+import {
+  useExternalAppSkillIssues,
+  useExternalAppSkillLimitBlocks,
+} from "@/lib/externalApps/hooks";
+import SkillLimitAppNotice from "@/sections/skills/SkillLimitAppNotice";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 import useUserSkills from "@/hooks/useUserSkills";
+import { useSkillErrorMessage } from "@/lib/skills/hooks";
 import type { Skill, SkillsList } from "@/lib/skills/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -130,7 +138,9 @@ function MemberDetailTabs({
         keepMounted
         hidden={toolsTab !== "connection"}
       >
-        <div className="flex flex-col gap-6">{connection}</div>
+        <Section height="auto" alignItems="stretch" gap={6}>
+          {connection}
+        </Section>
       </Tabs.Content>
       <Tabs.Content value="tools">
         {secondaryTab === "skills" ? (
@@ -173,32 +183,78 @@ function MemberDetailTabs({
 
 function ExternalAppSkillRecovery({
   appId,
+  appName,
   onReview,
+  onDisconnect,
+  pending,
 }: {
   appId: number;
+  appName: string;
   onReview: () => void;
+  onDisconnect: (() => void) | undefined;
+  pending: boolean;
 }) {
   const t = useTranslations("craft.apps.page");
   const detailCopy = useTranslations("actions.memberPlugins.detail");
+  const limitCopy = useTranslations("skills.limit.app");
   const needsSkills = useExternalAppSkillIssues(appId);
+  const limitBlocked = useExternalAppSkillLimitBlocks(appId);
+  const needsReconnect = limitBlocked.some((skill) => !skill.can_toggle);
+  if (limitBlocked.length > 0) {
+    return (
+      <SkillLimitAppNotice
+        appId={appId}
+        appName={appName}
+        action={
+          <Section height="auto" alignItems="start" gap={1}>
+            {limitBlocked.some((skill) => skill.can_toggle) && (
+              <TextButton nowrap={false} onClick={onReview}>
+                {t("reviewSkillsButton")}
+              </TextButton>
+            )}
+            {needsReconnect && onDisconnect && (
+              <TextButton
+                nowrap={false}
+                disabled={pending}
+                onClick={onDisconnect}
+              >
+                {limitCopy("disconnectToReconnect")}
+              </TextButton>
+            )}
+          </Section>
+        }
+      />
+    );
+  }
   if (!needsSkills) return null;
   return (
     <Card border="solid" padding={4}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+      <Section
+        height="auto"
+        flexDirection="row"
+        justifyContent="between"
+        wrap
+        gap={3}
+      >
+        <Section
+          height="auto"
+          flexDirection="row"
+          gap={3}
+          className="min-w-0 flex-1"
+        >
           <span
             aria-hidden
             className="size-2 shrink-0 rounded-full bg-status-warning-05"
           />
-          <div className="flex min-w-0 flex-col gap-1">
+          <Section height="auto" alignItems="start" gap={1} className="min-w-0">
             <Text font="main-ui-action">{detailCopy("issuesTitle")}</Text>
             <Text font="secondary-body" color="text-03">
               {t("status.skillWarningTooltip")}
             </Text>
-          </div>
-        </div>
+          </Section>
+        </Section>
         <Button onClick={onReview}>{t("reviewSkillsButton")}</Button>
-      </div>
+      </Section>
     </Card>
   );
 }
@@ -225,9 +281,11 @@ export function MemberPluginDetailContent({
 }: MemberPluginDetailModalProps) {
   const t = useTranslations("actions.memberPlugins");
   const navigation = useNavigation();
+  const { isMobile } = useScreenSize();
   const craftEnabled = useSettings().onyx_craft_enabled === true;
   const actions = useTranslations("actions");
   const switchCopy = useTranslations("skills.page.switchModal");
+  const skillErrorMessage = useSkillErrorMessage();
   const { data: skills } = useUserSkills(
     craftEnabled && plugin.kind === "external-app"
   );
@@ -442,9 +500,7 @@ export function MemberPluginDetailContent({
       }
       onClose();
     } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : t("defaults.saveFailed")
-      );
+      setSaveError(skillErrorMessage(error, t("defaults.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -626,12 +682,20 @@ export function MemberPluginDetailContent({
             icon={icon}
             title={confirming ? t("detail.disconnectTitle", { name }) : name}
             description={
-              confirming ? t("detail.disconnectDescription") : description
+              confirming
+                ? t("detail.disconnectDescription")
+                : isMobile
+                  ? undefined
+                  : description
             }
             onClose={close}
             gap={!confirming ? 1 : undefined}
           />
-          <Modal.Body twoTone={false} alignItems="stretch">
+          <Modal.Body
+            twoTone={false}
+            alignItems="stretch"
+            padding={isMobile ? 0 : 2}
+          >
             {confirming ? (
               <>
                 {plugin.kind === "openapi" && (
@@ -649,6 +713,11 @@ export function MemberPluginDetailContent({
               </>
             ) : (
               <>
+                {isMobile && description && (
+                  <Text as="p" font="main-ui-body" color="text-03">
+                    {description}
+                  </Text>
+                )}
                 <MemberDetailTabs
                   enabled={hasTabs}
                   secondaryTab={
@@ -662,7 +731,7 @@ export function MemberPluginDetailContent({
                   }}
                   availableActions={
                     showApprovals ? (
-                      <div className="flex flex-col gap-4">
+                      <Section height="auto" alignItems="stretch" gap={4}>
                         {policyApp ? (
                           <MemberMCPToolsList
                             tools={policyApp.actions
@@ -679,13 +748,13 @@ export function MemberPluginDetailContent({
                         ) : (
                           policyLoadState
                         )}
-                      </div>
+                      </Section>
                     ) : undefined
                   }
                   approvalsLoading={!policyApp && !policyLoadError}
                   approvals={
                     showApprovals ? (
-                      <div className="flex flex-col gap-4">
+                      <Section height="auto" alignItems="stretch" gap={4}>
                         {policyApp ? (
                           <PolicyEditor
                             showTitle={false}
@@ -710,16 +779,26 @@ export function MemberPluginDetailContent({
                         ) : (
                           policyLoadState
                         )}
-                      </div>
+                      </Section>
                     ) : undefined
                   }
                   connection={
                     <>
-                      <Card border="solid" padding={4}>
-                        <div className="flex items-center justify-between gap-4">
-                          <div
+                      <Card border="solid" padding={2}>
+                        <Section
+                          height="auto"
+                          flexDirection={isMobile ? "column" : "row"}
+                          alignItems={isMobile ? "start" : "center"}
+                          justifyContent="between"
+                          gap={4}
+                        >
+                          <Section
                             role="status"
-                            className="flex min-w-0 flex-1 items-center gap-3"
+                            height="auto"
+                            flexDirection="row"
+                            justifyContent="start"
+                            gap={3}
+                            className="min-w-0 flex-1"
                           >
                             <span
                               aria-hidden
@@ -733,7 +812,12 @@ export function MemberPluginDetailContent({
                                     : "bg-text-03"
                               )}
                             />
-                            <div className="flex min-w-0 flex-col gap-1">
+                            <Section
+                              height="auto"
+                              alignItems="start"
+                              gap={1}
+                              className="min-w-0"
+                            >
                               <Text font="main-ui-action">
                                 {connectionTitle}
                               </Text>
@@ -744,11 +828,11 @@ export function MemberPluginDetailContent({
                                     : connectionLabel}
                                 </Text>
                               )}
-                            </div>
-                          </div>
+                            </Section>
+                          </Section>
                           {canDisconnect && (
-                            <Button
-                              prominence="secondary"
+                            <TextButton
+                              nowrap={false}
                               disabled={pending}
                               onClick={() =>
                                 guard.requestLeave(() =>
@@ -757,17 +841,18 @@ export function MemberPluginDetailContent({
                               }
                             >
                               {t("detail.disconnect")}
-                            </Button>
+                            </TextButton>
                           )}
                           {canConnect && (
-                            <Button
+                            <TextButton
+                              nowrap={false}
                               disabled={pending}
                               onClick={() => guard.requestLeave(onConnect)}
                             >
                               {t("connection.connect")}
-                            </Button>
+                            </TextButton>
                           )}
-                        </div>
+                        </Section>
                       </Card>
                       {plugin.kind !== "external-app" &&
                         (surface !== "craft" ||
@@ -813,7 +898,17 @@ export function MemberPluginDetailContent({
                         connection.kind === "connected" && (
                           <ExternalAppSkillRecovery
                             appId={plugin.app.id}
+                            appName={plugin.app.name}
                             onReview={() => setTab("skills")}
+                            pending={pending}
+                            onDisconnect={
+                              canDisconnect
+                                ? () =>
+                                    guard.requestLeave(() =>
+                                      setAction({ kind: "confirmDisconnect" })
+                                    )
+                                : undefined
+                            }
                           />
                         )}
                     </>
@@ -832,7 +927,7 @@ export function MemberPluginDetailContent({
                     ) : plugin.kind === "mcp" ? (
                       <MemberMCPToolsList tools={plugin.tools} />
                     ) : (
-                      <div className="flex flex-col gap-4">
+                      <Section height="auto" alignItems="stretch" gap={4}>
                         <InputTypeIn
                           icon="search"
                           value={endpointSearch}
@@ -858,7 +953,7 @@ export function MemberPluginDetailContent({
                               : t("detail.noTools")}
                           </Text>
                         )}
-                      </div>
+                      </Section>
                     ))
                   }
                 />
@@ -870,11 +965,12 @@ export function MemberPluginDetailContent({
               </>
             )}
           </Modal.Body>
-          <Modal.Footer wrap>
+          <Modal.Footer wrap padding={isMobile ? 2 : 4}>
             {confirming ? (
               <>
                 <Button
                   prominence="secondary"
+                  size={isMobile ? "sm" : "md"}
                   disabled={pending}
                   onClick={() => setAction({ kind: "details" })}
                 >
@@ -882,6 +978,7 @@ export function MemberPluginDetailContent({
                 </Button>
                 <Button
                   variant="danger"
+                  size={isMobile ? "sm" : "md"}
                   disabled={pending}
                   onClick={() => void disconnect()}
                 >
@@ -893,7 +990,7 @@ export function MemberPluginDetailContent({
                 {plugin.kind === "external-app" &&
                   craftEnabled &&
                   activeTab === "skills" && (
-                    <div className="flex flex-1">
+                    <Section height="auto" width="auto" className="flex-1">
                       <Button
                         prominence="tertiary"
                         href={
@@ -908,16 +1005,18 @@ export function MemberPluginDetailContent({
                       >
                         {craftCopy("reviewSkillsButton")}
                       </Button>
-                    </div>
+                    </Section>
                   )}
                 <Button
                   prominence="secondary"
+                  size={isMobile ? "sm" : "md"}
                   disabled={pending}
                   onClick={close}
                 >
                   {t("detail.cancel")}
                 </Button>
                 <Button
+                  size={isMobile ? "sm" : "md"}
                   disabled={
                     pending ||
                     !dirty ||

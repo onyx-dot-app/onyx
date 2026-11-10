@@ -402,6 +402,88 @@ test.each(["builtin", "custom"] as const)(
   }
 );
 
+test.each([320, 1280])(
+  "explains app skills the Skill limit left off at %ipx, with keyboard recovery",
+  async (width) => {
+    jest.replaceProperty(window, "innerWidth", width);
+    const user = setupUser();
+    const blocked = builtinFixture({
+      id: "blocked-builtin",
+      name: "github-triage",
+      enabled: false,
+      can_toggle: false,
+      skill_limit_block: "files",
+      external_app: {
+        external_app_id: 7,
+        name: "Workspace GitHub",
+        enabled: true,
+        ready: true,
+      },
+    });
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const path = String(input);
+      if (path.includes("/action-policies/"))
+        return jsonResponse({ ...approvalApp, actions: [] });
+      if (path === "/api/skills/limit/me")
+        return jsonResponse({
+          bytes: 100 * 1024 * 1024,
+          files: 4990,
+          unknown_skill_count: 1,
+          charged_bytes: 200 * 1024 * 1024,
+          charged_files: 5490,
+          max_bytes: 500 * 1024 * 1024,
+          max_files: 5000,
+        });
+      return jsonResponse({ builtins: [blocked], customs: [] });
+    });
+    show({
+      kind: "external-app",
+      app: memberApp({ authenticated: true }),
+      connection: { kind: "connected", ownership: "user" },
+    });
+
+    expect(
+      await screen.findByText("1 skill for Workspace GitHub is off")
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Workspace GitHub is connected, but these skills would put your skills over the file limit. Make room, then reconnect Workspace GitHub."
+      )
+    ).toBeVisible();
+    expect(
+      await screen.findByText(
+        "Your skills use an estimated 200 MB of 500 MB and 5,490 files of 5,000. The estimate counts skills not yet measured at the largest allowed size."
+      )
+    ).toBeVisible();
+    expect(
+      screen.queryByText(
+        "Not all associated skills are enabled. This app may not work correctly."
+      )
+    ).not.toBeInTheDocument();
+
+    screen.getByRole("button", { name: "Disconnect to reconnect" }).focus();
+    await user.keyboard("{Enter}");
+    expect(
+      await screen.findByRole("button", { name: "Disconnect" })
+    ).toBeVisible();
+    expect(
+      jest
+        .mocked(global.fetch)
+        .mock.calls.some(([, init]) => init?.method === "DELETE")
+    ).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("tab", { name: "Skills" }));
+    expect(
+      await screen.findByText(
+        "Off: it would put your skills over the file limit. Make room, then reconnect Workspace GitHub."
+      )
+    ).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "Enable github-triage" })
+    ).toHaveAttribute("aria-disabled", "true");
+  }
+);
+
 test("enabled or unrelated skills do not mark a connected app as needing skill setup", async () => {
   mockSkillsRequests({
     builtins: [
@@ -1569,6 +1651,52 @@ test("skill conflicts can be confirmed without losing remaining drafts", async (
       body: JSON.stringify({ enabled: true, replace_conflict: false }),
     })
   );
+});
+
+test("mixed limit blocks offer Skill review without requiring disconnect", async () => {
+  const external_app = {
+    external_app_id: 7,
+    name: "Workspace GitHub",
+    enabled: true,
+    ready: true,
+  };
+  mockSkillsRequests({
+    builtins: [
+      builtinFixture({
+        enabled: false,
+        can_toggle: false,
+        skill_limit_block: "files",
+        external_app,
+      }),
+    ],
+    customs: [
+      customFixture({
+        enabled: false,
+        can_toggle: true,
+        skill_limit_block: "files",
+        external_app,
+      }),
+    ],
+  });
+  show({
+    kind: "external-app",
+    app: memberApp({ authenticated: true }),
+    connection: { kind: "connected", ownership: "user" },
+  });
+  const review = await screen.findByRole("button", { name: "Review skills" });
+  expect(
+    screen.getByRole("button", { name: "Disconnect to reconnect" })
+  ).toBeVisible();
+  await setupUser().click(review);
+  expect(screen.getByRole("tab", { name: "Skills" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
+  expect(
+    jest
+      .mocked(global.fetch)
+      .mock.calls.some(([, init]) => init?.method === "DELETE")
+  ).toBe(false);
 });
 
 test.each(["VIEWER", "EDITOR", "OWNER"] as const)(

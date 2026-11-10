@@ -65,7 +65,7 @@ function TextButton({
       font={font}
       color="inherit"
       as="p"
-      wordWrap={nowrap ? "whitespace-nowrap" : undefined}
+      wordWrap={nowrap ? "whitespace-nowrap" : "wrap-anywhere"}
     >
       {children}
     </Text>
@@ -92,7 +92,13 @@ function TextButton({
           {label}
         </NavLink>
       ) : (
-        <div className="opal-text-label interactive-foreground">{label}</div>
+        <button
+          type="button"
+          disabled={disabled}
+          className="opal-text-label interactive-foreground"
+        >
+          {label}
+        </button>
       )}
     </Interactive.Stateless>
   );

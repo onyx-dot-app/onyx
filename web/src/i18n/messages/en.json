@@ -12210,6 +12210,10 @@
         "connectApp": "Connect app “{app}” from the Apps page to use this skill.",
         "invalid": "This skill is invalid. Delete it and create a new skill.",
         "unavailable": "Skill is currently unavailable. Click to view details."
+      },
+      "limit": {
+        "retry": "Off: it would put your skills over the {limit, select, files {file limit} other {size limit}}. Make room, then turn it on.",
+        "reconnect": "Off: it would put your skills over the {limit, select, files {file limit} other {size limit}}. Make room, then reconnect {app}."
       }
     }
   },
@@ -17632,6 +17636,14 @@
         "loadError": "Could not load skill usage",
         "retry": "Try Again",
         "loading": "Checking skill usage…"
+      },
+      "app": {
+        "title": "{count, plural, one {# skill for {app} is off} other {# skills for {app} are off}}",
+        "description": "{app} is connected, but these skills would put your skills over the {limit, select, files {file limit} other {size limit}}. {retry, select, toggle {Make room, then turn them on.} other {Make room, then reconnect {app}.}}",
+        "usage": "Your skills use {size} of {maxSize} and {files, plural, one {# file} other {# files}} of {maxFiles, number}.",
+        "usageEstimated": "Your skills use an estimated {size} of {maxSize} and {files, plural, one {# file} other {# files}} of {maxFiles, number}. The estimate counts skills not yet measured at the largest allowed size.",
+        "manage": "Manage skills",
+        "disconnectToReconnect": "Disconnect to reconnect"
       }
     }
   },

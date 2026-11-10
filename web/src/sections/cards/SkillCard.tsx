@@ -27,6 +27,7 @@ import type {
   CustomSkill,
   SkillExternalAppDependency,
 } from "@/lib/skills/types";
+import type { SkillLimitKind } from "@/lib/skills/limits";
 import { cn } from "@opal/utils";
 import SkillVersionLabel from "@/sections/skills/SkillVersionLabel";
 import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
@@ -43,6 +44,8 @@ interface SkillCardItemBase {
    * provider's associated skill is a built-in row, so reading this off the
    * custom variant only would silently drop every built-in app. */
   external_app: SkillExternalAppDependency | null;
+  /** The limit that kept this app Skill off when the app connected. */
+  skill_limit_block?: SkillLimitKind | null;
 }
 
 export interface BuiltinSkillCardItem extends SkillCardItemBase {
