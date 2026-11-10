@@ -13,14 +13,14 @@ Create returns. Never log the key.
 import abc
 import secrets
 import threading
-from datetime import datetime, timezone
+from datetime import timezone
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
 
 import grpc
 from google.rpc import error_details_pb2, status_pb2
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import SecretStr
 
 from onyx.microvm.configs import (
     SANDBOX_FC_AGENT_CA_PATH,
@@ -31,6 +31,7 @@ from onyx.microvm.configs import (
     SANDBOX_FC_AGENT_TLS_SERVER_NAME,
 )
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2, hostagent_pb2_grpc
+from onyx.microvm.models import AgentVm, CreateResult, NodeInfo, TemplateInfo, VmState
 
 HOST_AGENT_ERROR_DOMAIN = "hostagent.craft.onyx.app"
 _STATUS_DETAILS_KEY = "grpc-status-details-bin"
@@ -131,75 +132,11 @@ _REASON_ERRORS: dict[HostAgentErrorReason, type[HostAgentError]] = {
 }
 
 
-class VmState(str, Enum):
-    UNSPECIFIED = "UNSPECIFIED"
-    STARTING = "STARTING"
-    RUNNING = "RUNNING"
-    EXITED = "EXITED"
-
-    def is_live(self) -> bool:
-        """The VM holds resources (and its session files) on the node."""
-        return self in (VmState.STARTING, VmState.RUNNING)
-
-
 _VM_STATES: dict[int, VmState] = {
     hostagent_pb2.VM_STATE_STARTING: VmState.STARTING,
     hostagent_pb2.VM_STATE_RUNNING: VmState.RUNNING,
     hostagent_pb2.VM_STATE_EXITED: VmState.EXITED,
 }
-
-
-class AgentVm(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    sandbox_id: str
-    attempt: int
-    # Host-side boot ID of this VM instance (ENG-4606).
-    generation: int
-    template: str
-    vcpus: int
-    mem_mib: int
-    scratch_gib: int
-    state: VmState
-    pid: int
-    tenant_id: str
-    started_at: datetime | None
-
-
-class TemplateInfo(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    version: str
-    vcpus: int
-    mem_mib: int
-    scratch_gib: int
-    guest_kernel: str
-    firecracker_version: str
-
-
-class NodeInfo(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    mem_total_mib: int
-    mem_available_mib: int
-    vm_count: int
-    templates: list[TemplateInfo]
-    cpu_model: str
-    firecracker_version: str
-    host_kernel: str
-    agent_version: str
-    disk_free_mib: int
-
-    def template(self, version: str) -> TemplateInfo | None:
-        return next((t for t in self.templates if t.version == version), None)
-
-
-class CreateResult(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    vm: AgentVm
-    # False when the agent returned an existing VM for the same attempt.
-    created: bool
 
 
 def _vm_from_proto(vm: hostagent_pb2.VM) -> AgentVm:

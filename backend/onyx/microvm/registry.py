@@ -25,6 +25,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, SecretStr
 
 from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLockAcquisitionError
+from onyx.microvm.models import IndexedPlacement, RegisteredNode
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 
 NODE_SIGNING_KEY_TTL_SECONDS = 3600
@@ -180,14 +181,6 @@ def get_sandbox_placement(
     return SandboxPlacement(node_id=record["node"], generation=record["gen"])
 
 
-class RegisteredNode(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    node_id: str
-    # host:port of the agent's mTLS listener.
-    address: str
-
-
 def set_node_agent_address(
     shared_cache: CacheBackend, *, node_id: str, address: str
 ) -> None:
@@ -237,13 +230,6 @@ def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:
     except CacheLockAcquisitionError:
         # A registration holds the lock; the next list prunes if still expired.
         pass
-
-
-class IndexedPlacement(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    tenant_id: str
-    sandbox_id: UUID
 
 
 def _placement_member(tenant_id: str, sandbox_id: UUID) -> str:

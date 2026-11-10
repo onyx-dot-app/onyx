@@ -16,11 +16,12 @@ from datetime import datetime, timezone
 from enum import Enum
 
 import grpc
-from pydantic import BaseModel, ConfigDict, SecretStr
+from pydantic import SecretStr
 
 from onyx.microvm.agent_client import HostAgentError, error_info, host_agent_error
 from onyx.microvm.configs import SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2, sandboxd_pb2_grpc
+from onyx.microvm.models import DaemonHealth, DaemonInitResult
 
 SANDBOXD_ERROR_DOMAIN = "sandboxd.craft.onyx.app"
 SANDBOX_ID_HEADER = "x-sandbox-id"
@@ -95,27 +96,6 @@ def _error_from_rpc(err: grpc.RpcError) -> SandboxDaemonError | HostAgentError:
         else SandboxDaemonError
     )
     return cls(err.code(), err.details() or "", reason)
-
-
-class DaemonHealth(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    initialized: bool
-    key_set: bool
-    version: str
-    generation: int
-    sandbox_id: str
-    running_executions: int
-
-
-class DaemonInitResult(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    version: str
-    clock_step_seconds: float
-    entropy_credited: bool
-    attached: bool
-    relay_reset: bool
 
 
 class SandboxDaemonClient:

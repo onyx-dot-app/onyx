@@ -21,24 +21,20 @@ from datetime import datetime
 from functools import partial
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import SandboxStatus
-from onyx.microvm.agent_client import (
-    AgentVm,
-    HostAgentClientFactory,
-    HostAgentError,
-    VmState,
-)
+from onyx.microvm.agent_client import HostAgentClientFactory, HostAgentError
 from onyx.microvm.lifecycle import (
     SandboxActivityProbe,
     SandboxCheckpointer,
     VmStopOutcome,
     sleep_idle_sandbox_vm,
 )
+from onyx.microvm.models import AgentVm, ReconcileReport, RegisteredNode, VmState
 from onyx.microvm.placement import (
     find_vm,
     forget_placement,
@@ -47,7 +43,6 @@ from onyx.microvm.placement import (
     sandbox_placement_lock,
 )
 from onyx.microvm.registry import (
-    RegisteredNode,
     SandboxPlacement,
     get_sandbox_daemon_key,
     get_sandbox_placement,
@@ -63,19 +58,6 @@ logger = setup_logger()
 _ORPHAN_MARK_PREFIX = "sandbox_fc:orphan:"
 _ORPHAN_MARK_TTL_SECONDS = 7 * 24 * 3600
 _ADOPTABLE_STATUSES = frozenset({SandboxStatus.PROVISIONING, SandboxStatus.RUNNING})
-
-
-class ReconcileReport(BaseModel):
-    nodes: int = 0
-    unreachable_nodes: list[str] = Field(default_factory=list)
-    # Steps that raised; the pass logged them and went on.
-    failed: list[str] = Field(default_factory=list)
-    refreshed: list[str] = Field(default_factory=list)
-    adopted: list[str] = Field(default_factory=list)
-    cleared: list[str] = Field(default_factory=list)
-    orphans_marked: list[str] = Field(default_factory=list)
-    orphans_stopped: list[str] = Field(default_factory=list)
-    slept: list[str] = Field(default_factory=list)
 
 
 class _SandboxRow(BaseModel):

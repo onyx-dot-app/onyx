@@ -32,13 +32,11 @@ from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm.agent_client import (
-    AgentVm,
     GuestKeyRejectedError,
     GuestUnreachableError,
     HostAgentClientFactory,
     HostAgentError,
     HostAgentErrorReason,
-    NodeInfo,
     new_sandboxd_key,
 )
 from onyx.microvm.configs import (
@@ -48,8 +46,15 @@ from onyx.microvm.configs import (
     SANDBOX_FC_PLACEMENT_CANDIDATES,
     SANDBOX_FC_PLACEMENT_TTL_SECONDS,
 )
-from onyx.microvm.registry import (
+from onyx.microvm.models import (
+    AgentVm,
+    NodeInfo,
+    NodeRefusal,
+    PlacedVm,
     RegisteredNode,
+    VmRequest,
+)
+from onyx.microvm.registry import (
     SandboxPlacement,
     clear_sandbox_daemon_key,
     clear_sandbox_placement,
@@ -99,30 +104,6 @@ _NEXT_NODE_REASONS: frozenset[HostAgentErrorReason] = frozenset(
 _MAX_ATTEMPTS = 2
 
 
-class VmRequest(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    tenant_id: str
-    sandbox_id: UUID
-    # The sandbox's provisioning attempt number (the existing attempt fence).
-    attempt: int
-    # Template version; vcpus and mem_mib come from the node's template.
-    template: str
-    # None = the template's scratch size.
-    scratch_gib: int | None = None
-
-
-class PlacedVm(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    node: RegisteredNode
-    vm: AgentVm
-    # False when the VM existed before this call.
-    created: bool
-    # The guest daemon key of vm.attempt (x-sandboxd-key). Never log it.
-    sandboxd_key: SecretStr
-
-
 class _LiveVm(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -142,14 +123,6 @@ class _Unusable(Exception):
         self.reason = reason
         self.detail = detail
         self.vm = vm
-
-
-class NodeRefusal(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    node_id: str
-    reason: str
-    detail: str
 
 
 def capacity_unavailable_error(refusals: list[NodeRefusal]) -> OnyxError:

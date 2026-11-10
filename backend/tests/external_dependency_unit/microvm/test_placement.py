@@ -15,9 +15,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm import admission, configs, placement, registry
 from onyx.microvm.agent_client import HostAgentErrorReason
-from onyx.microvm.placement import VmRequest, place_sandbox_vm
+from onyx.microvm.models import RegisteredNode, VmRequest
+from onyx.microvm.placement import place_sandbox_vm
 from onyx.microvm.registry import (
-    RegisteredNode,
     SandboxPlacement,
     get_sandbox_placement,
     list_indexed_placements,

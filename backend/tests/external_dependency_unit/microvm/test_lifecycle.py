@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from onyx.cache.interface import CacheBackend
-from onyx.microvm.agent_client import AgentVm
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
@@ -18,7 +17,7 @@ from onyx.microvm.lifecycle import (
     sleep_idle_sandbox_vm,
     wake_sandbox_vm,
 )
-from onyx.microvm.placement import VmRequest
+from onyx.microvm.models import AgentVm, VmRequest
 from onyx.microvm.registry import SandboxPlacement, get_sandbox_placement
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,

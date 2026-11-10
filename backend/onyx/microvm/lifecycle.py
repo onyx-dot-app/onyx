@@ -24,20 +24,14 @@ from uuid import UUID
 
 from onyx.cache.interface import CacheBackend
 from onyx.microvm.agent_client import (
-    AgentVm,
     HostAgentClientFactory,
     HostAgentError,
     HostAgentErrorReason,
 )
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
-from onyx.microvm.daemon_client import (
-    DaemonInitResult,
-    SandboxDaemonClient,
-    SandboxDaemonError,
-)
+from onyx.microvm.daemon_client import SandboxDaemonClient, SandboxDaemonError
+from onyx.microvm.models import AgentVm, DaemonInitResult, PlacedVm, VmRequest
 from onyx.microvm.placement import (
-    PlacedVm,
-    VmRequest,
     discard_unusable_vm,
     find_vm,
     forget_placement,

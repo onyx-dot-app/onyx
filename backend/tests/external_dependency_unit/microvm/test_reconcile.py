@@ -8,7 +8,7 @@ import pytest
 from onyx.cache.interface import CacheBackend
 from onyx.db.enums import SandboxStatus
 from onyx.microvm import reconcile
-from onyx.microvm.agent_client import AgentVm, new_sandboxd_key
+from onyx.microvm.agent_client import new_sandboxd_key
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
@@ -17,8 +17,9 @@ from onyx.microvm.lifecycle import (
     SandboxCheckpointer,
     UnknownActivity,
 )
+from onyx.microvm.models import AgentVm, ReconcileReport
 from onyx.microvm.placement import record_placement
-from onyx.microvm.reconcile import ReconcileReport, reconcile_microvms
+from onyx.microvm.reconcile import reconcile_microvms
 from onyx.microvm.registry import (
     SandboxPlacement,
     get_sandbox_placement,

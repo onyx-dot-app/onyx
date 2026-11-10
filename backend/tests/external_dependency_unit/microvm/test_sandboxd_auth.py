@@ -35,7 +35,7 @@ from onyx.microvm.lifecycle import (
     sandbox_daemon,
     wake_sandbox_vm,
 )
-from onyx.microvm.placement import PlacedVm, VmRequest
+from onyx.microvm.models import PlacedVm, VmRequest
 from onyx.microvm.registry import (
     _DAEMON_KEY_PREFIX,
     clear_sandbox_daemon_key,

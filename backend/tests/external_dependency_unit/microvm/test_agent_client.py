@@ -18,9 +18,9 @@ from onyx.microvm.agent_client import (
     HostAgentError,
     HostAgentErrorReason,
     MtlsHostAgentClientFactory,
-    VmState,
     new_sandboxd_key,
 )
+from onyx.microvm.models import VmState
 from tests.external_dependency_unit.microvm.fake_agent import (
     FakeHostAgent,
     InsecureClientFactory,
