@@ -147,7 +147,10 @@ panel picks up the new session when the user returns.
    `web/src/lib/oauth/launch.ts:launchOAuth` do not use a popup in the app.
    They open the provider in the system browser with a `.desktop` state
    suffix. The browser-side callback page opens
-   `onyx://oauth-callback?path=...&origin=...`, and
+   `onyx://oauth-callback?path=...&origin=...`. The browser often has no Onyx
+   session, so `web/src/proxy.ts` serves `.desktop` callbacks from
+   `/oauth/desktop-handoff` before any auth gate
+   (`web/src/lib/oauth/desktopCallback.ts` holds the path allowlist). Then
    `desktop/src-tauri/src/oauth_handoff.rs` accepts only allowlisted callback
    paths on the configured server. When the main window is on that server, it
    first offers the callback to it (`__ONYX_DESKTOP__.claimOAuthCallback`): a
