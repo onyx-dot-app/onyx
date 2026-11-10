@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
+from onyx.background.indexing.source_api_limiter import build_source_api_limiter
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -249,6 +250,10 @@ def instantiate_connector(
 
     if raw_file_callback is not None:
         connector.set_raw_file_callback(raw_file_callback)
+
+    source_api_limiter = build_source_api_limiter(source, credential.id)
+    if source_api_limiter is not None:
+        connector.set_source_api_limiter(source_api_limiter)
 
     return connector
 
