@@ -353,7 +353,7 @@
         "clientMetadataRejected": "Le fournisseur n’a pas pu utiliser le document de métadonnées du client. Si cette instance n’est pas accessible depuis Internet, désactivez « Utiliser le document de métadonnées client » et reconnectez-vous.",
         "discoveryFailed": "Les paramètres de connexion OAuth sont introuvables. Vérifiez l’URL du serveur ou saisissez les points de terminaison de votre fournisseur.",
         "connectionFailed": "Le serveur est inaccessible. Vérifiez l’URL du serveur et réessayez.",
-        "oauthFailed": "La connexion OAuth n’a pas pu démarrer. Vérifiez les paramètres de votre client et réessayez.",
+        "oauthFailed": "La connexion OAuth a échoué. Réessayez ou vérifiez les paramètres OAuth du serveur.",
         "oauthInitFailed": "Échec du lancement de OAuth : {detail}"
       },
       "header": {
@@ -14242,6 +14242,11 @@
       },
       "completeFailed": {
         "message": "Impossible de finaliser l'autorisation"
+      },
+      "desktopHandoff": {
+        "button": "Ouvrir Onyx",
+        "description": "Votre navigateur ouvre l'application de bureau Onyx pour terminer la connexion. Vous pouvez fermer cet onglet une fois l'application ouverte.",
+        "title": "Retour à Onyx"
       },
       "genericError": {
         "description": "Une erreur est survenue pendant le processus OAuth. Veuillez réessayer.",

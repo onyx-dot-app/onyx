@@ -112,16 +112,7 @@ async function configureOauthServer(
   await adminMcp.fillServerDetails({
     name: options.serverName,
   });
-  await oauthFlow.clickAndWaitForPossibleUrlChange(async () => {
-    await adminMcp.connectAndWaitForSetup();
-  }, "OAuth connect click");
-
-  await oauthFlow.completeFlow({
-    expectReturnPathContains: "/admin/plugins/mcp/",
-    confirmConnected: async () => {
-      await adminMcp.expectServerDetail(options.serverName);
-    },
-  });
+  await oauthFlow.completeFlowInNewTab(() => adminMcp.connectAndWaitForSetup());
 
   await adminMcp.expectServerDetail(options.serverName);
   await adminMcp.setToolEnabled(options.toolName, true);
