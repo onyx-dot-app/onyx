@@ -86,6 +86,8 @@ type Shipper struct {
 	mu   sync.Mutex
 	tail map[string]*vmTail
 	node bucket
+	// started: Start ran. Before it, every VM is adopted.
+	started bool
 }
 
 type vmTail struct {
@@ -129,6 +131,7 @@ func (s *Shipper) Start(ctx context.Context) {
 	s.init()
 	s.mu.Lock()
 	s.syncLocked(true)
+	s.started = true
 	s.mu.Unlock()
 	go func() {
 		t := time.NewTicker(s.Interval)
@@ -197,8 +200,9 @@ func (s *Shipper) Release(vm agent.VM) {
 		return
 	}
 	if t == nil || t.vm.Generation < vm.Generation {
-		// The VM ended before a Tick saw it: read its files from the start.
-		t = s.newTail(vm, false)
+		// The VM ended before a Tick saw it: read its files from the start,
+		// unless it was adopted and exits during recovery, before Start.
+		t = s.newTail(vm, !s.started)
 		s.tail[vm.SandboxID] = t
 	}
 	now := s.now()

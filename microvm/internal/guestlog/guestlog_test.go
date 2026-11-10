@@ -264,6 +264,20 @@ func TestReleaseBeforeFirstTick(t *testing.T) {
 	eq(t, texts(f.lines()), "crash")
 }
 
+// An adopted VM that exits during recovery, before Start, does not ship the
+// lines of the previous agent again.
+func TestReleaseBeforeStartIsAdopted(t *testing.T) {
+	f := newFixture(t, &Shipper{}, id1)
+	f.write(id1, Console, "before the restart\n")
+	f.s.Release(f.vms[0])
+	if got := texts(f.lines()); len(got) != 0 {
+		t.Fatalf("old lines shipped again: %q", got)
+	}
+	f.write(id1, Console, "last words\n")
+	f.s.Release(f.vms[0])
+	eq(t, texts(f.lines()), "last words")
+}
+
 // A Tick that sees the VM exited before Release keeps its tail, so Release
 // ships the last lines once.
 func TestExitedVMKeepsTailUntilRelease(t *testing.T) {
