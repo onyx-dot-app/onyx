@@ -97,16 +97,13 @@ manifest paths. When both compatibility manifests exist, Claude takes precedence
 Overlapping discovery sources load each path once; different paths with the same
 key fail the read. A nested plugin can load its root `SKILL.md` when neither a
 `skills` key nor a default skills directory with members exists.
+If that root definition disappears while other plugin files remain, its entry
+stays blocked with the same key. Sync preserves the existing Skill.
 
-Marketplace discovery requires a TAR end marker after the last member.
-The general archive reader still accepts member-boundary EOF. Discovery enables
-`require_complete` because a valid gzip wrapper does not prove catalog completion.
-ZIP discovery also checks the end-record entry count against the parsed directory.
-Every ZIP member, including unrelated files, must have a matching local header
-and name. These checks do not inflate unrelated member data.
-Missing end markers and parser-detected header errors fail discovery before
-reconciliation can infer removed skills. A zero header can still conceal later
-entries, as described above. Truncated sparse extensions also fail discovery.
+Marketplace discovery requires the complete end marker and padding checks below.
+On any processing error, a sync must retain the last good state and retire nothing.
+A future streaming staging API can support larger repositories without retaining
+all output bundles in memory. Raising these limits requires resource measurements.
 
 Each skill path builds once per read, even when many plugins reference it.
 Unique generated bundles share a 256 MiB ceiling. This permits ten maximum-size

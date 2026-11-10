@@ -132,6 +132,27 @@ def test_explicit_official_anthropic_shape_and_determinism() -> None:
 
 
 @pytest.mark.parametrize(
+    "manifest", [".claude-plugin/plugin.json", ".codex-plugin/plugin.json"]
+)
+def test_nested_plugin_root_remains_blocked_without_its_definition(
+    manifest: str,
+) -> None:
+    files = {
+        CLAUDE: _catalog(source="./solo"),
+        f"solo/{manifest}": b'{"name":"solo"}',
+        "solo/SKILL.md": _md("solo"),
+        "solo/scripts/run.py": b"print('hello')",
+    }
+    ready = _entries(files)
+    assert len(ready) == 1 and isinstance(ready[0], ReadySkill)
+    del files["solo/SKILL.md"]
+    blocked = _entries(files)
+    assert len(blocked) == 1 and isinstance(blocked[0], BlockedSkill)
+    assert blocked[0].entry_key == ready[0].entry_key
+    assert blocked[0].path == ready[0].path
+
+
+@pytest.mark.parametrize(
     "component", ["mcpServers", "hooks", "agents", "commands", "apps"]
 )
 @pytest.mark.parametrize(

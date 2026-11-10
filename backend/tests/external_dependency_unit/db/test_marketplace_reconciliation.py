@@ -43,6 +43,7 @@ from onyx.skills.marketplace.read_models import (
 from onyx.skills.marketplace.reader import read_marketplace_archive
 from onyx.skills.metadata import parse_skill_document
 from onyx.utils.bundle import compute_bundle_metadata
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 from tests.unit.onyx.skills.marketplace_fixtures import CLAUDE, _archive, _catalog, _md
 
@@ -63,6 +64,9 @@ def session(isolated_engine: Engine) -> Generator[Session, None, None]:
             "external_app__skill",
             "user__user_group",
             "user_skill_preference",
+            "user_skill_limit_block",
+            "external_app_user_credential",
+            "image_generation_config",
             "oauth_account",
             "user__pinned_persona",
         )
@@ -232,11 +236,8 @@ def test_create_update_move_and_unchanged(
         == "revision-2"
     )
     assert skill.current_version_id == history[0].id != original_version
-    assert (skill.bundle_file_id, skill.bundle_sha256, skill.is_valid) == (
-        history[0].bundle_file_id,
-        history[0].bundle_sha256,
-        True,
-    )
+    assert skill.current_version == history[0]
+    assert history[0].is_valid is True
     assert history[0].file_count == 1 and history[0].unpacked_size_bytes is not None
 
 
@@ -468,7 +469,9 @@ def test_retention_and_cleanup_are_transactional(
     for index in range(11):
         result = apply(session, marketplace, catalog("hello", body=str(index).encode()))
         if index == 0:
-            first_file = skills(session, marketplace)[0].bundle_file_id
+            current = skills(session, marketplace)[0].current_version
+            assert current is not None
+            first_file = current.bundle_file_id
         session.commit()
     skill = skills(session, marketplace)[0]
     history = list(session.scalars(SkillVersionAdapter(skill).versions()))
@@ -614,6 +617,40 @@ def test_waiting_sync_reads_committed_version(
         result = future.result(timeout=15)
     assert not result.changed_skill_ids
     assert len(list(session.scalars(SkillVersionAdapter(skill).versions()))) == 2
+
+
+def test_library_lock_uses_tenant_identity_with_shared_search_path(
+    session: Session, marketplace: Marketplace, isolated_engine: Engine
+) -> None:
+    other = Marketplace(
+        name="Other tenant catalog",
+        provider=MarketplaceProvider.GITHUB,
+        provider_config=marketplace.provider_config,
+    )
+    session.add(other)
+    session.commit()
+    first_id, second_id = marketplace.id, other.id
+    schema = session.scalar(select(func.current_schema()))
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(f"library_first_{uuid4().hex}")
+    try:
+        reconcile_marketplace__no_commit(
+            first_id, catalog(), revision="first", staged={}, db_session=session
+        )
+        with Session(isolated_engine) as second:
+            second.execute(
+                text("SELECT set_config('search_path', :schema, true)"),
+                {"schema": schema},
+            )
+            assert second.scalar(select(func.current_schema())) == schema
+            second.execute(text("SET LOCAL statement_timeout = '1s'"))
+            CURRENT_TENANT_ID_CONTEXTVAR.set(f"library_second_{uuid4().hex}")
+            result = reconcile_marketplace__no_commit(
+                second_id, catalog(), revision="second", staged={}, db_session=second
+            )
+            assert result.status == "applied"
+    finally:
+        session.rollback()
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def test_corrupt_zip_catalog_cannot_retire_existing_skills(

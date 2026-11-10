@@ -89,7 +89,7 @@ def test_expansion_boundary_includes_trailing_data(
     monkeypatch.setattr(archives, "EXPANDED_MAX_BYTES", len(expanded) - 1)
     with (
         pytest.raises(archives.ArchiveLimitError),
-        archives.archive_files(gzip.compress(expanded)),
+        archives.archive_files(gzip.compress(expanded), require_complete=True),
     ):
         pass
 
@@ -113,6 +113,26 @@ def test_truncated_trailer_fails(trim: int) -> None:
     with (
         pytest.raises((EOFError, OSError)),
         archives.archive_files(_archive(_files(), "tar")[:-trim]),
+    ):
+        pass
+
+
+@pytest.mark.parametrize("damage", ["one_end_block", "hidden_member", "trailing_data"])
+def test_tar_end_marker_cannot_hide_archive_contents(damage: str) -> None:
+    expanded = gzip.decompress(_archive(_files(), "tar"))
+    with tarfile.open(fileobj=io.BytesIO(expanded), mode="r:") as archive:
+        members = archive.getmembers()
+    last = members[-1]
+    end = last.offset_data + ((last.size + 511) // 512) * 512
+    if damage == "one_end_block":
+        expanded = expanded[:end] + b"\0" * 512
+    elif damage == "hidden_member":
+        expanded = expanded[: last.offset] + b"\0" * 512 + expanded[last.offset + 512 :]
+    else:
+        expanded += b"unexpected data"
+    with (
+        pytest.raises(ValueError, match="end marker"),
+        archives.archive_files(gzip.compress(expanded), require_complete=True),
     ):
         pass
 

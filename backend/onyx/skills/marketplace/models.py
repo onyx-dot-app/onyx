@@ -12,6 +12,12 @@ from onyx.utils.github import (
 MARKETPLACE_LOGIN_ERROR = "Marketplace login is unavailable. Replace the login with an active user connected to GitHub."
 
 
+class MarketplaceSyncStatus(StrEnum):
+    APPLIED = "applied"
+    FAILED = "failed"
+    NEEDS_CONFIRMATION = "needs_confirmation"
+
+
 class MarketplaceProvider(StrEnum):
     GITHUB = "github"
 
@@ -59,6 +65,14 @@ class MarketplaceArchive(BaseModel):
     revision: str
     archive_bytes: bytes
     folder: str | None
+
+
+class MarketplaceRetirementProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    revision: str
+    skill_ids: tuple[UUID, ...]
+    approved: bool = False
 
 
 class ReconciliationResult(BaseModel):
