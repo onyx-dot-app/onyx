@@ -985,14 +985,14 @@ const AppInputBar = React.memo(
           onHighlight={queueNav.setHighlightedIndex}
         />
         {pendingMessages.error && (
-          <Section padding={1} width="full">
+          <Section padding={1} width="full" height="fit">
             <Text font="secondary-body" color="text-03">
               {pendingMessages.error}
             </Text>
           </Section>
         )}
         {canStopGeneration && !incognitoEnabled && (
-          <Section padding={1} width="full">
+          <Section padding={1} width="full" height="fit">
             <Text font="secondary-body" color="text-03">
               {pendingMessageHint}
             </Text>

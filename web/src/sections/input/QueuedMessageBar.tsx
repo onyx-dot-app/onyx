@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useEffect, useRef } from "react";
 import { Text, Button } from "@opal/components";
 import { SvgTrash, SvgEdit } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
@@ -27,12 +28,22 @@ function QueuedMessageBar({
 }: QueuedMessageBarProps) {
   const t = useTranslations("chat.input");
   const isEmpty = messages.length === 0;
+  const highlightedItemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    highlightedItemRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [highlightedIndex]);
 
   return (
     <div
       className={cn(
         "transition-all duration-150",
-        isEmpty ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
+        isEmpty
+          ? "opacity-0 h-0 overflow-hidden"
+          : "opacity-100 max-h-[min(16rem,30dvh)] overflow-y-auto overscroll-contain"
       )}
     >
       {!isEmpty && (
@@ -43,6 +54,7 @@ function QueuedMessageBar({
             return (
               <div
                 key={item.id}
+                ref={isHighlighted ? highlightedItemRef : undefined}
                 data-testid="queued-message-bar"
                 className={cn(
                   "bg-background-neutral-02 rounded-12 border px-3 py-1.5 flex items-center gap-2 cursor-pointer",

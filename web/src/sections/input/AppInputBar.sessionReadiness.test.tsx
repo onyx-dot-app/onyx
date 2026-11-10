@@ -19,6 +19,8 @@ import {
 } from "@/lib/chat/sessionReadiness";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
+Element.prototype.scrollIntoView = jest.fn();
+
 let mockSearchMode = false;
 let mockIncognito = false;
 let pending: import("@/lib/chat/types").PendingChatMessage[] = [];

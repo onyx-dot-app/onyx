@@ -28,6 +28,7 @@ const pendingTest = test.extend<{
       await chatPage.inputBar.fill(question);
       await chatPage.inputBar.send();
       await expect(chatPage.scrollContainer).toContainText("Working on");
+      await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
       await use({ sessionId, question, gateId });
     } finally {
       await releaseMockLlmGate(gateId);
@@ -42,8 +43,10 @@ pendingTest(
     await chatPage.inputBar.submitPending("First queued");
     await chatPage.inputBar.submitPending("Second queued");
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
+    await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
     await chatPage.reload();
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
+    await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
     await expect(chatPage.inputBar.queuedMessages.nth(0)).toContainText(
       "First queued"
     );
@@ -58,6 +61,48 @@ pendingTest(
     ]);
     await chatPage.expectCompleteAnswers(3);
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
+    await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
+  }
+);
+
+pendingTest(
+  "a long queue scrolls without hiding the input",
+  async ({ page, chatPage, heldResponse }) => {
+    const messageCount = 16;
+    for (let index = 0; index < messageCount; index++) {
+      await chatPage.inputBar.submitPending(`Pending instruction ${index}`);
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(index + 1);
+      await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
+    }
+
+    await chatPage.inputBar.textbox.press("ArrowUp");
+    await expect(chatPage.inputBar.queuedMessages.last()).toBeInViewport({
+      ratio: 1,
+    });
+    for (let index = 1; index < messageCount; index++) {
+      await chatPage.inputBar.textbox.press("ArrowUp");
+    }
+    await expect(chatPage.inputBar.queuedMessages.first()).toBeInViewport({
+      ratio: 1,
+    });
+    await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await chatPage.reload();
+    await expect(chatPage.inputBar.queuedMessages).toHaveCount(messageCount);
+    await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
+    await chatPage.inputBar.textbox.press("ArrowUp");
+    await expect(chatPage.inputBar.queuedMessages.last()).toBeInViewport({
+      ratio: 1,
+    });
+    await expect(chatPage.inputBar.container).toBeInViewport({ ratio: 1 });
+
+    for (let remaining = messageCount; remaining > 0; remaining--) {
+      await chatPage.inputBar.textbox.press("Delete");
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(remaining - 1);
+    }
+    await releaseMockLlmGate(heldResponse.gateId);
+    await chatPage.expectCompleteAnswers(1);
   }
 );
 
