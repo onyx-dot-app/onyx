@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
-from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.models import MessageRendering, PresentationMode, ResponseRecord
 from onyx.chat.presentation import replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
 from onyx.chat.response import tool_arguments_for_display
@@ -22,12 +22,14 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationLifecycleEvent,
     ToolCallDeltaEvent,
+    ToolCallStartEvent,
     apply_generation_event,
 )
 from onyx.server.query_and_chat.streaming_models import (
     PythonToolStart,
     ToolCallArgumentDelta,
 )
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 
 
 def chunk(
@@ -253,3 +255,20 @@ def test_interrupted_python_call_replays_the_streamed_code() -> None:
     assert call.arguments == {}
     assert not call.arguments_complete
     assert not saved.steps[0].tools
+
+
+def test_code_argument_streams_live_as_execute_code() -> None:
+    renderer = MessageRenderer(
+        MessageRendering(mode=PresentationMode.ANSWER), {}, ResponseLayout()
+    )
+    renderer.consume(
+        ToolCallStartEvent(
+            content_index=0, tool_call_id="code-1", tool_name=CodeModeTool.NAME
+        )
+    )
+    [packet] = renderer.consume(
+        ToolCallDeltaEvent(content_index=0, arguments_delta='{"code": "print(1)')
+    )
+    assert isinstance(packet.obj, ToolCallArgumentDelta)
+    assert packet.obj.tool_type == CodeModeTool.NAME
+    assert packet.obj.argument_deltas == {"code": "print(1)"}

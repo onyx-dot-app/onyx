@@ -155,6 +155,39 @@ class TestConvertChatHistory:
             "original tool output"
         )
 
+    def test_legacy_calls_replay_in_saved_order_with_and_without_tool_rows(
+        self,
+    ) -> None:
+        def call(row_id: int, tab_index: int, tool_id: int | None) -> MagicMock:
+            saved = MagicMock()
+            saved.id = row_id
+            saved.turn_number = 0
+            saved.tab_index = tab_index
+            saved.tool_id = tool_id
+            saved.tool_call_id = f"call-{row_id}"
+            saved.tool_call_arguments = {}
+            saved.generated_images = None
+            saved.tool_call_response = f"output {row_id}"
+            return saved
+
+        assistant_msg = self._make_chat_message("final answer", MessageType.ASSISTANT)
+        # A code mode call has no tool row; order comes from the saved tabs.
+        assistant_msg.tool_calls = [call(1, 1, None), call(2, 0, 7)]
+        history = capture_chat_history(
+            cast(list[ChatMessage], [assistant_msg]),
+            {7: "internal_search"},
+            lambda s: len(s),
+        )
+        results = [
+            message
+            for message in history[0].response_messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        assert [(m.tool_call_id, m.tool_name) for m in results] == [
+            ("call-2", "internal_search"),
+            ("call-1", "unknown"),
+        ]
+
 
 @pytest.mark.parametrize("copy_messages", [True, False])
 def test_replay_preserves_completed_tools_and_drops_partial_arguments(

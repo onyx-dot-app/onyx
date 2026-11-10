@@ -200,6 +200,7 @@ class MCPTool(Tool):
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        """Check credentials, call the server, and report tool or authentication errors."""
         _start = time.monotonic()
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR
@@ -223,12 +224,7 @@ class MCPTool(Tool):
                 credentials.build_headers(),
             )
 
-            # Extra request headers can stand in for missing credentials, but
-            # not for a dead OAuth grant — its stale bearer wins the header
-            # merge, so the call can only fail upstream.
-            if not credentials.can_authenticate() and (
-                credentials.needs_reauth() or not self._additional_headers
-            ):
+            if not credentials.can_authenticate_with_headers(request_headers):
                 auth_error_msg = (
                     f"The {self._name} tool from {self.mcp_server.name} requires "
                     "connection values. Tell the user to connect to the server "
@@ -294,15 +290,14 @@ class MCPTool(Tool):
             tool_result_dict = {
                 "tool_result": _tool_result_value(process_mcp_result(tool_result))
             }
-            content = json.dumps(tool_result_dict)
-
             response = ToolResult(
                 details=CustomToolCallSummary(
                     tool_name=self._name,
                     response_type="json",
                     tool_result=tool_result_dict,
+                    structured_result=tool_result.structuredContent,
                 ),
-                content=content,
+                content=json.dumps(tool_result_dict),
             )
             outcome = MCPToolCallStatus.SUCCESS
             return response

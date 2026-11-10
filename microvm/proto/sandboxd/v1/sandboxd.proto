@@ -1,0 +1,378 @@
+syntax = "proto3";
+
+package craft.sandboxd.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1;sandboxdv1";
+
+// Sandboxd is the guest daemon inside each Craft micro-VM. It listens on
+// vsock port 52. The api_server reaches it through the node agent.
+//
+// Auth: the node agent installs a per-VM key with SetKey before its Create
+// returns, so no other caller can reach the VM first. Every call except
+// Health and SetKey, Init included, must carry that key in the
+// "x-sandboxd-key" metadata. Before SetKey they fail with KEY_NOT_SET.
+// Calls other than Health, SetKey and Init fail with NOT_INITIALIZED until
+// Init succeeds.
+//
+// Routing: through the node agent pass-through, every call, Health
+// included, must also carry exactly one "x-sandbox-id" metadata value: the
+// node agent's sandbox ID of the VM. The node agent rejects a call without
+// it (INVALID_ARGUMENT) and removes it before the call reaches the daemon.
+//
+// Errors: every failed call returns a gRPC status with one
+// google.rpc.ErrorInfo detail. ErrorInfo.domain is "sandboxd.craft.onyx.app"
+// and ErrorInfo.reason is the name of an ErrorReason value.
+//
+// A command that ends in any way (exit, signal, Cancel, deadline) is a
+// normal result (ExecResult), not an error.
+service Sandboxd {
+  // Health answers before Init. It needs no key.
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // SetKey installs the per-VM key. Only the node agent calls it, from its
+  // Create (with CreateRequest.sandboxd_key); the pass-through refuses it
+  // with PERMISSION_DENIED. It needs no key. The first key stays: a repeat
+  // call with the same key succeeds, any other key fails with
+  // KEY_ALREADY_SET.
+  rpc SetKey(SetKeyRequest) returns (SetKeyResponse);
+
+  // Init runs after every cold boot and every restore, before the sandbox
+  // is handed out. In order: set the wall clock, add host entropy to the
+  // kernel RNG, attach the per-VM drives (the image's attach script: scratch,
+  // overlays, managed drive; a no-op when init already ran it), grow the
+  // scratch file system, send SIGHUP to the in-guest egress relay (it resets
+  // every live connection), then install the env and session list. Before Init after a restore, the
+  // caller must also close the VM's host-side relay connections (node agent
+  // CloseConnections).
+  rpc Init(InitRequest) returns (InitResponse);
+
+  // Run starts a command and streams its events until the result. If the
+  // client goes away, the command keeps running; use Stream with the
+  // execution ID from the first event to read the rest.
+  rpc Run(RunRequest) returns (stream ExecEvent);
+
+  // Start starts a command and returns its execution ID at once.
+  rpc Start(StartRequest) returns (StartResponse);
+
+  // Stream sends the output of an execution from the given offsets, then
+  // the result. It works while the command runs and after it ended.
+  rpc Stream(StreamRequest) returns (stream ExecEvent);
+
+  // Interact writes to the stdin of a running command (started with
+  // stdin = true), or closes it.
+  rpc Interact(InteractRequest) returns (InteractResponse);
+
+  // Cancel kills every process of the execution (its cgroup) and returns
+  // the result, with completion CANCELED. Cancel of an ended execution
+  // returns its result. If the main process exited before the kill, the
+  // result is EXITED with its exit code.
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+
+  // Inspect returns one execution record.
+  rpc Inspect(InspectRequest) returns (InspectResponse);
+
+  // List returns every execution record, optionally filtered by labels.
+  rpc List(ListRequest) returns (ListResponse);
+
+  // Reserved for ENG-4572 (files, session capture/restore). They return
+  // UNIMPLEMENTED; the messages get their fields with that issue.
+  rpc ReadFile(ReadFileRequest) returns (stream DataChunk);
+  rpc WriteFile(stream WriteFileRequest) returns (WriteFileResponse);
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+  rpc CaptureSession(CaptureSessionRequest) returns (stream DataChunk);
+  rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
+
+  // Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+  rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
+  rpc BrowserStop(BrowserStopRequest) returns (BrowserStopResponse);
+}
+
+// The reason of a guest daemon error (google.rpc.ErrorInfo.reason).
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+  // A request field is not valid.
+  INVALID_ARGUMENT = 1;
+  // The call needs a successful Init first.
+  NOT_INITIALIZED = 2;
+  // The x-sandboxd-key metadata is missing or wrong.
+  UNAUTHENTICATED = 3;
+  // No record for the execution ID (never started, or expired).
+  EXECUTION_NOT_FOUND = 4;
+  // Interact: the command was started without stdin, or stdin is closed.
+  STDIN_NOT_OPEN = 5;
+  // Interact: the command already ended.
+  EXECUTION_ENDED = 6;
+  // The command could not start (for example, the program does not exist).
+  START_FAILED = 7;
+  // Too many running commands.
+  TOO_MANY_EXECUTIONS = 8;
+  // Init could not set the clock, add entropy or grow a file system.
+  INIT_FAILED = 9;
+  // Any other error.
+  INTERNAL = 10;
+  // No key yet: the node agent has not called SetKey.
+  KEY_NOT_SET = 11;
+  // SetKey: the daemon already has a different key.
+  KEY_ALREADY_SET = 12;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  // True after a successful Init.
+  bool initialized = 1;
+  string version = 2;
+  // Guest wall clock when the daemon answered.
+  google.protobuf.Timestamp guest_time = 3;
+  // From the last Init. Zero before Init.
+  uint64 generation = 4;
+  string sandbox_id = 5;
+  uint32 running_executions = 6;
+  google.protobuf.Timestamp initialized_at = 7;
+  // Time since the daemon process started.
+  google.protobuf.Duration uptime = 8;
+  // True after SetKey.
+  bool key_set = 9;
+}
+
+message SetKeyRequest {
+  // Per-VM key, 32 to 512 bytes of printable ASCII with no spaces (0x21 to
+  // 0x7E), because later calls send it as x-sandboxd-key metadata. Encode
+  // random bytes, for example the hex or base64url of 32 bytes from
+  // os.urandom. Any other key fails with INVALID_ARGUMENT.
+  string key = 1;
+}
+
+message SetKeyResponse {
+  // True if the daemon already had this key.
+  bool already_set = 1;
+}
+
+message InitRequest {
+  // Host wall clock. The daemon sets CLOCK_REALTIME to it. Add half the
+  // measured round trip for sub-millisecond error.
+  google.protobuf.Timestamp host_time = 1;
+  // 32 to 4096 random bytes from the host. The daemon adds them to the
+  // kernel RNG.
+  bytes entropy = 2;
+  // The key moved to SetKey.
+  reserved 3;
+  reserved "key";
+  // Base env for every command. Per-command env overrides it.
+  map<string, string> env = 4;
+  // Sessions of this sandbox (used by ENG-4572 capture/restore).
+  repeated string session_ids = 5;
+  // Node agent VM generation and sandbox ID, for Health and logs.
+  uint64 generation = 6;
+  string sandbox_id = 7;
+  // Size of the scratch drive in bytes (CreateRequest.scratch_gib << 30).
+  // Init fails with INIT_FAILED if a grown drive is still smaller after a
+  // short wait (the resize has not reached the guest). 0 skips the check.
+  uint64 scratch_bytes = 8;
+}
+
+message InitResponse {
+  // New clock minus the old clock (how far the guest clock moved).
+  google.protobuf.Duration clock_step = 1;
+  // True if the entropy was credited (RNDADDENTROPY); false if it was only
+  // mixed in.
+  bool entropy_credited = 2;
+  repeated GrownFS grown = 3;
+  string version = 4;
+  // True if the attach script ran (it does nothing when already attached).
+  bool attached = 5;
+  // True if the egress relay got SIGHUP. False if it was not running.
+  bool relay_reset = 6;
+}
+
+message GrownFS {
+  string mount_point = 1;
+  uint64 old_bytes = 2;
+  uint64 new_bytes = 3;
+}
+
+message Command {
+  // argv[0] is looked up in PATH. For a shell script use
+  // ["bash", "-c", script].
+  repeated string argv = 1;
+  // Working directory. Default "/".
+  string cwd = 2;
+  // Added to the Init env.
+  map<string, string> env = 3;
+  // Open a stdin pipe for Interact. Otherwise stdin is /dev/null.
+  bool stdin = 4;
+  // Kill the command after this long. Default 30 min. The daemon caps it
+  // (24 h by default).
+  google.protobuf.Duration deadline = 5;
+  // Free-form labels, for example session_id or task_id. Inspect and List
+  // return them.
+  map<string, string> labels = 6;
+}
+
+message RunRequest {
+  Command command = 1;
+}
+
+message StartRequest {
+  Command command = 1;
+}
+
+message StartResponse {
+  ExecStarted started = 1;
+}
+
+enum OutputStream {
+  OUTPUT_STREAM_UNSPECIFIED = 0;
+  STDOUT = 1;
+  STDERR = 2;
+}
+
+// How a command ended.
+enum Completion {
+  COMPLETION_UNSPECIFIED = 0;
+  // The main process exited; exit_code is set.
+  EXITED = 1;
+  // The main process was killed by a signal that the daemon did not send
+  // (for example the OOM killer); signal is set.
+  SIGNALED = 2;
+  // Cancel killed it.
+  CANCELED = 3;
+  // The deadline killed it.
+  DEADLINE_EXCEEDED = 4;
+}
+
+message ExecStarted {
+  string execution_id = 1;
+  // Guest PID of the main process.
+  int32 pid = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp deadline_at = 4;
+}
+
+message OutputChunk {
+  OutputStream stream = 1;
+  // Byte offset of data[0] in this stream.
+  int64 offset = 2;
+  bytes data = 3;
+}
+
+// The daemon keeps only the last bytes of each stream, and drops the output
+// of old ended executions when all output passes its memory budget. A gap
+// means the bytes [from, to) are gone.
+message OutputGap {
+  OutputStream stream = 1;
+  int64 from = 2;
+  int64 to = 3;
+}
+
+// The final event of every execution: the completion marker.
+message ExecResult {
+  Completion completion = 1;
+  // Set for EXITED. -1 otherwise.
+  int32 exit_code = 2;
+  // Signal number that ended the main process, or 0.
+  int32 signal = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  // Total bytes written to each stream.
+  int64 stdout_bytes = 5;
+  int64 stderr_bytes = 6;
+}
+
+message ExecEvent {
+  oneof event {
+    // Run only: the first event.
+    ExecStarted started = 1;
+    OutputChunk output = 2;
+    OutputGap gap = 3;
+    // The last event.
+    ExecResult result = 4;
+  }
+}
+
+message StreamRequest {
+  string execution_id = 1;
+  // Resume points: the first byte of each stream to send.
+  int64 stdout_offset = 2;
+  int64 stderr_offset = 3;
+}
+
+message InteractRequest {
+  string execution_id = 1;
+  bytes data = 2;
+  // Close stdin after data is written.
+  bool close_stdin = 3;
+}
+
+message InteractResponse {
+  int64 written = 1;
+}
+
+message CancelRequest {
+  string execution_id = 1;
+}
+
+message CancelResponse {
+  ExecResult result = 1;
+  // True if the execution had already ended; result is its own result.
+  bool already_ended = 2;
+}
+
+enum ExecState {
+  EXEC_STATE_UNSPECIFIED = 0;
+  RUNNING = 1;
+  ENDED = 2;
+}
+
+message Execution {
+  string execution_id = 1;
+  ExecState state = 2;
+  repeated string argv = 3;
+  map<string, string> labels = 4;
+  int32 pid = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp deadline_at = 7;
+  int64 stdout_bytes = 8;
+  int64 stderr_bytes = 9;
+  // Set when state is ENDED.
+  ExecResult result = 10;
+}
+
+message InspectRequest {
+  string execution_id = 1;
+}
+
+message InspectResponse {
+  Execution execution = 1;
+}
+
+message ListRequest {
+  // Only records that have all these labels.
+  map<string, string> labels = 1;
+}
+
+message ListResponse {
+  repeated Execution executions = 1;
+}
+
+// ENG-4572 / ENG-4573 placeholders.
+message DataChunk {
+  bytes data = 1;
+}
+message ReadFileRequest {}
+message WriteFileRequest {}
+message WriteFileResponse {}
+message ListFilesRequest {}
+message ListFilesResponse {}
+message DeleteFileRequest {}
+message DeleteFileResponse {}
+message CaptureSessionRequest {}
+message RestoreSessionRequest {}
+message RestoreSessionResponse {}
+message BrowserStartRequest {}
+message BrowserStartResponse {}
+message BrowserStopRequest {}
+message BrowserStopResponse {}

@@ -239,7 +239,10 @@ export class ChatPage {
     await expect(this.inputBar.sendButton).toBeDisabled();
   }
 
-  async expectCustomToolResult(name: string, json: string): Promise<void> {
+  /** Expands the timeline and checks one completed step of the tool that
+   * shows `output`. A JSON response renders as a `code` block; a text
+   * response renders as an inline code span. */
+  async expectCustomToolResult(name: string, output: string): Promise<void> {
     await this.page
       .getByRole("button", { name: "Expand timeline", exact: true })
       .click();
@@ -249,7 +252,10 @@ export class ChatPage {
     await expect(status).toBeVisible();
     await status.click();
     await expect(
-      this.scrollContainer.getByRole("code").filter({ hasText: json })
+      this.scrollContainer
+        .getByRole("code")
+        .or(this.scrollContainer.getByTestId("code-block"))
+        .filter({ hasText: output })
     ).toBeVisible();
   }
 

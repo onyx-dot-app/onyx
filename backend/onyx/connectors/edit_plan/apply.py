@@ -49,7 +49,11 @@ from onyx.connectors.file.config import LocalFileConnectorConfig
 from onyx.connectors.file.edit_staging import claim_staged_files__no_commit
 from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.backfill_models import BackfillSpec
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    ensure_personal_has_reader,
+    fetch_cc_pair_creator_id,
+    get_connector_credential_pair_from_id,
+)
 from onyx.db.connector_edit_requests import (
     apply_access_change__no_commit,
     clip_pending_backfills_to_start__no_commit,
@@ -391,6 +395,11 @@ def _apply_claimed_plan(
         )
     credential = fetch_proposed_credential(
         db_session, user=user, current=current, proposed=proposed
+    )
+    ensure_personal_has_reader(
+        proposed.access_type,
+        credential.user_id,
+        fetch_cc_pair_creator_id(db_session, cc_pair_id),
     )
     validated = _validate_proposed_state(
         db_session, current, proposed, credential, user.id

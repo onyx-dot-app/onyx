@@ -86,6 +86,9 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
             .with_for_update(key_share=True)
         )
     )
+    # Group rows first: their foreign key rejects a pair leaving a group type
+    # while it still has them.
+    db_session.execute(delete(UserGroup__CCPairDataAccess))
     if cc_pair_ids:
         db_session.execute(
             update(ConnectorCredentialPair)
@@ -105,7 +108,6 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
     # Not scoped to the changed pairs: with every pair public, nothing may keep a
     # data-access group or a synced permission, whichever pair wrote it. A sync
     # already in flight can still write some back, which grants nothing on a public pair.
-    db_session.execute(delete(UserGroup__CCPairDataAccess))
     db_session.execute(delete(User__ExternalUserGroupId))
     db_session.execute(delete(PublicExternalUserGroup))
     db_session.execute(

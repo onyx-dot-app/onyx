@@ -115,14 +115,11 @@ def start_playwright() -> tuple[Playwright, BrowserContext]:
         service_workers="block",
     )
 
+    # Chromium must compute Sec-Fetch-* headers for each request type.
     context.set_extra_http_headers(
         {
             "Accept": DEFAULT_HEADERS["Accept"],
             "Accept-Language": DEFAULT_HEADERS["Accept-Language"],
-            "Sec-Fetch-Dest": DEFAULT_HEADERS["Sec-Fetch-Dest"],
-            "Sec-Fetch-Mode": DEFAULT_HEADERS["Sec-Fetch-Mode"],
-            "Sec-Fetch-Site": DEFAULT_HEADERS["Sec-Fetch-Site"],
-            "Sec-Fetch-User": DEFAULT_HEADERS["Sec-Fetch-User"],
             "Sec-CH-UA": DEFAULT_HEADERS["Sec-CH-UA"],
             "Sec-CH-UA-Mobile": DEFAULT_HEADERS["Sec-CH-UA-Mobile"],
             "Sec-CH-UA-Platform": DEFAULT_HEADERS["Sec-CH-UA-Platform"],

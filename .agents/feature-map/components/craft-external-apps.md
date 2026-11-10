@@ -213,7 +213,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    `Bearer` headers. Firecracker VMs share the host relay's IP, so the relay
    stamps an EdDSA token per connection (`sandbox_proxy/sandbox_identity/signed.py`).
    The proxy holds node public keys only and checks the cache placement record
-   (`server/features/build/sandbox/firecracker_registry.py`; no schema change).
+   (`microvm/registry.py`; no schema change).
    A bad token is a 403, never an IP fallback; a signed plain-HTTP connection
    allows one request.
    `sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_session_by_id` accepts a tag

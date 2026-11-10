@@ -39,6 +39,7 @@ from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.chat_configs import (
     CHAT_EXECUTION_TIMEOUT_S,
+    CODE_MODE_ENABLED,
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
@@ -429,16 +430,19 @@ class ChatTurnExecution:
             chat_agent = create_chat_agent(
                 self.setup, self.user, index, cancellation, self._auto_filters
             )
-            persistence.tool_ids = {
-                tool.name: tool.id for tool in chat_agent.application_tools
-            }
+            tool_ids = {tool.name: tool.id for tool in chat_agent.application_tools}
+            persistence.tool_ids = dict(tool_ids)
+            # Restored and child agents build their own tools from these.
             if isinstance(chat_agent, DeepResearchAgent):
+                # Deep research offers its tools unchanged.
+                configured_tools = chat_agent.application_tools
                 if self.setup.research_tool_id is None:
                     raise ValueError("Deep research tool configuration is missing")
                 persistence.tool_ids[RESEARCH_AGENT_TOOL_NAME] = (
                     self.setup.research_tool_id
                 )
             else:
+                configured_tools = chat_agent.configured_tools
                 persistence.initial_citations = dict(chat_agent.initial_citations)
             branch = load_chat_branch(persistence.message_id)
             if branch.chat_session_id != self.setup.chat_session_id:
@@ -472,7 +476,7 @@ class ChatTurnExecution:
             directory = ChatAgentDirectory(
                 history_store=history_store,
                 llm=persistence.llm,
-                tools=chat_agent.application_tools,
+                tools=configured_tools,
                 user_identity=self.setup.user_identity,
                 store=store,
             )
@@ -482,7 +486,7 @@ class ChatTurnExecution:
                     build_agent=partial(
                         restore_chat_agent,
                         llm=persistence.llm,
-                        tools=chat_agent.application_tools,
+                        tools=configured_tools,
                         user_identity=self.setup.user_identity,
                     ),
                     directory=directory,
@@ -524,12 +528,7 @@ class ChatTurnExecution:
                     deadline_at=self._deadline_at,
                     coordinator=coordinator,
                     event_dispatcher=self.delivery.events,
-                    on_event=ResponsePresenter(
-                        emitter,
-                        tool_ids={
-                            tool.name: tool.id for tool in chat_agent.application_tools
-                        },
-                    ).consume,
+                    on_event=ResponsePresenter(emitter, tool_ids=tool_ids).consume,
                 )
 
             def response_saved(completion: Future[RunState]) -> None:
@@ -726,6 +725,7 @@ def create_chat_agent(
             agent_id=agent_id,
             messages=list(setup.messages),
             tools=tools,
+            code_mode=CODE_MODE_ENABLED,
             custom_agent_prompt=setup.custom_agent_prompt,
             additional_context=setup.additional_context,
             context_files=setup.extracted_context_files,

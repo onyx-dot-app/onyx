@@ -42,6 +42,8 @@ export function isToolPacket(
     PacketType.CODING_AGENT_FINAL,
     PacketType.BASH_TOOL_START,
     PacketType.BASH_TOOL_DELTA,
+    PacketType.CODE_MODE_START,
+    PacketType.CODE_MODE_DELTA,
     PacketType.IMAGE_GENERATION_TOOL_START,
     PacketType.IMAGE_GENERATION_TOOL_DELTA,
   ];

@@ -353,7 +353,7 @@ export function ModelAccessField() {
               <div className="grid grid-cols-2 gap-1 w-full">
                 {selectedGroupIds.map((id) => {
                   const group = groupById.get(id);
-                  const memberCount = group?.users.length ?? 0;
+                  const memberCount = group?.member_count ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
                       <Card

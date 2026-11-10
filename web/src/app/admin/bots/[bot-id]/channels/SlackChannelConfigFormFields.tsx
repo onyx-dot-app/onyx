@@ -75,7 +75,8 @@ export function SlackChannelConfigFormFields({
   // Helper function to check if a document set contains private connectors
   const documentSetContainsPrivate = (documentSet: DocumentSetSummary) => {
     return documentSet.cc_pair_summaries.some(
-      (summary) => summary.access_type === "private"
+      (summary) =>
+        summary.access_type === "private" || summary.access_type === "personal"
     );
   };
 
@@ -104,13 +105,35 @@ export function SlackChannelConfigFormFields({
     return documentSets.filter(documentSetContainsSync);
   }, [documentSets]);
 
+  // The document sets this channel would search: the selected sets, or the
+  // chosen agent's. The privacy alert lists only their connectors.
+  const searchedSets = useMemo((): DocumentSetSummary[] => {
+    if (values.knowledge_source === "document_sets") {
+      return documentSets.filter((ds) => values.document_sets.includes(ds.id));
+    }
+    if (values.knowledge_source === "assistant") {
+      return (
+        searchEnabledAgents.find((p) => p.id == values.persona_id)
+          ?.document_sets ?? []
+      );
+    }
+    return [];
+  }, [
+    documentSets,
+    searchEnabledAgents,
+    values.knowledge_source,
+    values.document_sets,
+    values.persona_id,
+  ]);
+
   const memoizedPrivateConnectors = useMemo(() => {
     const uniqueDescriptors = new Map();
-    documentSets.forEach((ds: DocumentSetSummary) => {
+    searchedSets.forEach((ds: DocumentSetSummary) => {
       const ccPairSummaries = getCcPairSummaries(ds);
       ccPairSummaries.forEach((summary: any) => {
         if (
-          summary.access_type === "private" &&
+          (summary.access_type === "private" ||
+            summary.access_type === "personal") &&
           !uniqueDescriptors.has(summary.id)
         ) {
           uniqueDescriptors.set(summary.id, summary);
@@ -118,7 +141,7 @@ export function SlackChannelConfigFormFields({
       });
     });
     return Array.from(uniqueDescriptors.values());
-  }, [documentSets]);
+  }, [searchedSets]);
 
   const selectableSets = useMemo(() => {
     return documentSets.filter((ds) => !documentSetContainsSync(ds));
@@ -157,22 +180,10 @@ export function SlackChannelConfigFormFields({
     }
   }, [unselectableSets, values.document_sets, setFieldValue, t]);
 
-  const shouldShowPrivacyAlert = useMemo(() => {
-    if (values.knowledge_source === "document_sets") {
-      const selectedSets = documentSets.filter((ds) =>
-        values.document_sets.includes(ds.id)
-      );
-      return selectedSets.some((ds) => documentSetContainsPrivate(ds));
-    } else if (values.knowledge_source === "assistant") {
-      const chosenAgent = searchEnabledAgents.find(
-        (p) => p.id == values.persona_id
-      );
-      return chosenAgent?.document_sets.some((ds) =>
-        documentSetContainsPrivate(ds)
-      );
-    }
-    return false;
-  }, [values.knowledge_source, values.document_sets, values.persona_id]);
+  const shouldShowPrivacyAlert = useMemo(
+    () => searchedSets.some((ds) => documentSetContainsPrivate(ds)),
+    [searchedSets]
+  );
 
   return (
     <>

@@ -8,9 +8,11 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     PreparedStep,
+    ReleaseFailed,
     StepInput,
     StepResult,
     ToolCallContext,
+    ToolResultAmendment,
 )
 from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -30,10 +32,16 @@ from onyx.chat.models import (
 )
 from onyx.chat.prompt_utils import (
     build_chat_prompt,
+    callable_tools,
     prepare_prompt,
 )
-from onyx.chat.tool_results import staged_result_details, tool_result_sources
-from onyx.configs.chat_configs import MAX_LLM_CYCLES
+from onyx.chat.tool_results import (
+    merged_chat_files,
+    staged_result_details,
+    tool_result_parts,
+    tool_result_sources,
+)
+from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
@@ -53,6 +61,7 @@ from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
@@ -88,15 +97,27 @@ class ChatAgent(Agent, RestorableFeature):
         previous_run_id: str | None = None,
         agent_id: str | None = None,
         additional_context: str | None = None,
+        code_mode: bool = False,
     ) -> None:
-        self.max_steps = MAX_LLM_CYCLES
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
-        self.application_tools = list(tools)
-        self.stages_files = any(tool.name == PYTHON_TOOL_NAME for tool in tools)
+        # The tools the chat is configured with; restored and child agents receive
+        # them, and code mode applies per agent.
+        self.configured_tools = list(tools)
+        self.code_mode = code_mode
+        # Each agent instance has its own cells, so a restored run has none open.
+        self.application_tools, self.code_cells = (
+            with_code_mode(self.configured_tools)
+            if code_mode
+            else (list(self.configured_tools), None)
+        )
+        # Programs batch tool calls, so code mode gets its own cap when it applies.
+        self.max_steps = (
+            CODE_MODE_MAX_LLM_CYCLES if self.code_cells is not None else MAX_LLM_CYCLES
+        )
         self.include_citations = include_citations
         self.reasoning_effort = reasoning_effort
         self.memory = user_memory_context
@@ -105,6 +126,10 @@ class ChatAgent(Agent, RestorableFeature):
         self.started = time.monotonic()
         self.preferred_tool_id = preferred_tool_id
         self.chat_files = list(chat_files or [])
+        # Only the Python tool reads the files of found documents.
+        self.stages_files = any(
+            tool.name == PYTHON_TOOL_NAME for tool in self.configured_tools
+        )
         self.citation_processor = DynamicCitationProcessor(
             citation_mode=CitationMode.HYPERLINK
             if include_citations
@@ -147,6 +172,8 @@ class ChatAgent(Agent, RestorableFeature):
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
             after_tool_call=self._finalize_tool,
+            on_finish=None if self.code_cells is None else self._finished_cells,
+            on_suspend=None if self.code_cells is None else self._suspended_cells,
         )
 
     def capture_state(self) -> ChatFeatureState:
@@ -159,6 +186,7 @@ class ChatAgent(Agent, RestorableFeature):
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
             preferred_tool_id=self.preferred_tool_id,
+            code_mode=self.code_mode,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
             request_context=self.additional_context,
@@ -183,6 +211,7 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
             or saved.preferred_tool_id != self.preferred_tool_id
+            or saved.code_mode != self.code_mode
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
             or saved.request_context != self.additional_context
@@ -201,16 +230,16 @@ class ChatAgent(Agent, RestorableFeature):
         """Apply accepted tool results to the next request's context policy."""
         for response in responses:
             data = response.details
-            if response.tool_name == SearchTool.NAME:
+            if any(
+                part.tool_name == SearchTool.NAME
+                for part in tool_result_parts(response)
+            ):
                 self.has_called_search_tool = True
             sources = tool_result_sources(data)
             if sources is not None:
                 self.gathered_documents.extend(sources.documents)
             if isinstance(data, StagedChatFiles):
-                existing = {file.filename for file in self.chat_files}
-                self.chat_files.extend(
-                    file for file in data.staged_files if file.filename not in existing
-                )
+                self.chat_files = merged_chat_files(self.chat_files, data.staged_files)
             if sources is None:
                 continue
             self.citation_processor.update_citation_mapping(sources.citations)
@@ -252,7 +281,9 @@ class ChatAgent(Agent, RestorableFeature):
         ]
         allowed_tool_names: frozenset[str] | None = None
         tool_choice = ToolChoiceOptions.AUTO
-        available_tool_names = {tool.name for tool in self.application_tools}
+        available_tool_names = {
+            tool.name for tool in callable_tools(self.application_tools)
+        }
         if state.step.is_last:
             tool_choice = ToolChoiceOptions.NONE
             allowed_tool_names = frozenset()
@@ -313,7 +344,8 @@ class ChatAgent(Agent, RestorableFeature):
 
     def _after_step(self, result: StepResult) -> bool:
         self.search_context = update_search_context(
-            self.search_context, result.tool_results
+            self.search_context,
+            [part for item in result.tool_results for part in tool_result_parts(item)],
         )
         self._update_tool_context(result.tool_results)
         if not result.message.tool_calls or result.step.is_last:
@@ -325,6 +357,10 @@ class ChatAgent(Agent, RestorableFeature):
     def _finalize_tool(
         self, _context: ToolCallContext, result: ToolResult
     ) -> ToolResult:
+        return self._staged(result)
+
+    def _staged(self, result: ToolResult) -> ToolResult:
+        """Stage the files of the result's documents for the Python tool."""
         if not self.stages_files:
             return result
         known = {file.file_id for file in self.chat_files if file.file_id is not None}
@@ -332,6 +368,41 @@ class ChatAgent(Agent, RestorableFeature):
             result.details, known, build_python_chat_files_from_search_docs
         )
         return result
+
+    def _finished_cells(
+        self, results: list[ToolResultMessage]
+    ) -> list[ToolResultAmendment]:
+        """Stop the response's open cells and save their final records."""
+        if self.code_cells is None:
+            return []
+        return self._staged_release(partial(self.code_cells.finish, results))
+
+    def _suspended_cells(
+        self, results: list[ToolResultMessage]
+    ) -> list[ToolResultAmendment]:
+        """Stop the response's open cells when the run pauses, and save their final
+        records."""
+        if self.code_cells is None:
+            return []
+        return self._staged_release(partial(self.code_cells.suspend, results))
+
+    def _staged_release(
+        self, release: Callable[[], list[ToolResultAmendment]]
+    ) -> list[ToolResultAmendment]:
+        try:
+            return self._staged_amendments(release())
+        except ReleaseFailed as failed:
+            raise ReleaseFailed(
+                failed.error, self._staged_amendments(failed.amendments)
+            ) from failed.error
+
+    def _staged_amendments(
+        self, amendments: list[ToolResultAmendment]
+    ) -> list[ToolResultAmendment]:
+        return [
+            amendment.model_copy(update={"result": self._staged(amendment.result)})
+            for amendment in amendments
+        ]
 
     def _validate_answer(self, result: StepResult) -> None:
         if not result.message.text and not result.message.tool_calls:

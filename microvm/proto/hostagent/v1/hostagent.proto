@@ -1,0 +1,235 @@
+syntax = "proto3";
+
+package craft.hostagent.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1;hostagentv1";
+
+// HostAgent runs the Firecracker VMs of one Craft node.
+//
+// Errors: every failed call returns a gRPC status with one
+// google.rpc.ErrorInfo detail. ErrorInfo.domain is
+// "hostagent.craft.onyx.app" and ErrorInfo.reason is the name of an
+// ErrorReason value, for example "CAPACITY_MEMORY".
+service HostAgent {
+  // Create restores a VM for (sandbox_id, attempt) from a template on this
+  // node. A repeat call with the same (sandbox_id, attempt) returns the
+  // existing VM and does not start a second one. A different attempt for a
+  // sandbox that has a VM on this node returns ATTEMPT_CONFLICT. With
+  // sandboxd_key set, Create installs that key in the guest daemon (its
+  // SetKey, over vsock) before it returns a running VM; a repeat call
+  // installs it again (the daemon accepts the same key).
+  rpc Create(CreateRequest) returns (CreateResponse);
+
+  // Stop stops the VM only if sandbox_id, attempt and generation all match
+  // it. A repeat Stop of the same instance succeeds.
+  rpc Stop(StopRequest) returns (StopResponse);
+
+  // List returns every VM that this agent knows about.
+  rpc List(ListRequest) returns (ListResponse);
+
+  // NodeInfo returns the node capacity, versions and templates.
+  rpc NodeInfo(NodeInfoRequest) returns (NodeInfoResponse);
+
+  // CloseConnections closes every egress relay connection of the VM, with
+  // the same preconditions as Stop. New connections still work. The
+  // api_server calls it in the daemon Init sequence after a restore, so that
+  // pooled client connections in the guest fail fast and reconnect.
+  rpc CloseConnections(CloseConnectionsRequest) returns (CloseConnectionsResponse);
+
+  // Dial opens a byte stream to a vsock port of a running VM: the guest
+  // daemon or the app preview (3010). The first frame names sandbox_id and
+  // guest_port and may carry data; later frames carry data only. The
+  // response stream carries the guest's bytes and ends when the guest closes
+  // the connection. When the client ends its send side, the agent keeps
+  // reading until the guest closes (Firecracker vsock has no half-close).
+  rpc Dial(stream DialFrame) returns (stream DialFrame);
+}
+
+// The reason of a host agent error (google.rpc.ErrorInfo.reason).
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+  // A request field is not valid (format or range).
+  INVALID_ARGUMENT = 1;
+  // The template version is not on this node.
+  TEMPLATE_MISSING = 2;
+  // vcpus or mem_mib differ from the template. A snapshot restore keeps the
+  // template's shape.
+  TEMPLATE_SHAPE_MISMATCH = 3;
+  // The template was built with a different Firecracker version.
+  TEMPLATE_INCOMPATIBLE = 4;
+  // scratch_gib is smaller than the template's scratch disk. The scratch
+  // disk can only grow.
+  SCRATCH_TOO_SMALL = 5;
+  // scratch_gib is larger than the node allows.
+  SCRATCH_TOO_LARGE = 6;
+  // The node does not have enough free memory for the VM.
+  CAPACITY_MEMORY = 7;
+  // The node data disk does not have enough free space.
+  CAPACITY_DISK = 8;
+  // The node has no free VM slot (jailer UID).
+  CAPACITY_VM_SLOTS = 9;
+  // The sandbox has a VM with a different attempt on this node.
+  ATTEMPT_CONFLICT = 10;
+  // The attempt is not newer than an attempt that this node already stopped.
+  STALE_ATTEMPT = 11;
+  // This node has no VM and no record of a stopped VM for the sandbox.
+  SANDBOX_NOT_FOUND = 12;
+  // Stop: the attempt or the generation does not match the VM. Dial: the
+  // running VM has another generation than the first frame asks for.
+  INSTANCE_MISMATCH = 13;
+  // The jailer, Firecracker or the snapshot restore failed.
+  VMM_FAILED = 14;
+  // Any other error.
+  INTERNAL = 15;
+  // The agent keeps a Firecracker process for the sandbox that it could not
+  // verify (an unreadable journal record, a failed check at start-up, or a
+  // failed start). Create and Stop fail until that process exits, or until an
+  // operator fixes the journal record and restarts the agent.
+  SANDBOX_IN_DOUBT = 16;
+  // Dial: the guest port is not on the agent's allow-list.
+  PORT_NOT_ALLOWED = 17;
+  // Dial or the guest daemon pass-through: nothing in the VM accepted the
+  // connection on that port.
+  GUEST_UNREACHABLE = 18;
+  // Dial or the guest daemon pass-through: the sandbox has a VM on this node,
+  // but it is not running (starting, stopping or exited).
+  VM_NOT_RUNNING = 19;
+  // Dial: the VM already has the most open Dial streams that the agent
+  // allows (--dial-max-streams).
+  DIAL_LIMIT = 20;
+  // The guest daemon pass-through: only the agent may call this daemon
+  // method (SetKey).
+  METHOD_NOT_ALLOWED = 21;
+  // Create: the guest daemon refused sandboxd_key, for example because it
+  // already has a different key. Do not use the VM: Stop it and create a
+  // new attempt.
+  GUEST_KEY_REJECTED = 22;
+}
+
+enum VMState {
+  VM_STATE_UNSPECIFIED = 0;
+  // Create is in progress.
+  VM_STATE_STARTING = 1;
+  // The VM runs.
+  VM_STATE_RUNNING = 2;
+  // The Firecracker process ended without a Stop call. Its resources are
+  // released. Stop it, or Create a new attempt.
+  VM_STATE_EXITED = 3;
+}
+
+message CreateRequest {
+  // Lowercase canonical UUID.
+  string sandbox_id = 1;
+  // Attempt number from the api_server. Must be 1 or more.
+  uint64 attempt = 2;
+  // Template version on this node.
+  string template = 3;
+  // Must equal the template's vcpus.
+  uint32 vcpus = 4;
+  // Must equal the template's mem_mib.
+  uint32 mem_mib = 5;
+  // Scratch disk size. Must be at least the template's scratch size. A
+  // larger value grows the disk; the guest daemon grows the file system.
+  uint32 scratch_gib = 6;
+  // Tenant of the sandbox (^[A-Za-z0-9_-]+$). The egress relay stamps
+  // spiffe://onyx/tenant/<tenant_id>/sandbox/<sandbox_id>.
+  string tenant_id = 7;
+  // Secret. The per-VM guest daemon key (craft.sandboxd.v1 SetKey rules:
+  // 32 to 512 bytes, 0x21 to 0x7E). Daemon calls must carry it in
+  // x-sandboxd-key. The agent does not log or store it. Without it, the
+  // daemon answers only Health.
+  string sandboxd_key = 8;
+}
+
+message CreateResponse {
+  VM vm = 1;
+  // False when the call returned an existing VM.
+  bool created = 2;
+}
+
+message StopRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+}
+
+message StopResponse {
+  // True when this instance was already stopped.
+  bool already_stopped = 1;
+}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated VM vms = 1;
+}
+
+message VM {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  // Identifies this VM instance. Unique on the node and increases with each
+  // Create.
+  uint64 generation = 3;
+  string template = 4;
+  uint32 vcpus = 5;
+  uint32 mem_mib = 6;
+  uint32 scratch_gib = 7;
+  VMState state = 8;
+  // Host PID of the Firecracker process. 0 while starting.
+  int32 pid = 9;
+  // Jailer UID and GID of the VM.
+  uint32 uid = 10;
+  google.protobuf.Timestamp started_at = 11;
+  string tenant_id = 12;
+}
+
+message CloseConnectionsRequest {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+}
+
+message DialFrame {
+  // First frame only.
+  string sandbox_id = 1;
+  // First frame only.
+  uint32 guest_port = 2;
+  bytes data = 3;
+  // First frame only. If set, Dial fails with INSTANCE_MISMATCH unless the
+  // running VM has this generation. 0 means any running VM.
+  uint64 generation = 4;
+}
+
+message CloseConnectionsResponse {
+  // Number of relay connections that were closed.
+  uint32 closed = 1;
+}
+
+message NodeInfoRequest {}
+
+message NodeInfoResponse {
+  uint64 mem_total_mib = 1;
+  uint64 mem_available_mib = 2;
+  // VMs that are starting or running.
+  uint32 vm_count = 3;
+  repeated TemplateInfo templates = 4;
+  string cpu_model = 5;
+  // For example "v1.17.0".
+  string firecracker_version = 6;
+  // Host kernel release.
+  string host_kernel = 7;
+  string agent_version = 8;
+  uint64 disk_free_mib = 9;
+}
+
+message TemplateInfo {
+  string version = 1;
+  uint32 vcpus = 2;
+  uint32 mem_mib = 3;
+  uint32 scratch_gib = 4;
+  // Guest kernel release.
+  string guest_kernel = 5;
+  string firecracker_version = 6;
+}

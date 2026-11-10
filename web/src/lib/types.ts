@@ -187,7 +187,12 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync" | "sync_restricted";
+export type AccessType =
+  | "public"
+  | "private"
+  | "sync"
+  | "sync_restricted"
+  | "personal";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -560,7 +565,10 @@ export interface SlackBotTokens {
 export interface UserGroup {
   id: number;
   name: string;
+  // Empty when the list was fetched without members; use member_count.
   users: User[];
+  member_count: number;
+  active_member_count: number;
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)
   manager_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];

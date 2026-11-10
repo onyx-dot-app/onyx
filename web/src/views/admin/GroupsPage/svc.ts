@@ -8,15 +8,14 @@ import type { UserGroup } from "@/lib/types";
 const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
 
 /**
- * Refresh both group-list caches. These pages read the include_default key, but the users
- * and connector pages read the plain one, so a rename, membership edit or delete has to
- * reach both or they keep serving a stale name or a group that no longer exists.
+ * Refresh every cached group list and single-group read. Pages read different
+ * variants (with or without default groups and members), so a rename, membership
+ * edit or delete has to reach all of them or they serve stale data.
  */
 async function refreshGroupLists(mutate: ScopedMutator): Promise<void> {
-  await Promise.all([
-    mutate(SWR_KEYS.adminUserGroups),
-    mutate(SWR_KEYS.adminUserGroupsWithDefault),
-  ]);
+  await mutate(
+    (key) => typeof key === "string" && key.startsWith(USER_GROUP_URL)
+  );
 }
 
 // Logs an unparseable body — without it a proxy's HTML 502 is indistinguishable from a

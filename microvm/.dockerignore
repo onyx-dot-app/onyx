@@ -1,0 +1,5 @@
+# Build context of Dockerfile: only the Go sources are needed.
+*.test
+Dockerfile
+check-image.sh
+README.md

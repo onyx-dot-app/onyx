@@ -24,7 +24,7 @@ covers new files that match it.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/chat/execution.py`, `backend/onyx/chat/agent.py`, `backend/onyx/chat/errors.py` | core-chat-loop |
-| `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py` | streaming-protocol, core-chat-loop |
+| `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py` | streaming-protocol, core-chat-loop, code-execution |
 | `backend/onyx/chat/persistence.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/chat/history_store.py`, `backend/onyx/chat/response.py`, `backend/onyx/db/chat_checkpoint.py` | chat-persistence |
 | `backend/onyx/chat/run_store.py`, `backend/onyx/chat/checkpoint.py`, `backend/onyx/chat/restoration.py` | agent-runtime, chat-persistence |
@@ -58,7 +58,7 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
-| `backend/onyx/tools/tool_implementations/bash/`, `backend/onyx/tools/tool_implementations/python/` | code-execution |
+| `backend/onyx/tools/tool_implementations/bash/`, `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
@@ -242,10 +242,11 @@ covers new files that match it.
 | `backend/onyx/server/features/build/sandbox/image/opencode-plugins/webapp.ts`, `backend/onyx/server/features/build/sandbox/image/templates/outputs/web/` | craft-webapp-proxy |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/sandbox_proxy/`, `deployment/helm/charts/onyx/templates/sandbox-proxy/` | craft-external-apps |
-| `backend/onyx/server/features/build/sandbox_nodes.py`, `backend/onyx/server/features/build/sandbox/firecracker_registry.py` | craft-external-apps |
+| `backend/onyx/server/features/microvm/api.py`, `backend/onyx/microvm/registry.py` | craft-external-apps |
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-egress.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-push.yaml`, `deployment/helm/charts/onyx/templates/sandbox-image-prepuller.yaml`, `deployment/helm/charts/onyx/templates/craft-fc-preflight.yaml`, `deployment/helm/charts/onyx/scripts/craft-fc-preflight.sh` | craft-sandboxes |
 | `deployment/helm/dev/`, `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
+| `microvm/` | craft-sandboxes |
 
 ## Frontend: chat and user surfaces
 

@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Annotated, Any, Literal, NotRequired
+from typing import Annotated, Any, Literal, NotRequired, get_args
 from uuid import UUID, uuid4
 
 from fastapi_users_db_sqlalchemy import (
@@ -160,6 +160,7 @@ from onyx.tools.models import (
     MemoryUpdated,
     ToolExecutionError,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
@@ -1043,6 +1044,13 @@ class ConnectorCredentialPair(Base):
     """
 
     __tablename__ = "connector_credential_pair"
+    # The target of the data-access rows' (cc_pair_id, access_type) foreign key,
+    # which pins those rows to group access types.
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "access_type", name="uq_connector_credential_pair_id_access_type"
+        ),
+    )
     # NOTE: this `id` column has to use `Sequence` instead of `autoincrement=True`
     # due to some SQLAlchemy quirks + this not being a primary key column
     id: Mapped[int] = mapped_column(
@@ -1176,7 +1184,9 @@ class ConnectorCredentialPair(Base):
     )
 
     # the user id of the user that created this cc pair
-    creator_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    creator_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
     creator: Mapped["User"] = relationship(
         "User",
         back_populates="cc_pairs",
@@ -3783,25 +3793,31 @@ class ChatResponseItem(Base):
     )
 
 
+# Tool result details that saved responses, checkpoints and temporary chats keep,
+# told apart by their `type` literal.
+SavedToolResultDetails = Annotated[
+    SearchDocsResponse
+    | ResearchAgentCallResult
+    | CodingAgentCallResult
+    | CustomToolCallSummary
+    | FileReadResult
+    | LlmBashExecutionResult
+    | LlmPythonExecutionResult
+    | MemoryUpdated
+    | ToolExecutionError
+    | FinalImageGenerationResponse
+    | CodeModeExecutionResult,
+    Field(discriminator="type"),
+]
+SAVED_TOOL_RESULT_TYPES: tuple[type[BaseModel], ...] = get_args(
+    get_args(SavedToolResultDetails)[0]
+)
+
+
 class StoredToolResult(ToolResultMessage):
     """Tool output with durable application details that can be restored from JSON."""
 
-    details: (
-        Annotated[
-            SearchDocsResponse
-            | ResearchAgentCallResult
-            | CodingAgentCallResult
-            | CustomToolCallSummary
-            | FileReadResult
-            | LlmBashExecutionResult
-            | LlmPythonExecutionResult
-            | MemoryUpdated
-            | ToolExecutionError
-            | FinalImageGenerationResponse,
-            Field(discriminator="type"),
-        ]
-        | None
-    ) = None
+    details: SavedToolResultDetails | None = None
 
 
 class ToolCall(Base):
@@ -5602,15 +5618,32 @@ class UserGroup__CCPairDataAccess(Base):
     may manage the pair."""
 
     __tablename__ = "user_group__cc_pair_data_access"
-
-    cc_pair_id: Mapped[int] = mapped_column(
-        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
-        primary_key=True,
+    # A row copies its pair's access type, and the foreign key matches both, so
+    # a row can exist only while its pair takes groups. Moving a pair to a type
+    # without groups fails until its rows are removed; PRIVATE <-> SYNC_RESTRICTED
+    # cascades.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cc_pair_id", "access_type"],
+            ["connector_credential_pair.id", "connector_credential_pair.access_type"],
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+            name="fk_cc_pair_data_access_cc_pair_access_type",
+        ),
+        CheckConstraint(
+            "access_type IN ('PRIVATE', 'SYNC_RESTRICTED')",
+            name="ck_cc_pair_data_access_group_access_type",
+        ),
     )
+
+    cc_pair_id: Mapped[int] = mapped_column(primary_key=True)
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id", ondelete="CASCADE"),
         primary_key=True,
         index=True,
+    )
+    access_type: Mapped[AccessType] = mapped_column(
+        Enum(AccessType, native_enum=False), nullable=False
     )
 
 

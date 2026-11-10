@@ -95,8 +95,10 @@ sets, start date, attached documents and hierarchy nodes. Chat builds it in
 `db/tools.py:capture_persona_tool_configuration`, and the `/search` API builds
 its own.
 
-**Lanes and weights.** The rephrased semantic query, the model's own queries,
-the user's original message and the keyword queries each get a lane and an RRF
+**Lanes and weights.** A call runs at most `MAX_QUERIES_PER_CALL` (3) of the
+model's queries; `SearchTool._run` drops the rest with a log warning, and the
+tool definition states the limit. The rephrased semantic query, the model's
+own queries, the user's original message and the keyword queries each get a lane and an RRF
 weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a
 low `hybrid_alpha`. A `hybrid_alpha` of exactly 0 skips embedding and runs pure
 keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.
@@ -209,7 +211,7 @@ calls the index directly for admin document inspection.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
    `ChatAgent._finalize_tool` stages the connector files of all `search_docs`
-   for the Python tool by `SearchDoc.file_id`, which
+   for the Python tool, when the chat offers it, by `SearchDoc.file_id`, which
    `populate_file_ids_on_sections` fills ([[code-execution]]). The saved result
    (`chat/response.py:_saved_message`) drops `search_docs` and the planning
    metadata. The `ToolCall` row keeps the selected documents, so replay and

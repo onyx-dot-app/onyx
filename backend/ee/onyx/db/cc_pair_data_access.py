@@ -143,11 +143,25 @@ def add_cc_pair_data_access__no_commit(
     cc_pair_ids. Does not mark documents for sync."""
     if not cc_pair_ids or not user_group_ids:
         return
+    # Each row copies its pair's access type for the composite foreign key.
+    access_types = dict(
+        db_session.execute(
+            select(
+                ConnectorCredentialPair.id, ConnectorCredentialPair.access_type
+            ).where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+        )
+        .tuples()
+        .all()
+    )
     db_session.execute(
         insert(UserGroup__CCPairDataAccess)
         .values(
             [
-                {"cc_pair_id": cc_pair_id, "user_group_id": user_group_id}
+                {
+                    "cc_pair_id": cc_pair_id,
+                    "user_group_id": user_group_id,
+                    "access_type": access_types[cc_pair_id],
+                }
                 for cc_pair_id in cc_pair_ids
                 for user_group_id in user_group_ids
             ]

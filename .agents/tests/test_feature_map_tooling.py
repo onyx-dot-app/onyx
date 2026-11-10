@@ -726,6 +726,77 @@ def test_enclosing_names() -> None:
     assert not stale_docs.symbol_matches("Model.column", {"Model", "Model.run"})
 
 
+_UTILS = "backend/onyx/chat/citation_utils.py"
+
+
+def _commit_map(fmap: FixtureMap) -> None:
+    _git(fmap.root, "add", ".")
+    _git(fmap.root, "commit", "-qm", "map")
+    _git(fmap.root, "checkout", "-qb", "feature")
+
+
+def test_pr_lists_documents_the_pr_edited(fmap: FixtureMap) -> None:
+    _commit_map(fmap)
+    (fmap.root / _UTILS).write_text("def update_mapping():\n    return 1\n")
+    fmap.edit(_CIT, "numbered markers that open", "numbered markers that link")
+    _git(fmap.root, "commit", "-qam", "change update_mapping and its document")
+
+    text = stale_docs.pr_text("main", fmap.map_dir, fmap.root)
+
+    entry = _entry(text, "citations")
+    assert "edited in this PR" in entry
+    assert "`unresolved-silent`" in entry
+    assert "Owns:" not in entry
+    # The turn brief skips the same document.
+    assert "- citations " not in _reminder(
+        fmap, [_UTILS, f".agents/feature-map/{_CIT}"]
+    )
+
+
+def test_pr_skips_a_change_outside_the_cited_symbol(fmap: FixtureMap) -> None:
+    _commit_map(fmap)
+    (fmap.root / _UTILS).write_text("import os\n\ndef update_mapping():\n    pass\n")
+    _git(fmap.root, "commit", "-qam", "import outside update_mapping")
+
+    assert stale_docs.pr_text("main", fmap.map_dir, fmap.root) == ""
+
+
+def test_pr_measures_from_the_lower_branch_of_a_stack(fmap: FixtureMap) -> None:
+    _commit_map(fmap)
+    (fmap.root / _UTILS).write_text("def update_mapping():\n    return 1\n")
+    _git(fmap.root, "commit", "-qam", "lower PR changes update_mapping")
+    _git(fmap.root, "checkout", "-qb", "upper")
+    (fmap.root / "backend/scripts/dev.py").write_text("print()\n")
+    _git(fmap.root, "commit", "-qam", "upper PR changes a script")
+
+    assert "- citations " in stale_docs.pr_text("main", fmap.map_dir, fmap.root)
+    assert stale_docs.pr_text("feature", fmap.map_dir, fmap.root) == ""
+
+
+def test_pr_bounds_the_document_list(
+    fmap: FixtureMap, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _commit_map(fmap)
+    fmap.edit(
+        _TOOL, "## Architecture\n", "## Architecture\n\n`chat/citation_utils.py`\n"
+    )
+    _git(fmap.root, "commit", "-qam", "cite update_mapping from tools-framework")
+    _git(fmap.root, "checkout", "-qb", "change")
+    (fmap.root / _UTILS).write_text("def update_mapping():\n    return 1\n")
+    monkeypatch.setattr(stale_docs, "MAX_PR_DOCUMENTS", 1)
+
+    text = stale_docs.pr_text("feature", fmap.map_dir, fmap.root)
+
+    assert len([line for line in text.splitlines() if line.startswith("- ")]) == 1
+    assert "... and 1 more documents." in text
+
+
+def test_pr_reports_an_unknown_base(fmap: FixtureMap) -> None:
+    assert "Cannot find the merge base" in stale_docs.pr_text(
+        "no-such-branch", fmap.map_dir, fmap.root
+    )
+
+
 def test_cited_prints_contract_and_recipe_keys(fmap: FixtureMap) -> None:
     fmap.edit(_CIT, "Follow [[tools-framework#tool-key]].", "Edit `scripts/dev.py`.")
     output = stale_docs.format_cited(

@@ -27,11 +27,13 @@ function group(packets: Packet[]): TurnGroup[] {
       steps: [
         {
           key: "0-0",
+          groupKey: "0-0",
           turnIndex: 0,
           tabIndex: 0,
           packets,
           nestedCalls: [],
           streamPackets: packets,
+          codeMode: null,
         },
       ],
     },
@@ -73,5 +75,25 @@ describe("useTimelineHeader", () => {
       )
     );
     expect(result.current.headerText).toBe("header.generatingImages.label");
+  });
+
+  it("reads work without a step as working", () => {
+    const { result } = renderHook(() =>
+      useTimelineHeader(
+        group([
+          {
+            placement: { turn_index: 0 },
+            obj: { type: PacketType.SEARCH_TOOL_START },
+          },
+          {
+            placement: { turn_index: 0 },
+            obj: { type: PacketType.SECTION_END },
+          },
+        ]),
+        undefined,
+        true
+      )
+    );
+    expect(result.current.headerText).toBe("header.working.label");
   });
 });

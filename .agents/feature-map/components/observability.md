@@ -107,7 +107,11 @@ With no flow set, they tag `UNTAGGED_INVOKE` or `UNTAGGED_STREAM`.
 the gateway's. `traced_llm_call` is for a direct SDK call or a call to the
 model server, such as image generation, voice, embedding and rerank. A span in
 `TraceContentMode.METADATA_ONLY` records tokens and model but no prompt or
-response. Indexing work, such as contextual RAG, uses it.
+response. Indexing work, such as contextual RAG, uses it. `Tool.run` opens a
+function span per tool call, with `ToolInvocation.trace_metadata` as the span's
+`metadata`; Braintrust and Langfuse export it. A code mode cell opens a
+`code_mode_cell` span, the parent of its nested tool spans
+([[code-execution]]).
 
 **Usage and cost.** `UserUsageTracingProcessor` takes each generation span with
 token usage, and each image generation span. It prices the span with `llm/cost.py:compute_cost_cents`, and upserts additive
@@ -132,7 +136,12 @@ serves metrics and how to add one. Workers start an unauthenticated server
 from `server/metrics/metrics_server.py:start_metrics_server`. Task lifecycle
 metrics come from `server/metrics/celery_task_metrics.py`, called from each
 worker app's own signal handlers. The monitoring worker serves metrics but does
-not wire these handlers.
+not wire these handlers. Code mode capacity metrics (`onyx_code_mode_*`) are
+per API server process. `server/metrics/code_mode.py` defines them; each
+capacity budget has a matching `_limit` gauge, without a tenant label. The
+counters of the use of that capacity carry `tenant_id`.
+`tools/tool_implementations/code_mode/sandbox.py` and
+`tools/tool_implementations/code_mode/cells.py` update them where they own the state ([[code-execution]]).
 
 **Audit.** `utils/audit.py:emit_audit_event` writes one JSON line to the child
 logger `onyx.audit.<ocsf_class>`. The module owns its stdout handler, set at

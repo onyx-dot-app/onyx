@@ -286,7 +286,11 @@ def test_manage_roles_and_data_access_are_independent(db_session: Session) -> No
         ],
     )
     db_session.add(
-        UserGroup__CCPairDataAccess(user_group_id=data_group.id, cc_pair_id=cc_pair.id)
+        UserGroup__CCPairDataAccess(
+            user_group_id=data_group.id,
+            cc_pair_id=cc_pair.id,
+            access_type=cc_pair.access_type,
+        )
     )
     db_session.commit()
 

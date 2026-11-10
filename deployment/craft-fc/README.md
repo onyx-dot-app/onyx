@@ -7,11 +7,10 @@ This directory builds the files that a Craft Firecracker host needs:
 
 The output is one OCI image, `onyxdotapp/craft-fc-artifacts:<kernel>-fc<firecracker>`
 (for example `6.18.25-57.115-fc1.17.0`). The image is `FROM scratch` and is not
-runnable. The host agent image will copy its files as a base layer:
-
-```dockerfile
-COPY --from=onyxdotapp/craft-fc-artifacts:6.18.25-57.115-fc1.17.0 /craft-fc/ /opt/craft-fc/
-```
+runnable. The host agent image (`microvm/Dockerfile`,
+`onyxdotapp/craft-fc-host-agent`) copies its files to `/opt/craft-fc/`. Its
+`ARTIFACTS_TAG` build arg must match the versions in `Dockerfile.artifacts`;
+`.github/workflows/craft-fc-host-agent.yml` checks this.
 
 ## Image contents
 

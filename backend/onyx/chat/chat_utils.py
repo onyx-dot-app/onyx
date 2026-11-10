@@ -238,8 +238,10 @@ def _legacy_tool_messages(
 ) -> list[Message]:
     """Reconstruct tool steps for responses saved without response items."""
     messages: list[Message] = []
+    # Saved call order; a call that no tool row ran has no tool_id.
     calls = sorted(
-        message.tool_calls or [], key=lambda call: (call.turn_number, call.tool_id)
+        message.tool_calls or [],
+        key=lambda call: (call.turn_number, call.tab_index, call.id),
     )
     for turn_number, turn in groupby(calls, key=lambda call: call.turn_number):
         records = list(turn)

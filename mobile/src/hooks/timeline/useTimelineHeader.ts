@@ -21,10 +21,15 @@ export interface TimelineHeaderResult {
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
+  codeModeWorking = false,
 ): TimelineHeaderResult {
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
+
+    if (codeModeWorking) {
+      return { headerText: "Working", hasPackets, userStopped };
+    }
 
     if (!hasPackets) {
       return { headerText: "Thinking...", hasPackets, userStopped };
@@ -99,5 +104,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };
-  }, [turnGroups, stopReason]);
+  }, [turnGroups, stopReason, codeModeWorking]);
 }

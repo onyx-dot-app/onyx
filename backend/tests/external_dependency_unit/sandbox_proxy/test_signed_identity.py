@@ -18,6 +18,12 @@ from onyx.cache.interface import CacheBackend
 from onyx.db.models import Sandbox
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.microvm.registry import (
+    SandboxPlacement,
+    clear_sandbox_placement,
+    get_node_signing_key,
+    set_sandbox_placement,
+)
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import parse_destination_policy
@@ -32,14 +38,8 @@ from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
     CacheReplayGuard,
     CacheSandboxPlacementLookup,
 )
-from onyx.server.features.build import sandbox_nodes
-from onyx.server.features.build.sandbox.firecracker_registry import (
-    SandboxPlacement,
-    clear_sandbox_placement,
-    get_node_signing_key,
-    set_sandbox_placement,
-)
-from onyx.server.features.build.sandbox_nodes import (
+from onyx.server.features.microvm import api as microvm_api
+from onyx.server.features.microvm.api import (
     SandboxNodeSigningKeyRegistration,
     register_sandbox_node_signing_key,
     verify_sandbox_node_registration,
@@ -79,6 +79,7 @@ def _token(
             "iat": now,
             "exp": now + 60,
             "jti": str(uuid4()),
+            "aud": "sandbox-proxy",
         },
         private_key,
         algorithm="EdDSA",
@@ -231,7 +232,7 @@ def test_registration_requires_cluster_credential(
     header: str | None,
     allowed: bool,
 ) -> None:
-    monkeypatch.setattr(sandbox_nodes, "SANDBOX_NODE_REGISTRATION_SECRET", configured)
+    monkeypatch.setattr(microvm_api, "SANDBOX_NODE_REGISTRATION_SECRET", configured)
     raw_headers = [] if header is None else [(b"authorization", header.encode("utf-8"))]
     request = Request({"type": "http", "headers": raw_headers})
     if allowed:
@@ -295,10 +296,10 @@ def test_registration_route_over_http(monkeypatch: pytest.MonkeyPatch) -> None:
     from onyx.error_handling.exceptions import register_onyx_exception_handlers
     from onyx.server.auth_check import check_router_auth
 
-    monkeypatch.setattr(sandbox_nodes, "SANDBOX_NODE_REGISTRATION_SECRET", "cred")
+    monkeypatch.setattr(microvm_api, "SANDBOX_NODE_REGISTRATION_SECRET", "cred")
     app = FastAPI()
     register_onyx_exception_handlers(app)
-    app.include_router(sandbox_nodes.sandbox_node_router)
+    app.include_router(microvm_api.router)
     check_router_auth(app)
     client = TestClient(app)
     node_id = f"node-{uuid4().hex[:12]}"
@@ -310,22 +311,20 @@ def test_registration_route_over_http(monkeypatch: pytest.MonkeyPatch) -> None:
 
     try:
         assert (
-            client.put(
-                sandbox_nodes.SANDBOX_NODE_SIGNING_KEY_PATH, json=body
-            ).status_code
+            client.put(microvm_api.SANDBOX_NODE_SIGNING_KEY_PATH, json=body).status_code
             == 401
         )
         bad_key = {**body, "public_key": base64.b64encode(b"short").decode()}
         assert (
             client.put(
-                sandbox_nodes.SANDBOX_NODE_SIGNING_KEY_PATH,
+                microvm_api.SANDBOX_NODE_SIGNING_KEY_PATH,
                 json=bad_key,
                 headers={"Authorization": "Bearer cred"},
             ).status_code
             == 400
         )
         ok = client.put(
-            sandbox_nodes.SANDBOX_NODE_SIGNING_KEY_PATH,
+            microvm_api.SANDBOX_NODE_SIGNING_KEY_PATH,
             json=body,
             headers={"Authorization": "Bearer cred"},
         )

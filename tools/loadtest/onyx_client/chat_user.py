@@ -18,6 +18,7 @@ see README.md.
 
 from __future__ import annotations
 
+import copy
 import os
 import time
 import uuid
@@ -254,22 +255,23 @@ class OnyxChatUser(HttpUser):
                     return
 
                 for line in response.iter_lines(decode_unicode=True):
-                    before = (
-                        analyzer.summary.packets,
-                        analyzer.summary.search_calls,
-                        analyzer.summary.reasoning_packets,
-                        analyzer.summary.citations,
-                        analyzer.summary.answer_chars,
-                    )
+                    before = copy.copy(analyzer.summary)
                     milestones = analyzer.feed(line)
+                    after = analyzer.summary
                     counts = workload_metrics.local[self.scenario_prefix]
-                    counts.packets += analyzer.summary.packets - before[0]
-                    counts.search_calls += analyzer.summary.search_calls - before[1]
+                    counts.packets += after.packets - before.packets
+                    counts.answer_chars += after.answer_chars - before.answer_chars
+                    counts.search_calls += after.search_calls - before.search_calls
                     counts.reasoning_packets += (
-                        analyzer.summary.reasoning_packets - before[2]
+                        after.reasoning_packets - before.reasoning_packets
                     )
-                    counts.citations += analyzer.summary.citations - before[3]
-                    counts.answer_chars += analyzer.summary.answer_chars - before[4]
+                    counts.citations += after.citations - before.citations
+                    counts.code_programs += after.code_programs - before.code_programs
+                    counts.code_waits += after.code_waits - before.code_waits
+                    counts.nested_search_calls += (
+                        after.nested_search_calls - before.nested_search_calls
+                    )
+                    counts.code_failures += after.code_failures - before.code_failures
                     for milestone in milestones:
                         self._fire(milestone, start)
                         if disconnect_target and milestone == disconnect_target:

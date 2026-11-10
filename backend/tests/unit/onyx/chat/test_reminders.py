@@ -14,6 +14,11 @@ from onyx.prompts.chat_prompts import (
     REQUIRE_CITATION_GUIDANCE,
 )
 from onyx.tools.models import GeneratedImage
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeCall,
+    CodeModeExecutionResult,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -49,6 +54,30 @@ def _direct_image() -> ToolResultMessage:
         tool_name=ImageGenerationTool.NAME,
         content="[]",
         details=IMAGES,
+    )
+
+
+def _nested_image() -> ToolResultMessage:
+    return ToolResultMessage(
+        tool_call_id="code",
+        tool_name=CodeModeTool.NAME,
+        content="Execution completed",
+        details=CodeModeExecutionResult(
+            cell_id=1,
+            code="await generate_image(prompt='a')",
+            status="completed",
+            calls=[
+                CodeModeCall(
+                    id="code:0",
+                    state="ok",
+                    index=0,
+                    tool_name=ImageGenerationTool.NAME,
+                    function_name=ImageGenerationTool.NAME,
+                    arguments={"prompt": "a"},
+                    details=IMAGES,
+                )
+            ],
+        ),
     )
 
 
@@ -102,8 +131,10 @@ def test_web_search_reminder_requires_available_open_url_tool() -> None:
     )
 
 
-def test_generated_images_add_a_reminder_after_the_task_prompt() -> None:
-    result = _direct_image()
+@pytest.mark.parametrize("result", [_direct_image(), _nested_image()])
+def test_generated_images_add_a_reminder_after_the_task_prompt(
+    result: ToolResultMessage,
+) -> None:
     context = _context(task_prompt="Answer in French.")
     reminder = build_chat_reminder(context, [result], [result], enabled=True)
     assert reminder == f"Answer in French.\n\n{IMAGE_GEN_REMINDER}"
@@ -140,7 +171,10 @@ def test_reminder_retains_citation_guidance(
 
 
 @pytest.mark.parametrize("image_succeeds", [True, False])
-def test_image_and_web_search_keep_the_task_instructions(image_succeeds: bool) -> None:
+@pytest.mark.parametrize("nested", [True, False])
+def test_image_and_web_search_keep_the_task_instructions(
+    image_succeeds: bool, nested: bool
+) -> None:
     image = _direct_image()
     if not image_succeeds:
         image = image.model_copy(
@@ -149,6 +183,16 @@ def test_image_and_web_search_keep_the_task_instructions(image_succeeds: bool) -
                 "is_error": True,
             }
         )
+    if nested:
+        nested_result = _nested_image()
+        assert isinstance(nested_result.details, CodeModeExecutionResult)
+        nested_result.details.calls[0] = nested_result.details.calls[0].model_copy(
+            update={
+                "details": image.details,
+                "state": "ok" if image_succeeds else "error",
+            }
+        )
+        image = nested_result
     document = SearchDoc(
         document_id="web-result",
         chunk_ind=0,

@@ -1158,7 +1158,18 @@ def get_access_info_for_documents(
         .outerjoin(
             User,
             and_(
-                Credential.user_id == User.id,
+                # A PERSONAL pair on an ownerless credential (a source with no
+                # credential form) is read by its creator.
+                case(
+                    (
+                        ConnectorCredentialPair.access_type == AccessType.PERSONAL,
+                        func.coalesce(
+                            Credential.user_id, ConnectorCredentialPair.creator_id
+                        ),
+                    ),
+                    else_=Credential.user_id,
+                )
+                == User.id,
                 ConnectorCredentialPair.access_type.notin_(
                     AccessType.perm_synced_types()
                 ),
