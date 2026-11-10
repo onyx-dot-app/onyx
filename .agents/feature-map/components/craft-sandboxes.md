@@ -934,3 +934,6 @@ Without this bundle, downloads retain their default certificate and transport se
   cannot stop unrelated alerts.
   Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
   use the ODS allowlist or automatic issue tracking.
+  `.github/workflows/update-sandbox-browser.yml` moves the pin: it runs every
+  four hours and when a deploy audit gate fails, and opens a PR on each stale
+  branch among main and the four newest release lines.
