@@ -64,6 +64,7 @@ from onyx.connectors.google_drive.connector import (
 from onyx.connectors.google_drive.constants import (
     DRIVE_FOLDER_TYPE,
     DRIVE_SHORTCUT_TYPE,
+    GOOGLE_APPS_MIME_PREFIX,
 )
 from onyx.connectors.google_drive.doc_conversion import GOOGLE_MIME_TYPES_TO_EXPORT
 from onyx.connectors.google_drive.drive_access import (
@@ -1541,7 +1542,7 @@ class _ContentReadCheck(_GoogleDriveCheck):
         uploaded: list[tuple[int, GoogleDriveFileType]] = [
             (size, file)
             for file in files
-            if file.get("mimeType") not in GOOGLE_MIME_TYPES_TO_EXPORT
+            if not (file.get("mimeType") or "").startswith(GOOGLE_APPS_MIME_PREFIX)
             and (size := _size(file)) is not None
             and size <= _MAX_PROBE_BYTES
         ]
