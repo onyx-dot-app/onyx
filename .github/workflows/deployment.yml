@@ -1984,7 +1984,7 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
-      actions: write # dispatch cve-alerts.yml
+      actions: write # dispatch cve-alerts.yml and update-sandbox-browser.yml
       contents: read # look up the release branch
     steps:
       # A release tag's findings live on its release branch, so the run scans
@@ -2002,6 +2002,16 @@ jobs:
             ref="release/v${BASH_REMATCH[1]}"
           fi
           gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}" -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+
+      # The gate result does not say why it failed, and a stale sandbox Chrome
+      # leaves no finding for CVE Alerts, so every failure also runs the browser
+      # update. It does nothing when the pin is current.
+      - name: Dispatch the sandbox browser update
+        if: ${{ !cancelled() && needs.audit-gate.result == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: gh workflow run update-sandbox-browser.yml --repo "${REPO}" --ref main
 
   notify-slack-on-failure:
     needs:
