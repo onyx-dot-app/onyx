@@ -1,6 +1,6 @@
 from collections.abc import Callable, Generator
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -9,7 +9,7 @@ from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
-from onyx.microvm import registry
+from onyx.microvm import placement, reconcile, registry
 from onyx.microvm.registry import set_node_agent_address
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import delete_test_users_and_owned_rows
@@ -21,6 +21,13 @@ from tests.external_dependency_unit.microvm.fake_agent import (
 )
 
 TENANT_ID = POSTGRES_DEFAULT_SCHEMA
+
+
+def forget_sandbox_keys(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
+    """Delete every tenant-cache key that placement writes for a sandbox."""
+    registry.clear_sandbox_placement(tenant_cache, sandbox_id)
+    registry.clear_sandbox_daemon_key(tenant_cache, sandbox_id)
+    placement.clear_pending_create(tenant_cache, sandbox_id)
 
 
 @pytest.fixture
@@ -63,6 +70,26 @@ def add_node(shared_cache: CacheBackend) -> Generator[AddNode, None, None]:
         running.stop()
         shared_cache.delete(registry._NODE_ADDRESS_PREFIX + node_id)
         shared_cache.delete(registry._NODE_PLACEMENTS_PREFIX + node_id)
+        shared_cache.delete_prefix(f"{reconcile._ORPHAN_MARK_PREFIX}{node_id}:")
+
+
+NewSandboxId = Callable[[], UUID]
+
+
+@pytest.fixture
+def new_sandbox_id(
+    tenant_cache: CacheBackend,
+) -> Generator[NewSandboxId, None, None]:
+    """A fresh sandbox id whose placement keys are deleted after the test."""
+    ids: list[UUID] = []
+
+    def new() -> UUID:
+        ids.append(uuid4())
+        return ids[-1]
+
+    yield new
+    for sandbox_id in ids:
+        forget_sandbox_keys(tenant_cache, sandbox_id)
 
 
 MakeSandbox = Callable[..., Sandbox]
@@ -91,7 +118,7 @@ def make_db_sandbox(
 
     yield make
     for sandbox_id in sandbox_ids:
-        registry.clear_sandbox_placement(tenant_cache, sandbox_id)
+        forget_sandbox_keys(tenant_cache, sandbox_id)
     if users:
         delete_test_users_and_owned_rows(
             db_session, [u for u, _ in users], [e for _, e in users]

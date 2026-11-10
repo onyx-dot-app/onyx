@@ -42,7 +42,7 @@ from onyx.microvm.placement import (
     find_vm,
     forget_placement,
     place_sandbox_vm,
-    record_placement,
+    refresh_placement,
     sandbox_placement_lock,
 )
 from onyx.microvm.registry import (
@@ -188,16 +188,13 @@ def refresh_sandbox_placement(
     placement: SandboxPlacement,
 ) -> bool:
     """Heartbeat: refresh the record if it still names this VM instance."""
-    if get_sandbox_placement(tenant_cache, sandbox_id) != placement:
-        return False
-    record_placement(
+    return refresh_placement(
         shared_cache,
         tenant_cache,
         tenant_id=tenant_id,
         sandbox_id=sandbox_id,
         placement=placement,
     )
-    return True
 
 
 def _live_instance(

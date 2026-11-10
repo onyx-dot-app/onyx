@@ -42,7 +42,11 @@ from onyx.microvm.registry import (
     get_sandbox_daemon_key,
     get_sandbox_placement,
 )
-from tests.external_dependency_unit.microvm.conftest import TENANT_ID, AddNode
+from tests.external_dependency_unit.microvm.conftest import (
+    TENANT_ID,
+    AddNode,
+    NewSandboxId,
+)
 from tests.external_dependency_unit.microvm.fake_agent import (
     FakeHostAgent,
     InsecureClientFactory,
@@ -80,9 +84,10 @@ def test_create_sends_a_new_random_key_and_stores_it(
     client_factory: InsecureClientFactory,
     add_node: AddNode,
     caplog: pytest.LogCaptureFixture,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("key"))
-    first, second = uuid4(), uuid4()
+    first, second = new_sandbox_id(), new_sandbox_id()
 
     placed = _wake(shared_cache, tenant_cache, client_factory, first)
     other = _wake(shared_cache, tenant_cache, client_factory, second)
@@ -108,10 +113,11 @@ def test_guest_unreachable_retries_the_same_attempt_and_key(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("slow"))
     node.agent.guest_unreachable_creates = 2
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
 
     placed = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
 
@@ -126,11 +132,12 @@ def test_guest_unreachable_after_retries_does_not_try_another_node(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     first = add_node(_node("a"), FakeHostAgent(mem_available_mib=32_768))
     second = add_node(_node("b"), FakeHostAgent(mem_available_mib=8192))
     first.agent.guest_unreachable_creates = 10
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
 
     with pytest.raises(OnyxError) as exc:
         _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
@@ -148,9 +155,10 @@ def test_key_rejected_stops_the_vm_and_creates_the_next_attempt(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("rejected"))
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     # A VM of this attempt whose daemon holds another key.
     stale = node.agent.add_vm(
         sandbox_id=str(sandbox_id), tenant_id=TENANT_ID, attempt=1, daemon_key="k" * 64
@@ -173,9 +181,10 @@ def test_lost_key_replaces_the_vm(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("lost"))
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     placed = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
     clear_sandbox_daemon_key(tenant_cache, sandbox_id)
 
@@ -191,9 +200,10 @@ def test_init_carries_the_key_and_scratch_size(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("init"))
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     placed = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
 
     result = initialize_sandbox_vm(
@@ -228,9 +238,10 @@ def test_key_not_set_makes_the_vm_unusable(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("nokey"))
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     placed = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
     node.agent.daemon_keys.pop(str(sandbox_id))
 
@@ -261,9 +272,10 @@ def test_daemon_errors_are_typed(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("errors"))
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     placed = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
     channel = client_factory.client(placed.node.address).channel
 
@@ -303,7 +315,9 @@ def test_daemon_errors_are_typed(
     ],
 )
 def test_agent_reasons_map_to_typed_errors(
-    reason: HostAgentErrorReason, error_type: type[HostAgentError]
+    reason: HostAgentErrorReason,
+    error_type: type[HostAgentError],
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     running = RunningFakeAgent(FakeHostAgent())
     running.agent.refuse_create = reason
@@ -311,7 +325,7 @@ def test_agent_reasons_map_to_typed_errors(
     try:
         with pytest.raises(HostAgentError) as exc:
             factory.client(running.address).create(
-                sandbox_id=str(uuid4()),
+                sandbox_id=str(new_sandbox_id()),
                 attempt=1,
                 template="tpl-1",
                 vcpus=2,

@@ -18,6 +18,8 @@ placement in the tenant cache, both with TTLs their writers refresh.
 
 import base64
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, SecretStr
@@ -37,6 +39,18 @@ _DAEMON_KEY_PREFIX = "sandbox_fc:daemon_key:"
 _MAX_NODES = 10_000
 _MAX_NODE_PLACEMENTS = 100_000
 _LOCK_WAIT_SECONDS = 10.0
+
+
+@contextmanager
+def _node_lock(shared_cache: CacheBackend, node_id: str) -> Iterator[None]:
+    """Serialize writes to one node's keys, address and set membership."""
+    lock = shared_cache.lock(_NODE_LOCK_PREFIX + node_id, timeout=_LOCK_WAIT_SECONDS)
+    if not lock.acquire(blocking_timeout=_LOCK_WAIT_SECONDS):
+        raise CacheLockAcquisitionError(node_id)
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 class NodeSigningKeyConflictError(Exception):
@@ -121,6 +135,10 @@ def register_node_signing_key(
         lock.release()
 
 
+def _placement_record(placement: SandboxPlacement) -> str:
+    return json.dumps({"node": placement.node_id, "gen": placement.generation})
+
+
 def set_sandbox_placement(
     tenant_cache: CacheBackend,
     sandbox_id: UUID,
@@ -129,8 +147,22 @@ def set_sandbox_placement(
 ) -> None:
     tenant_cache.set(
         _PLACEMENT_PREFIX + str(sandbox_id),
-        json.dumps({"node": placement.node_id, "gen": placement.generation}),
+        _placement_record(placement),
         ex=ttl_seconds,
+    )
+
+
+def renew_sandbox_placement(
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    placement: SandboxPlacement,
+    ttl_seconds: int,
+) -> bool:
+    """Reset the record TTL only while it still names `placement` (atomic)."""
+    return tenant_cache.renew_if_value(
+        _PLACEMENT_PREFIX + str(sandbox_id),
+        _placement_record(placement).encode(),
+        ttl_seconds,
     )
 
 
@@ -160,10 +192,18 @@ def set_node_agent_address(
     shared_cache: CacheBackend, *, node_id: str, address: str
 ) -> None:
     """Record the agent listener of a node. Expires with the node's keys."""
-    shared_cache.set(
-        _NODE_ADDRESS_PREFIX + node_id, address, ex=NODE_SIGNING_KEY_TTL_SECONDS
-    )
-    shared_cache.set_add(_NODES_KEY, node_id)
+    with _node_lock(shared_cache, node_id):
+        shared_cache.set(
+            _NODE_ADDRESS_PREFIX + node_id, address, ex=NODE_SIGNING_KEY_TTL_SECONDS
+        )
+        shared_cache.set_add(_NODES_KEY, node_id)
+
+
+def clear_node_agent_address(shared_cache: CacheBackend, *, node_id: str) -> None:
+    """Forget the agent listener of a node that registered without one."""
+    with _node_lock(shared_cache, node_id):
+        shared_cache.delete(_NODE_ADDRESS_PREFIX + node_id)
+        shared_cache.set_remove(_NODES_KEY, node_id)
 
 
 def get_registered_node(
@@ -182,10 +222,21 @@ def list_registered_nodes(shared_cache: CacheBackend) -> list[RegisteredNode]:
         node_id = member.decode()
         node = get_registered_node(shared_cache, node_id)
         if node is None:
-            shared_cache.set_remove(_NODES_KEY, node_id)
+            _prune_node(shared_cache, node_id)
             continue
         nodes.append(node)
     return sorted(nodes, key=lambda n: n.node_id)
+
+
+def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:
+    """Drop an expired node from the set, unless it registered again meanwhile."""
+    try:
+        with _node_lock(shared_cache, node_id):
+            if not shared_cache.exists(_NODE_ADDRESS_PREFIX + node_id):
+                shared_cache.set_remove(_NODES_KEY, node_id)
+    except CacheLockAcquisitionError:
+        # A registration holds the lock; the next list prunes if still expired.
+        pass
 
 
 class IndexedPlacement(BaseModel):

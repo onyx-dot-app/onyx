@@ -18,6 +18,7 @@ One pass, cluster-wide, run by the `microvm_reconcile` beat task under a lease:
 import time
 from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -42,6 +43,7 @@ from onyx.microvm.placement import (
     find_vm,
     forget_placement,
     record_placement,
+    refresh_placement,
     sandbox_placement_lock,
 )
 from onyx.microvm.registry import (
@@ -66,6 +68,8 @@ _ADOPTABLE_STATUSES = frozenset({SandboxStatus.PROVISIONING, SandboxStatus.RUNNI
 class ReconcileReport(BaseModel):
     nodes: int = 0
     unreachable_nodes: list[str] = Field(default_factory=list)
+    # Steps that raised; the pass logged them and went on.
+    failed: list[str] = Field(default_factory=list)
     refreshed: list[str] = Field(default_factory=list)
     adopted: list[str] = Field(default_factory=list)
     cleared: list[str] = Field(default_factory=list)
@@ -122,6 +126,14 @@ def is_orphan_marked(shared_cache: CacheBackend, node_id: str, vm: AgentVm) -> b
     )
 
 
+class _PassEnded(Exception):
+    """`check_lease` raised: end the whole pass with `cause`."""
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.cause = cause
+
+
 class _Pass:
     def __init__(
         self,
@@ -131,6 +143,7 @@ class _Pass:
         activity: SandboxActivityProbe,
         now: datetime,
         report: ReconcileReport,
+        check_lease: Callable[[], None] | None,
     ) -> None:
         self.shared_cache = shared_cache
         self.client_factory = client_factory
@@ -138,6 +151,23 @@ class _Pass:
         self.activity = activity
         self.now = now
         self.report = report
+        self.check_lease = check_lease
+
+    def step(self, what: str, run: Callable[[], None]) -> None:
+        """Check the lease, then run one step. A failed step is logged and
+        does not end the pass; a lease failure does."""
+        if self.check_lease is not None:
+            try:
+                self.check_lease()
+            except Exception as e:
+                raise _PassEnded(e) from e
+        try:
+            run()
+        except _PassEnded:
+            raise
+        except Exception:
+            logger.exception("sandbox_fc_reconcile_step_failed step=%s", what)
+            self.report.failed.append(what)
 
     def list_vms(self, node: RegisteredNode) -> list[AgentVm] | None:
         try:
@@ -165,10 +195,16 @@ class _Pass:
                     vm.sandbox_id,
                 )
                 continue
-            self.vm(node, vm, sandbox_id)
+            self.step(
+                f"vm {node.node_id}/{vm.sandbox_id}",
+                partial(self.vm, node, vm, sandbox_id),
+            )
         live = {(vm.sandbox_id, vm.generation) for vm in vms if vm.state.is_live()}
         for indexed in list_indexed_placements(self.shared_cache, node.node_id):
-            self.record(node, indexed.tenant_id, indexed.sandbox_id, live)
+            self.step(
+                f"record {node.node_id}/{indexed.sandbox_id}",
+                partial(self.record, node, indexed.tenant_id, indexed.sandbox_id, live),
+            )
 
     def vm(self, node: RegisteredNode, vm: AgentVm, sandbox_id: UUID) -> None:
         tenant_cache = get_cache_backend(tenant_id=vm.tenant_id)
@@ -180,7 +216,9 @@ class _Pass:
             # An exited VM has no files left; the record step clears its record.
             return
         if matches:
-            record_placement(
+            # Atomic compare-and-renew: a wake may have replaced the VM since
+            # the read above.
+            if not refresh_placement(
                 self.shared_cache,
                 tenant_cache,
                 tenant_id=vm.tenant_id,
@@ -188,7 +226,8 @@ class _Pass:
                 placement=SandboxPlacement(
                     node_id=node.node_id, generation=vm.generation
                 ),
-            )
+            ):
+                return
             self.report.refreshed.append(vm.sandbox_id)
             if vm.state is VmState.RUNNING:
                 self.maybe_sleep(vm, sandbox_id, tenant_cache)
@@ -355,12 +394,16 @@ def reconcile_microvms(
     check_lease: Callable[[], None] | None = None,
 ) -> ReconcileReport:
     """One reconcile pass over every registered node. `check_lease` runs
-    before each node and raises to end the pass."""
+    before each node, VM and record, and raises to end the pass. Any other
+    error ends only its step."""
     report = ReconcileReport()
-    run = _Pass(shared_cache, client_factory, checkpointer, activity, now, report)
-    for node in list_registered_nodes(shared_cache):
-        if check_lease is not None:
-            check_lease()
-        report.nodes += 1
-        run.node(node)
+    run = _Pass(
+        shared_cache, client_factory, checkpointer, activity, now, report, check_lease
+    )
+    try:
+        for node in list_registered_nodes(shared_cache):
+            report.nodes += 1
+            run.step(f"node {node.node_id}", partial(run.node, node))
+    except _PassEnded as ended:
+        raise ended.cause from None
     return report

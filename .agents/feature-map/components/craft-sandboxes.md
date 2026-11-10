@@ -200,8 +200,9 @@ the stored token on each request, so a new token takes effect at once.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory, `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. Each attempt
   gets a random daemon key, stored encrypted in the tenant cache before
-  Create. A rejected or lost key stops the VM and creates the next attempt;
-  the caller must store the returned attempt.
+  Create. A rejected or lost key, or an exited VM, stops the VM and creates
+  the next attempt; the caller must store the returned attempt. A Create with
+  no known outcome pins the sandbox to its node until the outcome is known.
 - `backend/onyx/microvm/lifecycle.py`: wake on the first tool call, Init,
   idle sleep, stop only after a saved checkpoint.
 - `backend/onyx/microvm/reconcile.py`: the cluster-wide reconcile pass, run by

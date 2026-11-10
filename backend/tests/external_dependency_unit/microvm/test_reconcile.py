@@ -3,8 +3,11 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+import pytest
+
 from onyx.cache.interface import CacheBackend
 from onyx.db.enums import SandboxStatus
+from onyx.microvm import reconcile
 from onyx.microvm.agent_client import AgentVm, new_sandboxd_key
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
@@ -26,6 +29,7 @@ from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
     MakeSandbox,
+    NewSandboxId,
 )
 from tests.external_dependency_unit.microvm.fake_agent import InsecureClientFactory
 
@@ -66,10 +70,11 @@ def test_record_without_vm_is_cleared(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node_id = _node("rec")
     node = add_node(node_id)
-    gone_id, exited_id = uuid4(), uuid4()
+    gone_id, exited_id = new_sandbox_id(), new_sandbox_id()
     for sandbox_id in (gone_id, exited_id):
         record_placement(
             shared_cache,
@@ -134,13 +139,14 @@ def test_orphan_is_marked_and_never_stopped_without_checkpoint(
     client_factory: InsecureClientFactory,
     add_node: AddNode,
     make_db_sandbox: MakeSandbox,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(_node("orphan"))
     # Stale attempt: the row moved on to attempt 2.
     stale = make_db_sandbox(status=SandboxStatus.RUNNING, attempt=2)
     node.agent.add_vm(sandbox_id=str(stale.id), tenant_id=TENANT_ID, attempt=1)
     # No sandbox row at all.
-    unknown_id = uuid4()
+    unknown_id = new_sandbox_id()
     node.agent.add_vm(sandbox_id=str(unknown_id), tenant_id=TENANT_ID, attempt=1)
 
     report = _reconcile(shared_cache, client_factory)
@@ -195,10 +201,11 @@ def test_unreachable_node_keeps_its_records(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node_id = _node("down")
     add_node(node_id).stop()
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     placement = SandboxPlacement(node_id=node_id, generation=9)
     record_placement(
         shared_cache,
@@ -273,3 +280,67 @@ def test_vm_without_its_daemon_key_is_not_adopted(
     assert get_sandbox_placement(tenant_cache, sandbox.id) is None
     # No checkpoint support: the orphan is only marked.
     assert node.agent.stop_calls == []
+
+
+def test_a_failing_vm_does_not_end_the_pass(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    make_db_sandbox: MakeSandbox,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node = add_node(_node("isolate"))
+    broken, healthy = make_db_sandbox(), make_db_sandbox()
+    for sandbox in (broken, healthy):
+        node.agent.add_vm(sandbox_id=str(sandbox.id), tenant_id=TENANT_ID, attempt=1)
+        set_sandbox_daemon_key(
+            tenant_cache, sandbox.id, attempt=1, key=new_sandboxd_key(), ttl_seconds=60
+        )
+    load = reconcile._load_sandbox_row
+
+    def load_or_fail(tenant_id: str, sandbox_id: UUID) -> reconcile._SandboxRow | None:
+        if sandbox_id == broken.id:
+            raise RuntimeError("tenant schema is gone")
+        return load(tenant_id, sandbox_id)
+
+    monkeypatch.setattr(reconcile, "_load_sandbox_row", load_or_fail)
+
+    report = _reconcile(shared_cache, client_factory)
+
+    assert report.adopted == [str(healthy.id)]
+    assert len(report.failed) == 1 and str(broken.id) in report.failed[0]
+
+
+def test_lease_is_checked_before_every_vm(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    make_db_sandbox: MakeSandbox,
+) -> None:
+    node = add_node(_node("lease"))
+    for sandbox in (make_db_sandbox(), make_db_sandbox()):
+        node.agent.add_vm(sandbox_id=str(sandbox.id), tenant_id=TENANT_ID, attempt=1)
+        set_sandbox_daemon_key(
+            tenant_cache, sandbox.id, attempt=1, key=new_sandboxd_key(), ttl_seconds=60
+        )
+    checks: list[int] = []
+
+    def check_lease() -> None:
+        checks.append(1)
+        # The node step and the first VM pass; the lease is lost before the
+        # second VM of the same node.
+        if len(checks) == 3:
+            raise TimeoutError("deadline")
+
+    with pytest.raises(TimeoutError):
+        reconcile_microvms(
+            shared_cache,
+            client_factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            now=NOW,
+            check_lease=check_lease,
+        )
+    assert len(checks) == 3

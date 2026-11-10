@@ -14,7 +14,7 @@ import secrets
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.auth.constants import BEARER_PREFIX
 from onyx.cache.factory import get_shared_cache_backend
@@ -22,6 +22,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm.registry import (
     NodeSigningKeyConflictError,
+    clear_node_agent_address,
     register_node_signing_key,
     set_node_agent_address,
 )
@@ -37,6 +38,7 @@ SANDBOX_NODE_SIGNING_KEY_PATH = "/microvm/node/signing-key"
 
 _IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"
 # host:port, with a DNS name, an IPv4 address or a bracketed IPv6 address.
+# The agent's advertiseAddress() applies the same host rule.
 _AGENT_ADDRESS_PATTERN = r"^([A-Za-z0-9][A-Za-z0-9.-]*|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$"
 
 
@@ -65,6 +67,13 @@ class SandboxNodeSigningKeyRegistration(BaseModel):
     agent_address: str | None = Field(
         default=None, max_length=261, pattern=_AGENT_ADDRESS_PATTERN
     )
+
+    @field_validator("agent_address")
+    @classmethod
+    def _agent_port_in_range(cls, value: str | None) -> str | None:
+        if value is not None and not 1 <= int(value.rsplit(":", 1)[1]) <= 65535:
+            raise ValueError("agent_address port must be 1-65535")
+        return value
 
 
 router = APIRouter()
@@ -102,6 +111,11 @@ def register_sandbox_node_signing_key(
             get_shared_cache_backend(),
             node_id=registration.node_id,
             address=registration.agent_address,
+        )
+    else:
+        # A stale address may point at a previous agent pod.
+        clear_node_agent_address(
+            get_shared_cache_backend(), node_id=registration.node_id
         )
     logger.info(
         "sandbox_node_signing_key_registered node=%s key_id=%s agent_address=%s",

@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from onyx.cache.interface import CacheBackend
 from onyx.microvm.agent_client import AgentVm
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
+from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
     NoCheckpointSupport,
     SandboxActivityProbe,
@@ -19,7 +20,11 @@ from onyx.microvm.lifecycle import (
 )
 from onyx.microvm.placement import VmRequest
 from onyx.microvm.registry import SandboxPlacement, get_sandbox_placement
-from tests.external_dependency_unit.microvm.conftest import TENANT_ID, AddNode
+from tests.external_dependency_unit.microvm.conftest import (
+    TENANT_ID,
+    AddNode,
+    NewSandboxId,
+)
 from tests.external_dependency_unit.microvm.fake_agent import (
     FakeHostAgent,
     InsecureClientFactory,
@@ -97,9 +102,10 @@ def test_wake_starts_vm_only_on_first_call(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(f"wake-{uuid4().hex[:6]}")
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     assert node.agent.create_calls == 0
     assert get_sandbox_placement(tenant_cache, sandbox_id) is None
 
@@ -114,15 +120,56 @@ def test_wake_starts_vm_only_on_first_call(
     assert node.agent.create_calls == 2
 
 
+def test_wake_replaces_an_exited_vm_with_the_next_attempt(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node = add_node(f"exit-{uuid4().hex[:6]}")
+    recorded, unrecorded = new_sandbox_id(), new_sandbox_id()
+    first = _wake(shared_cache, tenant_cache, client_factory, recorded)
+    # The agent keeps an exited VM and returns it for a repeat Create of its
+    # attempt, so placement must move to the next attempt.
+    node.agent.vms[str(recorded)].state = hostagent_pb2.VM_STATE_EXITED
+    exited = node.agent.add_vm(
+        sandbox_id=str(unrecorded),
+        tenant_id=TENANT_ID,
+        attempt=1,
+        state=hostagent_pb2.VM_STATE_EXITED,
+    )
+
+    for sandbox_id, old_generation in (
+        (recorded, first),
+        (unrecorded, exited.generation),
+    ):
+        placed = wake_sandbox_vm(
+            shared_cache,
+            tenant_cache,
+            client_factory,
+            VmRequest(
+                tenant_id=TENANT_ID, sandbox_id=sandbox_id, attempt=1, template="tpl-1"
+            ),
+        )
+        assert placed.vm.attempt == 2 and placed.created
+        assert placed.vm.state.is_live()
+        assert (str(sandbox_id), 1, old_generation) in node.agent.stop_calls
+        assert get_sandbox_placement(tenant_cache, sandbox_id) == SandboxPlacement(
+            node_id=placed.node.node_id, generation=placed.vm.generation
+        )
+
+
 def test_heartbeat_refreshes_only_the_current_instance(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node_id = f"hb-{uuid4().hex[:6]}"
     add_node(node_id)
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     generation = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
     current = SandboxPlacement(node_id=node_id, generation=generation)
     stale = SandboxPlacement(node_id=node_id, generation=generation - 1)
@@ -149,9 +196,10 @@ def test_idle_sleep_rules(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(f"idle-{uuid4().hex[:6]}")
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     generation = _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
     saver = SavedCheckpoint()
 
@@ -188,9 +236,10 @@ def test_stop_rechecks_liveness_after_checkpoint(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node = add_node(f"recheck-{uuid4().hex[:6]}")
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
     _wake(shared_cache, tenant_cache, client_factory, sandbox_id)
 
     outcome = _sleep(

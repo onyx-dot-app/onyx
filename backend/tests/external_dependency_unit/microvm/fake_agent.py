@@ -105,6 +105,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.daemon_keys: dict[str, str] = {}
         # The next N key installs time out (GUEST_UNREACHABLE).
         self.guest_unreachable_creates = 0
+        # The next N Creates start the VM, then fail with no reason (a lost
+        # answer, e.g. a deadline): the caller cannot know the VM runs.
+        self.lost_create_answers = 0
         self.init_requests: list[tuple[sandboxd_pb2.InitRequest, str]] = []
 
     def add_vm(
@@ -146,13 +149,21 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             if self.refuse_create is not None:
                 abort_with_reason(context, self.refuse_create, "refused by the test")
             existing = self.vms.get(request.sandbox_id)
-            if existing is not None and existing.state != hostagent_pb2.VM_STATE_EXITED:
+            if existing is not None:
+                # Like the real agent: the same attempt returns the VM, even
+                # an exited one; only a newer attempt replaces an exited VM.
                 if existing.attempt == request.attempt:
-                    self._install_key(context, request)
+                    if existing.state != hostagent_pb2.VM_STATE_EXITED:
+                        self._install_key(context, request)
                     return hostagent_pb2.CreateResponse(vm=existing, created=False)
-                abort_with_reason(
-                    context, HostAgentErrorReason.ATTEMPT_CONFLICT, "other attempt"
-                )
+                if (
+                    existing.state != hostagent_pb2.VM_STATE_EXITED
+                    or request.attempt < existing.attempt
+                ):
+                    abort_with_reason(
+                        context, HostAgentErrorReason.ATTEMPT_CONFLICT, "other attempt"
+                    )
+                del self.vms[request.sandbox_id]
             if self.mem_available_mib < request.mem_mib:
                 abort_with_reason(
                     context, HostAgentErrorReason.CAPACITY_MEMORY, "not enough memory"
@@ -174,6 +185,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             self.mem_available_mib -= request.mem_mib
             # A new VM boots a new daemon with no key.
             self.daemon_keys.pop(request.sandbox_id, None)
+            if self.lost_create_answers > 0:
+                self.lost_create_answers -= 1
+                self.daemon_keys[request.sandbox_id] = request.sandboxd_key
+                context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, "answer lost")
             self._install_key(context, request)
             return hostagent_pb2.CreateResponse(vm=vm, created=True)
 

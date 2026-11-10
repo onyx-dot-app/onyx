@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from onyx.cache.interface import CacheBackend
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.microvm import admission
+from onyx.microvm import admission, configs, placement, registry
 from onyx.microvm.agent_client import HostAgentErrorReason
 from onyx.microvm.placement import VmRequest, place_sandbox_vm
 from onyx.microvm.registry import (
@@ -27,7 +27,11 @@ from onyx.server.features.microvm.api import (
     SandboxNodeSigningKeyRegistration,
     register_sandbox_node_signing_key,
 )
-from tests.external_dependency_unit.microvm.conftest import TENANT_ID, AddNode
+from tests.external_dependency_unit.microvm.conftest import (
+    TENANT_ID,
+    AddNode,
+    NewSandboxId,
+)
 from tests.external_dependency_unit.microvm.fake_agent import (
     FakeHostAgent,
     InsecureClientFactory,
@@ -49,12 +53,13 @@ def test_picks_most_free_memory_and_writes_record(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     small = add_node(_node("small"), FakeHostAgent(mem_available_mib=4096))
     big_id = _node("big")
     big = add_node(big_id, FakeHostAgent(mem_available_mib=32_768))
     mid = add_node(_node("mid"), FakeHostAgent(mem_available_mib=8192))
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
 
     placed = place_sandbox_vm(
         shared_cache, tenant_cache, client_factory, _request(sandbox_id)
@@ -79,6 +84,7 @@ def test_refusal_moves_to_next_node(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     refusing = add_node(_node("refuses"), FakeHostAgent(mem_available_mib=32_768))
     refusing.agent.refuse_create = HostAgentErrorReason.CAPACITY_VM_SLOTS
@@ -86,7 +92,7 @@ def test_refusal_moves_to_next_node(
     add_node(second_id, FakeHostAgent(mem_available_mib=8192))
 
     placed = place_sandbox_vm(
-        shared_cache, tenant_cache, client_factory, _request(uuid4())
+        shared_cache, tenant_cache, client_factory, _request(new_sandbox_id())
     )
 
     assert refusing.agent.create_calls == 1
@@ -98,10 +104,11 @@ def test_one_vm_per_sandbox(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     a = add_node(_node("a"), FakeHostAgent(mem_available_mib=32_768))
     b = add_node(_node("b"), FakeHostAgent(mem_available_mib=32_000))
-    sandbox_id = uuid4()
+    sandbox_id = new_sandbox_id()
 
     first = place_sandbox_vm(
         shared_cache, tenant_cache, client_factory, _request(sandbox_id)
@@ -127,9 +134,12 @@ def test_capacity_error_has_real_reason(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     with pytest.raises(OnyxError) as exc:
-        place_sandbox_vm(shared_cache, tenant_cache, client_factory, _request(uuid4()))
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(new_sandbox_id())
+        )
     assert exc.value.error_code is OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
     assert exc.value.extra == {"reason": "NO_NODES", "nodes": {}}
 
@@ -144,7 +154,7 @@ def test_capacity_error_has_real_reason(
             shared_cache,
             tenant_cache,
             client_factory,
-            _request(uuid4()),
+            _request(new_sandbox_id()),
             rng=random.Random(0),
         )
     assert exc.value.error_code is OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
@@ -164,16 +174,85 @@ def test_refusal_reason_from_agent(
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
 ) -> None:
     node_id = _node("disk")
     add_node(node_id).agent.refuse_create = HostAgentErrorReason.CAPACITY_DISK
 
     with pytest.raises(OnyxError) as exc:
-        place_sandbox_vm(shared_cache, tenant_cache, client_factory, _request(uuid4()))
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(new_sandbox_id())
+        )
     assert exc.value.extra == {
         "reason": "CAPACITY_DISK",
         "nodes": {node_id: "CAPACITY_DISK"},
     }
+
+
+def test_unknown_create_outcome_pins_the_next_wake_to_that_node(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    first_id = _node("lost")
+    first = add_node(first_id, FakeHostAgent(mem_available_mib=32_768))
+    second = add_node(_node("other"), FakeHostAgent(mem_available_mib=8192))
+    first.agent.lost_create_answers = 1
+    sandbox_id = new_sandbox_id()
+
+    with pytest.raises(OnyxError) as exc:
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+    assert exc.value.extra is not None
+    assert exc.value.extra["reason"] == "NODE_UNREACHABLE"
+
+    # The VM started on the first node. The second node now ranks higher, but
+    # the next wake must return the first node's VM, not start a second one.
+    second.agent.mem_available_mib = 64_000
+    placed = place_sandbox_vm(
+        shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+    )
+    assert placed.node.node_id == first_id and not placed.created
+    assert second.agent.create_calls == 0
+    assert len(first.agent.vms) == 1
+    assert placement._pending_create_node(tenant_cache, sandbox_id) is None
+
+
+def test_pinned_node_refusal_moves_to_next_node(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    pinned_id = _node("pinned")
+    refusing = add_node(pinned_id, FakeHostAgent(mem_available_mib=32_768))
+    refusing.agent.refuse_create = HostAgentErrorReason.CAPACITY_VM_SLOTS
+    other_id = _node("other")
+    add_node(other_id, FakeHostAgent(mem_available_mib=8192))
+    sandbox_id = new_sandbox_id()
+    placement._pin_pending_create(tenant_cache, sandbox_id, pinned_id)
+
+    placed = place_sandbox_vm(
+        shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+    )
+
+    assert refusing.agent.create_calls == 1
+    assert placed.node.node_id == other_id
+    assert placement._pending_create_node(tenant_cache, sandbox_id) is None
+
+
+def test_bad_number_settings_use_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SANDBOX_FC_TEST_NUMBER", "3O")
+    assert configs._fc_env_int("SANDBOX_FC_TEST_NUMBER", 5, minimum=1) == 5
+    assert configs._fc_env_float("SANDBOX_FC_TEST_NUMBER", 2.5) == 2.5
+    monkeypatch.setenv("SANDBOX_FC_TEST_NUMBER", "-4")
+    assert configs._fc_env_int("SANDBOX_FC_TEST_NUMBER", 5, minimum=0) == 0
+    monkeypatch.delenv("SANDBOX_FC_TEST_NUMBER")
+    assert configs._fc_env_int("SANDBOX_FC_TEST_NUMBER", 5) == 5
 
 
 def test_scheduled_run_jitter_only_with_firecracker() -> None:
@@ -196,21 +275,26 @@ def test_registration_with_agent_address_makes_node_placeable(
         .public_bytes(Encoding.Raw, PublicFormat.Raw)
     )
     node_id = _node("reg")
-    register_sandbox_node_signing_key(
-        SandboxNodeSigningKeyRegistration(
-            node_id=node_id,
-            key_id=f"{node_id}-1",
-            public_key=base64.b64encode(raw).decode(),
-            agent_address="10.0.3.7:7443",
+    try:
+        register_sandbox_node_signing_key(
+            SandboxNodeSigningKeyRegistration(
+                node_id=node_id,
+                key_id=f"{node_id}-1",
+                public_key=base64.b64encode(raw).decode(),
+                agent_address="10.0.3.7:7443",
+            )
         )
-    )
-    assert list_registered_nodes(shared_cache) == [
-        RegisteredNode(node_id=node_id, address="10.0.3.7:7443")
-    ]
-    with pytest.raises(ValidationError):
-        SandboxNodeSigningKeyRegistration(
-            node_id=node_id,
-            key_id=f"{node_id}-2",
-            public_key=base64.b64encode(raw).decode(),
-            agent_address="http://10.0.3.7:7443/",
-        )
+        assert list_registered_nodes(shared_cache) == [
+            RegisteredNode(node_id=node_id, address="10.0.3.7:7443")
+        ]
+        with pytest.raises(ValidationError):
+            SandboxNodeSigningKeyRegistration(
+                node_id=node_id,
+                key_id=f"{node_id}-2",
+                public_key=base64.b64encode(raw).decode(),
+                agent_address="http://10.0.3.7:7443/",
+            )
+    finally:
+        shared_cache.delete(registry._KEY_PREFIX + f"{node_id}-1")
+        shared_cache.delete(registry._NODE_KIDS_PREFIX + node_id)
+        shared_cache.delete(registry._NODE_ADDRESS_PREFIX + node_id)

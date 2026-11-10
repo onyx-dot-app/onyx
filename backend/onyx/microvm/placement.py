@@ -10,9 +10,14 @@ no node accepts, `SANDBOX_CAPACITY_UNAVAILABLE` carries the reasons.
 
 Guest daemon key: each attempt gets a random key, stored (encrypted) before
 `Create` sends it, so a repeat `Create` of the same attempt sends the same key.
-When the daemon rejects the key, or the key is lost, the VM is unusable:
-placement stops it and creates the next attempt. The caller must then store
-`PlacedVm.vm.attempt` as the sandbox's attempt.
+When the daemon rejects the key, the key is lost, or the VM exited, the VM is
+unusable: placement stops it and creates the next attempt. The caller must
+then store `PlacedVm.vm.attempt` as the sandbox's attempt.
+
+Pending Create: before `Create`, placement pins the sandbox to the node. Until
+the Create outcome is known (success, or a node-local refusal), later
+placements try only that node, because a Create that timed out can still
+start the VM there.
 """
 
 import random
@@ -54,6 +59,7 @@ from onyx.microvm.registry import (
     index_sandbox_placement,
     list_registered_nodes,
     refresh_sandbox_daemon_key,
+    renew_sandbox_placement,
     set_sandbox_daemon_key,
     set_sandbox_placement,
     unindex_sandbox_placement,
@@ -64,12 +70,15 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _PLACEMENT_LOCK_PREFIX = "sandbox_fc:place_lock:"
+_PENDING_CREATE_PREFIX = "sandbox_fc:pending_create:"
 _LOCK_WAIT_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 15
 _LOCK_LEASE_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 30
 
 # Capacity reasons that are not agent ErrorReasons.
 REASON_NO_NODES = "NO_NODES"
 REASON_NODE_UNREACHABLE = "NODE_UNREACHABLE"
+# Create returned a VM that is not running (the agent keeps exited VMs).
+_REASON_VM_EXITED = "VM_EXITED"
 
 # Create failed for a node-local reason: another node may accept.
 _NEXT_NODE_REASONS: frozenset[HostAgentErrorReason] = frozenset(
@@ -121,11 +130,18 @@ class _LiveVm(BaseModel):
     vm: AgentVm
 
 
-class _KeyRejected(Exception):
-    def __init__(self, node: RegisteredNode, error: GuestKeyRejectedError) -> None:
-        super().__init__(str(error))
+class _Unusable(Exception):
+    """Create on `node` gave a VM that nothing can use. `vm` is None when
+    Create did not return it (GUEST_KEY_REJECTED)."""
+
+    def __init__(
+        self, node: RegisteredNode, reason: str, detail: str, vm: AgentVm | None
+    ) -> None:
+        super().__init__(detail)
         self.node = node
-        self.error = error
+        self.reason = reason
+        self.detail = detail
+        self.vm = vm
 
 
 class NodeRefusal(BaseModel):
@@ -214,6 +230,52 @@ def record_placement(
     )
 
 
+def refresh_placement(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    *,
+    tenant_id: str,
+    sandbox_id: UUID,
+    placement: SandboxPlacement,
+) -> bool:
+    """Refresh the record only while it still names `placement`. The check and
+    the TTL reset are one atomic step, so a stale caller cannot overwrite a
+    replacement VM's record."""
+    if not renew_sandbox_placement(
+        tenant_cache, sandbox_id, placement, SANDBOX_FC_PLACEMENT_TTL_SECONDS
+    ):
+        return False
+    refresh_sandbox_daemon_key(
+        tenant_cache, sandbox_id, SANDBOX_FC_PLACEMENT_TTL_SECONDS
+    )
+    index_sandbox_placement(
+        shared_cache,
+        node_id=placement.node_id,
+        tenant_id=tenant_id,
+        sandbox_id=sandbox_id,
+    )
+    return True
+
+
+def _pin_pending_create(
+    tenant_cache: CacheBackend, sandbox_id: UUID, node_id: str
+) -> None:
+    tenant_cache.set(
+        _PENDING_CREATE_PREFIX + str(sandbox_id),
+        node_id,
+        ex=SANDBOX_FC_PLACEMENT_TTL_SECONDS,
+    )
+
+
+def _pending_create_node(tenant_cache: CacheBackend, sandbox_id: UUID) -> str | None:
+    raw = tenant_cache.get(_PENDING_CREATE_PREFIX + str(sandbox_id))
+    return raw.decode() if raw is not None else None
+
+
+def clear_pending_create(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
+    tenant_cache.delete(_PENDING_CREATE_PREFIX + str(sandbox_id))
+
+
 def forget_placement(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
@@ -242,13 +304,17 @@ def _existing_vm(
     tenant_cache: CacheBackend,
     client_factory: HostAgentClientFactory,
     request: VmRequest,
-) -> _LiveVm | None:
+) -> tuple[_LiveVm | None, VmRequest]:
     """The live VM that the placement record names, or None after clearing a
     record whose VM is gone. Raises when the sandbox has a live VM of another
-    attempt (one VM per sandbox)."""
+    attempt (one VM per sandbox).
+
+    The returned request has the next attempt when the record's VM exited: the
+    agent keeps an exited VM and returns it for a repeat Create of its attempt.
+    """
     placement = get_sandbox_placement(tenant_cache, request.sandbox_id)
     if placement is None:
-        return None
+        return None, request
     node = get_registered_node(shared_cache, placement.node_id)
     if node is None:
         # The node stopped registering. Its VM may still run, so do not start
@@ -275,6 +341,17 @@ def _existing_vm(
             ]
         ) from e
     vm = find_vm(vms, request.sandbox_id, placement.generation)
+    if vm is not None and not vm.state.is_live() and vm.attempt >= request.attempt:
+        discard_unusable_vm(
+            shared_cache,
+            tenant_cache,
+            client_factory,
+            tenant_id=request.tenant_id,
+            node=node,
+            vm=vm,
+            why=_REASON_VM_EXITED,
+        )
+        return None, request.model_copy(update={"attempt": vm.attempt + 1})
     if vm is None or not vm.state.is_live():
         forget_placement(
             shared_cache,
@@ -283,10 +360,10 @@ def _existing_vm(
             sandbox_id=request.sandbox_id,
             node_id=placement.node_id,
         )
-        return None
+        return None, request
     if vm.attempt != request.attempt:
         raise _conflict_error(request.sandbox_id, node.node_id, "ATTEMPT_CONFLICT")
-    return _LiveVm(node=node, vm=vm)
+    return _LiveVm(node=node, vm=vm), request
 
 
 def _node_infos(
@@ -351,7 +428,8 @@ def _create_on(
     lock: CacheLock,
 ) -> PlacedVm:
     """Create on one node. The daemon did not take the key in time: the VM
-    runs, so retry the same attempt with the same key."""
+    runs, so retry the same attempt with the same key. Raises _Unusable when
+    the VM is not running or the daemon rejects the key."""
     template = info.template(request.template)
     if template is None:
         raise ValueError(f"template {request.template} is not on {node.node_id}")
@@ -368,9 +446,10 @@ def _create_on(
                 tenant_id=request.tenant_id,
                 sandboxd_key=key,
             )
-            return PlacedVm(
-                node=node, vm=result.vm, created=result.created, sandboxd_key=key
-            )
+        except GuestKeyRejectedError as e:
+            raise _Unusable(
+                node, HostAgentErrorReason.GUEST_KEY_REJECTED.value, e.message, None
+            ) from e
         except GuestUnreachableError:
             if retry == SANDBOX_FC_CREATE_GUEST_RETRIES:
                 raise
@@ -382,18 +461,122 @@ def _create_on(
                 retry + 1,
             )
             lock.extend(_LOCK_LEASE_SECONDS)
+            continue
+        if not result.vm.state.is_live():
+            raise _Unusable(
+                node,
+                _REASON_VM_EXITED,
+                f"Create returned a VM in state {result.vm.state.value}",
+                result.vm,
+            )
+        return PlacedVm(
+            node=node, vm=result.vm, created=result.created, sandboxd_key=key
+        )
     raise AssertionError("unreachable")
 
 
+def _try_node(
+    tenant_cache: CacheBackend,
+    client_factory: HostAgentClientFactory,
+    request: VmRequest,
+    node: RegisteredNode,
+    info: NodeInfo,
+    key: SecretStr,
+    lock: CacheLock,
+    refusals: list[NodeRefusal],
+) -> PlacedVm | None:
+    """Create on `node`. None when the node refused for a node-local reason
+    (added to `refusals`); then no VM of this Create runs there."""
+    lock.extend(_LOCK_LEASE_SECONDS)
+    _pin_pending_create(tenant_cache, request.sandbox_id, node.node_id)
+    try:
+        return _create_on(client_factory, request, node, info, key, lock)
+    except GuestUnreachableError as e:
+        # The VM runs on this node: never start a second one elsewhere.
+        raise capacity_unavailable_error(
+            [
+                *refusals,
+                NodeRefusal(
+                    node_id=node.node_id,
+                    reason=HostAgentErrorReason.GUEST_UNREACHABLE.value,
+                    detail=e.message,
+                ),
+            ]
+        ) from e
+    except HostAgentError as e:
+        if e.reason is None:
+            # The VM may exist there. The pending-Create pin keeps the next
+            # placement on this node.
+            raise capacity_unavailable_error(
+                [
+                    *refusals,
+                    NodeRefusal(
+                        node_id=node.node_id,
+                        reason=REASON_NODE_UNREACHABLE,
+                        detail=e.message,
+                    ),
+                ]
+            ) from e
+        if e.reason in (
+            HostAgentErrorReason.ATTEMPT_CONFLICT,
+            HostAgentErrorReason.STALE_ATTEMPT,
+            HostAgentErrorReason.SANDBOX_IN_DOUBT,
+        ):
+            # The node holds state for this sandbox: never place it on a
+            # second node.
+            raise _conflict_error(
+                request.sandbox_id, node.node_id, e.reason.value
+            ) from e
+        if e.reason not in _NEXT_NODE_REASONS:
+            raise
+        clear_pending_create(tenant_cache, request.sandbox_id)
+        logger.info(
+            "sandbox_fc_node_refused node=%s sandbox=%s reason=%s",
+            node.node_id,
+            request.sandbox_id,
+            e.reason.value,
+        )
+        refusals.append(
+            NodeRefusal(node_id=node.node_id, reason=e.reason.value, detail=e.message)
+        )
+        return None
+
+
 def _place_new(
+    tenant_cache: CacheBackend,
     client_factory: HostAgentClientFactory,
     request: VmRequest,
     nodes: list[RegisteredNode],
+    pinned: RegisteredNode | None,
     lock: CacheLock,
     rng: random.Random,
     key: SecretStr,
 ) -> PlacedVm:
     refusals: list[NodeRefusal] = []
+    if pinned is not None:
+        # An earlier Create on this node has no known outcome: its VM may run
+        # there, so try that node first and skip the free-memory ranking.
+        lock.extend(_LOCK_LEASE_SECONDS + SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS)
+        infos = _node_infos(client_factory, [pinned], refusals)
+        if not infos:
+            raise capacity_unavailable_error(refusals)
+        node, info = infos[0]
+        if info.template(request.template) is None:
+            clear_pending_create(tenant_cache, request.sandbox_id)
+            refusals.append(
+                NodeRefusal(
+                    node_id=node.node_id,
+                    reason=HostAgentErrorReason.TEMPLATE_MISSING.value,
+                    detail=f"template {request.template} is not on the node",
+                )
+            )
+        else:
+            placed = _try_node(
+                tenant_cache, client_factory, request, node, info, key, lock, refusals
+            )
+            if placed is not None:
+                return placed
+        nodes = [n for n in nodes if n.node_id != pinned.node_id]
     order = list(nodes)
     rng.shuffle(order)
     for start in range(0, len(order), SANDBOX_FC_PLACEMENT_CANDIDATES):
@@ -402,60 +585,11 @@ def _place_new(
         for node, info in _rank(
             request, _node_infos(client_factory, batch, refusals), refusals
         ):
-            lock.extend(_LOCK_LEASE_SECONDS)
-            try:
-                return _create_on(client_factory, request, node, info, key, lock)
-            except GuestKeyRejectedError as e:
-                raise _KeyRejected(node, e) from e
-            except GuestUnreachableError as e:
-                # The VM runs on this node: never start a second one elsewhere.
-                raise capacity_unavailable_error(
-                    [
-                        *refusals,
-                        NodeRefusal(
-                            node_id=node.node_id,
-                            reason=HostAgentErrorReason.GUEST_UNREACHABLE.value,
-                            detail=e.message,
-                        ),
-                    ]
-                ) from e
-            except HostAgentError as e:
-                if e.reason is None:
-                    # The VM may exist there; another node could start a second
-                    # one. Reconcile adopts it if it does.
-                    raise capacity_unavailable_error(
-                        [
-                            *refusals,
-                            NodeRefusal(
-                                node_id=node.node_id,
-                                reason=REASON_NODE_UNREACHABLE,
-                                detail=e.message,
-                            ),
-                        ]
-                    ) from e
-                if e.reason in (
-                    HostAgentErrorReason.ATTEMPT_CONFLICT,
-                    HostAgentErrorReason.STALE_ATTEMPT,
-                    HostAgentErrorReason.SANDBOX_IN_DOUBT,
-                ):
-                    # The node holds state for this sandbox: never place it
-                    # on a second node.
-                    raise _conflict_error(
-                        request.sandbox_id, node.node_id, e.reason.value
-                    ) from e
-                if e.reason not in _NEXT_NODE_REASONS:
-                    raise
-                logger.info(
-                    "sandbox_fc_node_refused node=%s sandbox=%s reason=%s",
-                    node.node_id,
-                    request.sandbox_id,
-                    e.reason.value,
-                )
-                refusals.append(
-                    NodeRefusal(
-                        node_id=node.node_id, reason=e.reason.value, detail=e.message
-                    )
-                )
+            placed = _try_node(
+                tenant_cache, client_factory, request, node, info, key, lock, refusals
+            )
+            if placed is not None:
+                return placed
     raise capacity_unavailable_error(refusals)
 
 
@@ -526,40 +660,69 @@ def discard_unusable_vm(
     )
 
 
-def _discard_rejected(
+def _discard_unusable(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: HostAgentClientFactory,
     request: VmRequest,
-    rejected: _KeyRejected,
+    unusable: _Unusable,
 ) -> None:
-    """Create does not return the VM on GUEST_KEY_REJECTED: find it by attempt."""
-    try:
-        vms = client_factory.client(rejected.node.address).list_vms()
-    except HostAgentError as e:
+    """Stop the unusable VM of `request.attempt`. Create does not return the
+    VM on GUEST_KEY_REJECTED: find it by attempt."""
+    vm = unusable.vm
+    if vm is None:
+        try:
+            vms = client_factory.client(unusable.node.address).list_vms()
+        except HostAgentError as e:
+            raise capacity_unavailable_error(
+                [
+                    NodeRefusal(
+                        node_id=unusable.node.node_id,
+                        reason=e.reason.value if e.reason else REASON_NODE_UNREACHABLE,
+                        detail=e.message,
+                    )
+                ]
+            ) from e
+        key = str(request.sandbox_id)
+        vm = next(
+            (v for v in vms if v.sandbox_id == key and v.attempt == request.attempt),
+            None,
+        )
+    if vm is None:
+        clear_sandbox_daemon_key(tenant_cache, request.sandbox_id)
+    else:
+        discard_unusable_vm(
+            shared_cache,
+            tenant_cache,
+            client_factory,
+            tenant_id=request.tenant_id,
+            node=unusable.node,
+            vm=vm,
+            why=unusable.reason,
+        )
+    clear_pending_create(tenant_cache, request.sandbox_id)
+
+
+def _pinned_node(
+    shared_cache: CacheBackend, tenant_cache: CacheBackend, sandbox_id: UUID
+) -> RegisteredNode | None:
+    node_id = _pending_create_node(tenant_cache, sandbox_id)
+    if node_id is None:
+        return None
+    node = get_registered_node(shared_cache, node_id)
+    if node is None:
+        # The VM of the unfinished Create may still run there; the pin
+        # expires with its TTL.
         raise capacity_unavailable_error(
             [
                 NodeRefusal(
-                    node_id=rejected.node.node_id,
-                    reason=e.reason.value if e.reason else REASON_NODE_UNREACHABLE,
-                    detail=e.message,
+                    node_id=node_id,
+                    reason=REASON_NODE_UNREACHABLE,
+                    detail="the node of an unfinished Create is not registered",
                 )
             ]
-        ) from e
-    key = str(request.sandbox_id)
-    for vm in vms:
-        if vm.sandbox_id == key and vm.attempt == request.attempt:
-            discard_unusable_vm(
-                shared_cache,
-                tenant_cache,
-                client_factory,
-                tenant_id=request.tenant_id,
-                node=rejected.node,
-                vm=vm,
-                why=HostAgentErrorReason.GUEST_KEY_REJECTED.value,
-            )
-            return
-    clear_sandbox_daemon_key(tenant_cache, request.sandbox_id)
+        )
+    return node
 
 
 def place_sandbox_vm(
@@ -583,7 +746,9 @@ def place_sandbox_vm(
     ) as lock:
         if lock is None:
             raise SandboxProvisionContentionError(str(request.sandbox_id))
-        existing = _existing_vm(shared_cache, tenant_cache, client_factory, request)
+        existing, request = _existing_vm(
+            shared_cache, tenant_cache, client_factory, request
+        )
         if existing is not None:
             key = get_sandbox_daemon_key(
                 tenant_cache, request.sandbox_id, attempt=existing.vm.attempt
@@ -619,21 +784,29 @@ def place_sandbox_vm(
         refusals: list[NodeRefusal] = []
         for _ in range(_MAX_ATTEMPTS):
             key = _key_for_attempt(tenant_cache, request)
+            pinned = _pinned_node(shared_cache, tenant_cache, request.sandbox_id)
             nodes = list_registered_nodes(shared_cache)
             try:
                 placed = _place_new(
-                    client_factory, request, nodes, lock, rng or random.Random(), key
+                    tenant_cache,
+                    client_factory,
+                    request,
+                    nodes,
+                    pinned,
+                    lock,
+                    rng or random.Random(),
+                    key,
                 )
-            except _KeyRejected as rejected:
+            except _Unusable as unusable:
                 refusals.append(
                     NodeRefusal(
-                        node_id=rejected.node.node_id,
-                        reason=HostAgentErrorReason.GUEST_KEY_REJECTED.value,
-                        detail=rejected.error.message,
+                        node_id=unusable.node.node_id,
+                        reason=unusable.reason,
+                        detail=unusable.detail,
                     )
                 )
-                _discard_rejected(
-                    shared_cache, tenant_cache, client_factory, request, rejected
+                _discard_unusable(
+                    shared_cache, tenant_cache, client_factory, request, unusable
                 )
                 request = request.model_copy(update={"attempt": request.attempt + 1})
                 continue
@@ -646,6 +819,7 @@ def place_sandbox_vm(
                     node_id=placed.node.node_id, generation=placed.vm.generation
                 ),
             )
+            clear_pending_create(tenant_cache, request.sandbox_id)
             logger.info(
                 "sandbox_fc_placed node=%s sandbox=%s attempt=%d generation=%d created=%s",
                 placed.node.node_id,

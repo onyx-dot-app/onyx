@@ -69,12 +69,14 @@ def microvm_reconcile_task(*, tenant_id: str | None = None) -> None:  # noqa: AR
         or report.cleared
         or report.orphans_marked
         or report.unreachable_nodes
+        or report.failed
     ):
         task_logger.info(
-            "microvm_reconcile_task nodes=%d unreachable=%s adopted=%d "
+            "microvm_reconcile_task nodes=%d unreachable=%s failed=%s adopted=%d "
             "cleared=%d orphans=%d stopped=%d slept=%d",
             report.nodes,
             report.unreachable_nodes,
+            report.failed,
             len(report.adopted),
             len(report.cleared),
             len(report.orphans_marked),
