@@ -20,7 +20,7 @@ Callers normally control the transaction boundary so multi-step operations can
 roll back atomically.
 """
 
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, IntEnum
@@ -28,23 +28,40 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     ColumnElement,
+    Integer,
     Select,
+    String,
     and_,
+    any_,
+    bindparam,
     case,
+    cast,
+    column,
     delete,
     exists,
+    false,
     func,
+    literal,
     null,
     or_,
     select,
     true,
+    type_coerce,
+    union_all,
     update,
 )
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import ARRAY, array, insert
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, contains_eager, selectinload
-from sqlalchemy.sql.selectable import CTE
+from sqlalchemy.orm import (
+    InstrumentedAttribute,
+    Session,
+    contains_eager,
+    selectinload,
+)
+from sqlalchemy.sql.selectable import CTE, Subquery
 
 from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
@@ -58,6 +75,7 @@ from onyx.db.enums import (
 )
 from onyx.db.external_app import (
     SkillExternalAppDependencyState,
+    get_ready_external_app_ids_for_users,
     get_skill_external_app_dependencies,
 )
 from onyx.db.models import (
@@ -103,11 +121,17 @@ from onyx.db.skill_version import (
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.users import lock_group_membership
-from onyx.db.utils import is_fk_violation
+from onyx.db.utils import is_fk_violation, uuid_array
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.built_in import BUILT_IN_SKILLS
+from onyx.skills.built_in import BUILT_IN_SKILLS, get_builtin_skill_footprints
 from onyx.skills.ingest import IngestedBundle
+from onyx.skills.limits import SkillUsage
+
+# Past these sizes, a usage query finds each name's shared winner once.
+# Smaller queries cost less to expand each user over each name.
+PER_USER_WINNER_MAX_NAME_PAIRS = 5_000
+PER_USER_WINNER_MAX_FULL_TOTAL_USERS = 20
 
 
 class SkillManagementPolicy(str, Enum):
@@ -176,14 +200,18 @@ def skill_marketplace_sources(
     }
 
 
+# A literal user, or a user column of an enclosing multi-user query.
+UserIdRef = UUID | ColumnElement[UUID] | InstrumentedAttribute[UUID]
+
+
 def _is_shared_with_user(
-    user: User,
+    user_id: UserIdRef,
     permission: SkillSharePermission | None = None,
 ) -> ColumnElement[bool]:
     stmt = (
         select(Skill__User.skill_id)
         .where(Skill__User.skill_id == Skill.id)
-        .where(Skill__User.user_id == user.id)
+        .where(Skill__User.user_id == user_id)
     )
     if permission is not None:
         stmt = stmt.where(Skill__User.permission == permission)
@@ -191,7 +219,7 @@ def _is_shared_with_user(
 
 
 def _is_shared_with_user_group(
-    user: User,
+    user_id: UserIdRef,
     permission: SkillSharePermission | None = None,
 ) -> ColumnElement[bool]:
     stmt = (
@@ -201,7 +229,7 @@ def _is_shared_with_user_group(
             User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
         )
         .where(Skill__UserGroup.skill_id == Skill.id)
-        .where(User__UserGroup.user_id == user.id)
+        .where(User__UserGroup.user_id == user_id)
     )
     if permission is not None:
         stmt = stmt.where(Skill__UserGroup.permission == permission)
@@ -221,16 +249,16 @@ def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool
     )
 
 
-def _is_owned_custom_skill(user: User) -> ColumnElement[bool]:
+def _is_owned_custom_skill(user_id: UserIdRef) -> ColumnElement[bool]:
     return and_(
         Skill.author_user_id.is_not(None),
-        Skill.author_user_id == user.id,
+        Skill.author_user_id == user_id,
         Skill.built_in_skill_id.is_(None),
     )
 
 
 def skill_visible_to_user(
-    user: User,
+    user_id: UserIdRef,
     *,
     include_retired: bool = False,
     installation_policy: ColumnElement[str] | None = None,
@@ -238,16 +266,16 @@ def skill_visible_to_user(
     policy = (
         installation_policy
         if installation_policy is not None
-        else _effective_skill_policy(user.id)
+        else _effective_skill_policy(user_id)
     )
     visible = or_(
-        _is_shared_with_user(user),
-        _is_owned_custom_skill(user),
+        _is_shared_with_user(user_id),
+        _is_owned_custom_skill(user_id),
         and_(
             policy != SkillInstallationPolicy.NOT_AVAILABLE,
             or_(
                 Skill.public_permission.is_not(None),
-                _is_shared_with_user_group(user),
+                _is_shared_with_user_group(user_id),
             ),
         ),
     )
@@ -259,9 +287,9 @@ def _is_editable_by_user(
     user: User, *, allow_management: bool = True
 ) -> ColumnElement[bool]:
     editable = or_(
-        _is_owned_custom_skill(user),
-        _is_shared_with_user(user, SkillSharePermission.EDITOR),
-        _is_shared_with_user_group(user, SkillSharePermission.EDITOR),
+        _is_owned_custom_skill(user.id),
+        _is_shared_with_user(user.id, SkillSharePermission.EDITOR),
+        _is_shared_with_user_group(user.id, SkillSharePermission.EDITOR),
         Skill.public_permission == SkillSharePermission.EDITOR,
     )
     if (
@@ -297,7 +325,7 @@ def _skill_policy_from_rank(rank: ColumnElement[int]) -> ColumnElement[str]:
     )
 
 
-def _effective_skill_policy(user_id: UUID | ColumnElement[UUID]) -> ColumnElement[str]:
+def _effective_skill_policy(user_id: UserIdRef) -> ColumnElement[str]:
     group_rank = (
         select(func.max(_group_skill_policy_rank()))
         .select_from(Skill__UserGroup)
@@ -308,15 +336,19 @@ def _effective_skill_policy(user_id: UUID | ColumnElement[UUID]) -> ColumnElemen
         .where(
             Skill__UserGroup.skill_id == Skill.id, User__UserGroup.user_id == user_id
         )
-        .correlate(Skill, User)
+        .correlate_except(Skill__UserGroup, User__UserGroup)
         .scalar_subquery()
     )
     return _skill_policy_from_rank(group_rank)
 
 
-def _skill_installation_policy_rows(
-    user_ids: Collection[UUID], skill_ids: Collection[UUID] | None = None
-) -> CTE:
+def _group_policy_ranks(
+    user_ids: Collection[UUID],
+    skill_ids: Collection[UUID] | None = None,
+    *,
+    names: Collection[str] | None = None,
+) -> Subquery:
+    """The strongest group policy rank per user and group-shared Skill."""
     groups = (
         select(
             User__UserGroup.user_id,
@@ -329,12 +361,23 @@ def _skill_installation_policy_rows(
             User__UserGroup,
             User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
         )
-        .where(User__UserGroup.user_id.in_(user_ids))
+        .where(User__UserGroup.user_id == any_(uuid_array(user_ids)))
         .group_by(User__UserGroup.user_id, Skill__UserGroup.skill_id)
     )
     if skill_ids is not None:
         groups = groups.where(Skill.id.in_(skill_ids))
-    group_rows = groups.subquery()
+    if names is not None:
+        groups = groups.where(Skill.name.in_(names))
+    return groups.subquery()
+
+
+def _skill_installation_policy_rows(
+    user_ids: Collection[UUID],
+    skill_ids: Collection[UUID] | None = None,
+    *,
+    names: Collection[str] | None = None,
+) -> CTE:
+    group_rows = _group_policy_ranks(user_ids, skill_ids, names=names)
     user_id = User.__table__.c.id
     rows = (
         select(
@@ -352,6 +395,8 @@ def _skill_installation_policy_rows(
     )
     if skill_ids is not None:
         rows = rows.where(Skill.id.in_(skill_ids))
+    if names is not None:
+        rows = rows.where(Skill.name.in_(names))
     return rows.cte()
 
 
@@ -376,37 +421,43 @@ def resolve_skill_installation_policies(
 
 
 def _is_required_for_user(
-    user: User, installation_policy: ColumnElement[str] | None = None
+    user_id: UserIdRef, installation_policy: ColumnElement[str] | None = None
 ) -> ColumnElement[bool]:
     policy = (
         installation_policy
         if installation_policy is not None
-        else _effective_skill_policy(user.id)
+        else _effective_skill_policy(user_id)
     )
     return and_(
         policy == SkillInstallationPolicy.REQUIRED,
-        skill_visible_to_user(user, installation_policy=policy),
+        skill_visible_to_user(user_id, installation_policy=policy),
     )
 
 
 def _is_enabled_for_user(
-    user: User, installation_policy: ColumnElement[str] | None = None
+    user_id: UserIdRef,
+    installation_policy: ColumnElement[str] | None = None,
+    *,
+    preference: ColumnElement[bool] | None = None,
 ) -> ColumnElement[bool]:
+    """``preference`` is the user's saved choice when the caller already joins it."""
     policy = (
         installation_policy
         if installation_policy is not None
-        else _effective_skill_policy(user.id)
+        else _effective_skill_policy(user_id)
     )
-    preference = (
-        select(UserSkillPreference.enabled)
-        .where(
-            UserSkillPreference.user_id == user.id,
-            UserSkillPreference.skill_id == Skill.id,
+    if preference is None:
+        preference = (
+            select(UserSkillPreference.enabled)
+            .where(
+                UserSkillPreference.user_id == user_id,
+                UserSkillPreference.skill_id == Skill.id,
+            )
+            # Also correlates a user column of a multi-user query.
+            .correlate_except(UserSkillPreference)
+            .scalar_subquery()
         )
-        .correlate(Skill)
-        .scalar_subquery()
-    )
-    visible = skill_visible_to_user(user, installation_policy=policy)
+    visible = skill_visible_to_user(user_id, installation_policy=policy)
     enabled = or_(
         Skill.built_in_skill_id.isnot(None),
         policy == SkillInstallationPolicy.REQUIRED,
@@ -425,7 +476,7 @@ def _is_enabled_for_user(
     )
 
 
-def _available_built_in_skills(db_session: Session) -> ColumnElement[bool]:
+def available_built_in_skills(db_session: Session) -> ColumnElement[bool]:
     """Keep custom rows and known built-ins whose ``is_available(db)`` is true.
     User-facing reads use this; admin reads don't (admins see all rows)."""
     available = [
@@ -481,12 +532,12 @@ def _skill_select_for_management_policy(
         policies = _skill_installation_policy_rows([user.id])
         stmt = stmt.join(policies, policies.c.skill_id == Skill.id).where(
             skill_visible_to_user(
-                user,
+                user.id,
                 include_retired=include_retired,
                 installation_policy=policies.c.installation_policy,
             )
         )
-        return stmt.where(_available_built_in_skills(db_session))
+        return stmt.where(available_built_in_skills(db_session))
 
     if policy == SkillManagementPolicy.EDIT:
         stmt = stmt.where(Skill.built_in_skill_id.is_(None))
@@ -508,6 +559,16 @@ def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
     )
 
 
+def _skill_reaches_user(user_id: UserIdRef) -> ColumnElement[bool]:
+    """Any grant that can show the skill to the user, before installation policy."""
+    return or_(
+        Skill.public_permission.is_not(None),
+        Skill.author_user_id == user_id,
+        _is_shared_with_user(user_id),
+        _is_shared_with_user_group(user_id),
+    )
+
+
 def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
     return affected_user_ids_for_skills([skill.id], db_session).get(skill.id, set())
 
@@ -518,33 +579,13 @@ def affected_user_ids_for_skills(
     recipients: dict[UUID, set[UUID]] = {}
     if not skill_ids:
         return recipients
-    direct = exists().where(
-        Skill__User.skill_id == Skill.id, Skill__User.user_id == Sandbox.user_id
-    )
-    group = (
-        select(Skill__UserGroup.skill_id)
-        .join(
-            User__UserGroup,
-            User__UserGroup.user_group_id == Skill__UserGroup.user_group_id,
-        )
-        .where(
-            Skill__UserGroup.skill_id == Skill.id,
-            User__UserGroup.user_id == Sandbox.user_id,
-        )
-        .exists()
-    )
     rows = db_session.execute(
         select(Skill.id, Sandbox.user_id)
         .join(
             Sandbox,
             and_(
                 Sandbox.status == SandboxStatus.RUNNING,
-                or_(
-                    Skill.public_permission.is_not(None),
-                    Skill.author_user_id == Sandbox.user_id,
-                    direct,
-                    group,
-                ),
+                _skill_reaches_user(Sandbox.user_id),
             ),
         )
         .where(Skill.id.in_(skill_ids))
@@ -571,6 +612,52 @@ def list_skills(
     return list(db_session.scalars(stmt))
 
 
+def _runtime_candidate_order(
+    user_id: UserIdRef,
+) -> tuple[
+    ColumnElement[int], InstrumentedAttribute[datetime], InstrumentedAttribute[UUID]
+]:
+    """Company library, the user's library, then others; the caller joins Marketplace."""
+    library_owner = skill_library_owner()
+    priority = case(
+        (library_owner.is_(None), 0),
+        (library_owner == user_id, 1),
+        else_=2,
+    )
+    return priority, Skill.created_at, Skill.id
+
+
+def _runtime_eligibility(
+    user_id: UserIdRef,
+    policy: ColumnElement[str],
+    *,
+    app_ready: ColumnElement[bool],
+    built_in_available: ColumnElement[bool],
+    include_skill_id: UUID | None = None,
+    preference: ColumnElement[bool] | None = None,
+) -> list[ColumnElement[bool]]:
+    """Runtime gate for one user or a user column; the caller joins current versions.
+
+    ``app_ready`` is true for an app-linked skill whose app the user can use.
+    ``built_in_available`` is ``available_built_in_skills``.
+    ``preference`` is the user's joined saved choice, read per row otherwise.
+    """
+    return [
+        skill_visible_to_user(user_id, installation_policy=policy),
+        policy != SkillInstallationPolicy.NOT_AVAILABLE,
+        or_(
+            _is_enabled_for_user(user_id, policy, preference=preference),
+            Skill.id == include_skill_id,
+        ),
+        or_(~exists().where(ExternalApp__Skill.skill_id == Skill.id), app_ready),
+        or_(
+            Skill.built_in_skill_id.isnot(None),
+            and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
+        ),
+        built_in_available,
+    ]
+
+
 def _runtime_name_winners(
     user: User,
     db_session: Session,
@@ -590,15 +677,9 @@ def _runtime_name_winners(
         for skill_id, dependency in external_app_dependencies.items()
         if dependency.ready
     ]
-    library_owner = skill_library_owner()
     policies = _skill_installation_policy_rows([user.id])
     policy = policies.c.installation_policy
-    priority = case(
-        (library_owner.is_(None), 0),
-        (library_owner == user.id, 1),
-        else_=2,
-    )
-    candidate_order = (priority, Skill.created_at, Skill.id)
+    candidate_order = _runtime_candidate_order(user.id)
     stmt = (
         select(
             Skill.id.label("skill_id"),
@@ -613,23 +694,18 @@ def _runtime_name_winners(
         .outerjoin(Marketplace, Skill.marketplace_id == Marketplace.id)
         .join(policies, policies.c.skill_id == Skill.id)
         .where(
-            skill_visible_to_user(user, installation_policy=policy),
-            policy != SkillInstallationPolicy.NOT_AVAILABLE,
-            or_(_is_enabled_for_user(user, policy), Skill.id == include_skill_id),
-            or_(
-                ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
-                Skill.id.in_(ready_external_app_skill_ids),
-            ),
-            or_(
-                Skill.built_in_skill_id.isnot(None),
-                and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
-            ),
-            _available_built_in_skills(db_session),
+            *_runtime_eligibility(
+                user.id,
+                policy,
+                app_ready=Skill.id.in_(ready_external_app_skill_ids),
+                built_in_available=available_built_in_skills(db_session),
+                include_skill_id=include_skill_id,
+            )
         )
     )
     if required_only:
         stmt = stmt.where(
-            or_(_is_required_for_user(user, policy), Skill.id == include_skill_id)
+            or_(_is_required_for_user(user.id, policy), Skill.id == include_skill_id)
         )
     return stmt
 
@@ -771,6 +847,442 @@ def list_runtime_skill_candidates_for_user(
     ]
 
 
+def _user_specific_skill_names(
+    user_ids: Collection[UUID],
+    names: Collection[str] | None,
+    app_overrides: Collection[tuple[UUID, int]],
+) -> CTE:
+    """Each user and Skill name whose winner can differ from the generic winner.
+
+    Lists every row that ties a user to a Skill: preference, direct or group
+    share, app readiness, authorship or marketplace ownership.
+    Without one, a name has the same winner as for a user with no rows. Extra
+    pairs are safe: they get a full per-user winner.
+    """
+    apps = (
+        func.unnest(
+            uuid_array([user_id for user_id, _ in app_overrides]),
+            bindparam(
+                None, [app_id for _, app_id in app_overrides], type_=ARRAY(Integer)
+            ),
+        )
+        .table_valued(
+            column("user_id", PGUUID(as_uuid=True)),
+            column("external_app_id", Integer),
+        )
+        .render_derived(name="app_overrides")
+    )
+    links = union_all(
+        select(UserSkillPreference.user_id, UserSkillPreference.skill_id),
+        select(Skill__User.user_id, Skill__User.skill_id),
+        select(User__UserGroup.user_id, Skill__UserGroup.skill_id).join(
+            Skill__UserGroup,
+            Skill__UserGroup.user_group_id == User__UserGroup.user_group_id,
+        ),
+        select(apps.c.user_id, ExternalApp__Skill.skill_id).join(
+            ExternalApp__Skill,
+            ExternalApp__Skill.external_app_id == apps.c.external_app_id,
+        ),
+        select(Skill.author_user_id, Skill.id),
+        select(Marketplace.owner_user_id, Skill.id).join(
+            Skill, Skill.marketplace_id == Marketplace.id
+        ),
+    ).subquery()
+    stmt = (
+        select(links.c.user_id, Skill.name)
+        .join(Skill, Skill.id == links.c.skill_id)
+        .where(links.c.user_id == any_(uuid_array(user_ids)))
+        .distinct()
+    )
+    if names is not None:
+        stmt = stmt.where(Skill.name.in_(names))
+    return stmt.cte()
+
+
+def _skill_name_winners(
+    policies: Subquery,
+    ready_apps: Collection[tuple[UUID, int]],
+    *,
+    built_in_available: ColumnElement[bool],
+    exclude_skill_ids: Collection[UUID],
+    version_overrides: Mapping[UUID, UUID | None],
+) -> Select[tuple[UUID, str, Sequence[int]]]:
+    """Each policy row's user and name with the runtime winner and its size.
+
+    ``policies`` has ``user_id``, ``skill_id`` and ``installation_policy``.
+    """
+    user_id = policies.c.user_id
+    app_ready = false()
+    if ready_apps:
+        ready = (
+            func.unnest(
+                uuid_array([user_id for user_id, _ in ready_apps]),
+                bindparam(
+                    None, [app_id for _, app_id in ready_apps], type_=ARRAY(Integer)
+                ),
+            )
+            .table_valued(
+                column("user_id", PGUUID(as_uuid=True)),
+                column("external_app_id", Integer),
+            )
+            .render_derived(name="ready_apps")
+        )
+        app_ready = exists().where(
+            ExternalApp__Skill.skill_id == Skill.id,
+            ready.c.external_app_id == ExternalApp__Skill.external_app_id,
+            ready.c.user_id == user_id,
+        )
+    unknown = and_(
+        Skill.built_in_skill_id.is_(None),
+        or_(
+            SkillVersion.unpacked_size_bytes.is_(None),
+            SkillVersion.file_count.is_(None),
+        ),
+    )
+    footprints = get_builtin_skill_footprints().items()
+    built_in_bytes = case(
+        {skill_id: footprint.bytes for skill_id, footprint in footprints},
+        value=Skill.built_in_skill_id,
+        else_=0,
+    )
+    built_in_files = case(
+        {skill_id: footprint.files for skill_id, footprint in footprints},
+        value=Skill.built_in_skill_id,
+        else_=0,
+    )
+    library_priority, *creation_order = _runtime_candidate_order(user_id)
+    name_positions = (
+        select(
+            Skill.id.label("skill_id"),
+            func.row_number()
+            .over(partition_by=Skill.name, order_by=creation_order)
+            .label("position"),
+        )
+        .cte("skill_name_positions", nesting=True)
+        .prefix_with("MATERIALIZED")
+    )
+    # The smallest array per name is the runtime winner, followed by its size.
+    winner = func.min(
+        array(
+            [
+                cast(value, BigInteger)
+                for value in (
+                    library_priority,
+                    name_positions.c.position,
+                    case(
+                        (unknown, 0),
+                        else_=func.coalesce(
+                            SkillVersion.unpacked_size_bytes, built_in_bytes
+                        ),
+                    ),
+                    case(
+                        (unknown, 0),
+                        else_=func.coalesce(SkillVersion.file_count, built_in_files),
+                    ),
+                    case((unknown, 1), else_=0),
+                )
+            ]
+        )
+    )
+    version_id = (
+        case(
+            {
+                skill_id: literal(version, PGUUID(as_uuid=True))
+                for skill_id, version in version_overrides.items()
+            },
+            value=Skill.id,
+            else_=Skill.current_version_id,
+        )
+        if version_overrides
+        else Skill.current_version_id
+    )
+    return (
+        select(
+            user_id.label("user_id"),
+            Skill.name.label("name"),
+            type_coerce(winner, ARRAY(BigInteger)).label("winner"),
+        )
+        .select_from(policies)
+        .join(Skill, Skill.id == policies.c.skill_id)
+        .join(name_positions, name_positions.c.skill_id == Skill.id)
+        .outerjoin(SkillVersion, SkillVersion.id == version_id)
+        .outerjoin(Marketplace, Skill.marketplace_id == Marketplace.id)
+        .outerjoin(
+            UserSkillPreference,
+            and_(
+                UserSkillPreference.user_id == user_id,
+                UserSkillPreference.skill_id == Skill.id,
+            ),
+        )
+        .where(
+            *_runtime_eligibility(
+                user_id,
+                policies.c.installation_policy,
+                app_ready=app_ready,
+                built_in_available=built_in_available,
+                preference=UserSkillPreference.__table__.c.enabled,
+            ),
+            Skill.id.not_in(exclude_skill_ids),
+        )
+        .group_by(user_id, Skill.name)
+    )
+
+
+def skill_usage_for_users(
+    user_ids: Collection[UUID],
+    db_session: Session,
+    *,
+    exclude_skill_ids: Collection[UUID] = (),
+    names: Collection[str] | None = None,
+) -> dict[UUID, SkillUsage]:
+    """Total each user's runtime name winners from current-version metadata.
+
+    Uses one query for any number of users, plus two app-readiness queries.
+    Reads no bundles. Users without Skills get zero usage. ``names`` limits
+    the total to those names; their winners are the same as in a full total.
+
+    Most names have the same winner for every user. For many users, the query
+    finds each name's winner once for a user with no rows of their own, then
+    replaces it for each user and name from ``_user_specific_skill_names``.
+    Fewer users take every name through the per-user winner instead.
+    """
+    usage = {user_id: SkillUsage() for user_id in user_ids}
+    if not usage:
+        return usage
+    # No row can reference this id: every per-user table has a user foreign key.
+    generic_user_id = uuid4()
+    shared = (
+        len(usage) * len(names) > PER_USER_WINNER_MAX_NAME_PAIRS
+        if names is not None
+        else len(usage) > PER_USER_WINNER_MAX_FULL_TOTAL_USERS
+    )
+    ready = get_ready_external_app_ids_for_users(
+        db_session, [*usage, generic_user_id] if shared else usage, skill_names=names
+    )
+    stmt = skill_usage_statement(
+        user_ids,
+        ready,
+        generic_user_id,
+        built_in_available=available_built_in_skills(db_session),
+        exclude_skill_ids=exclude_skill_ids,
+        names=names,
+    )
+    for user_id, _, total_bytes, total_files, unknown_count in db_session.execute(stmt):
+        usage[user_id] = SkillUsage(
+            int(total_bytes), int(total_files), int(unknown_count)
+        )
+    return usage
+
+
+def skill_usage_statement(
+    user_ids: Collection[UUID],
+    ready: Mapping[UUID, Collection[int]],
+    generic_user_id: UUID,
+    *,
+    built_in_available: ColumnElement[bool],
+    exclude_skill_ids: Collection[UUID] = (),
+    names: Collection[str] | None = None,
+    version_overrides: Mapping[UUID, UUID | None] = {},
+    per_name: bool = False,
+) -> Select[tuple[UUID, str | None, int, int, int]]:
+    """Build usage at the caller's statement snapshot, with explicit readiness.
+
+    A None override makes a staged custom Skill absent. Per-name rows contain
+    generic winners plus exact replacements (including zero) for user/name
+    exceptions. The generic id must have no user row and must be in ``ready``.
+    Totals contain only existing users. Neither mode executes a query.
+    """
+    shared = (
+        len(user_ids) * len(names) > PER_USER_WINNER_MAX_NAME_PAIRS
+        if names is not None
+        else len(user_ids) > PER_USER_WINNER_MAX_FULL_TOTAL_USERS
+    )
+    if not shared:
+        users = (
+            func.unnest(uuid_array(user_ids))
+            .table_valued(column("user_id", PGUUID(as_uuid=True)))
+            .render_derived(name="users")
+        )
+        every_name = select(users.c.user_id, Skill.name).join(Skill, true()).distinct()
+        if names is not None:
+            every_name = every_name.where(Skill.name.in_(names))
+        return _skill_usage_from_winners(
+            user_ids,
+            every_name.cte(),
+            None,
+            ready,
+            built_in_available=built_in_available,
+            exclude_skill_ids=exclude_skill_ids,
+            names=names,
+            version_overrides=version_overrides,
+            per_name=per_name,
+        )
+    generic_policies = select(
+        literal(generic_user_id, PGUUID(as_uuid=True)).label("user_id"),
+        Skill.id.label("skill_id"),
+        _skill_policy_from_rank(cast(null(), Integer)).label("installation_policy"),
+    )
+    if names is not None:
+        generic_policies = generic_policies.where(Skill.name.in_(names))
+    generic_ready = set(ready[generic_user_id])
+    ready = {user: apps for user, apps in ready.items() if user != generic_user_id}
+    generic = _skill_name_winners(
+        generic_policies.subquery(),
+        [(generic_user_id, app_id) for app_id in generic_ready],
+        built_in_available=built_in_available,
+        exclude_skill_ids=exclude_skill_ids,
+        version_overrides=version_overrides,
+    ).cte()
+    return _skill_usage_from_winners(
+        user_ids,
+        _user_specific_skill_names(
+            user_ids,
+            names,
+            [
+                (user_id, app_id)
+                for user_id, app_ids in ready.items()
+                for app_id in set(app_ids).symmetric_difference(generic_ready)
+            ],
+        ),
+        generic,
+        ready,
+        built_in_available=built_in_available,
+        exclude_skill_ids=exclude_skill_ids,
+        names=names,
+        version_overrides=version_overrides,
+        per_name=per_name,
+    )
+
+
+def _skill_usage_from_winners(
+    user_ids: Collection[UUID],
+    pairs: CTE,
+    generic: CTE | None,
+    ready: Mapping[UUID, Collection[int]],
+    *,
+    built_in_available: ColumnElement[bool],
+    exclude_skill_ids: Collection[UUID],
+    names: Collection[str] | None,
+    version_overrides: Mapping[UUID, UUID | None],
+    per_name: bool,
+) -> Select[tuple[UUID, str | None, int, int, int]]:
+    """Each user's total: the ``generic`` winners, with ``pairs`` replaced.
+
+    Without ``generic``, ``pairs`` must hold every user and name.
+    """
+    groups = _group_policy_ranks(user_ids, names=names)
+    specific = _skill_name_winners(
+        select(
+            pairs.c.user_id,
+            Skill.id.label("skill_id"),
+            _skill_policy_from_rank(groups.c.rank).label("installation_policy"),
+        )
+        .select_from(pairs)
+        .join(Skill, Skill.name == pairs.c.name)
+        .outerjoin(
+            groups,
+            and_(groups.c.user_id == pairs.c.user_id, groups.c.skill_id == Skill.id),
+        )
+        .subquery(),
+        [(user_id, app_id) for user_id, app_ids in ready.items() for app_id in app_ids],
+        built_in_available=built_in_available,
+        exclude_skill_ids=exclude_skill_ids,
+        version_overrides=version_overrides,
+    ).subquery()
+    amount_names = ("bytes", "files", "unknown_skill_count")
+    if per_name:
+        replacements_by_name = (
+            select(
+                pairs.c.user_id,
+                pairs.c.name,
+                *(
+                    func.coalesce(specific.c.winner[index], 0).label(name)
+                    for index, name in zip((3, 4, 5), amount_names, strict=True)
+                ),
+            )
+            .select_from(pairs)
+            .outerjoin(
+                specific,
+                and_(
+                    specific.c.user_id == pairs.c.user_id,
+                    specific.c.name == pairs.c.name,
+                ),
+            )
+        )
+        if generic is None:
+            return replacements_by_name
+        rows = union_all(
+            select(
+                generic.c.user_id,
+                generic.c.name,
+                *(
+                    generic.c.winner[index].label(name)
+                    for index, name in zip((3, 4, 5), amount_names, strict=True)
+                ),
+            ),
+            replacements_by_name,
+        ).subquery()
+        return select(*rows.c)
+    replacements = (
+        select(
+            pairs.c.user_id,
+            *(
+                func.sum(
+                    func.coalesce(specific.c.winner[index], 0)
+                    - (
+                        func.coalesce(generic.c.winner[index], 0)
+                        if generic is not None
+                        else 0
+                    )
+                ).label(name)
+                for index, name in zip((3, 4, 5), amount_names, strict=True)
+            ),
+        )
+        .select_from(pairs)
+        .outerjoin(
+            specific,
+            and_(
+                specific.c.user_id == pairs.c.user_id,
+                specific.c.name == pairs.c.name,
+            ),
+        )
+        .group_by(pairs.c.user_id)
+    )
+    if generic is not None:
+        replacements = replacements.outerjoin(generic, generic.c.name == pairs.c.name)
+    deltas = replacements.subquery()
+    base = (
+        select(
+            *(
+                func.coalesce(func.sum(generic.c.winner[index]), 0).label(name)
+                for index, name in zip((3, 4, 5), amount_names, strict=True)
+            )
+        ).subquery()
+        if generic is not None
+        else None
+    )
+    # One statement includes existing users, generic winners and replacements.
+    user_id = User.__table__.c.id
+    stmt = (
+        select(
+            user_id.label("user_id"),
+            literal(None, String).label("name"),
+            *(
+                (
+                    func.coalesce(deltas.c[name], 0)
+                    + (base.c[name] if base is not None else 0)
+                ).label(name)
+                for name in amount_names
+            ),
+        )
+        .outerjoin(deltas, deltas.c.user_id == user_id)
+        .where(user_id == any_(uuid_array(user_ids)))
+    )
+    if base is not None:
+        stmt = stmt.join(base, true())
+    return stmt
+
+
 def fetch_skill(
     skill_id: UUID,
     *,
@@ -851,7 +1363,7 @@ def enable_new_skill_if_name_available__no_commit(
             select(Skill.id).where(
                 Skill.name == skill.name,
                 Skill.id != skill.id,
-                _is_enabled_for_user(user),
+                _is_enabled_for_user(user.id),
             )
         )
         is not None
@@ -1000,8 +1512,8 @@ def skill_user_states(
         select(
             Skill.id,
             policy,
-            _is_enabled_for_user(user, policy).label("enabled"),
-            skill_visible_to_user(user, installation_policy=policy).label("visible"),
+            _is_enabled_for_user(user.id, policy).label("enabled"),
+            skill_visible_to_user(user.id, installation_policy=policy).label("visible"),
             and_(
                 Skill.built_in_skill_id.is_(None),
                 SkillVersion.id.is_not(None),
@@ -1087,7 +1599,7 @@ def set_skill_enabled_for_user(
             select(Skill.id).where(
                 Skill.name == skill.name,
                 Skill.id != skill.id,
-                _is_enabled_for_user(user),
+                _is_enabled_for_user(user.id),
                 _effective_skill_policy(user.id) != SkillInstallationPolicy.REQUIRED,
             )
         ).all()

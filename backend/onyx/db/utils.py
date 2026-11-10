@@ -1,12 +1,17 @@
+from collections.abc import Iterable, Sequence
 from enum import Enum
 from typing import Any, Final, TypeGuard, TypeVar
+from uuid import UUID
 
 from asyncpg.exceptions import CheckViolationError as AsyncpgCheckViolationError
 from psycopg2 import OperationalError, errorcodes
 from psycopg2.errors import CheckViolation, ForeignKeyViolation, UniqueViolation
 from pydantic import BaseModel, Field
-from sqlalchemy import inspect
+from sqlalchemy import bindparam, inspect
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.elements import BindParameter
 
 from onyx.db.models import Base
 
@@ -122,3 +127,8 @@ class DiscordChannelView(BaseModel):
     channel_name: str
     channel_type: str = "text"  # text, forum
     is_private: bool = False  # True if @everyone cannot view the channel
+
+
+def uuid_array(ids: Iterable[UUID]) -> BindParameter[Sequence[UUID]]:
+    """One array parameter for ``column == any_(...)``, however many ids."""
+    return bindparam(None, list(ids), type_=ARRAY(PGUUID(as_uuid=True)))
