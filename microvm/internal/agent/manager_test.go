@@ -359,6 +359,44 @@ func TestTemplatesInUseAndBuildSlot(t *testing.T) {
 	done2(true) // the build VM may still run: its UID stays reserved
 	_, _, err = f.m.Create(ctx, req(sb2, 1))
 	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	// The build VM is in doubt until a scan finds no process for it.
+	table := &fakeTable{cands: []Candidate{{ID: "tpl-def", PID: 700, UID: uid}}}
+	f.m.adopter = table
+	_, _, err = f.m.BuildSlot("tpl-def")
+	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
+	table.set(nil, nil)
+	_, done3, err := f.m.BuildSlot("tpl-def")
+	if err != nil {
+		t.Fatalf("build slot after the doubt cleared: %v", err)
+	}
+	done3(false)
+	if got := table.removedIDs(); len(got) != 1 || got[0] != "tpl-def" {
+		t.Fatalf("removed %v, want the build VM chroot", got)
+	}
+	if _, _, err := f.m.Create(ctx, req(sb2, 1)); err != nil {
+		t.Fatalf("create after the build UID was freed: %v", err)
+	}
+}
+
+func TestCreatePinsItsTemplateAgainstGC(t *testing.T) {
+	f := newFixture(t, 2)
+	var removed []string
+	var gcErr error
+	// GC runs while Create is in admission, before its VM is in the table.
+	f.stats.onMem = func() {
+		removed, gcErr = f.m.templates.GC(0, f.m.TemplatesInUse)
+	}
+	if _, _, err := f.m.Create(context.Background(), req(sb1, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if gcErr != nil || len(removed) != 0 {
+		t.Fatalf("GC during admission removed %v %v", removed, gcErr)
+	}
+	// After Create the VM is in the table, so GC still keeps the template.
+	removed, gcErr = f.m.templates.GC(0, f.m.TemplatesInUse)
+	if gcErr != nil || len(removed) != 0 {
+		t.Fatalf("GC after create removed %v %v", removed, gcErr)
+	}
 }
 
 func TestLaunchFailureReleasesSlot(t *testing.T) {

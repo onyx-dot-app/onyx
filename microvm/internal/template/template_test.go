@@ -279,7 +279,7 @@ func TestGCKeepsNewestAndInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &Store{Dir: dir}
-	removed, err := s.GC(2, map[string]bool{"v1": true})
+	removed, err := s.GC(2, func() map[string]bool { return map[string]bool{"v1": true} })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,12 +293,78 @@ func TestGCKeepsNewestAndInUse(t *testing.T) {
 		}
 	}
 	// v1 is no longer in use: the next GC removes it.
-	removed, err = s.GC(2, nil)
+	removed, err = s.GC(2, noneInUse)
 	if err != nil || strings.Join(removed, ",") != "v1" {
 		t.Fatalf("second GC removed %v %v", removed, err)
 	}
 	list, _ := s.List()
 	if len(list) != 2 {
 		t.Fatalf("%d templates left, want 2", len(list))
+	}
+}
+
+func noneInUse() map[string]bool { return nil }
+
+func TestPinKeepsTemplateFromGCAndRemove(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	fake(t, dir, "v1", now.Add(-2*time.Hour))
+	fake(t, dir, "v2", now.Add(-1*time.Hour))
+	s := &Store{Dir: dir}
+	unpin := s.Pin("v1")
+	removed, err := s.GC(1, noneInUse)
+	if err != nil || len(removed) != 0 {
+		t.Fatalf("GC of a pinned template removed %v %v", removed, err)
+	}
+	if ok, err := s.RemoveUnused("v1", noneInUse); ok || err != nil {
+		t.Fatalf("RemoveUnused of a pinned template: %v %v", ok, err)
+	}
+	// A second unpin call does nothing.
+	unpin()
+	unpin()
+	removed, err = s.GC(1, noneInUse)
+	if err != nil || strings.Join(removed, ",") != "v1" {
+		t.Fatalf("GC after unpin removed %v %v", removed, err)
+	}
+	if ok, err := s.RemoveUnused("v2", func() map[string]bool { return map[string]bool{"v2": true} }); ok || err != nil {
+		t.Fatalf("RemoveUnused of a template in use: %v %v", ok, err)
+	}
+	if ok, err := s.RemoveUnused("v2", noneInUse); !ok || err != nil {
+		t.Fatalf("RemoveUnused: %v %v", ok, err)
+	}
+	if ok, _ := s.Exists("v2"); ok {
+		t.Fatal("v2 still there")
+	}
+}
+
+func TestVerifyCacheDoesNotCoverANewManifest(t *testing.T) {
+	dir := t.TempDir()
+	fake(t, dir, "t1", time.Now())
+	s := &Store{Dir: dir}
+	tpl, err := s.Get("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Verify(tpl); err != nil {
+		t.Fatal(err)
+	}
+	// A self-consistent manifest that claims another mem hash, with the
+	// same data files: the cached check must not pass it.
+	m := tpl.Manifest
+	m.Files = map[string]string{}
+	for k, v := range tpl.Files {
+		m.Files[k] = v
+	}
+	m.Files[MemFile] = strings.Repeat("e", 64)
+	m.SnapshotSHA256 = SnapshotHash(m.KeySHA256, m.Files)
+	if err := WriteManifest(tpl.Dir, m); err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.Get("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Verify(other); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE || !strings.Contains(err.Error(), MemFile) {
+		t.Fatalf("verify of a changed manifest: %v", err)
 	}
 }

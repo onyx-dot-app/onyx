@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -100,9 +101,13 @@ func buildTemplateWith(t *testing.T, e *env, cmd jailer.Command, args string, re
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	v := kvmVersions(t, *e)
-	rf, err := tplbuild.LoadRootfs(e.ImgDir)
-	if err != nil {
+	// Only a missing manifest falls back to the kit rootfs. A manifest that
+	// LoadRootfs rejects fails the test, as it would fail the agent.
+	var rf *tplbuild.Rootfs
+	if _, err := os.Stat(filepath.Join(e.ImgDir, tplbuild.RootfsManifestFile)); errors.Is(err, os.ErrNotExist) {
 		rf = kitRootfs(t, e.ImgDir, args)
+	} else if rf, err = tplbuild.LoadRootfs(e.ImgDir); err != nil {
+		t.Fatalf("rootfs manifest in %s: %v", e.ImgDir, err)
 	}
 	b := &tplbuild.Builder{
 		Store: &template.Store{Dir: filepath.Join(e.DataDir, "templates")},

@@ -331,6 +331,33 @@ func TestTamperedTemplateIsBuiltAgain(t *testing.T) {
 	}
 }
 
+func TestIncompleteTemplateIsBuiltAgain(t *testing.T) {
+	r := newRig(t)
+	ctx := context.Background()
+	in := writeRootfs(t, filepath.Join(r.data, "in"), "root drive", opensslCA)
+	res, err := r.b.Build(ctx, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A data file is gone: Get reports TEMPLATE_MISSING, but the directory
+	// is still there and must go before the new build is renamed in.
+	if err := os.Remove(res.Template.Path(template.MemFile)); err != nil {
+		t.Fatal(err)
+	}
+	r.slots.inUse = map[string]bool{res.Template.Version: true}
+	if _, err := r.b.Build(ctx, in); err == nil {
+		t.Fatal("removed an incomplete template that a VM uses")
+	}
+	r.slots.inUse = nil
+	res2, err := r.b.Build(ctx, in)
+	if err != nil || !res2.Built || res2.Template.Version != res.Template.Version {
+		t.Fatalf("rebuild: %+v %v", res2, err)
+	}
+	if got, _ := os.ReadFile(res.Template.Path(template.MemFile)); string(got) != "mem" {
+		t.Fatalf("mem after the rebuild: %q", got)
+	}
+}
+
 func TestGCKeepsTwoAndTheOnesInUse(t *testing.T) {
 	r := newRig(t)
 	ctx := context.Background()

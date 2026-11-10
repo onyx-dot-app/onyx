@@ -260,9 +260,21 @@ type Store struct {
 
 	mu sync.Mutex
 	// verified holds the fingerprints of templates whose hashes were checked.
-	verified map[string]map[string]fingerprint
+	verified map[string]verifiedPrints
 	// locks serialize the full hash check per template.
 	locks map[string]*sync.Mutex
+
+	// removeMu orders Pin with the in-use check and removal in
+	// RemoveUnused and GC.
+	removeMu sync.Mutex
+	pins     map[string]int
+}
+
+// verifiedPrints are the file fingerprints of a full hash check and the
+// snapshot hash of the manifest that the check compared with.
+type verifiedPrints struct {
+	prints   map[string]fingerprint
+	snapshot string
 }
 
 // ValidVersion reports whether v is a safe template version name.
@@ -321,7 +333,7 @@ func (s *Store) Verify(t *Template) error {
 	s.mu.Lock()
 	cached := s.verified[t.Version]
 	s.mu.Unlock()
-	if samePrints(cached, prints) {
+	if cached.snapshot == t.SnapshotSHA256 && samePrints(cached.prints, prints) {
 		t.prints = prints
 		return nil
 	}
@@ -346,9 +358,9 @@ func (s *Store) Verify(t *Template) error {
 	}
 	s.mu.Lock()
 	if s.verified == nil {
-		s.verified = map[string]map[string]fingerprint{}
+		s.verified = map[string]verifiedPrints{}
 	}
-	s.verified[t.Version] = prints
+	s.verified[t.Version] = verifiedPrints{prints: prints, snapshot: t.SnapshotSHA256}
 	s.mu.Unlock()
 	t.prints = prints
 	return nil
@@ -411,20 +423,69 @@ func (s *Store) List() ([]*Template, error) {
 	return out, nil
 }
 
-// Remove deletes one template directory.
-func (s *Store) Remove(version string) error {
-	if !ValidVersion(version) {
-		return fmt.Errorf("invalid template version %q", version)
+// Pin keeps version from RemoveUnused and GC until the returned func runs.
+// A restore pins its template from before Get until its VM is in the table
+// that inUse reports.
+func (s *Store) Pin(version string) func() {
+	s.removeMu.Lock()
+	defer s.removeMu.Unlock()
+	if s.pins == nil {
+		s.pins = map[string]int{}
 	}
+	s.pins[version]++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.removeMu.Lock()
+			defer s.removeMu.Unlock()
+			if s.pins[version]--; s.pins[version] <= 0 {
+				delete(s.pins, version)
+			}
+		})
+	}
+}
+
+// Exists reports whether the template directory is there, complete or not.
+func (s *Store) Exists(version string) (bool, error) {
+	if !ValidVersion(version) {
+		return false, fmt.Errorf("invalid template version %q", version)
+	}
+	_, err := os.Lstat(filepath.Join(s.Dir, version))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// RemoveUnused deletes one template directory unless it is pinned or
+// inUse() has it. inUse runs after the pins are frozen, so a VM that
+// released its pin is in inUse. It returns false if the template is kept.
+func (s *Store) RemoveUnused(version string, inUse func() map[string]bool) (bool, error) {
+	if !ValidVersion(version) {
+		return false, fmt.Errorf("invalid template version %q", version)
+	}
+	s.removeMu.Lock()
+	defer s.removeMu.Unlock()
+	if s.pins[version] > 0 || inUse()[version] {
+		return false, nil
+	}
+	return true, s.removeLocked(version)
+}
+
+func (s *Store) removeLocked(version string) error {
 	s.forget(version)
 	return os.RemoveAll(filepath.Join(s.Dir, version))
 }
 
-// GC keeps the keep newest valid templates (by build time) and every
-// template in inUse. It removes the other template directories, also ones
-// with a manifest that the agent cannot read (an older layout), and returns
-// their names. Hidden directories (builds in progress) are not touched.
-func (s *Store) GC(keep int, inUse map[string]bool) ([]string, error) {
+// GC keeps the keep newest valid templates (by build time), every pinned
+// template and every template in inUse(). It removes the other template
+// directories, also ones with a manifest that the agent cannot read (an
+// older layout), and returns their names. Hidden directories (builds in
+// progress) are not touched.
+func (s *Store) GC(keep int, inUse func() map[string]bool) ([]string, error) {
+	s.removeMu.Lock()
+	defer s.removeMu.Unlock()
+	used := inUse()
 	entries, err := os.ReadDir(s.Dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -465,10 +526,10 @@ func (s *Store) GC(keep int, inUse map[string]bool) ([]string, error) {
 			kept++
 			continue
 		}
-		if inUse[c.name] {
+		if used[c.name] || s.pins[c.name] > 0 {
 			continue
 		}
-		if err := s.Remove(c.name); err != nil {
+		if err := s.removeLocked(c.name); err != nil {
 			return removed, fmt.Errorf("remove template %s: %w", c.name, err)
 		}
 		removed = append(removed, c.name)
@@ -533,9 +594,9 @@ func (s *Store) MarkVerified(t *Template, prints Prints) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.verified == nil {
-		s.verified = map[string]map[string]fingerprint{}
+		s.verified = map[string]verifiedPrints{}
 	}
-	s.verified[t.Version] = map[string]fingerprint(prints)
+	s.verified[t.Version] = verifiedPrints{prints: prints, snapshot: t.SnapshotSHA256}
 	return nil
 }
 

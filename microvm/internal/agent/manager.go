@@ -336,6 +336,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		break
 	}
 
+	// The pin keeps template GC away until the VM is in the table.
+	unpin := m.templates.Pin(req.Template)
+	defer unpin()
 	tpl, err := m.admit(req)
 	if err != nil {
 		return VM{}, false, err
@@ -741,12 +744,15 @@ func (m *Manager) TemplatesInUse() map[string]bool {
 
 // BuildSlot gives a template build VM with jailer ID id a jailer UID. The
 // process scan does not count the VM as untracked while it runs. Call done
-// when the VM is gone; done(true) keeps the UID reserved, for a VM that may
-// still run.
+// when the VM is gone; done(true) puts the VM in doubt with its UID, for a
+// VM that may still run, and a later scan frees the UID once it is gone.
 func (m *Manager) BuildSlot(id string) (uint32, func(left bool), error) {
+	if err := m.checkDoubt(context.Background(), id, false); err != nil {
+		return 0, nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.building[id] || m.vms[id] != nil {
+	if m.building[id] || m.vms[id] != nil || m.doubt[id] != nil {
 		return 0, nil, apierr.New(pb.ErrorReason_INTERNAL, "build VM %s already runs", id)
 	}
 	uid, ok := m.uids.Get()
@@ -759,7 +765,8 @@ func (m *Manager) BuildSlot(id string) (uint32, func(left bool), error) {
 		defer m.mu.Unlock()
 		delete(m.building, id)
 		if left {
-			m.log.Error("template build VM may still run; its UID stays reserved", "id", id, "uid", uid)
+			m.log.Error("template build VM may still run; it is in doubt with its UID", "id", id, "uid", uid)
+			m.doubt[id] = &doubt{reason: "a template build VM may still run", uids: []uint32{uid}}
 			return
 		}
 		m.uids.Put(uid)

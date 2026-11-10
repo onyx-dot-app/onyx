@@ -278,7 +278,7 @@ func run(f flags, log *slog.Logger) error {
 // old templates when there is no root drive.
 func startupTemplates(svc *server.Service, b *tplbuild.Builder, log *slog.Logger) {
 	if svc.Builder == nil {
-		if removed, err := b.Store.GC(b.Keep, b.Slots.TemplatesInUse()); err != nil {
+		if removed, err := b.Store.GC(b.Keep, b.Slots.TemplatesInUse); err != nil {
 			log.Error("template GC", "err", err)
 		} else if len(removed) > 0 {
 			log.Info("template GC", "removed", removed)

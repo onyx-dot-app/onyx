@@ -139,7 +139,8 @@ func (b *Builder) Build(ctx context.Context, r *Rootfs) (Result, error) {
 	key := b.Key(r)
 	name := Name(key.ImageRef, key.Hash())
 	res := Result{}
-	if t, err := b.Store.Get(name); err == nil {
+	t, err := b.Store.Get(name)
+	if err == nil {
 		if err = t.CheckNode(b.Node); err == nil {
 			err = b.Store.Verify(t)
 		}
@@ -148,20 +149,22 @@ func (b *Builder) Build(ctx context.Context, r *Rootfs) (Result, error) {
 			res.Removed, err = b.gc()
 			return res, err
 		}
-		if b.Slots.TemplatesInUse()[name] {
-			return Result{}, fmt.Errorf("template %s is not valid (%w) and a VM uses it", name, err)
-		}
+	}
+	// An absent template is built. A directory that is there but not a
+	// valid template (a missing file too) is removed first, so the new
+	// build can take its name.
+	exists, existsErr := b.Store.Exists(name)
+	if existsErr != nil {
+		return Result{}, existsErr
+	}
+	if exists {
 		b.Log.Error("template is not valid; building it again", "template", name, "err", err)
-		if err := b.Store.Remove(name); err != nil {
-			return Result{}, err
+		removed, rmErr := b.Store.RemoveUnused(name, b.Slots.TemplatesInUse)
+		if rmErr != nil {
+			return Result{}, rmErr
 		}
-	} else if apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_MISSING {
-		if b.Slots.TemplatesInUse()[name] {
-			return Result{}, fmt.Errorf("template %s is not readable (%w) and a VM uses it", name, err)
-		}
-		b.Log.Error("template is not readable; building it again", "template", name, "err", err)
-		if err := b.Store.Remove(name); err != nil {
-			return Result{}, err
+		if !removed {
+			return Result{}, fmt.Errorf("template %s is not valid (%w) and a VM uses it", name, err)
 		}
 	}
 	t, ms, err := b.build(ctx, r, key, name)
@@ -174,7 +177,7 @@ func (b *Builder) Build(ctx context.Context, r *Rootfs) (Result, error) {
 }
 
 func (b *Builder) gc() ([]string, error) {
-	removed, err := b.Store.GC(b.Keep, b.Slots.TemplatesInUse())
+	removed, err := b.Store.GC(b.Keep, b.Slots.TemplatesInUse)
 	if len(removed) > 0 {
 		b.Log.Info("template GC", "removed", removed, "keep", b.Keep)
 	}
