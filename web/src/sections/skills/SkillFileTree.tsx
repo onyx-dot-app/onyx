@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, LineItemButton, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
@@ -141,6 +141,28 @@ export default function SkillFileTree({
   removeDisabled = false,
 }: SkillFileTreeProps) {
   const t = useTranslations("skills.sections");
+  const treeRef = useRef<HTMLDivElement>(null);
+  const removeTriggerRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    const trigger = removeTriggerRef.current;
+    if (!trigger || trigger.isConnected) return;
+    removeTriggerRef.current = null;
+    if (document.activeElement === document.body) {
+      const next = treeRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [role="button"][tabindex="0"]'
+      );
+      (next ?? treeRef.current)?.focus();
+    }
+  }, [files]);
+
+  function remove(path: string) {
+    removeTriggerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    onRemove?.(path);
+  }
   const nodes = useMemo(() => {
     const root: SkillFileTreeNode = {
       name: "",
@@ -198,7 +220,11 @@ export default function SkillFileTree({
 
   if (files.length === 0) {
     return (
-      <div className="flex min-h-24 items-center justify-center p-3">
+      <div
+        ref={treeRef}
+        tabIndex={-1}
+        className="flex min-h-24 items-center justify-center p-3"
+      >
         <Text font="secondary-body" color="text-03">
           {emptyMessage ?? t("fileTree.empty.description")}
         </Text>
@@ -207,13 +233,13 @@ export default function SkillFileTree({
   }
 
   return (
-    <div className="max-h-80 overflow-y-auto p-1">
+    <div ref={treeRef} tabIndex={-1} className="max-h-80 overflow-y-auto p-1">
       <SkillFileTreeNodes
         nodes={nodes}
         depth={0}
         expandedPaths={expandedPaths}
         onToggle={toggle}
-        onRemove={onRemove}
+        onRemove={onRemove ? remove : undefined}
         removingPath={removingPath}
         removeDisabled={removeDisabled}
       />

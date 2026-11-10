@@ -25,6 +25,7 @@ jest.mock("@/providers/UserProvider", () => ({
 
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockDeleteUserSkill = jest.fn();
+const mockRemoveUserSkillFile = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
@@ -120,6 +121,26 @@ jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
       >
         Choose organization access
       </button>
+    ) : props.open && props.mode === "edit" ? (
+      <button
+        disabled={props.restoreDisabled}
+        onClick={() => {
+          const restored = existingSkill({
+            description: "Restored description",
+            instructions_markdown: "Restored instructions",
+            current_version_number: 3,
+          });
+          mockUseSWR.mockReturnValue({
+            data: restored,
+            mutate: mockRefreshSkill,
+          });
+          props.onRestored?.(restored);
+          props.onSaved();
+          props.onClose();
+        }}
+      >
+        Restore earlier content
+      </button>
     ) : null,
 }));
 
@@ -128,6 +149,7 @@ jest.mock("@/lib/skills/api", () => ({
   createCustomSkillFromEditor: (...args: unknown[]) =>
     mockCreateCustomSkillFromEditor(...args),
   deleteUserSkill: (...args: unknown[]) => mockDeleteUserSkill(...args),
+  removeUserSkillFile: (...args: unknown[]) => mockRemoveUserSkillFile(...args),
 }));
 
 jest.mock("@/sections/skills/SkillFilesPicker", () => ({
@@ -141,6 +163,7 @@ describe("SkillEditorPage", () => {
     mockCreateCustomSkillFromEditor.mockReset();
     mockDeleteUserSkill.mockReset();
     mockDeleteUserSkill.mockResolvedValue(undefined);
+    mockRemoveUserSkillFile.mockReset();
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
     mockGetSkillCreationDraft.mockReset();
@@ -158,6 +181,69 @@ describe("SkillEditorPage", () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  it("blocks sharing, restore and content edits while removing a file", async () => {
+    const user = setupUser();
+    const removal = deferred<SkillEditableDetail>();
+    const skill = existingSkill({ files: [{ path: "notes.md", size: 10 }] });
+    mockUseSWR.mockReturnValue({ data: skill, mutate: mockRefreshSkill });
+    mockRemoveUserSkillFile.mockReturnValue(removal.promise);
+    render(<SkillEditorPage skillId={skill.id} />);
+    await user.click(screen.getByRole("button", { name: "Remove notes.md" }));
+    expect(mockRemoveUserSkillFile).toHaveBeenCalledWith(skill.id, "notes.md");
+    expect(screen.getByRole("button", { name: "Edit sharing" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(
+      screen.getByPlaceholderText("Write the skill instructions.")
+    ).toBeDisabled();
+    await act(async () => removal.resolve(existingSkill()));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Edit sharing" })).toBeEnabled()
+    );
+    expect(
+      screen.getByPlaceholderText("Write the skill instructions.")
+    ).toBeEnabled();
+  });
+
+  it("replaces editor fields after restore without creating an unsaved edit", async () => {
+    const user = setupUser();
+    mockUseSWR.mockReturnValue({
+      data: existingSkill(),
+      mutate: mockRefreshSkill,
+    });
+    render(<SkillEditorPage skillId="existing-id" />);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Restore earlier content" })
+    );
+    expect(
+      screen.getByPlaceholderText("Write the skill instructions.")
+    ).toHaveValue("Restored instructions");
+    expect(
+      screen.getByPlaceholderText("What does this skill help with?")
+    ).toHaveValue("Restored description");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("keeps unsaved content and blocks restore from the sharing modal", async () => {
+    const user = setupUser();
+    mockUseSWR.mockReturnValue({
+      data: existingSkill(),
+      mutate: mockRefreshSkill,
+    });
+    render(<SkillEditorPage skillId="existing-id" />);
+    const instructions = screen.getByPlaceholderText(
+      "Write the skill instructions."
+    );
+    await user.type(instructions, " Unsaved change.");
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    expect(
+      screen.getByRole("button", { name: "Restore earlier content" })
+    ).toBeDisabled();
+    expect(instructions).toHaveValue(
+      "Write the requested report. Unsaved change."
+    );
+  });
 
   it.each([false, true])(
     "gates draft company sharing on global authority (%s)",

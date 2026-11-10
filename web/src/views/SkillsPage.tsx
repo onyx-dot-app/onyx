@@ -1067,6 +1067,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         skillId={previewTarget?.id ?? null}
         fallbackTitle={previewTarget?.name}
         unavailableReason={previewUnavailableReason}
+        historySkill={
+          previewTarget?.source === "custom" ? previewTarget.skill : undefined
+        }
+        onRestored={() => void revalidateSkills()}
         onClose={() => setSkillDialog(null)}
       />
 

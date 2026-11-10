@@ -5,16 +5,26 @@ import { IconLoader } from "@opal/loaders";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
+import {
+  Button,
+  CompactMarkdown,
+  MessageCard,
+  Tabs,
+  Text,
+} from "@opal/components";
 import { SvgBlocks } from "@opal/icons";
 import { Modal } from "@opal/components";
 import { CardGrid, Section } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { SkillPreview } from "@/lib/skills/types";
+import type { CustomSkill, SkillPreview } from "@/lib/skills/types";
 import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
+
+import SkillVersions from "@/sections/skills/SkillVersions";
+import { canReadSkillHistory } from "@/lib/skills/permissions";
+import useScreenSize from "@opal/hooks/useScreenSize";
 
 interface SkillPreviewModalProps {
   open: boolean;
@@ -22,6 +32,8 @@ interface SkillPreviewModalProps {
   fallbackTitle?: string;
   unavailableReason?: string | null;
   onClose: () => void;
+  historySkill?: CustomSkill;
+  onRestored?: () => void;
 }
 
 // Message keys under `skills.modals`, not copy — the literal union keeps `t()`
@@ -59,6 +71,7 @@ interface SkillPreviewContentProps extends Omit<
   "open"
 > {
   closeLabel?: string | RichStr;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 type SkillPreviewDetailsProps = Pick<
@@ -186,28 +199,79 @@ export function SkillPreviewContent({
   unavailableReason = null,
   onClose,
   closeLabel,
+  historySkill,
+  onRestored,
+  onBusyChange,
 }: SkillPreviewContentProps) {
   const t = useTranslations("skills.modals");
   const { data: preview } = useSWR<SkillPreview>(
     skillId ? SWR_KEYS.userSkillPreview(skillId) : null,
     errorHandlingFetcher
   );
+  const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState("details");
+  const versionsCopy = useTranslations("skills.versions");
+  const { isSmallScreen } = useScreenSize();
+  const historyAllowed = historySkill && canReadSkillHistory(historySkill);
+  const header = (
+    <Modal.Header
+      padding={isSmallScreen ? 0 : 2}
+      reserveCloseSpace={isSmallScreen}
+      icon={isSmallScreen ? undefined : SvgBlocks}
+      title={preview?.name ?? fallbackTitle ?? t("preview.fallbackTitle")}
+      description={tab === "versions" ? undefined : preview?.description}
+      onClose={busy ? undefined : onClose}
+    />
+  );
+
   return (
     <>
-      <Modal.Header
-        icon={SvgBlocks}
-        title={preview?.name ?? fallbackTitle ?? t("preview.fallbackTitle")}
-        description={preview?.description}
-        onClose={onClose}
-      />
-      <Modal.Body>
-        <SkillPreviewDetails
-          skillId={skillId}
-          unavailableReason={unavailableReason}
-        />
+      {!isSmallScreen && header}
+      <Modal.Body padding={isSmallScreen ? 2 : 4}>
+        {isSmallScreen && header}
+        {historyAllowed ? (
+          <Tabs
+            variant="underline"
+            value={tab}
+            onValueChange={(value) => {
+              if (!busy) setTab(value);
+            }}
+            gap={isSmallScreen ? 3 : 6}
+          >
+            <Tabs.List enableScrollArrows>
+              <Tabs.Trigger value="details" disabled={busy}>
+                {t("tabs.details")}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="versions" disabled={busy}>
+                {versionsCopy("title")}
+              </Tabs.Trigger>
+            </Tabs.List>
+            <Tabs.Content value="details">
+              <SkillPreviewDetails
+                skillId={skillId}
+                unavailableReason={unavailableReason}
+              />
+            </Tabs.Content>
+            <Tabs.Content value="versions">
+              <SkillVersions
+                skill={historySkill}
+                onBusyChange={(pending) => {
+                  setBusy(pending);
+                  onBusyChange?.(pending);
+                }}
+                onRestored={() => onRestored?.()}
+              />
+            </Tabs.Content>
+          </Tabs>
+        ) : (
+          <SkillPreviewDetails
+            skillId={skillId}
+            unavailableReason={unavailableReason}
+          />
+        )}
       </Modal.Body>
-      <Modal.Footer>
-        <Button onClick={onClose}>
+      <Modal.Footer padding={isSmallScreen ? 2 : 4}>
+        <Button disabled={busy} onClick={onClose}>
           {closeLabel ?? t("preview.closeButton.label")}
         </Button>
       </Modal.Footer>
@@ -219,10 +283,14 @@ export default function SkillPreviewModal({
   open,
   ...props
 }: SkillPreviewModalProps) {
+  const [busy, setBusy] = useState(false);
   return (
-    <Modal open={open} onOpenChange={(isOpen) => !isOpen && props.onClose()}>
-      <Modal.Content width="lg" height="lg">
-        <SkillPreviewContent {...props} />
+    <Modal
+      open={open}
+      onOpenChange={(isOpen) => !isOpen && !busy && props.onClose()}
+    >
+      <Modal.Content width="lg" height="lg" restoreOpeningFocus>
+        <SkillPreviewContent {...props} onBusyChange={setBusy} />
       </Modal.Content>
     </Modal>
   );

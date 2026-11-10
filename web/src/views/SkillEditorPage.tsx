@@ -206,19 +206,20 @@ export default function SkillEditorPage({
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
   // would be clobbered by the post-upload sync (or race it via Save).
-  const fieldsLocked =
-    !canEditContent || isPreparingFiles || isUploadingFiles || isSaving;
+  const contentBusy =
+    isPreparingFiles ||
+    isUploadingFiles ||
+    isSaving ||
+    removingFilePath !== null;
+  const fieldsLocked = !canEditContent || contentBusy;
 
   const canSave =
     (isCreating || !!skill) &&
-    canEditContent &&
-    !isPreparingFiles &&
-    !isUploadingFiles &&
+    !fieldsLocked &&
     isDirty &&
     !!name.trim() &&
     !!description.trim() &&
-    !!instructionsMarkdown.trim() &&
-    !isSaving;
+    !!instructionsMarkdown.trim();
 
   function leaveEditor() {
     navigation.go(
@@ -227,7 +228,7 @@ export default function SkillEditorPage({
   }
 
   function handleCancel() {
-    if (isSaving || isPreparingFiles || isUploadingFiles) return;
+    if (contentBusy) return;
     unsavedChanges.requestLeave(leaveEditor);
   }
 
@@ -398,7 +399,7 @@ export default function SkillEditorPage({
   }
 
   async function handleRemoveFile(path: string) {
-    if (!skill || !canEditContent || removingFilePath !== null) return;
+    if (!skill || fieldsLocked) return;
     setRemovingFilePath(path);
     try {
       const updated = await removeUserSkillFile(skill.id, path);
@@ -465,11 +466,7 @@ export default function SkillEditorPage({
                 : undefined;
 
   const filesUploadDisabled =
-    !canManageSkill ||
-    isPreparingFiles ||
-    isUploadingFiles ||
-    isSaving ||
-    (!isCreating && isDirty);
+    !canManageSkill || contentBusy || (!isCreating && isDirty);
   const filesUploadTooltip =
     !isCreating && isDirty
       ? t("editor.filesTooltip.saveFirst")
@@ -511,6 +508,7 @@ export default function SkillEditorPage({
                 : t("editor.header.editDescription")
           }
           cancel={handleCancel}
+          stackActionsOnMobile
           actions={[
             ...(canShare && !isCreating && skill
               ? [
@@ -519,7 +517,7 @@ export default function SkillEditorPage({
                     type="button"
                     prominence="secondary"
                     icon={SvgShare}
-                    disabled={isSaving || isUploadingFiles || isPreparingFiles}
+                    disabled={contentBusy}
                     onClick={() => setShareOpen(true)}
                   >
                     {t("editor.management.sharing.edit.label")}
@@ -839,6 +837,8 @@ export default function SkillEditorPage({
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           onSaved={handleSharingSaved}
+          onRestored={syncEditableFields}
+          restoreDisabled={isDirty || fieldsLocked}
         />
       ) : null}
 

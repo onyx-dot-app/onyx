@@ -393,6 +393,7 @@ interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   title: string | RichStr;
   description?: string | RichStr;
   onClose?: () => void;
+  reserveCloseSpace?: boolean;
 }
 
 function ModalHeader({
@@ -404,6 +405,7 @@ function ModalHeader({
   title,
   description,
   onClose,
+  reserveCloseSpace = false,
   children,
   /*
    * Defaulted here rather than written before the spread below: a spread
@@ -469,7 +471,10 @@ function ModalHeader({
         gap={0}
         padding={2}
       >
-        <div className="opal-modal-header-content">
+        <div
+          className="opal-modal-header-content"
+          data-reserve-close-space={reserveCloseSpace || undefined}
+        >
           <div className="opal-modal-header-close">{closeButton}</div>
           <DialogPrimitive.Title asChild>
             <div>

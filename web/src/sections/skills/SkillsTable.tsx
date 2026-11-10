@@ -65,6 +65,7 @@ function SkillName({
         font="main-ui-body"
         color="text-05"
         as="p"
+        wordWrap="wrap-anywhere"
         maxLines={
           isMobile && !showDescription && !isInvalid && !dependencyStatus
             ? 2
@@ -157,6 +158,7 @@ function SkillActions({
   return (
     <Section
       flexDirection="row"
+      wrap
       gap={1}
       height="auto"
       justifyContent="end"
@@ -318,6 +320,7 @@ export default function SkillsTable({
   return (
     <Table
       label={t("page.header.title")}
+      rowHeight="content"
       items={items.map((item) => ({
         ...getItemProps(item),
         item,

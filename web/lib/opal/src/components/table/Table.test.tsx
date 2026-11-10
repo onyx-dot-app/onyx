@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { parse } from "postcss";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import { Table, type TableColumn } from "@opal/components";
 
@@ -179,3 +181,58 @@ describe("Table selection", () => {
     expect(onSelectionChange).not.toHaveBeenCalled();
   });
 });
+
+// Exercise the stylesheet selectors against the real nested table structure.
+it.each([2.25, 2.75] as const)(
+  "keeps nested fixed cells and headers fixed at size %s",
+  (size) => {
+    const nested = (
+      <Table
+        label="Nested"
+        items={ROWS.slice(0, 1)}
+        columns={COLUMNS}
+        getRowId={(row) => row.id}
+        size={size}
+      />
+    );
+    const { container } = render(
+      <Table
+        label="Outer"
+        items={ROWS.slice(0, 1)}
+        columns={[
+          {
+            kind: "display",
+            id: "nested",
+            title: "Outer",
+            width: { weight: 1 },
+            cell: () => nested,
+          },
+        ]}
+        getRowId={(row) => row.id}
+        rowHeight="content"
+        size={size}
+      />
+    );
+    const outer = screen.getByRole("table", { name: "Outer" });
+    const inner = screen.getByRole("table", { name: "Nested" });
+    let matchedRules = 0;
+    parse(
+      readFileSync("lib/opal/src/components/table/styles.css", "utf8")
+    ).walkRules((rule) => {
+      if (!rule.selector.includes('[data-row-height="content"]')) return;
+      const matches = Array.from(container.querySelectorAll(rule.selector));
+      if (
+        rule.selector.includes("data-size") &&
+        !rule.selector.includes(String(size))
+      )
+        return;
+      expect(matches.length).toBeGreaterThan(0);
+      for (const node of matches) {
+        expect(node.closest("table")).toBe(outer);
+        expect(inner.contains(node)).toBe(false);
+      }
+      matchedRules += 1;
+    });
+    expect(matchedRules).toBe(3);
+  }
+);
