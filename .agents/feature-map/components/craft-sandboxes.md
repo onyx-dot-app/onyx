@@ -136,6 +136,26 @@ then replaces `outputs/` and `attachments/`
 in place with `tar`. Managed-content pushes, not snapshots, use
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py:safe_extract_then_atomic_swap`.
 
+**Push transport.** The Kubernetes sender writes the tar.gz to a temporary
+file and streams it with `Content-Length`
+(`backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:_build_targz`).
+`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py`
+holds the shared limits: 900 MiB content, 10,000 files, 10,000 folders,
+4096-byte paths, and tar and gzip bounds derived from them. The sidecar checks
+the signature before it reads the body, spools the body to `/tmp` with a running
+SHA-256 and byte count, and extracts from the file in a worker thread. It runs
+one push at a time. Push archives use a dedicated spool folder; each push first
+clears files and folders that a killed sidecar left there. Each mount keeps
+versions in `.versions/<mount name>/`. A push removes that mount's versions
+other than the live one before it extracts, so the previous version is kept for
+60 seconds or until the next push to that mount. Any failure keeps the live tree
+and removes the spooled file. The sidecar ephemeral-storage limit in
+`deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml` covers this
+disk use. Deployment cycles every existing sandbox pod before resuming Craft traffic,
+so all receivers use the new image and resource limits. Updating the template alone
+leaves old receivers running; they reject large pushes. This rollout accepts interruption
+of active sessions and possible loss of unsaved workspace changes.
+
 **Sweep.** `cleanup_idle_sandboxes_task` runs on the `sandbox` Celery queue.
 It first reconciles runtime resources
 (`backend/onyx/server/features/build/session/resource_cleanup.py:reconcile_sandbox_resources`): it fails stale

@@ -115,9 +115,14 @@ template:
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
           # Snapshot tar/stream runs through this sidecar, so give it headroom.
-          # Restore buffers the downloaded archive (<=100MB cap) in /tmp.
+          # Pushes stream through disk, so memory stays flat as pushes grow.
+          # The pod storage limit sums container limits and includes emptyDirs.
+          # The sidecar share covers one push at a time (sandbox_daemon/extract.py):
+          # 4 trees in managed (live + incoming for this mount, live + previous
+          # for the other mount), each <= 900 MiB + 20,000 x 4 KiB blocks, plus
+          # one <= 960 MiB archive in /tmp: about 4.8 GiB.
           requests: { cpu: "100m", memory: "256Mi", ephemeral-storage: "512Mi" }
-          limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "2Gi" }
+          limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "6Gi" }
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
