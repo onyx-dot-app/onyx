@@ -51,11 +51,38 @@ type Client struct {
 	PartBytes int64
 }
 
+// client returns a copy of the HTTP client that also checks the scheme of
+// every redirect, so an https request is never sent on over http.
 func (c *Client) client() *http.Client {
-	if c.HTTP != nil {
-		return c.HTTP
+	base := c.HTTP
+	if base == nil {
+		base = http.DefaultClient
 	}
-	return http.DefaultClient
+	hc := *base
+	next := base.CheckRedirect
+	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := c.checkScheme(req.URL); err != nil {
+			return err
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return &hc
+}
+
+func (c *Client) checkScheme(u *url.URL) error {
+	switch {
+	case u.Scheme == "https":
+	case u.Scheme == "http" && c.AllowHTTP:
+	default:
+		return fmt.Errorf("%w: scheme %q is not allowed", ErrBadRequest, u.Scheme)
+	}
+	return nil
 }
 
 func (c *Client) timeout() time.Duration {
@@ -75,11 +102,8 @@ func (c *Client) build(ctx context.Context, r Request, method string, body io.Re
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("%w: the URL does not parse", ErrBadRequest)
 	}
-	switch {
-	case u.Scheme == "https":
-	case u.Scheme == "http" && c.AllowHTTP:
-	default:
-		return nil, fmt.Errorf("%w: scheme %q is not allowed", ErrBadRequest, u.Scheme)
+	if err := c.checkScheme(u); err != nil {
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
@@ -136,7 +160,7 @@ func (c *Client) Put(ctx context.Context, r Request, body io.Reader, size int64)
 	}
 	resp, err := c.client().Do(req)
 	if err != nil {
-		return PutResult{}, fmt.Errorf("%w: PUT %s: %v", ErrFailed, Redacted(r.URL), unwrapURLErr(err))
+		return PutResult{}, fmt.Errorf("%w: PUT %s: %w", ErrFailed, Redacted(r.URL), unwrapURLErr(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 {
@@ -175,7 +199,7 @@ func (c *Client) getOne(ctx context.Context, r Request, size int64) (io.ReadClos
 	resp, err := c.client().Do(req)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("%w: GET %s: %v", ErrFailed, Redacted(r.URL), unwrapURLErr(err))
+		return nil, fmt.Errorf("%w: GET %s: %w", ErrFailed, Redacted(r.URL), unwrapURLErr(err))
 	}
 	if resp.StatusCode != http.StatusOK {
 		msg := snippet(resp.Body)
@@ -218,6 +242,7 @@ func snippet(r io.Reader) string {
 
 // rangeReader returns the parts of a ranged download in order.
 type rangeReader struct {
+	ctx    context.Context
 	cancel context.CancelFunc
 	parts  []chan partResult
 	slots  chan struct{}
@@ -237,7 +262,7 @@ type partResult struct {
 func (c *Client) getRanges(ctx context.Context, r Request, size, part int64) io.ReadCloser {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout())
 	n := int((size + part - 1) / part)
-	rr := &rangeReader{cancel: cancel, parts: make([]chan partResult, n), slots: make(chan struct{}, c.Parallel)}
+	rr := &rangeReader{ctx: ctx, cancel: cancel, parts: make([]chan partResult, n), slots: make(chan struct{}, c.Parallel)}
 	for i := range rr.parts {
 		rr.parts[i] = make(chan partResult, 1)
 	}
@@ -277,7 +302,7 @@ func (c *Client) getRange(ctx context.Context, r sizedRequest, from, to int64) (
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", from, to))
 	resp, err := c.client().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: GET %s: %v", ErrFailed, Redacted(r.URL), unwrapURLErr(err))
+		return nil, fmt.Errorf("%w: GET %s: %w", ErrFailed, Redacted(r.URL), unwrapURLErr(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusPartialContent {
@@ -308,7 +333,15 @@ func (rr *rangeReader) Read(p []byte) (int, error) {
 		if rr.next == len(rr.parts) {
 			return 0, io.EOF
 		}
-		res := <-rr.parts[rr.next]
+		var res partResult
+		select {
+		case res = <-rr.parts[rr.next]:
+		case <-rr.ctx.Done():
+			// The timeout or Close stopped the dispatcher: this part may
+			// never come.
+			rr.err = fmt.Errorf("%w: %w", ErrFailed, rr.ctx.Err())
+			return 0, rr.err
+		}
 		rr.next++
 		<-rr.slots
 		if res.err != nil {

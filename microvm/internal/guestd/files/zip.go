@@ -3,6 +3,7 @@ package files
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -53,7 +54,10 @@ func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Wr
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		ents, err := readDir(t.root, rel)
+		ents, err := readDir(t.root, rel, s.cfg.MaxZipEntries)
+		if errors.Is(err, errDirTooBig) {
+			return err
+		}
 		if err != nil {
 			sum.Skipped++
 			return nil
@@ -105,14 +109,8 @@ func (s *Store) Zip(ctx context.Context, sessionID string, spec ZipSpec, w io.Wr
 		if err := ctx.Err(); err != nil {
 			return sum, err
 		}
-		f, err := t.root.Open(it.rel)
+		f, st, err := openRegular(t.root, it.rel, 0)
 		if err != nil {
-			sum.Skipped++
-			continue
-		}
-		st, err := f.Stat()
-		if err != nil || !st.Mode().IsRegular() {
-			_ = f.Close()
 			sum.Skipped++
 			continue
 		}

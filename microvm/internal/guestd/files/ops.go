@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -73,18 +74,14 @@ func (s *Store) Read(ctx context.Context, sessionID, p string, off, length int64
 		return err
 	}
 	defer func() { _ = t.root.Close() }()
-	f, err := t.root.Open(t.rel)
+	f, fi, err := openRegular(t.root, t.rel, 0)
 	if err != nil {
+		if errors.Is(err, errNotRegular) {
+			return fmt.Errorf("%w: %s is not a regular file", ErrInvalid, p)
+		}
 		return fsErr(err)
 	}
 	defer func() { _ = f.Close() }()
-	fi, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	if !fi.Mode().IsRegular() {
-		return fmt.Errorf("%w: %s is not a regular file", ErrInvalid, p)
-	}
 	size := fi.Size()
 	if off > size {
 		return fmt.Errorf("%w: offset %d is past the end (%d bytes)", ErrInvalid, off, size)
@@ -121,6 +118,27 @@ func (s *Store) Read(ctx context.Context, sessionID, p string, off, length int64
 		}
 	}
 	return nil
+}
+
+var errNotRegular = errors.New("not a regular file")
+
+// openRegular opens rel read-only and returns it only if it is a regular
+// file. O_NONBLOCK keeps the open of a FIFO without a writer from blocking;
+// it has no effect on reads of a regular file.
+func openRegular(root *os.Root, rel string, flags int) (*os.File, fs.FileInfo, error) {
+	f, err := root.OpenFile(rel, os.O_RDONLY|syscall.O_NONBLOCK|flags, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	fi, err := f.Stat()
+	if err == nil && !fi.Mode().IsRegular() {
+		err = errNotRegular
+	}
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, err
+	}
+	return f, fi, nil
 }
 
 // WriteSpec is the header of a write.
@@ -412,7 +430,11 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	ents, err := readDir(l.t.root, rel)
+	ents, err := readDir(l.t.root, rel, MaxListEntries)
+	if errors.Is(err, errDirTooBig) {
+		l.truncated = true
+		return nil
+	}
 	if err != nil {
 		return fsErr(err)
 	}
@@ -458,17 +480,32 @@ func (l *lister) dir(ctx context.Context, rel string, depth int) error {
 	return nil
 }
 
+// errDirTooBig: a directory has more entries than the scan cap of readDir.
+var errDirTooBig = fmt.Errorf("%w: directory has too many entries", ErrLimit)
+
 // readDir returns the entries of dir: directories first, then by name
-// (case-insensitive, then exact).
-func readDir(root *os.Root, dir string) ([]fs.DirEntry, error) {
+// (case-insensitive, then exact). It reads in batches and fails with
+// errDirTooBig past max entries, so one huge directory cannot use unbounded
+// memory.
+func readDir(root *os.Root, dir string, max int) ([]fs.DirEntry, error) {
 	d, err := root.Open(dir)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
-	ents, err := d.ReadDir(-1)
-	if err != nil {
-		return nil, err
+	var ents []fs.DirEntry
+	for {
+		batch, err := d.ReadDir(1024)
+		ents = append(ents, batch...)
+		if len(ents) > max {
+			return nil, fmt.Errorf("%w: %s has more than %d", errDirTooBig, dir, max)
+		}
+		if errors.Is(err, io.EOF) || (err == nil && len(batch) == 0) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	slices.SortFunc(ents, func(a, b fs.DirEntry) int {
 		if ad, bd := a.IsDir(), b.IsDir(); ad != bd {

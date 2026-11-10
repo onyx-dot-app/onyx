@@ -164,7 +164,10 @@ func (c *capturer) dir(rel string, fi fs.FileInfo, depth int) error {
 		c.sum.Skipped++
 		return nil
 	}
-	ents, err := readDir(c.root, rel)
+	ents, err := readDir(c.root, rel, int(c.lim.Entries))
+	if errors.Is(err, errDirTooBig) {
+		return err
+	}
 	if err != nil {
 		c.sum.Skipped++
 		return nil
@@ -183,6 +186,11 @@ func (c *capturer) dir(rel string, fi fs.FileInfo, depth int) error {
 		child := rel + "/" + name
 		if c.skip[name] || strings.HasPrefix(name, writePrefix) {
 			c.sum.Excluded++
+			continue
+		}
+		if !restorableName(name) || len(child) > maxPathBytes {
+			// Restore would refuse the member, so the save leaves it out.
+			c.sum.Skipped++
 			continue
 		}
 		info, err := e.Info()
@@ -214,17 +222,12 @@ func (c *capturer) file(rel string) error {
 	if err := c.ctx.Err(); err != nil {
 		return err
 	}
-	f, err := c.root.OpenFile(rel, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	f, fi, err := openRegular(c.root, rel, syscall.O_NOFOLLOW)
 	if err != nil {
 		c.sum.Skipped++
 		return nil
 	}
 	defer func() { _ = f.Close() }()
-	fi, err := f.Stat()
-	if err != nil || !fi.Mode().IsRegular() {
-		c.sum.Skipped++
-		return nil
-	}
 	size := fi.Size()
 	if c.sum.ExpandedBytes+size > c.lim.ExpandedBytes {
 		return fmt.Errorf("%w: the files are over %d bytes", ErrLimit, c.lim.ExpandedBytes)

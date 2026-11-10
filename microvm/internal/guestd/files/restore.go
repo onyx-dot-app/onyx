@@ -111,13 +111,15 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 		return sum, err
 	}
 	defer zr.Close()
+	br := &budgetReader{r: zr}
 	x := &extractor{root: st, lim: lim, allowed: setOf(roots), sum: &sum, present: map[string]bool{},
-		buf: make([]byte, 1<<20)}
-	if err := x.run(ctx, tar.NewReader(zr)); err != nil {
+		buf: make([]byte, 1<<20), budget: br}
+	if err := x.run(ctx, tar.NewReader(br)); err != nil {
 		return sum, err
 	}
-	// The hash covers the whole stream: read what is left after the tar end.
-	if _, err := io.Copy(io.Discard, zr); err != nil {
+	// The hash covers the whole stream: read what is left after the tar end,
+	// still inside the decoded budget.
+	if _, err := io.Copy(io.Discard, br); err != nil {
 		return sum, archiveErr(err)
 	}
 	if _, err := io.Copy(io.Discard, hr); err != nil {
@@ -132,47 +134,147 @@ func (s *Store) Restore(ctx context.Context, spec RestoreSpec, r io.Reader) (Res
 		return sum, err
 	}
 
-	// Swap each root of the archive into place. The old tree goes to a
-	// trash directory first, so a failed swap can move it back.
-	trash := randName(oldPrefix)
-	if err := root.Mkdir(trash, 0o700); err != nil {
+	if err := swapRoots(root, staging, roots, x.present); err != nil {
 		return sum, err
 	}
-	defer func() { _ = root.RemoveAll(trash) }()
 	for _, r := range roots {
-		if !x.present[r] {
+		if x.present[r] {
+			sum.Roots = append(sum.Roots, r)
+		}
+	}
+	return sum, nil
+}
+
+// rename is root.Rename; tests replace it to inject failures.
+var rename = func(root *os.Root, from, to string) error { return root.Rename(from, to) }
+
+// swapRoots moves each restored root from staging into place. An old root
+// goes to a trash directory first. If any step fails, the roots already
+// swapped are moved back, so the call changes nothing. One rename is atomic
+// for one root only: if the daemon stops during the swap, the next restore
+// (removeLeftovers) puts back any old root that has no replacement, so no
+// root is lost, but the session can keep a mix of old and new roots.
+func swapRoots(root *os.Root, staging string, roots []string, present map[string]bool) error {
+	trash := randName(oldPrefix)
+	if err := root.Mkdir(trash, 0o700); err != nil {
+		return err
+	}
+	type swapped struct {
+		name   string
+		hadOld bool
+	}
+	var done []swapped
+	// keep is set when a rollback step fails: the trash then holds the only
+	// copy of an old root, and removeLeftovers recovers it later.
+	keep := false
+	defer func() {
+		if !keep {
+			_ = root.RemoveAll(trash)
+		}
+	}()
+	rollback := func() {
+		for i := len(done) - 1; i >= 0; i-- {
+			d := done[i]
+			if err := rename(root, d.name, staging+"/"+d.name); err != nil {
+				keep = true
+				continue
+			}
+			if d.hadOld {
+				if err := rename(root, trash+"/"+d.name, d.name); err != nil {
+					keep = true
+				}
+			}
+		}
+	}
+	for _, r := range roots {
+		if !present[r] {
 			continue
 		}
 		_, err := root.Lstat(r)
 		hadOld := err == nil
 		if hadOld {
-			if err := root.Rename(r, trash+"/"+r); err != nil {
-				return sum, fmt.Errorf("move old %s: %w", r, err)
+			if err := rename(root, r, trash+"/"+r); err != nil {
+				rollback()
+				return fmt.Errorf("move old %s: %w", r, err)
 			}
 		}
-		if err := root.Rename(staging+"/"+r, r); err != nil {
+		if err := rename(root, staging+"/"+r, r); err != nil {
 			if hadOld {
-				_ = root.Rename(trash+"/"+r, r)
+				if err := rename(root, trash+"/"+r, r); err != nil {
+					keep = true
+				}
 			}
-			return sum, fmt.Errorf("move restored %s: %w", r, err)
+			rollback()
+			return fmt.Errorf("move restored %s: %w", r, err)
 		}
-		sum.Roots = append(sum.Roots, r)
+		done = append(done, swapped{name: r, hadOld: hadOld})
 	}
-	return sum, nil
+	return nil
 }
 
-// removeLeftovers removes staging and trash directories of an earlier
-// restore that did not finish (the daemon restarted).
+// removeLeftovers cleans up after a restore that did not finish (the daemon
+// stopped). It first moves back each old root whose place is empty, then
+// removes the staging and trash directories.
 func removeLeftovers(root *os.Root) {
-	ents, err := readDir(root, ".")
+	ents, err := readDir(root, ".", MaxListEntries)
 	if err != nil {
 		return
+	}
+	for _, e := range ents {
+		if n := e.Name(); e.IsDir() && strings.HasPrefix(n, oldPrefix) {
+			olds, err := readDir(root, n, MaxListEntries)
+			if err != nil {
+				continue
+			}
+			for _, o := range olds {
+				if _, err := root.Lstat(o.Name()); errors.Is(err, fs.ErrNotExist) {
+					_ = root.Rename(n+"/"+o.Name(), o.Name())
+				}
+			}
+		}
 	}
 	for _, e := range ents {
 		if n := e.Name(); e.IsDir() && (strings.HasPrefix(n, stagingPrefix) || strings.HasPrefix(n, oldPrefix)) {
 			_ = root.RemoveAll(n)
 		}
 	}
+}
+
+const (
+	// entryOverheadBytes bounds the decoded tar bytes of one member besides
+	// its file data: header, PAX header and records, padding.
+	entryOverheadBytes = 16 << 10
+	// tailBytes bounds the decoded bytes after the tar end marker (record
+	// padding).
+	tailBytes = 64 << 10
+)
+
+// budgetReader fails once more than max decoded bytes were read. The
+// extractor raises max as it accepts members, so the whole decoded stream
+// stays within the file bytes plus a fixed overhead per member.
+type budgetReader struct {
+	r   io.Reader
+	n   int64
+	max int64
+}
+
+func (b *budgetReader) Read(p []byte) (int, error) {
+	if b.n >= b.max {
+		return 0, fmt.Errorf("%w: the archive expands past its members", ErrLimit)
+	}
+	if rest := b.max - b.n; int64(len(p)) > rest {
+		p = p[:rest]
+	}
+	n, err := b.r.Read(p)
+	b.n += int64(n)
+	return n, err
+}
+
+// restorableName reports whether restore accepts name as one path part.
+// Capture leaves out files whose names fail it. A backslash is a normal
+// character on Linux, so it is allowed.
+func restorableName(name string) bool {
+	return name != "" && len(name) <= maxNameBytes && utf8.ValidString(name) && !strings.ContainsRune(name, 0)
 }
 
 func archiveErr(err error) error {
@@ -191,6 +293,12 @@ type extractor struct {
 	present map[string]bool
 	dirs    []dirMode
 	buf     []byte
+	budget  *budgetReader
+}
+
+// allow sets the decoded budget for entries members so far.
+func (x *extractor) allow(entries int64) {
+	x.budget.max = x.sum.ExpandedBytes + (entries+1)*entryOverheadBytes + tailBytes
 }
 
 type dirMode struct {
@@ -210,7 +318,7 @@ func (x *extractor) memberName(h *tar.Header) (string, error) {
 	switch {
 	case n == "" || len(n) > maxPathBytes:
 		return "", bad("bad length")
-	case !utf8.ValidString(n) || strings.ContainsRune(n, 0) || strings.Contains(n, "\\"):
+	case !utf8.ValidString(n) || strings.ContainsRune(n, 0):
 		return "", bad("bad characters")
 	case strings.HasPrefix(n, "/"):
 		return "", bad("absolute path")
@@ -219,7 +327,7 @@ func (x *extractor) memberName(h *tar.Header) (string, error) {
 	}
 	parts := strings.Split(n, "/")
 	for _, p := range parts {
-		if p == ".." || p == "." || len(p) > maxNameBytes {
+		if p == ".." || p == "." || !restorableName(p) {
 			return "", bad("unsafe path part")
 		}
 	}
@@ -238,6 +346,7 @@ func (x *extractor) run(ctx context.Context, tr *tar.Reader) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		x.allow(entries)
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			return nil
@@ -273,6 +382,7 @@ func (x *extractor) run(ctx context.Context, tr *tar.Reader) error {
 				return fmt.Errorf("%w: the files are over %d bytes", ErrLimit, x.lim.ExpandedBytes)
 			}
 			x.sum.ExpandedBytes += h.Size
+			x.allow(entries)
 			if err := x.file(name, mode, h, tr); err != nil {
 				return err
 			}

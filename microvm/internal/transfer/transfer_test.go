@@ -135,3 +135,89 @@ func TestGetRanges(t *testing.T) {
 	_, _ = io.ReadFull(body, make([]byte, 10))
 	_ = body.Close()
 }
+
+func TestRedirectToHTTPIsRefused(t *testing.T) {
+	var plainHits int
+	var mu sync.Mutex
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		plainHits++
+		mu.Unlock()
+		_, _ = io.WriteString(w, "abc")
+	}))
+	defer plain.Close()
+	tls := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, plain.URL+"/o", http.StatusTemporaryRedirect)
+	}))
+	defer tls.Close()
+	ctx := context.Background()
+	c := &Client{HTTP: tls.Client()}
+	if _, err := c.Get(ctx, Request{URL: tls.URL + "/o", Method: "GET"}, 3); !errors.Is(err, ErrBadRequest) {
+		t.Fatalf("get redirect to http: %v", err)
+	}
+	if _, err := c.Put(ctx, Request{URL: tls.URL + "/o", Method: "PUT"}, strings.NewReader("abc"), 3); !errors.Is(err, ErrBadRequest) {
+		t.Fatalf("put redirect to http: %v", err)
+	}
+	ranged := &Client{HTTP: tls.Client(), Parallel: 2, PartBytes: 1}
+	body, err := ranged.Get(ctx, Request{URL: tls.URL + "/o", Method: "GET"}, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(body); !errors.Is(err, ErrBadRequest) {
+		t.Fatalf("ranged redirect to http: %v", err)
+	}
+	_ = body.Close()
+	if plainHits != 0 {
+		t.Fatalf("the http server got %d requests", plainHits)
+	}
+	// With AllowHTTP the redirect is followed.
+	c.AllowHTTP = true
+	body, err = c.Get(ctx, Request{URL: tls.URL + "/o", Method: "GET"}, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = body.Close()
+}
+
+func TestGetRangesStopsOnCancel(t *testing.T) {
+	data := make([]byte, 1<<20)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "o", time.Time{}, bytes.NewReader(data))
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := &Client{AllowHTTP: true, Parallel: 2, PartBytes: 100 << 10}
+	body, err := c.Get(ctx, Request{URL: srv.URL, Method: "GET"}, int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = body.Close() }()
+	if _, err := io.ReadFull(body, make([]byte, 10)); err != nil {
+		t.Fatal(err)
+	}
+	// Wait until the parts in flight are done, so only the parts the
+	// dispatcher never started are left when the context ends.
+	rr := body.(*rangeReader)
+	deadline := time.Now().Add(10 * time.Second)
+	for len(rr.parts[1]) == 0 || len(rr.parts[2]) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("parts 1 and 2 did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.ReadAll(body)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("read after cancel: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Read hung after the context ended")
+	}
+}

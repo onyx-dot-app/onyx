@@ -141,8 +141,8 @@ a URL (`internal/server/saves.go`, `internal/transfer`).
   extracts into a staging directory and replaces the session's capture roots only after the size and
   SHA-256 match. A mismatch is `ARCHIVE_MISMATCH` (agent) or `ARCHIVE_INVALID` (daemon); the session
   does not change.
-- URLs must be `https`, unless `--transfer-allow-http` (a test object store). `--transfer-timeout`
-  (default 10 min) bounds one request. Errors and logs show the URL without its query string.
+- URLs and redirect targets must be `https`, unless `--transfer-allow-http` (a test object store).
+  `--transfer-timeout` (default 10 min) bounds one request, and stops a ranged restore that waits on it. Errors and logs show the URL without its query string.
 - Order for the api_server: `CaptureSession` → `presign_upload(size_bytes, sha256)` → `UploadCapture` →
   `finalize_presigned_upload` → commit the new archive → only then delete old archives.
 

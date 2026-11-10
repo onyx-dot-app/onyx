@@ -8,12 +8,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -662,5 +665,177 @@ func TestRestoreCreatesSession(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(filepath.Dir(base), fresh, "outputs/a.txt")); string(b) != "a" {
 		t.Fatalf("content %q", b)
+	}
+}
+
+func TestRestoreRollsBackEveryRoot(t *testing.T) {
+	s, base := newStore(t, Config{})
+	put(t, base, "outputs/a.txt", "new a")
+	put(t, base, "attachments/b.txt", "new b")
+	archive, _ := capture(t, s, CaptureSpec{SessionID: sid})
+	other := "a6f1b1a2-0000-4000-8000-000000000006"
+	ob := filepath.Join(filepath.Dir(base), other)
+	put(t, ob, "outputs/a.txt", "old a")
+	put(t, ob, "attachments/b.txt", "old b")
+
+	// outputs swaps, then attachments fails to move into place.
+	orig := rename
+	t.Cleanup(func() { rename = orig })
+	rename = func(root *os.Root, from, to string) error {
+		if to == "attachments" && strings.HasPrefix(from, stagingPrefix) {
+			return errors.New("injected")
+		}
+		return orig(root, from, to)
+	}
+	if _, err := restore(s, other, archive, RestoreSpec{}); err == nil {
+		t.Fatal("restore did not fail")
+	}
+	for rel, want := range map[string]string{"outputs/a.txt": "old a", "attachments/b.txt": "old b"} {
+		if b, err := os.ReadFile(filepath.Join(ob, rel)); err != nil || string(b) != want {
+			t.Errorf("%s = %q %v, want %q", rel, b, err, want)
+		}
+	}
+	ents, _ := os.ReadDir(ob)
+	for _, e := range ents {
+		if strings.HasPrefix(e.Name(), ".craft-") {
+			t.Fatalf("leftover %s", e.Name())
+		}
+	}
+}
+
+func TestRestoreRecoversInterruptedSwap(t *testing.T) {
+	s, base := newStore(t, Config{})
+	// The daemon stopped after it moved outputs to the trash and before it
+	// moved the new tree in.
+	put(t, base, oldPrefix+"x/outputs/a.txt", "old a")
+	put(t, base, stagingPrefix+"y/outputs/a.txt", "new a")
+	put(t, base, "attachments/b.txt", "b")
+	put(t, base, oldPrefix+"x/attachments/b.txt", "older b")
+	if _, err := restore(s, sid, []byte("not zstd at all"), RestoreSpec{}); !errors.Is(err, ErrArchive) {
+		t.Fatalf("garbage: %v", err)
+	}
+	if b, err := os.ReadFile(filepath.Join(base, "outputs/a.txt")); err != nil || string(b) != "old a" {
+		t.Fatalf("outputs/a.txt = %q %v", b, err)
+	}
+	// A root that is in place is not replaced by its trash copy.
+	if b, _ := os.ReadFile(filepath.Join(base, "attachments/b.txt")); string(b) != "b" {
+		t.Fatalf("attachments/b.txt = %q", b)
+	}
+	ents, _ := os.ReadDir(base)
+	for _, e := range ents {
+		if strings.HasPrefix(e.Name(), ".craft-") {
+			t.Fatalf("leftover %s", e.Name())
+		}
+	}
+}
+
+func TestRestoreTailBomb(t *testing.T) {
+	s, _ := newStore(t, Config{})
+	var buf bytes.Buffer
+	zw, _ := zstd.NewWriter(&buf)
+	tw := tar.NewWriter(zw)
+	_ = tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: "outputs/a", Size: 1, Mode: 0o644})
+	_, _ = tw.Write([]byte("a"))
+	_ = tw.Close()
+	// A small archive whose stream goes on long after the tar end.
+	if _, err := zw.Write(make([]byte, 8<<20)); err != nil {
+		t.Fatal(err)
+	}
+	_ = zw.Close()
+	if buf.Len() > 64<<10 {
+		t.Fatalf("tail did not compress: %d bytes", buf.Len())
+	}
+	if _, err := restore(s, "a6f1b1a2-0000-4000-8000-000000000007", buf.Bytes(), RestoreSpec{}); !errors.Is(err, ErrLimit) {
+		t.Fatalf("tail bomb: %v", err)
+	}
+}
+
+func TestRestoreUnusualNames(t *testing.T) {
+	s, base := newStore(t, Config{})
+	ctx := context.Background()
+	// A backslash is a normal character on Linux: write, save and restore.
+	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: `outputs/a\b.txt`, Size: 1, MakeParents: true},
+		strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	// A name that is not UTF-8 is left out of the save, so the save still
+	// restores. Some file systems (APFS) refuse such names.
+	badName := filepath.Join(base, "outputs", "bad\xff.txt")
+	madeBad := os.WriteFile(badName, []byte("y"), 0o644) == nil
+	archive, cs := capture(t, s, CaptureSpec{SessionID: sid})
+	if madeBad && cs.Skipped != 1 {
+		t.Fatalf("summary %+v", cs)
+	}
+	other := "a6f1b1a2-0000-4000-8000-000000000008"
+	if _, err := restore(s, other, archive, RestoreSpec{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(filepath.Dir(base), other, `outputs/a\b.txt`)); err != nil || string(b) != "x" {
+		t.Fatalf("backslash file = %q %v", b, err)
+	}
+}
+
+func TestFIFOsDoNotBlock(t *testing.T) {
+	s, base := newStore(t, Config{})
+	put(t, base, "outputs/a.txt", "a")
+	fifo := filepath.Join(base, "outputs", "pipe")
+	if err := syscall.Mkfifo(fifo, 0o644); err != nil {
+		t.Skipf("mkfifo: %v", err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, _, err := read(t, s, "outputs/pipe", 0, 0); !errors.Is(err, ErrInvalid) {
+			t.Errorf("read fifo: %v", err)
+		}
+		root, err := os.OpenRoot(base)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer func() { _ = root.Close() }()
+		// Capture and Zip open through openRegular, so a file that became
+		// a FIFO after the walk is refused, not waited on.
+		if _, _, err := openRegular(root, "outputs/pipe", syscall.O_NOFOLLOW); !errors.Is(err, errNotRegular) {
+			t.Errorf("openRegular fifo: %v", err)
+		}
+		if _, cs := capture(t, s, CaptureSpec{SessionID: sid}); cs.Skipped != 1 || cs.Files != 1 {
+			t.Errorf("capture %+v", cs)
+		}
+		if zs, err := s.Zip(context.Background(), sid, ZipSpec{Path: "outputs"}, io.Discard); err != nil || zs.Files != 1 {
+			t.Errorf("zip %+v %v", zs, err)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("a FIFO blocked a file call")
+	}
+}
+
+func TestReadDirCap(t *testing.T) {
+	_, base := newStore(t, Config{})
+	for i := range 30 {
+		put(t, base, fmt.Sprintf("outputs/f%02d", i), "")
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	if _, err := readDir(root, "outputs", 10); !errors.Is(err, errDirTooBig) || !errors.Is(err, ErrLimit) {
+		t.Fatalf("over the cap: %v", err)
+	}
+	ents, err := readDir(root, "outputs", 30)
+	if err != nil || len(ents) != 30 || ents[0].Name() != "f00" || ents[29].Name() != "f29" {
+		t.Fatalf("at the cap: %d entries, %v", len(ents), err)
+	}
+	// Capture fails on a directory over the entry limit.
+	s, base2 := newStore(t, Config{Limits: Limits{Entries: 10}})
+	for i := range 30 {
+		put(t, base2, fmt.Sprintf("outputs/f%02d", i), "")
+	}
+	if _, err := s.Capture(context.Background(), CaptureSpec{SessionID: sid}, io.Discard); !errors.Is(err, ErrLimit) {
+		t.Fatalf("capture: %v", err)
 	}
 }
