@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -23,9 +24,10 @@ func (a Addr) Network() string { return "vsock" }
 func (a Addr) String() string  { return fmt.Sprintf("vsock:%d:%d", a.CID, a.Port) }
 
 type listener struct {
-	f    *os.File
-	rc   syscall.RawConn
-	addr Addr
+	f      *os.File
+	rc     syscall.RawConn
+	addr   Addr
+	closed atomic.Bool
 }
 
 // Listen listens on port for any CID.
@@ -61,7 +63,9 @@ func (l *listener) Accept() (net.Conn, error) {
 		return !errors.Is(aerr, unix.EAGAIN)
 	})
 	if err != nil {
-		if errors.Is(err, os.ErrClosed) {
+		// RawConn.Read returns the poller's own "use of closed file" error,
+		// not os.ErrClosed.
+		if l.closed.Load() || errors.Is(err, os.ErrClosed) {
 			return nil, net.ErrClosed
 		}
 		return nil, err
@@ -76,7 +80,10 @@ func (l *listener) Accept() (net.Conn, error) {
 	return &conn{File: os.NewFile(uintptr(nfd), "vsock-conn"), local: l.addr, remote: remote}, nil
 }
 
-func (l *listener) Close() error   { return l.f.Close() }
+func (l *listener) Close() error {
+	l.closed.Store(true)
+	return l.f.Close()
+}
 func (l *listener) Addr() net.Addr { return l.addr }
 
 // conn is a vsock stream. os.File gives poller-backed reads and deadlines.

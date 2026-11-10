@@ -29,13 +29,19 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 | Scratch disk | ext4 on `/mnt/scratch`. Init grows it to the device size, and fails if the device is still smaller than `scratch_bytes` after about 1 s. |
 | Init state | `/run/craft-fc/guest-daemon-init.json` (mode 0600, tmpfs). A restarted daemon keeps its key, env and session list. |
 | Logs | stderr, text. |
+| Browser (ENG-4573) | Xvfb (`/usr/bin/Xvfb`, from `build-rootfs.sh`) and Chromium (`/opt/chrome/chrome`, else `/usr/bin/chromium`), run as the image user `sandbox` (uid 1000). CDP on guest vsock **9222**. Live profile `/var/lib/craft-browser/live`, saved profile `/workspace/.craft/browser-profile`. cgroup `/sys/fs/cgroup/guestd-browser`. |
 
 Flags (defaults in brackets): `--port` (52), `--attach-cmd` (`/craft-fc/lib/attach`; empty to skip),
 `--relay-pidfile` (`/run/craft-fc/egress-relay.pid`; empty to skip), `--cgroup-root`
 (`/sys/fs/cgroup/guestd`), `--state-file`, `--grow-fs` (`/mnt/scratch`), `--default-deadline` (30m),
 `--max-deadline` (24h), `--output-bytes` (4 MiB per stream), `--output-budget` (256 MiB for all
 executions), `--max-running` (64), `--listen`
-(`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
+(`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. Browser flags: `--browser-bin`
+(`/opt/chrome/chrome,/usr/bin/chromium`: the first that exists; empty turns the browser calls off),
+`--browser-xvfb` (`/usr/bin/Xvfb`), `--browser-user` (`sandbox`), `--browser-profile-dir`
+(`/workspace/.craft/browser-profile`), `--browser-work-dir` (`/var/lib/craft-browser`), `--browser-cgroup`
+(`/sys/fs/cgroup/guestd-browser`), `--browser-memory-max` (2 GiB), `--browser-cdp-port` (9222, TCP on
+127.0.0.1), `--browser-vsock-port` (9222), `--browser-screen` (`1280x800x24`). The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
 
@@ -84,7 +90,7 @@ agent, every call also carries `x-sandbox-id`.
 | `Cancel` | Kills the command's cgroup and returns the result (`CANCELED`, or `EXITED` if the command exited first). Not an error. |
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
 | Files, `CaptureSession`, `RestoreSession` | Reserved for ENG-4572. `UNIMPLEMENTED`. |
-| `BrowserStart`, `BrowserStop` | Reserved for ENG-4573. `UNIMPLEMENTED`. |
+| `BrowserStart`, `BrowserStop`, `BrowserStatus` | The VM's browser (ENG-4573). See "Browser". |
 
 Commands:
 
@@ -111,6 +117,49 @@ Commands:
 
 Errors are gRPC statuses with one `google.rpc.ErrorInfo`: domain `sandboxd.craft.onyx.app`, reason an
 `ErrorReason` name (`KEY_NOT_SET`, `NOT_INITIALIZED`, `UNAUTHENTICATED`, `EXECUTION_NOT_FOUND`, ...).
+
+### Browser
+
+One headful Chromium per VM on Xvfb (decision P1), with Chromium's own sandbox on (user namespace and
+seccomp-BPF; no `--no-sandbox`). There is no GPU (`--disable-gpu`). Chromium refuses its sandbox as root,
+so Xvfb and Chromium run as `--browser-user`.
+
+- `BrowserStart` starts Xvfb (`:99`, ready when it writes `-displayfd`) and Chromium, and returns when
+  Chromium prints its DevTools URL. Limit: 30 s (`BROWSER_START_FAILED`). If the browser runs, it returns
+  its status with `already_running`. Chromium gets the egress proxy as `--proxy-server` (it ignores the
+  `*_PROXY` env) and `HOME` of the browser user (the NSS database with the egress CA).
+- CDP: Chromium listens on `127.0.0.1:9222`. While the browser runs or restarts, the daemon forwards guest
+  vsock 9222 to it, one TCP connection for each vsock connection (at most 128). The api_server opens it
+  with node agent `Dial(guest_port=9222)`: the agent's `--dial-ports` must list 9222 (the default is
+  `3010`). Send `Host: 127.0.0.1` and no `Origin` header (Chromium refuses others). `BrowserStatus`
+  gives `cdp_path` (`/devtools/browser/<id>`), new after each start.
+- Crash: if Chromium or Xvfb exits without `BrowserStop`, the daemon kills both and starts them again
+  after 1 s, doubled up to 30 s. A run of 60 s or more resets the backoff. After 5 fast crashes in a row,
+  the state is `BROWSER_FAILED` and the CDP port closes; the next `BrowserStart` tries again.
+- Memory: Xvfb and Chromium run in their own cgroups under `--browser-cgroup`, which has `memory.max`
+  (`--browser-memory-max`) and `memory.oom.group`. Over the limit, the kernel kills the whole browser,
+  and the crash rule restarts it. The executions' records, `List`, `Cancel` and output budget do not
+  include the browser.
+- `BrowserStop` sends the CDP command `Browser.close` (as Playwright does), waits up to 10 s, then kills
+  what is left, stops Xvfb and closes the CDP port. If `Browser.close` fails it sends SIGTERM, but that
+  is not a clean stop: Chromium then exits with its SQLite stores (cookies) uncommitted. It succeeds also
+  when no browser runs. A daemon stop (SIGTERM) stops the browser the same way. A daemon crash kills the
+  browser: the restarted daemon kills every leftover in `--browser-cgroup`.
+
+Profile (one for each VM, so one for each user):
+
+- Chromium runs on a live copy in `--browser-work-dir`/live. `BrowserStart` makes it again from the
+  saved profile (or empty). After a crash restart, Chromium keeps the live copy.
+- After a clean stop (Chromium exited in time after `Browser.close`), `BrowserStop` copies the live profile to
+  `--browser-profile-dir` without caches, locks and crash dumps, at most 256 MiB. The swap is two
+  renames; a daemon crash between them is repaired at the next start or stop. If the repair fails, the
+  call fails and the old copy (`.old`) stays. If the call's deadline ends during the copy, the saved
+  profile does not change. The response gives `profile_saved`, `profile_bytes` and `profile_error`.
+- After a kill (stop timeout, crash, daemon crash) the saved profile does not change: it is always the
+  last clean one.
+- The saved profile is a plain directory on the scratch disk, owned by the browser user. A session save
+  can include it (`/workspace/.craft/browser-profile`); a restore must put it back before
+  `BrowserStart`. There is no other login storage (decision P3 is open).
 
 ## Egress relay
 

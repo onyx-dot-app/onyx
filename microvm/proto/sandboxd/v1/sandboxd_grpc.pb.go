@@ -37,6 +37,7 @@ const (
 	Sandboxd_RestoreSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/RestoreSession"
 	Sandboxd_BrowserStart_FullMethodName   = "/craft.sandboxd.v1.Sandboxd/BrowserStart"
 	Sandboxd_BrowserStop_FullMethodName    = "/craft.sandboxd.v1.Sandboxd/BrowserStop"
+	Sandboxd_BrowserStatus_FullMethodName  = "/craft.sandboxd.v1.Sandboxd/BrowserStatus"
 )
 
 // SandboxdClient is the client API for Sandboxd service.
@@ -111,9 +112,18 @@ type SandboxdClient interface {
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
 	CaptureSession(ctx context.Context, in *CaptureSessionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DataChunk], error)
 	RestoreSession(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RestoreSessionRequest, RestoreSessionResponse], error)
-	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+	// BrowserStart starts Xvfb and Chromium, and returns when the CDP
+	// endpoint is ready. The live profile starts as a copy of the saved
+	// profile. If the browser runs already, it returns its status. A crashed
+	// browser restarts with a backoff; after repeated fast crashes the state
+	// is BROWSER_FAILED until the next BrowserStart.
 	BrowserStart(ctx context.Context, in *BrowserStartRequest, opts ...grpc.CallOption) (*BrowserStartResponse, error)
+	// BrowserStop closes Chromium with the CDP command Browser.close (SIGTERM
+	// if that fails, then a kill after a timeout), stops Xvfb, closes the CDP
+	// port and, after a clean exit, saves the profile. It succeeds also when
+	// the browser does not run.
 	BrowserStop(ctx context.Context, in *BrowserStopRequest, opts ...grpc.CallOption) (*BrowserStopResponse, error)
+	BrowserStatus(ctx context.Context, in *BrowserStatusRequest, opts ...grpc.CallOption) (*BrowserStatusResponse, error)
 }
 
 type sandboxdClient struct {
@@ -346,6 +356,16 @@ func (c *sandboxdClient) BrowserStop(ctx context.Context, in *BrowserStopRequest
 	return out, nil
 }
 
+func (c *sandboxdClient) BrowserStatus(ctx context.Context, in *BrowserStatusRequest, opts ...grpc.CallOption) (*BrowserStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BrowserStatusResponse)
+	err := c.cc.Invoke(ctx, Sandboxd_BrowserStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SandboxdServer is the server API for Sandboxd service.
 // All implementations must embed UnimplementedSandboxdServer
 // for forward compatibility.
@@ -418,9 +438,18 @@ type SandboxdServer interface {
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
 	CaptureSession(*CaptureSessionRequest, grpc.ServerStreamingServer[DataChunk]) error
 	RestoreSession(grpc.ClientStreamingServer[RestoreSessionRequest, RestoreSessionResponse]) error
-	// Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+	// BrowserStart starts Xvfb and Chromium, and returns when the CDP
+	// endpoint is ready. The live profile starts as a copy of the saved
+	// profile. If the browser runs already, it returns its status. A crashed
+	// browser restarts with a backoff; after repeated fast crashes the state
+	// is BROWSER_FAILED until the next BrowserStart.
 	BrowserStart(context.Context, *BrowserStartRequest) (*BrowserStartResponse, error)
+	// BrowserStop closes Chromium with the CDP command Browser.close (SIGTERM
+	// if that fails, then a kill after a timeout), stops Xvfb, closes the CDP
+	// port and, after a clean exit, saves the profile. It succeeds also when
+	// the browser does not run.
 	BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error)
+	BrowserStatus(context.Context, *BrowserStatusRequest) (*BrowserStatusResponse, error)
 	mustEmbedUnimplementedSandboxdServer()
 }
 
@@ -484,6 +513,9 @@ func (UnimplementedSandboxdServer) BrowserStart(context.Context, *BrowserStartRe
 }
 func (UnimplementedSandboxdServer) BrowserStop(context.Context, *BrowserStopRequest) (*BrowserStopResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BrowserStop not implemented")
+}
+func (UnimplementedSandboxdServer) BrowserStatus(context.Context, *BrowserStatusRequest) (*BrowserStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BrowserStatus not implemented")
 }
 func (UnimplementedSandboxdServer) mustEmbedUnimplementedSandboxdServer() {}
 func (UnimplementedSandboxdServer) testEmbeddedByValue()                  {}
@@ -780,6 +812,24 @@ func _Sandboxd_BrowserStop_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Sandboxd_BrowserStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BrowserStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SandboxdServer).BrowserStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Sandboxd_BrowserStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SandboxdServer).BrowserStatus(ctx, req.(*BrowserStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Sandboxd_ServiceDesc is the grpc.ServiceDesc for Sandboxd service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -834,6 +884,10 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BrowserStop",
 			Handler:    _Sandboxd_BrowserStop_Handler,
+		},
+		{
+			MethodName: "BrowserStatus",
+			Handler:    _Sandboxd_BrowserStatus_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

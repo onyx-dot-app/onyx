@@ -508,9 +508,6 @@ func TestErrors(t *testing.T) {
 	if _, err := c.ListFiles(ctx, &pb.ListFilesRequest{}); status.Code(err) != codes.Unimplemented {
 		t.Fatalf("reserved call: %v", err)
 	}
-	if _, err := c.BrowserStart(ctx, &pb.BrowserStartRequest{}); status.Code(err) != codes.Unimplemented {
-		t.Fatalf("reserved call: %v", err)
-	}
 }
 
 func TestInteract(t *testing.T) {
@@ -659,6 +656,9 @@ func TestOutputGap(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := st.GetStarted().GetExecutionId()
+	// A live stream can attach between the two writes; replay after the end.
+	first, _ := c.Stream(ctx, &pb.StreamRequest{ExecutionId: id})
+	collect(t, first)
 	s, _ := c.Stream(ctx, &pb.StreamRequest{ExecutionId: id})
 	r := collect(t, s)
 	if r.result.GetStdoutBytes() != 53 {

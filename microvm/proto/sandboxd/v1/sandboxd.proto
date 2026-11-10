@@ -86,9 +86,25 @@ service Sandboxd {
   rpc CaptureSession(CaptureSessionRequest) returns (stream DataChunk);
   rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
 
-  // Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
+  // Browser (ENG-4573). One headful Chromium on Xvfb per VM, with
+  // Chromium's own sandbox on. It runs as the image's "sandbox" user, in
+  // its own cgroup with a memory limit. Its DevTools (CDP) endpoint is on a
+  // guest vsock port (BrowserStatus.cdp_port): open it with the node agent
+  // Dial. There is one profile per VM (the user's): BrowserStop saves it
+  // after a clean stop, see BrowserStopResponse.
+
+  // BrowserStart starts Xvfb and Chromium, and returns when the CDP
+  // endpoint is ready. The live profile starts as a copy of the saved
+  // profile. If the browser runs already, it returns its status. A crashed
+  // browser restarts with a backoff; after repeated fast crashes the state
+  // is BROWSER_FAILED until the next BrowserStart.
   rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
+  // BrowserStop closes Chromium with the CDP command Browser.close (SIGTERM
+  // if that fails, then a kill after a timeout), stops Xvfb, closes the CDP
+  // port and, after a clean exit, saves the profile. It succeeds also when
+  // the browser does not run.
   rpc BrowserStop(BrowserStopRequest) returns (BrowserStopResponse);
+  rpc BrowserStatus(BrowserStatusRequest) returns (BrowserStatusResponse);
 }
 
 // The reason of a guest daemon error (google.rpc.ErrorInfo.reason).
@@ -118,6 +134,16 @@ enum ErrorReason {
   KEY_NOT_SET = 11;
   // SetKey: the daemon already has a different key.
   KEY_ALREADY_SET = 12;
+
+  // Browser (ENG-4573): 20 to 23.
+  // The VM has no browser: no Chromium or Xvfb binary, or no browser user.
+  BROWSER_NOT_AVAILABLE = 20;
+  // BrowserStart: Xvfb or Chromium did not start, or the CDP endpoint was
+  // not ready in time.
+  BROWSER_START_FAILED = 21;
+  // BrowserStart: the saved profile could not be copied to the live
+  // profile.
+  BROWSER_PROFILE_FAILED = 22;
 }
 
 message HealthRequest {}
@@ -372,7 +398,81 @@ message DeleteFileResponse {}
 message CaptureSessionRequest {}
 message RestoreSessionRequest {}
 message RestoreSessionResponse {}
+
+// Browser (ENG-4573).
+
+enum BrowserState {
+  BROWSER_STATE_UNSPECIFIED = 0;
+  BROWSER_STOPPED = 1;
+  // BrowserStart runs: Xvfb and Chromium start.
+  BROWSER_STARTING = 2;
+  // The CDP endpoint is ready.
+  BROWSER_RUNNING = 3;
+  // Chromium or Xvfb exited without BrowserStop; it starts again after a
+  // backoff (1 s, doubled up to 30 s).
+  BROWSER_RESTARTING = 4;
+  BROWSER_STOPPING = 5;
+  // Too many fast crashes in a row. BrowserStart tries again.
+  BROWSER_FAILED = 6;
+}
+
+message BrowserStatus {
+  BrowserState state = 1;
+  // Guest vsock port of the CDP endpoint (HTTP and WebSocket). Open it with
+  // node agent Dial; the agent's --dial-ports must have it. Send
+  // "Host: 127.0.0.1" (Chromium refuses other host names). Open while the
+  // browser runs or restarts.
+  uint32 cdp_port = 2;
+  // Path of the browser's CDP WebSocket, for example
+  // "/devtools/browser/<id>". New after each start or restart.
+  string cdp_path = 3;
+  // Guest PID of the Chromium main process.
+  int32 pid = 4;
+  // Start of the current Chromium run.
+  google.protobuf.Timestamp started_at = 5;
+  // Time from the start of Xvfb to the ready CDP endpoint, for that run.
+  google.protobuf.Duration start_duration = 6;
+  // Restarts after a crash since the last BrowserStart.
+  uint32 restarts = 7;
+  // Why the last run ended or failed, with the end of Chromium's stderr.
+  string last_error = 8;
+  // Memory use of the browser cgroup (Chromium and Xvfb), and its limit.
+  // Zero when the daemon runs without cgroups.
+  uint64 memory_bytes = 9;
+  uint64 memory_max_bytes = 10;
+  // The saved profile: a plain directory on the scratch disk. Session saves
+  // can include it; a restore must put it back before BrowserStart.
+  string profile_dir = 11;
+}
+
 message BrowserStartRequest {}
-message BrowserStartResponse {}
+
+message BrowserStartResponse {
+  BrowserStatus status = 1;
+  // True if the browser ran (or restarted) already.
+  bool already_running = 2;
+}
+
 message BrowserStopRequest {}
-message BrowserStopResponse {}
+
+message BrowserStopResponse {
+  // False if no browser ran (also after BROWSER_FAILED).
+  bool was_running = 1;
+  // True if Chromium exited in time after Browser.close. SIGTERM is not a
+  // clean stop: Chromium then leaves its profile stores uncommitted.
+  bool clean = 2;
+  // True if the profile was saved to BrowserStatus.profile_dir. Only after
+  // a clean stop; otherwise the last saved profile stays.
+  bool profile_saved = 3;
+  // Size of the saved profile (caches are not saved).
+  uint64 profile_bytes = 4;
+  // Why the save failed, for example the profile is over the size limit.
+  string profile_error = 5;
+  string profile_dir = 6;
+}
+
+message BrowserStatusRequest {}
+
+message BrowserStatusResponse {
+  BrowserStatus status = 1;
+}
