@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// maxForwards caps the open CDP connections (the node agent caps Dial
-// streams per VM at 64 by default).
+// maxForwards caps the open CDP forwards. Each forward is one vsock and one
+// TCP connection. The node agent caps Dial streams per VM at 64 by default.
 const maxForwards = 128
 
 // forwarder copies each connection on ln (vsock) to target, Chromium's
@@ -20,10 +20,11 @@ type forwarder struct {
 	target string
 	log    *slog.Logger
 
-	mu     sync.Mutex
-	conns  map[net.Conn]struct{}
-	closed bool
-	wg     sync.WaitGroup
+	mu       sync.Mutex
+	conns    map[net.Conn]struct{} // both ends of every forward, for close
+	forwards int
+	closed   bool
+	wg       sync.WaitGroup
 }
 
 func newForwarder(ln net.Listener, target string, log *slog.Logger) *forwarder {
@@ -47,7 +48,8 @@ func (f *forwarder) serve() {
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
-		if !f.track(c, true) {
+		if !f.accept(c) {
+			f.log.Warn("cdp connection refused: too many forwards", "max", maxForwards)
 			_ = c.Close()
 			continue
 		}
@@ -55,8 +57,29 @@ func (f *forwarder) serve() {
 	}
 }
 
-// track adds or removes c. It refuses a new connection after close or over
-// the cap.
+// accept tracks a new vsock connection as one forward. It refuses it after
+// close or over maxForwards.
+func (f *forwarder) accept(c net.Conn) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.closed || f.forwards >= maxForwards {
+		return false
+	}
+	f.forwards++
+	f.conns[c] = struct{}{}
+	return true
+}
+
+// release untracks the vsock connection of a forward.
+func (f *forwarder) release(c net.Conn) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.forwards--
+	delete(f.conns, c)
+}
+
+// track adds or removes the TCP end of a forward. It does not count against
+// maxForwards; it refuses an addition after close.
 func (f *forwarder) track(c net.Conn, add bool) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -64,7 +87,7 @@ func (f *forwarder) track(c net.Conn, add bool) bool {
 		delete(f.conns, c)
 		return true
 	}
-	if f.closed || len(f.conns) >= maxForwards {
+	if f.closed {
 		return false
 	}
 	f.conns[c] = struct{}{}
@@ -72,7 +95,7 @@ func (f *forwarder) track(c net.Conn, add bool) bool {
 }
 
 func (f *forwarder) handle(c net.Conn) {
-	defer f.track(c, false)
+	defer f.release(c)
 	defer func() { _ = c.Close() }()
 	t, err := net.DialTimeout("tcp", f.target, 5*time.Second)
 	if err != nil {

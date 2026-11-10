@@ -152,8 +152,9 @@ Profile (one for each VM, so one for each user):
   saved profile (or empty). After a crash restart, Chromium keeps the live copy.
 - After a clean stop (Chromium exited in time after `Browser.close`), `BrowserStop` copies the live profile to
   `--browser-profile-dir` without caches, locks and crash dumps, at most 256 MiB. The swap is two
-  renames; a daemon crash between them is repaired at the next start or stop. The response gives
-  `profile_saved`, `profile_bytes` and `profile_error`.
+  renames; a daemon crash between them is repaired at the next start or stop. If the repair fails, the
+  call fails and the old copy (`.old`) stays. If the call's deadline ends during the copy, the saved
+  profile does not change. The response gives `profile_saved`, `profile_bytes` and `profile_error`.
 - After a kill (stop timeout, crash, daemon crash) the saved profile does not change: it is always the
   last clean one.
 - The saved profile is a plain directory on the scratch disk, owned by the browser user. A session save

@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -37,21 +38,30 @@ var (
 	}
 )
 
-// recoverSwap finishes a save that a daemon crash cut short.
-func (p *profile) recoverSwap() {
+// recoverSwap finishes a save that a daemon crash cut short. It removes
+// .old only when the saved profile is in place.
+func (p *profile) recoverSwap() error {
 	old := p.saved + ".old"
 	if _, err := os.Lstat(p.saved); errors.Is(err, fs.ErrNotExist) {
 		if _, err := os.Lstat(old); err == nil {
-			_ = os.Rename(old, p.saved)
+			if err := os.Rename(old, p.saved); err != nil {
+				return fmt.Errorf("restore saved profile: %w", err)
+			}
 		}
+	} else if err != nil {
+		return fmt.Errorf("saved profile: %w", err)
 	}
-	_ = os.RemoveAll(old)
-	_ = os.RemoveAll(p.saved + ".tmp")
+	if err := os.RemoveAll(old); err != nil {
+		return err
+	}
+	return os.RemoveAll(p.saved + ".tmp")
 }
 
 // resetLive makes the live profile a copy of the saved one (or empty).
-func (p *profile) resetLive() error {
-	p.recoverSwap()
+func (p *profile) resetLive(ctx context.Context) error {
+	if err := p.recoverSwap(); err != nil {
+		return err
+	}
 	live := p.live()
 	if err := os.MkdirAll(p.work, 0o755); err != nil {
 		return err
@@ -65,7 +75,7 @@ func (p *profile) resetLive() error {
 		}
 		return p.chown(live)
 	}
-	if _, err := copyTree(p.saved, live, false, p.cred, 0); err != nil {
+	if _, err := copyTree(ctx, p.saved, live, false, p.cred, 0); err != nil {
 		_ = os.RemoveAll(live)
 		return fmt.Errorf("copy saved profile: %w", err)
 	}
@@ -73,14 +83,17 @@ func (p *profile) resetLive() error {
 }
 
 // save copies the live profile, without caches, over the saved one. The
-// swap is two renames; recoverSwap repairs a crash between them.
-func (p *profile) save() (int64, error) {
-	p.recoverSwap()
+// swap is two renames; recoverSwap repairs a crash between them. If ctx
+// ends during the copy, the saved profile stays as it was.
+func (p *profile) save(ctx context.Context) (int64, error) {
+	if err := p.recoverSwap(); err != nil {
+		return 0, err
+	}
 	if err := os.MkdirAll(filepath.Dir(p.saved), 0o755); err != nil {
 		return 0, err
 	}
 	tmp, old := p.saved+".tmp", p.saved+".old"
-	n, err := copyTree(p.live(), tmp, true, p.cred, p.max)
+	n, err := copyTree(ctx, p.live(), tmp, true, p.cred, p.max)
 	if err != nil {
 		_ = os.RemoveAll(tmp)
 		return 0, err
@@ -115,12 +128,16 @@ var errTooBig = errors.New("profile is over the size limit")
 
 // copyTree copies the regular files and dirs of src to dst (new). It skips
 // symlinks and special files, and with prune the cache dirs and lock files.
-// Files are synced. max > 0 caps the total file bytes.
-func copyTree(src, dst string, prune bool, cred *syscall.Credential, max int64) (int64, error) {
+// Files are synced. max > 0 caps the total file bytes. It stops when ctx
+// ends.
+func copyTree(ctx context.Context, src, dst string, prune bool, cred *syscall.Credential, max int64) (int64, error) {
 	var total int64
 	p := &profile{cred: cred}
 	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		rel, err := filepath.Rel(src, path)

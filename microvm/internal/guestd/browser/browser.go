@@ -162,7 +162,7 @@ type StopResult struct {
 type Manager struct {
 	cfg Config
 
-	op sync.Mutex // one Start or Stop at a time
+	op chan struct{} // one Start or Stop at a time; lock honors ctx
 
 	mu       sync.Mutex
 	st       Status
@@ -180,13 +180,24 @@ func New(cfg Config) (*Manager, error) {
 	if cfg.MemoryMax < 0 || cfg.ProfileMaxBytes < 0 {
 		return nil, errors.New("browser: limits must not be negative")
 	}
-	m := &Manager{cfg: cfg}
+	m := &Manager{cfg: cfg, op: make(chan struct{}, 1)}
 	m.st = Status{State: Stopped, VsockPort: cfg.VsockPort, ProfileDir: cfg.ProfileDir}
 	if cfg.CgroupRoot != "" {
 		m.st.MemoryMax = uint64(cfg.MemoryMax)
 	}
 	return m, nil
 }
+
+func (m *Manager) lockOp(ctx context.Context) error {
+	select {
+	case m.op <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (m *Manager) unlockOp() { <-m.op }
 
 // Status returns the current status.
 func (m *Manager) Status() Status {
@@ -232,8 +243,10 @@ func (m *Manager) Start(ctx context.Context) (st Status, already bool, err error
 	if len(m.cfg.ChromeBins) == 0 {
 		return Status{}, false, fmt.Errorf("%w: no Chromium binary configured", ErrUnavailable)
 	}
-	m.op.Lock()
-	defer m.op.Unlock()
+	if err := m.lockOp(ctx); err != nil {
+		return Status{}, false, err
+	}
+	defer m.unlockOp()
 	m.mu.Lock()
 	running := m.sup != nil
 	m.mu.Unlock()
@@ -264,7 +277,7 @@ func (m *Manager) Start(ctx context.Context) (st Status, already bool, err error
 		m.limitSet = true
 	}
 	p := m.profile(cr)
-	if err := p.resetLive(); err != nil {
+	if err := p.resetLive(ctx); err != nil {
 		return Status{}, false, fmt.Errorf("%w: %v", ErrProfile, err)
 	}
 	ln, err := m.cfg.Listen(m.cfg.VsockPort)
@@ -295,10 +308,14 @@ func (m *Manager) Start(ctx context.Context) (st Status, already bool, err error
 	return m.Status(), false, nil
 }
 
-// Stop stops the browser. After a clean exit it saves the profile.
-func (m *Manager) Stop(context.Context) (StopResult, error) {
-	m.op.Lock()
-	defer m.op.Unlock()
+// Stop stops the browser. After a clean exit it saves the profile. If ctx
+// ends first, Stop returns without the save and the saved profile stays as
+// it was. Chromium's shutdown has its own limit, StopTimeout.
+func (m *Manager) Stop(ctx context.Context) (StopResult, error) {
+	if err := m.lockOp(ctx); err != nil {
+		return StopResult{}, err
+	}
+	defer m.unlockOp()
 	m.mu.Lock()
 	s := m.sup
 	m.mu.Unlock()
@@ -310,7 +327,7 @@ func (m *Manager) Stop(context.Context) (StopResult, error) {
 	if !clean {
 		return res, nil
 	}
-	n, err := m.profile(s.cr).save()
+	n, err := m.profile(s.cr).save(ctx)
 	if err != nil {
 		res.ProfileError = err.Error()
 		m.cfg.Log.Warn("browser profile not saved", "err", err)

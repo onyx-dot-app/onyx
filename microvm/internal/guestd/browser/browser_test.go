@@ -536,7 +536,7 @@ func TestRecoverSwap(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(p.saved+".old", "Default", "Cookies"), []byte("7"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.resetLive(); err != nil {
+	if err := p.resetLive(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if got := readCookies(t, p.saved); got != "7" {
@@ -549,6 +549,78 @@ func TestRecoverSwap(t *testing.T) {
 		if _, err := os.Stat(d); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s left", d)
 		}
+	}
+}
+
+func TestRecoverSwapKeepsOldOnFailedRestore(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores dir permissions")
+	}
+	dir := filepath.Join(t.TempDir(), "ws")
+	p := &profile{saved: filepath.Join(dir, "profile"), work: filepath.Join(t.TempDir(), "work")}
+	if err := os.MkdirAll(filepath.Join(p.saved+".old", "Default"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p.saved+".old", "Default", "Cookies"), []byte("7"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A read-only parent makes the restore rename fail.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	if err := p.resetLive(context.Background()); err == nil {
+		t.Fatal("resetLive ignored a failed restore")
+	}
+	if got := readCookies(t, p.saved+".old"); got != "7" {
+		t.Fatalf(".old cookies %q", got)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.resetLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := readCookies(t, p.saved); got != "7" {
+		t.Fatalf("recovered %q", got)
+	}
+}
+
+func TestSaveCanceledKeepsSavedProfile(t *testing.T) {
+	dir := t.TempDir()
+	p := &profile{saved: filepath.Join(dir, "profile"), work: filepath.Join(dir, "work")}
+	for d, v := range map[string]string{p.saved: "1", p.live(): "2"} {
+		if err := os.MkdirAll(filepath.Join(d, "Default"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "Default", "Cookies"), []byte(v), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := p.save(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("save err %v", err)
+	}
+	if got := readCookies(t, p.saved); got != "1" {
+		t.Fatalf("saved cookies %q", got)
+	}
+	if _, err := os.Stat(p.saved + ".tmp"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("tmp left: %v", err)
+	}
+}
+
+func TestStopHonorsContextWhileBusy(t *testing.T) {
+	f := newFixture(t, nil)
+	if err := f.m.lockOp(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := f.m.Stop(ctx)
+	f.m.unlockOp()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("stop err %v", err)
 	}
 }
 

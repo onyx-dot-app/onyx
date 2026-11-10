@@ -78,3 +78,55 @@ func TestForwarderClosesOpenConnections(t *testing.T) {
 		t.Fatal("connection still open after close")
 	}
 }
+
+// TestForwarderCapCountsForwards checks that maxForwards counts forwards,
+// not sockets: each forward also holds a TCP connection.
+func TestForwarderCapCountsForwards(t *testing.T) {
+	target, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = target.Close() }()
+	go func() {
+		for {
+			c, err := target.Accept()
+			if err != nil {
+				return
+			}
+			go func() { _, _ = io.Copy(c, c) }()
+		}
+	}()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newForwarder(ln, target.Addr().String(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer f.close()
+	echo := func(c net.Conn) error {
+		_ = c.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := c.Write([]byte("ping")); err != nil {
+			return err
+		}
+		buf := make([]byte, 4)
+		_, err := io.ReadFull(c, buf)
+		return err
+	}
+	for i := range maxForwards {
+		c, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = c.Close() }()
+		if err := echo(c); err != nil {
+			t.Fatalf("forward %d: %v", i, err)
+		}
+	}
+	c, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	if err := echo(c); err == nil {
+		t.Fatal("forward over the cap was accepted")
+	}
+}
