@@ -123,7 +123,7 @@ def test_associated_custom_skill_requires_normal_user_selection(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
     make_external_app(db_session, skill=skill, auth_template={})
 
@@ -142,7 +142,7 @@ def test_runtime_requires_selection_and_authenticated_external_app(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
     app = make_external_app(db_session, skill=skill, auth_template=_AUTH_TEMPLATE)
 
@@ -172,7 +172,7 @@ def test_one_external_app_can_gate_multiple_skills(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     first_skill = make_skill(db_session, is_public=True, name="first-app-skill")
     second_skill = make_skill(db_session, is_public=True, name="second-app-skill")
     app = make_external_app(
@@ -240,7 +240,7 @@ def test_runtime_excludes_disabled_external_app(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
     app = make_external_app(
         db_session,
@@ -297,7 +297,7 @@ def test_runtime_includes_external_app_with_no_user_credentials_required(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     empty_template_skill = make_skill(
         db_session,
         is_public=True,
@@ -332,8 +332,8 @@ def test_associated_same_name_switch_changes_only_the_acting_user(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    first_user = make_user(db_session)
-    second_user = make_user(db_session)
+    first_user = make_user(db_session, standard_account=True)
+    second_user = make_user(db_session, standard_account=True)
     standalone = make_skill(db_session, is_public=True, name="shared-runtime-name")
     associated = make_skill(db_session, is_public=True, name="shared-runtime-name")
     make_external_app(db_session, skill=associated, auth_template={})
@@ -424,7 +424,7 @@ def test_regular_shared_skill_still_requires_enabled_preference(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True, name="plain-skill")
 
     assert skill.id in _management_skill_ids(
