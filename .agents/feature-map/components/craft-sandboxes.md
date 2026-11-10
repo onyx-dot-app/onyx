@@ -146,14 +146,20 @@ sandboxes and puts idle ones to sleep. Sleep also clears every Next.js port of
 the user, so a restored session can get a different port
 ([[craft-webapp-proxy]]).
 
-**Managed content.** Provisioning and a live push build the skills and user
-library payload with the same code
-(`backend/onyx/server/features/build/session/sandbox_lifecycle.py:build_managed_content_payload`). The read transaction
-must close before the push. `push_managed_content` runs before the sandbox is
-reported `RUNNING`, because opencode scans the skills directory once per
-instance: a turn that starts during the push misses managed skills for good. It
-logs a failure and never raises. `skills_hash` is written
-only after a successful push, so the next session create or reload retries.
+**Managed content.** Provisioning and live sync build the Skill payload with
+`backend/onyx/server/features/build/session/sandbox_lifecycle.py:build_managed_content_payload`. Both lock the
+`Sandbox` row through the Skill build, push and hash record, as
+`push_skills_for_users` does ([[skills]]). Membership marking uses `NOWAIT`:
+a contended row rolls back the complete membership request with a retryable
+409, so an older payload cannot overwrite a newer pending marker. Library
+assembly and transport run after that commit, without the Skill delivery lock.
+Provisioning keeps the row `PROVISIONING` through both pushes. It checks the
+attempt fence before Skill delivery and again before finalizing `RUNNING`.
+Finalization does not rewrite Skill hashes, so a membership change during
+library delivery keeps its pending marker. `push_managed_skills` logs failures
+and records `skills_hash` only after success. A sandbox without a hash gets a
+retry before the next session create, restore or reload, and that work stops
+while the retry fails ([[skills]]).
 User library blobs use `FileOrigin.USER_FILE` but have no `UserFile` rows, so
 the chat user-file lifecycle does not apply to them.
 

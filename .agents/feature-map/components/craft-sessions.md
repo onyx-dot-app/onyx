@@ -195,7 +195,10 @@ Uploads and deletes push the full file set to the user's sandbox when it is
 Provisioning pushes it again with the other managed content.
 
 **Skills reload.** `SessionManager.reload_session_skills` refuses while the
-sandbox is `PROVISIONING` and while a turn holds the prompt slot. It rewrites
+sandbox is `PROVISIONING` and while a turn holds the prompt slot. A `RUNNING`
+sandbox without `skills_hash` first gets a skill push; the reload fails with a
+502 while that push fails. The stale check applies to sessions of every
+origin, so a scheduled session that takes a later turn also reloads. It rewrites
 the session's `opencode.json` and `AGENTS.md` before it disposes the live
 opencode instance, so the next instance reads the new files ([[skills]]).
 
@@ -242,8 +245,13 @@ opencode instance, so the next instance reads the new files ([[skills]]).
 6. `repair-through-ensure-session-ready` **Session repair goes through
    `ensure_session_ready` under the creation lock.**
    `server/features/build/session/session_ready.py:session_runtime_intact` is a
-   database-only fast path. A `RUNNING` row is a claim, so the runner also
-   checks the pod. Do not rebuild a session workspace anywhere else. An opencode
+   database-only fast path. It is false while the sandbox has no
+   `skills_hash`, so the turn goes through the skill retry in
+   `ensure_session_ready`. A `RUNNING` row is a claim, so the runner also
+   checks the pod. `SessionManager.yield_sandbox_events` refuses pending delivery
+   before session preparation. The shared streaming path checks again after
+   preparation and heartbeat work, just before prompt admission ([[craft-streaming]]).
+   Do not rebuild a session workspace anywhere else. An opencode
    instance keeps the config it saw at creation, so a turn that runs during a
    rebuild stays on the wrong config for the life of the pod (module docstring
    of `server/features/build/session/session_ready.py`).

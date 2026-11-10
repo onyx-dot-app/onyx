@@ -62,6 +62,7 @@ from onyx.server.features.build.db.build_session import (
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     get_snapshots_for_session,
+    sandbox_skills_delivery_pending,
     update_sandbox_heartbeat,
 )
 from onyx.server.features.build.interactive_turns.state import (
@@ -113,6 +114,7 @@ from onyx.server.features.build.session.models import (
 from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
     ProvisioningPolicy,
+    deliver_pending_skills,
     ensure_sandbox_ready,
     sync_managed_content,
 )
@@ -364,13 +366,17 @@ class SessionManager:
         if sandbox is None or not session_runtime_stale(session, sandbox):
             return False
 
-        skills_hash = sandbox.skills_hash
-        mcp_config_hash = sandbox.mcp_config_hash
         if sandbox.status == SandboxStatus.PROVISIONING:
             raise OnyxError(
                 OnyxErrorCode.CONFLICT,
                 "Wait for the sandbox to finish starting before reloading skills.",
             )
+        if sandbox.status == SandboxStatus.RUNNING:
+            deliver_pending_skills(
+                self._db_session, self._sandbox_manager, sandbox, user
+            )
+        skills_hash = sandbox.skills_hash
+        mcp_config_hash = sandbox.mcp_config_hash
 
         update_sandbox_heartbeat(self._db_session, sandbox.id)
         self._db_session.commit()
@@ -484,7 +490,10 @@ class SessionManager:
             user.id,
             policy=ProvisioningPolicy.FAIL,
         )
-        if outcome == SandboxReadyOutcome.ALREADY_RUNNING:
+        skills_synced = deliver_pending_skills(
+            self._db_session, self._sandbox_manager, sandbox, user
+        )
+        if outcome == SandboxReadyOutcome.ALREADY_RUNNING and not skills_synced:
             sync_managed_content(
                 self._db_session, self._sandbox_manager, sandbox.id, user
             )
@@ -1147,6 +1156,13 @@ class SessionManager:
         should_abort_on_teardown: Callable[[], bool] | None = None,
         turn_timeout_seconds: float | None = None,
     ) -> Generator[Any, None, None]:
+        # Skip preparation when delivery is already pending. Streaming checks
+        # again after preparation, at prompt admission.
+        if sandbox_skills_delivery_pending(self._db_session, sandbox_id):
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "Could not update the Skills in your sandbox. Try again.",
+            )
         build_session = _streaming.load_turn_session(
             self._db_session, self._sandbox_manager, sandbox_id, session_id
         )

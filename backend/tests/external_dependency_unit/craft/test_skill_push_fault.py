@@ -77,10 +77,12 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
 
     assert stub.write_files_to_sandbox_count == 3
     assert session_runtime_stale(sessions[user_a.id], sandbox_a)
-    assert not session_runtime_stale(sessions[user_b.id], sandbox_b)
+    # No confirmed delivery: the runtime stays stale until a retry succeeds.
+    assert session_runtime_stale(sessions[user_b.id], sandbox_b)
     assert not session_runtime_stale(sessions[user_c.id], sandbox_c)
     assert not session_runtime_stale(idle_session, sandbox_a)
-    assert not session_runtime_stale(scheduled_session, sandbox_a)
+    # A scheduled session can take a later turn, so its runtime goes stale too.
+    assert session_runtime_stale(scheduled_session, sandbox_a)
     assert sandbox_a.skills_hash is not None
     assert sandbox_b.skills_hash is None
     assert sandbox_c.skills_hash is not None
@@ -99,9 +101,10 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     for session, sandbox in (
         (sessions[user_a.id], sandbox_a),
         (sessions[user_b.id], sandbox_b),
-        (sessions[user_c.id], sandbox_c),
     ):
-        assert not session_runtime_stale(session, sandbox)
+        assert session_runtime_stale(session, sandbox)
+    # Without an OpenCode session there is no live runtime to reload.
+    assert not session_runtime_stale(sessions[user_c.id], sandbox_c)
 
 
 def test_connectable_app_change_pushes_and_hashes_self_heal(

@@ -70,8 +70,18 @@ from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
-from onyx.db.users import assign_user_to_default_groups__no_commit, user_is_admin
+from onyx.db.users import (
+    assign_user_to_default_groups__no_commit,
+    lock_group_membership,
+    user_is_admin,
+)
 from onyx.db.utils import is_unique_violation
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.db.sandbox import (
+    mark_user_sandbox_skills_pending__no_commit,
+)
+from onyx.skills.push import push_skills_for_users
 from onyx.utils.audit import (
     AuditAction,
     AuditActor,
@@ -243,6 +253,21 @@ def _scim_error_response(status: int, detail: str) -> ScimJSONResponse:
         status_code=status,
         content=body.model_dump(exclude_none=True),
     )
+
+
+def _mark_skills_pending(
+    db_session: Session, user_ids: set[UUID]
+) -> ScimJSONResponse | None:
+    """Expose delivery contention as a transient SCIM error after rollback."""
+    try:
+        mark_user_sandbox_skills_pending__no_commit(db_session, user_ids)
+    except OnyxError as exc:
+        if exc.error_code != OnyxErrorCode.CONFLICT:
+            raise
+        response = _scim_error_response(503, exc.detail)
+        response.headers["Retry-After"] = "1"
+        return response
+    return None
 
 
 def _parse_excluded_attributes(raw: str | None) -> set[str]:
@@ -1323,6 +1348,7 @@ def create_group(
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | ScimJSONResponse:
     """Create a new group from a SCIM provisioning request."""
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1401,6 +1427,7 @@ def replace_group(
     db_session: Session = Depends(get_session),
 ) -> ScimGroupResource | ScimJSONResponse:
     """Replace a group entirely (RFC 7644 §3.5.1)."""
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1440,8 +1467,13 @@ def replace_group(
     recompute_permissions_for_group__no_commit(group.id, db_session)
     removed_ids = list(old_member_ids - set(member_uuids))
     recompute_user_permissions__no_commit(removed_ids, db_session)
+    changed_member_ids = old_member_ids ^ set(member_uuids)
+    if error := _mark_skills_pending(db_session, changed_member_ids):
+        return error
 
     dal.commit()
+    push_skills_for_users(changed_member_ids, db_session)
+    db_session.commit()
 
     added_ids = sorted(set(member_uuids) - old_member_ids)
     _emit_scim_group_update(
@@ -1471,6 +1503,7 @@ def patch_group(
 
     Handles member add/remove operations from Okta and Azure AD.
     """
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1531,9 +1564,13 @@ def patch_group(
 
     # Recompute permissions for all users whose group membership changed.
     recompute_user_permissions__no_commit(affected_uuids, db_session)
+    if error := _mark_skills_pending(db_session, set(affected_uuids)):
+        return error
 
     dal.sync_group_external_id(group.id, patched.externalId)
     dal.commit()
+    push_skills_for_users(set(affected_uuids), db_session)
+    db_session.commit()
 
     # Report the validated sets that were applied, not the raw added_ids /
     # removed_ids from the request, which can contain entries that were rejected.
@@ -1559,6 +1596,7 @@ def delete_group(
     db_session: Session = Depends(get_session),
 ) -> Response | ScimJSONResponse:
     """Delete a group (RFC 7644 §3.6)."""
+    lock_group_membership(db_session)
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
@@ -1583,8 +1621,12 @@ def delete_group(
 
     # Recompute permissions for users who lost this group membership.
     recompute_user_permissions__no_commit(affected_user_ids, db_session)
+    if error := _mark_skills_pending(db_session, set(affected_user_ids)):
+        return error
 
     dal.commit()
+    push_skills_for_users(set(affected_user_ids), db_session)
+    db_session.commit()
 
     emit_audit_event(
         AuditAction.USER_GROUP_DELETE,

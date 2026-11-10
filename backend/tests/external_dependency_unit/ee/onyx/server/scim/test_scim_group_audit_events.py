@@ -9,7 +9,7 @@ hide a real change that landed inside the window.
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -177,3 +177,27 @@ def test_delete_group_records_who_lost_access(
     assert extra["member_ids"] == [str(member.id)]
 
     delete_test_user(db_session, member)
+
+
+def test_membership_changes_refresh_changed_members_after_commit(
+    db_session: Session, token: ScimToken, member_factory: Callable[[], User]
+) -> None:
+    """Group Skill shares and settings follow membership."""
+    kept, dropped, joined = member_factory(), member_factory(), member_factory()
+    name = f"scim-audit-{uuid4().hex[:12]}"
+    group_id = _create(db_session, token, _resource(name, kept, dropped))
+    pushes: list[set[UUID]] = []
+
+    def push(user_ids: set[UUID], session: Session) -> None:
+        assert not session.in_transaction()
+        pushes.append(user_ids)
+
+    with patch("ee.onyx.server.scim.api.push_skills_for_users", side_effect=push):
+        resource = _resource(name, kept, joined)
+        replace_group(
+            str(group_id), resource, token, get_default_provider(), db_session
+        )
+        delete_group(str(group_id), token, db_session)
+
+    assert pushes == [{dropped.id, joined.id}, {kept.id, joined.id}]
+    delete_test_user(db_session, kept, dropped, joined)

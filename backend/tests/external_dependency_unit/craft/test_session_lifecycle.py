@@ -58,7 +58,8 @@ from onyx.server.features.build.session.locks import (
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import (
     ManagedContentPayload,
-    push_managed_content,
+    push_managed_skills,
+    push_user_library,
     record_managed_content_hashes__no_commit,
     refresh_mcp_config_hashes_for_users,
 )
@@ -84,13 +85,16 @@ def _hydrate_managed_content_for_test(
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),
-        library_files=build_user_library_fileset(user.id, db_session),
     )
     db_session.commit()
-    skills_hydrated = push_managed_content(stub_sandbox_manager, sandbox_id, payload)
+    skills_hydrated = push_managed_skills(stub_sandbox_manager, sandbox_id, payload)
     record_managed_content_hashes__no_commit(
         db_session, sandbox_id, payload, skills_hydrated
     )
+    db_session.commit()
+    library_files = build_user_library_fileset(user.id, db_session)
+    db_session.commit()
+    push_user_library(stub_sandbox_manager, sandbox_id, library_files)
     return skills_hydrated
 
 
@@ -1398,6 +1402,7 @@ class TestRestoreSession:
 
         stub_sandbox_manager.health_check_returns = True
         stub_sandbox_manager.session_workspace_exists_returns = False
+        stub_sandbox_manager.write_files_to_sandbox_silent = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.api.get_sandbox_manager",
