@@ -3,6 +3,10 @@ import {
   SKILL_INSTALLATION_POLICIES,
   type SkillInstallationPolicy,
 } from "@/lib/skills/types";
+import {
+  skillLimitViolationSchema,
+  type SkillLimitViolation,
+} from "@/lib/skills/limits";
 
 // Matches server/features/skill/marketplace_models.py and skills/marketplace/models.py.
 const identifier = yup.string().uuid().defined();
@@ -62,6 +66,17 @@ const blockedEntries = yup
   )
   .defined();
 
+// Entry keys the last sync blocked for the Skill limit; each is also in blocked_entries.
+const skillLimitBlocks = yup.mixed<Record<string, SkillLimitViolation>>(
+  (value: unknown): value is Record<string, SkillLimitViolation> =>
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((block) =>
+      skillLimitViolationSchema.isValidSync(block, { strict: true })
+    )
+);
+
 export const marketplaceSchema = yup
   .object({
     id: identifier,
@@ -96,6 +111,7 @@ export const marketplaceSchema = yup
     last_synced_at: yup.string().nullable().defined(),
     last_error: yup.string().nullable().defined(),
     blocked_entries: blockedEntries,
+    skill_limit_blocks: skillLimitBlocks,
     retirement_proposal: retirementProposalSchema.nullable(),
     live_skill_count: yup.number().integer().min(0).defined(),
     retired_skill_count: yup.number().integer().min(0).defined(),

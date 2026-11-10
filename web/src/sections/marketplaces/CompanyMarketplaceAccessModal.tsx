@@ -15,6 +15,7 @@ import {
 } from "@/lib/marketplaces/hooks";
 import type { Marketplace } from "@/lib/marketplaces/types";
 import { fetchErrorDetail, skipRetryOnAuthError } from "@/lib/fetcher";
+import { useSkillLimitFeedback } from "@/lib/skills/hooks";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission } from "@/lib/types";
@@ -119,6 +120,7 @@ function AccessForm({
   refresh,
 }: AccessFormProps) {
   const t = useTranslations("marketplaces");
+  const skillLimit = useSkillLimitFeedback();
   const access = useCompanyMarketplaceAccess(marketplaceAccessDraft(snapshot));
   const cache = useSWRConfig();
   const [saving, setSaving] = useState(false);
@@ -149,7 +151,11 @@ function AccessForm({
       });
     } catch (error) {
       if (alive.current) {
-        setFailure(fetchErrorDetail(error) ?? t("requestError"));
+        setFailure(
+          skillLimit(error)?.description ??
+            fetchErrorDetail(error) ??
+            t("requestError")
+        );
         setSaving(false);
         pending.current = false;
       }

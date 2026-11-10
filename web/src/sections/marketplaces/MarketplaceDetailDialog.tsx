@@ -35,6 +35,7 @@ import {
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
 import { deleteUserSkill } from "@/lib/skills/api";
+import { useSkillLimitFeedback } from "@/lib/skills/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
@@ -84,6 +85,7 @@ function DetailSession({
   getCountLabel,
 }: MarketplaceDetailDialogProps) {
   const t = useTranslations("marketplaces");
+  const skillLimit = useSkillLimitFeedback();
   const format = useFormatter();
   const versionsT = useTranslations("skills.versions");
   const { isSmallScreen } = useScreenSize();
@@ -219,7 +221,8 @@ function DetailSession({
     } catch (caught) {
       if (alive.current) {
         setFailure(
-          fetchErrorDetail(caught) ??
+          skillLimit(caught)?.description ??
+            fetchErrorDetail(caught) ??
             (caught instanceof Error ? caught.message : t("requestError"))
         );
         // A rejected confirmation must be reviewed again against fresh detail.
@@ -390,16 +393,27 @@ function DetailSession({
                       </Section>
                     )}
                     {Object.entries(data.marketplace.blocked_entries).map(
-                      ([entry, reason]) => (
-                        <MessageCard
-                          key={entry}
-                          variant="warning"
-                          title={entry}
-                          description={reason}
-                          outerPadding={1}
-                          innerPadding={1}
-                        />
-                      )
+                      ([entry, reason]) => {
+                        const limit =
+                          data.marketplace.skill_limit_blocks?.[entry];
+                        return (
+                          <MessageCard
+                            key={entry}
+                            variant="warning"
+                            title={entry}
+                            description={
+                              limit
+                                ? t("skillLimitBlock", {
+                                    limit: limit.failed_limit,
+                                    count: limit.affected_user_count,
+                                  })
+                                : reason
+                            }
+                            outerPadding={1}
+                            innerPadding={1}
+                          />
+                        );
+                      }
                     )}
                     {data.skills.map((skill) => (
                       <Section

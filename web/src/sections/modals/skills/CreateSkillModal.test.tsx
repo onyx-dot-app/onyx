@@ -178,6 +178,51 @@ describe("CreateSkillModal", () => {
     expect(mockInspectSkillBundle).not.toHaveBeenCalled();
   });
 
+  it("shows localized limit feedback beside the refused ZIP", async () => {
+    const user = setupUser();
+    mockUploadSkillBundles.mockResolvedValue({
+      imported: [
+        { skill: { id: "alpha", name: "alpha" }, disabled_reason: null },
+      ],
+      not_imported: [
+        {
+          path: "beta.zip",
+          name: "beta.zip",
+          reason: "Untranslated server detail",
+          skill_limit: {
+            failed_limit: "files",
+            affected_user_count: 3,
+            usage: null,
+          },
+        },
+      ],
+    });
+    render(
+      <CreateSkillModal
+        open
+        onClose={jest.fn()}
+        onContinue={jest.fn()}
+        onImported={jest.fn()}
+      />
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Select multiple bundles" })
+    );
+    await user.click(screen.getByRole("button", { name: "Import 2 skills" }));
+    expect(
+      await screen.findByText("beta.zip: Skill file limit reached")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This change would put 3 users over the skill file limit."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Untranslated server detail/)
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("1 skill imported. 1 failed.")).toBeInTheDocument();
+  });
+
   it("starts a fresh batch when the dialog is reopened", async () => {
     const user = setupUser();
     mockUploadSkillBundles.mockResolvedValue({

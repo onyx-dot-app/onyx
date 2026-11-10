@@ -258,10 +258,32 @@ test.each([400, 403, 409, 503])(
   }
 );
 
+test("reads Skill limit blocks beside the generic blocked reasons", async () => {
+  const row = {
+    ...marketplace,
+    blocked_entries: { "skills/big": "skill limit", "skills/odd": "invalid" },
+    skill_limit_blocks: {
+      "skills/big": {
+        failed_limit: "files",
+        affected_user_count: 4,
+        usage: null,
+      },
+    },
+  };
+  jest.spyOn(global, "fetch").mockResolvedValue(Response.json([row]));
+  await expect(listMarketplaces()).resolves.toEqual([row]);
+});
+
 test.each([
   { ...marketplace, sync_requested: "true" },
   { ...marketplace, live_skill_count: -1 },
   { ...marketplace, blocked_entries: { broken: { reason: "invalid shape" } } },
+  {
+    ...marketplace,
+    skill_limit_blocks: {
+      big: { failed_limit: "folders", affected_user_count: 1, usage: null },
+    },
+  },
   {
     ...marketplace,
     retirement_proposal: {

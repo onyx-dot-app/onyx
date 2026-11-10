@@ -106,6 +106,15 @@ def test_batch_import_refuses_only_the_bundle_over_the_limit(clean: Session) -> 
     assert response.imported == []
     assert len(response.not_imported) == 1
     assert "limit" in response.not_imported[0].reason
+    limit = response.not_imported[0].skill_limit
+    assert limit is not None
+    assert limit.failed_limit == SkillLimit.BYTES
+    assert limit.affected_user_count == 1
+    assert limit.usage is not None
+    assert limit.usage.bytes == (
+        SKILL_WRITE_MAX_BYTES
+        + prepare_skill_bundle(bundle(small), "skill.zip").metadata.unpacked_size_bytes
+    )
     # Without auto-enable the upload adds nothing the user gets.
     response = api.create_custom_skills_batch(
         [upload(bundle(small))], False, None, user, clean, http_request=REQUEST

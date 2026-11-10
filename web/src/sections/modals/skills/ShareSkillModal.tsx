@@ -44,7 +44,11 @@ import {
   resetSkillMarketplaceAccess,
 } from "@/lib/skills/api";
 import { canReadSkillHistory, canShareSkill } from "@/lib/skills/permissions";
-import { useInstallationPolicyOptions } from "@/lib/skills/hooks";
+import {
+  useInstallationPolicyOptions,
+  useSkillErrorMessage,
+  useSkillErrorToast,
+} from "@/lib/skills/hooks";
 import type {
   CustomSkill,
   SkillEditableDetail,
@@ -125,6 +129,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   );
   const skill = props.mode === "create" ? props.draft : loadedSkill;
   const t = useTranslations("skills.modals");
+  const skillErrorToast = useSkillErrorToast();
+  const skillErrorMessage = useSkillErrorMessage();
   const skillCopy = useTranslations("skills");
   const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
@@ -477,9 +483,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       closeModal();
     } catch (err) {
       console.error("Failed to update skill sharing", err);
-      toast.error(
-        err instanceof Error ? err.message : t("share.saveErrorToast.message")
-      );
+      skillErrorToast(err, t("share.saveErrorToast.message"));
     } finally {
       setSaving(false);
     }
@@ -506,11 +510,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       closeModal();
     } catch (err) {
       console.error("Failed to transfer skill ownership", err);
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : t("share.transferErrorToast.message")
-      );
+      skillErrorToast(err, t("share.transferErrorToast.message"));
     } finally {
       setSaving(false);
     }
@@ -529,9 +529,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       toast.success(t("share.marketplace.resetSuccess"));
     } catch (error) {
       setResetError(
-        error instanceof Error
-          ? error.message
-          : t("share.marketplace.resetError")
+        skillErrorMessage(error, t("share.marketplace.resetError"))
       );
     } finally {
       setSaving(false);
