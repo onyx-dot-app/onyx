@@ -51,7 +51,10 @@ def test_history_current_marker_includes_edit_after_authorization(
     session: Session, user: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("history-concurrent-edit")), False, user, session
+        upload(bundle("history-concurrent-edit")),
+        False,
+        user,
+        session,
     )
     list_versions = api.list_skill_versions
 
@@ -81,7 +84,10 @@ def test_history_without_current_pointer_has_no_current_marker(
     session: Session, user: User
 ) -> None:
     created = api.create_custom_skill(
-        upload(bundle("history-missing-pointer")), False, user, session
+        upload(bundle("history-missing-pointer")),
+        False,
+        user,
+        session,
     )
     skill = session.get(Skill, created.id)
     assert skill is not None
@@ -98,11 +104,17 @@ def test_unreadable_history_refuses_preview_and_restore(
     session: Session, user: User, damage: str
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("history-damage")), False, user, session
+        upload(bundle("history-damage")),
+        False,
+        user,
+        session,
     )
     original_id = api.list_custom_skill_versions(skill.id, user, session)[0].id
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "Current instructions")), user, session
+        skill.id,
+        upload(bundle(skill.name, "Current instructions")),
+        user,
+        session,
     )
     original = session.get(SkillVersion, original_id)
     assert original is not None and original.bundle_file_id is not None
@@ -148,11 +160,17 @@ def test_failed_restore_commit_defers_cleanup(
     session: Session, user: User, monkeypatch: pytest.MonkeyPatch, committed: bool
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("restore-rollback")), False, user, session
+        upload(bundle("restore-rollback")),
+        False,
+        user,
+        session,
     )
     original = api.list_custom_skill_versions(skill.id, user, session)[0]
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "Current instructions")), user, session
+        skill.id,
+        upload(bundle(skill.name, "Current instructions")),
+        user,
+        session,
     )
     before_history = api.list_custom_skill_versions(skill.id, user, session)
     before_files = set(session.scalars(select(FileRecord.file_id)))
@@ -168,7 +186,12 @@ def test_failed_restore_commit_defers_cleanup(
     with monkeypatch.context() as patch:
         patch.setattr(session, "commit", fail_commit)
         with pytest.raises(RuntimeError, match="commit rejected"):
-            api.restore_custom_skill_version(skill.id, original.id, user, session)
+            api.restore_custom_skill_version(
+                skill.id,
+                original.id,
+                user,
+                session,
+            )
     history = api.list_custom_skill_versions(skill.id, user, session)
     assert len(history) == len(before_history) + int(committed)
     if not committed:
@@ -200,10 +223,14 @@ def test_history_without_creator_and_builtin_refusal(
     session: Session, user: User
 ) -> None:
     skill = api.create_custom_skill(
-        upload(bundle("unknown-creator")), False, user, session
+        upload(bundle("unknown-creator")),
+        False,
+        user,
+        session,
     )
     version = session.get(
-        SkillVersion, api.list_custom_skill_versions(skill.id, user, session)[0].id
+        SkillVersion,
+        api.list_custom_skill_versions(skill.id, user, session)[0].id,
     )
     assert version is not None
     version.created_by_user_id = None
@@ -232,7 +259,10 @@ def test_stored_read_boundaries(
     from onyx.skills import content, validation
 
     response = api.create_custom_skill(
-        upload(bundle("bounded-reader")), False, user, session
+        upload(bundle("bounded-reader")),
+        False,
+        user,
+        session,
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -282,7 +312,10 @@ def test_current_editor_rejects_expansion_before_inspection(
     from onyx.skills import content
 
     response = api.create_custom_skill(
-        upload(bundle("bounded-editor")), False, user, session
+        upload(bundle("bounded-editor")),
+        False,
+        user,
+        session,
     )
     monkeypatch.setattr(
         content,
@@ -308,7 +341,10 @@ def test_legacy_current_and_preview_keep_stored_allowances(
     from onyx.skills.validation import load_stored_custom_skill_bundle
 
     response = api.create_custom_skill(
-        upload(bundle("legacy-reader")), False, user, session
+        upload(bundle("legacy-reader")),
+        False,
+        user,
+        session,
     )
     skill = session.get(Skill, response.id)
     assert skill is not None and skill.current_version is not None
@@ -499,7 +535,12 @@ def test_restore_legacy_file_count_preserves_upload_limit(
             archive.writestr(f"notes/{number}.txt", "legacy")
     content = output.getvalue()
     with pytest.raises(OnyxError) as caught:
-        api.create_custom_skill(upload(content), False, user, session)
+        api.create_custom_skill(
+            upload(content),
+            False,
+            user,
+            session,
+        )
     assert caught.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
     assert list(session.scalars(select(FileRecord.file_id))) == []
     file_id = save_skill_bundle_bytes(
@@ -517,7 +558,10 @@ def test_restore_legacy_file_count_preserves_upload_limit(
     original = repair_skill_version(skill, session)
     session.commit()
     api.replace_current_user_skill_bundle(
-        skill.id, upload(bundle(skill.name, "New")), user, session
+        skill.id,
+        upload(bundle(skill.name, "New")),
+        user,
+        session,
     )
     restored = api.restore_custom_skill_version(skill.id, original.id, user, session)
     assert restored.instructions_markdown == "Original"
@@ -535,7 +579,10 @@ def test_stored_restore_preserves_admission_safety(
     session: Session, user: User, monkeypatch: pytest.MonkeyPatch, damage: str
 ) -> None:
     created = api.create_custom_skill(
-        upload(bundle("restore-safety")), False, user, session
+        upload(bundle("restore-safety")),
+        False,
+        user,
+        session,
     )
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -562,7 +609,12 @@ def test_stored_restore_preserves_admission_safety(
     if damage == "stored_bytes":
         monkeypatch.setattr(ingest, "DEFAULT_STORED_ZIP_MAX_BYTES", len(content) - 1)
     with pytest.raises(OnyxError):
-        api.restore_custom_skill_version(created.id, historical.id, user, session)
+        api.restore_custom_skill_version(
+            created.id,
+            historical.id,
+            user,
+            session,
+        )
     session.rollback()
     assert set(session.scalars(select(FileRecord.file_id))) == before_files
     assert api.list_custom_skill_versions(created.id, user, session) == before_history

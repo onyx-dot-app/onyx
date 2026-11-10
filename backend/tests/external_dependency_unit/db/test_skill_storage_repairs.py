@@ -6,6 +6,7 @@ from typing import Never
 from unittest.mock import patch
 
 import pytest
+from fastapi import Request
 from psycopg2 import OperationalError
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -113,7 +114,9 @@ def test_delete_cleans_versions_only_after_commit(session: Session, user: User) 
     session.rollback()
     delete_unreferenced_skill_bundles(pending, session)
     assert set(session.scalars(select(FileRecord.file_id))) == files
-    api.delete_current_user_skill(created.id, user, session)
+    api.delete_current_user_skill(
+        created.id, user, session, http_request=Request({"type": "http"})
+    )
     assert list(session.scalars(select(FileRecord.file_id))) == []
 
 
