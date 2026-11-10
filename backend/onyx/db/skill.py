@@ -81,6 +81,7 @@ from onyx.db.skill_version import (
     skill_bundle_file_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.db.users import lock_group_membership
 from onyx.db.utils import is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -433,6 +434,7 @@ def add_new_skill__no_commit(
 
 
 def _lock_user_skill_preferences(user_id: UUID, db_session: Session) -> None:
+    lock_group_membership(db_session)
     # Serialize preference changes without blocking foreign-key reads from sharing.
     db_session.execute(
         select(User.__table__.c.id)

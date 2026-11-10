@@ -9,6 +9,7 @@ from onyx.auth.permissions import has_global_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.db.enums import Permission, SkillInstallationPolicy, SkillSharePermission
 from onyx.db.models import User
+from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -61,6 +62,7 @@ def mutate_resource_access[Resource](
     allow_partial: bool = False,
 ) -> AccessMutationResult:
     """Caller commits, then pushes result.affected once for the whole batch."""
+    lock_group_membership(db_session)
     result = AccessMutationResult()
     resources: dict[UUID, Resource] = {}
     for resource_id in sorted(set(resource_ids)):

@@ -20,6 +20,8 @@ from onyx.db.external_app import (
 from onyx.db.models import ExternalApp, Skill, User
 from onyx.db.skill import SkillManagementPolicy, fetch_skill
 from onyx.db.skill_version import persist_skill_version_validity
+from onyx.db.users import lock_group_membership
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill import api
 from onyx.skills.bundle import inspect_custom_bundle
 from onyx.skills.content import read_custom_skill_bundle_bytes
@@ -90,6 +92,17 @@ def test_waiting_edit_reads_committed_version(
                         db_session=writer,
                     )
                 elif operation == "upload":
+                    with pytest.raises(
+                        OnyxError, match="Skill content changed"
+                    ) as conflict:
+                        api.upload_current_user_skill_files(
+                            skill_id,
+                            upload(b"second", "second.txt"),
+                            second_user,
+                            writer,
+                        )
+                    assert conflict.value.status_code == 409
+                    writer.rollback()
                     api.upload_current_user_skill_files(
                         skill_id, upload(b"second", "second.txt"), second_user, writer
                     )
@@ -105,6 +118,7 @@ def test_waiting_edit_reads_committed_version(
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
+    lock_group_membership(session)
     first = fetch_skill(
         skill_id,
         policy=SkillManagementPolicy.EDIT,
