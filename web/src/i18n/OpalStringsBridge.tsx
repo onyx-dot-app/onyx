@@ -95,6 +95,8 @@ export default function OpalStringsBridge({
       columns: t("table.columns"),
       shownColumns: t("table.shownColumns"),
       alwaysShown: t("table.alwaysShown"),
+      tableSelectAll: t("table.selectAll"),
+      tableSelectRow: (name) => t("table.selectRow", { name }),
       dragToReorder: t("table.dragToReorder"),
       viewSelected: t("table.viewSelected"),
       deselectAll: t("table.deselectAll"),

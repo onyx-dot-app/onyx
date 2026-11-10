@@ -21,7 +21,7 @@ import QualifierContainer from "@opal/components/table/QualifierContainer";
 import ActionsContainer from "@opal/components/table/ActionsContainer";
 import DragOverlayRow from "@opal/components/table/DragOverlayRow";
 import Footer from "@opal/components/table/Footer";
-import { InputCheckbox } from "@opal/components";
+import { useOpalStrings } from "@opal/strings";
 import { TableSizeProvider } from "@opal/components/table/TableSizeContext";
 import { ColumnVisibilityPopover } from "@opal/components/table/ColumnVisibilityPopover";
 import { SortingPopover } from "@opal/components/table/ColumnSortabilityPopover";
@@ -157,6 +157,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
     prominence = "primary",
     selectionBehavior = "no-select",
     onSelectionChange,
+    selectionDisabled = false,
+    selectAllLabel,
+    getRowSelectionLabel,
     onRowClick,
     getRowLabel,
     query,
@@ -165,6 +168,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
     emptyState,
     header = true,
   } = props;
+  const strings = useOpalStrings();
 
   const footerConfig: DataTableFooterConfig | undefined =
     footer === true ? {} : footer || undefined;
@@ -267,6 +271,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
   // Drag indexes come from the rows the query leaves visible, so hidden rows
   // keep their positions.
   const filteredRows = table.getFilteredRowModel().rows;
+  const selectedVisibleCount = table.getFilteredSelectedRowModel().rows.length;
   const draggableData = useMemo(
     () => filteredRows.map((row) => row.original),
     [filteredRows]
@@ -304,6 +309,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
           multiSelect={isMultiSelect}
           selectionState={selectionState}
           selectedCount={selectedCount}
+          selectionDisabled={selectionDisabled}
           onClear={
             config.onClear ??
             (() => {
@@ -407,19 +413,20 @@ export function Table<TData>(props: DataTableProps<TData>) {
                         return (
                           <QualifierContainer key={header.id} type="head">
                             {isMultiSelect && (
-                              <InputCheckbox
-                                checked={isAllRowsSelected}
-                                indeterminate={
-                                  !isAllRowsSelected && selectedCount > 0
+                              <TableQualifier
+                                content="checkbox"
+                                selectable
+                                selected={isAllRowsSelected}
+                                selectionLabel={
+                                  selectAllLabel ?? strings.tableSelectAll
                                 }
-                                onCheckedChange={(checked) => {
-                                  // Indeterminate → clear all; otherwise toggle normally
-                                  if (!isAllRowsSelected && selectedCount > 0) {
-                                    toggleAllRowsSelected(false);
-                                  } else {
-                                    toggleAllRowsSelected(checked);
-                                  }
-                                }}
+                                disabled={
+                                  selectionDisabled || filteredRows.length === 0
+                                }
+                                indeterminate={
+                                  !isAllRowsSelected && selectedVisibleCount > 0
+                                }
+                                onSelectChange={toggleAllRowsSelected}
                               />
                             )}
                           </QualifierContainer>
@@ -536,6 +543,9 @@ export function Table<TData>(props: DataTableProps<TData>) {
                     sortableId={rowId}
                     prominence={prominence}
                     selected={row.getIsSelected()}
+                    aria-selected={
+                      isSelectable ? row.getIsSelected() : undefined
+                    }
                     data-clickable={onRowClick ? true : undefined}
                     tabIndex={onRowClick ? 0 : undefined}
                     aria-label={
@@ -560,7 +570,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                       }
                       if (onRowClick) {
                         onRowClick(row.original);
-                      } else if (isSelectable) {
+                      } else if (isSelectable && !selectionDisabled) {
                         if (!isMultiSelect) {
                           // single-select: clear all, then select this row
                           table.toggleAllRowsSelected(false);
@@ -590,6 +600,13 @@ export function Table<TData>(props: DataTableProps<TData>) {
                               background={qDef.background}
                               avatar={qDef.avatar}
                               selectable={showQualifierCheckbox}
+                              disabled={selectionDisabled}
+                              selectionLabel={
+                                getRowSelectionLabel?.(row.original) ??
+                                strings.tableSelectRow(
+                                  getRowLabel?.(row.original) ?? row.id
+                                )
+                              }
                               selected={
                                 showQualifierCheckbox && row.getIsSelected()
                               }
