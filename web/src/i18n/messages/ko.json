@@ -17297,6 +17297,13 @@
           "confirmReset": "접근 재설정",
           "resetSuccess": "마켓플레이스 접근 설정이 복원되었습니다",
           "resetError": "접근을 재설정하지 못했습니다. 다시 시도하세요."
+        },
+        "groupInstallation": {
+          "title": "그룹 설치",
+          "description": "그룹 설정은 해당 구성원에 대해 회사 설정을 대체합니다. 여러 그룹에서는 필수, 기본 설치, 설치 가능, 사용 불가 순으로 우선 적용됩니다.",
+          "ariaLabel": "{name}의 설치",
+          "inherit": "회사 설정",
+          "inheritDescription": "이 그룹에 회사 설정을 사용합니다."
         }
       },
       "placeholders": {
@@ -17464,7 +17471,9 @@
       "invitedOnly": "초대한 사용자 및 그룹",
       "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
       "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
-      "moreActions": "추가 작업"
+      "moreActions": "추가 작업",
+      "groupInstallationDescription": "새 그룹마다 설정을 추가합니다. '변경하지 않음'은 각 스킬의 현재 그룹 설정을 유지합니다.",
+      "detachWarning": "{count, plural, other {선택한 스킬 #개가 회사 마켓플레이스를 따릅니다. 저장하면 자체 액세스를 갖게 되며 이후 동기화에서도 유지됩니다.}}"
     },
     "synced": {
       "view": "콘텐츠 보기",

@@ -1275,6 +1275,44 @@ describe("SkillsPage preference toggles", () => {
     ).toBeDisabled();
   });
 
+  it("warns in bulk sharing only for selected skills that follow company access", async () => {
+    mockPermissions = [Permission.MANAGE_SKILLS];
+    const source = {
+      id: "company-source",
+      name: "Team tools",
+      personal: false,
+      folder: null,
+      follows_access: true,
+      can_share: true,
+    };
+    skillsData.customs = [
+      {
+        ...customSkill("following", "following-skill"),
+        user_permission: "EDITOR",
+        marketplace: source,
+      },
+      {
+        ...customSkill("overridden", "overridden-skill"),
+        user_permission: "EDITOR",
+        marketplace: { ...source, follows_access: false },
+      },
+      { ...customSkill("plain", "plain-skill"), user_permission: "OWNER" },
+    ];
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Select all visible custom skills",
+      })
+    );
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(
+      screen.getByText(
+        "1 selected skill follows its company marketplace. Saving gives it its own access, and later syncs keep that access."
+      )
+    ).toBeVisible();
+  });
+
   it("lists exactly the skills selected for deletion before confirming", async () => {
     const names = [
       "first-skill",

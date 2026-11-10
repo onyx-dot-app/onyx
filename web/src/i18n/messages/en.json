@@ -17297,6 +17297,13 @@
           "confirmReset": "Reset access",
           "resetSuccess": "Marketplace access restored",
           "resetError": "Could not reset access. Try again."
+        },
+        "groupInstallation": {
+          "title": "Group Installation",
+          "description": "A group setting replaces the company setting for its members. Across groups, precedence is: Required, Installed by default, Available to install, then Not available.",
+          "ariaLabel": "Installation for {name}",
+          "inherit": "Company setting",
+          "inheritDescription": "Use the company setting for this group."
         }
       },
       "placeholders": {
@@ -17464,7 +17471,9 @@
       "invitedOnly": "Invited people and groups",
       "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
       "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
-      "moreActions": "More actions"
+      "moreActions": "More actions",
+      "groupInstallationDescription": "Add a setting for each new group. Keep unchanged leaves each skill's current group setting.",
+      "detachWarning": "{count, plural, one {# selected skill follows its company marketplace. Saving gives it its own access, and later syncs keep that access.} other {# selected skills follow their company marketplace. Saving gives them their own access, and later syncs keep that access.}}"
     },
     "synced": {
       "view": "View content",
