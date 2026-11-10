@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Modal, Text } from "@opal/components";
+import { Button, Card, MessageCard, Modal, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgBlocks, SvgLock, SvgOrganization, SvgUsers } from "@opal/icons";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -18,12 +18,18 @@ import type {
 } from "@/lib/skills/types";
 import type { SkillShareUpdatePayload } from "@/lib/skills/api";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
-import { SharePermissionMenu } from "@/lib/permissions/components";
+import {
+  SharePermissionMenu,
+  type SharePermissionMenuOption,
+} from "@/lib/permissions/components";
+import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
 import { useSharePermissionOptions } from "@/sections/modals/shareAccessConstants";
 import { useInstallationPolicyOptions } from "@/lib/skills/hooks";
 
 interface BulkSkillSharingModalProps {
   count: number;
+  /** Selected company synced skills that still follow marketplace access. */
+  followingMarketplaceCount?: number;
   canChangeOrgAccess: boolean;
   canChangeUserAccess: boolean;
   open: boolean;
@@ -32,8 +38,11 @@ interface BulkSkillSharingModalProps {
   onSave: (sharing: SkillShareUpdatePayload) => Promise<void>;
 }
 
+type GroupPolicyChoice = SkillInstallationPolicy | "KEEP" | "INHERIT";
+
 export default function BulkSkillSharingModal({
   count,
+  followingMarketplaceCount = 0,
   canChangeOrgAccess,
   canChangeUserAccess,
   open,
@@ -43,9 +52,13 @@ export default function BulkSkillSharingModal({
 }: BulkSkillSharingModalProps) {
   const t = useTranslations("skills.bulk");
   const shareCopy = useTranslations("skills.modals.share");
-  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
-    Permission.MANAGE_SKILLS
-  );
+  const {
+    isGlobalHolder: canManageCompanySkills,
+    isScopedManager: isScopedSkillManager,
+  } = usePermissionAuthority(Permission.MANAGE_SKILLS);
+  // The server checks each skill's groups; this only hides controls that
+  // cannot succeed for anyone without manage-skills.
+  const canSetGroupPolicies = canManageCompanySkills || isScopedSkillManager;
   const { data: users } = useShareableUsers({ includeApiKeys: true });
   const { data: groups } = useShareableGroups();
   const [scope, setScope] = useState<"KEEP" | "PRIVATE" | "PUBLIC">("KEEP");
@@ -59,8 +72,21 @@ export default function BulkSkillSharingModal({
   const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
     []
   );
+  const [groupPolicies, setGroupPolicies] = useState<
+    Map<number, GroupPolicyChoice>
+  >(() => new Map());
   const permissionOptions = useSharePermissionOptions();
   const installationOptions = useInstallationPolicyOptions();
+  const groupPolicyOptions: SharePermissionMenuOption<GroupPolicyChoice>[] = [
+    { value: "KEEP", label: t("unchanged"), icon: SvgBlocks },
+    {
+      value: "INHERIT",
+      label: shareCopy("groupInstallation.inherit"),
+      description: shareCopy("groupInstallation.inheritDescription"),
+      icon: SvgOrganization,
+    },
+    ...installationOptions,
+  ];
   const canChangeCompanyAccess = canManageCompanySkills && canChangeOrgAccess;
   const effectiveScope = canChangeCompanyAccess ? scope : "KEEP";
   const changed =
@@ -78,6 +104,7 @@ export default function BulkSkillSharingModal({
     setPublicPermission("VIEWER");
     setStagedUsers([]);
     setStagedGroups([]);
+    setGroupPolicies(new Map());
   }
 
   async function save() {
@@ -93,10 +120,19 @@ export default function BulkSkillSharingModal({
         permission,
       }));
     if (stagedGroups.length)
-      sharing.group_shares = stagedGroups.map((group) => ({
-        group_id: group.id,
-        permission,
-      }));
+      sharing.group_shares = stagedGroups.map((group) => {
+        const choice = canSetGroupPolicies
+          ? (groupPolicies.get(group.id) ?? "KEEP")
+          : "KEEP";
+        // KEEP omits the setting so each skill keeps its own override.
+        return choice === "KEEP"
+          ? { group_id: group.id, permission }
+          : {
+              group_id: group.id,
+              permission,
+              installation_policy: choice === "INHERIT" ? null : choice,
+            };
+      });
     await onSave(sharing);
     reset();
   }
@@ -189,13 +225,64 @@ export default function BulkSkillSharingModal({
                     current.filter((user) => user.id !== id)
                   )
                 }
-                onRemoveGroup={(id) =>
+                onRemoveGroup={(id) => {
                   setStagedGroups((current) =>
                     current.filter((group) => group.id !== id)
-                  )
-                }
+                  );
+                  setGroupPolicies((current) => {
+                    const next = new Map(current);
+                    next.delete(id);
+                    return next;
+                  });
+                }}
               />
             </Section>
+            {canSetGroupPolicies && stagedGroups.length > 0 && (
+              <Section gap={2} height="auto" alignItems="stretch">
+                <Content
+                  font="main-ui-action"
+                  title={shareCopy("groupInstallation.title")}
+                  description={t("groupInstallationDescription")}
+                />
+                <Card border="solid" padding={2}>
+                  <Section gap={1} height="auto" alignItems="stretch">
+                    {stagedGroups.map((group) => (
+                      <ShareAccessRow
+                        key={group.id}
+                        avatarIcon={SvgUsers}
+                        icon={SvgUsers}
+                        title={group.name}
+                        rightChildren={
+                          <SharePermissionMenu
+                            ariaLabel={shareCopy(
+                              "groupInstallation.ariaLabel",
+                              {
+                                name: group.name,
+                              }
+                            )}
+                            disabled={saving}
+                            menuWidth={70}
+                            value={groupPolicies.get(group.id) ?? "KEEP"}
+                            options={groupPolicyOptions}
+                            onChange={(choice) =>
+                              setGroupPolicies((current) =>
+                                new Map(current).set(group.id, choice)
+                              )
+                            }
+                          />
+                        }
+                      />
+                    ))}
+                  </Section>
+                </Card>
+              </Section>
+            )}
+            {followingMarketplaceCount > 0 && (
+              <MessageCard
+                variant="warning"
+                title={t("detachWarning", { count: followingMarketplaceCount })}
+              />
+            )}
           </Section>
         </Modal.Body>
         <Modal.Footer>

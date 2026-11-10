@@ -1025,6 +1025,14 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
 
       <BulkSkillSharingModal
         count={selectedItems.length}
+        followingMarketplaceCount={
+          selectedItems.filter(
+            ({ skill: { marketplace } }) =>
+              marketplace !== null &&
+              !marketplace.personal &&
+              marketplace.follows_access
+          ).length
+        }
         canChangeOrgAccess={
           selectedItems.every((item) => item.skill.external_app === null) &&
           canManageCompanySkills

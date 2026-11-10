@@ -1,5 +1,18 @@
-import type { CustomSkill } from "@/lib/skills/types";
+import type {
+  CustomSkill,
+  SkillGroupShare,
+  SkillInstallationPolicy,
+} from "@/lib/skills/types";
 import type { SkillShareUpdatePayload } from "@/lib/skills/api";
+
+/** A group grant to save. `installation_policy` is sent only when present:
+ * absent keeps the saved override, null clears it. */
+export type SkillGroupShareDraft = Omit<
+  SkillGroupShare,
+  "installation_policy"
+> & {
+  installation_policy?: SkillInstallationPolicy | null;
+};
 
 export type SkillSharingDraft = Pick<
   CustomSkill,
@@ -8,10 +21,10 @@ export type SkillSharingDraft = Pick<
   | "ownership_vacant"
   | "user_permission"
   | "user_shares"
-  | "group_shares"
   | "public_permission"
   | "installation_policy"
 > & {
+  group_shares: SkillGroupShareDraft[];
   external_app: Pick<NonNullable<CustomSkill["external_app"]>, "name"> | null;
 };
 
@@ -54,6 +67,9 @@ export function serializeSkillSharing(
     group_shares: draft.group_shares.map((share) => ({
       group_id: share.group_id,
       permission: share.permission,
+      ...(share.installation_policy !== undefined && {
+        installation_policy: share.installation_policy,
+      }),
     })),
   };
 }

@@ -4,17 +4,19 @@ import {
   screen,
   setupUser,
   waitFor,
+  within,
 } from "@tests/setup/test-utils";
 import { Permission } from "@/lib/types";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 
 let mockPermissions: string[] = [];
+let mockCapabilities: string[] = [];
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
     isAdmin: false,
     permissions: mockPermissions,
-    adminCapabilities: [Permission.MANAGE_SKILLS],
+    adminCapabilities: mockCapabilities,
   }),
 }));
 jest.mock("@/hooks/useShareableUsers", () => ({
@@ -28,13 +30,21 @@ jest.mock("@/hooks/useShareableUsers", () => ({
 }));
 jest.mock("@/hooks/useShareableGroups", () => ({
   __esModule: true,
-  default: () => ({ data: [{ id: 7, name: "Cash Kings" }] }),
+  default: () => ({
+    data: [
+      { id: 7, name: "Cash Kings" },
+      { id: 8, name: "Night Owls" },
+      { id: 9, name: "Early Birds" },
+    ],
+  }),
 }));
 
 describe("BulkSkillSharingModal", () => {
   beforeEach(() => {
     mockPermissions = [Permission.MANAGE_SKILLS];
+    mockCapabilities = [Permission.MANAGE_SKILLS];
   });
+
   async function stageGroup(name: string) {
     const user = setupUser();
     await user.type(
@@ -46,6 +56,128 @@ describe("BulkSkillSharingModal", () => {
     );
   }
 
+  function renderModal(props: { onSave: jest.Mock; following?: number }) {
+    render(
+      <BulkSkillSharingModal
+        count={3}
+        followingMarketplaceCount={props.following}
+        canChangeUserAccess
+        canChangeOrgAccess
+        open
+        saving={false}
+        onClose={jest.fn()}
+        onSave={props.onSave}
+      />
+    );
+  }
+
+  it("adds groups and sends only the settings chosen for them", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    renderModal({ onSave });
+    expect(screen.queryByText("Group Installation")).not.toBeInTheDocument();
+    await stageGroup("Cash Kings");
+    await stageGroup("Night Owls");
+    await stageGroup("Early Birds");
+    expect(
+      screen.getByRole("button", { name: "Installation for Cash Kings" })
+    ).toHaveTextContent("Keep unchanged");
+    await user.click(
+      screen.getByRole("button", { name: "Installation for Night Owls" })
+    );
+    fireEvent.click(screen.getByRole("option", { name: /^Not available/ }));
+    await user.click(
+      screen.getByRole("button", { name: "Installation for Early Birds" })
+    );
+    fireEvent.click(screen.getByRole("option", { name: /^Company setting/ }));
+    await user.click(screen.getByRole("button", { name: "Apply to 3 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        group_shares: [
+          { group_id: 7, permission: "VIEWER" },
+          {
+            group_id: 8,
+            permission: "VIEWER",
+            installation_policy: "NOT_AVAILABLE",
+          },
+          { group_id: 9, permission: "VIEWER", installation_policy: null },
+        ],
+      })
+    );
+  });
+
+  it("drops a removed group's setting", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    renderModal({ onSave });
+    await stageGroup("Cash Kings");
+    await user.click(
+      screen.getByRole("button", { name: "Installation for Cash Kings" })
+    );
+    fireEvent.click(screen.getByRole("option", { name: /^Required/ }));
+    // The staged chip comes first; its remove button has no name of its own.
+    const chip = screen.getAllByText("Cash Kings")[0]!.parentElement!;
+    await user.click(within(chip).getByRole("button"));
+    expect(
+      screen.queryByRole("button", { name: "Installation for Cash Kings" })
+    ).not.toBeInTheDocument();
+    await stageGroup("Cash Kings");
+    expect(
+      screen.getByRole("button", { name: "Installation for Cash Kings" })
+    ).toHaveTextContent("Keep unchanged");
+  });
+
+  it("offers group settings to scoped managers but not to members", async () => {
+    mockPermissions = [];
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    const { unmount } = render(
+      <BulkSkillSharingModal
+        count={2}
+        canChangeUserAccess={false}
+        canChangeOrgAccess={false}
+        open
+        saving={false}
+        onClose={jest.fn()}
+        onSave={onSave}
+      />
+    );
+    await stageGroup("Cash Kings");
+    expect(
+      screen.getByRole("button", { name: "Installation for Cash Kings" })
+    ).toBeEnabled();
+    unmount();
+    mockCapabilities = [];
+    renderModal({ onSave });
+    await stageGroup("Cash Kings");
+    expect(
+      screen.queryByRole("button", { name: "Installation for Cash Kings" })
+    ).not.toBeInTheDocument();
+    await setupUser().click(
+      screen.getByRole("button", { name: "Apply to 3 skills" })
+    );
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        group_shares: [{ group_id: 7, permission: "VIEWER" }],
+      })
+    );
+  });
+
+  it("warns before detaching skills that follow a company marketplace", () => {
+    renderModal({ onSave: jest.fn(), following: 2 });
+    expect(
+      screen.getByText(
+        "2 selected skills follow their company marketplace. Saving gives them their own access, and later syncs keep that access."
+      )
+    ).toBeVisible();
+  });
+
+  it("shows no detach warning without following skills", () => {
+    renderModal({ onSave: jest.fn() });
+    expect(
+      screen.queryByText(/follow their company marketplace/)
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps group sharing available when selected skills forbid individual grants", async () => {
     mockPermissions = [];
     const user = setupUser();
@@ -53,8 +185,8 @@ describe("BulkSkillSharingModal", () => {
     render(
       <BulkSkillSharingModal
         count={2}
-        canChangeOrgAccess={false}
         canChangeUserAccess={false}
+        canChangeOrgAccess={false}
         open
         saving={false}
         onClose={jest.fn()}

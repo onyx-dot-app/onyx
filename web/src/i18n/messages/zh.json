@@ -17297,6 +17297,13 @@
           "confirmReset": "重置访问",
           "resetSuccess": "已恢复市场访问设置",
           "resetError": "无法重置访问。请重试。"
+        },
+        "groupInstallation": {
+          "title": "群组安装",
+          "description": "群组设置会替代其成员的公司设置。跨群组的优先顺序为：必需、默认安装、可安装、不可用。",
+          "ariaLabel": "{name} 的安装",
+          "inherit": "公司设置",
+          "inheritDescription": "此群组使用公司设置。"
         }
       },
       "placeholders": {
@@ -17464,7 +17471,9 @@
       "invitedOnly": "受邀人员和群组",
       "addAccessDescription": "将这些人员和群组添加到每个所选技能。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
       "apply": "{count, plural, one {应用于 # 个技能} other {应用于 # 个技能}}",
-      "moreActions": "更多操作"
+      "moreActions": "更多操作",
+      "groupInstallationDescription": "为每个新群组添加设置。“保持不变”会保留每个技能当前的群组设置。",
+      "detachWarning": "{count, plural, other {所选的 # 个技能遵循公司市场。保存后它们将拥有自己的访问权限，之后的同步会保留该权限。}}"
     },
     "synced": {
       "view": "查看内容",

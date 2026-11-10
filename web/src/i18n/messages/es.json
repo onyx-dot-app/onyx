@@ -17297,6 +17297,13 @@
           "confirmReset": "Restablecer acceso",
           "resetSuccess": "Acceso del marketplace restaurado",
           "resetError": "No se pudo restablecer el acceso. Inténtalo de nuevo."
+        },
+        "groupInstallation": {
+          "title": "Instalación por Grupo",
+          "description": "La configuración de un grupo reemplaza la de la empresa para sus miembros. Entre grupos, el orden de prioridad es: Obligatorio, Instalado por defecto, Disponible para instalar y No disponible.",
+          "ariaLabel": "Instalación para {name}",
+          "inherit": "Configuración de la empresa",
+          "inheritDescription": "Usar la configuración de la empresa para este grupo."
         }
       },
       "placeholders": {
@@ -17464,7 +17471,9 @@
       "invitedOnly": "Personas y grupos invitados",
       "addAccessDescription": "Añade estas personas y grupos a cada habilidad seleccionada. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
       "apply": "{count, plural, one {Aplicar a # habilidad} other {Aplicar a # habilidades}}",
-      "moreActions": "Más acciones"
+      "moreActions": "Más acciones",
+      "groupInstallationDescription": "Añade una configuración para cada grupo nuevo. «Mantener sin cambios» conserva la configuración de grupo actual de cada habilidad.",
+      "detachWarning": "{count, plural, one {# habilidad seleccionada sigue su marketplace de la empresa. Al guardar, obtiene su propio acceso y las sincronizaciones posteriores lo conservan.} other {# habilidades seleccionadas siguen su marketplace de la empresa. Al guardar, obtienen su propio acceso y las sincronizaciones posteriores lo conservan.}}"
     },
     "synced": {
       "view": "Ver contenido",

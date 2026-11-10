@@ -6,6 +6,7 @@ import {
   screen,
   setupUser,
   waitFor,
+  within,
 } from "@tests/setup/test-utils";
 import { Permission, type MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
@@ -300,6 +301,213 @@ describe("ShareSkillModal", () => {
     );
   });
 
+  describe("group installation settings", () => {
+    const groupShares = [
+      {
+        group_id: 1,
+        group_name: "Engineering",
+        permission: "VIEWER",
+        installation_policy: "NOT_AVAILABLE",
+      },
+      {
+        group_id: 2,
+        group_name: "Support",
+        permission: "VIEWER",
+        installation_policy: "REQUIRED",
+      },
+      {
+        group_id: 3,
+        group_name: "Research",
+        permission: "EDITOR",
+        installation_policy: null,
+      },
+    ] as const;
+
+    function renderEdit(overrides: Parameters<typeof customFixture>[0] = {}) {
+      mockLoadSkill.mockResolvedValue(
+        customFixture({
+          user_permission: "OWNER",
+          public_permission: null,
+          group_shares: groupShares.map((share) => ({ ...share })),
+          ...overrides,
+        })
+      );
+      render(
+        <ShareSkillModal
+          mode="edit"
+          skillId="custom-1"
+          open
+          onClose={jest.fn()}
+          onSaved={jest.fn()}
+        />
+      );
+    }
+
+    async function choosePolicy(group: string, option: RegExp) {
+      const user = setupUser();
+      await user.click(
+        await screen.findByRole("button", { name: `Installation for ${group}` })
+      );
+      fireEvent.click(screen.getByRole("option", { name: option }));
+    }
+
+    it("sends only changed overrides: set, cleared and untouched", async () => {
+      const user = setupUser();
+      renderEdit();
+      expect(
+        await screen.findByRole("button", {
+          name: "Installation for Engineering",
+        })
+      ).toHaveTextContent("Not available");
+      expect(
+        screen.getByRole("button", { name: "Installation for Research" })
+      ).toHaveTextContent("Company setting");
+      await choosePolicy("Support", /^Company setting/);
+      await choosePolicy("Research", /^Not available/);
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+          "custom-1",
+          expect.objectContaining({
+            group_shares: [
+              { group_id: 1, permission: "VIEWER" },
+              { group_id: 2, permission: "VIEWER", installation_policy: null },
+              {
+                group_id: 3,
+                permission: "EDITOR",
+                installation_policy: "NOT_AVAILABLE",
+              },
+            ],
+          })
+        )
+      );
+    });
+
+    it("treats choosing the saved override again as unchanged", async () => {
+      renderEdit();
+      await choosePolicy("Support", /^Installed by default/);
+      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+      await choosePolicy("Support", /^Required/);
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    });
+
+    it("adds a new group without an override unless one is chosen", async () => {
+      mockShareableGroups = [{ id: 9, name: "Design" }];
+      const user = setupUser();
+      renderEdit({ group_shares: [] });
+      await user.type(
+        await screen.findByRole("combobox", {
+          name: "Add users, groups, and accounts",
+        }),
+        "des"
+      );
+      fireEvent.click(await screen.findByRole("option", { name: /Design/ }));
+      expect(
+        screen.getByRole("button", { name: "Installation for Design" })
+      ).toHaveTextContent("Company setting");
+      await choosePolicy("Design", /^Required/);
+      const chip = screen.getAllByText("Design")[0]?.parentElement;
+      if (!chip) throw new Error("Missing staged group chip");
+      await user.click(within(chip).getByRole("button"));
+      await user.type(
+        screen.getByRole("combobox", {
+          name: "Add users, groups, and accounts",
+        }),
+        "des"
+      );
+      fireEvent.click(await screen.findByRole("option", { name: /Design/ }));
+      expect(
+        screen.getByRole("button", { name: "Installation for Design" })
+      ).toHaveTextContent("Company setting");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+          "custom-1",
+          expect.objectContaining({
+            group_shares: [{ group_id: 9, permission: "VIEWER" }],
+          })
+        )
+      );
+    });
+
+    it("keeps a non-manager owner from changing or dropping a saved override", async () => {
+      mockIsAdmin = false;
+      const user = setupUser();
+      renderEdit();
+      expect(
+        await screen.findByRole("button", {
+          name: "Installation for Engineering",
+        })
+      ).toBeDisabled();
+      await user.click(
+        screen.getByRole("button", { name: "Update access for Engineering" })
+      );
+      expect(
+        screen.queryByRole("option", { name: "Remove Access" })
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("option", { name: /Can edit/ }));
+      await user.click(
+        screen.getByRole("button", { name: "Update access for Research" })
+      );
+      fireEvent.click(
+        await screen.findByRole("option", { name: "Remove Access" })
+      );
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() =>
+        expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+          "custom-1",
+          expect.objectContaining({
+            group_shares: [
+              { group_id: 1, permission: "EDITOR" },
+              { group_id: 2, permission: "VIEWER" },
+            ],
+          })
+        )
+      );
+    });
+
+    it.each([
+      { visibility: null, editable: true },
+      { visibility: "VIEWER", editable: false },
+    ] as const)(
+      "lets a scoped manager edit overrides only on private skills ($visibility)",
+      async ({ visibility, editable }) => {
+        mockIsAdmin = false;
+        mockAdminCapabilities = [Permission.MANAGE_SKILLS];
+        renderEdit({ public_permission: visibility });
+        const user = setupUser();
+        if (visibility !== null) {
+          await user.click(
+            await screen.findByRole("button", {
+              name: "Manage individual access",
+            })
+          );
+        }
+        const menu = await screen.findByRole("button", {
+          name: "Installation for Engineering",
+        });
+        if (editable) expect(menu).toBeEnabled();
+        else expect(menu).toBeDisabled();
+      }
+    );
+
+    it("hides the section from a non-manager when no group has an override", async () => {
+      mockIsAdmin = false;
+      renderEdit({
+        group_shares: [
+          {
+            group_id: 3,
+            group_name: "Research",
+            permission: "EDITOR",
+            installation_policy: null,
+          },
+        ],
+      });
+      await screen.findByText("Research");
+      expect(screen.queryByText("Group Installation")).not.toBeInTheDocument();
+    });
+  });
+
   it("loads full sharing details from the overview before saving", async () => {
     const user = setupUser();
     mockLoadSkill.mockResolvedValue(
@@ -413,7 +621,12 @@ describe("ShareSkillModal", () => {
             },
           ],
           group_shares: [
-            { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+            {
+              group_id: 42,
+              group_name: "Editors",
+              permission: "EDITOR",
+              installation_policy: null,
+            },
           ],
         })
       );
@@ -611,6 +824,7 @@ describe("ShareSkillModal", () => {
             group_id: 7,
             group_name: "Engineering",
             permission: "VIEWER",
+            installation_policy: null,
           },
         ],
       })
@@ -738,6 +952,14 @@ describe("ShareSkillModal", () => {
         customFixture({
           user_permission: "EDITOR",
           public_permission: null,
+          group_shares: [
+            {
+              group_id: 1,
+              group_name: "Support",
+              permission: "VIEWER",
+              installation_policy: "DEFAULT",
+            },
+          ],
           user_shares: [
             {
               user: { id: "editor", email: "editor@example.com" },
@@ -773,7 +995,16 @@ describe("ShareSkillModal", () => {
       expect(
         screen.queryByRole("button", { name: "Reset to marketplace access" })
       ).not.toBeInTheDocument();
+      const groupPolicy = screen.getByRole("button", {
+        name: "Installation for Support",
+      });
+      expect(
+        screen.getByRole("button", { name: "Update access for Support" })
+      ).toBeDisabled();
       if (global) {
+        expect(groupPolicy).toBeEnabled();
+        await user.click(groupPolicy);
+        fireEvent.click(screen.getByRole("option", { name: /^Not available/ }));
         await user.click(screen.getByRole("button", { name: "Required" }));
         await user.click(screen.getByRole("button", { name: "Save" }));
         await waitFor(() =>
@@ -781,10 +1012,17 @@ describe("ShareSkillModal", () => {
             public_permission: undefined,
             installation_policy: "REQUIRED",
             user_shares: [{ user_id: "editor", permission: "EDITOR" }],
-            group_shares: [],
+            group_shares: [
+              {
+                group_id: 1,
+                permission: "VIEWER",
+                installation_policy: "NOT_AVAILABLE",
+              },
+            ],
           })
         );
       } else {
+        expect(groupPolicy).toBeDisabled();
         expect(
           screen.queryByRole("button", { name: "Save" })
         ).not.toBeInTheDocument();
