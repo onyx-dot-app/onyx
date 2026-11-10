@@ -167,6 +167,8 @@ export interface SkillShareUpdatePayload {
   group_shares?: {
     group_id: number;
     permission: SkillSharePermission;
+    /** Omitted keeps the saved override; null clears it. */
+    installation_policy?: SkillInstallationPolicy | null;
   }[];
   public_permission?: SkillSharePermission | null;
 }

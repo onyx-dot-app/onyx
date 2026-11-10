@@ -60,6 +60,9 @@ An empty cell does not mean that the Skill has no groups. On narrow screens, the
     Select **Share**. Choose **Everyone in the organization** to share all selected Skills with your staff.
     You can also add specific people or groups. People and groups you list get the chosen permission.
     Other existing grants remain in place. Settings left at **Keep unchanged** retain their current values.
+    Skill managers can set **Group Installation** for each group you add.
+    **Keep unchanged** keeps each Skill's current setting for that group. **Company setting** removes the override.
+    If a selected Skill follows a company marketplace, the dialog tells you that saving gives it its own access.
   </Step>
 
   <Step title="Apply the changes">
@@ -285,6 +288,12 @@ Users with global manage-skills permission set how a shared Skill is installed f
 | **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
 | **Required** | Onyx selects it automatically. Users cannot turn it off directly. Name conflicts still follow library priority below. Deleting it requires global manage-skills permission. |
 | **Not available** | The Skill cannot load or be enabled unless a group override makes it available. Owners and direct recipients can still see it. |
+
+To set a policy for one group, open the Skill's **Sharing** tab and use **Group Installation**.
+**Company setting** means that the group uses the company policy. A group setting replaces it for the group's members.
+Global skill managers can change any group. Group managers can change their own groups on private Skills.
+On personal synced Skills, global managers can change existing group settings; only the owner can change the audience.
+Other owners and editors see the saved settings but cannot change them or remove a group that has one.
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
 Bulk sharing preserves existing grants and group install settings that the request omits. In the sharing API,
