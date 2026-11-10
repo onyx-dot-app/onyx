@@ -97,6 +97,9 @@ def maybe_mark_tenant_active(tenant_id: str, caller: str = "unknown") -> None:
     `caller` labels the Prometheus counter so a dashboard can show which
     consumer is firing the hook most.
     """
+    if not MULTI_TENANT:
+        return
+
     try:
         # Local import to avoid a module-load cycle: OnyxRuntime imports
         # onyx.redis.redis_pool, so a top-level import here would wedge on

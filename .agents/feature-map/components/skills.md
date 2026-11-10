@@ -593,7 +593,7 @@ still propagate unexpected storage errors.
     Explicit requests reset the budget and delay, including during a running attempt.
     Lost login errors survive completion; publication checks the login under the row lock.
     An unchanged success clears the prior error. Errors contain no provider bodies.
-    The next worker layer adds request dispatch
+    Request entry points use `background/celery/tasks/marketplace_sync/tasks.py:enqueue_marketplace_sync`
     after authorization and commit. It persists intent before transport I/O. Recovery
     retries requested work, expired queue reservations and expired owners; it never
     polls idle sources. Cloud recovery skips gated tenants and uses tenant activity
