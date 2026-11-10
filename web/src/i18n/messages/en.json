@@ -7520,7 +7520,7 @@
             "targetUriParseFailed": "Failed to parse target URI — using original values."
           },
           "validation": {
-            "targetUriInvalid": "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+            "targetUriInvalid": "Target URI must be a valid URL: an /openai/v1/ URL, or a URL with the api-version query parameter and either a deployment name in the path or /openai/responses",
             "targetUriRequired": "Target URI is required"
           }
         },

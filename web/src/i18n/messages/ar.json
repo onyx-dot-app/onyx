@@ -7520,7 +7520,7 @@
             "targetUriParseFailed": "فشل تحليل عنوان URI الهدف، وتُستخدم القيم الأصلية."
           },
           "validation": {
-            "targetUriInvalid": "يجب أن يكون عنوان URI الهدف عنوان URL صالحًا يتضمن معامل api-version وإما اسم نشر في المسار أو ‎/openai/responses",
+            "targetUriInvalid": "يجب أن يكون عنوان URI الهدف عنوان URL صالحًا: عنوان URL بالشكل ‎/openai/v1/‎، أو عنوان URL يتضمن معامل api-version وإما اسم نشر في المسار أو ‎/openai/responses",
             "targetUriRequired": "عنوان URI الهدف مطلوب"
           }
         },
