@@ -304,3 +304,70 @@ def test_list_files_requires_its_variant() -> None:
         _gateway().list_files(  # ty: ignore[missing-argument]
             user_email=_ADMIN, fields="nextPageToken, files(id)"
         )
+
+
+@pytest.mark.parametrize("operation", ["download", "export"])
+def test_a_rate_limited_download_is_retried_past_the_quota_window(
+    operation: str,
+) -> None:
+    """The media download retries a rate limit for only a few seconds. Google's
+    quotas refill within a minute, so the gateway retries longer."""
+    gateway = _gateway()
+    waits: list[float] = []
+    outcomes: list[Exception | bytes] = [
+        _http_error(403, _RATE_LIMIT_BODY),
+        _http_error(429),
+        b"content",
+    ]
+
+    def download(*_args: object) -> bytes:
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(source_operations, "_download", side_effect=download),
+        mock.patch("time.sleep", side_effect=waits.append),
+    ):
+        if operation == "download":
+            content = gateway.download_file(
+                user_email=_ADMIN, file_id="f1", size_threshold=100
+            )
+        else:
+            content = gateway.export_file(
+                user_email=_ADMIN,
+                file_id="f1",
+                mime_type="text/plain",
+                size_threshold=100,
+            )
+
+    assert content == b"content"
+    assert len(waits) == 2
+
+
+def test_a_download_error_that_is_not_a_rate_limit_is_not_retried() -> None:
+    gateway = _gateway()
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations, "_download", side_effect=_http_error(404)
+        ) as download,
+        mock.patch("time.sleep"),
+        pytest.raises(GoogleDriveHttpError),
+    ):
+        gateway.download_file(user_email=_ADMIN, file_id="f1", size_threshold=100)
+
+    assert download.call_count == 1
+
+
+def test_download_retries_outlast_one_minute() -> None:
+    waits = [
+        min(
+            source_operations._RATE_LIMITED_DOWNLOAD_DELAY_SECONDS * 2**attempt,
+            source_operations._RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS,
+        )
+        for attempt in range(source_operations._RATE_LIMITED_DOWNLOAD_TRIES - 1)
+    ]
+    assert sum(waits) > 60

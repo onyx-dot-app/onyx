@@ -18,6 +18,7 @@ from onyx.connectors.google_drive.doc_conversion import (
 )
 from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.source_operations import (
+    _DOCS_FETCH_TRIES,
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
@@ -95,11 +96,11 @@ def test_a_transient_error_is_retried(error: Exception) -> None:
 
 
 def test_a_rate_limit_that_outlasts_the_retries_raises() -> None:
-    result, session = _fetch([_http_error(429)] * 5)
+    result, session = _fetch([_http_error(429)] * _DOCS_FETCH_TRIES)
 
     assert isinstance(result, GoogleDriveHttpError)
     assert result.rate_limited
-    assert session.get.call_count == 5
+    assert session.get.call_count == _DOCS_FETCH_TRIES
 
 
 def test_an_access_error_is_not_retried() -> None:
