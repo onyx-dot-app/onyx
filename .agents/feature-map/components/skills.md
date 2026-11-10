@@ -762,7 +762,7 @@ still propagate unexpected storage errors.
     verifies every ref, including pinned commits, and fetches one bounded archive
     at that commit. The reader receives bytes and a folder. Reconciliation receives
     its result and staged bundle metadata.
-    Config and import share repository-name and folder validation in `utils/github.py`.
+    Marketplace configuration and provider requests share validation in `utils/github.py`.
     Repository, ref and folder are fixed at creation; no API edits them.
     A future source edit must clear the synced revision and invalidate active sync
     ownership and retirement approval before allowing publication from the new source.
@@ -1257,7 +1257,7 @@ still propagate unexpected storage errors.
 - `backend/tests/external_dependency_unit/craft/test_skill_runtime_notice.py` covers successful, failed and unchanged pushes, session start, session responses and owner-only access.
 
 - `backend/tests/unit/onyx/skills/` covers bundles, validation, rendering and
-  GitHub import.
+  marketplace parsing and provider requests.
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
 - `backend/tests/integration/tests/skills/` covers the API, bulk actions and

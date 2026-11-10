@@ -83,8 +83,8 @@ These safeguards can reject an otherwise valid repository within the compressed
 and entry limits. In particular, a tar archive with large unrelated files can
 fail while a ZIP with those unread files succeeds. Processing failures must
 fail the whole read. TAR header errors detected by the parser fail even after valid entries.
-Normal TAR endings remain accepted: a zero header or EOF at a member boundary.
-The format cannot distinguish those endings from some forms of lost data.
+General archive reads accept a zero header or EOF at a member boundary.
+Marketplace discovery requires the complete end marker and padding checks below.
 On any processing error, a sync must retain the last good state and retire nothing.
 A future streaming staging API can support larger repositories without retaining
 all output bundles in memory. Raising these limits requires resource measurements.
@@ -120,10 +120,14 @@ key fail the read. A nested plugin can load its root `SKILL.md` when neither a
 If that root definition disappears while other plugin files remain, its entry
 stays blocked with the same key. Sync preserves the existing Skill.
 
-Marketplace discovery requires the complete end marker and padding checks below.
-On any processing error, a sync must retain the last good state and retire nothing.
-A future streaming staging API can support larger repositories without retaining
-all output bundles in memory. Raising these limits requires resource measurements.
+Marketplace discovery requires two zero TAR end blocks and only zero padding after the last member.
+The general archive reader still accepts member-boundary EOF. Discovery enables
+`require_complete` because a valid gzip wrapper does not prove catalog completion.
+ZIP discovery also checks the end-record entry count against the parsed directory.
+Every ZIP member, including unrelated files, must have a matching local header
+and name. These checks do not inflate unrelated member data.
+Missing end markers and parser-detected header errors fail discovery before
+reconciliation can infer removed skills. Truncated sparse extensions also fail discovery.
 
 Each skill path builds once per read, even when many plugins reference it.
 Unique generated bundles share a 256 MiB ceiling. This permits ten maximum-size
