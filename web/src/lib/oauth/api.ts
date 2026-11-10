@@ -125,7 +125,11 @@ export async function initiateOAuthFlow(
     )
       throw error;
     loadPage(
-      await getOAuthAuthorizationUrl(oauthConfigId, returnPath, invalidUrlMessage)
+      await getOAuthAuthorizationUrl(
+        oauthConfigId,
+        returnPath,
+        invalidUrlMessage
+      )
     );
   }
 }

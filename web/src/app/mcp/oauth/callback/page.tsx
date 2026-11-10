@@ -264,7 +264,9 @@ function MCPOAuthCallbackPageContent() {
                 <Button
                   width="full"
                   onClick={() =>
-                    leaveOAuthCallback(() => navigation.go(DEFAULT_REDIRECT_PATH))
+                    leaveOAuthCallback(() =>
+                      navigation.go(DEFAULT_REDIRECT_PATH)
+                    )
                   }
                 >
                   {t("mcpOauthCallback.backToChatButton.label")}
