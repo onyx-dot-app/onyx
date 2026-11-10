@@ -245,12 +245,12 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   | Metric | Type | Labels |
   |---|---|---|
   | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed |
-  | `craft_fc_host_agent_admissions_total` | counter | `result`: admitted, refused, failed; `reason`: ErrorReason |
+  | `craft_fc_host_agent_admissions_total` | counter | `result`: admitted, refused (stopped before admission passed), failed (the start failed after admission); `reason`: ErrorReason |
   | `craft_fc_host_agent_vms` | gauge | `state`: starting, running, exited |
   | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |
   | `craft_fc_host_agent_node_memory_total_bytes`, `_node_memory_available_bytes`, `_node_disk_free_bytes` | gauge | |
   | `craft_fc_host_agent_node_stats_errors` | gauge | `stat`: memory, disk |
-  | `craft_fc_host_agent_rpc_requests_total` | counter | `method`, `code` (gRPC) |
+  | `craft_fc_host_agent_rpc_requests_total` | counter | `method` (HostAgent method, else `unknown`), `code` (gRPC) |
   | `craft_fc_host_agent_rpc_duration_seconds` | histogram | `method` |
   | `craft_fc_host_agent_passthrough_calls_total` | counter | `method` (daemon method, else `unknown`), `code` |
   | `craft_fc_host_agent_relay_open_connections` | gauge | |
@@ -266,8 +266,9 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   `--guest-log-rate` bytes/s (default 16 KiB/s, burst `--guest-log-burst`, default 256 KiB), and the
   node `--guest-log-node-rate` (default 1 MiB/s, burst 4 s). Bytes over a budget are skipped, counted in
   `guest_log_dropped_bytes_total`, and reported in one `guest log rate limit` line. Lines over 4 KiB are
-  cut (`truncated=true`). Stop and VM exit ship the last lines before the files are removed. After an
-  agent restart, adopted VMs are read from the current end of their files, so nothing is shipped twice.
+  cut (`truncated=true`). Stop and VM exit ship the last lines before the files are removed, also for a
+  VM that ended before its first read. After an agent restart, adopted VMs are read from the current end
+  of their files, so nothing is shipped twice.
   `--guest-log-rate=0` turns shipping off.
 - **Log files on disk.** `--guest-log-max-file-bytes` (default 16 MiB, 0 = no cap) caps each file, also
   with shipping off. Firecracker writes the console to its stdout, which the agent opens with `O_APPEND`,
@@ -276,7 +277,8 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
   cap; then the unread bytes are dropped and counted. Firecracker v1.17 opens `fc.log` without
   `O_APPEND` (a truncate would leave it writing at its old offset), so for `fc.log` the agent punches a
   hole over the bytes it has read (`fallocate` `PUNCH_HOLE`, Linux): the size stays and the disk blocks
-  are freed.
+  are freed. A failed truncate or hole punch logs one `guest log cap failed` error line (with the path)
+  until the cap works again.
 - **Audit.** One `rpc` line (`kind=audit`) on stderr for every HostAgent call and every daemon
   pass-through call: `method`, `passthrough`, `caller` (the URI and DNS SANs of the verified client
   certificate, or `unix` for the root-only socket), `sandbox_id`, `tenant_id` (from the request or the VM

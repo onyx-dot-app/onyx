@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net"
 	"strings"
@@ -205,5 +206,49 @@ craft_fc_host_agent_rpc_requests_total{code="PermissionDenied",method="Dial"} 1
 func TestCallerOfNoPeer(t *testing.T) {
 	if got := callerOf(context.Background()); got != "unknown" {
 		t.Errorf("no peer: %q", got)
+	}
+}
+
+// Unknown HostAgent methods share one metric series.
+func TestUnknownHostAgentMethodsShareOneSeries(t *testing.T) {
+	a := newPTAgent(t, false, map[string]string{})
+	buf, mt, conn := observedAgent(t, a)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, name := range []string{"NoSuch1", "NoSuch2", "NoSuch3"} {
+		_ = conn.Invoke(ctx, "/"+pb.HostAgent_ServiceDesc.ServiceName+"/"+name, &pb.ListRequest{}, &pb.ListResponse{})
+	}
+	if err := testutil.GatherAndCompare(mt.Registry(), strings.NewReader(`
+# HELP craft_fc_host_agent_rpc_requests_total HostAgent API calls by method and gRPC status code.
+# TYPE craft_fc_host_agent_rpc_requests_total counter
+craft_fc_host_agent_rpc_requests_total{code="Unimplemented",method="unknown"} 3
+`), "craft_fc_host_agent_rpc_requests_total"); err != nil {
+		t.Error(err)
+	}
+	for _, l := range buf.lines(t) {
+		if l["method"] != "unknown" {
+			t.Errorf("audit method %v", l["method"])
+		}
+	}
+}
+
+// A Create that passed admission and then failed counts as failed.
+func TestCreateFailedAfterAdmission(t *testing.T) {
+	a := newPTAgent(t, false, map[string]string{})
+	a.l.fail = errors.New("boom")
+	_, mt, conn := observedAgent(t, a)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := pb.NewHostAgentClient(conn).Create(ctx, &pb.CreateRequest{SandboxId: sandbox2, Attempt: 1, Template: "t1",
+		Vcpus: 2, MemMib: 4096, ScratchGib: 1, TenantId: "t2"})
+	if reasonOf(err) != "VMM_FAILED" {
+		t.Fatalf("create: %v", err)
+	}
+	if err := testutil.GatherAndCompare(mt.Registry(), strings.NewReader(`
+# HELP craft_fc_host_agent_admissions_total Create admission decisions. result: admitted, refused (reason = ErrorReason), failed (the start failed after admission).
+# TYPE craft_fc_host_agent_admissions_total counter
+craft_fc_host_agent_admissions_total{reason="VMM_FAILED",result="failed"} 1
+`), "craft_fc_host_agent_admissions_total"); err != nil {
+		t.Error(err)
 	}
 }

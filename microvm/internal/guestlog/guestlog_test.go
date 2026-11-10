@@ -41,6 +41,10 @@ func newFixture(t *testing.T, s *Shipper, ids ...string) *fixture {
 		}
 	}
 	s.Layout = f.lay
+	if s.Interval == 0 {
+		// Tests call Tick themselves; keep the background ticker idle.
+		s.Interval = time.Hour
+	}
 	s.VMs = func() []agent.VM {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -217,15 +221,22 @@ func TestAdoptedVMStartsAtEnd(t *testing.T) {
 
 func TestReleaseFlushesAndForgets(t *testing.T) {
 	f := newFixture(t, &Shipper{}, id1)
+	f.mu.Lock()
+	f.vms[0].Generation = 7
+	f.mu.Unlock()
 	f.s.Start(t.Context())
 	f.write(id1, Console, "line\nno newline")
-	// Another generation is not this tail.
-	f.s.Release(agent.VM{SandboxID: id1, Generation: 99})
+	// An older generation does not own the files.
+	f.s.Release(agent.VM{SandboxID: id1, Generation: 3})
 	if len(f.lines()) != 0 {
-		t.Fatal("release of another generation shipped lines")
+		t.Fatal("release of an older generation shipped lines")
 	}
 	f.s.Release(f.vms[0])
 	eq(t, texts(f.lines()), "line", "no newline")
+	// A Tick before the VM leaves the table does not read the files again.
+	f.write(id1, Console, "after release\n")
+	f.s.Tick()
+	eq(t, texts(f.lines()), "after release")
 	if err := os.RemoveAll(filepath.Dir(f.lay.RootDir(id1))); err != nil {
 		t.Fatal(err)
 	}
@@ -234,19 +245,62 @@ func TestReleaseFlushesAndForgets(t *testing.T) {
 	f.mu.Unlock()
 	f.s.Tick()
 	if len(f.s.tail) != 0 {
-		t.Fatal("tail kept after release")
+		t.Fatal("tail kept after the VM left the table")
 	}
 }
 
-func TestExitedAndGoneVMsAreDropped(t *testing.T) {
+// A VM that ends before any Tick still ships its lines.
+func TestReleaseBeforeFirstTick(t *testing.T) {
 	f := newFixture(t, &Shipper{}, id1)
 	f.s.Start(t.Context())
 	f.mu.Lock()
+	f.vms = append(f.vms, agent.VM{SandboxID: id2, Generation: 9, State: pb.VMState_VM_STATE_RUNNING})
+	f.mu.Unlock()
+	if err := os.MkdirAll(f.lay.RootDir(id2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f.write(id2, Console, "crash\n")
+	f.s.Release(f.vms[1])
+	eq(t, texts(f.lines()), "crash")
+}
+
+// A Tick that sees the VM exited before Release keeps its tail, so Release
+// ships the last lines once.
+func TestExitedVMKeepsTailUntilRelease(t *testing.T) {
+	f := newFixture(t, &Shipper{}, id1)
+	f.s.Start(t.Context())
+	f.write(id1, Console, "early\n")
+	f.s.Tick()
+	eq(t, texts(f.lines()), "early")
+	f.mu.Lock()
 	f.vms[0].State = pb.VMState_VM_STATE_EXITED
 	f.mu.Unlock()
-	f.write(id1, Console, "late\n")
+	f.write(id1, Console, "panic")
 	f.s.Tick()
-	if len(f.lines()) != 0 || len(f.s.tail) != 0 {
-		t.Fatal("an exited VM is still tailed")
+	if len(f.lines()) != 0 {
+		t.Fatal("an unfinished line shipped before Release")
+	}
+	f.s.Release(f.vms[0])
+	eq(t, texts(f.lines()), "panic")
+}
+
+func TestExitedAndGoneVMsAreDropped(t *testing.T) {
+	f := newFixture(t, &Shipper{}, id1, id2)
+	f.mu.Lock()
+	// Exited before the agent started: never tailed.
+	f.vms[1].State = pb.VMState_VM_STATE_EXITED
+	f.mu.Unlock()
+	f.s.Start(t.Context())
+	f.write(id2, Console, "late\n")
+	f.s.Tick()
+	if len(f.lines()) != 0 || f.s.tail[id2] != nil {
+		t.Fatal("an exited VM got a new tail")
+	}
+	f.mu.Lock()
+	f.vms = f.vms[1:]
+	f.mu.Unlock()
+	f.s.Tick()
+	if f.s.tail[id1] != nil {
+		t.Fatal("a gone VM is still tailed")
 	}
 }

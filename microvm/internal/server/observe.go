@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
 	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
@@ -63,12 +64,16 @@ type generationMsg interface{ GetGeneration() uint64 }
 
 func (o *Observer) unary(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
 	t0 := time.Now()
-	c := &call{method: shortMethod(info.FullMethod), caller: callerOf(ctx)}
+	c := &call{method: hostAgentMethod(info.FullMethod), caller: callerOf(ctx)}
 	c.fromMsg(req, o.Tenant)
+	admitted := func() bool { return false }
+	if c.method == "Create" {
+		ctx, admitted = agent.WithAdmission(ctx)
+	}
 	resp, err := h(ctx, req)
 	d := time.Since(t0)
 	if c.method == "Create" {
-		o.Metrics.ObserveCreate(d, createResult(resp, err), reasonOf(err))
+		o.Metrics.ObserveCreate(d, createResult(resp, err, admitted()), reasonOf(err))
 	}
 	o.finish(c, err, d)
 	return resp, err
@@ -76,17 +81,15 @@ func (o *Observer) unary(ctx context.Context, req any, info *grpc.UnaryServerInf
 
 func (o *Observer) stream(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, h grpc.StreamHandler) error {
 	t0 := time.Now()
-	c := &call{method: shortMethod(info.FullMethod), caller: callerOf(ss.Context())}
+	c := &call{method: hostAgentMethod(info.FullMethod), caller: callerOf(ss.Context())}
 	if daemon, ok := strings.CutPrefix(info.FullMethod, "/"+DaemonService+"/"); ok {
 		c.passthrough = true
-		c.method = daemonMethod(daemon)
+		c.method = knownMethod(daemonMethods, daemon)
 		md, _ := metadata.FromIncomingContext(ss.Context())
 		if ids := md.Get(SandboxIDHeader); len(ids) == 1 {
 			c.sandboxID = clip(ids[0])
 			c.lookupTenant(o.Tenant)
 		}
-	} else if !strings.HasPrefix(info.FullMethod, "/"+pb.HostAgent_ServiceDesc.ServiceName+"/") {
-		c.method = "unknown"
 	}
 	err := h(srv, &observedStream{ServerStream: ss, c: c, tenant: o.Tenant})
 	o.finish(c, err, time.Since(t0))
@@ -197,32 +200,39 @@ func certIdentity(leaf *x509.Certificate) string {
 	return strings.Join(ids, ",")
 }
 
-// shortMethod returns the method name of "/pkg.Service/Method".
-func shortMethod(full string) string {
-	if i := strings.LastIndexByte(full, '/'); i >= 0 {
-		return full[i+1:]
-	}
-	return full
-}
+// Method names of the HostAgent and guest daemon services. Other names map
+// to "unknown", so a client cannot add metric series.
+var (
+	hostAgentMethods = methodNames(pb.HostAgent_ServiceDesc)
+	daemonMethods    = methodNames(sdpb.Sandboxd_ServiceDesc)
+)
 
-// daemonMethods are the method names of the guest daemon service. Other
-// names map to "unknown", so a client cannot add metric series.
-var daemonMethods = func() map[string]bool {
+func methodNames(d grpc.ServiceDesc) map[string]bool {
 	out := map[string]bool{}
-	for _, m := range sdpb.Sandboxd_ServiceDesc.Methods {
+	for _, m := range d.Methods {
 		out[m.MethodName] = true
 	}
-	for _, s := range sdpb.Sandboxd_ServiceDesc.Streams {
+	for _, s := range d.Streams {
 		out[s.StreamName] = true
 	}
 	return out
-}()
+}
 
-func daemonMethod(name string) string {
-	if daemonMethods[name] {
+func knownMethod(known map[string]bool, name string) string {
+	if known[name] {
 		return name
 	}
 	return "unknown"
+}
+
+// hostAgentMethod returns the method name of "/<HostAgent service>/Method",
+// or "unknown".
+func hostAgentMethod(full string) string {
+	name, ok := strings.CutPrefix(full, "/"+pb.HostAgent_ServiceDesc.ServiceName+"/")
+	if !ok {
+		return "unknown"
+	}
+	return knownMethod(hostAgentMethods, name)
 }
 
 // reasonOf returns the ErrorReason name of an agent error, or "".
@@ -237,24 +247,16 @@ func reasonOf(err error) string {
 	return r.String()
 }
 
-// Reasons of a Create that passed admission and then failed.
-var createFailed = map[pb.ErrorReason]bool{
-	pb.ErrorReason_INTERNAL:           true,
-	pb.ErrorReason_VMM_FAILED:         true,
-	pb.ErrorReason_GUEST_UNREACHABLE:  true,
-	pb.ErrorReason_GUEST_KEY_REJECTED: true,
-	pb.ErrorReason_VM_NOT_RUNNING:     true,
-}
-
-func createResult(resp any, err error) string {
+// createResult classifies a Create. admitted: the call passed admission or
+// found its VM already placed, so an error is a failed start, not a refusal.
+func createResult(resp any, err error, admitted bool) string {
 	if err == nil {
 		if r, ok := resp.(*pb.CreateResponse); ok && r.GetCreated() {
 			return metrics.CreateCreated
 		}
 		return metrics.CreateExisting
 	}
-	r := apierr.FromStatus(err)
-	if r == pb.ErrorReason_ERROR_REASON_UNSPECIFIED || createFailed[r] {
+	if admitted {
 		return metrics.CreateFailed
 	}
 	return metrics.CreateRefused

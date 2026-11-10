@@ -106,6 +106,8 @@ type fileTail struct {
 	// Otherwise the shipper punches holes; punched is the end of the last one.
 	appendOnly bool
 	punched    int64
+	// capErr: the last cap failed and was logged.
+	capErr bool
 }
 
 type bucket struct {
@@ -181,54 +183,68 @@ func (s *Shipper) Tick() {
 	}
 }
 
-// Release ships the last lines of a VM that stops or exits and forgets it.
-// Register it with agent.Manager.OnRelease: it runs before the VM's files are
-// removed.
+// Release ships the last lines of a VM that stops or exits. Register it with
+// agent.Manager.OnRelease: it runs before the VM's files are removed. The
+// tail stays until the VM leaves the table, so a Tick in between does not
+// read the files again from the start.
 func (s *Shipper) Release(vm agent.VM) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.init()
 	t := s.tail[vm.SandboxID]
-	if t == nil || t.vm.Generation != vm.Generation {
+	if t != nil && t.vm.Generation > vm.Generation {
+		// The files belong to a newer VM.
 		return
+	}
+	if t == nil || t.vm.Generation < vm.Generation {
+		// The VM ended before a Tick saw it: read its files from the start.
+		t = s.newTail(vm, false)
+		s.tail[vm.SandboxID] = t
 	}
 	now := s.now()
 	s.node.refill(now)
 	s.pumpLocked(t, now, true)
-	delete(s.tail, vm.SandboxID)
 }
 
 // syncLocked adds the VMs that are new and drops the ones that are gone.
+// An exited VM keeps its tail until it leaves the table, so Release can
+// still ship its last lines; an exited VM gets no new tail.
 // adopted: start at the end of the files (the lines were shipped before).
 func (s *Shipper) syncLocked(adopted bool) {
 	seen := map[string]bool{}
 	for _, vm := range s.VMs() {
+		t := s.tail[vm.SandboxID]
+		if t != nil && t.vm.Generation == vm.Generation {
+			seen[vm.SandboxID] = true
+			t.vm = vm
+			continue
+		}
 		if vm.State == pb.VMState_VM_STATE_EXITED {
 			continue
 		}
 		seen[vm.SandboxID] = true
-		if t := s.tail[vm.SandboxID]; t != nil && t.vm.Generation == vm.Generation {
-			t.vm = vm
-			continue
-		}
-		r := float64(s.VMRate)
-		t := &vmTail{vm: vm, budget: bucket{tokens: float64(s.VMBurst), rate: r, burst: float64(s.VMBurst), last: s.now()}}
-		for _, f := range []*fileTail{
-			{stream: Console, path: s.Layout.ConsoleLog(vm.SandboxID), appendOnly: true},
-			{stream: Firecracker, path: s.Layout.HostPath(vm.SandboxID, jailer.LogFile)},
-		} {
-			if adopted {
-				f.off, f.skipLine = atEnd(f.path)
-			}
-			t.files = append(t.files, f)
-		}
-		s.tail[vm.SandboxID] = t
+		s.tail[vm.SandboxID] = s.newTail(vm, adopted)
 	}
 	for id := range s.tail {
 		if !seen[id] {
 			delete(s.tail, id)
 		}
 	}
+}
+
+func (s *Shipper) newTail(vm agent.VM, adopted bool) *vmTail {
+	r := float64(s.VMRate)
+	t := &vmTail{vm: vm, budget: bucket{tokens: float64(s.VMBurst), rate: r, burst: float64(s.VMBurst), last: s.now()}}
+	for _, f := range []*fileTail{
+		{stream: Console, path: s.Layout.ConsoleLog(vm.SandboxID), appendOnly: true},
+		{stream: Firecracker, path: s.Layout.HostPath(vm.SandboxID, jailer.LogFile)},
+	} {
+		if adopted {
+			f.off, f.skipLine = atEnd(f.path)
+		}
+		t.files = append(t.files, f)
+	}
+	return t
 }
 
 // pumpLocked ships the new bytes of one VM within its budget and the node's.
@@ -265,10 +281,10 @@ func (s *Shipper) readFile(t *vmTail, f *fileTail, final bool) (shipped, dropped
 	}
 	if s.ShipOff {
 		f.off, f.partial, f.skipLine = size, nil, !endsLine(fh, size)
-		s.capFile(fh, f)
+		s.capFile(t, fh, f)
 		return 0, 0
 	}
-	defer func() { dropped += s.capFile(fh, f) }()
+	defer func() { dropped += s.capFile(t, fh, f) }()
 	avail := size - f.off
 	budget := int64(min(t.budget.tokens, s.node.tokens))
 	n := min(avail, max(budget, 0))
@@ -298,15 +314,19 @@ func (s *Shipper) readFile(t *vmTail, f *fileTail, final bool) (shipped, dropped
 
 // capFile frees the bytes of f that the shipper has read once they pass
 // MaxFileBytes. It returns the bytes lost when it had to empty a file that
-// had unread bytes.
-func (s *Shipper) capFile(fh *os.File, f *fileTail) int {
+// had unread bytes. A failure is logged once until the cap works again.
+func (s *Shipper) capFile(t *vmTail, fh *os.File, f *fileTail) int {
 	limit := s.MaxFileBytes
 	if limit <= 0 {
 		return 0
 	}
 	if !f.appendOnly {
-		if f.off-f.punched >= limit && punchHole(fh, f.off) == nil {
-			f.punched = f.off
+		if f.off-f.punched >= limit {
+			if err := punchHole(fh, f.off); err != nil {
+				s.capFailed(t, f, err)
+				return 0
+			}
+			f.punched, f.capErr = f.off, false
 		}
 		return 0
 	}
@@ -315,6 +335,7 @@ func (s *Shipper) capFile(fh *os.File, f *fileTail) int {
 	}
 	st, err := fh.Stat()
 	if err != nil {
+		s.capFailed(t, f, err)
 		return 0
 	}
 	// Bytes written since the read would be lost: wait for the next read,
@@ -324,14 +345,24 @@ func (s *Shipper) capFile(fh *os.File, f *fileTail) int {
 		return 0
 	}
 	if err := fh.Truncate(0); err != nil {
+		s.capFailed(t, f, err)
 		return 0
 	}
-	f.off, f.punched = 0, 0
+	f.off, f.punched, f.capErr = 0, 0, false
 	if lost > 0 {
 		f.partial, f.skipLine = nil, false
 		return int(lost)
 	}
 	return 0
+}
+
+func (s *Shipper) capFailed(t *vmTail, f *fileTail, err error) {
+	if f.capErr {
+		return
+	}
+	f.capErr = true
+	s.Out.LogAttrs(context.Background(), slog.LevelError, "guest log cap failed",
+		append(s.vmAttrs(t, f.stream), slog.String("path", f.path), slog.String("err", err.Error()))...)
 }
 
 // atEnd returns the size of a file and whether its last line is unfinished.

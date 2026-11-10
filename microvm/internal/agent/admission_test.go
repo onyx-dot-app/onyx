@@ -436,3 +436,46 @@ func TestDrainWaitsForBuildVM(t *testing.T) {
 		t.Fatalf("build done: %+v", d)
 	}
 }
+
+func TestCreateReportsAdmission(t *testing.T) {
+	f := newFixture(t, 10)
+	create := func(r CreateRequest) (bool, error) {
+		ctx, admitted := WithAdmission(context.Background())
+		_, _, err := f.m.Create(ctx, r)
+		return admitted(), err
+	}
+
+	if ok, err := create(req(sb1, 1)); err != nil || !ok {
+		t.Fatalf("created: admitted %v, err %v", ok, err)
+	}
+	if ok, err := create(req(sb1, 1)); err != nil || !ok {
+		t.Fatalf("existing: admitted %v, err %v", ok, err)
+	}
+
+	// VMM_FAILED from an old attempt's cleanup comes before admission.
+	vm := f.m.List()[0]
+	f.l.procs[sb1].failKills.Store(1)
+	_, err := f.m.Stop(context.Background(), sb1, 1, vm.Generation)
+	wantReason(t, err, pb.ErrorReason_VMM_FAILED)
+	ok, err := create(req(sb1, 2))
+	wantReason(t, err, pb.ErrorReason_VMM_FAILED)
+	if ok {
+		t.Fatal("cleanup failure counted as admitted")
+	}
+
+	f.stats.availMiB = 1024
+	ok, err = create(req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	if ok {
+		t.Fatal("capacity refusal counted as admitted")
+	}
+
+	// A launch failure comes after admission.
+	f.stats.availMiB = 32 << 10
+	f.l.fail = errors.New("boom")
+	ok, err = create(req(sb2, 1))
+	wantReason(t, err, pb.ErrorReason_VMM_FAILED)
+	if !ok {
+		t.Fatal("launch failure not counted as admitted")
+	}
+}
