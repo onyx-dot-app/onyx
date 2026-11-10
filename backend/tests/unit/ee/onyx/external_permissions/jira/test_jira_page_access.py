@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, create_autospec
 from pytest import LogCaptureFixture
 
 from ee.onyx.external_permissions.jira.page_access import get_project_permissions
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.source_operations import JiraSourceOperations
 
 PROJECT_KEY = "PROJ"
@@ -74,25 +73,6 @@ def test_dc_direct_user_holder_accepts_email_without_account_id() -> None:
     assert external_access.external_user_emails == {"dc-user@example.com"}
     assert external_access.external_user_group_ids == set()
     assert external_access.is_public is False
-
-
-def test_prefixed_groups_use_the_requested_source() -> None:
-    gateway = _gateway(is_cloud=False)
-    gateway.get_project_permission_scheme.return_value = _project_permissions(
-        _permission({"type": "group", "value": "jira-servicedesk-users"})
-    )
-
-    external_access = get_project_permissions(
-        gateway,
-        PROJECT_KEY,
-        add_prefix=True,
-        source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
-    )
-
-    assert external_access is not None
-    assert external_access.external_user_group_ids == {
-        "jira_service_management_jira-servicedesk-users"
-    }
 
 
 def test_direct_group_holders_preserve_value_and_parameter_shapes() -> None:

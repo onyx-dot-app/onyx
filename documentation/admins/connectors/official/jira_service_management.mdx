@@ -15,17 +15,14 @@ Onyx checks Jira for new and changed requests on the connector's refresh schedul
 | Requests | Summary, description, and comments. An internal comment is labeled internal. |
 | Service desk fields | Request type, customer status, organizations, request participants, and SLA state. |
 | Scope | One service desk project, a JQL query, or every service desk project the account can read. |
-| Permissions | Optional. **Sync** mirrors who can browse each project. It is a paid feature. |
+| Permissions | Permission sync is not available. Everyone who can see the connector's documents in Onyx can see every indexed request. |
 
 The connector supports Jira Service Management Cloud and Jira Service Management Data Center.
 A JQL query cannot contain `ORDER BY` or a time filter. Onyx adds the update window itself.
 The connector also limits every query to service desk projects.
 
 The connector indexes only the requests its account can read. An API token does not add Jira permissions.
-
-**Sync** uses the project's **Browse Projects** permission,
-the same model as the [Jira connector](/admins/connectors/official/jira).
-It does not apply customer-portal organization limits.
+Permission sync is not available for this connector.
 
 ## Setting up
 
@@ -45,9 +42,6 @@ On Data Center, the account needs a personal access token. Leave the email empty
   <Step title="Grant read access">
     Give the account **Browse Projects** on every service desk project you want to index.
     The account also needs access to each issue security level and each restricted comment you want in the index.
-
-    For **Sync**, the account also needs permission to read the project permission scheme and its groups.
-    A Jira administrator can grant **Administer Projects** on those projects.
   </Step>
 </Steps>
 
@@ -78,6 +72,3 @@ On Data Center, the account needs a personal access token. Leave the email empty
     Under **Comment Email Blacklist**, add the email of each bot whose comments you do not want in the index.
   </Step>
 </Steps>
-
-Select **Sync** when Onyx should hide a request from people who cannot browse its project.
-Leave it off when everyone who can use the connector in Onyx may read every indexed request.

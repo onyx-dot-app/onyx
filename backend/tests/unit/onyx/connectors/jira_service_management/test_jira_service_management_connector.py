@@ -4,12 +4,11 @@ The gateway is a fake. These tests do not call Jira.
 """
 
 from typing import Any
-from unittest.mock import MagicMock, create_autospec, patch
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 from pydantic import ValidationError
 
-from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.jira.models import JiraIssueIdPage
@@ -21,8 +20,6 @@ from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
 from onyx.connectors.models import ConnectorFailure, Document
-from onyx.db.models import ConnectorCredentialPair
-from onyx.utils.sensitive import make_mock_sensitive_value
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
 )
@@ -371,62 +368,3 @@ def test_auth_failure_on_comments_fails_that_request() -> None:
     assert isinstance(items[0], ConnectorFailure)
     assert items[0].failed_document is not None
     assert items[0].failed_document.document_id == f"{_BASE_URL}/browse/IT-1"
-
-
-def test_permission_prefix_uses_the_service_management_source() -> None:
-    gateway = _gateway(cloud=False)
-    gateway.list_projects.return_value = [
-        {"key": "IT", "projectTypeKey": "service_desk"}
-    ]
-    gateway.search_issues.return_value = [_issue()]
-    connector = _connector(gateway)
-
-    with patch(
-        "onyx.connectors.jira_service_management.connector.get_project_permissions",
-        return_value=MagicMock(),
-    ) as permissions:
-        list(
-            connector.load_from_checkpoint_with_perm_sync(
-                _START, _END, connector.build_dummy_checkpoint()
-            )
-        )
-
-    permissions.assert_called_once_with(
-        source_operations=gateway,
-        jira_project="IT",
-        add_prefix=True,
-        source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
-    )
-
-
-@pytest.mark.usefixtures("enable_ee")
-def test_doc_sync_uses_the_service_management_connector() -> None:
-    pair = MagicMock(spec=ConnectorCredentialPair)
-    pair.connector = MagicMock()
-    pair.connector.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
-    pair.connector.connector_specific_config = {
-        "jira_base_url": _BASE_URL,
-        "project_key": "it",
-    }
-    pair.connector.indexing_start = None
-    pair.credential.credential_json = make_mock_sensitive_value(
-        {"jira_api_token": "token"}
-    )
-
-    with patch(
-        "ee.onyx.external_permissions.jira.doc_sync.JiraServiceManagementConnector"
-    ) as connector_cls:
-        connector_cls.return_value.retrieve_all_slim_docs_perm_sync.return_value = iter(
-            ()
-        )
-        list(
-            jira_doc_sync(
-                cc_pair=pair,
-                fetch_all_existing_docs_fn=MagicMock(),
-                fetch_all_existing_docs_ids_fn=MagicMock(return_value=[]),
-            )
-        )
-
-    connector_cls.assert_called_once()
-    assert connector_cls.call_args.kwargs["project_key"] == "IT"
-    connector_cls.return_value.load_credentials.assert_called_once()

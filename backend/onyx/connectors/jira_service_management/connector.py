@@ -1,9 +1,12 @@
 """Jira Service Management connector.
 
 Service desk requests are Jira issues. This connector reuses the Jira
-checkpoint, prune, and permission paths, and limits them to service desk
-projects. It adds the request type, customer status, organizations,
-participants, SLA state, and public versus internal comments.
+checkpoint and prune paths, and limits them to service desk projects. It adds
+the request type, customer status, organizations, participants, SLA state, and
+public versus internal comments.
+
+Permission sync is not registered. The Jira permission jobs live in the
+Enterprise Edition tree, which this connector does not change.
 """
 
 import re
@@ -17,7 +20,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointOutput, SecondsSinceUnixEpoch
-from onyx.connectors.jira.access import get_project_permissions
 from onyx.connectors.jira.connector import (
     _RUN_FAILING_STATUS_CODES,
     JiraConnector,
@@ -275,23 +277,6 @@ class JiraServiceManagementConnector(JiraConnector):
             return embedded
         paged = self._paged_comments(issue_key, total)
         return embedded if paged is None else paged
-
-    @override
-    def _get_project_permissions(
-        self, project_key: str, add_prefix: bool = False
-    ) -> Any:
-        cache_key = (
-            f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}:"
-            f"{DocumentSource.JIRA_SERVICE_MANAGEMENT.value}"
-        )
-        if cache_key not in self._project_permissions_cache:
-            self._project_permissions_cache[cache_key] = get_project_permissions(
-                source_operations=self.source_operations,
-                jira_project=project_key,
-                add_prefix=add_prefix,
-                source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
-            )
-        return self._project_permissions_cache[cache_key]
 
     @override
     def _issue_to_items(
