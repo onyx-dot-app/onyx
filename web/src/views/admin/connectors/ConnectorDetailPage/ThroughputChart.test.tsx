@@ -448,35 +448,16 @@ describe("flat fallback", () => {
   });
 });
 
-/** Gives every tooltip card, and any other element sized to its content, 150 px inside the 600 px chart. */
-function sizeContentBoxes() {
-  const measured = Element.prototype.getBoundingClientRect;
-  Element.prototype.getBoundingClientRect = function (this: Element) {
-    const box = measured.call(this);
-    return this.classList.contains("w-max")
-      ? ({ ...box, width: 150, right: box.left + 150 } as DOMRect)
-      : box;
-  };
-}
+const TOOLTIP_WIDTH = 150;
 
-/** The left edge the browser resolves from the card's clamped inline start inside a parent this wide. */
-function resolvedStart(element: HTMLElement, parentWidth: number): number {
-  const match =
-    /clamp\(0px, calc\(([\d.]+)% - ([\d.]+)px\), calc\(100% - ([\d.]+)px\)\)/.exec(
-      element.style.insetInlineStart
-    );
-  if (match === null) {
-    throw new Error(`unclamped start: ${element.style.insetInlineStart}`);
-  }
-  const [at, half, width] = match.slice(1).map(Number) as [
-    number,
-    number,
-    number,
-  ];
-  return Math.min(
-    Math.max(0, (at / 100) * parentWidth - half),
-    parentWidth - width
-  );
+/** The left edge the browser gives a tooltip card this wide: centered in its span while it fits, else flush with the span's start in the span's direction. */
+function resolvedStart(card: HTMLElement, parentWidth: number): number {
+  const span = card.parentElement!;
+  const left = (parseFloat(span.style.left) / 100) * parentWidth;
+  const right =
+    parentWidth - (parseFloat(span.style.right) / 100) * parentWidth;
+  if (TOOLTIP_WIDTH <= right - left) return (left + right - TOOLTIP_WIDTH) / 2;
+  return span.dir === "rtl" ? right - TOOLTIP_WIDTH : left;
 }
 
 describe("tooltips and keyboard", () => {
@@ -488,7 +469,6 @@ describe("tooltips and keyboard", () => {
     [59, "9 documents", 450],
   ])("keeps bar %i's tooltip inside the chart", async (index, title, start) => {
     installChartLayout(600);
-    sizeContentBoxes();
     const user = setupUser();
     const { container } = render(<ThroughputBars data={data} range="24h" />);
 
@@ -498,7 +478,32 @@ describe("tooltips and keyboard", () => {
       ".w-max"
     );
     expect(card).not.toBeNull();
-    expect(resolvedStart(card!, 600)).toBe(start);
+    // resolvedStart models these: auto margins center the card, and its span is positioned.
+    expect(card).toHaveClass("mx-auto");
+    expect(card!.parentElement).toHaveClass("absolute");
+    expect(resolvedStart(card!, 600)).toBeCloseTo(start);
+  });
+
+  it("shows a tooltip when the browser reports a new width on every measurement", async () => {
+    installChartLayout(600);
+    const measured = Element.prototype.getBoundingClientRect;
+    let reads = 0;
+    // Only CenteredInside boxes drift, so the chart keeps its bins.
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const box = measured.call(this);
+      const drifts =
+        this.classList.contains("w-max") ||
+        this.firstElementChild?.classList.contains("w-max");
+      if (!drifts) return box;
+      reads += 1;
+      return { ...box, width: box.width + reads } as DOMRect;
+    };
+    const user = setupUser();
+    const { container } = render(<ThroughputBars data={data} range="24h" />);
+
+    await user.hover(bars(container)[30]!);
+
+    expect(await screen.findByText("12 documents")).toBeInTheDocument();
   });
 
   it("a keyboard user tabs to a bar, reads its tooltip, moves with the arrows and picks it with Enter", async () => {
