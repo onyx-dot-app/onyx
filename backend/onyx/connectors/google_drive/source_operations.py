@@ -857,35 +857,43 @@ class GoogleDriveSourceOperations(SourceOperations):
         ),
     )
     @_translated
-    def fetch_google_form(self, *, user_email: str, form_id: str) -> dict[str, Any]:
+    def fetch_google_form(
+        self, *, user_email: str, form_id: str, max_response_bytes: int
+    ) -> dict[str, Any] | None:
         """A Google Form from the Forms API: its title, description and items.
-        Responses are not read. A rate limit or a server error is retried with
+        Responses are not read. None when the response exceeds
+        ``max_response_bytes``. A rate limit or a server error is retried with
         backoff; the last one raises."""
-        return _retry_transient_fetch(self._fetch_google_form_once)(
-            user_email=user_email, form_id=form_id
+        return _retry_transient_fetch(self._get_capped_json)(
+            user_email=user_email,
+            url=_FORMS_API_FORM_URL.format(form_id=form_id),
+            params={},
+            max_response_bytes=max_response_bytes,
         )
-
-    def _fetch_google_form_once(
-        self, *, user_email: str, form_id: str
-    ) -> dict[str, Any]:
-        with get_google_authorized_session(self._creds(), user_email) as session:
-            with session.get(
-                _FORMS_API_FORM_URL.format(form_id=form_id),
-                timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
-            ) as response:
-                response.raise_for_status()
-                form: dict[str, Any] = response.json()
-        return form
 
     def _fetch_google_doc_once(
         self, *, user_email: str, doc_id: str, max_response_bytes: int
     ) -> dict[str, Any] | None:
+        return self._get_capped_json(
+            user_email=user_email,
+            url=_DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
+            params={"includeTabsContent": "true"},
+            max_response_bytes=max_response_bytes,
+        )
+
+    def _get_capped_json(
+        self,
+        *,
+        user_email: str,
+        url: str,
+        params: dict[str, str],
+        max_response_bytes: int,
+    ) -> dict[str, Any] | None:
+        """The JSON body of a GET, streamed so an oversized one is never held
+        whole. None when it exceeds ``max_response_bytes``."""
         with get_google_authorized_session(self._creds(), user_email) as session:
             with session.get(
-                _DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
-                params={"includeTabsContent": "true"},
-                stream=True,
-                timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
+                url, params=params, stream=True, timeout=_DOCS_FETCH_TIMEOUT_SECONDS
             ) as response:
                 response.raise_for_status()
                 buffer = bytearray()

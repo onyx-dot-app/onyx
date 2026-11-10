@@ -1,9 +1,12 @@
-"""A Google Form indexes its questions through the Forms API. With the Forms
-API off, the Form is skipped without trying other users."""
+"""A Google Form indexes its questions through the Forms API. A Form over the
+size threshold, or any Form while the Forms API is off, is skipped without
+trying other users."""
 
+import json
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
 from onyx.connectors.google_drive.form_extraction import get_form_text
 from onyx.connectors.google_drive.models import GDriveMimeType
@@ -114,3 +117,47 @@ def test_a_form_is_skipped_when_the_forms_api_is_off() -> None:
 
     assert _convert(ops) is None
     ops.fetch_google_form.assert_called_once()
+
+
+def test_a_form_over_the_size_threshold_is_skipped() -> None:
+    ops = MagicMock(spec=GoogleDriveSourceOperations)
+    ops.fetch_google_form.return_value = None
+
+    assert _convert(ops) is None
+    ops.fetch_google_form.assert_called_once()
+    assert ops.fetch_google_form.call_args.kwargs["max_response_bytes"] == 10_000
+
+
+def _session(chunks: list[bytes]) -> MagicMock:
+    response = MagicMock()
+    response.__enter__ = MagicMock(return_value=response)
+    response.__exit__ = MagicMock(return_value=False)
+    response.iter_content = MagicMock(return_value=iter(chunks))
+    session = MagicMock()
+    session.__enter__ = MagicMock(return_value=session)
+    session.__exit__ = MagicMock(return_value=False)
+    session.get = MagicMock(return_value=response)
+    return session
+
+
+def _fetch_form(chunks: list[bytes], max_response_bytes: int) -> dict[str, Any] | None:
+    ops = GoogleDriveSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(None, "google_drive", {})
+    )
+    with (
+        patch.object(GoogleDriveSourceOperations, "_creds", return_value=MagicMock()),
+        patch(
+            "onyx.connectors.google_drive.source_operations.get_google_authorized_session",
+            return_value=_session(chunks),
+        ),
+    ):
+        return ops.fetch_google_form(
+            user_email="user@example.com",
+            form_id="form",
+            max_response_bytes=max_response_bytes,
+        )
+
+
+def test_fetch_google_form_stops_reading_over_the_cap() -> None:
+    assert _fetch_form([b"a" * 80, b"b" * 80], max_response_bytes=100) is None
+    assert _fetch_form([json.dumps(_FORM).encode()], max_response_bytes=10_000) == _FORM

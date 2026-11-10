@@ -211,6 +211,7 @@ _FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
     GDriveMimeType.DOC.value: "https://docs.google.com/document/d/{}/view",
     GDriveMimeType.SPREADSHEET.value: "https://docs.google.com/spreadsheets/d/{}/view",
     GDriveMimeType.PPT.value: "https://docs.google.com/presentation/d/{}/view",
+    GDriveMimeType.FORM.value: "https://docs.google.com/forms/d/{}/view",
 }
 # Fallback template for non-native (uploaded binary) Drive files.
 _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE = "https://drive.google.com/file/d/{}/view"
@@ -806,7 +807,9 @@ def _convert_drive_item_to_document(
         elif file.get("mimeType") == GDriveMimeType.FORM.value:
             try:
                 form = ops.fetch_google_form(
-                    user_email=retriever_email, form_id=file["id"]
+                    user_email=retriever_email,
+                    form_id=file["id"],
+                    max_response_bytes=size_threshold,
                 )
             except GoogleDriveHttpError as e:
                 if not e.api_disabled:
@@ -814,6 +817,13 @@ def _convert_drive_item_to_document(
                 logger.warning(
                     "Skipping Google Form %s: the Google Forms API is off.",
                     file.get("name"),
+                )
+                return None
+            if form is None:
+                logger.warning(
+                    "Skipping Google Form %s: exceeds size threshold of %s.",
+                    file.get("name"),
+                    size_threshold,
                 )
                 return None
             if form_text := get_form_text(form):
