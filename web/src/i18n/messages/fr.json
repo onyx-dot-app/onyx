@@ -5525,7 +5525,7 @@
             "targetUriParseFailed": "Échec de l'analyse de l'URI cible — les valeurs d'origine sont utilisées."
           },
           "validation": {
-            "targetUriInvalid": "L'URI cible doit être une URL valide, avec le paramètre de requête api-version et soit un nom de déploiement dans le chemin, soit /openai/responses",
+            "targetUriInvalid": "L'URI cible doit être une URL valide : une URL /openai/v1/, ou une URL avec le paramètre de requête api-version et soit un nom de déploiement dans le chemin, soit /openai/responses",
             "targetUriRequired": "L'URI cible est obligatoire"
           }
         },

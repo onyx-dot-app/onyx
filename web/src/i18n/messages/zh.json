@@ -5525,7 +5525,7 @@
             "targetUriParseFailed": "无法解析目标 URI — 将使用原始值。"
           },
           "validation": {
-            "targetUriInvalid": "目标 URI 必须是有效的 URL，并带有 api-version 查询参数，且路径中包含部署名称或 /openai/responses",
+            "targetUriInvalid": "目标 URI 必须是有效的 URL：/openai/v1/ URL，或带有 api-version 查询参数且路径中包含部署名称或 /openai/responses 的 URL",
             "targetUriRequired": "目标 URI 为必填项"
           }
         },
