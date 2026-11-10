@@ -5,6 +5,8 @@ pages come back in any order, when calls fail at random, and when Drive
 answers with a burst of 429s. It must not make many more list calls than a
 serial listing."""
 
+import time
+
 import pytest
 
 from onyx.connectors.google_drive import parallel_listing
@@ -189,3 +191,35 @@ def test_parallel_listing_adds_few_list_calls(
     assert extra <= 0.05, (
         f"{parallel_calls} list calls against {serial_calls} serial: {extra:.1%} more"
     )
+
+
+@pytest.mark.usefixtures("small_pages")
+def test_a_failed_call_stops_its_listing_threads(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caller fails while pages are in flight. The call must stop its
+    listing threads before it raises, and not leave them to list on."""
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    own_mock_drive.patch_config(
+        {"latency": {"enabled": True, "list_ms": 20, "metadata_ms": 1, "token_ms": 1}}
+    )
+    connector = own_mock_drive.build_connector()
+
+    def fail(*_args: object, **_kwargs: object) -> list[object]:
+        raise RuntimeError("the folder walk failed")
+
+    monkeypatch.setattr(connector, "_get_new_ancestors_for_files", fail)
+    generator = connector.retrieve_slim_docs_from_checkpoint(
+        0, time.time(), connector.build_dummy_checkpoint()
+    )
+    # The error keeps its traceback, and so the call's frames, alive. The
+    # threads must stop even then.
+    with pytest.raises(RuntimeError, match="the folder walk failed") as error:
+        list(generator)
+
+    requests_at_failure = own_mock_drive.stats()["requests"]
+    time.sleep(1.0)
+    assert own_mock_drive.stats()["requests"] == requests_at_failure
+    assert error.value is not None
+    # The call failed long before the listing was complete.
+    assert own_mock_drive.list_calls() < 200
