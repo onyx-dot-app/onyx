@@ -63,13 +63,16 @@ def _response(message: Message, finish_reason: str | None = "stop") -> ModelResp
 
 
 class RecordingProvider(LitellmLLM):
-    def __init__(self, response: ModelResponse | None = None) -> None:
+    def __init__(
+        self, response: ModelResponse | None = None, *, config: LLMConfig | None = None
+    ) -> None:
+        self._config = config or _config()
         self.calls: list[dict[str, Any]] = []
         self._response = response or _response(Message(content="answer"))
 
     @property
     def config(self) -> LLMConfig:
-        return _config()
+        return self._config
 
     def invoke_raw(self, prompt: Any, *args: Any, **kwargs: Any) -> ModelResponse:
         assert not args
@@ -195,6 +198,35 @@ def test_invoke_skips_prompt_cache_without_a_cacheable_prefix() -> None:
         provider.invoke(GenerationRequest(messages=[UserMessage(content="question")]))
 
     prepare_cache.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "model_provider,model_name,expected_system_contents",
+    [
+        ("hosted_vllm", "Pro", ["shared head\n\nuser info"]),
+        ("openai", "gpt-4o", ["shared head\n\nuser info"]),
+        ("anthropic", "claude-sonnet-4-5", ["shared head", "user info"]),
+    ],
+)
+def test_invoke_merges_leading_system_messages_unless_cached_separately(
+    model_provider: str, model_name: str, expected_system_contents: list[str]
+) -> None:
+    provider = RecordingProvider(config=_config(model_provider, model_name))
+    request = GenerationRequest(
+        system_prompt="shared head",
+        messages=[
+            SystemMessage(content="user info", cacheable=True),
+            UserMessage(content="question"),
+        ],
+    )
+    provider.invoke(request)
+
+    prompt = provider.calls[0]["prompt"]
+    system_messages = [m for m in prompt if isinstance(m, ProviderSystemMessage)]
+    assert [m.content for m in system_messages] == expected_system_contents
+    assert prompt[: len(system_messages)] == system_messages
+    assert isinstance(prompt[-1], ProviderUserMessage)
+    assert prompt[-1].content == "question"
 
 
 def test_serialize_request_reenables_formatting_for_openai_reasoning_models() -> None:
