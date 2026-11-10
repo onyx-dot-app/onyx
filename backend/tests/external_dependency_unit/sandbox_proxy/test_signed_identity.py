@@ -20,8 +20,8 @@ from onyx.db.models import Sandbox
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.microvm import registry
+from onyx.microvm.models import RegisteredNode
 from onyx.microvm.registry import (
-    RegisteredNode,
     SandboxPlacement,
     clear_sandbox_placement,
     get_node_signing_key,

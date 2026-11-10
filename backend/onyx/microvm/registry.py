@@ -19,6 +19,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLockAcquisitionError
+from onyx.microvm.models import RegisteredNode
 
 NODE_SIGNING_KEY_TTL_SECONDS = 3600
 _KEY_PREFIX = "sandbox_fc:signing_key:"
@@ -150,14 +151,6 @@ def get_sandbox_placement(
         return None
     record = json.loads(raw)
     return SandboxPlacement(node_id=record["node"], generation=record["gen"])
-
-
-class RegisteredNode(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    node_id: str
-    # host:port of the agent's mTLS listener.
-    address: str
 
 
 def set_node_agent_address(
