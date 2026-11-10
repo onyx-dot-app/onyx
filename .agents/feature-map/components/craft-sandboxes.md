@@ -209,8 +209,9 @@ the stored token on each request, so a new token takes effect at once.
   background task polls the agents. Each agent pushes its VM list to
   `POST /microvm/node/state`, signed with its registered key
   (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
-  node under a per-node lease. A node that stops reporting loses its
-  placement records when their TTL ends.
+  node under a per-node lease. A pass refreshes every live record first;
+  the slower steps resume where the last unfinished pass stopped. A node
+  that stops reporting loses its placement records when their TTL ends.
 
 Agents become reachable when their signing-key registration carries
 `agent_address`. No sandbox manager uses this code yet (ENG-4575).

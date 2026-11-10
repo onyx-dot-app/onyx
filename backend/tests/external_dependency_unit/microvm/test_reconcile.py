@@ -11,7 +11,12 @@ import pytest
 from onyx.cache.interface import CacheBackend
 from onyx.db.enums import SandboxStatus
 from onyx.microvm import reconcile
-from onyx.microvm.agent_client import new_sandboxd_key
+from onyx.microvm.agent_client import (
+    HostAgentClient,
+    HostAgentClientFactory,
+    HostAgentConfigError,
+    new_sandboxd_key,
+)
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.generated.hostagent.v1 import hostagent_pb2
 from onyx.microvm.lifecycle import (
@@ -20,7 +25,7 @@ from onyx.microvm.lifecycle import (
     SandboxCheckpointer,
     UnknownActivity,
 )
-from onyx.microvm.models import AgentVm, ReconcileReport
+from onyx.microvm.models import AgentVm, ReconcileReport, RegisteredNode
 from onyx.microvm.placement import record_placement
 from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
@@ -360,8 +365,9 @@ def test_lease_is_checked_before_every_vm(
 
     def check_lease() -> None:
         checks.append(1)
-        # The first VM passes; the lease is lost before the second VM.
-        if len(checks) == 2:
+        # The refreshes and the first VM pass; the lease is lost before the
+        # second VM.
+        if len(checks) == 3:
             raise TimeoutError("deadline")
 
     registered = get_registered_node(shared_cache, node_id)
@@ -377,4 +383,159 @@ def test_lease_is_checked_before_every_vm(
             now=NOW,
             check_lease=check_lease,
         )
-    assert len(checks) == 2
+    assert len(checks) == 3
+
+
+def test_unfinished_passes_keep_every_live_record(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_id = _node("resume")
+    node = add_node(node_id)
+    sandbox_ids = sorted((new_sandbox_id() for _ in range(4)), key=str)
+    for sandbox_id in sandbox_ids:
+        vm = node.agent.add_vm(
+            sandbox_id=str(sandbox_id), tenant_id=TENANT_ID, attempt=1
+        )
+        record_placement(
+            shared_cache,
+            tenant_cache,
+            tenant_id=TENANT_ID,
+            sandbox_id=sandbox_id,
+            placement=SandboxPlacement(node_id=node_id, generation=vm.generation),
+        )
+    refreshed: list[UUID] = []
+    real_refresh = reconcile.refresh_placement
+
+    def counting_refresh(
+        shared: CacheBackend,
+        tenant: CacheBackend,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        placement: SandboxPlacement,
+    ) -> bool:
+        refreshed.append(sandbox_id)
+        return real_refresh(
+            shared,
+            tenant,
+            tenant_id=tenant_id,
+            sandbox_id=sandbox_id,
+            placement=placement,
+        )
+
+    slow_steps: list[UUID] = []
+
+    def record_sleep(
+        _pass: object, _vm: AgentVm, sandbox_id: UUID, _cache: CacheBackend
+    ) -> None:
+        slow_steps.append(sandbox_id)
+
+    monkeypatch.setattr(reconcile, "refresh_placement", counting_refresh)
+    monkeypatch.setattr(reconcile._Pass, "maybe_sleep", record_sleep)
+    registered = get_registered_node(shared_cache, node_id)
+    assert registered is not None
+    vms = client_factory.client(registered.address).list_vms()
+
+    checks: list[int] = []
+
+    def check_lease() -> None:
+        checks.append(1)
+        # 1: before the refreshes, 2: first VM, 3: second VM.
+        if len(checks) == 3:
+            raise TimeoutError("deadline")
+
+    # Every pass runs out of time after one slow VM step.
+    for _ in sandbox_ids:
+        refreshed.clear()
+        checks.clear()
+        with pytest.raises(TimeoutError):
+            reconcile_node(
+                shared_cache,
+                client_factory,
+                NoCheckpointSupport(),
+                UnknownActivity(),
+                node=registered,
+                vms=vms,
+                now=NOW,
+                check_lease=check_lease,
+            )
+        # Each unfinished pass still refreshes every live record.
+        assert sorted(refreshed, key=str) == sandbox_ids
+
+    # The slow step starts where the last pass stopped, so it reaches all VMs.
+    assert slow_steps == sandbox_ids
+    for sandbox_id in sandbox_ids:
+        assert get_sandbox_placement(tenant_cache, sandbox_id) is not None
+
+    # A finished pass starts again from the first VM.
+    slow_steps.clear()
+    reconcile_node(
+        shared_cache,
+        client_factory,
+        NoCheckpointSupport(),
+        UnknownActivity(),
+        node=registered,
+        vms=vms,
+        now=NOW,
+    )
+    assert slow_steps == sandbox_ids
+    slow_steps.clear()
+    reconcile_node(
+        shared_cache,
+        client_factory,
+        NoCheckpointSupport(),
+        UnknownActivity(),
+        node=registered,
+        vms=vms,
+        now=NOW,
+    )
+    assert slow_steps == sandbox_ids
+
+
+class _NoMtlsFactory(HostAgentClientFactory):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def client(self, address: str) -> HostAgentClient:  # noqa: ARG002
+        self.calls += 1
+        raise HostAgentConfigError("SANDBOX_FC_AGENT_CLIENT_CERT_PATH must be set")
+
+
+def test_missing_mtls_settings_end_the_pass_once(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+) -> None:
+    node_id = _node("nomtls")
+    add_node(node_id)
+    # Two records without a VM: each would need a second List over mTLS.
+    for sandbox_id in (new_sandbox_id(), new_sandbox_id()):
+        record_placement(
+            shared_cache,
+            tenant_cache,
+            tenant_id=TENANT_ID,
+            sandbox_id=sandbox_id,
+            placement=SandboxPlacement(node_id=node_id, generation=3),
+        )
+    registered = get_registered_node(shared_cache, node_id)
+    assert isinstance(registered, RegisteredNode)
+    factory = _NoMtlsFactory()
+
+    with pytest.raises(HostAgentConfigError):
+        reconcile_node(
+            shared_cache,
+            factory,
+            NoCheckpointSupport(),
+            UnknownActivity(),
+            node=registered,
+            vms=[],
+            now=NOW,
+        )
+    assert factory.calls == 1
+    assert len(list_indexed_placements(shared_cache, node_id)) == 2

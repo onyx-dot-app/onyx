@@ -19,7 +19,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
-from onyx.microvm.agent_client import HostAgentClientFactory
+from onyx.microvm.agent_client import HostAgentClientFactory, HostAgentConfigError
 from onyx.microvm.lifecycle import NoCheckpointSupport, UnknownActivity
 from onyx.microvm.models import NodeStateReport, NodeStateReportResult
 from onyx.microvm.reconcile import reconcile_node
@@ -151,6 +151,14 @@ def reconcile_node_report(
     except (TimeoutError, CacheLockLostError) as e:
         logger.warning(
             "sandbox_fc_node_report_pass_ended node=%s error=%s", node.node_id, e
+        )
+        return NodeStateReportResult(reconciled=False)
+    except HostAgentConfigError as e:
+        # The refreshes ran; adopt, clear and orphan steps need the agent.
+        logger.error(
+            "sandbox_fc_node_report_pass_ended node=%s: agent mTLS is not configured: %s",
+            node.node_id,
+            e,
         )
         return NodeStateReportResult(reconciled=False)
     finally:

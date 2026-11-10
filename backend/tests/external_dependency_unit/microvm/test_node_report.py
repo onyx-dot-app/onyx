@@ -22,7 +22,12 @@ from onyx.cache.interface import CacheBackend
 from onyx.db.enums import SandboxStatus
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.microvm import node_report, registry
-from onyx.microvm.agent_client import new_sandboxd_key
+from onyx.microvm.agent_client import (
+    HostAgentClient,
+    HostAgentClientFactory,
+    HostAgentConfigError,
+    new_sandboxd_key,
+)
 from onyx.microvm.models import (
     NODE_REPORT_MAX_BODY_BYTES,
     NODE_REPORT_MAX_VMS,
@@ -339,6 +344,42 @@ def test_reports_for_one_node_run_one_at_a_time(
     assert reconcile_node_report(
         shared_cache, client_factory, report, now=now
     ).reconciled
+
+
+class _NoMtlsFactory(HostAgentClientFactory):
+    def client(self, address: str) -> HostAgentClient:  # noqa: ARG002
+        raise HostAgentConfigError("SANDBOX_FC_AGENT_CLIENT_CERT_PATH must be set")
+
+
+def test_missing_mtls_settings_end_the_report_with_one_error(
+    node: Node,
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    new_sandbox_id: NewSandboxId,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    for sandbox_id in (new_sandbox_id(), new_sandbox_id()):
+        record_placement(
+            shared_cache,
+            tenant_cache,
+            tenant_id=TENANT_ID,
+            sandbox_id=sandbox_id,
+            placement=SandboxPlacement(node_id=node.node_id, generation=3),
+        )
+    report = NodeStateReport(node_id=node.node_id, vms=[])
+
+    with caplog.at_level("ERROR"):
+        result = reconcile_node_report(
+            shared_cache, _NoMtlsFactory(), report, now=datetime.now(timezone.utc)
+        )
+
+    assert result.reconciled is False
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(errors) == 1 and "mTLS is not configured" in errors[0].getMessage()
+    # The lease is free for the next report.
+    lease = node_report_lease(shared_cache, node.node_id, 30)
+    assert lease.acquire(blocking=False)
+    lease.release()
 
 
 def test_report_vm_round_trip() -> None:
