@@ -5,6 +5,7 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import type { SkillCardItem } from "@/sections/cards/SkillCard";
+import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
 
 export function useSkillPresentation(
   item: SkillCardItem,
@@ -55,6 +56,7 @@ export function useSkillPresentation(
   }
   const canEdit =
     item.source === "custom" &&
+    !item.skill.retired_at &&
     (item.skill.user_permission === "OWNER" ||
       item.skill.user_permission === "EDITOR");
 
@@ -85,6 +87,13 @@ export function useSkillPresentation(
     dependencyStatus,
     tooltip,
     canEdit,
+    canShare:
+      item.source === "custom" &&
+      canShareSkill({ skill: item.skill, canManageCompanySkills }),
+    canDelete:
+      item.source === "custom" &&
+      canDeleteSkill({ skill: item.skill, canManageCompanySkills }),
+    isSynced: item.source === "custom" && Boolean(item.skill.marketplace),
     toggleAriaLabel,
   };
 }

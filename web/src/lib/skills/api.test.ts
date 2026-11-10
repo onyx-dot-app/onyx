@@ -3,6 +3,7 @@ import {
   createCustomSkillFromEditor,
   importGitHubSkills,
   isSkillNameConflict,
+  resetSkillMarketplaceAccess,
 } from "@/lib/skills/api";
 import type { GitHubSkillsPreview } from "@/lib/skills/types";
 
@@ -17,6 +18,25 @@ describe("skills API", () => {
       json: async () => ({ id: "created-skill" }),
     } as Response);
     global.fetch = fetchMock;
+  });
+
+  it("resets access through the dedicated route and returns saved settings", async () => {
+    await expect(resetSkillMarketplaceAccess("skill-id")).resolves.toEqual({
+      id: "created-skill",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/skills/custom/skill-id/reset-marketplace-access",
+      { method: "POST" }
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ detail: "Only company skills can follow defaults" }),
+        { status: 400 }
+      )
+    );
+    await expect(resetSkillMarketplaceAccess("skill-id")).rejects.toThrow(
+      "Only company skills can follow defaults"
+    );
   });
 
   it("sends the confirmed disabled state through editor creation", async () => {

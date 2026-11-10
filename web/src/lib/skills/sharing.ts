@@ -34,14 +34,15 @@ export function emptySkillSharingDraft(
 
 export function serializeSkillSharing(
   draft: SkillSharingDraft,
-  canManageCompanySkills: boolean
+  canManageCompanySkills: boolean,
+  { canEditPublicAccess = canManageCompanySkills } = {}
 ): SkillShareUpdatePayload {
   return {
     installation_policy: canManageCompanySkills
       ? draft.installation_policy
       : undefined,
     public_permission:
-      !draft.external_app && canManageCompanySkills
+      !draft.external_app && canEditPublicAccess
         ? draft.public_permission
         : undefined,
     user_shares: draft.user_shares

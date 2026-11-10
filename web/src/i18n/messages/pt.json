@@ -17359,7 +17359,20 @@
         "peopleTitle": "Pessoas com acesso",
         "manageIndividualAccess": "Gerenciar acesso individual",
         "individualAccessTitle": "Acesso individual",
-        "ownershipTitle": "Propriedade"
+        "ownershipTitle": "Propriedade",
+        "marketplace": {
+          "personal": "Marketplace pessoal",
+          "personalDescription": "Somente o proprietário pode alterar o acesso a esta habilidade de {name}. Os gerentes podem alterar as configurações de instalação.",
+          "following": "Segue o acesso do marketplace",
+          "followingDescription": "O acesso e a instalação seguem {name}. Salvar alterações aqui cria configurações próprias.",
+          "overridden": "Acesso personalizado",
+          "overriddenDescription": "Esta habilidade usa suas próprias configurações de acesso e instalação em vez dos padrões de {name}.",
+          "reset": "Restaurar o acesso do marketplace",
+          "resetDescription": "Isso substitui o acesso e a instalação pelos padrões de {name}. Remove permissões individuais e descarta alterações não salvas. Futuras alterações de acesso do marketplace serão aplicadas a esta habilidade.",
+          "confirmReset": "Redefinir acesso",
+          "resetSuccess": "Acesso do marketplace restaurado",
+          "resetError": "Não foi possível redefinir o acesso. Tente novamente."
+        }
       },
       "placeholders": {
         "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"
@@ -17526,6 +17539,12 @@
       "addAccessDescription": "Adicione estas pessoas e grupos a cada habilidade selecionada. As pessoas e grupos indicados recebem a permissão escolhida. Os demais mantêm o acesso atual.",
       "apply": "{count, plural, one {Aplicar a # habilidade} other {Aplicar a # habilidades}}",
       "moreActions": "Mais ações"
+    },
+    "synced": {
+      "view": "Ver conteúdo",
+      "readOnlyTitle": "Sincronizado do GitHub",
+      "readOnlyDescription": "Edite estas instruções e arquivos no GitHub. O Onyx os atualiza quando este marketplace é sincronizado.",
+      "source": "Marketplace: {name}"
     }
   },
   "opensearchHealth": {
