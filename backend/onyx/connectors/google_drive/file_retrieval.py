@@ -88,6 +88,16 @@ def generate_time_range_filter(
     return time_range_filter
 
 
+def owner_email(drive_file: GoogleDriveFileType) -> str | None:
+    """Lowercased owner of a My Drive file. Drive allows one owner; shared
+    drive files have none."""
+    owners = drive_file.get("owners") or []
+    if not owners:
+        return None
+    email = owners[0].get("emailAddress")
+    return email.lower() if isinstance(email, str) else None
+
+
 LINK_ONLY_PERMISSION_TYPES = {"domain", "anyone"}
 
 

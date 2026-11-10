@@ -59,11 +59,25 @@ stages for its one user (`DriveRetrievalStage`). Indexing and the slim
 listings share the crawl (`GoogleDriveConnector._fetch_drive_items`).
 
 **Checkpointed slim listing.**
-`GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one pass of the
-slim listing and returns the checkpoint. It yields `SlimDocumentStub`s with a
-`DriveListingPayload` (the user who listed the file). It drops files that
-conversion cannot index (`connectors/google_drive/doc_conversion.py:drive_file_can_be_indexed`): keep
-that function in step with `_convert_drive_item_to_document`.
+`GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one call of the
+slim listing for indexing and returns the checkpoint. It yields
+`SlimDocumentStub`s with a `DriveListingPayload` (the user who listed the
+file). It drops files that conversion cannot index
+(`connectors/google_drive/doc_conversion.py:drive_file_can_be_indexed`): keep
+that function in step with `_convert_drive_item_to_document`. No worker calls
+it yet. Pruning and permission sync still use the serial crawl.
+
+**Parallel listing.** For a service account with no requested folders, that
+call runs `connectors/google_drive/parallel_listing.py:ParallelDriveLister`.
+Every partition (shared drive, My Drive, files shared with a user) lists in one
+`AdaptiveTaskPool`, one page per task, at `pageSize=1000`. A partition with
+many pages splits into `modifiedTime` shards by probe and split
+(`plan_split`): the sub-ranges are query filters, so no step depends on page
+order. `GoogleDriveCheckpoint.listing` (`DriveListingState`) holds the open
+shards, the coverage sets, the learned worker limit and the count of stubs by
+`DocumentTypeLabel`. One lock guards each page step, and a call drains the pool
+before it returns, so the checkpoint covers exactly what the call yielded. The
+OAuth flow and a connector with requested folders use the serial crawl.
 
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).

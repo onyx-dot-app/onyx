@@ -540,6 +540,20 @@ class IndexAttemptMetadata(BaseModel):
     structured_id: str | None = None
 
 
+class DocumentTypeLabel(str, Enum):
+    """The document types a corpus count reports. One vocabulary for every
+    source, so counts compare across connectors and fleet telemetry can carry
+    them. A source maps its own file types onto these."""
+
+    DOCUMENT = "document"
+    SPREADSHEET = "spreadsheet"
+    PRESENTATION = "presentation"
+    PDF = "pdf"
+    TEXT = "text"
+    IMAGE = "image"
+    OTHER = "other"
+
+
 class ConnectorCheckpoint(BaseModel):
     # TODO: maybe move this to something disk-based to handle extremely large checkpoints?
     has_more: bool

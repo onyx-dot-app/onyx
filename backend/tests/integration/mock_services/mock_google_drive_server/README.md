@@ -86,6 +86,9 @@ Useful scenarios:
 # Random 500 and 503 answers
 --config '{"faults": {"server_error_rate": 0.05}}'
 
+# files.list ignores orderBy, as Drive can for a user with very many files
+--config '{"faults": {"ignore_order_by": true}}'
+
 # Fetch permissions during indexing, as an EE connector with sync access does
 --perm-sync
 

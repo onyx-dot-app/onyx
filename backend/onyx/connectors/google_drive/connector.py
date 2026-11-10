@@ -2,7 +2,7 @@ import copy
 import json
 import os
 import sys
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Collection, Generator, Iterator
 from datetime import datetime
 from typing import Any, Protocol, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
@@ -49,13 +49,17 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_files_in_shared_drive,
     get_folder_metadata,
     has_link_only_permission,
+    owner_email,
 )
 from onyx.connectors.google_drive.models import (
+    DriveListingState,
     DriveRetrievalPhase,
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
     ImpersonationError,
+    ListingPartition,
+    ListingPartitionKind,
     PhaseProgress,
     RetrievedDriveFile,
     StageCompletion,
@@ -63,6 +67,12 @@ from onyx.connectors.google_drive.models import (
     next_phase,
     split_target_partition_key,
     target_partition_key,
+)
+from onyx.connectors.google_drive.parallel_listing import (
+    ParallelDriveLister,
+    drive_document_type,
+    extend_window,
+    window_ms,
 )
 from onyx.connectors.google_drive.source_operations import (
     DriveCorpus,
@@ -101,6 +111,7 @@ from onyx.connectors.models import (
     EntityFailure,
     HierarchyNode,
     SlimDocument,
+    SlimDocumentStub,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -240,16 +251,6 @@ def _resume_start(
     return max(completed_until, start) if start is not None else completed_until
 
 
-def _owner_email(drive_file: GoogleDriveFileType) -> str | None:
-    """Lowercased owner of a My Drive file. Drive allows one owner; shared
-    drive files have none."""
-    owners = drive_file.get("owners") or []
-    if not owners:
-        return None
-    email = owners[0].get("emailAddress")
-    return email.lower() if isinstance(email, str) else None
-
-
 def _note_modified_time(
     progress: PhaseProgress, drive_file: GoogleDriveFileType
 ) -> None:
@@ -300,6 +301,17 @@ def _retrieval_failure(retrieved_file: RetrievedDriveFile) -> ConnectorFailure:
         ),
         exception=retrieved_file.error,
     )
+
+
+def _count_stub(checkpoint: GoogleDriveCheckpoint, stub: SlimDocumentStub) -> None:
+    """Adds a stub to the running count of the parallel listing."""
+    state = checkpoint.listing
+    if state is None:
+        return
+    label = drive_document_type(stub.mime_type or "")
+    state.docs_by_type[label] = state.docs_by_type.get(label, 0) + 1
+    if stub.size_bytes is not None:
+        state.bytes_by_type[label] = state.bytes_by_type.get(label, 0) + stub.size_bytes
 
 
 def _public_access() -> ExternalAccess:
@@ -1147,9 +1159,13 @@ class GoogleDriveConnector(
         return False
 
     def _choose_drive_principal(
-        self, drive_id: str, checkpoint: GoogleDriveCheckpoint
+        self,
+        drive_id: str,
+        checkpoint: GoogleDriveCheckpoint,
+        busy: Collection[str] = (),
     ) -> tuple[str | None, bool]:
-        """The email to list a drive as, and whether its listing is complete."""
+        """The email to list a drive as, and whether its listing is complete.
+        Members in ``busy`` already list another drive, so they come last."""
         try:
             members = list_drive_members(self.ops, drive_id)
         except GoogleDriveHttpError as error:
@@ -1171,6 +1187,7 @@ class GoogleDriveConnector(
             google_domain=self.google_domain,
             expand_group=self._expand_group,
             can_list_drive=_can_list,
+            busy=busy,
         )
         if choice.email is not None:
             return choice.email, choice.complete
@@ -1229,7 +1246,7 @@ class GoogleDriveConnector(
                 if isinstance(item, str):
                     progress.next_page_token = item
                     return True
-                owner = _owner_email(item)
+                owner = owner_email(item)
                 owned_here = owner == email.lower() and not item.get("driveId")
                 via_shortcut = RESOLVED_FROM_SHORTCUT_KEY in item
                 # A shortcut to this user's own file: the listing reaches the
@@ -1297,7 +1314,7 @@ class GoogleDriveConnector(
                     return True
                 if (
                     item.get("driveId") in covered_drive_ids
-                    or _owner_email(item) in covered_owners
+                    or owner_email(item) in covered_owners
                 ):
                     suppressed += 1
                     continue
@@ -1381,7 +1398,7 @@ class GoogleDriveConnector(
             if email is not None:
                 return [email]
         else:
-            owner = _owner_email(metadata)
+            owner = owner_email(metadata)
             if (
                 owner is not None
                 and owner.endswith(f"@{self.google_domain.lower()}")
@@ -2298,6 +2315,7 @@ class GoogleDriveConnector(
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
         stub_failures: list[ConnectorFailure] | None = None,
+        drive_files: Iterator[RetrievedDriveFile] | None = None,
     ) -> GenerateSlimDocumentOutput:
         """With ``stub_failures``, the listing is for indexing. It applies the
         indexing filters, yields ``SlimDocumentStub``s, and adds a retrieval
@@ -2363,12 +2381,14 @@ class GoogleDriveConnector(
             slim_batch = []
             return result
 
-        for file in self._fetch_drive_items(
-            field_type=DriveFileFieldType.SLIM,
-            checkpoint=checkpoint,
-            start=start,
-            end=end,
-        ):
+        if drive_files is None:
+            drive_files = self._fetch_drive_items(
+                field_type=DriveFileFieldType.SLIM,
+                checkpoint=checkpoint,
+                start=start,
+                end=end,
+            )
+        for file in drive_files:
             if file.error is not None:
                 if stub_failures is None:
                     raise file.error
@@ -2495,25 +2515,138 @@ class GoogleDriveConnector(
         self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
         failures: list[ConnectorFailure] = []
         try:
+            drive_files = (
+                self._parallel_listing(checkpoint, include_permissions)
+                if self._plan_parallel_listing(checkpoint, start, end)
+                else None
+            )
             for batch in self._extract_slim_docs_from_google_drive(
                 checkpoint=checkpoint,
                 start=start,
                 end=end,
                 include_permissions=include_permissions,
                 stub_failures=failures,
+                drive_files=drive_files,
             ):
                 yield from failures
                 failures.clear()
-                yield from batch
+                for item in batch:
+                    if isinstance(item, SlimDocumentStub):
+                        _count_stub(checkpoint, item)
+                    yield item
             yield from failures
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+        if checkpoint.listing is not None and checkpoint.listing.is_done:
+            checkpoint.completion_stage = DriveRetrievalStage.DONE
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
         return checkpoint
+
+    def _plan_parallel_listing(
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> bool:
+        """Sets up ``checkpoint.listing`` for this call. Returns False when
+        the connector must use the serial listing: the OAuth flow, and a
+        connector with requested folders, because a folder crawl has no
+        time-range shards yet.
+
+        The first call plans the partitions: shared drives, then My Drives,
+        then the files shared with each user."""
+        if not self._is_service_account or self._requested_folder_ids:
+            return False
+        if checkpoint.phase_progress is not None:
+            # The serial listing started on an earlier call.
+            return False
+        t0, t1 = window_ms(start, end)
+        state = checkpoint.listing
+        if state is not None and state.window_t0 != t0:
+            logger.warning(
+                "The listing window start changed from %s to %s; listing again "
+                "from the start.",
+                state.window_t0,
+                t0,
+            )
+            state = None
+        if state is not None:
+            # A resumed attempt has a later end. List the added range too.
+            extend_window(state, t1)
+            return True
+
+        self._run_inventory(checkpoint)
+        if checkpoint.folder_ids_to_retrieve:
+            # A requested drive id that is a folder.
+            return False
+        partitions = [
+            ListingPartition(kind=ListingPartitionKind.SHARED_DRIVE, key=drive_id)
+            for drive_id in checkpoint.drive_ids_to_retrieve or []
+        ]
+        user_emails = self._my_drive_partition_emails(checkpoint)
+        partitions.extend(
+            ListingPartition(kind=ListingPartitionKind.MY_DRIVE, key=email)
+            for email in user_emails
+        )
+        if self.include_files_shared_with_me:
+            partitions.extend(
+                ListingPartition(kind=ListingPartitionKind.SHARED_WITH_USER, key=email)
+                for email in user_emails
+            )
+        checkpoint.listing = DriveListingState(
+            window_t0=t0, window_t1=t1, pending_partitions=partitions
+        )
+        logger.info("Parallel listing: %s partitions planned", len(partitions))
+        return True
+
+    def _parallel_listing(
+        self, checkpoint: GoogleDriveCheckpoint, include_permissions: bool
+    ) -> Iterator[RetrievedDriveFile]:
+        """One call of the parallel sharded listing."""
+
+        def choose_drive_principal(
+            drive_id: str, busy: Collection[str]
+        ) -> tuple[str | None, bool]:
+            return self._choose_drive_principal(drive_id, checkpoint, busy)
+
+        def check_impersonation(email: str) -> tuple[bool, list[RetrievedDriveFile]]:
+            failures: list[RetrievedDriveFile] = []
+            gate = self._impersonation_gate(email, checkpoint)
+            while True:
+                try:
+                    failures.append(next(gate))
+                except StopIteration as stop:
+                    return bool(stop.value), failures
+
+        def impersonation_failed(
+            email: str, error: GoogleDriveRefreshError
+        ) -> list[RetrievedDriveFile]:
+            return list(self._impersonation_failed(email, error, checkpoint))
+
+        def admit_file(drive_file: GoogleDriveFileType, exact: bool) -> bool:
+            return self._admit_file(checkpoint, drive_file, exact)
+
+        lister = ParallelDriveLister(
+            ops=self.ops,
+            checkpoint=checkpoint,
+            # Without permission sync, pages carry no permissions, so Drive
+            # can serve 1000 files a page.
+            field_type=(
+                DriveFileFieldType.WITH_PERMISSIONS
+                if include_permissions or self.exclude_domain_link_only
+                else DriveFileFieldType.STANDARD
+            ),
+            requested_shared_drive_ids=self._requested_shared_drive_ids,
+            choose_drive_principal=choose_drive_principal,
+            check_impersonation=check_impersonation,
+            impersonation_failed=impersonation_failed,
+            admit_file=admit_file,
+        )
+        yield from lister.run()
 
     def validate_connector_settings(self) -> None:
         if self._ops is None:
