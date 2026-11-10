@@ -58,6 +58,13 @@ with drives and users. Only the dedup set grows with files
 stages for its one user (`DriveRetrievalStage`). Indexing and the slim
 listings share the crawl (`GoogleDriveConnector._fetch_drive_items`).
 
+**Checkpointed slim listing.**
+`GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one pass of the
+slim listing and returns the checkpoint. It yields `SlimDocumentStub`s with a
+`DriveListingPayload` (the user who listed the file). It drops files that
+conversion cannot index (`connectors/google_drive/doc_conversion.py:drive_file_can_be_indexed`): keep
+that function in step with `_convert_drive_item_to_document`.
+
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).
 `GoogleDriveConnector.normalize_url` returns several candidate ids for a pasted

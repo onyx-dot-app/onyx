@@ -1,0 +1,167 @@
+"""The Drive checkpointed slim listing against the mock Google Drive server.
+
+The resume test runs one connector call at a time and sends the checkpoint
+through JSON between calls, as docfetching does. The union of the stubs must be
+the full corpus with no duplicates."""
+
+import re
+import time
+
+import pytest
+
+from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
+from onyx.connectors.google_drive.doc_conversion import drive_file_can_be_indexed
+from onyx.connectors.google_drive.models import DriveListingPayload, GDriveMimeType
+from onyx.connectors.models import (
+    ConnectorFailure,
+    HierarchyNode,
+    SlimDocument,
+    SlimDocumentStub,
+)
+from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
+
+_FILE_ID_PATTERN = re.compile(r"/(?:d|folders)/([A-Za-z0-9_-]+)")
+_MAX_CALLS = 1000
+
+
+class _Listing:
+    def __init__(self) -> None:
+        self.stubs: list[SlimDocumentStub] = []
+        self.nodes: list[HierarchyNode] = []
+        self.failures: list[ConnectorFailure] = []
+        self.calls = 0
+
+    @property
+    def file_ids(self) -> list[str]:
+        return [_file_id(stub.id) for stub in self.stubs]
+
+
+def _file_id(document_id: str) -> str:
+    match = _FILE_ID_PATTERN.search(document_id)
+    return match.group(1) if match else document_id
+
+
+def list_with_resume(
+    connector: GoogleDriveConnector, include_permissions: bool = False
+) -> _Listing:
+    """Runs the listing to its end, one call at a time."""
+    listing = _Listing()
+    end = time.time()
+    checkpoint = connector.build_dummy_checkpoint()
+    while checkpoint.has_more:
+        listing.calls += 1
+        if listing.calls > _MAX_CALLS:
+            raise AssertionError("The listing did not finish")
+        generator = connector.retrieve_slim_docs_from_checkpoint(
+            0, end, checkpoint, include_permissions
+        )
+        while True:
+            try:
+                item = next(generator)
+            except StopIteration as stop:
+                next_checkpoint = stop.value
+                break
+            if isinstance(item, SlimDocumentStub):
+                listing.stubs.append(item)
+            elif isinstance(item, HierarchyNode):
+                listing.nodes.append(item)
+            elif isinstance(item, ConnectorFailure):
+                listing.failures.append(item)
+            else:
+                assert not isinstance(item, SlimDocument), (
+                    "The indexing listing must yield stubs"
+                )
+        # Docfetching stores the checkpoint as JSON between connector calls.
+        checkpoint = connector.validate_checkpoint_json(
+            next_checkpoint.model_dump_json()
+        )
+    return listing
+
+
+def test_resumed_listing_is_the_full_corpus_with_no_duplicates(
+    mock_drive: MockDrive,
+) -> None:
+    expected = mock_drive.content_file_ids()
+    assert expected
+
+    listing = list_with_resume(mock_drive.build_connector())
+
+    assert listing.failures == []
+    # More than one call, so the test did resume from a JSON checkpoint.
+    assert listing.calls > 1
+    assert len(listing.file_ids) == len(set(listing.file_ids)), "duplicate stubs"
+    assert set(listing.file_ids) == expected
+    assert listing.nodes, "the listing yields hierarchy nodes"
+
+    for stub in listing.stubs:
+        assert stub.mime_type
+        assert stub.doc_updated_at is not None
+        assert isinstance(stub.listing_payload, DriveListingPayload)
+        assert stub.listing_payload.retriever_email
+        # Permission sync is off, so the stub has no access data.
+        assert stub.external_access is None
+
+
+def test_stub_goes_through_json_with_its_payload(mock_drive: MockDrive) -> None:
+    listing = list_with_resume(mock_drive.build_connector())
+    stub = listing.stubs[0]
+
+    dumped = stub.model_dump(mode="json")
+
+    assert dumped["listing_payload"] == {
+        "retriever_email": stub.listing_payload.retriever_email  # ty: ignore[unresolved-attribute]
+    }
+    assert dumped["mime_type"] == stub.mime_type
+    # Pruning and permission sync read a stub as a slim document.
+    assert SlimDocument.model_validate(dumped).id == stub.id
+
+
+def test_listing_applies_the_size_threshold(mock_drive: MockDrive) -> None:
+    full = list_with_resume(mock_drive.build_connector())
+    sizes = sorted(s.size_bytes for s in full.stubs if s.size_bytes is not None)
+    assert len(sizes) > 1, "the mock corpus has uploaded files with a size"
+    threshold = sizes[len(sizes) // 2]
+
+    connector = mock_drive.build_connector()
+    connector.size_threshold = threshold
+    filtered = list_with_resume(connector)
+
+    too_large = {s.id for s in full.stubs if (s.size_bytes or 0) > threshold}
+    assert too_large
+    assert {s.id for s in filtered.stubs} == {s.id for s in full.stubs} - too_large
+
+
+@pytest.mark.parametrize(
+    ("file", "allow_images", "expected"),
+    [
+        ({"mimeType": GDriveMimeType.DOC.value, "name": "notes"}, False, True),
+        (
+            {"mimeType": GDriveMimeType.PDF.value, "name": "a", "size": "10"},
+            False,
+            True,
+        ),
+        (
+            {"mimeType": GDriveMimeType.PDF.value, "name": "a", "size": "101"},
+            False,
+            False,
+        ),
+        ({"mimeType": "image/png", "name": "a.png"}, False, False),
+        ({"mimeType": "image/png", "name": "a.png"}, True, True),
+        ({"mimeType": DRIVE_FOLDER_TYPE, "name": "folder"}, True, False),
+        # An unknown type is read by its extension.
+        ({"mimeType": "application/octet-stream", "name": "a.md"}, False, True),
+        ({"mimeType": "application/octet-stream", "name": "a.bin"}, False, False),
+        ({"mimeType": GDriveMimeType.FORM.value, "name": "form"}, False, True),
+        (
+            {"mimeType": "application/vnd.google-apps.drawing", "name": "d"},
+            False,
+            False,
+        ),
+        ({"mimeType": "text/csv", "name": "table.csv"}, False, True),
+    ],
+)
+def test_indexing_filter_follows_the_file_metadata(
+    file: dict[str, str], allow_images: bool, expected: bool
+) -> None:
+    assert drive_file_can_be_indexed(file, allow_images, size_threshold=100) is expected

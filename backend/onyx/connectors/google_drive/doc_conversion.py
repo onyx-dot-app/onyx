@@ -23,7 +23,11 @@ from onyx.connectors.google_drive.constants import (
     DRIVE_SHORTCUT_TYPE,
 )
 from onyx.connectors.google_drive.form_extraction import get_form_text
-from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
+from onyx.connectors.google_drive.models import (
+    DriveListingPayload,
+    GDriveMimeType,
+    GoogleDriveFileType,
+)
 from onyx.connectors.google_drive.section_extraction import (
     HEADING_DELIMITER,
     get_document_sections,
@@ -40,6 +44,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     ImageSection,
     SlimDocument,
+    SlimDocumentStub,
     TabularSection,
     TextSection,
 )
@@ -974,4 +979,74 @@ def build_slim_document(
             if (created_time := file.get("createdTime"))
             else None
         ),
+    )
+
+
+# Types that `_download_and_extract_sections_basic` reads without a check of
+# the file extension.
+_MIME_TYPES_READ_BY_TYPE = frozenset(
+    {
+        GDriveMimeType.PLAIN_TEXT.value,
+        GDriveMimeType.WORD_DOC.value,
+        GDriveMimeType.SPREADSHEET_OPEN_FORMAT.value,
+        GDriveMimeType.PDF.value,
+        PRESENTATION_MIME_TYPE,
+    }
+)
+
+
+def drive_file_can_be_indexed(
+    file: GoogleDriveFileType, allow_images: bool, size_threshold: int
+) -> bool:
+    """False when the file's metadata shows that conversion returns no
+    document. A listing uses this so that later steps do not get files they
+    drop. Keep it in step with `_convert_drive_item_to_document` and
+    `_download_and_extract_sections_basic`.
+
+    A spreadsheet is kept when SKIP_SPREADSHEET_CONTENT is set: conversion
+    still stages the raw file."""
+    mime_type = file.get("mimeType", "")
+    if mime_type in (DRIVE_SHORTCUT_TYPE, DRIVE_FOLDER_TYPE):
+        return False
+    size_bytes = _drive_file_size(file)
+    if size_bytes is not None and size_bytes > size_threshold:
+        return False
+    if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
+        return allow_images
+    if (
+        mime_type in GOOGLE_MIME_TYPES_TO_EXPORT
+        or mime_type in _MIME_TYPES_READ_BY_TYPE
+        # The Forms API reads a Google Form.
+        or mime_type == GDriveMimeType.FORM.value
+    ):
+        return True
+    file_name = file.get("name", "")
+    if is_tabular_file(file_name):
+        return True
+    return get_file_ext(file_name) in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
+
+
+def build_slim_document_stub(
+    ops: GoogleDriveSourceOperations,
+    file: GoogleDriveFileType,
+    permission_sync_context: PermissionSyncContext | None,
+    retriever_email: str,
+) -> SlimDocumentStub | None:
+    """`build_slim_document`, plus what a later conversion needs."""
+    slim = build_slim_document(ops, file, permission_sync_context, retriever_email)
+    if slim is None:
+        return None
+    return SlimDocumentStub(
+        id=slim.id,
+        external_access=slim.external_access,
+        parent_hierarchy_raw_node_id=slim.parent_hierarchy_raw_node_id,
+        doc_created_at=slim.doc_created_at,
+        doc_updated_at=(
+            datetime.fromisoformat(modified_time)
+            if (modified_time := file.get("modifiedTime"))
+            else None
+        ),
+        mime_type=file.get("mimeType") or None,
+        size_bytes=_drive_file_size(file),
+        listing_payload=DriveListingPayload(retriever_email=retriever_email),
     )
