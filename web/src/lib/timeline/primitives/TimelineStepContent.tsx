@@ -8,6 +8,8 @@ import { TimelineSurfaceBackground } from "@/lib/timeline/primitives/TimelineSur
 export interface TimelineStepContentProps {
   children?: React.ReactNode;
   header?: React.ReactNode;
+  /** Rendered at the inline end of the header, before the toggle. */
+  headerAccessory?: React.ReactNode;
   buttonTitle?: string;
   /** Accessible name of the icon-only toggle (no `buttonTitle`). */
   toggleLabel?: string;
@@ -28,6 +30,7 @@ export interface TimelineStepContentProps {
 export function TimelineStepContent({
   children,
   header,
+  headerAccessory,
   buttonTitle,
   toggleLabel,
   isExpanded = true,
@@ -45,11 +48,17 @@ export function TimelineStepContent({
     <div className="flex flex-col px-1 pb-1">
       {!hideHeader && header && (
         <div className="flex items-center justify-between h-(--timeline-step-header-height) ps-1">
-          <div className="pt-(--timeline-step-top-padding) ps-(--timeline-common-text-padding) w-full">
+          <div className="pt-(--timeline-step-top-padding) ps-(--timeline-common-text-padding) w-full min-w-0">
             <Text as="p" font="main-ui-muted" color="text-04">
               {richNodes(header)}
             </Text>
           </div>
+
+          {headerAccessory && (
+            <div className="shrink-0 pt-(--timeline-step-top-padding) ps-2">
+              {headerAccessory}
+            </div>
+          )}
 
           <div className="h-full w-(--timeline-step-header-right-section-width) flex items-center justify-end">
             {showCollapseControls ? (

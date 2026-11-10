@@ -15,6 +15,8 @@ export interface StepContainerProps {
   stepIcon?: FunctionComponent<IconProps>;
   /** Header left slot */
   header?: React.ReactNode;
+  /** Rendered at the inline end of the header, before the toggle */
+  headerAccessory?: React.ReactNode;
   /** Button title for toggle */
   buttonTitle?: string;
   /** Accessible name of the icon-only toggle */
@@ -50,6 +52,7 @@ export function StepContainer({
   children,
   stepIcon: StepIconComponent,
   header,
+  headerAccessory,
   buttonTitle,
   toggleLabel,
   isExpanded = true,
@@ -83,6 +86,7 @@ export function StepContainer({
     >
       <TimelineStepContent
         header={header}
+        headerAccessory={headerAccessory}
         buttonTitle={buttonTitle}
         toggleLabel={toggleLabel}
         isExpanded={isExpanded}
