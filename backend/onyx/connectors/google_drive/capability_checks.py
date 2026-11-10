@@ -133,7 +133,6 @@ _SHARED_DRIVE_FIELD = "shared_drive_urls"
 # The URL form of a shared drive or folder that the config fields take.
 _FOLDER_URL = "https://drive.google.com/drive/folders/{}"
 
-_DISABLED_API_REASONS = frozenset({"accessNotConfigured", "SERVICE_DISABLED"})
 _SCOPE_REASONS = frozenset(
     {"insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}
 )
@@ -348,7 +347,7 @@ def _raise_google_error(
                     )
                 ),
             ) from e
-        if _DISABLED_API_REASONS.intersection(e.reasons):
+        if e.api_disabled:
             raise ConnectorValidationError(
                 f"The {api} is turned off in the Google Cloud project of the "
                 "credential. Turn it on in the Google Cloud console (APIs & "
@@ -1739,7 +1738,7 @@ def _is_item_denial(error: GoogleDriveHttpError) -> bool:
     return (
         error.status_code in (403, 404)
         and error.access_denied
-        and not _DISABLED_API_REASONS.intersection(error.reasons)
+        and not error.api_disabled
         and not _SCOPE_REASONS.intersection(error.reasons)
     )
 
