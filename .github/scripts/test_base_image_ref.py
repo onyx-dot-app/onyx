@@ -1,5 +1,6 @@
 """Check the boundary between CVE report collection and release gates."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -36,6 +37,84 @@ def resolve_image(
             text=True,
             check=False,
         )
+
+
+INSTALLER = (
+    SCRIPT.parents[2]
+    / "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
+)
+ARCHIVES = {"linux64": b"amd64 archive", "linux-arm64": b"arm64 archive"}
+
+
+def update_browser(installer: Path, stable: str) -> subprocess.CompletedProcess[str]:
+    """Run the pin update against a fake Chrome for Testing."""
+    root = installer.parent
+    stable_response = json.dumps({"channels": {"Stable": {"version": stable}}})
+    cases = "".join(
+        f"*/{stable}/{platform}/chrome-{platform}.zip) printf '{body.decode()}'; exit 0;;\n"
+        for platform, body in ARCHIVES.items()
+    )
+    curl = root / "curl"
+    curl.write_text(
+        '#!/bin/sh\nfor arg in "$@"; do case "$arg" in\n'
+        f"*/last-known-good-versions.json) echo '{stable_response}'; exit 0;;\n"
+        f"{cases}"
+        "esac; done\nexit 22\n"
+    )
+    curl.chmod(0o755)
+    return subprocess.run(
+        ["bash", str(SCRIPT.with_name("update-sandbox-browser.sh")), str(installer)],
+        env={**os.environ, "PATH": f"{root}{os.pathsep}{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+class BrowserUpdateTests(unittest.TestCase):
+    def test_a_stale_pin_moves_to_stable_with_both_archive_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            installer = Path(directory) / INSTALLER.name
+            shutil.copyfile(INSTALLER, installer)
+            before = installer.read_text().splitlines()
+
+            result = update_browser(installer, "999.0.1.2")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "999.0.1.2")
+            after = installer.read_text().splitlines()
+            changed = [
+                new for old, new in zip(before, after, strict=True) if old != new
+            ]
+            self.assertEqual(
+                changed,
+                [
+                    "version=999.0.1.2",
+                    f"    checksum={hashlib.sha256(ARCHIVES['linux64']).hexdigest()}",
+                    f"    checksum={hashlib.sha256(ARCHIVES['linux-arm64']).hexdigest()}",
+                ],
+            )
+
+            # The pin is now current, so a second run changes and prints nothing.
+            result = update_browser(installer, "999.0.1.2")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+            self.assertEqual(installer.read_text().splitlines(), after)
+
+    def test_an_installer_missing_a_pin_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            installer = Path(directory) / INSTALLER.name
+            arm64_pin = [
+                line
+                for line in INSTALLER.read_text().splitlines()
+                if "checksum=" in line
+            ][1]
+            installer.write_text(INSTALLER.read_text().replace(arm64_pin + "\n", ""))
+
+            result = update_browser(installer, "999.0.1.2")
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Could not pin", result.stderr)
 
 
 class ImageResolverTests(unittest.TestCase):

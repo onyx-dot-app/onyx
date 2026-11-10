@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Update the version and both archive hashes together.
-version=157.0.8103.38
+# .github/scripts/update-sandbox-browser.sh rewrites the version and both
+# archive hashes together.
+version=157.0.8103.50
 case "$(dpkg --print-architecture)" in
   amd64)
     platform=linux64
-    checksum=8cdeb344e9b2cefe59f4aea8d1d93d5d93054c03cde217665c16fc1f62e72a66
+    checksum=d17167bc092eb495a3b768c7467f27e35f625aa03834233a1663af67dcb668c9
     ;;
   arm64)
     platform=linux-arm64
-    checksum=5517510e61657ff43ee9ab804ecd1a499b3d5bd3caf72f097516bd6565ba5a17
+    checksum=9539c1612121eb09c4b787f4f9d0c732357772eb22583620ffed64d50dd6c4cc
     ;;
   *) echo 'Unsupported browser architecture' >&2; exit 1 ;;
 esac
