@@ -17391,15 +17391,15 @@
       },
       "createMenu": {
         "github": {
-          "description": "Importe uma ou mais habilidades de um repositório.",
-          "title": "Importar do GitHub"
+          "description": "Mantenha as habilidades atualizadas a partir de um repositório do GitHub.",
+          "title": "Sincronizar do GitHub"
         },
         "scratch": {
           "description": "Escreva as instruções e adicione arquivos de apoio no {appName}.",
-          "title": "Começar do zero"
+          "title": "Criar uma habilidade"
         },
         "trigger": {
-          "label": "Criar habilidade"
+          "label": "Adicionar"
         },
         "upload": {
           "description": "Importe um arquivo SKILL.md, um arquivo ZIP ou uma pasta de habilidade.",
@@ -17625,6 +17625,25 @@
     "listTitle": "Marketplaces",
     "emptyList": "Nenhum marketplace ainda",
     "emptyListDescription": "Sincronize do GitHub para adicionar um catálogo de habilidades.",
-    "detailsFor": "Ver detalhes de {name}"
+    "detailsFor": "Ver detalhes de {name}",
+    "access": {
+      "description": "Estas definições aplicam-se às habilidades sincronizadas que seguem o acesso do marketplace.",
+      "forbidden": "É necessária permissão global para gerir habilidades.",
+      "loading": "A carregar definições de acesso…",
+      "settingsError": "Não foi possível carregar as definições de acesso. Os valores permanecem inalterados.",
+      "community": "O plano gratuito permite acesso de utilização em toda a organização. O acesso privado e os grupos exigem um plano pago.",
+      "restricted": "Estas definições guardadas exigem um plano pago. São preservadas; não é possível guardar no plano gratuito.",
+      "groups": "Grupos",
+      "addGroup": "Procurar um grupo para adicionar",
+      "groupsLoading": "A carregar grupos…",
+      "groupsError": "Não foi possível carregar os grupos. As permissões existentes são preservadas.",
+      "unknownGroup": "Grupo #{id}",
+      "groupPermission": "Acesso de {name}",
+      "installationDescription": "Escolha como as habilidades sincronizadas são instaladas para quem tem acesso.",
+      "title": "Definições do Marketplace da Empresa",
+      "loadError": "Não foi possível carregar as definições do marketplace. As suas alterações são preservadas.",
+      "companyOnly": "As definições de acesso estão disponíveis apenas para marketplaces de empresa.",
+      "save": "Guardar definições"
+    }
   }
 }
