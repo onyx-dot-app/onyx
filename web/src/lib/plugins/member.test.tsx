@@ -865,6 +865,7 @@ test.each([
       closed: false,
       close: jest.fn(),
       location: { href: "about:blank" },
+      sessionStorage: { setItem: jest.fn() },
     } as unknown as Window;
     const openSpy = jest.spyOn(window, "open").mockReturnValue(popup);
     const fetchSpy = jest
@@ -875,7 +876,7 @@ test.each([
           return new Response(
             JSON.stringify({
               status: "authorization_required",
-              authorization_url: "https://notes.example/oauth",
+              authorization_url: "https://notes.example/oauth?state=s1",
               server_id: 7,
               redirect_url: "/app",
             })
@@ -894,7 +895,7 @@ test.each([
       firstMCP({ connection_status: connectionStatus })
     );
     await waitFor(() =>
-      expect(popup.location.href).toBe("https://notes.example/oauth")
+      expect(popup.location.href).toBe("https://notes.example/oauth?state=s1")
     );
     const startRequest = fetchSpy.mock.calls[0]?.[1];
     const body: { return_path: string; force_reauthentication: boolean } =
@@ -902,16 +903,12 @@ test.each([
     expect(body.force_reauthentication).toBe(
       connectionStatus === MCPConnectionStatus.REAUTH_REQUIRED
     );
-    const attempt = new URL(
-      body.return_path,
-      window.location.origin
-    ).searchParams.get("attempt");
     await act(async () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           origin: window.location.origin,
           source: popup,
-          data: { type: "onyx:member-plugin-oauth-complete", attempt },
+          data: { type: "onyx:oauth-complete", state: "s1", ok: true },
         })
       );
       await promise;
@@ -926,6 +923,7 @@ test("connects an OpenAPI plugin through its real OAuth initiation endpoint", as
     closed: false,
     close: jest.fn(),
     location: { href: "about:blank" },
+    sessionStorage: { setItem: jest.fn() },
   } as unknown as Window;
   jest.spyOn(window, "open").mockReturnValue(popup);
   const oauthTool = tool({ oauth_config_id: 4 });
@@ -935,8 +933,8 @@ test("connects an OpenAPI plugin through its real OAuth initiation endpoint", as
       if (input === "/api/oauth-config/initiate")
         return new Response(
           JSON.stringify({
-            authorization_url: "https://notes.example/oauth",
-            state: "provider-state",
+            authorization_url: "https://notes.example/oauth?state=s2",
+            state: "s2",
           })
         );
       if (input === "/api/mcp/servers")
@@ -958,7 +956,7 @@ test("connects an OpenAPI plugin through its real OAuth initiation endpoint", as
   if (!plugin) throw new Error("Missing plugin fixture");
   const promise = connectMemberPlugin(plugin);
   await waitFor(() =>
-    expect(popup.location.href).toBe("https://notes.example/oauth")
+    expect(popup.location.href).toBe("https://notes.example/oauth?state=s2")
   );
   const body: { oauth_config_id: number; return_path: string } = JSON.parse(
     String(fetchSpy.mock.calls[0]?.[1]?.body)
@@ -971,10 +969,7 @@ test("connects an OpenAPI plugin through its real OAuth initiation endpoint", as
     new MessageEvent("message", {
       origin: window.location.origin,
       source: popup,
-      data: {
-        type: "onyx:member-plugin-oauth-complete",
-        attempt: returnUrl.searchParams.get("attempt"),
-      },
+      data: { type: "onyx:oauth-complete", state: "s2", ok: true },
     })
   );
   await promise;
