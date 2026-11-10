@@ -19,8 +19,8 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_DICT_TOKEN_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_API_TOKEN_URI,
     GOOGLE_SCOPES,
-    GOOGLE_TOKEN_URI,
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.utils.logger import setup_logger
@@ -159,6 +159,7 @@ def get_google_creds(
             authorized_user_info["client_secret"] = credentials_dict["client_secret"]
 
         authorized_user_info["refresh_token"] = credentials_dict["refresh_token"]
+        authorized_user_info["token_uri"] = GOOGLE_API_TOKEN_URI
 
         authorized_user_info["token"] = credentials_dict["token"]
         authorized_user_info["expiry"] = credentials_dict["expiry"]
@@ -193,7 +194,7 @@ def get_google_creds(
             DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
         ]
         service_account_key = json.loads(service_account_key_json_str)
-        service_account_key["token_uri"] = GOOGLE_TOKEN_URI
+        service_account_key["token_uri"] = GOOGLE_API_TOKEN_URI
 
         service_creds = ServiceAccountCredentials.from_service_account_info(
             service_account_key, scopes=GOOGLE_SCOPES[source]

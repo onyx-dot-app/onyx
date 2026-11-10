@@ -59,6 +59,7 @@ from onyx.connectors.google_utils.resources import (
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_DOCS_API_ROOT_URL,
     USER_FIELDS,
     GoogleCredentialKind,
 )
@@ -82,7 +83,7 @@ _DOWNLOAD_NUM_RETRIES = 3
 # Extra bytes a download chunk reads past the size threshold, so an oversized
 # file is detected without reading all of it.
 _CHUNK_SIZE_BUFFER = 64
-_DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
+_DOCS_API_DOCUMENT_URL = GOOGLE_DOCS_API_ROOT_URL + "v1/documents/{doc_id}"
 _FORMS_API_FORM_URL = "https://forms.googleapis.com/v1/forms/{form_id}"
 _DOCS_FETCH_TIMEOUT_SECONDS = 60
 _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024

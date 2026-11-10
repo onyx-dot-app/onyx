@@ -75,6 +75,9 @@ Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates
 the given user with a service-account key. The gateway keeps one Drive client
 per thread (`threading.local`), because `googleapiclient` over `httplib2` is
 not thread safe.
+`GOOGLE_API_ENDPOINT_OVERRIDE` (testing only) sends every client, token refresh
+and Docs API call to another URL. The clients are then built from the bundled
+discovery document with its root URL replaced, so batch requests follow too.
 
 ---
 
@@ -135,3 +138,8 @@ not thread safe.
 - External dependency tests:
   `backend/tests/external_dependency_unit/connectors/google_drive/`.
 - Daily tests against a live domain: `backend/tests/daily/connectors/google_drive/`.
+- Without a Workspace: the mock server in
+  `backend/tests/integration/mock_services/mock_google_drive_server/` serves the
+  token, Drive, Admin SDK and Docs calls, with Google's quotas and errors.
+  `GOOGLE_API_ENDPOINT_OVERRIDE` points the connector at it, and
+  `backend/scripts/benchmark_google_drive_connector.py` measures throughput.
