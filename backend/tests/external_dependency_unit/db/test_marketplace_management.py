@@ -617,9 +617,12 @@ def test_remove_cascades_cleanup_audience_rollback_and_fence(
     legacy = save_skill_bundle_bytes(
         bundle("legacy"), display_name="legacy.zip", file_store=store
     )
-    skill.bundle_file_id = legacy
-    shared = make_skill(db_session, author_user_id=outsider.id)
-    shared.bundle_file_id = staged.bundle_file_id
+    db_session.add(
+        SkillVersion(skill_id=skill.id, version_number=3, bundle_file_id=legacy)
+    )
+    shared = make_skill(
+        db_session, author_user_id=outsider.id, bundle_file_id=staged.bundle_file_id
+    )
     for user in (owner, recipient, outsider):
         make_sandbox(db_session, user)
     db_session.commit()

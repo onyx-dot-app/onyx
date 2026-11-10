@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -22,11 +23,7 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.resource_version import VERSION_FILES_NOT_KEPT
-from onyx.db.skill_version import (
-    PreparedSkillVersionWrite,
-    delete_orphan_skill_bundles,
-    repair_skill_version,
-)
+from onyx.db.skill_version import PreparedSkillVersionWrite, delete_orphan_skill_bundles
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -38,7 +35,7 @@ from onyx.skills.bundle import (
     compute_bundle_sha256,
 )
 from onyx.skills.ingest import IngestedBundle, save_skill_bundle_bytes
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 from tests.external_dependency_unit.db.skill_api_client import client_for
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     bundle,
@@ -92,7 +89,7 @@ def test_history_current_marker_includes_edit_after_authorization(
     ]
 
 
-def test_history_without_current_pointer_has_no_current_marker(
+def test_history_keeps_current_marker_when_pointer_removal_is_refused(
     session: Session, user: User
 ) -> None:
     created = api.create_custom_skill(
@@ -105,7 +102,9 @@ def test_history_without_current_pointer_has_no_current_marker(
     skill = session.get(Skill, created.id)
     assert skill is not None
     skill.current_version_id = None
-    session.commit()
+    with pytest.raises(IntegrityError, match="ck_skill_definition_source"):
+        session.commit()
+    session.rollback()
     history = api.list_custom_skill_versions(
         created.id,
         user,
@@ -113,7 +112,7 @@ def test_history_without_current_pointer_has_no_current_marker(
         http_request=Request({"type": "http"}),
     )
     assert [(version.version_number, version.is_current) for version in history] == [
-        (1, False)
+        (1, True)
     ]
 
 
@@ -631,10 +630,7 @@ def test_legacy_large_central_directory_stays_readable(
     version.bundle_file_id = save_skill_bundle_bytes(
         content, display_name="legacy.zip", file_store=store
     )
-    skill.bundle_file_id = version.bundle_file_id
-    skill.is_valid = None
     version.bundle_sha256 = compute_bundle_sha256(content)
-    skill.bundle_sha256 = version.bundle_sha256
     version.content_digest = None
     version.unpacked_size_bytes = None
     version.file_count = None
@@ -736,6 +732,42 @@ def test_history_pages_keep_older_rows_stable_during_new_writes(
             )
 
 
+def test_current_version_metadata_tracks_restore(session: Session, user: User) -> None:
+    with client_for(user, session) as client:
+        created = client.post(
+            "/skills/custom",
+            files={
+                "bundle": ("history.zip", bundle("history-metadata"), "application/zip")
+            },
+            data={"auto_enable": "false"},
+        )
+        assert created.status_code == 200, created.text
+        skill = created.json()
+        assert skill["current_version_number"] == 1
+        path = f"/skills/custom/{skill['id']}"
+        history = client.get(f"{path}/versions").json()
+        original = history[0]
+        assert original["marketplace_revision"] is None
+        changed = client.patch(path, json={"instructions_markdown": "Second version"})
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["current_version_number"] == 2
+        restored = client.post(f"{path}/versions/{original['id']}/restore")
+        assert restored.status_code == 200, restored.text
+        assert restored.json()["current_version_number"] == 3
+        rows = client.get("/skills").json()["customs"]
+        assert (
+            next(row for row in rows if row["id"] == skill["id"])[
+                "current_version_number"
+            ]
+            == 3
+        )
+        detail = client.get(f"/skills/{skill['id']}").json()
+        assert detail["current_version_number"] == 3
+        history = client.get(f"{path}/versions").json()
+        assert [row["version_number"] for row in history] == [3, 2, 1]
+        assert [row["is_current"] for row in history] == [True, False, False]
+
+
 def test_restore_legacy_file_count_preserves_upload_limit(
     session: Session, user: User
 ) -> None:
@@ -765,7 +797,8 @@ def test_restore_legacy_file_count_preserves_upload_limit(
     file_id = save_skill_bundle_bytes(
         content, display_name="legacy.zip", file_store=get_default_file_store()
     )
-    skill = Skill(
+    skill = make_skill(
+        session,
         name="legacy-count",
         description="Legacy",
         author_user_id=user.id,
@@ -774,7 +807,8 @@ def test_restore_legacy_file_count_preserves_upload_limit(
     )
     session.add(skill)
     session.commit()
-    original = repair_skill_version(skill, session)
+    original = skill.current_version
+    assert original is not None
     session.commit()
     api.replace_current_user_skill_bundle(
         skill.id,
@@ -851,39 +885,3 @@ def test_stored_restore_preserves_admission_safety(
         )
         == before_history
     )
-
-
-def test_current_version_metadata_tracks_restore(session: Session, user: User) -> None:
-    with client_for(user, session) as client:
-        created = client.post(
-            "/skills/custom",
-            files={
-                "bundle": ("history.zip", bundle("history-metadata"), "application/zip")
-            },
-            data={"auto_enable": "false"},
-        )
-        assert created.status_code == 200, created.text
-        skill = created.json()
-        assert skill["current_version_number"] == 1
-        path = f"/skills/custom/{skill['id']}"
-        history = client.get(f"{path}/versions").json()
-        original = history[0]
-        assert original["marketplace_revision"] is None
-        changed = client.patch(path, json={"instructions_markdown": "Second version"})
-        assert changed.status_code == 200, changed.text
-        assert changed.json()["current_version_number"] == 2
-        restored = client.post(f"{path}/versions/{original['id']}/restore")
-        assert restored.status_code == 200, restored.text
-        assert restored.json()["current_version_number"] == 3
-        rows = client.get("/skills").json()["customs"]
-        assert (
-            next(row for row in rows if row["id"] == skill["id"])[
-                "current_version_number"
-            ]
-            == 3
-        )
-        detail = client.get(f"/skills/{skill['id']}").json()
-        assert detail["current_version_number"] == 3
-        history = client.get(f"{path}/versions").json()
-        assert [row["version_number"] for row in history] == [3, 2, 1]
-        assert [row["is_current"] for row in history] == [True, False, False]

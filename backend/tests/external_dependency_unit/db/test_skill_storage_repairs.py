@@ -54,8 +54,8 @@ def test_identical_upload_repairs_missing_large_object(
             http_request=Request({"type": "http"}),
         )
         skill = session.get(Skill, created.id)
-        assert skill is not None
-        old_file_id = skill.bundle_file_id
+        assert skill is not None and skill.current_version is not None
+        old_file_id = skill.current_version.bundle_file_id
         assert old_file_id is not None
         oid = session.scalar(
             select(FileContent.lobj_oid).where(FileContent.file_id == old_file_id)
@@ -74,13 +74,14 @@ def test_identical_upload_repairs_missing_large_object(
             http_request=Request({"type": "http"}),
         )
         session.refresh(skill)
-        assert skill.bundle_file_id != old_file_id
-        assert skill.bundle_file_id is not None
-        with store.read_file(skill.bundle_file_id) as source:
+        assert skill.current_version is not None
+        assert skill.current_version.bundle_file_id != old_file_id
+        assert skill.current_version.bundle_file_id is not None
+        with store.read_file(skill.current_version.bundle_file_id) as source:
             assert source.read() == content
         store.delete_file(old_file_id)
         assert session.get(FileRecord, old_file_id) is None
-        store.delete_file(skill.bundle_file_id)
+        store.delete_file(skill.current_version.bundle_file_id)
 
 
 @pytest.mark.parametrize("operation", ["read", "delete"])
@@ -235,7 +236,8 @@ def test_physical_history_absence_clears_link_without_payload_reads(
         session.commit()
         assert old.bundle_file_id is None
         assert current.bundle_file_id == current_file
-        assert skill.bundle_file_id == current_file
+        assert skill.current_version is not None
+        assert skill.current_version.bundle_file_id == current_file
         assert session.get(FileRecord, old_file) is not None
         assert session.get(FileRecord, current_file) is not None
         api.replace_current_user_skill_bundle(
@@ -246,9 +248,10 @@ def test_physical_history_absence_clears_link_without_payload_reads(
             http_request=Request({"type": "http"}),
         )
         session.refresh(skill)
-        assert skill.bundle_file_id != current_file
-        assert skill.bundle_file_id is not None
-        with store.read_file(skill.bundle_file_id) as source:
+        assert skill.current_version is not None
+        assert skill.current_version.bundle_file_id != current_file
+        assert skill.current_version.bundle_file_id is not None
+        with store.read_file(skill.current_version.bundle_file_id) as source:
             assert source.read() == bundle(skill.name, "Version 2")
-        for file_id in (old_file, current_file, skill.bundle_file_id):
+        for file_id in (old_file, current_file, skill.current_version.bundle_file_id):
             store.delete_file(file_id)

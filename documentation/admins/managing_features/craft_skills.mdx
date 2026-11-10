@@ -182,7 +182,8 @@ Stored ZIP reads default to `SKILL_BUNDLE_TOTAL_MAX_BYTES` (100 MiB unless confi
 Set `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES` to choose a separate stored ZIP allowance.
 Keep this allowance large enough for your existing bundles when you lower upload limits.
 An existing expanded-total setting above 100 MiB also preserves that stored ZIP allowance after upgrading.
-A saved bundle above this allowance returns a 413 read-limit error. Raise the allowance to read it.
+A current-content read above this allowance returns HTTP 413.
+History preview and restore return HTTP 400 for this stored-byte limit. Raise the allowance to read the saved bundle.
 Stored reads have no file-list size limit. Onyx applies the current upload limits when you save the Skill again.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,
@@ -419,8 +420,7 @@ The response lists up to 50 versions from newest to oldest. Each entry contains 
 `marketplace_revision` identifies the source commit for a synced version; it is `null` for other versions.
 To read the next page, set `before_version` to the last entry’s `version_number`. The cursor must be a positive integer.
 Stop when the response is empty or includes version 1. New versions do not shift older pages.
-Skill list and detail responses include `current_version_number`,
-which is `null` for built-ins and custom Skills that have no version.
+Skill list and detail responses include `current_version_number`. It is `null` when no current version is recorded.
 Older servers can omit this field during an upgrade.
 The library hides the version label until version data is available.
 

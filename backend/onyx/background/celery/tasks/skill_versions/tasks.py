@@ -1,4 +1,4 @@
-"""Resume metadata repair and reconcile legacy writers after the first pass."""
+"""Repair retained version metadata with a bounded, repeating backlog scan."""
 
 from time import monotonic
 from uuid import UUID
@@ -21,9 +21,7 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
-PROGRESS_KEY = "skill_version_metadata_v2"
-_DRIFT_CURSOR_KEY = "skill_version_metadata_v2_drift_cursor"
-_COMPLETED = "completed"
+PROGRESS_KEY = "skill_version_metadata_v3"
 _LOCK_TIMEOUT_SECONDS = 300
 _TIME_BUDGET_SECONDS = 30
 
@@ -42,24 +40,11 @@ def repair_skill_versions(*, tenant_id: str) -> None:
                 progress = store.load(PROGRESS_KEY, refresh_cache=True)
             except KvKeyNotFoundError:
                 progress = None
-            completed = progress == _COMPLETED
-            cursor = (
-                UUID(str(progress)) if progress is not None and not completed else None
-            )
-            if completed:
-                try:
-                    drift_cursor = store.load(_DRIFT_CURSOR_KEY, refresh_cache=True)
-                except KvKeyNotFoundError:
-                    drift_cursor = None
-                cursor = UUID(str(drift_cursor)) if drift_cursor is not None else None
+            cursor = UUID(str(progress)) if progress is not None else None
             deadline = monotonic() + _TIME_BUDGET_SECONDS
             file_store = get_default_file_store()
             with get_session_with_current_tenant() as session:
-                batch = skill_version_repair_batch(
-                    session, cursor, drift_only=completed
-                )
-                if completed and not batch and cursor is not None:
-                    batch = skill_version_repair_batch(session, None, drift_only=True)
+                batch = skill_version_repair_batch(session, cursor)
                 for skill in batch:
                     if monotonic() >= deadline:
                         return
@@ -77,9 +62,7 @@ def repair_skill_versions(*, tenant_id: str) -> None:
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
                     session.commit()
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
-                    store.store(
-                        _DRIFT_CURSOR_KEY if completed else PROGRESS_KEY, str(cursor)
-                    )
+                    store.store(PROGRESS_KEY, str(cursor))
                     try:
                         delete_unreferenced_skill_bundles(stale_file_ids, session)
                     except Exception:
@@ -88,10 +71,7 @@ def repair_skill_versions(*, tenant_id: str) -> None:
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
                 if not batch:
                     lock.extend(_LOCK_TIMEOUT_SECONDS)
-                    store.store(
-                        _DRIFT_CURSOR_KEY if completed else PROGRESS_KEY,
-                        None if completed else _COMPLETED,
-                    )
+                    store.store(PROGRESS_KEY, None)
         finally:
             if lock.owned():
                 lock.release()

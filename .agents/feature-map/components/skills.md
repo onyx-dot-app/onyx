@@ -244,8 +244,9 @@ Metadata repair recovers retained history before clearing old bundle links.
 This keeps digest, size, and count after retention deletes the files.
 Versions with incomplete metadata keep their links and remain repair candidates.
 Only confirmed absence clears a non-current link; transient failures retain it.
-Background repair isolates each skill in a savepoint. Both scan phases advance
-through failures and retry pending work after the cursor wraps. User saves
+Background repair isolates each Skill and each version read in a savepoint. The v3 scan advances
+through failures and retries pending work after the cursor wraps. Complete historical metadata
+uses physical size checks without downloading bundles again. User saves
 still propagate unexpected storage errors.
 
 1. `rendering-input-changes-hash` **A new rendering input must change the
@@ -348,7 +349,7 @@ still propagate unexpected storage errors.
    after `skills/validation.py:validate_stored_custom_skill` passes for an
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the observed version and bundle. The skill lock serializes
-   this update with replacement; the legacy validity column is dual-written.
+   this update with replacement; only the observed current version can receive lazy validity.
    Runtime and history use the same missing-object classification. Ambiguous cloud
    404s need a physical metadata check before runtime persists invalidity. Unknown
    metadata or storage outages leave validity unclassified so later reads can retry.
@@ -368,7 +369,7 @@ still propagate unexpected storage errors.
    Version metadata repair also bounds compressed reads at the storage backend
    and expanded work per file and in total, without applying upload file counts.
    Skill deletion collects every retained bundle before cascading version deletion.
-   Cleanup runs after commit and checks both legacy and version references.
+   Cleanup runs after commit and checks version references.
    New upload inputs have a 1 MiB central-directory cap before parsing. Stored reads
    and edits read the saved input without this cap. Saves check the rewritten
    directory against the 1 MiB cap. `file_processing/zip_index.py:ZipIndex` parses
@@ -530,17 +531,17 @@ still propagate unexpected storage errors.
     adapts the generic `db/resource_version.py` service. A row lock serializes
     version numbers. Custom creation reserves its first version ID before inserting
     the skill; the deferred foreign key permits both rows in one transaction.
-    Later writes allocate a new version ID. The version, pointer and legacy columns change in one
+    Later writes allocate a new version ID. The version and pointer change in one
     transaction. Equal content digests keep the current version and stored-byte
     hash. `utils/bundle.py:compute_bundle_metadata` computes the digest without
     application database or server imports. It uses only the temporary SQLite
     store in `db/zip_metadata.py`; ZIP timestamps and entry order do not affect it. See
     [[#bundle-retention]] for which bundle files stay.
-    Legacy columns remain for V2 compatibility and repair. A save repairs a stale
-    or missing pointer before writing its new content. A recovery snapshot has
-    no creator; a user content change follows it. Runtime classification updates
-    the observed current version only while it remains unclassified. It also
-    updates legacy validity when the bundle links match, without creating history.
+    V7 removes legacy bundle/hash/validity mappings and dual writes. Its migration
+    appends deterministic recovery versions for pointerless or drifted old-writer rows,
+    without blob I/O. Matching bundles retain their version and reconcile validity.
+    Custom rows require a same-skill version pointer; built-ins require no pointer.
+    Runtime classification updates only the observed, still-unclassified current version.
     Identical user saves verify the existing bundle before reusing it. A missing,
     changed or corrupt current file creates a fresh version from the upload.
     Unexpected storage errors abort the save and keep the current version.
@@ -555,8 +556,8 @@ still propagate unexpected storage errors.
     No upload ZIP or file-count cap applies to history.
     Current-content reads verify expansion before inspection or editing.
     Current-content stored-byte limits return a specific 413; its expansion failures
-    return 400 through the ValueError handler. History preview and restore retain
-    their structured 413 responses for stored-byte and expansion limits.
+    return 400 through the ValueError handler. History preview and restore return
+    400 for stored-byte overflow and structured 413 responses for expansion limits.
     Metadata hashes original entries without normalization.
     Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
@@ -569,13 +570,17 @@ still propagate unexpected storage errors.
     UUID cursor advances, including failed attempts. Failed work remains eligible
     for retry after the cursor wraps.
     Progress reloads from PostgreSQL because KV caching precedes its commit.
-    After the initial scan, `db/skill_version.py:skill_version_repair_batch`
-    checks pointer, file, hash and validity drift with an outer join and
-    null-safe comparisons. This catches old-writer edits and pointerless
-    inserts below the cursor. The completed flag means only the initial scan
-    finished. Before switching readers, drain old writers and require a fresh
-    empty drift query, not that flag. Follow [[#cut-over-version-readers]].
-    No migration reads blobs.
+    `db/skill_version.py:skill_version_repair_batch` selects retained versions with
+    incomplete metadata and skills with more than ten retained bundles. The v3 UUID
+    cursor wraps after each pass. Missing or corrupt bundles do not block later rows;
+    restored files and rows below the cursor can recover on later passes.
+    Physical legacy columns stay until V8, at least one release after V7.
+    After reconciliation, migration clears these columns and enforces
+    `ck_skill_legacy_fields_retired`. Old repair workers reject the absent legacy
+    bundle; old bundle and validity writes fail instead of reverting current content.
+    Drain old writers before migration. Downgrade removes the check and fills the columns from
+    current versions and refuses custom rows without current bundle references.
+    No migration reads blobs. See [[#cut-over-version-readers]] for rollout.
 16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
@@ -660,10 +665,8 @@ still propagate unexpected storage errors.
     empties `bundle_file_id` on versions older than the retention cutoff (never the
     current one). Writers and skill delete return file ids; callers delete them
     after commit with `db/skill_version.py:delete_unreferenced_skill_bundles`,
-    which keeps any file that a version row or the legacy
-    `Skill.bundle_file_id` still uses. Old writers and pointerless skills use
-    only the legacy column, so a cleanup that checks only versions deletes
-    live bundles. The hourly `check_for_orphan_skill_bundle_cleanup` task uses
+    which keeps any file that a version row or physical legacy bundle column still uses.
+    The legacy exclusion remains until V8 so workers started before migration cannot delete recovery inputs. The hourly `check_for_orphan_skill_bundle_cleanup` task uses
     the configured tenant-scoped cache lock. It retries failed deletes and
     removes `SKILL_BUNDLE` files older than `ORPHAN_BUNDLE_MIN_AGE` that nothing uses.
     Lite runs the same cleanup through `background/periodic_poller.py`.
@@ -754,7 +757,7 @@ still propagate unexpected storage errors.
     Changed entries require a staged bundle whose name and digest match the read.
     Healthy unchanged digests need no upload. Explicit `recovery_keys` bypass digest
     reuse; only ready recovery entries require fresh staged bundles. The shared version writer and retention
-    functions maintain history and legacy columns; save-time storage repair is skipped.
+    functions maintain history and the current pointer; save-time storage repair is skipped.
     Missing keys retire permanently; reappearance creates a new id. Moves retain ids.
     Unsupported plugin keys protect all their existing child skills. Blocked keys
     keep their versions; `Marketplace.blocked_entries` stores reasons for the later UI.
@@ -801,7 +804,7 @@ still propagate unexpected storage errors.
     pending-request reads share that transaction. Before a commit attempt, failure
     cleanup checks only this run's ids. After a commit attempt fails, defer cleanup
     to the aged orphan sweep: the server may still commit. Success cleanup also
-    checks pruned ids. Cleanup preserves version and legacy references.
+    checks pruned ids. Cleanup preserves all version references.
     After commit, lease renewal stops before cleanup and sandbox I/O.
     One push covers users affected by content, retirement, or access changes.
     A failed push is logged; it cannot change the committed sync result.
@@ -889,7 +892,7 @@ still propagate unexpected storage errors.
     or an unchanged revision would end as a no-op and hide a needed confirmation.
     Default access requires global authority before the existing access adapter;
     resolve tier before locking, then commit and push its returned audience once.
-    Removal captures all version/legacy file IDs and sandbox recipients before cascading.
+    Removal captures all version file IDs and sandbox recipients before cascading.
     Commit before dispatch, push or unreferenced-file cleanup. Rollback preserves rows
     and blobs. Replacement and deletion fence workers that already staged content.
     The source list refreshes host resources after completion, revision/count changes,
@@ -1070,28 +1073,19 @@ still propagate unexpected storage errors.
   `BuildSession.skills_hash`: equal means the runtime loaded the last push;
   different means the session waits for a reload. Search the API server log
   for `Skill push failed` for a failed push.
-- `cut-over-version-readers` **Gate version readers after legacy writers drain.**
-  First deploy version writers and the version repair task everywhere. Stop and drain every API,
-  worker, Lite poller and script that can still write only legacy columns.
-  Keep current-version readers off until the following check passes for every tenant and shard.
-  Run the existing repair task until a fresh drift query returns no rows.
-  The repair completed marker does not authorize cutover. Old writers can create
-  drift after that marker is set.
+- `cut-over-version-readers` **Deploy V7 after draining old writers.**
+  Stop API servers, workers, Lite pollers and scripts running pre-V7 code before migration.
+  Apply revision `ef73786dc783`, then start V7 code. Reconciliation preserves history,
+  copies known legacy bundle references into recovery versions, and enforces the pointer check.
+  It clears legacy bundle/hash/validity columns and rejects writes that repopulate them.
+  Old processes left during rollout fail instead of restoring stale content.
+  File metadata recovery remains an application job. Missing files remain unavailable.
+  Do not restart old writers against this schema. Before downgrading application code,
+  downgrade the migration to fill legacy fields from current versions. A custom current
+  version without a bundle link requires content replacement or deletion first.
+  V7 targets the next planned release. Keep physical legacy columns for at least one release;
+  only V8 may remove them after that gate is met.
 
-  Use the target shard's database configuration and the application's backend path:
-
-  ```bash
-  PYTHONPATH=backend uv run python backend/scripts/check_skill_version_cutover.py --tenant-id public
-  ```
-
-  Substitute each tenant schema for `public`. Exit 1 reports the first batch of
-  drifted skill IDs; a database error also blocks deployment. Run the existing
-  `repair_skill_versions` task for that tenant, then repeat the check in a new
-  process. Do not replace missing blobs with empty bundles. Recover their source
-  and upload again when repair cannot recover them. The query checks database
-  drift, not blob availability. Retain the command output, tenant, shard and
-  deployed writer revision. Deploy current-version readers only after every check exits 0 and legacy
-  writers remain stopped. Keep legacy dual writes and version repair through this release.
 - `test-skill-setup` **Set up skills for a test.** Use the integration manager
   `backend/tests/integration/common_utils/managers/skill.py`. A real push
   needs the Kubernetes harness in `backend/tests/integration/tests/craft/k8s/`.
