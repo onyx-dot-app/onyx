@@ -72,6 +72,18 @@ sync), so pruning removes documents of files that indexing skips. Conversion
 runs it first. `_post_download_skip_reason` covers what only the content shows
 (export over the size cap, Forms API off, no text).
 
+**Parallel listing.** For a service account with no requested folders, that
+call runs `connectors/google_drive/parallel_listing.py:ParallelDriveLister`.
+Every partition (shared drive, My Drive, files shared with a user) lists in one
+`AdaptiveTaskPool`, one page per task, at `pageSize=1000`. A partition with
+many pages splits into `modifiedTime` shards by probe and split
+(`plan_split`): the sub-ranges are query filters, so no step depends on page
+order. `GoogleDriveCheckpoint.listing` (`DriveListingState`) holds the open
+shards, the coverage sets, the learned worker limit and the count of stubs by
+`DocumentTypeLabel`. One lock guards each page step, and a call drains the pool
+before it returns, so the checkpoint covers exactly what the call yielded. The
+OAuth flow and a connector with requested folders use the serial crawl.
+
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).
 `GoogleDriveConnector.normalize_url` returns several candidate ids for a pasted
