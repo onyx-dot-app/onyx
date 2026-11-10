@@ -117,6 +117,30 @@ func TestMemoryAdmissionCountsStartingVMs(t *testing.T) {
 	}
 }
 
+// A template build VM is admitted like a Create and counts as starting
+// until it is done.
+func TestMemoryAdmissionCountsBuildVM(t *testing.T) {
+	f := newFixture(t, 10)
+	ctx := context.Background()
+	f.stats.availMiB = 2*4096 + 2048 - 1
+	_, done, err := f.m.BuildSlot("tpl-abc", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = f.m.Create(ctx, req(sb1, 1))
+	wantReason(t, err, pb.ErrorReason_CAPACITY_MEMORY)
+	if _, md := errorInfo(t, err); md["mem_starting_mib"] != "4096" {
+		t.Fatalf("metadata %v", md)
+	}
+	if _, _, err := f.m.BuildSlot("tpl-def", 4096); err == nil {
+		t.Fatal("a second build fit in the memory of one")
+	}
+	done(false)
+	if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
+		t.Fatalf("create after the build: %v", err)
+	}
+}
+
 // The memory reading happens under the lock: a Create that reads memory
 // while another Create holds it sees that VM as starting.
 func TestMemoryReadUnderLock(t *testing.T) {

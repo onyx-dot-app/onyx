@@ -458,8 +458,8 @@ func TestMemAdmissionKVM(t *testing.T) {
 	hv := mustCreate()
 	hogOnce(hv, "overhead default")
 
-	// 6. The same hog with a 16 MiB overhead: Firecracker goes over
-	// memory.max. Only that VM ends; the agent cleans it up.
+	// 6. The same hog with a 16 MiB overhead: the guest OOM killer still
+	// stops the hog before Firecracker reaches memory.max, so the VM lives.
 	_ = exec.Command("docker", "rm", "-f", agentName).Run()
 	startTBAgent(t, e, agentName, rootfsDir, ca, certDir, certs, "--vm-mem-overhead-mib", "16")
 	conn = ptConn(t, ctx, certs, agentName)

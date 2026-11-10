@@ -557,9 +557,13 @@ func (m *Manager) admitMemoryLocked(memMiB uint32) error {
 	return e
 }
 
-// startingMiBLocked is the guest memory of the VMs that are starting.
+// startingMiBLocked is the guest memory of the VMs that are starting and of
+// the template build VMs.
 func (m *Manager) startingMiBLocked() uint64 {
 	var n uint64
+	for _, mib := range m.building {
+		n += uint64(mib)
+	}
 	for _, e := range m.vms {
 		if e.vm.State == pb.VMState_VM_STATE_STARTING {
 			n += uint64(e.vm.MemMiB)
@@ -569,7 +573,7 @@ func (m *Manager) startingMiBLocked() uint64 {
 }
 
 func (m *Manager) startingCountLocked() int {
-	n := 0
+	n := len(m.building)
 	for _, e := range m.vms {
 		if e.vm.State == pb.VMState_VM_STATE_STARTING {
 			n++
@@ -828,8 +832,8 @@ func (m *Manager) TemplatesInUse() map[string]bool {
 }
 
 // BuildSlot gives a template build VM with jailer ID id and memMiB of guest
-// memory a jailer UID. It refuses the build when the node lacks the memory,
-// as Create does. The process scan does not count the VM as untracked while
+// memory a jailer UID. It admits the build on memory as Create does, and
+// the build counts as a starting VM until done. The process scan does not count the VM as untracked while
 // it runs. Call done when the VM is gone; done(true) puts the VM in doubt
 // with its UID, for a VM that may still run, and a later scan frees the UID
 // once it is gone.
@@ -842,13 +846,8 @@ func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), 
 	if _, ok := m.building[id]; ok || m.vms[id] != nil || m.doubt[id] != nil {
 		return 0, nil, apierr.New(pb.ErrorReason_INTERNAL, "build VM %s already runs", id)
 	}
-	_, avail, err := m.stats.MemInfo()
-	if err != nil {
-		return 0, nil, fmt.Errorf("read memory info: %w", err)
-	}
-	if avail < uint64(memMiB)+m.cfg.MinFreeMemMiB {
-		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
-			"node has %d MiB available, the template build VM needs %d MiB plus a %d MiB reserve", avail, memMiB, m.cfg.MinFreeMemMiB)
+	if err := m.admitMemoryLocked(memMiB); err != nil {
+		return 0, nil, err
 	}
 	uid, ok := m.uids.Get()
 	if !ok {

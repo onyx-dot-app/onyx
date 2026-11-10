@@ -74,8 +74,9 @@ service HostAgent {
   rpc SwapManaged(SwapManagedRequest) returns (SwapManagedResponse);
 
   // Drain (ENG-4569). A draining node refuses every Create that would start
-  // a new VM (NODE_DRAINING). Running VMs keep running: the api_server saves
-  // and stops each one. The node drains while the manual drain flag is set
+  // a new VM (NODE_DRAINING). Running VMs keep running; automatic evacuation
+  // by the api_server is planned (ENG-4580), so until then the operator stops
+  // each VM and waits for DRAINED. The node drains while the manual drain flag is set
   // or while it has a drain taint (the agent's --watch-node-drain).
 
   // SetDrain sets or clears the manual drain flag. The agent keeps the flag

@@ -355,9 +355,12 @@ times slower. Free page reporting gives the pages that the guest frees back to t
 **Cgroup limits.** Each VM scope has `memory.max` = `mem_mib` + `--vm-mem-overhead-mib` (default 128) and
 `cpu.max` = `vcpus` CPUs. The scope also counts the host page cache of the VM's drive and memory files;
 the kernel reclaims it at the limit. A guest cannot use more than its memory, so a guest memory hog meets
-the guest's own OOM killer first (KVM: also with a 16 MiB overhead). Only a Firecracker that grows past
-the limit is OOM-killed; the kernel kills that VM only, and the agent shows it as `EXITED` and cleans it
-up. `io.max` is not set.
+the guest's own OOM killer first in the KVM test (also with a 16 MiB overhead). That test covers one
+workload; it does not prove every VM shape. If guest memory plus the host memory that the scope counts
+(Firecracker, page cache) reaches `memory.max` first, the cgroup OOM killer kills Firecracker before the
+guest OOM killer acts. Keep the default overhead unless a test of the VM shape shows a smaller one is
+safe. A Firecracker that grows past the limit is OOM-killed; the kernel kills that VM only, and the agent
+shows it as `EXITED` and cleans it up. `io.max` is not set.
 
 **Admission.** Create needs `MemAvailable` (measured, `/proc/meminfo`) >= guest memory of the VMs that are
 starting + `mem_mib` + `--min-free-mem-mib` (default 2048). Starting VMs count at their full size because
@@ -373,12 +376,16 @@ across restarts) or while its Node has a taint from `--drain-taints` (default
 `--watch-node-drain`, the agent reads its own Node (`--node-id`, from `$NODE_NAME`) every
 `--drain-poll-interval` (default 10 s) with the pod's ServiceAccount (RBAC: `get` on nodes). The first read
 runs before the API serves. If a read fails, the agent keeps the last taints and shows the error in
-`NodeInfo.drain.watch_error`.
+`NodeInfo.drain.watch_error`. The agent does not keep taints across a restart: if the first read after a
+restart fails, the agent has no taints and admits VMs on a cordoned Node until a read works. Set the
+manual flag (`SetDrain`) before a planned drain to close this gap.
 
 - A draining node refuses every Create that would start a new VM with `NODE_DRAINING`
   (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
   returns it.
-- Running VMs keep running. The api_server saves and stops each one (ENG-4580).
+- Running VMs keep running. Automatic evacuation by the api_server is planned (ENG-4580), not built.
+  Until then, save the data you need, `Stop` each VM from `List`, and wait for `NodeInfo.drain.state`
+  `DRAINED` before you take the node down.
 - `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, while the agent
   keeps Firecracker processes in doubt or runs a template build VM, and while no process scan worked;
   `DRAINED` when none of these is left), `manual`, `taints`, `since`, `watch_error`. While draining,
