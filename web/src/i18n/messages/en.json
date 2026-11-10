@@ -6367,6 +6367,34 @@
           "name": "Basic",
           "description": "Default group for all users with basic permissions."
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {No Skills follow this marketplace} one {# Skill follows this marketplace} other {# Skills follow this marketplace}}"
+        },
+        "skill": {
+          "fromMarketplace": "From {marketplace}"
+        },
+        "select": {
+          "label": "Install setting for {name}"
+        },
+        "option": {
+          "inherit": "Company setting ({policy})",
+          "inheritDescription": "Follow the company setting, also when it changes."
+        },
+        "status": {
+          "inherited": "This group follows the company setting: {policy}.",
+          "overridden": "This group uses {policy} in place of the company setting, {company}.",
+          "readOnly": "You can see this setting but not change it. You can change only private Skills and marketplaces that are shared only with groups you manage.",
+          "saving": "Saving…",
+          "saved": "Saved.",
+          "failed": "{choice} is not saved. {reason}",
+          "failedReason": "Try again."
+        },
+        "retry": {
+          "button": "Retry",
+          "label": "Retry the setting for {name}"
+        }
       }
     },
     "hooks": {

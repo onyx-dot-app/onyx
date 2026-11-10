@@ -6367,6 +6367,34 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
+      },
+      "skills": {
+        "marketplace": {
+          "followers": "{count, plural, =0 {没有技能跟随此市场} other {# 个技能跟随此市场}}"
+        },
+        "skill": {
+          "fromMarketplace": "来自 {marketplace}"
+        },
+        "select": {
+          "label": "{name} 的安装设置"
+        },
+        "option": {
+          "inherit": "公司设置（{policy}）",
+          "inheritDescription": "跟随公司设置，公司设置更改时也跟随。"
+        },
+        "status": {
+          "inherited": "此群组跟随公司设置：{policy}。",
+          "overridden": "此群组使用 {policy}，而不是公司设置 {company}。",
+          "readOnly": "你可以查看此设置，但无法更改。你只能更改仅与你管理的群组共享的私有技能和市场。",
+          "saving": "正在保存…",
+          "saved": "已保存。",
+          "failed": "{choice} 未保存。{reason}",
+          "failedReason": "请重试。"
+        },
+        "retry": {
+          "button": "重试",
+          "label": "重试 {name} 的设置"
+        }
       }
     },
     "hooks": {
