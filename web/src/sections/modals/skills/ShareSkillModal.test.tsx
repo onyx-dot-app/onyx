@@ -257,6 +257,49 @@ describe("ShareSkillModal", () => {
     );
   });
 
+  it("shows a saved Not available policy as selected and can change it", async () => {
+    const user = setupUser();
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        installation_policy: "NOT_AVAILABLE",
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    expect(
+      await screen.findByRole("button", { name: "Not available" })
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Available to install" })
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByText(/Hidden from the library and the agent/)
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Available to install" })
+    );
+    await user.click(screen.getByRole("button", { name: "Not available" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.click(
+      screen.getByRole("button", { name: "Installed by default" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({ installation_policy: "DEFAULT" })
+      )
+    );
+  });
+
   it("loads full sharing details from the overview before saving", async () => {
     const user = setupUser();
     mockLoadSkill.mockResolvedValue(

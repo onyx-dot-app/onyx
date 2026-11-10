@@ -20,6 +20,7 @@ import type { SkillShareUpdatePayload } from "@/lib/skills/api";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { SharePermissionMenu } from "@/lib/permissions/components";
 import { useSharePermissionOptions } from "@/sections/modals/shareAccessConstants";
+import { useInstallationPolicyOptions } from "@/lib/skills/hooks";
 
 interface BulkSkillSharingModalProps {
   count: number;
@@ -59,6 +60,7 @@ export default function BulkSkillSharingModal({
     []
   );
   const permissionOptions = useSharePermissionOptions();
+  const installationOptions = useInstallationPolicyOptions();
   const canChangeCompanyAccess = canManageCompanySkills && canChangeOrgAccess;
   const effectiveScope = canChangeCompanyAccess ? scope : "KEEP";
   const changed =
@@ -156,21 +158,7 @@ export default function BulkSkillSharingModal({
                   disabled={saving}
                   options={[
                     { value: "KEEP", label: t("unchanged"), icon: SvgBlocks },
-                    {
-                      value: "AVAILABLE",
-                      label: shareCopy("installation.available"),
-                      icon: SvgBlocks,
-                    },
-                    {
-                      value: "DEFAULT",
-                      label: shareCopy("installation.default"),
-                      icon: SvgBlocks,
-                    },
-                    {
-                      value: "REQUIRED",
-                      label: shareCopy("installation.required"),
-                      icon: SvgLock,
-                    },
+                    ...installationOptions,
                   ]}
                 />
               </Section>

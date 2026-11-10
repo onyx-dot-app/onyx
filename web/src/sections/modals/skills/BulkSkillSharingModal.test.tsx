@@ -140,6 +140,29 @@ describe("BulkSkillSharingModal", () => {
       expect(onSave).toHaveBeenCalledWith({ public_permission: "VIEWER" })
     );
   });
+  it("offers Not available as a company installation policy", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    render(
+      <BulkSkillSharingModal
+        count={2}
+        canChangeOrgAccess
+        canChangeUserAccess
+        open
+        saving={false}
+        onClose={jest.fn()}
+        onSave={onSave}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Installation" }));
+    fireEvent.click(screen.getByRole("option", { name: /^Not available/ }));
+    await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        installation_policy: "NOT_AVAILABLE",
+      })
+    );
+  });
   it("keeps staged edits across a generic close and drops them on Cancel", async () => {
     const user = setupUser();
     const onClose = jest.fn();
@@ -225,7 +248,7 @@ describe("BulkSkillSharingModal", () => {
       screen.getByRole("option", { name: "Everyone in the organization" })
     );
     await user.click(screen.getByRole("button", { name: "Installation" }));
-    fireEvent.click(screen.getByRole("option", { name: "Required" }));
+    fireEvent.click(screen.getByRole("option", { name: /^Required/ }));
     await user.type(
       screen.getByRole("combobox", { name: "Add users, groups, and accounts" }),
       "cash"

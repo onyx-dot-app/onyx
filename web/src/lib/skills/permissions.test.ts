@@ -1,4 +1,8 @@
-import { canReadSkillHistory, canShareSkill } from "@/lib/skills/permissions";
+import {
+  canDeleteSkill,
+  canReadSkillHistory,
+  canShareSkill,
+} from "@/lib/skills/permissions";
 import {
   builtinFixture,
   customFixture,
@@ -42,3 +46,23 @@ describe("skill history authority", () => {
     ).toBe(true);
   });
 });
+
+it.each([false, true])(
+  "allows deleting group-required skills only for global managers (%s)",
+  (canManageCompanySkills) => {
+    const skill = customFixture({
+      user_permission: "EDITOR",
+      group_shares: [
+        {
+          group_id: 7,
+          group_name: "Engineering",
+          permission: "VIEWER",
+          installation_policy: "REQUIRED",
+        },
+      ],
+    });
+    expect(canDeleteSkill({ skill, canManageCompanySkills })).toBe(
+      canManageCompanySkills
+    );
+  }
+);

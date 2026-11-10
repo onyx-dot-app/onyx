@@ -183,6 +183,7 @@ function customSkill(id: string, name: string): CustomSkill {
     enabled: false,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    effective_installation_policy: "AVAILABLE",
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },
@@ -194,6 +195,7 @@ function customSkill(id: string, name: string): CustomSkill {
     updated_at: null,
     user_shares: [],
     group_shares: [],
+    group_summaries: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
     external_app: null,
@@ -709,6 +711,30 @@ describe("SkillsPage preference toggles", () => {
     );
   });
 
+  it("labels each company installation policy without falling back to Available", () => {
+    skillsData.customs = [
+      {
+        ...customSkill("hidden-id", "hidden-skill"),
+        installation_policy: "NOT_AVAILABLE",
+      },
+      {
+        ...customSkill("required-id", "required-skill"),
+        installation_policy: "REQUIRED",
+      },
+    ];
+    render(<SkillsPage admin />);
+    const hidden = screen.getByRole("row", { name: "hidden-skill" });
+    expect(within(hidden).getByText("Not available")).toBeVisible();
+    expect(
+      within(hidden).queryByText("Available to install")
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("row", { name: "required-skill" })).getByText(
+        "Required"
+      )
+    ).toBeVisible();
+  });
+
   it("shows server access and group names and keeps invalid skills manageable", async () => {
     skillsData.customs = [
       {
@@ -717,9 +743,19 @@ describe("SkillsPage preference toggles", () => {
         is_personal: false,
         is_valid: false,
         user_permission: "OWNER",
-        group_shares: [
-          { group_id: 1, group_name: "Engineering", permission: "VIEWER" },
-          { group_id: 2, group_name: "Research", permission: "VIEWER" },
+        group_summaries: [
+          {
+            group_id: 1,
+            group_name: "Engineering",
+            installation_policy: null,
+            source: "direct",
+          },
+          {
+            group_id: 2,
+            group_name: "Research",
+            installation_policy: "NOT_AVAILABLE",
+            source: "direct",
+          },
         ],
       },
     ];
@@ -727,7 +763,9 @@ describe("SkillsPage preference toggles", () => {
     const user = setupUser();
     const row = screen.getByRole("row", { name: "invalid-skill" });
     expect(within(row).getByText("Shared")).toBeVisible();
-    expect(within(row).getByText("Engineering, Research")).toBeVisible();
+    expect(within(row).getByText("Engineering")).toBeVisible();
+    expect(within(row).getByText("Research")).toBeVisible();
+    expect(within(row).getByText("Not available")).toBeVisible();
     expect(within(row).getByRole("switch")).toHaveAttribute(
       "aria-disabled",
       "true"
@@ -741,6 +779,228 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("menuitem", { name: "Delete skill" }));
     expect(screen.getByRole("dialog")).toHaveTextContent("invalid-skill");
     expect(mockDeleteUserSkill).not.toHaveBeenCalled();
+  });
+
+  describe("group column and filter", () => {
+    const engineering = {
+      group_id: 1,
+      group_name: "Engineering",
+      installation_policy: null,
+      source: "direct",
+    } as const;
+    const support = {
+      group_id: 2,
+      group_name: "Support",
+      installation_policy: "REQUIRED",
+      source: "marketplace",
+    } as const;
+
+    beforeEach(() => {
+      skillsData.customs = [
+        {
+          ...customSkill("eng-a", "eng-report"),
+          group_summaries: [engineering],
+        },
+        {
+          ...customSkill("eng-b", "eng-review"),
+          group_summaries: [engineering, support],
+        },
+        {
+          ...customSkill("support-a", "support-triage"),
+          group_summaries: [support],
+        },
+        customSkill("ungrouped", "ungrouped-skill"),
+      ];
+    });
+
+    async function chooseGroup(name: string) {
+      const user = setupUser();
+      await user.click(
+        screen.getByRole("combobox", { name: "Filter by group" })
+      );
+      await user.click(screen.getByRole("option", { name: name }));
+    }
+
+    function rowNames() {
+      return screen
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.getAttribute("aria-label"));
+    }
+
+    it("labels direct and marketplace groups with their settings", () => {
+      render(<SkillsPage admin />);
+      expect(
+        screen.getByRole("columnheader", { name: "Groups" })
+      ).toBeInTheDocument();
+      const row = screen.getByRole("row", { name: "support-triage" });
+      expect(within(row).getByText("Support")).toBeVisible();
+      expect(within(row).getByText("Required · Marketplace")).toBeVisible();
+      const engRow = screen.getByRole("row", { name: "eng-report" });
+      expect(within(engRow).getByText("Engineering")).toBeVisible();
+      // A direct grant without an override adds no setting beside the
+      // company Installation column.
+      expect(within(engRow).getAllByText("Available to install")).toHaveLength(
+        1
+      );
+      // Empty summaries do not invent groups.
+      const ungrouped = screen.getByRole("row", { name: "ungrouped-skill" });
+      expect(within(ungrouped).queryByText(/Engineering|Support/)).toBeNull();
+    });
+
+    it("filters rows, count and select-all, and clears the selection", async () => {
+      render(<SkillsPage admin />);
+      const user = setupUser();
+      const toolbar = screen.getByRole("group", { name: "Select skills" });
+      expect(within(toolbar).getByText("4 skills")).toBeVisible();
+      await user.click(
+        screen.getByRole("checkbox", { name: "Select support-triage" })
+      );
+      expect(within(toolbar).getByText("1 selected")).toBeVisible();
+
+      await chooseGroup("Engineering");
+      expect(rowNames()).toEqual(["eng-report", "eng-review"]);
+      expect(within(toolbar).getByText("2 skills")).toBeVisible();
+      expect(within(toolbar).queryByText(/selected/)).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("checkbox", {
+          name: "Select all visible custom skills",
+        })
+      );
+      expect(within(toolbar).getByText("2 selected")).toBeVisible();
+      await user.click(screen.getByRole("button", { name: "More actions" }));
+      await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+      await waitFor(() =>
+        expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
+          action: "enable",
+          skill_ids: ["eng-a", "eng-b"],
+        })
+      );
+    });
+
+    it("clears failures and keeps the name search when the group changes", async () => {
+      mockBulkUpdateSkills.mockResolvedValue({
+        succeeded: [],
+        failed: [{ skill_id: "eng-b", detail: "Denied" }],
+      } satisfies BulkSkillResult);
+      render(<SkillsPage admin />);
+      const user = setupUser();
+      await user.type(screen.getByPlaceholderText("Search skills..."), "eng");
+      await user.click(
+        screen.getByRole("checkbox", { name: "Select eng-review" })
+      );
+      await user.click(screen.getByRole("button", { name: "More actions" }));
+      await user.click(screen.getByRole("menuitem", { name: "Enable for me" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "eng-review: Denied"
+      );
+      await chooseGroup("Support");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Search skills...")).toHaveValue(
+        "eng"
+      );
+      expect(rowNames()).toEqual(["eng-review"]);
+      expect(
+        screen.getByRole("checkbox", { name: "Select eng-review" })
+      ).not.toBeChecked();
+    });
+
+    it("shows a group empty state when search and group match nothing", async () => {
+      render(<SkillsPage admin />);
+      const user = setupUser();
+      await chooseGroup("Support");
+      await user.type(
+        screen.getByPlaceholderText("Search skills..."),
+        "eng-report"
+      );
+      expect(screen.getByText("No matching skills")).toBeVisible();
+      expect(
+        screen.getByText(
+          "No skills in this group match. Try a different group or search."
+        )
+      ).toBeVisible();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+      await chooseGroup("All groups");
+      expect(rowNames()).toEqual(["eng-report"]);
+    });
+
+    it("combines the group filter with an app focus", async () => {
+      mockSearchParamsGet.mockImplementation((key: string) =>
+        key === "externalAppId" ? "42" : null
+      );
+      const app = {
+        external_app_id: 42,
+        name: "Acme CRM",
+        enabled: true,
+        ready: true,
+      };
+      skillsData.customs = skillsData.customs.map((skill) =>
+        skill.id === "eng-b" || skill.id === "support-a"
+          ? { ...skill, external_app: app }
+          : skill
+      );
+      render(<SkillsPage admin />);
+      expect(rowNames()).toEqual(["eng-review", "support-triage"]);
+      await chooseGroup("Engineering");
+      expect(rowNames()).toEqual(["eng-review"]);
+      expect(screen.getByText("Skills for app “Acme CRM”")).toBeInTheDocument();
+    });
+
+    it("does not restore a removed group filter when the group returns", async () => {
+      const original = skillsData;
+      const { rerender } = render(<SkillsPage admin />);
+      await chooseGroup("Engineering");
+      expect(rowNames()).toEqual(["eng-report", "eng-review"]);
+      skillsData = {
+        ...skillsData,
+        customs: skillsData.customs.map((skill) => ({
+          ...skill,
+          group_summaries: skill.group_summaries.filter(
+            (group) => group.group_id !== engineering.group_id
+          ),
+        })),
+      };
+      rerender(<SkillsPage admin />);
+      expect(rowNames()).toHaveLength(4);
+      skillsData = original;
+      rerender(<SkillsPage admin />);
+      expect(rowNames()).toHaveLength(4);
+      expect(
+        screen.getByRole("combobox", { name: "Filter by group" })
+      ).toHaveValue("All groups");
+    });
+
+    it("hides the filter when no visible skill has groups", () => {
+      skillsData.customs = [customSkill("solo", "solo-skill")];
+      render(<SkillsPage admin />);
+      expect(
+        screen.queryByRole("combobox", { name: "Filter by group" })
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows compact group labels on narrow screens", () => {
+      const originalWidth = window.innerWidth;
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: 390,
+      });
+      try {
+        render(<SkillsPage admin />);
+        expect(
+          screen.queryByRole("columnheader", { name: "Groups" })
+        ).not.toBeInTheDocument();
+        const row = screen.getByRole("row", { name: "eng-review" });
+        expect(
+          within(row).getByText("Groups: Engineering, Support")
+        ).toHaveClass("truncate");
+      } finally {
+        Object.defineProperty(window, "innerWidth", {
+          configurable: true,
+          value: originalWidth,
+        });
+      }
+    });
   });
 
   it("keeps all admin rows visible and bulk targets limited to the current search", async () => {

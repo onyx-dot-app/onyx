@@ -121,6 +121,7 @@ it("presents the chosen creation defaults and changes visibility, permissions an
   for (const [label, policy] of [
     ["Installed by default", "DEFAULT"],
     ["Required", "REQUIRED"],
+    ["Not available", "NOT_AVAILABLE"],
     ["Available to install", "AVAILABLE"],
   ]) {
     await user.click(screen.getByRole("combobox", { name: "Installation" }));
@@ -166,6 +167,24 @@ it.each(["saved", "edited"])(
     });
   }
 );
+it("labels a saved Not available default instead of Available", async () => {
+  render(
+    <Harness
+      initial={{
+        ...DEFAULT_COMPANY_MARKETPLACE_ACCESS,
+        installation_policy: "NOT_AVAILABLE",
+      }}
+      onSubmit={jest.fn()}
+    />
+  );
+  await ready();
+  expect(screen.getByRole("combobox", { name: "Installation" })).toHaveValue(
+    "Not available"
+  );
+  expect(
+    screen.getByText(/Hidden from the library and the agent/)
+  ).toBeInTheDocument();
+});
 
 it("adds and removes groups while preserving policies on edited and unresolved grants", async () => {
   const onSubmit = jest.fn();
