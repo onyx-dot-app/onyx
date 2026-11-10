@@ -140,6 +140,16 @@ them (`_interleave_by_user`), so conversions spread over per-user quotas. A
 file does not wait for its folder: docfetching gives a document a STUB parent
 until the folder's node arrives.
 
+**Shared API budget.** With `ENABLE_SOURCE_API_LIMITER` (off by default),
+`connectors/factory.py:instantiate_connector` passes the connector a
+`SourceApiLimiter` (`background/indexing/source_api_limiter.py`). The gateway
+spends from it before each Drive and Docs request
+(`connectors/google_drive/source_operations.py:attach_source_api_limiter`) and
+reports a rate-limit answer with its scope: 403 `userRateLimitExceeded` cuts
+that user's budget, and 429 cuts the project's. The budgets live in Redis
+(`redis/redis_rate_window.py`), so every worker that uses the credential shares
+them. Connector code does not import Redis.
+
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates
 the given user with a service-account key. The gateway keeps one Drive client
