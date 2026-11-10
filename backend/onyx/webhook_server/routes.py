@@ -51,7 +51,7 @@ def _registered() -> list[WebhookSourceSpec]:
     return registered_webhook_sources()
 
 
-async def _read_body(request: Request) -> bytes:
+async def read_webhook_body(request: Request) -> bytes:
     """Read up to the limit, then stop, unlike `request.body()`."""
     chunks: list[bytes] = []
     total = 0
@@ -68,7 +68,7 @@ def _handler_for(
     endpoint: str,
 ) -> Callable[[Request], Awaitable[Response]]:
     async def handle(request: Request) -> Response:
-        raw_body = await _read_body(request)
+        raw_body = await read_webhook_body(request)
         delivery = WebhookRequest(
             raw_body=raw_body,
             headers=dict(request.headers),

@@ -63,6 +63,23 @@ class GitHubMarketplaceConfig(BaseModel):
         return value
 
 
+class GitHubHookConfig(BaseModel):
+    url: str
+
+
+class GitHubHook(BaseModel):
+    id: int
+    config: GitHubHookConfig
+
+
+class GitHubRef(BaseModel):
+    ref: str
+
+
+class GitHubRepository(BaseModel):
+    default_branch: str
+
+
 class MarketplaceArchive(BaseModel):
     revision: str
     archive_bytes: bytes

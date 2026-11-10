@@ -592,8 +592,8 @@ still propagate unexpected storage errors.
     still does this. A harness that loads skills in the API server must give the
     model `skills/rendering.py:render_skill_for_model`, which resolves the
     placeholder and adds the same two lines. No such harness is on main yet.
-17. `marketplace-provider-boundary` **Only the provider adapter reads provider
-    config.** `skills/marketplace/provider.py:MarketplaceProviderAdapter` owns
+17. `marketplace-provider-boundary` **Only the provider adapter reads provider config for sync.**
+    `skills/marketplace/provider.py:MarketplaceProviderAdapter` owns
     login checks, ref resolution, change checks and webhook capability. GitHub
     verifies every ref, including pinned commits, and fetches one bounded archive
     at that commit. The reader receives bytes and a folder. Reconciliation receives
@@ -604,7 +604,22 @@ still propagate unexpected storage errors.
     ownership and retirement approval before allowing publication from the new source.
     Empty folders become NULL; trailing slashes are removed. Absolute paths and
     dot segments are rejected.
-    Webhooks remain unsupported until the self-hosted webhook ticket ships.
+    Hook registration remains unavailable until the self-hosted webhook ticket ships.
+    `skills/marketplace/github_webhooks.py`, called by the adapter, resolves exact
+    branch/tag refs, refuses pinned or ambiguous refs, and creates or updates a hook
+    by its exact callback URL. Retries reuse that hook after a lost response.
+    Transport uses signed JSON, certificate verification, and no redirects.
+    `webhook_server/marketplace.py` serves a separate, bounded receiver outside
+    connector routing. The provider adapter verifies the encrypted secret,
+    repository, hook ID and exact registered ref. `db/marketplace_webhook.py`
+    rejects invalid deliveries before locking, then verifies the locked source
+    again before saving S5 intent.
+    It commits intent and delivery time before dispatch; broker failure leaves
+    recoverable work. Ping and other-ref pushes record delivery without syncing only
+    for the saved hook ID. A signed setup ping with another ID is acknowledged
+    without recording delivery. Push sync requires a saved registration.
+    Missing signing state closes the route. Cloud requests and pinned-commit syncs
+    are refused. Registration must save the secret and full ref before GitHub's ping.
 18. `marketplace-ownership` **A personal marketplace blocks owner deletion.**
     Its owner FK uses RESTRICT; the login and version creator FKs use SET NULL.
     `db/users.py:delete_user_from_db__no_commit` names owned marketplaces and

@@ -5495,6 +5495,10 @@ class Marketplace(Base):
         PydanticType(MarketplaceRetirementProposal, none_as_null=True), nullable=True
     )
     webhook_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    webhook_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    webhook_last_delivery_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     webhook_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )

@@ -180,6 +180,10 @@ against, so each account of a source signs with its own; an unsigned source
 serves one pair and refuses a delivery when several are active. Single tenant only; the webhook server refuses to start under
 `MULTI_TENANT`.
 
+Marketplace repository pushes use a separate route, not a connector pair or
+event inbox. They reuse the body limit and save durable sync intent after
+signature and source checks. See [[skills#marketplace-provider-boundary]].
+
 A handler is given the pair's decrypted credential JSON alongside the row
 (`onyx/connectors/event_inbox/credentials.py:pair_secrets`), so a provider
 that pushes a link rather than a body can fetch it. That fetch is why the

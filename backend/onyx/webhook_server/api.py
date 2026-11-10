@@ -21,6 +21,7 @@ from onyx.server.metrics.prometheus_setup import (
     expose_prometheus_metrics,
 )
 from onyx.utils.variable_functionality import set_is_ee_if_available
+from onyx.webhook_server.marketplace import router as marketplace_router
 from onyx.webhook_server.routes import build_webhook_router
 
 
@@ -46,6 +47,7 @@ def create_webhook_app() -> FastAPI:
         return await call_next(request)
 
     app.include_router(build_webhook_router())
+    app.include_router(marketplace_router)
 
     expose_prometheus_metrics(app, create_prometheus_instrumentator())
     return app
