@@ -221,6 +221,39 @@ def test_unknown_create_outcome_pins_the_next_wake_to_that_node(
     assert placement._pending_create_node(tenant_cache, sandbox_id) is None
 
 
+@pytest.mark.parametrize(
+    "reason,code",
+    [
+        (HostAgentErrorReason.INTERNAL, OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE),
+        (HostAgentErrorReason.SANDBOX_IN_DOUBT, OnyxErrorCode.CONFLICT),
+    ],
+)
+def test_unknown_create_failure_keeps_the_pin(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    reason: HostAgentErrorReason,
+    code: OnyxErrorCode,
+) -> None:
+    failing_id = _node("failing")
+    failing = add_node(failing_id, FakeHostAgent(mem_available_mib=32_768))
+    failing.agent.refuse_create = reason
+    other = add_node(_node("other"), FakeHostAgent(mem_available_mib=8192))
+    sandbox_id = new_sandbox_id()
+
+    with pytest.raises(OnyxError) as exc:
+        place_sandbox_vm(
+            shared_cache, tenant_cache, client_factory, _request(sandbox_id)
+        )
+
+    assert exc.value.error_code == code
+    assert exc.value.extra is not None and exc.value.extra["reason"] == reason.value
+    assert other.agent.create_calls == 0
+    assert placement._pending_create_node(tenant_cache, sandbox_id) == failing_id
+
+
 def test_pinned_node_refusal_moves_to_next_node(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
@@ -251,6 +284,7 @@ def test_bad_number_settings_use_the_default(monkeypatch: pytest.MonkeyPatch) ->
     assert configs._fc_env_float("SANDBOX_FC_TEST_NUMBER", 2.5) == 2.5
     monkeypatch.setenv("SANDBOX_FC_TEST_NUMBER", "-4")
     assert configs._fc_env_int("SANDBOX_FC_TEST_NUMBER", 5, minimum=0) == 0
+    assert configs._fc_env_float("SANDBOX_FC_TEST_NUMBER", 10.0, minimum=1.0) == 1.0
     monkeypatch.delenv("SANDBOX_FC_TEST_NUMBER")
     assert configs._fc_env_int("SANDBOX_FC_TEST_NUMBER", 5) == 5
 

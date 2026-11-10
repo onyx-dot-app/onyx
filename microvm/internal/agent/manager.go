@@ -459,6 +459,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			m.log.Error("VM may still run after a failed create; the sandbox is in doubt",
 				"sandbox_id", req.SandboxID, "uid", uid)
 			m.doubt[req.SandboxID] = &doubt{reason: "a failed start may have left its VM running", uids: []uint32{uid}}
+			// Not VMM_FAILED: callers must not start this attempt on another node.
+			e.createErr = apierr.New(pb.ErrorReason_SANDBOX_IN_DOUBT, "start VM: %v", launchErr)
 		} else {
 			m.uids.Put(uid)
 		}
@@ -516,7 +518,7 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 	}
 	free, err := m.stats.DiskFreeBytes()
 	if err != nil {
-		return nil, fmt.Errorf("read disk space: %w", err)
+		return nil, apierr.New(pb.ErrorReason_CAPACITY_DISK, "read disk space: %v", err)
 	}
 	if free < m.cfg.MinFreeDiskBytes {
 		return nil, apierr.New(pb.ErrorReason_CAPACITY_DISK,
@@ -534,7 +536,8 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 func (m *Manager) admitMemoryLocked(memMiB uint32) error {
 	total, avail, err := m.stats.MemInfo()
 	if err != nil {
-		return fmt.Errorf("read memory info: %w", err)
+		// An unreadable statistic is a refusal: no VM started, another node may accept.
+		return apierr.New(pb.ErrorReason_CAPACITY_MEMORY, "read memory info: %v", err)
 	}
 	starting := m.startingMiBLocked()
 	need := starting + uint64(memMiB) + m.cfg.MinFreeMemMiB

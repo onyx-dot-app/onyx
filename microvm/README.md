@@ -141,8 +141,9 @@ files are removed at once.
 
 If a cleanup fails, the VM shows as `EXITED` once its process is gone, and a repeat Stop retries the
 cleanup. A newer attempt for that sandbox gets `VMM_FAILED` until a Stop succeeds. If a start fails and
-the agent cannot confirm that the Firecracker process is gone, the agent keeps the chroot and does not
-give the jailer UID to another VM.
+the agent cannot confirm that the Firecracker process is gone, Create returns `SANDBOX_IN_DOUBT`, and
+the agent keeps the chroot and does not give the jailer UID to another VM. An unreadable memory or
+disk statistic refuses Create with `CAPACITY_MEMORY` or `CAPACITY_DISK`.
 
 ### Journal and agent restart
 

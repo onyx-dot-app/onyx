@@ -528,7 +528,15 @@ def _try_node(
                 request.sandbox_id, node.node_id, e.reason.value
             ) from e
         if e.reason not in _NEXT_NODE_REASONS:
-            raise
+            # Not a known refusal: keep the pin, the outcome is unknown.
+            raise capacity_unavailable_error(
+                [
+                    *refusals,
+                    NodeRefusal(
+                        node_id=node.node_id, reason=e.reason.value, detail=e.message
+                    ),
+                ]
+            ) from e
         clear_pending_create(tenant_cache, request.sandbox_id)
         logger.info(
             "sandbox_fc_node_refused node=%s sandbox=%s reason=%s",
