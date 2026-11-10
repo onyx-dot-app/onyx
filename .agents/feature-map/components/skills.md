@@ -234,7 +234,37 @@ The library preview of an external-app skill calls the same renderer
 
 ---
 
-**Runtime payload preparation.** `UserSkillsPayload` carries files, app guidance and omission records through session assembly. Selection currently leaves omissions empty. Bulk refresh builds and sends one user's payload at a time, releases it before building the next, and records only successful hashes. A user's build or transport error does not discard earlier successful states or stop later users. This avoids retaining one complete fileset per sandbox.
+**Runtime payload preparation.** `UserSkillsPayload` carries files, app guidance and omission records through session assembly. Bulk refresh builds and sends one user's payload at a time, releases it before building the next, and records only successful hashes. A user's build or transport error does not discard earlier successful states or stop later users. This avoids retaining one complete fileset per sandbox.
+
+**Runtime limit.** `skills/push.py:_assemble_fileset` keeps whole Skills
+within `SKILL_RUNTIME_MAX_BYTES` (900 MiB) and `SKILL_RUNTIME_MAX_FILES`
+(10,000). Each rendered file costs at least 4 KiB. The keep order comes from
+`db/skill.py:_runtime_skill_priorities` in one query: built-in, effective
+Required, explicitly enabled (a re-enabled Default counts), then Default.
+Inside a class, the newest `enabled_at` or grant `created_at` comes first,
+unknown dates last, then name and id. Name precedence and fallback order do
+not change. A name is processed at the best rank that any remaining candidate
+can deliver. When the delivered candidate ranks after another pending name,
+its files are dropped and it renders again at its own rank. A delivered
+candidate that does not fit is an omission; no hidden duplicate replaces it.
+The byte check counts root Markdown path substitutions before allocating their
+output. Only admitted candidates expand `${CLAUDE_SKILL_DIR}`.
+Smaller later Skills still load. `UserSkillsPayload.omissions` and
+`ManagedContentPayload.skill_omissions` record the Skill id, name, charged
+bytes, file count and failed limit (`db/skill_runtime_models.py`).
+Selection also counts unique implied folders (10,000 maximum) and checks each
+rendered path (4,021 UTF-8 bytes maximum, 255 bytes per component).
+The shared path validator reserves the full extraction directory prefix under
+Linux PATH_MAX. Skill selection also reserves the longer session symlink prefix,
+so delivered files can be opened from the session. Other mounts derive their own remaining path budget. It leaves out the whole Skill that
+exceeds either bound and tries smaller later Skills. The sender checks the same
+bounds before writing the archive. Folder parents count once.
+Kubernetes push transport accepts the same 900 MiB and 10,000 files
+(`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py`
+`PUSH_MAX_*`) and fails closed above them, so
+omissions happen here, not in transport. Push archives use a dedicated temporary
+folder. The next authenticated push clears files left by a killed sidecar while
+holding the push lock; snapshot archives use separate paths.
 
 ## Contracts and traps
 
@@ -346,7 +376,7 @@ still propagate unexpected storage errors.
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
    `skills/push.py:_assemble_fileset` stages each candidate separately and claims
-   its name only after complete assembly, including rendering, size admission and path replacement.
+   its name only after complete assembly, including rendering and path replacement.
    Failed candidates leave no files; delivery tries the next eligible candidate.
    After success, it never reads losing bundles for that name. Temporary storage
    failures do not persist invalidity. Do not bypass the shared resolver.
@@ -382,6 +412,8 @@ still propagate unexpected storage errors.
    and expanded work per file and in total, without applying upload file counts.
    Skill deletion collects every retained bundle before cascading version deletion.
    Cleanup runs after commit and checks version references.
+   Runtime selection checks expanded instruction sizes against both the configured per-file limit
+   and the shared sidecar per-file limit. A refused winner is omitted whole; other names remain eligible.
    New upload inputs have a 1 MiB central-directory cap before parsing. Stored reads
    and edits read the saved input without this cap. Saves check the rewritten
    directory against the 1 MiB cap. `file_processing/zip_index.py:ZipIndex` parses
@@ -597,13 +629,11 @@ still propagate unexpected storage errors.
     `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
     a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
-    placeholder. Before substitution, assembly checks every predicted file size
-    against both the configured file limit and the receiver file limit.
-    Assembly checks predicted bytes against the receiver total, including already
-    accepted Skills, before substitution. This includes files without placeholders.
-    A size refusal skips the whole candidate, logs a warning and tries the next
-    eligible candidate without claiming the name. Assembly does not raise for
-    size refusals, so session preparation and other users' pushes can continue.
+    placeholder. Before substitution, the push checks the predicted instruction
+    size against both the configured file limit and the receiver file limit.
+    Expansion must also fit the receiver total, including other Skills. An
+    oversized expansion records a whole-Skill omission and continues with other names.
+    Selection applies the shared receiver file limit to every file.
     The sent bytes feed the runtime hash. OpenCode adds the base
     folder line and the relative-path rule itself, so the push adds neither.
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox

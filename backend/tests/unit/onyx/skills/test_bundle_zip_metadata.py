@@ -171,11 +171,12 @@ def test_stored_reads_keep_bundles_with_large_file_lists(shape: str) -> None:
     assert len(inspect_custom_bundle(zip_bytes).files) == files - 1
     stored = normalize_custom_bundle(zip_bytes, zip_max_bytes=None, max_file_count=None)
     assert stored.content is zip_bytes
-    delivered: dict[str, bytes] = {}
-    push._add_bundle_bytes(
-        delivered, cast(Skill, SimpleNamespace(name="limits")), stored.content
+    delivered = push._add_bundle_bytes(
+        {}, cast(Skill, SimpleNamespace(name="limits")), stored.content
     )
-    assert len(delivered) == files
+    assert push._file_count(delivered) == files
+    assert len(delivered) == min(files, push.SKILL_RUNTIME_MAX_FILES)
+    assert delivered["limits/SKILL.md"] == _SKILL_MD
 
 
 def test_stored_reads_unwrap_legacy_bundle_with_large_file_list() -> None:
@@ -291,3 +292,29 @@ def test_forged_directory_sizes_fail_without_partial_state(
         compute_bundle_metadata(zip_bytes, limits=STORED_BUNDLE_LIMITS)
     if descriptors is not None:
         assert len(list(descriptor_dir.iterdir())) == descriptors
+
+
+def test_runtime_counts_files_past_the_runtime_limit_without_keeping_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(push, "SKILL_RUNTIME_MAX_FILES", 3)
+    zip_bytes = raw_zip(
+        [(f"refs/{index}.md", b"x" * 5000 * index) for index in range(6)]
+        + [("SKILL.md", _SKILL_MD)]
+    )
+
+    files = push._add_bundle_bytes(
+        {}, cast(Skill, SimpleNamespace(name="limits")), zip_bytes
+    )
+
+    assert sorted(files) == [
+        "limits/SKILL.md",
+        "limits/refs/0.md",
+        "limits/refs/1.md",
+        "limits/refs/2.md",
+    ]
+    assert push._file_count(files) == 7
+    assert push._charged_bytes(files) == sum(
+        max(size, push.SKILL_RUNTIME_MIN_FILE_CHARGE_BYTES)
+        for size in [len(_SKILL_MD)] + [5000 * index for index in range(6)]
+    )
