@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
 from onyx.db.models import Skill, SkillVersion, User
 from onyx.db.skill import (
+    RuntimeSkillCandidate,
+    SkillRuntimePriority,
     SkillValidityUpdate,
     list_runtime_skills_for_user,
     persist_skill_validity,
@@ -34,6 +36,10 @@ from tests.external_dependency_unit.db.test_skill_version_writes import (
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     user as user,
 )
+
+
+def _candidate(skill: Skill) -> RuntimeSkillCandidate:
+    return RuntimeSkillCandidate(skill, SkillRuntimePriority.ENABLED, None, 1)
 
 
 def test_readers_use_current_version(session: Session, user: User) -> None:
@@ -62,7 +68,10 @@ def test_readers_use_current_version(session: Session, user: User) -> None:
     assert skill.id in {
         row.id for row in list_runtime_skills_for_user(db_session=session, user=user)
     }
-    assert "current-reader/SKILL.md" in _assemble_fileset([skill], user, session)
+    assert (
+        "current-reader/SKILL.md"
+        in _assemble_fileset([_candidate(skill)], user, session).files
+    )
 
 
 def test_current_invalid_blocks_runtime(session: Session, user: User) -> None:
@@ -91,7 +100,7 @@ def test_current_invalid_blocks_runtime(session: Session, user: User) -> None:
     assert skill.id not in {
         row.id for row in list_runtime_skills_for_user(db_session=session, user=user)
     }
-    assert _assemble_fileset([skill], user, session) == {}
+    assert _assemble_fileset([_candidate(skill)], user, session).files == {}
 
 
 def test_backfilled_equal_ids_and_builtin_outer_join(
@@ -151,7 +160,7 @@ def test_missing_current_bundle_never_uses_legacy(
     assert (
         validate_stored_custom_skill(skill, get_default_file_store()).is_valid is False
     )
-    assert _assemble_fileset([skill], user, session) == {}
+    assert _assemble_fileset([_candidate(skill)], user, session).files == {}
 
 
 def test_lazy_validity_updates_version_and_ignores_replaced_version(

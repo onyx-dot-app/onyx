@@ -2,11 +2,18 @@
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
+from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy.orm import Session
 
+from onyx.db.models import User
+from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 from onyx.skills.rendering import render_skill_for_model, resolve_skill_dir_placeholder
+from tests.unit.onyx.skills.test_push import _assemble, _skill
 
 _SANDBOX_DOCKERFILE = (
     Path(__file__).resolve().parents[4]
@@ -69,113 +76,46 @@ def test_render_for_model_matches_opencode_skill_tool() -> None:
     )
 
 
+@pytest.mark.parametrize("limit", ["file", "receiver", "total"])
 @pytest.mark.parametrize("excess", [0, 1])
-def test_expansion_limit_skips_the_whole_skill_only_above_the_limit(
-    monkeypatch: pytest.MonkeyPatch, excess: int
-) -> None:
-    path = "report/SKILL.md"
-    body = "${CLAUDE_SKILL_DIR}/café\n".encode()
-    files = {
-        path: body,
-        "report/data.txt": b"supporting data",
-        "report-other/SKILL.md": b"other instructions",
-    }
-    expected = f"{_SKILL_DIR}/café\n".encode()
-    monkeypatch.setattr(
-        push, "DEFAULT_PER_FILE_MAX_BYTES", len(expected) - excess, raising=False
-    )
-
-    push._resolve_skill_dirs(files, ["report", "report-other"])
-
-    if excess:
-        assert files == {"report-other/SKILL.md": b"other instructions"}
-    else:
-        assert files[path] == expected
-        assert files["report/data.txt"] == b"supporting data"
-
-
-def test_existing_files_and_combined_library_are_not_readmitted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    files = {
-        "first/SKILL.md": b"old instructions" * 100,
-        "first/data.txt": b"a" * 2000,
-        "second/SKILL.md": b"other instructions" * 100,
-        "second/data.txt": b"b" * 2000,
-    }
-    original = dict(files)
-    monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 100, raising=False)
-    monkeypatch.setattr(push, "DEFAULT_TOTAL_MAX_BYTES", 150, raising=False)
-
-    push._resolve_skill_dirs(files, ["first", "second"])
-
-    assert files == original
-
-
-def test_expansion_respects_receiver_file_limit_when_upload_limit_is_higher(
-    monkeypatch: pytest.MonkeyPatch,
+def test_expansion_admission_keeps_other_skills(
+    monkeypatch: pytest.MonkeyPatch, limit: str, excess: int
 ) -> None:
     body = b"${CLAUDE_SKILL_DIR}/run.py"
-    files = {
-        "report/SKILL.md": body,
-        "report/run.py": b"script",
-        "report-other/SKILL.md": b"healthy",
-    }
-    expected = f"{_SKILL_DIR}/run.py".encode()
-    monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 1000)
-    monkeypatch.setattr(push, "MAX_FILE_BYTES", len(expected) - 1, raising=False)
-    push._resolve_skill_dirs(files, ["report", "report-other"])
-    assert files == {"report-other/SKILL.md": b"healthy"}
+    expanded = b"/workspace/managed/skills/report/run.py"
 
+    def render(skill: object, *_args: object) -> dict[str, bytes]:
+        if skill is report:
+            return {"report/SKILL.md": body, "report/run.py": b"script"}
+        return {"healthy/SKILL.md": b"healthy"}
 
-@pytest.mark.parametrize("excess", [0, 1])
-def test_expansion_checks_combined_bytes_before_substitution(
-    monkeypatch: pytest.MonkeyPatch,
-    excess: int,
-) -> None:
-    body = b"${CLAUDE_SKILL_DIR}/run.py"
-    files = {
-        "report/SKILL.md": body,
-        "report/run.py": b"script",
-        "report-other/SKILL.md": b"healthy",
-    }
-    expected = f"{_SKILL_DIR}/run.py".encode()
+    report = _skill(name="report", is_valid=True)
+    healthy = _skill(name="healthy", is_valid=True)
+    monkeypatch.setattr(push, "_render_candidate", render)
     monkeypatch.setattr(
-        push,
-        "MAX_BUNDLE_BYTES",
-        len(expected) + len(b"scripthealthy") - excess,
-        raising=False,
+        push, "get_default_file_store", lambda: MagicMock(spec=FileStore)
     )
-    push._resolve_skill_dirs(files, ["report", "report-other"])
-    if excess:
-        assert files == {"report-other/SKILL.md": b"healthy"}
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    monkeypatch.setattr(push, "SKILL_RUNTIME_MIN_FILE_CHARGE_BYTES", 1)
+    if limit == "total":
+        monkeypatch.setattr(
+            push,
+            "SKILL_RUNTIME_MAX_BYTES",
+            len(expanded) + len(b"scripthealthy") - excess,
+        )
+        skills = [healthy, report]
     else:
-        assert files["report/SKILL.md"] == expected
+        name = (
+            "PUSH_MAX_FILE_BYTES"
+            if limit == "receiver"
+            else "DEFAULT_PER_FILE_MAX_BYTES"
+        )
+        monkeypatch.setattr(push, name, len(expanded) - excess)
+        skills = [report, healthy]
+    files = _assemble(skills, cast(User, SimpleNamespace()), MagicMock(spec=Session))
+    assert files["healthy/SKILL.md"] == b"healthy"
+    if excess:
+        assert set(files) == {"healthy/SKILL.md"}
+    else:
+        assert files["report/SKILL.md"] == expanded
         assert files["report/run.py"] == b"script"
-        assert files["report-other/SKILL.md"] == b"healthy"
-
-
-def test_expansion_accumulates_growth_and_keeps_later_fitting_skill(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    body = b"${CLAUDE_SKILL_DIR}"
-    files = {
-        "first/SKILL.md": body,
-        "second/SKILL.md": body,
-        "third/SKILL.md": body,
-        "healthy/SKILL.md": b"healthy",
-    }
-    first = b"/workspace/managed/skills/first"
-    third = b"/workspace/managed/skills/third"
-    monkeypatch.setattr(
-        push,
-        "MAX_BUNDLE_BYTES",
-        len(first) + len(body) * 2 + len(b"healthy"),
-        raising=False,
-    )
-    push._resolve_skill_dirs(files, ["first", "second", "third", "healthy"])
-    assert files == {
-        "first/SKILL.md": first,
-        "third/SKILL.md": third,
-        "healthy/SKILL.md": b"healthy",
-    }
