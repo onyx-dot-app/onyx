@@ -11,7 +11,7 @@ from onyx.background.celery.tasks.skill_versions.tasks import (
     PROGRESS_KEY,
     repair_skill_versions,
 )
-from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
 from onyx.db.models import Skill, SkillVersion, User
 from onyx.db.skill import (
     SkillValidityUpdate,
@@ -63,7 +63,14 @@ def test_readers_ignore_legacy_bundle_and_validity(
     assert (
         validate_stored_custom_skill(skill, get_default_file_store()).is_valid is True
     )
-    assert SkillResponse.from_custom(skill, enabled=True).is_valid is True
+    assert (
+        SkillResponse.from_custom(
+            skill,
+            enabled=True,
+            effective_installation_policy=SkillInstallationPolicy.AVAILABLE,
+        ).is_valid
+        is True
+    )
     assert skill_user_states(user, [skill.id], session)[skill.id].can_toggle
     assert skill.id in {
         row.id for row in list_runtime_skills_for_user(db_session=session, user=user)
@@ -87,7 +94,14 @@ def test_current_invalid_blocks_runtime_even_when_legacy_valid(
     assert version is not None
     version.is_valid = False
     session.commit()
-    assert SkillResponse.from_custom(skill, enabled=True).is_valid is False
+    assert (
+        SkillResponse.from_custom(
+            skill,
+            enabled=True,
+            effective_installation_policy=SkillInstallationPolicy.AVAILABLE,
+        ).is_valid
+        is False
+    )
     assert not skill_user_states(user, [skill.id], session)[skill.id].can_toggle
     assert skill.id not in {
         row.id for row in list_runtime_skills_for_user(db_session=session, user=user)
