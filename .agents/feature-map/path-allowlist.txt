@@ -20,6 +20,11 @@ components/craft-sessions.md: opencode.json
 components/craft-webapp-proxy.md: start-webapp.sh
 components/skills.md: opencode.json
 
+# Plugin manifest paths inside uploaded ZIPs.
+components/skills.md: .claude-plugin/plugin.json
+components/skills.md: .codex-plugin/plugin.json
+components/skills.md: plugin.json
+
 # Local files that git ignores.
 components/cc-pairs-and-creds.md: .vscode/.env
 components/connectors.md: .vscode/.env

@@ -111,6 +111,9 @@ Global skill managers can also create company marketplaces with explicit access 
 Upload `SKILL.md` directly when the Skill contains instructions only. When it includes supporting files,
 upload a ZIP or drag in a folder with `SKILL.md` at the top level.
 
+Plugin ZIP upload is not supported yet. Upload one Skill bundle, not a plugin package.
+The Plugins page connects apps and services; it does not accept plugin ZIPs.
+
 ```text
 weekly-customer-update/
 ├── SKILL.md
@@ -160,6 +163,10 @@ Select **Request sync** to save the source and start its first sync.
 **Sync requested** means the request was saved. Skills appear after the background sync completes.
 The **Marketplaces** list shows progress and errors, including sources with no imported Skills.
 Open a source to request another sync, replace its GitHub login, or review a retirement proposal.
+
+Skills from the previous one-time GitHub import remain editable custom Skills.
+Add their repository as a marketplace to sync new copies with repository updates.
+The old `/skills/github/preview` and `/skills/github/import` API routes are removed.
 Change synced instructions and files in GitHub, then sync again. Their Onyx content page is read-only.
 
 ### Update a Skill

@@ -251,6 +251,7 @@ def test_storage_recheck_does_not_fall_back_to_management(
         file_store: FileStore,
         *,
         expected_name: str | None = None,
+        reject_plugins: bool = True,
         stored: bool = False,
     ) -> IngestedBundle:
         ingested = ingest(
@@ -258,6 +259,7 @@ def test_storage_recheck_does_not_fall_back_to_management(
             filename,
             file_store,
             expected_name=expected_name,
+            reject_plugins=reject_plugins,
             stored=stored,
         )
         session.delete(grant)

@@ -186,7 +186,8 @@ Keep this allowance large enough for your existing bundles when you lower upload
 An existing expanded-total setting above 100 MiB also preserves that stored ZIP allowance after upgrading.
 A current-content read above this allowance returns HTTP 413.
 History preview and restore return HTTP 400 for this stored-byte limit. Raise the allowance to read the saved bundle.
-Stored reads have no file-list size limit. Onyx applies the current upload limits when you save the Skill again.
+Stored reads have no file-list size limit. Restores preserve stored file counts and ZIP allowances.
+New uploads and content edits still apply the current upload limits.
 
 Self-hosted operators can change the limits with `SKILL_BUNDLE_ZIP_MAX_BYTES`, `SKILL_BUNDLE_MAX_FILE_COUNT`,
 `SKILL_BUNDLE_PER_FILE_MAX_BYTES` and `SKILL_BUNDLE_TOTAL_MAX_BYTES`. If your reverse proxy sets a request size limit,
@@ -197,6 +198,14 @@ ZIP size errors show the exact configured limit. Values that are not whole MiB a
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
 or a slug reserved by a built-in Skill or App.
+
+Plugin ZIP upload is not supported yet. Skill uploads reject `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`,
+or `plugin.json` at the package root, including inside one enclosing folder.
+These paths identify a plugin even when the manifest is malformed or the package also contains `SKILL.md`.
+Manifest files inside a Skill's reference or example folders remain supporting files. You can read, edit,
+and restore previously saved Skills that contain root plugin manifests.
+New uploads and replacement bundles cannot add plugin manifests. The Plugins page connects apps and services;
+it does not accept plugin ZIPs.
 
 ### Skill limit per user
 
