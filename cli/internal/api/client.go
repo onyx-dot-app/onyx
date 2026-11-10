@@ -271,6 +271,15 @@ func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) 
 	return result, nil
 }
 
+// ListDocumentSets returns the document sets the current user can search.
+func (c *Client) ListDocumentSets(ctx context.Context) ([]models.DocumentSetSummary, error) {
+	var result []models.DocumentSetSummary
+	if err := c.doJSON(ctx, "GET", "/manage/document-set?searchable_only=true", nil, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // ListLLMProviders returns LLM providers (with their models) accessible to
 // the current user, plus the workspace default model.
 func (c *Client) ListLLMProviders(ctx context.Context) (*models.LLMProviderResponse, error) {
