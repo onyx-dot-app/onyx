@@ -78,6 +78,8 @@ Every modal is top-aligned, with no prop to change it. The card's top edge sits 
 
 When a `[data-main-container]` element is present (the content area beside the sidebar), the modal centers horizontally on it instead of the viewport, and falls back to viewport centering on medium screens or when the container is absent.
 
+The card shifts inward when this preferred center would place an edge outside the viewport. It keeps a 1rem horizontal gap, including with enlarged text.
+
 ## Deferred
 
 The remaining Figma header/footer content variants (Search, Card, Panel, InputCheckbox, Message) are follow-ups.

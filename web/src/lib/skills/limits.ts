@@ -89,9 +89,9 @@ export function skillLimitViolationOf(
   return parseSkillLimitViolation(error.info.skill_limit);
 }
 
-const BYTE_UNITS = ["byte", "kilobyte", "megabyte", "gigabyte"] as const;
+const BYTE_UNITS = ["B", "KiB", "MiB", "GiB"] as const;
 
-/** A binary size in the viewer's locale, such as "500 MB" for 500 MiB. */
+/** Localized numbers with binary units that match the byte limits. */
 export function formatSkillSize(
   format: ReturnType<typeof useFormatter>,
   bytes: number
@@ -102,10 +102,5 @@ export function formatSkillSize(
     value /= 1024;
     unit += 1;
   }
-  return format.number(value, {
-    style: "unit",
-    unit: BYTE_UNITS[unit],
-    unitDisplay: "short",
-    maximumFractionDigits: 1,
-  });
+  return `${format.number(value, { maximumFractionDigits: 1 })} ${BYTE_UNITS[unit]}`;
 }

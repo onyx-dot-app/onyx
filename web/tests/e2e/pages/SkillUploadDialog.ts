@@ -11,6 +11,23 @@ export class SkillUploadDialog {
     await expect(this.dialog).toBeVisible();
   }
 
+  async expectControlsInsideViewport(): Promise<void> {
+    await expect(this.dialog).toBeInViewport({ ratio: 1 });
+    await expect(
+      this.dialog.getByRole("button", { name: "Close", exact: true })
+    ).toBeInViewport({ ratio: 1 });
+    await expect(
+      this.dialog.getByRole("button", { name: "Cancel", exact: true })
+    ).toBeInViewport({ ratio: 1 });
+  }
+
+  async close(): Promise<void> {
+    await this.dialog
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await expect(this.dialog).toBeHidden();
+  }
+
   async selectFiles(
     files: Parameters<Locator["setInputFiles"]>[0]
   ): Promise<void> {

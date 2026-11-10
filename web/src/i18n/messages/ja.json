@@ -2436,6 +2436,10 @@
           "description": "GitHub リポジトリを調査し、そのコードに関する質問に回答します。",
           "title": "コーディングエージェント"
         },
+        "skills": {
+          "title": "スキル",
+          "description": "有効なスキルの手順を検索して読み取ります。スクリプトには Craft サンドボックスが必要です。"
+        },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
         "pluginsNote": "デフォルトのチャットで使用する MCP サーバーと OpenAPI プラグインは、[プラグイン]({url})で設定できます。",
         "imageGeneration": {
@@ -11291,6 +11295,10 @@
           "description": "GitHubリポジトリを調査し、そのコードに関する質問に回答します。",
           "title": "コーディングエージェント"
         },
+        "skills": {
+          "title": "スキル",
+          "description": "有効なスキルの手順を検索して読み取ります。スクリプトには Craft サンドボックスが必要です。"
+        },
         "description": "このエージェントが使用できるツールと機能です。",
         "imageGeneration": {
           "description": "AI搭載ツールで画像を生成・加工します。",
@@ -17113,7 +17121,7 @@
         "pendingLabel": "削除中..."
       },
       "details": {
-        "description": "Craftがこのスキルをいつどのように使用するかを定義します。",
+        "description": "このスキルをいつ、どのように使うかを定義します。",
         "descriptionField": {
           "description": "このスキルをいつ使用すべきかを説明します。",
           "placeholder": "このスキルは何に役立ちますか？",
@@ -17168,7 +17176,7 @@
         "title": "既存のスキルがありますか？"
       },
       "instructions": {
-        "description": "このスキルがCraftに追加する動作とワークフローを記述します。",
+        "description": "このスキルが提供する動作とワークフローを記述します。",
         "emptyFallback": "まだ指示がありません。",
         "placeholder": "スキルの指示を書いてください。",
         "title": "指示"
@@ -17435,7 +17443,8 @@
       },
       "header": {
         "description": "Craftエージェントが利用できる機能バンドルです。このページには、組み込みスキル、共有されたスキル、あなたの個人スキルが表示されます。",
-        "title": "スキル"
+        "title": "スキル",
+        "mainDescription": "メインチャット用の指示です。自分のスキルや共有されたスキルを有効にできます。スクリプトには Craft サンドボックスが必要です。"
       },
       "loadError": {
         "description": "詳細はコンソールを確認し、ページを再読み込みしてください。",
@@ -17594,6 +17603,9 @@
       "files": "ファイル",
       "noFiles": "追加ファイルはありません。"
     },
+    "table": {
+      "installationDefault": "既定のインストール"
+    },
     "groups": {
       "columnTitle": "グループ",
       "marketplace": "マーケットプレイス",
@@ -17614,7 +17626,7 @@
       },
       "admin": {
         "title": "{count, plural, one {# 人のユーザーがスキルの上限を超えています} other {# 人のユーザーがスキルの上限を超えています}}",
-        "description": "これらのユーザーのスキルは {maxSize} または {maxFiles, plural, one {# ファイル} other {# ファイル}} を超えています。上限内に戻るまでスキルの追加や有効化はできず、セッションで一部のスキルが読み込まれない場合があります。",
+        "description": "スキルの使用量が {maxSize} または {maxFiles, plural, one {# 個のファイル} other {# 個のファイル}}を超えています。使用量が制限未満になるまで、スキルの追加や有効化はできません。セッションで一部のスキルが省略される場合があります。",
         "tableLabel": "スキルの上限を超えているユーザー",
         "columns": {
           "user": "ユーザー",

@@ -54,6 +54,7 @@ from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.skills.skill_tool import SkillTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
@@ -292,8 +293,14 @@ def _construct_tools_impl(
                 )
                 continue
 
+            if tool_cls is SkillTool:
+                if not user.is_anonymous:
+                    tool_dict[db_tool_model.id] = [
+                        SkillTool(tool_id=db_tool_model.id, user_id=user.id)
+                    ]
+
             # Handle Internal Search Tool
-            if tool_cls.__name__ == SearchTool.__name__:
+            elif tool_cls.__name__ == SearchTool.__name__:
                 added_search_tool = True
                 if search_usage_forcing_setting == SearchToolUsage.DISABLED:
                     continue

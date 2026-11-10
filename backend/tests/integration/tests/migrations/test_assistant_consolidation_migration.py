@@ -54,7 +54,7 @@ def test_cold_startup_default_assistant() -> None:
         tool_names = [row[0] for row in tool_associations]
         tool_display_names = [row[1] for row in tool_associations]
 
-        # Verify all three main tools are attached
+        # Verify the default tools are attached
         assert "internal_search" in tool_names, (
             "Default assistant should have SearchTool attached"
         )
@@ -69,6 +69,10 @@ def test_cold_startup_default_assistant() -> None:
         )
         assert "run_python" in tool_names, (
             "Default assistant should have PythonTool attached"
+        )
+
+        assert "read_skill" in tool_names, (
+            "Default assistant should have SkillTool attached"
         )
 
         # Also verify by display names for clarity
@@ -88,7 +92,11 @@ def test_cold_startup_default_assistant() -> None:
             "Default assistant should have Code Interpreter tool"
         )
 
-        # Should have exactly 6 tools
-        assert len(tool_associations) == 6, (
-            f"Default assistant should have exactly 6 tools attached, got {len(tool_associations)}"
+        assert "Skills" in tool_display_names, (
+            "Default assistant should have Skills tool"
+        )
+
+        # Should have exactly 7 tools
+        assert len(tool_associations) == 7, (
+            f"Default assistant should have exactly 7 tools attached, got {len(tool_associations)}"
         )

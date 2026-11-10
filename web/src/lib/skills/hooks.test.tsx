@@ -53,7 +53,7 @@ describe("useSkillLimitFeedback", () => {
     expect(screen.getByText("Skill size limit reached")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This change would put your skills at 520 MB in 40 files. The limit is 500 MB and 5,000 files."
+        "This change would put your skills at 520 MiB in 40 files. The limit is 500 MiB and 5,000 files."
       )
     ).toBeInTheDocument();
   });
@@ -77,10 +77,10 @@ describe("useSkillLimitFeedback", () => {
     expect(screen.getByText("Skill file limit reached")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This change would put your skills at an estimated 110 MB in 5,004 files. The estimate counts 1 skill not yet measured at the largest allowed size. The limit is 500 MB and 5,000 files. It would also put 2 other users over the limit."
+        "This change would put your skills at an estimated 110 MiB in 5,004 files. The estimate counts 1 skill not yet measured at the largest allowed size. The limit is 500 MiB and 5,000 files. It would also put 2 other users over the limit."
       )
     ).toBeInTheDocument();
-    expect(screen.queryByText(/\b10 MB/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\b10 MiB/)).not.toBeInTheDocument();
   });
 
   it("shows the affected-user count when the requester stays within the limit", () => {

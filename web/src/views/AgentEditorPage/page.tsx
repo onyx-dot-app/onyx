@@ -46,6 +46,7 @@ import {
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
   CODING_AGENT_TOOL_ID,
+  SKILL_TOOL_ID,
 } from "@/lib/tools/constants";
 import { Collapsible, Text } from "@opal/components";
 import { InputSwitchField } from "@opal/form";
@@ -560,6 +561,10 @@ export default function AgentEditorPage({
   const codingAgentTool = availableTools?.find(
     (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
   );
+
+  const skillTool = availableTools?.find(
+    (t) => t.in_code_tool_id === SKILL_TOOL_ID
+  );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
@@ -666,6 +671,12 @@ export default function AgentEditorPage({
       !!codingAgentTool &&
       (existingAgent?.tools?.some(
         (tool) => tool.in_code_tool_id === CODING_AGENT_TOOL_ID
+      ) ??
+        false),
+    skills:
+      !!skillTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === SKILL_TOOL_ID
       ) ??
         false),
     // MCP servers - dynamically add fields for each server with nested tool fields
@@ -815,6 +826,9 @@ export default function AgentEditorPage({
       }
       if (values.coding_agent && codingAgentTool) {
         toolIds.push(codingAgentTool.id);
+      }
+      if (values.skills && skillTool) {
+        toolIds.push(skillTool.id);
       }
 
       // Collect enabled MCP tool IDs
@@ -1612,6 +1626,24 @@ export default function AgentEditorPage({
                                 <InputSwitchField
                                   name="coding_agent"
                                   disabled={!codingAgentTool}
+                                />
+                              </InputHorizontal>
+                            </Card>
+                          </Disabled>
+
+                          <Disabled disabled={!skillTool}>
+                            <Card border="solid" rounding={4}>
+                              <InputHorizontal
+                                withLabel="skills"
+                                title={t("editor.actions.skills.title")}
+                                description={t(
+                                  "editor.actions.skills.description"
+                                )}
+                                disabled={!skillTool}
+                              >
+                                <InputSwitchField
+                                  name="skills"
+                                  disabled={!skillTool}
                                 />
                               </InputHorizontal>
                             </Card>

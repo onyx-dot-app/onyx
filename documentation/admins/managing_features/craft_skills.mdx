@@ -1,15 +1,16 @@
 ---
 title: "Skills"
-description: "Review, publish, share, and maintain reusable Craft instructions"
+description: "Review, publish, share, and maintain reusable Skills for chat and Craft"
 icon: "wand-magic-sparkles"
 ---
 
-Skills package reusable instructions and supporting files that teach Craft how to perform a kind of work.
+Skills package reusable instructions and supporting files. Main chat reads Skill instructions without a sandbox.
+Craft can also run Skill scripts in its session sandbox.
 Open **Admin Panel → Skills** to manage custom Skills across your organization.
-Open **Craft → Skills** to manage your own library.
+Open **Skills** in the main sidebar to manage your own library, including when Craft is disabled.
 
 <Note>
-  Anyone with Craft access can create a Skill and manage the Skills they own or can edit.
+  Signed-in users can create a Skill and manage the Skills they own or can edit.
   Admins can inspect and manage all custom Skills, including private personal Skills.
   Global manage-skills permission controls company access and installation policies.
   Craft needs a Business or Enterprise plan, or Onyx Cloud.
@@ -35,8 +36,10 @@ upload, or sync Skills. Open **Edit sharing** for access and installation settin
 
 <img className="rounded-image" src="/assets/admins/managing_features/skills-library.webp" alt="Skills table with personal and organization Skills, group policies, and a synced marketplace Skill"/>
 
+**Default installation** shows the Skill's policy before group overrides.
 The **Groups** column lists the groups that you can see for each Skill, with each group's installation setting.
-A group without an override has no installation label and uses **Installation**.
+A group without an override has no installation label and uses **Default installation**.
+A group can require a Skill whose default is **Available to install**.
 Hover over or focus **+ more groups** to read the remaining groups and their installation settings.
 **Marketplace** marks a group that comes from the Skill's company marketplace. Owners, editors,
 and global skill managers see every group. Other users see only the groups they belong to or manage.
@@ -50,7 +53,8 @@ Only users with global Manage Skills can read this list. Group managers cannot r
 <img className="rounded-image" src="/assets/admins/managing_features/skills-table.webp" alt="Admin Skills page showing a user above the Skill limit, Skill usage, and the last delivery status"/>
 
 Each row shows the user's email, Skill size, file count, and Skills omitted from the last successful session delivery.
-Size and file totals include allowances for Skills that Onyx has not measured. These totals are labeled as estimates.
+Size and file totals are measured unless a Skill has not been measured yet. In that case,
+the totals include allowances for unmeasured Skills and show an estimate label.
 **No session yet** means no successful delivery is recorded. The last delivery count does not predict the next delivery.
 
 If loading fails, Onyx hides the cached rows. Select **Try Again** to fetch current usage.

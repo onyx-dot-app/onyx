@@ -41,10 +41,10 @@ _END_OFFSETS = (
 
 
 class ZipEntryStore:
-    """Disk-backed ZIP record offsets; ZIP parsing stays with the caller."""
+    """ZIP record offsets; callers must bound metadata before choosing memory."""
 
-    def __init__(self) -> None:
-        self._db = sqlite3.connect("")
+    def __init__(self, *, in_memory: bool = False) -> None:
+        self._db = sqlite3.connect(":memory:" if in_memory else "")
         try:
             self._db.executescript(_SCHEMA)
         except BaseException:

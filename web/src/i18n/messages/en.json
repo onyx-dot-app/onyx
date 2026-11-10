@@ -2436,6 +2436,10 @@
           "description": "Investigate a GitHub repository and answer questions about its code.",
           "title": "Coding Agent"
         },
+        "skills": {
+          "title": "Skills",
+          "description": "Discover and read enabled Skill instructions. Scripts require a Craft sandbox."
+        },
         "description": "Tools and capabilities available for chat to use. This does not apply to agents.",
         "pluginsNote": "Configure MCP servers and OpenAPI plugins for default Chat in [Plugins]({url}).",
         "imageGeneration": {
@@ -11291,6 +11295,10 @@
           "description": "Investigate a GitHub repository and answer questions about its code.",
           "title": "Coding Agent"
         },
+        "skills": {
+          "title": "Skills",
+          "description": "Discover and read enabled Skill instructions. Scripts require a Craft sandbox."
+        },
         "description": "Tools and capabilities available for this agent to use.",
         "imageGeneration": {
           "description": "Generate and manipulate images using AI-powered tools.",
@@ -17113,7 +17121,7 @@
         "pendingLabel": "Deleting..."
       },
       "details": {
-        "description": "Define when and how Craft should use this skill.",
+        "description": "Define when and how to use this skill.",
         "descriptionField": {
           "description": "Describe when this skill should be used.",
           "placeholder": "What does this skill help with?",
@@ -17168,7 +17176,7 @@
         "title": "Have an existing skill?"
       },
       "instructions": {
-        "description": "Write the behavior and workflow this skill adds to Craft.",
+        "description": "Write the behavior and workflow this skill provides.",
         "emptyFallback": "No instructions yet.",
         "placeholder": "Write the skill instructions.",
         "title": "Instructions"
@@ -17435,7 +17443,8 @@
       },
       "header": {
         "description": "Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills.",
-        "title": "Skills"
+        "title": "Skills",
+        "mainDescription": "Instructions for main chat. Enable your own skills or skills shared with you. Scripts require a Craft sandbox."
       },
       "loadError": {
         "description": "Check the console for details and try refreshing the page.",
@@ -17594,6 +17603,9 @@
       "files": "Files",
       "noFiles": "No additional files."
     },
+    "table": {
+      "installationDefault": "Default installation"
+    },
     "groups": {
       "columnTitle": "Groups",
       "marketplace": "Marketplace",
@@ -17614,7 +17626,7 @@
       },
       "admin": {
         "title": "{count, plural, one {# user is over the skill limit} other {# users are over the skill limit}}",
-        "description": "These users have more than {maxSize} or {maxFiles, plural, one {# file} other {# files}} of skills. They cannot add or turn on more skills until they are under the limit, and sessions can leave some of their skills out.",
+        "description": "Skill usage exceeds {maxSize} or {maxFiles, plural, one {# file} other {# files}}. Adding or turning on more skills is blocked until usage is under the limit. Sessions can leave some skills out.",
         "tableLabel": "Users over the skill limit",
         "columns": {
           "user": "User",

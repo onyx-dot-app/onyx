@@ -153,9 +153,19 @@ def strip_skill_md_frontmatter(content: str) -> str:
     return instructions_markdown.strip()
 
 
-def _read_stored_bundle(zip_bytes: bytes, files: list[SkillBundleFile] | None) -> str:
+def _read_stored_bundle(
+    zip_bytes: bytes,
+    files: list[SkillBundleFile] | None,
+    *,
+    path: str = SKILL_MD_NAME,
+    max_bytes: int | None = None,
+    max_metadata_bytes: int | None = None,
+) -> str:
+    _validated_bundle_path(zipfile.ZipInfo(path))
+    if not path.lower().endswith(".md"):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Only Markdown can be read.")
     try:
-        index = ZipIndex(zip_bytes)
+        index = ZipIndex(zip_bytes, max_metadata_bytes=max_metadata_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -164,11 +174,21 @@ def _read_stored_bundle(zip_bytes: bytes, files: list[SkillBundleFile] | None) -
 
     with index:
         try:
-            raw_skill_md = index.read(SKILL_MD_NAME)
+            info = index.getinfo(path)
+            _validated_bundle_path(info)
+            with index.open(info) as source:
+                raw_skill_md = (
+                    source.read() if max_bytes is None else source.read(max_bytes + 1)
+                )
+            if max_bytes is not None and len(raw_skill_md) > max_bytes:
+                raise OnyxError(
+                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    "Skill Markdown exceeds the model context limit.",
+                )
         except KeyError as exc:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
-                "Stored skill bundle is missing SKILL.md.",
+                "Stored skill bundle is missing the requested Markdown.",
             ) from exc
         for info in index.infos():
             if info.is_dir():
@@ -186,7 +206,7 @@ def _read_stored_bundle(zip_bytes: bytes, files: list[SkillBundleFile] | None) -
             OnyxErrorCode.INTERNAL_ERROR,
             "Stored skill bundle SKILL.md must be UTF-8 encoded.",
         ) from exc
-    return strip_skill_md_frontmatter(skill_md)
+    return strip_skill_md_frontmatter(skill_md) if path == SKILL_MD_NAME else skill_md
 
 
 def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
@@ -199,8 +219,20 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
     )
 
 
-def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
-    return _read_stored_bundle(zip_bytes, None)
+def read_custom_bundle_instructions(
+    zip_bytes: bytes,
+    *,
+    path: str = SKILL_MD_NAME,
+    max_bytes: int | None = None,
+    max_metadata_bytes: int | None = None,
+) -> str:
+    return _read_stored_bundle(
+        zip_bytes,
+        None,
+        path=path,
+        max_bytes=max_bytes,
+        max_metadata_bytes=max_metadata_bytes,
+    )
 
 
 def build_skill_md(

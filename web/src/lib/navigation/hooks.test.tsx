@@ -39,3 +39,16 @@ test("keeps conversation routing separate from Plugins", () => {
   expect(result.current.chat()).toBe("existing-chat");
   expect(result.current.href()).toBe("/app?chatId=existing-chat");
 });
+
+test.each(["/app/skills", "/app/skills/new", "/app/skills/edit/skill-id"])(
+  "recognizes %s without highlighting a conversation",
+  (pathname) => {
+    mockPathname = pathname;
+    mockParams = new URLSearchParams("chatId=existing-chat");
+    const { result } = renderHook(() => useAppPosition());
+    expect(result.current.isSkills()).toBe(true);
+    expect(result.current.isNewSession()).toBe(false);
+    expect(result.current.isChat()).toBe(false);
+    expect(result.current.href()).toBe("/app/skills");
+  }
+);

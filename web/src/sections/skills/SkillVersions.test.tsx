@@ -259,7 +259,7 @@ test("explains a restore the Skill limit refused, with an estimated usage", asyn
     response(
       {
         error_code: "PAYLOAD_TOO_LARGE",
-        detail: "This would put your skills at 600.0 MB",
+        detail: "This would put your skills at 600.0 MiB",
         skill_limit: {
           failed_limit: "bytes",
           affected_user_count: 1,
@@ -279,7 +279,7 @@ test("explains a restore the Skill limit refused, with an estimated usage", asyn
   );
   await user.click(screen.getByRole("button", { name: "Restore" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "This change would put your skills at an estimated 600 MB in 510 files. The estimate counts 1 skill not yet measured at the largest allowed size. The limit is 500 MB and 5,000 files."
+    "This change would put your skills at an estimated 600 MiB in 510 files. The estimate counts 1 skill not yet measured at the largest allowed size. The limit is 500 MiB and 5,000 files."
   );
   expect(onRestored).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Restore" })).toBeEnabled();

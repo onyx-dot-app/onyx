@@ -199,16 +199,6 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: (f: FeatureFlags) => f.craftAvailable,
   },
-  SKILLS: {
-    path: "/admin/skills",
-    icon: SvgBlocks,
-    title: "Skills",
-    sidebarLabel: "Skills",
-    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
-    section: "Craft",
-    requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
-  },
   CRAFT_PREFERENCES: {
     path: "/admin/craft/preferences",
     icon: SvgSliders,
@@ -232,6 +222,16 @@ export const ADMIN_ROUTES = {
   },
 
   // ── Agents & Actions ──────────────────────────────────────────────
+  SKILLS: {
+    path: "/admin/skills",
+    icon: SvgBlocks,
+    title: "Skills",
+    sidebarLabel: "Skills",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Agents & Actions",
+    requiredTier: null,
+    visibleWhen: null,
+  },
   AGENTS: {
     path: "/admin/agents",
     icon: SvgOnyxOctagon,

@@ -29,8 +29,15 @@
 /* Every modal is top-aligned: its top edge stays put and a height change
    grows or shrinks it downward, so the card never jumps. */
 .opal-modal-positioner {
-  @apply fixed -translate-x-1/2;
+  @apply fixed;
   @apply max-w-[calc(100dvw-2rem)];
+  /* Keep the card inside the viewport when its preferred center is offset. */
+  translate: clamp(
+      calc(1rem - var(--opal-modal-center, 50dvw)),
+      -50%,
+      calc(100dvw - 1rem - var(--opal-modal-center, 50dvw) - 100%)
+    )
+    0;
   /* The bottom gap is never less than the top one. */
   --opal-modal-gap: max(2rem, 12dvh);
   --opal-modal-top: var(--opal-modal-gap);

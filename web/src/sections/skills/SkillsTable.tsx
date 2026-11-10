@@ -281,7 +281,7 @@ export default function SkillsTable({
       {
         kind: "display",
         id: "installation",
-        title: t("modals.share.installation.title"),
+        title: t("table.installationDefault"),
         width: { weight: 20, minWidth: 148 },
         hideable: false,
         cell: ({ item: { skill } }) => (
@@ -303,7 +303,7 @@ export default function SkillsTable({
         kind: "display",
         id: "actions",
         title: t(isMobile ? "bulk.personalSetting" : "bulk.enable"),
-        width: { fixed: isMobile ? 80 : 104 },
+        width: { fixed: isMobile ? 80 : 136 },
         hideable: false,
         alignment: "right",
         cell: (props) => <SkillActions {...props} />,

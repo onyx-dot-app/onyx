@@ -244,7 +244,7 @@ describe("SetupCard", () => {
     expect(screen.queryByText("unrelated")).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        "Your skills use 480 MB of 500 MB and 20 files of 5,000."
+        "Your skills use 480 MiB of 500 MiB and 20 files of 5,000."
       )
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Manage skills" })).toHaveAttribute(

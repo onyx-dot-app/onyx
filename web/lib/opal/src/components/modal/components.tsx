@@ -244,6 +244,7 @@ function ModalContent({
   const containerStyle: React.CSSProperties | undefined = hasContainerCenter
     ? ({
         left: centerX,
+        "--opal-modal-center": `${centerX}px`,
         "--tw-enter-translate-x": "-50%",
         "--tw-exit-translate-x": "-50%",
       } as React.CSSProperties)
