@@ -211,6 +211,7 @@ def reconcile_sandbox_resources(
         seconds=SANDBOX_RESOURCE_GRACE_SECONDS
     )
     attempted = 0
+    errors: list[Exception] = []
     verified_owners: set[UUID] = set()
     for resource in manager.iter_resources(tenant_id, deadline):
         check_ownership()
@@ -285,11 +286,14 @@ def reconcile_sandbox_resources(
             continue
         except CacheLockLostError:
             raise
-        except Exception:
+        except Exception as e:
             cache.set(retry_key, "retry", ex=RESOURCE_RETRY_SECONDS)
             logger.exception("Failed to reconcile sandbox resource %s", resource.name)
+            errors.append(e)
         if attempted >= MAX_CLEANUP_RESOURCES:
             break
+    if errors:
+        raise ExceptionGroup("Failed to reconcile sandbox resources", errors)
 
 
 def delete_unknown_tenant_resources(
@@ -305,6 +309,7 @@ def delete_unknown_tenant_resources(
         seconds=SANDBOX_RESOURCE_GRACE_SECONDS
     )
     attempted = 0
+    errors: list[Exception] = []
     for resource in manager.iter_resources(tenant_id, deadline):
         if resource.legacy_ownership or resource.created_at > grace_cutoff:
             continue
@@ -320,7 +325,10 @@ def delete_unknown_tenant_resources(
                 resource.name,
                 tenant_id,
             )
-        except Exception:
+        except Exception as e:
             logger.exception("Failed to remove sandbox resource %s", resource.name)
+            errors.append(e)
         if attempted >= MAX_CLEANUP_RESOURCES:
             break
+    if errors:
+        raise ExceptionGroup("Failed to remove sandbox resources", errors)

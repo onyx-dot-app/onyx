@@ -1,5 +1,6 @@
 import time
 from collections.abc import Iterator
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -237,9 +238,10 @@ def test_db_read_failure_does_not_authorize_orphan_deletion(
         "get_sandbox_by_id",
         MagicMock(side_effect=RuntimeError("DB unavailable")),
     )
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup):
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     manager.delete_resource.assert_not_called()
 
 
@@ -331,7 +333,9 @@ def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
         snapshot.assert_not_called()
         return
 
-    tasks.reconcile_sandbox_runtimes_task.run()
+    # The inventory failure is reported after the rest of the sweep runs.
+    with pytest.raises(RuntimeError, match="reconciliation failed"):
+        tasks.reconcile_sandbox_runtimes_task.run()
     if idle:
         assert sleep.call_args.kwargs["sandbox"].id == sandbox.id
         snapshot.assert_not_called()
@@ -352,9 +356,10 @@ def test_deletion_failure_does_not_skip_other_resources(
         None,
     ]
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup):
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     assert manager.delete_resource.call_count == 2
     cache.set.assert_called_once()
 
@@ -382,9 +387,10 @@ def test_lost_claim_stops_deletion(
     manager.iter_resources.return_value = iter([_resource()])
     runtime_lock_cache.lock.return_value.owned.return_value = False
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup):
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     manager.delete_resource.assert_not_called()
 
 
@@ -417,9 +423,10 @@ def test_prior_runtime_work_requires_checkpoint_before_collection(
         side_effect=RuntimeError("checkpoint failed") if snapshot_fails else None
     )
     monkeypatch.setattr(cleanup, "_checkpoint_failed_runtime", checkpoint)
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup) if snapshot_fails else nullcontext():
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     assert checkpoint.called
     assert manager.delete_resource.call_count == (0 if snapshot_fails else 2)
 
@@ -472,9 +479,10 @@ def test_new_container_cannot_skip_checkpoint_for_a_retained_workspace_volume(
     monkeypatch.setattr(cleanup, "user_has_build_sessions", lambda *_args: True)
     checkpoint = MagicMock(side_effect=RuntimeError("Cannot checkpoint retained files"))
     monkeypatch.setattr(cleanup, "_checkpoint_failed_runtime", checkpoint)
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup):
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     assert checkpoint.called
     manager.delete_resource.assert_not_called()
 
@@ -553,15 +561,17 @@ def test_failed_collector_retries_only_with_current_proof_after_runtime_deletion
                 manager.workspace_storage_identity.return_value = "replacement-volume"
 
     manager.delete_resource.side_effect = delete
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup):
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     assert resources == [volume]
     assert snapshot.call_count == 1
 
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup) if change is not None else nullcontext():
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     assert resources == ([] if change is None else [volume])
     assert snapshot.call_count == 1
     assert volume_attempts == (2 if change is None else 0)
@@ -599,9 +609,10 @@ def test_failed_checkpoint_reuse_requires_matching_proof_and_no_runtime(
     checkpoint = MagicMock(side_effect=RuntimeError("Fresh checkpoint required"))
     monkeypatch.setattr(cleanup, "_checkpoint_failed_runtime", checkpoint)
 
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup) if mismatch is not None else nullcontext():
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
 
     if mismatch is None:
         checkpoint.assert_not_called()
@@ -699,6 +710,27 @@ def test_reconciler_handles_runtimes_of_unknown_tenants(
     assert deleted == ([old] if multi_tenant else [])
 
 
+def test_unknown_tenant_deletion_failure_is_reported_after_the_rest(
+    collector: tuple[MagicMock, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.background.celery.tasks.build import tasks
+
+    manager, _cache = collector
+    resources = [_resource(tenant_id="tenant-gone") for _ in range(2)]
+    manager.list_resource_tenant_ids.return_value = {"tenant-gone"}
+    manager.iter_resources.return_value = iter(resources)
+    manager.delete_resource.side_effect = [RuntimeError("Forbidden"), None]
+    monkeypatch.setattr(tasks, "MULTI_TENANT", True)
+    monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(tasks, "get_all_tenant_ids", lambda: ["tenant-a"])
+
+    with pytest.raises(RuntimeError, match="reconciliation failed"):
+        tasks.reconcile_sandbox_runtimes_task.run()
+
+    assert manager.delete_resource.call_count == 2
+
+
 def test_deletion_batch_is_bounded(
     collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,
@@ -751,9 +783,10 @@ def test_volume_retry_does_not_delay_another_volume_created_at_the_same_time(
 
     cache.set.side_effect = remember
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    with pytest.raises(ExceptionGroup):
+        cleanup.reconcile_sandbox_resources(
+            manager, "tenant-a", time.monotonic() + 60, lambda: None
+        )
     assert manager.delete_resource.call_count == 2
 
 

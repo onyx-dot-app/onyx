@@ -129,21 +129,23 @@ def _expire_and_collect(
     check_ownership: Callable[[], None],
     *,
     reconcile_resources: bool,
-) -> None:
+) -> list[Exception]:
     """Expire stale provisioning and optionally remove unjustified runtime
-    resources. A failure is logged so snapshots and idle cleanup still run,
-    unless the sweep lease is lost."""
+    resources. Returns failures instead of raising, so snapshots and idle
+    cleanup still run, unless the sweep lease is lost."""
     try:
         fail_stale_provisioning_sandboxes(tenant_id, check_ownership)
         if reconcile_resources:
             reconcile_sandbox_resources(
                 sandbox_manager, tenant_id, deadline, check_ownership
             )
-    except Exception:
+    except Exception as e:
         check_ownership()
         task_logger.exception(
             "Resource reconciliation failed; continuing sandbox snapshots and idle cleanup"
         )
+        return [e]
+    return []
 
 
 def _sweep_tenant_sandboxes(
@@ -184,10 +186,12 @@ def _sweep_tenant_sandboxes(
         task_logger.info("Sandbox sweep - lock not acquired, skipping")
         return
 
+    # Failures are collected so the rest of the sweep still runs, then raised
+    # at the end so the task reports that sandboxes were left unreconciled.
     try:
         sandbox_manager = get_sandbox_manager()
 
-        _expire_and_collect(
+        errors = _expire_and_collect(
             sandbox_manager,
             tenant_id,
             deadline,
@@ -207,7 +211,7 @@ def _sweep_tenant_sandboxes(
                 if not running_sandboxes:
                     cache.delete(RUNNING_SANDBOX_CURSOR_KEY)
                     task_logger.debug("No running sandboxes found")
-                    return
+                    break
 
                 # Tenant-work-gating hook: refresh this tenant's active-set
                 # membership whenever the sweep has work to do.
@@ -326,6 +330,7 @@ def _sweep_tenant_sandboxes(
                             exc_info=True,
                         )
                         db_session.rollback()
+                        errors.append(e)
 
                     finally:
                         if not lock.owned():
@@ -339,4 +344,6 @@ def _sweep_tenant_sandboxes(
         if lock.owned():
             lock.release()
 
+    if errors:
+        raise ExceptionGroup(f"Sandbox sweep failed for tenant {tenant_id}", errors)
     task_logger.info(f"Sandbox sweep completed for tenant {tenant_id}")

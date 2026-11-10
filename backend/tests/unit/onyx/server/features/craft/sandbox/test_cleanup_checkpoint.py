@@ -75,10 +75,7 @@ def test_cleanup_keeps_runtime_and_ports_after_checkpoint_or_delete_failure(
     else:
         manager.terminate_observed_resources.side_effect = RuntimeError("delete failed")
 
-    if failure in {"discovery", "rescan", "delete"}:
-        with pytest.raises(RuntimeError, match="failed"):
-            lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
-    else:
+    with pytest.raises(RuntimeError, match="failed"):
         lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
     if failure != "delete":
         manager.terminate_observed_resources.assert_not_called()

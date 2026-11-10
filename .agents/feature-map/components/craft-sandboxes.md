@@ -244,8 +244,10 @@ the stored token on each request, so a new token takes effect at once.
 6. `sleep-fail-closed` **Sleep is fail-closed.** If any snapshot or session
    workspace listing fails,
    `server/features/build/session/sandbox_lifecycle.py:sleep_sandbox` aborts and the sandbox stays
-   `RUNNING` for the next sweep. An unhealthy endpoint does not prove files are
-   lost. The session creation lock is held around the final check and
+   `RUNNING` for the next sweep. It raises, and the sweep and the reconciler
+   finish their other work and then fail, so a sandbox that cannot be slept or
+   a resource that cannot be removed is reported, not only logged. An unhealthy
+   endpoint does not prove files are lost. The session creation lock is held around the final check and
    termination, so a new session cannot start in a pod that is being removed.
 7. `exec-completion-sentinel` **Use the completion sentinel for exec
    scripts.** The Kubernetes exec client returns buffered output without

@@ -356,11 +356,15 @@ class StubSandboxManager(SandboxManager):
                     )
                 ]
             )
+        # A list, not a generator: callers delete while iterating, and
+        # delete_resource removes from resources_returns.
         return iter(
-            r
-            for r in self.resources_returns
-            if r.tenant_id == tenant_id
-            and (sandbox_id is None or r.sandbox_id == sandbox_id)
+            [
+                r
+                for r in self.resources_returns
+                if r.tenant_id == tenant_id
+                and (sandbox_id is None or r.sandbox_id == sandbox_id)
+            ]
         )
 
     def list_resource_tenant_ids(self, deadline: float) -> set[str]:  # noqa: ARG002
