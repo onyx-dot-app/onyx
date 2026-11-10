@@ -17,6 +17,22 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column(
+        "user",
+        sa.Column(
+            "ui_preferences",
+            postgresql.JSONB(),
+            nullable=False,
+            server_default=sa.text("'{}'::jsonb"),
+        ),
+    )
+    op.execute(
+        sa.text(
+            'UPDATE "user" SET ui_preferences = \'{"paste_as_tile": true}\'::jsonb '
+            "WHERE paste_as_tile IS TRUE"
+        )
+    )
+    op.drop_column("user", "paste_as_tile")
+    op.add_column(
         "chat_message",
         sa.Column(
             "response_inputs_closed",
@@ -78,7 +94,8 @@ def upgrade() -> None:
             "source IN ('human', 'agent', 'agent_result')", name="ck_chat_input_source"
         ),
         sa.CheckConstraint(
-            "delivery IS NULL OR delivery IN ('send', 'queue')",
+            "delivery IS NULL OR delivery IN ('send', 'queue') OR "
+            "(delivery = 'interrupt' AND source = 'human')",
             name="ck_chat_input_delivery",
         ),
     )
@@ -103,5 +120,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.add_column(
+        "user",
+        sa.Column(
+            "paste_as_tile", sa.Boolean(), nullable=False, server_default=sa.false()
+        ),
+    )
+    op.execute(
+        sa.text(
+            'UPDATE "user" SET paste_as_tile = true '
+            "WHERE ui_preferences ->> 'paste_as_tile' = 'true'"
+        )
+    )
+    op.drop_column("user", "ui_preferences")
     op.drop_table("chat_input")
     op.drop_column("chat_message", "response_inputs_closed")

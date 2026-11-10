@@ -175,13 +175,18 @@ receives that output as a message before its next model call.
 to the response item that consumed them. Starting a new run moves its pending
 instruction into the existing user-message tree in the same transaction.
 The runtime records an input only after its acceptance transaction commits.
-Session reads expose accepted human inputs on their response as
-`accepted_user_messages`, so the UI can retain instructions sent between steps.
+Live and saved rendering emit accepted human inputs as `user_message` packets
+before the model step that consumed them. This preserves their display order.
 Human input needs no invoking tool call. Main Chat accepts text only, without
 request headers or serialized request settings. Withdrawing pending text uses the
-same recipient lock as acceptance; accepted text cannot be withdrawn. A queued
-root turn consumes its row with the user-message insert, then advances remaining
-queued entries to the new response so they form sequential turns on that branch.
+same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
+to `interrupt` changes that same row. Acceptance rechecks delivery so input
+already read by a runner cannot bypass a concurrent promotion. The existing
+Chat control thread polls interrupt intent once per second for its response IDs.
+A new root turn consumes its row with the user-message insert, then advances
+remaining entries as queued messages. An interrupt must not cancel a successor
+to its targeted response. Interrupts take priority and may
+start after any terminal response; ordinary queued turns require completion.
 Inbox writers lock the recipient session before the response. The session lock
 uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Accepted result inputs reference their source response; reconstructed history

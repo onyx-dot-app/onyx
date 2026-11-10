@@ -20,6 +20,8 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionCheckpoint,
+    InputMessageMetadata,
+    InputSource,
     MessageDelivery,
     PreparedStep,
     RunProgress,
@@ -2206,6 +2208,9 @@ def test_input_acceptance_failure_preserves_committed_history(
         assert len(accepted) == int(commit_before_error)
         if accepted:
             assert accepted[0].response_item_id == f"{run.id}:1"
+            restored_input = saved.response.steps[1].input_messages[0]
+            assert isinstance(restored_input.metadata, InputMessageMetadata)
+            assert restored_input.metadata.source == InputSource.HUMAN
     finally:
         release.set()
         assert coordinator.close(timeout=10)

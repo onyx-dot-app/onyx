@@ -590,7 +590,6 @@ export default function MultiModelResponseView({
       onToggleVisibility: () => toggleVisibility(response.modelIndex),
       agentMessageProps: {
         rawPackets: response.packets,
-        acceptedUserMessages: response.acceptedUserMessages,
         packetCount: response.packetCount,
         chatState,
         nodeId: response.nodeId,

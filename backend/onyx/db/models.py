@@ -530,8 +530,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # organized in typical structured fashion
     # formatted as `displayName__provider__modelName`
 
-    # Input preferences
-    paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
+    ui_preferences: Mapped[JsonValue] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
 
     # Voice preferences
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -3840,7 +3844,8 @@ class ChatInput(Base):
             name="ck_chat_input_source",
         ),
         CheckConstraint(
-            "delivery IS NULL OR delivery IN ('send', 'queue')",
+            "delivery IS NULL OR delivery IN ('send', 'queue') OR "
+            "(delivery = 'interrupt' AND source = 'human')",
             name="ck_chat_input_delivery",
         ),
         Index("uq_chat_input_position", "response_item_id", "position", unique=True),

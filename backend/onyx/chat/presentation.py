@@ -18,6 +18,8 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentInfo,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     RunFailure,
     RunFailureKind,
     RunState,
@@ -52,9 +54,13 @@ from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
-from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
+    Packet,
+    UserMessagePacket,
+)
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
@@ -367,6 +373,29 @@ def _project_response_display(
     return response.model_copy(update={"presentation": presentation})
 
 
+def user_message_packets(
+    messages: Sequence[UserMessage],
+    layout: ResponseLayout,
+    parent: Placement | None,
+) -> list[Packet]:
+    packets: list[Packet] = []
+    for message in messages:
+        if (
+            not isinstance(message.metadata, InputMessageMetadata)
+            or message.metadata.source != InputSource.HUMAN
+        ):
+            continue
+        if message.id is None:
+            raise ValueError("Accepted user message has no identity")
+        packets.append(
+            Packet(
+                placement=layout.next_section(parent),
+                obj=UserMessagePacket(id=message.id, message=message.text),
+            )
+        )
+    return packets
+
+
 class ResponsePresenter:
     """Translate SDK events into chat packets, with child output inside tool tabs."""
 
@@ -392,6 +421,9 @@ class ResponsePresenter:
             )
         )
         if isinstance(event, MessageStartEvent):
+            output = user_message_packets(
+                event.input_messages, self.layout, parent.placement if parent else None
+            )
             if event.parent_run_id is None:
                 self.emitter.llm_step_started()
             if parent is not None:
@@ -470,10 +502,10 @@ class ResponsePresenter:
 def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
     """How a top-level response ended: the one mapping for live, replay and Stop."""
     if status != RunStatus.CANCELLED:
-        return OverallStop(stop_reason="finished")
+        return OverallStop(stop_reason="finished", response_status=status)
     if failure is not None and failure.kind == RunFailureKind.DEADLINE:
-        return OverallStop(stop_reason="timed_out")
-    return OverallStop(stop_reason="user_cancelled")
+        return OverallStop(stop_reason="timed_out", response_status=status)
+    return OverallStop(stop_reason="user_cancelled", response_status=status)
 
 
 def replay_response(
@@ -493,6 +525,7 @@ def replay_response(
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
     for step in response.steps:
+        packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
         setting = settings.get(message_id, MessageRendering(mode=default_mode))

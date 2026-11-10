@@ -119,6 +119,8 @@ For interruption tests, set `pause_after_first_chunk` on a scripted reply to a
 unique gate ID. Wait for the first text in the browser, perform the interruption,
 then call `releaseMockLlmGate(gateId)`. Release the gate in `finally` too. This
 holds the provider response without mocking the chat API or using fixed sleeps.
+Set `heartbeat_while_paused: true` to keep emitting whitespace while the answer
+is held. This tests cancellation during streaming; leave it off to test a blocked read.
 
 `chat/stream_recovery.spec.ts` covers real chat streaming, saved history, reloads,
 network loss, and stopping. Keep packet fixtures in rendering tests: they test

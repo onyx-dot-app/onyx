@@ -25,6 +25,8 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 - **A user** saves prompt shortcuts and inserts them into the message box. They
   can hide a shared shortcut for themselves.
 - **A user** picks a UI and answer language, or follows the workspace default.
+- **A user** chooses whether Enter and the send arrow wait for the current step
+  or interrupt current work. Ctrl/Cmd+Enter always queues a follow-up.
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
@@ -71,6 +73,13 @@ It does not own:
 ---
 
 ## Architecture
+
+**UI preferences.** `User.ui_preferences` stores small interface choices as JSONB.
+`server/manage/models.py:UserUIPreferences` validates paste collapsing and send
+behavior. Invalid fields fall back independently; malformed containers use defaults.
+Warnings identify fields without logging stored values. The next preference save
+locks the user's row, preserves valid settings, and writes a validated object.
+The API retains flat `paste_as_tile` and `interrupt_on_send` response fields.
 
 **From setting to prompt.** `db/memory.py:get_memories` builds one
 `UserMemoryContext` per turn, called from

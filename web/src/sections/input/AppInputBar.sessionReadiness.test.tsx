@@ -153,7 +153,7 @@ beforeEach(() => {
       if (method === "POST") {
         const body: {
           message: string;
-          delivery: "send" | "queue";
+          delivery: "send" | "queue" | "interrupt";
           target_response_id: number;
         } = JSON.parse(String(init?.body));
         const item = { id: `pending-${pending.length}`, ...body };
@@ -381,21 +381,33 @@ test.each(["{Enter}", "{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])(
     const inputProps = props("streaming");
     render(<AppInputBar {...inputProps} />);
     const textbox = screen.getByRole("textbox", { name: "Message input" });
+    const hint = screen.getByTestId("pending-message-hint");
+    expect(hint).toHaveAccessibleName(
+      "Enter to send · Ctrl or Command + Enter to queue"
+    );
+    expect(textbox.closest("#onyx-chat-input")).toContainElement(hint);
+    expect(screen.getByRole("button", { name: /^Send$/ })).toHaveTextContent(
+      /^$/
+    );
+    expect(
+      screen.queryByRole("button", { name: /^Send now$/ })
+    ).not.toBeInTheDocument();
     await user.click(textbox);
     await user.keyboard(keys);
     await waitFor(() => expect(pending).toHaveLength(2));
     expect(pending[1]).toMatchObject({
       message: "Keep this draft",
       target_response_id: 2,
-      delivery: keys === "{Enter}" ? "queue" : "send",
+      delivery: keys === "{Enter}" ? "send" : "queue",
     });
     expect(inputProps.onSubmit).not.toHaveBeenCalled();
     await waitFor(() => expect(textbox).toHaveTextContent(/^$/));
+    expect(hint).not.toBeInTheDocument();
     expect(await screen.findByText("Keep this draft")).toBeVisible();
   }
 );
 
-test("failed queue submission retains the draft and does not add a local message", async () => {
+test("failed pending submission retains the draft and does not add a local message", async () => {
   const user = setupUser();
   fetchSpy.mockImplementation(
     async (_url, init) =>
@@ -417,6 +429,43 @@ test("failed queue submission retains the draft and does not add a local message
   expect(mockClearDraft).not.toHaveBeenCalled();
 });
 
+test("handoff hides only the next entry and restores it when the session becomes idle", async () => {
+  const user = setupUser();
+  pending.push({
+    id: "second",
+    message: "Later question",
+    delivery: "queue",
+    target_response_id: 2,
+  });
+  const store = useChatSessionStore.getState();
+  const tree = new Map(store.sessions.get("session")!.messageTree);
+  tree.set(2, {
+    ...tree.get(2)!,
+    packets: [
+      {
+        placement: { turn_index: 0 },
+        obj: { type: "stop", response_status: "complete" },
+      },
+    ],
+  });
+  store.updateSessionData("session", {
+    chatState: "streaming",
+    messageTree: tree,
+  });
+  render(<AppInputBar {...props("streaming")} initialMessage="" />);
+  await screen.findByText("Later question");
+  expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{ArrowUp}{Delete}");
+  await waitFor(() =>
+    expect(pending.map((message) => message.id)).toEqual(["queued"])
+  );
+
+  act(() => store.updateChatState("session", "input"));
+  expect(await screen.findByText("Queued follow-up")).toBeVisible();
+});
+
 test("edit withdraws the message before putting its text in the input", async () => {
   const user = setupUser();
   const deletion = deferred<Response>();
@@ -429,7 +478,7 @@ test("edit withdraws the message before putting its text in the input", async ()
   await screen.findByText("Queued follow-up");
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
-  await user.keyboard("{ArrowUp}{Enter}");
+  await user.click(screen.getByRole("button", { name: "Edit queued message" }));
   expect(textbox).toHaveTextContent(/^$/);
   await act(async () => {
     pending = [];
@@ -455,7 +504,7 @@ test("an accepted message cannot be edited into a duplicate instruction", async 
   pending = [];
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
-  await user.keyboard("{ArrowUp}{Enter}");
+  await user.click(screen.getByRole("button", { name: "Edit queued message" }));
   expect(textbox).toHaveTextContent(/^$/);
   await waitFor(() =>
     expect(screen.queryByTestId("queued-message-bar")).not.toBeInTheDocument()
@@ -495,7 +544,7 @@ test("a successful queue request keeps text typed while it was pending", async (
   render(<AppInputBar {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
-  await user.keyboard("{Enter} more");
+  await user.keyboard("{Control>}{Enter}{/Control} more");
   await act(async () => {
     const item = {
       id: "new",
@@ -532,7 +581,7 @@ test("an input accepted before POST returns refreshes the active conversation", 
   );
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
-  await user.keyboard("{Control>}{Enter}{/Control}");
+  await user.keyboard("{Enter}");
   await waitFor(() =>
     expect(mockRefreshChatSession).toHaveBeenCalledWith(
       "session",
@@ -653,3 +702,64 @@ test("a failed queue-acceptance refresh offers recovery after the queue is empty
     log.mockRestore();
   }
 });
+
+test.each(["reader completion", "next response acknowledgement"])(
+  "%s refreshes accepted queue entries without waiting for polling",
+  async (transition) => {
+    jest.useFakeTimers();
+    try {
+      const reader = deferred<void>();
+      const acknowledgement = deferred<number>();
+      useChatSessionStore.getState().updateSessionData("session", {
+        readerFinished: reader.promise,
+        sendAcknowledged: acknowledgement.promise,
+      });
+      render(<AppInputBar {...props("streaming")} />);
+      await screen.findByText("Queued follow-up");
+      pending = [];
+
+      await act(async () => {
+        if (transition === "reader completion") reader.resolve();
+        else acknowledgement.resolve(2);
+      });
+
+      expect(
+        screen.queryByTestId("queued-message-bar")
+      ).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  }
+);
+
+test.each(["queue", "send"] as const)(
+  "%s acceptance waits for history only when starting a new turn",
+  async (delivery) => {
+    jest.useFakeTimers();
+    try {
+      const reader = deferred<void>();
+      const history = deferred<void>();
+      pending[0]!.delivery = delivery;
+      mockRefreshChatSession.mockReturnValue(history.promise);
+      useChatSessionStore.getState().updateSessionData("session", {
+        readerFinished: reader.promise,
+      });
+      render(<AppInputBar {...props("streaming")} />);
+      await screen.findByText("Queued follow-up");
+      pending = [];
+
+      await act(async () => reader.resolve());
+      expect(mockRefreshChatSession).toHaveBeenCalled();
+      if (delivery === "queue") {
+        expect(screen.getByText("Queued follow-up")).toBeVisible();
+      } else {
+        expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument();
+      }
+
+      await act(async () => history.resolve());
+      expect(screen.queryByText("Queued follow-up")).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  }
+);

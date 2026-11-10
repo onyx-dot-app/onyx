@@ -25,6 +25,8 @@ export class ChatPage {
   // Message collections. Only messages near the viewport are mounted, so
   // these hold the rendered ones, not the whole chat.
   readonly humanMessages: Locator;
+  readonly humanMessageBubbles: Locator;
+  readonly queuedMessageHandoff: Locator;
   readonly aiMessages: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
@@ -48,6 +50,8 @@ export class ChatPage {
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
+    this.humanMessageBubbles = page.getByTestId("human-message-bubble");
+    this.queuedMessageHandoff = page.getByTestId("queued-message-handoff");
     this.aiMessages = page.getByTestId("onyx-ai-message");
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
@@ -92,7 +96,6 @@ export class ChatPage {
 
   async goto(sessionId?: string): Promise<void> {
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
-    await this.page.waitForLoadState("networkidle");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 

@@ -290,9 +290,7 @@ export default function MultiModelPanel({
       <div className="sticky top-0 z-10 bg-background-neutral-00 rounded-12">
         {headerWithNav}
       </div>
-      {(!errorMessage ||
-        agentMessageProps.rawPackets.length > 0 ||
-        Boolean(agentMessageProps.acceptedUserMessages?.length)) && (
+      {(!errorMessage || agentMessageProps.rawPackets.length > 0) && (
         <div className={cn(isNonPreferredInSelection && "pointer-events-none")}>
           <AgentMessage
             {...agentMessageProps}

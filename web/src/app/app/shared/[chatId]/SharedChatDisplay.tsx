@@ -192,11 +192,9 @@ export default function SharedChatDisplay({
                       className="w-[min(50rem,100%)]"
                     >
                       {(message.type !== "error" ||
-                        message.packets.length > 0 ||
-                        Boolean(message.acceptedUserMessages?.length)) && (
+                        message.packets.length > 0) && (
                         <AgentMessage
                           rawPackets={message.packets}
-                          acceptedUserMessages={message.acceptedUserMessages}
                           chatState={{
                             agent: persona,
                             docs: message.documents,

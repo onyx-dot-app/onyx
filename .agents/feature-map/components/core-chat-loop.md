@@ -24,8 +24,10 @@
   fails with "Message ID is required" ([[#session-admission]]).
   The separate pending-message API accepts text during a turn. `send` targets
   the selected response's next model step; `queue` starts a new turn after normal
-  completion. Stop, failure, and step limits leave queued text pending. The
-  main-chat frontend uses this API; Craft has a separate backend.
+  completion. `interrupt` cancels current work, then starts a new turn after
+  execution and saves drain. Stop, failure, and step limits leave ordinary
+  queued text pending. The main-chat frontend uses this API; Craft has a
+  separate backend.
 - **Stop.** The user presses stop. The input shows that the turn is stopping
   until active model, tool and save work drains. The partial answer stays, with
   "Generation was stopped by the user." after it. A reload shows the same saved

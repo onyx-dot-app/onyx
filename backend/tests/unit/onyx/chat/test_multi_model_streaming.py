@@ -1429,6 +1429,8 @@ def _mock_settings() -> Generator[None, None, None]:
             return_value=[],
         ),
         patch("onyx.chat.execution.get_cache_backend"),
+        patch("onyx.chat.execution.get_session_with_current_tenant"),
+        patch("onyx.chat.execution.has_pending_human_interrupt", return_value=False),
         patch("onyx.chat.execution.ChatRunStore", side_effect=run_store),
     ):
         yield
@@ -3184,8 +3186,10 @@ def test_missing_response_outcome_cancels_run_and_drains_other_responses() -> No
     assert not turn._response_workers
 
 
+@pytest.mark.parametrize("pending_interrupt", [False, True])
 def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
     chat_workers: list[Future[Run | None]],
+    pending_interrupt: bool,
 ) -> None:
     entered, release = threading.Event(), threading.Event()
     outcome = Future[ChatResponseOutcome]()
@@ -3212,6 +3216,10 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
         patch("onyx.chat.execution.create_chat_agent", return_value=agent),
         patch("onyx.chat.history_store.save_chat_response_to_db"),
         patch(
+            "onyx.chat.execution.has_pending_human_interrupt",
+            side_effect=lambda *_args: entered.is_set() and pending_interrupt,
+        ),
+        patch(
             "onyx.chat.execution.is_stop_requested",
             side_effect=lambda *_args, **_kwargs: entered.is_set(),
         ),
@@ -3229,6 +3237,7 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
             assert not chat_workers[0].done()
             assert not outcome.done()
             release_admission.assert_not_called()
+            dispatch_pending.assert_not_called()
             release.set()
             assert outcome.result(timeout=3).response.cancelled
             _wait_for_chat_workers(chat_workers)
@@ -3240,7 +3249,7 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
                 for packet in packets
             )
             release_admission.assert_called_once()
-            dispatch_pending.assert_not_called()
+            assert dispatch_pending.call_count == (1 if pending_interrupt else 0)
         finally:
             release.set()
             turn.delivery.reader.close()

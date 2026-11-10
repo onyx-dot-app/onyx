@@ -20,6 +20,7 @@ interface UseQueuedMessageNavigationParams {
   onRemove: (index: number) => void;
   /** Pull a queued message's text back into the input for editing. */
   onEdit: (index: number) => void;
+  onSendNow?: (index: number) => void;
 }
 
 export interface QueuedMessageNavigation {
@@ -35,23 +36,13 @@ export interface QueuedMessageNavigation {
   handleKeyDown: (event: KeyboardEvent<HTMLDivElement>) => boolean;
 }
 
-/**
- * Keyboard navigation for the queued-message bar, shared by the main chat and
- * Craft input bars. Owns the highlight state and translates key presses into
- * remove / edit / navigate actions, leaving the store wiring to the caller.
- *
- * Behavior:
- * - ↑ on an empty input enters navigation mode at the last queued message.
- * - In navigation mode: ↑/↓ move (↓ past the end exits), Enter edits (pulls
- *   the message into the input), Delete/Backspace removes (staying in
- *   navigation mode so items can be pruned in a row), Escape exits.
- * - Any other key exits navigation mode and falls through so it types.
- */
+/** Queue navigation shared with Craft; Enter sends immediately when supported, otherwise edits. */
 export function useQueuedMessageNavigation({
   messages,
   inputIsEmpty,
   onRemove,
   onEdit,
+  onSendNow,
 }: UseQueuedMessageNavigationParams): QueuedMessageNavigation {
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
 
@@ -73,7 +64,7 @@ export function useQueuedMessageNavigation({
           event.preventDefault();
           const queued = messages[highlightedIndex];
           if (queued) {
-            onEdit(highlightedIndex);
+            (onSendNow ?? onEdit)(highlightedIndex);
           }
           setHighlightedIndex(null);
           return true;
@@ -124,7 +115,7 @@ export function useQueuedMessageNavigation({
 
       return false;
     },
-    [highlightedIndex, messages, inputIsEmpty, onRemove, onEdit]
+    [highlightedIndex, messages, inputIsEmpty, onRemove, onEdit, onSendNow]
   );
 
   return { highlightedIndex, setHighlightedIndex, handleKeyDown };

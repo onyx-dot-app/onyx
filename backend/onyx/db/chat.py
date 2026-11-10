@@ -69,7 +69,6 @@ from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
-    AcceptedUserMessage,
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
@@ -976,7 +975,8 @@ def reserve_chat_response_ids(
                 and previous.message_type == MessageType.ASSISTANT
                 else None
             )
-            # Advance queued turns with the branch, never onto a regeneration sibling.
+            # Pending interrupts target the old response, not its successor.
+            # Advance as queued turns, never onto a regeneration sibling.
             db_session.execute(
                 update(ChatInput)
                 .where(
@@ -984,9 +984,11 @@ def reserve_chat_response_ids(
                     ChatInput.source == InputSource.HUMAN,
                     ChatInput.response_item_id.is_(None),
                     ChatInput.target_response_id == previous_response_id,
-                    ChatInput.delivery == MessageDelivery.QUEUE,
                 )
-                .values(target_response_id=reserved[0].id)
+                .values(
+                    target_response_id=reserved[0].id,
+                    delivery=MessageDelivery.QUEUE,
+                )
             )
         parent.latest_child_message_id = reserved[-1].id
 
@@ -1317,16 +1319,6 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
         reasoning_tokens=get_chat_message_reasoning(chat_message),
-        accepted_user_messages=[
-            AcceptedUserMessage(id=message.message_id, message=message.content)
-            for item in sorted(
-                chat_message.response_items, key=lambda item: item.step_index
-            )
-            for message in item.inputs
-            if message.source == InputSource.HUMAN
-        ]
-        if chat_message.response_status is not None
-        else [],
         request_params=request_params,
         message_type=chat_message.message_type,
         context_docs=top_documents,

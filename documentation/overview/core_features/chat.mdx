@@ -8,23 +8,35 @@ icon: "comment"
 
 ## Input Bar
 
-### Queue a Message
+### Send While Onyx Responds
 
-While a response runs, type a message and press **Enter** to queue it for the next turn.
-Queued messages appear above the input bar. They remain available after you reload or leave the chat.
+Press **Enter** or click the send arrow to add an instruction after the current step.
+Onyx finishes the current generation and running actions before reading your message.
+Your instruction appears in the conversation before the next part of the response.
 
-To change the current response, press **Ctrl+Enter** on Windows or Linux, or **Cmd+Enter** on macOS.
-You can also click **Send now**. The message takes effect at the next step, after current work finishes.
-Accepted instructions appear under **Sent during this response**.
+To save a follow-up for later, press **Ctrl+Enter** on Windows or Linux, or **Cmd+Enter** on macOS.
+Onyx starts queued messages after the current response finishes. The queue survives reloads and browser closure.
 
-To edit a queued message, clear the input bar and click its edit button.
+Select a pending message and click **Send now** to interrupt current work and send that message first.
+You can also press **Enter** while the message is highlighted.
+Onyx saves the partial response and waits for current execution to stop before starting your message.
+An interruption cannot undo actions that already finished.
+
+Under **Settings → Chats → Send Behavior While Working**, choose what Enter and the send arrow do:
+
+- **After the current step** is the default.
+- **Interrupt current work** stops the current response before sending your message.
+
+**Ctrl/Cmd+Enter** always queues a follow-up, regardless of this setting.
+
+To edit a pending message, clear the input bar and click its edit button.
 Onyx removes the message from the queue and returns its text to the input bar.
-Press **Enter** to queue the edited text again. Click the trash button to remove a pending message.
+Press **Ctrl/Cmd+Enter** to queue the edited text again. Click the trash button to remove a pending message.
 You cannot edit or remove a message after Onyx accepts it.
 
-Stopping a response, or a response error, pauses the queue. Send a new message to continue. Queueing supports text only.
-Send new attachments after the current response finishes. In multi-model chat, choose a response before queueing.
-Incognito chat does not support queued messages.
+Stopping a response, or a response error, pauses the queue. Choose **Send now** on a pending message to continue.
+Pending messages support text only. Send new attachments after the current response finishes. In multi-model chat,
+choose a response before submitting pending messages. Incognito chat does not support pending messages.
 
 ### Attach Files
 

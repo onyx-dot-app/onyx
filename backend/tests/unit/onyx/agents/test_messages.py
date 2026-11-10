@@ -2,11 +2,12 @@
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import override
+from typing import Literal, override
 
 import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.events import AgentEvent, MessageStartEvent
 from onyx.agents.models import (
     AgentInfo,
     AgentMessageRequest,
@@ -323,6 +324,7 @@ def test_wait_wakes_for_instructions_without_accepting_them(remote: bool) -> Non
 def test_send_during_final_generation_preserves_the_run_budget(max_steps: int) -> None:
     entered, release = threading.Event(), threading.Event()
     requests: list[list[str]] = []
+    events: list[AgentEvent] = []
 
     def generate(
         request: GenerationRequest, signal: CancellationSignal
@@ -339,7 +341,9 @@ def test_send_during_final_generation_preserves_the_run_budget(max_steps: int) -
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
     )
     run = agent.start(
-        max_steps=max_steps, messages=[UserMessage(content="original task")]
+        max_steps=max_steps,
+        messages=[UserMessage(content="original task")],
+        on_event=events.append,
     )
     try:
         assert entered.wait(3)
@@ -351,6 +355,11 @@ def test_send_during_final_generation_preserves_the_run_budget(max_steps: int) -
         assert run.wait_for_idle(3)
         assert len(requests) == max_steps
         snapshot = run.snapshot()
+        started = [event for event in events if isinstance(event, MessageStartEvent)]
+        assert not started[0].input_messages
+        assert [
+            message.id for event in started for message in event.input_messages
+        ] == (["steer"] if max_steps == 2 else [])
         if max_steps == 1:
             assert result.stop_reason == RunStatus.LIMIT
             assert snapshot.progress is not None
@@ -375,6 +384,7 @@ def test_removal_during_preparation_wins_before_model_acceptance() -> None:
     entered, release = threading.Event(), threading.Event()
     requests: list[list[str]] = []
     runs: list[Run] = []
+    events: list[AgentEvent] = []
 
     def prepare(state: StepInput) -> PreparedStep:
         if state.received_inputs:
@@ -395,7 +405,7 @@ def test_removal_during_preparation_wins_before_model_acceptance() -> None:
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=prepare,
     )
-    run = agent.start(max_steps=2)
+    run = agent.start(max_steps=2, on_event=events.append)
     runs.append(run)
     try:
         assert entered.wait(3)
@@ -408,6 +418,11 @@ def test_removal_during_preparation_wins_before_model_acceptance() -> None:
         assert all("removed instruction" not in request for request in requests)
         assert len(run.snapshot().steps) == 2
         assert not run.snapshot().steps[1].input_messages
+        assert not any(
+            event.input_messages
+            for event in events
+            if isinstance(event, MessageStartEvent)
+        )
     finally:
         release.set()
         run.cancel()
@@ -464,7 +479,11 @@ def test_queued_runs_follow_normal_completion_and_pause_after_failure(
         parent_run_id=parent_run.id,
     )
 
-    def submit(message_id: str, text: str, delivery: MessageDelivery) -> None:
+    def submit(
+        message_id: str,
+        text: str,
+        delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE],
+    ) -> None:
         owner.submit_message(
             AgentMessageRequest(
                 agent_id=child.id,

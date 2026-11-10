@@ -219,19 +219,75 @@ def withdraw_human_message__no_commit(
     return pending
 
 
+def interrupt_human_message__no_commit(
+    session: Session,
+    chat_session_id: UUID,
+    user_id: UUID,
+    message_id: str,
+    target_response_id: int | None,
+) -> PendingChatMessage:
+    """Promote existing input without racing acceptance or stopping another branch."""
+    get_human_input_session(session, chat_session_id, user_id)
+    lock_agent(session, str(chat_session_id))
+    row = session.scalar(
+        _pending_human_inputs(chat_session_id)
+        .where(ChatInput.message_id == message_id)
+        .with_for_update(of=ChatInput)
+    )
+    if row is None:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "This message is no longer pending")
+    if row.target_response_id != target_response_id:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "This message now targets another response"
+        )
+    selected = _selected_response(session, chat_session_id)
+    if row.target_response_id != (selected.id if selected else None):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "This message belongs to another response branch"
+        )
+    if selected is not None and selected.response_status is None:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "This response cannot accept pending messages"
+        )
+    row.delivery = MessageDelivery.INTERRUPT
+    session.flush()
+    return _pending_human_message(row)
+
+
+def has_pending_human_interrupt(
+    session: Session, chat_session_id: UUID, response_ids: Collection[int]
+) -> bool:
+    """Read durable interrupt intent for the responses owned by a live turn."""
+    configure_response_transaction__no_commit(session)
+    return bool(
+        session.scalar(
+            _pending_human_inputs(chat_session_id)
+            .where(
+                ChatInput.delivery == MessageDelivery.INTERRUPT,
+                ChatInput.target_response_id.in_(response_ids),
+            )
+            .exists()
+            .select()
+        )
+    )
+
+
 def pending_human_message__no_commit(
     session: Session, chat_session_id: UUID, user_id: UUID
 ) -> PendingChatMessage | None:
     """Read an eligible next turn; acceptance rechecks under the session lock."""
     get_human_input_session(session, chat_session_id, user_id)
     query = _pending_human_inputs(chat_session_id).where(
-        ChatInput.delivery == MessageDelivery.QUEUE,
+        ChatInput.delivery.in_((MessageDelivery.QUEUE, MessageDelivery.INTERRUPT)),
     )
     if session.scalar(query.with_only_columns(ChatInput.id).limit(1)) is None:
         return None
     selected = _selected_response(session, chat_session_id)
-    if selected is not None and selected.response_status != RunStatus.COMPLETE:
-        return None
+    if selected is not None:
+        if selected.response_status is None or not selected.response_status.is_terminal:
+            return None
+        if selected.response_status != RunStatus.COMPLETE:
+            query = query.where(ChatInput.delivery == MessageDelivery.INTERRUPT)
     if (
         selected is None
         and session.scalar(
@@ -248,7 +304,13 @@ def pending_human_message__no_commit(
     query = query.where(
         ChatInput.target_response_id == (selected.id if selected else None)
     )
-    row = session.scalar(query.limit(1))
+    row = session.scalar(
+        query.order_by(None)
+        .order_by(
+            (ChatInput.delivery == MessageDelivery.INTERRUPT).desc(), ChatInput.id
+        )
+        .limit(1)
+    )
     return _pending_human_message(row) if row is not None else None
 
 
@@ -451,7 +513,7 @@ def inputs_available(
             )
             .with_for_update(of=ChatInput)
         )
-        if row is None:
+        if row is None or row.delivery != MessageDelivery.SEND:
             return False
     return True
 
@@ -492,7 +554,7 @@ def queued_request(row: ChatInput) -> AgentMessageRequest:
         invocation is None
         or invocation.parent_chat_message_id is None
         or row.max_steps is None
-        or row.delivery is None
+        or row.delivery not in (MessageDelivery.SEND, MessageDelivery.QUEUE)
     ):
         raise ValueError("Pending agent message has no invoking execution")
     return AgentMessageRequest(

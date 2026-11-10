@@ -1614,7 +1614,7 @@ class _ToolControl(AgentControl):
         agent_id: str,
         *,
         message: str,
-        delivery: MessageDelivery,
+        delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE],
         max_steps: int,
         total_timeout_s: float | None,
     ) -> AgentMessageReceipt:

@@ -38,6 +38,8 @@ document does not repeat it.
   to access them. The runtime accepts submitted instructions and unread results
   before a model call. Chat can remap citations through `PreparedStep.input_messages`.
   Accepted inputs retain their identity and source in saved history.
+  `MessageStartEvent.input_messages` contains the inputs durably accepted by
+  that step; it excludes instructions still queued or withdrawn before acceptance.
   `send_message` targets the next step or starts an idle child with fresh limits.
   `queue_message` waits for normal completion; Stop, failure, and step limits pause
   queued work. `interrupt_agent` cancels the current run while retaining its conversation.

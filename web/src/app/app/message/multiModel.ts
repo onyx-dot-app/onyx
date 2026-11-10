@@ -52,7 +52,6 @@ export function getMultiModelResponses(
       modelName: modelVersion,
       displayName,
       packets: msg.packets || [],
-      acceptedUserMessages: msg.acceptedUserMessages,
       packetCount: msg.packetCount || msg.packets?.length || 0,
       nodeId: msg.nodeId,
       messageId: msg.messageId,

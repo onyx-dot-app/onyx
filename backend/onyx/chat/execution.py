@@ -44,7 +44,9 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.db.chat_inputs import has_pending_human_interrupt
 from onyx.db.chat_subagents import load_chat_branch
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
 from onyx.deep_research.agent import MIN_RESEARCH_CONTEXT_TOKENS, DeepResearchAgent
@@ -85,6 +87,7 @@ from shared_configs.contextvars import (
 
 logger = setup_logger()
 _CANCEL_POLL_INTERVAL_S = 0.25
+_INPUT_POLL_INTERVAL_S = 1.0
 # Each response run ends itself at the turn deadline. The turn cancels later only
 # when work outlives that, e.g. preparation that never started a run.
 _DEADLINE_BACKSTOP = timedelta(seconds=30)
@@ -221,6 +224,7 @@ class ChatTurnExecution:
         self._stopped_models: set[int] = set()
         self._response_stops: dict[int, OverallStop] = {}
         self._last_refresh = time.monotonic()
+        self._last_input_poll = 0.0
         # Each response run cancels itself at this time and records a DEADLINE failure.
         self._deadline_at = datetime.now(timezone.utc) + timedelta(
             seconds=CHAT_EXECUTION_TIMEOUT_S
@@ -431,11 +435,23 @@ class ChatTurnExecution:
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return
-        if self._on_turn_finished is not None and not self.cancellation.cancelled:
-            try:
-                self._on_turn_finished()
-            except Exception:
-                logger.exception("Could not dispatch queued chat input")
+        if self._on_turn_finished is None:
+            return
+        try:
+            if self.cancellation.cancelled:
+                # A late Stop can follow a completed save; only explicit
+                # interrupt-and-send should advance pending work in that case.
+                with get_session_with_current_tenant() as session:
+                    interrupted = has_pending_human_interrupt(
+                        session,
+                        self.setup.chat_session_id,
+                        [response.message_id for response in self.setup.responses],
+                    )
+                if not interrupted:
+                    return
+            self._on_turn_finished()
+        except Exception:
+            logger.exception("Could not dispatch queued chat input")
 
     def _run_response(
         self,
@@ -616,6 +632,24 @@ class ChatTurnExecution:
             self.cancellation.cancel("deadline")
 
         now = time.monotonic()
+        if (
+            not self.cancellation.cancelled
+            and self.setup.incognito_record_mode is None
+            and now - self._last_input_poll >= _INPUT_POLL_INTERVAL_S
+        ):
+            self._last_input_poll = now
+            try:
+                with get_session_with_current_tenant() as session:
+                    interrupted = has_pending_human_interrupt(
+                        session,
+                        self.setup.chat_session_id,
+                        [response.message_id for response in self.setup.responses],
+                    )
+                if interrupted:
+                    self._stopped_by_user = True
+                    self.cancellation.cancel()
+            except Exception:
+                logger.exception("Failed to read chat interrupt request; will retry")
         if not self.cancellation.cancelled:
             try:
                 if is_stop_requested(

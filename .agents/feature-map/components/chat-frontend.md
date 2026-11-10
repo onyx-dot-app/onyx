@@ -25,9 +25,11 @@
   the client cannot confirm it, the send button changes to a manual check,
   and the typed text stays. A failed refresh after queue acceptance uses the same
   recovery action, even when the queue is empty.
-- **A user types while an answer streams.** Enter submits the text to the
-  server queue for the next turn. Ctrl/Cmd+Enter sends it at the next model
-  step of the active response. Queued text survives reload and browser closure.
+- **A user types while an answer streams.** Enter and the send arrow add text
+  at the next model step by default. The account's Send Behavior setting can
+  make them interrupt instead. Ctrl/Cmd+Enter always queues the next turn.
+  Selecting a pending message exposes Send now; that action interrupts current
+  work before starting the message. Queued text survives reload and browser closure.
   Editing withdraws the pending message before returning its text to the input;
   accepted messages cannot be withdrawn. Stop and failed responses pause the queue.
   Pending submission is text-only and unavailable in incognito. Craft keeps its
@@ -285,13 +287,13 @@ from the input bar's manual check or from loading the session again (see
 Resume).
 
 **Pending input.** `lib/chat/hooks.ts:usePendingChatMessages` polls the small
-pending list while messages remain. Focus and reconnect also refresh the list. A removed entry triggers
-`refreshChatSession`. On the same stream, refresh changes only accepted-input
-metadata; packet delivery retains ownership of live output. On a new stream,
-refresh hands off to the shared replay reader. Both stream paths preserve
-`Message.acceptedUserMessages` across packet updates. Saved history derives
-these instructions from existing human input rows, without copying their content
-into another table. The UI labels them "Sent during this response".
+pending list while messages remain. Focus, reconnect, stream completion, and a
+new response acknowledgement also refresh it. A removed entry triggers
+`refreshChatSession`; a new stream hands off to the shared replay reader.
+Accepted instructions arrive as `user_message` packets between response sections.
+The live reader removes their exact IDs from the pending cache. Saved replay
+emits the same packets from each step's human inputs. Both paths render normal
+user bubbles after earlier output and before the next step's output.
 
 **First-run onboarding.** `AppPage` renders
 `web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
@@ -384,7 +386,12 @@ up its own branding.
 6. `server-owns-queue` **Only the backend starts queued turns.**
    `sections/input/AppInputBar.tsx:AppInputBar` submits text to the pending-message
    endpoint. It does not wait for rendering or call normal send when a response
-   ends. SWR owns the pending-list cache; session refresh owns accepted text.
+   ends. SWR owns the pending-list cache. Accepted between-step inputs use the
+   same ordered packets for live display and reload. During successful turn
+   handoff, the next queued item previews in history with a loading indicator;
+   it stays in SWR until acceptance. Ordinary Stop, failure, and confirmed idle
+   remove the preview. An explicit interrupt can preview its promoted message
+   after cancellation. History refresh precedes removal of an accepted queued item.
    Editing waits for DELETE to return the withdrawn text. A conflict refreshes
    the list without restoring text that was already accepted.
 7. `branch-switch-reaches-server` **A branch switch must reach the server.**
@@ -540,5 +547,6 @@ up its own branding.
   `web/src/app/app/`.
 - By hand: select an Action preference, edit, switch back, stop mid-answer, and reload.
   Citations resolve, the branch holds, and the partial answer stays. Queue a
-  message during an answer: the server starts it after completion. Ctrl/Cmd+Enter
-  adds the text at the next model step. Reload and verify pending and accepted text.
+  message with Ctrl/Cmd+Enter during an answer: the server starts it after completion.
+  Enter adds text at the next model step by default. Select a queued message and
+  choose Send now to interrupt. Reload and verify pending and accepted text.

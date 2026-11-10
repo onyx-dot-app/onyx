@@ -228,11 +228,15 @@ its background task end ([[#pure-asgi-middleware]]).
    a new block at tab 0. A call in a later model step always opens a new
    block. Calls under a parent tool always take a new
    `sub_turn_index`. Saved-session replay uses the same renderer, so a change
-   here changes reloads too.
+   here changes reloads too. An accepted human instruction gets a `user_message`
+   packet in its own section before the next model step. Its placement orders
+   the user bubble relative to assistant and tool output, both live and on replay.
 8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's
    presenter sends one `OverallStop` with `stop_reason` `finished`, tagged with
-   its `model_index`. `OverallStop` does not mean success: response errors
+   its `model_index`. Its optional `response_status` distinguishes successful
+   completion from limits and errors; older packets can omit it.
+   `OverallStop` does not mean success: response errors
    arrive as `StreamingError`. After cancellation of the turn,
    `ChatTurnExecution._publish` drops producer packets, including stops and
    `SectionEnd`. Each response run first cancels itself at its deadline while

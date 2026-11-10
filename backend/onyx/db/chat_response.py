@@ -880,20 +880,16 @@ def read_response_input(row: ChatInput) -> UserMessage:
     source_id = (
         invocation.parent_chat_message_id if invocation else row.source_response_id
     )
-    metadata = (
-        InputMessageMetadata(
-            source=row.source,
-            source_run_id=str(source_id) if source_id is not None else None,
-            sender_agent_id=(
-                str(invocation.chat_session_id)
-                if invocation
-                else str(row.source_agent_id)
-                if row.source != InputSource.HUMAN and row.source_agent_id is not None
-                else None
-            ),
-        )
-        if row.source != InputSource.HUMAN or source_id is not None
-        else None
+    metadata = InputMessageMetadata(
+        source=row.source,
+        source_run_id=str(source_id) if source_id is not None else None,
+        sender_agent_id=(
+            str(invocation.chat_session_id)
+            if invocation
+            else str(row.source_agent_id)
+            if row.source != InputSource.HUMAN and row.source_agent_id is not None
+            else None
+        ),
     )
     return UserMessage(id=row.message_id, content=row.content, metadata=metadata)
 

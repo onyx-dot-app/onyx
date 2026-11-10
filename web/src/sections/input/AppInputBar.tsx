@@ -1,5 +1,8 @@
 "use client";
 
+import Keycap from "@/refresh-components/Keycap";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
+
 import { useNavigation } from "@opal/navigation";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
@@ -28,6 +31,7 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { usePendingChatMessages } from "@/lib/chat/hooks";
+import { useQueuedMessageHandoff } from "@/lib/chat/useQueuedMessageHandoff";
 import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useDraft, draftKey, saveDraft, clearDraft } from "@/hooks/useDraft";
@@ -185,15 +189,22 @@ const AppInputBar = React.memo(
       currentSessionId,
       !incognitoEnabled
     );
+    const queuedHandoff = useQueuedMessageHandoff(currentSessionId);
     const queuedMessages = useMemo(
       () =>
-        pendingMessages.messages.map((item) => ({
-          id: item.id,
-          text: item.message,
-        })),
-      [pendingMessages.messages]
+        pendingMessages.messages
+          .filter((item) => item.id !== queuedHandoff?.id)
+          .map((item) => ({
+            id: item.id,
+            text: item.message,
+          })),
+      [pendingMessages.messages, queuedHandoff?.id]
     );
     const { user, isAdmin } = useUser();
+    const { isMac } = useBrowserInfo();
+    const sendDelivery = user?.preferences.interrupt_on_send
+      ? "interrupt"
+      : "send";
     const [editingSessionId, setEditingSessionId] = useState<string | null>(
       null
     );
@@ -436,10 +447,14 @@ const AppInputBar = React.memo(
             ? "appInputBar.pendingMessages.chooseResponseHint"
             : targetResponseId === null
               ? "appInputBar.pendingMessages.preparingHint"
-              : "appInputBar.pendingMessages.keyboardHint"
+              : sendDelivery === "interrupt"
+                ? "appInputBar.pendingMessages.interruptHint"
+                : "appInputBar.pendingMessages.sendHint"
     );
 
-    async function submitPendingMessage(delivery: "send" | "queue") {
+    async function submitPendingMessage(
+      delivery: "send" | "queue" | "interrupt"
+    ) {
       if (
         !canSubmitPending ||
         targetResponseId === null ||
@@ -468,7 +483,7 @@ const AppInputBar = React.memo(
     }
 
     async function withdrawPendingMessage(index: number, edit: boolean) {
-      const pending = pendingMessages.messages[index];
+      const pending = queuedMessages[index];
       if (
         !pending ||
         !currentSessionId ||
@@ -498,11 +513,18 @@ const AppInputBar = React.memo(
       }
     }
 
+    function interruptWithQueuedMessage(index: number) {
+      const pending = queuedMessages[index];
+      if (!pending || editingQueuedMessage.current || disabled) return;
+      void pendingMessages.interrupt(pending.id);
+    }
+
     const queueNav = useQueuedMessageNavigation({
       messages: queuedMessages,
       inputIsEmpty: !message,
       onRemove: (index) => void withdrawPendingMessage(index, false),
       onEdit: (index) => void withdrawPendingMessage(index, true),
+      onSendNow: interruptWithQueuedMessage,
     });
 
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
@@ -828,6 +850,51 @@ const AppInputBar = React.memo(
           </div>
         </div>
 
+        {canStopGeneration && !incognitoEnabled && message.trim() && (
+          <Section
+            width="auto"
+            height="fit"
+            padding={1}
+            alignItems="stretch"
+            className="min-w-0 flex-1"
+          >
+            <Section
+              width="auto"
+              height="fit"
+              gap={1}
+              data-testid="pending-message-hint"
+              aria-label={
+                canSubmitPending
+                  ? t("appInputBar.pendingMessages.keyboardHint")
+                  : pendingMessageHint
+              }
+            >
+              {canSubmitPending ? (
+                <>
+                  <Keycap>↵</Keycap>
+                  <Text font="secondary-body" color="text-03">
+                    {t("appInputBar.pendingMessages.sendLabel")}
+                  </Text>
+                  <Keycap>{isMac ? "⌘" : "Ctrl"}</Keycap>
+                  <Keycap>↵</Keycap>
+                  <Text font="secondary-body" color="text-03">
+                    {t("appInputBar.pendingMessages.queueLabel")}
+                  </Text>
+                </>
+              ) : (
+                <Text
+                  font="secondary-body"
+                  color="text-03"
+                  maxLines={1}
+                  overflowTooltip
+                >
+                  {pendingMessageHint}
+                </Text>
+              )}
+            </Section>
+          </Section>
+        )}
+
         {/* Bottom right controls */}
         <div className="flex flex-row items-center gap-1">
           {showMicButton &&
@@ -872,17 +939,6 @@ const AppInputBar = React.memo(
               }}
             />
           )}
-          {canSubmitPending && message.trim() && (
-            <Button
-              prominence="tertiary"
-              size="sm"
-              tooltip={t("appInputBar.pendingMessages.sendHint")}
-              onClick={() => void submitPendingMessage("send")}
-            >
-              {t("appInputBar.pendingMessages.sendLabel")}
-            </Button>
-          )}
-
           <Button
             disabled={
               chatState === "cancelling" ||
@@ -904,10 +960,13 @@ const AppInputBar = React.memo(
                 : hasPendingFiles
                   ? t("appInputBar.sendButton.processingFilesTooltip")
                   : canStopGeneration && message.trim()
-                    ? canSubmitPending
-                      ? t("appInputBar.pendingMessages.queueHint")
-                      : pendingMessageHint
+                    ? pendingMessageHint
                     : undefined
+            }
+            aria-label={
+              canStopGeneration && message.trim()
+                ? t("baseInputBar.sendButton.sendLabel")
+                : undefined
             }
             id="onyx-chat-input-send-button"
             icon={
@@ -950,7 +1009,7 @@ const AppInputBar = React.memo(
               }
               const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
-                void submitPendingMessage("queue");
+                void submitPendingMessage(sendDelivery);
               } else if (canStopGeneration) {
                 stopTTS({ manual: true });
                 stopGenerating();
@@ -965,9 +1024,7 @@ const AppInputBar = React.memo(
               ? t("appInputBar.sendButton.stoppingLabel")
               : chatState === "unconfirmed"
                 ? t("appInputBar.sendButton.reloadLabel")
-                : canStopGeneration && message.trim()
-                  ? t("baseInputBar.sendButton.queueLabel")
-                  : undefined}
+                : undefined}
           </Button>
         </div>
       </div>
@@ -980,7 +1037,10 @@ const AppInputBar = React.memo(
           highlightedIndex={queueNav.highlightedIndex}
           onDiscard={(index) => void withdrawPendingMessage(index, false)}
           onEdit={(index) => void withdrawPendingMessage(index, true)}
-          disabled={isEditingQueuedMessage}
+          onSendNow={interruptWithQueuedMessage}
+          disabled={
+            isEditingQueuedMessage || pendingMessages.isSubmitting || disabled
+          }
           canEdit={!message.trim()}
           onHighlight={queueNav.setHighlightedIndex}
         />
@@ -988,13 +1048,6 @@ const AppInputBar = React.memo(
           <Section padding={1} width="full" height="fit">
             <Text font="secondary-body" color="text-03">
               {pendingMessages.error}
-            </Text>
-          </Section>
-        )}
-        {canStopGeneration && !incognitoEnabled && (
-          <Section padding={1} width="full" height="fit">
-            <Text font="secondary-body" color="text-03">
-              {pendingMessageHint}
             </Text>
           </Section>
         )}
@@ -1139,7 +1192,9 @@ const AppInputBar = React.memo(
                             }
                           } else if (canSubmitPending) {
                             void submitPendingMessage(
-                              event.ctrlKey || event.metaKey ? "send" : "queue"
+                              event.ctrlKey || event.metaKey
+                                ? "queue"
+                                : sendDelivery
                             );
                           }
                         }

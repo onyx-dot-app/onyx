@@ -25,6 +25,9 @@ import {
 } from "@/lib/fetcher";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
 import type { PendingChatMessage } from "@/lib/chat/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { useShallow } from "zustand/react/shallow";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const PENDING_MESSAGES_POLL_MS = 1000;
@@ -37,10 +40,33 @@ export function usePendingChatMessages(
   const t = useTranslations("chat.input.pendingMessages");
   const tReadiness = useTranslations("chat.readiness");
   const key =
-    enabled && sessionId
-      ? `/api/chat/chat-session/${sessionId}/pending-messages`
-      : null;
+    enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   const { mutate: mutateCache } = useSWRConfig();
+  const { readerFinished, sendAcknowledged } = useChatSessionStore(
+    useShallow((state) => {
+      const session = sessionId ? state.sessions.get(sessionId) : undefined;
+      return {
+        readerFinished: session?.readerFinished,
+        sendAcknowledged: session?.sendAcknowledged,
+      };
+    })
+  );
+  useEffect(() => {
+    if (!key) return;
+    let active = true;
+    const refresh = () => {
+      if (!active) return;
+      void mutateCache(key).catch((failure: unknown) =>
+        console.error("Failed to refresh pending messages", failure)
+      );
+    };
+    // A completed reader or a newly acknowledged turn can consume queued input.
+    void readerFinished?.then(refresh, refresh);
+    void sendAcknowledged?.then(refresh, refresh);
+    return () => {
+      active = false;
+    };
+  }, [key, mutateCache, readerFinished, sendAcknowledged]);
   const activeKey = useRef(key);
   useEffect(() => {
     activeKey.current = key;
@@ -50,30 +76,74 @@ export function usePendingChatMessages(
   );
   const submitting = useRef(false);
   const withdrawing = useRef(new Set<string>());
-  const previous = useRef<{ key: string | null; ids: Set<string> }>({
-    key: null,
-    ids: new Set(),
-  });
+  const previous = useRef<{
+    key: string | null;
+    deliveries: Map<string, PendingChatMessage["delivery"]>;
+  }>({ key: null, deliveries: new Map() });
   const { data, error, isLoading } = useSWR<PendingChatMessage[], Error>(
     key,
-    errorHandlingFetcher,
+    async (url: string): Promise<PendingChatMessage[]> => {
+      const messages = await errorHandlingFetcher<PendingChatMessage[]>(url);
+      if (activeKey.current !== url || !sessionId) return messages;
+      const ids = new Set(messages.map((message) => message.id));
+      const accepted =
+        previous.current.key === url
+          ? [...previous.current.deliveries].filter(([id]) => !ids.has(id))
+          : [];
+      if (accepted.length > 0) {
+        const refresh = refreshChatSession(
+          sessionId,
+          tReadiness("checkFailed")
+        );
+        // Show an accepted queued turn before removing its pending preview.
+        if (accepted.some(([, delivery]) => delivery !== "send")) {
+          await refresh;
+        }
+      }
+      return messages;
+    },
     {
       refreshInterval: (messages) =>
         messages?.length ? PENDING_MESSAGES_POLL_MS : 0,
       onErrorRetry: skipRetryOnAuthError,
       onSuccess: (messages) => {
         if (activeKey.current !== key) return;
-        const ids = new Set(messages.map((message) => message.id));
-        const accepted =
-          previous.current.key === key &&
-          [...previous.current.ids].some((id) => !ids.has(id));
-        previous.current = { key, ids };
-        if (accepted && sessionId) {
-          void refreshChatSession(sessionId, tReadiness("checkFailed"));
-        }
+        previous.current = {
+          key,
+          deliveries: new Map(
+            messages.map((message) => [message.id, message.delivery])
+          ),
+        };
       },
     }
   );
+
+  async function rememberPendingMessage(
+    pending: PendingChatMessage
+  ): Promise<void> {
+    if (!key || !sessionId) return;
+    // Revalidation may already omit an input accepted before the POST returned.
+    await mutateCache<PendingChatMessage[]>(
+      key,
+      (messages = []) =>
+        messages.some((item) => item.id === pending.id)
+          ? messages.map((item) => (item.id === pending.id ? pending : item))
+          : [...messages, pending],
+      { revalidate: false }
+    );
+    if (activeKey.current === key) {
+      previous.current = {
+        key,
+        deliveries: new Map([
+          ...(previous.current.key === key ? previous.current.deliveries : []),
+          [pending.id, pending.delivery],
+        ]),
+      };
+    }
+    void mutateCache(key).catch((failure: unknown) =>
+      console.error("Failed to refresh pending messages", failure)
+    );
+  }
 
   async function submit(
     message: string,
@@ -93,30 +163,42 @@ export function usePendingChatMessages(
           target_response_id: targetResponseId,
         }),
       });
-      // Revalidation may already omit an input accepted before the POST returned.
-      await mutateCache<PendingChatMessage[]>(
-        key,
-        (messages = []) => [
-          ...messages.filter((item) => item.id !== pending.id),
-          pending,
-        ],
-        { revalidate: false }
-      );
-      if (activeKey.current === key) {
-        previous.current = {
-          key,
-          ids: new Set([
-            ...(previous.current.key === key ? previous.current.ids : []),
-            pending.id,
-          ]),
-        };
-      }
-      void mutateCache(key).catch((failure: unknown) =>
-        console.error("Failed to refresh pending messages", failure)
-      );
+      await rememberPendingMessage(pending);
       return true;
     } catch (failure) {
       toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
+      return false;
+    } finally {
+      submitting.current = false;
+      setSubmittingSession(null);
+    }
+  }
+
+  async function interrupt(id: string): Promise<boolean> {
+    const queued = data?.find((message) => message.id === id);
+    if (!key || !sessionId || !queued || submitting.current) return false;
+    const target =
+      queued.target_response_id === null
+        ? ""
+        : `?target_response_id=${queued.target_response_id}`;
+    submitting.current = true;
+    setSubmittingSession(sessionId);
+    try {
+      const pending = await errorHandlingFetchWith<PendingChatMessage>(
+        `${key}/${id}/interrupt${target}`,
+        { method: "POST" }
+      );
+      await rememberPendingMessage(pending);
+      return true;
+    } catch (failure) {
+      toast.error(
+        failure instanceof FetchError && failure.status === 409
+          ? t("alreadyAccepted")
+          : (fetchErrorDetail(failure) ?? t("interruptFailed"))
+      );
+      void mutateCache(key).catch((refreshFailure: unknown) =>
+        console.error("Failed to refresh pending messages", refreshFailure)
+      );
       return false;
     } finally {
       submitting.current = false;
@@ -137,7 +219,7 @@ export function usePendingChatMessages(
         (messages = []) => messages.filter((item) => item.id !== id),
         { revalidate: false }
       );
-      if (previous.current.key === key) previous.current.ids.delete(id);
+      if (previous.current.key === key) previous.current.deliveries.delete(id);
       void refreshChatSession(sessionId, tReadiness("checkFailed"));
       return withdrawn;
     } catch (failure) {
@@ -161,6 +243,7 @@ export function usePendingChatMessages(
     isSubmitting: submittingSession === sessionId && submittingSession !== null,
     error: error ? t("loadFailed") : null,
     submit,
+    interrupt,
     withdraw,
   };
 }

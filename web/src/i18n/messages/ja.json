@@ -12462,14 +12462,15 @@
           "tooltip": "音声が未設定です。管理設定で設定してください。"
         },
         "pendingMessages": {
-          "queueHint": "次のターンのキューに追加 · Enter",
-          "sendHint": "次のステップで送信 · Ctrl/⌘ + Enter",
-          "sendLabel": "今すぐ送信",
-          "keyboardHint": "Enter でキューに追加 · Ctrl/⌘ + Enter で今すぐ送信",
+          "keyboardHint": "Enterで送信 · CtrlまたはCommand + Enterでキューに追加",
           "preparingHint": "応答が始まるとキューに追加できます。",
           "attachmentsHint": "この応答が終わってから添付ファイルを送信してください。",
           "chooseResponseHint": "メッセージをキューに追加する前に応答を選択してください。",
-          "incognitoHint": "シークレットチャットでは応答が終わるまでお待ちください。"
+          "incognitoHint": "シークレットチャットでは応答が終わるまでお待ちください。",
+          "sendHint": "現在のモデル生成とツールの完了後に送信",
+          "interruptHint": "現在の処理を中断してこのメッセージを送信",
+          "sendLabel": "送信",
+          "queueLabel": "キュー"
         }
       },
       "baseInputBar": {
@@ -12582,6 +12583,13 @@
         "editButton": {
           "tooltip": "キュー内のメッセージを編集",
           "clearDraftTooltip": "キュー内のメッセージを編集するには下書きを空にしてください"
+        },
+        "sendButton": {
+          "label": "今すぐ送信",
+          "tooltip": "現在の処理を中断してこのメッセージを送信"
+        },
+        "sendHint": {
+          "label": "今すぐ送信 ·"
         }
       },
       "sharedAppInputBar": {
@@ -12596,7 +12604,8 @@
         "submitFailed": "メッセージを送信できませんでした。下書きは保存されています。",
         "withdrawFailed": "保留中のメッセージを削除できませんでした。",
         "loadFailed": "保留中のメッセージを読み込めませんでした。",
-        "alreadyAccepted": "このメッセージはすでに受け付けられたため、編集や削除はできません。"
+        "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
+        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。"
       }
     },
     "mcpApiKey": {
@@ -12691,9 +12700,6 @@
         },
         "timedOut": {
           "text": "応答は制限時間に達したため停止しました。"
-        },
-        "acceptedInput": {
-          "label": "この応答中に送信"
         }
       },
       "codeBlock": {
@@ -16436,6 +16442,12 @@
       "title": "チャット",
       "toasts": {
         "saveFailed": "設定を保存できませんでした"
+      },
+      "sendBehavior": {
+        "title": "処理中の送信動作",
+        "description": "応答中のEnterキーと送信ボタンの動作を選択します。Ctrl/Cmd+Enterは常に次のメッセージをキューに追加します。",
+        "afterStep": "現在のステップの後",
+        "interrupt": "現在の処理を中断"
       }
     },
     "connectors": {

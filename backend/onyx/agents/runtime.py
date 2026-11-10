@@ -1779,6 +1779,7 @@ def _advance_step(
         **run.event_context,
         step_index=step.index,
         metadata=prepared.output_metadata,
+        input_messages=inputs,
     )
     with run.execution_lock:
         cancellation_signal.check()

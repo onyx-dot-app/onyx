@@ -314,11 +314,6 @@ export default function useChatSessionController({
           retained?.replayCursor !== undefined
             ? {
                 ...retained,
-                acceptedUserMessages:
-                  (resumedMessage.acceptedUserMessages?.length ?? 0) >
-                  (retained.acceptedUserMessages?.length ?? 0)
-                    ? resumedMessage.acceptedUserMessages
-                    : retained.acceptedUserMessages,
                 nodeId: resumedMessage.nodeId,
                 parentNodeId: resumedMessage.parentNodeId,
                 childrenNodeIds: resumedMessage.childrenNodeIds,

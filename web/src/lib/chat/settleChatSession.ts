@@ -102,32 +102,6 @@ export async function refreshChatSession(
       streamId === nextStreamId &&
       nextStreamId !== undefined
     ) {
-      const savedMessages = processRawChatHistory(
-        saved.messages,
-        saved.packets
-      );
-      const current = useChatSessionStore.getState().sessions.get(sessionId);
-      if (!current) return;
-      const messages = new Map(current.messageTree);
-      for (const [id, message] of messages) {
-        const restored =
-          message.messageId === undefined
-            ? undefined
-            : getMessageByMessageId(savedMessages, message.messageId);
-        if (
-          restored?.acceptedUserMessages &&
-          restored.acceptedUserMessages.length >
-            (message.acceptedUserMessages?.length ?? 0)
-        ) {
-          messages.set(id, {
-            ...message,
-            acceptedUserMessages: restored.acceptedUserMessages,
-          });
-        }
-      }
-      useChatSessionStore
-        .getState()
-        .updateSessionMessageTree(sessionId, messages);
       return;
     }
     await readerFinished;
@@ -162,11 +136,6 @@ export async function refreshChatSession(
               ...response,
               ...retained,
               nodeId: response.nodeId,
-              acceptedUserMessages:
-                (response.acceptedUserMessages?.length ?? 0) >
-                (retained.acceptedUserMessages?.length ?? 0)
-                  ? response.acceptedUserMessages
-                  : retained.acceptedUserMessages,
               parentNodeId: response.parentNodeId,
               childrenNodeIds: response.childrenNodeIds,
               latestChildNodeId: response.latestChildNodeId,
@@ -415,13 +384,7 @@ export async function resumeChatSession({
   };
   const publishResponse = (response: Message) => {
     if (!ownsStream()) return;
-    const current = useChatSessionStore.getState().sessions.get(sessionId);
-    const live = current?.messageTree.get(response.nodeId);
-    messageMap.set(response.nodeId, {
-      ...response,
-      acceptedUserMessages:
-        live?.acceptedUserMessages ?? response.acceptedUserMessages,
-    });
+    messageMap.set(response.nodeId, response);
     useChatSessionStore
       .getState()
       .updateSessionMessageTree(sessionId, new Map(messageMap));

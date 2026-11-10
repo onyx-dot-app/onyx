@@ -29,6 +29,8 @@ export class InputBar {
   readonly sendButton: Locator;
   readonly processingFileChips: Locator;
   readonly queuedMessages: Locator;
+  readonly pendingMessageHint: Locator;
+  readonly composerSendNowButton: Locator;
 
   readonly tile: Locator;
   readonly tileRemoveButton: Locator;
@@ -46,6 +48,13 @@ export class InputBar {
     this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.processingFileChips = this.container.getByText("Processing...");
     this.queuedMessages = page.getByTestId("queued-message-bar");
+    this.pendingMessageHint = this.container.getByTestId(
+      "pending-message-hint"
+    );
+    this.composerSendNowButton = this.container.getByRole("button", {
+      name: "Send now",
+      exact: true,
+    });
 
     this.tile = page.locator("[data-rich-tile]");
     this.tileRemoveButton = page.locator("[data-rich-tile-remove]");
@@ -181,7 +190,7 @@ export class InputBar {
   ): Promise<void> {
     await this.textbox.fill(text);
     await this.textbox.press(
-      delivery === "send" ? "ControlOrMeta+Enter" : "Enter"
+      delivery === "queue" ? "ControlOrMeta+Enter" : "Enter"
     );
     await expect(this.textbox).toHaveText("");
   }
@@ -189,6 +198,21 @@ export class InputBar {
   async discardPending(index: number): Promise<void> {
     await this.queuedMessages.nth(index).click();
     await this.textbox.press("Delete");
+  }
+
+  async editPending(index: number): Promise<void> {
+    await this.queuedMessages
+      .nth(index)
+      .getByRole("button", { name: "Edit queued message", exact: true })
+      .click();
+  }
+
+  async sendPendingNow(index: number): Promise<void> {
+    const queuedMessage = this.queuedMessages.nth(index);
+    await queuedMessage.click();
+    await queuedMessage
+      .getByRole("button", { name: "Send now", exact: true })
+      .click();
   }
 
   async clickSend(): Promise<void> {

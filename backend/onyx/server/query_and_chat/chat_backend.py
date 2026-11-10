@@ -89,6 +89,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_inputs import (
     get_human_input_session,
+    interrupt_human_message__no_commit,
     list_human_messages,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
@@ -1492,7 +1493,7 @@ def submit_pending_chat_message(
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> PendingChatMessage:
-    """Submit text for the next model step or a new turn on the selected branch."""
+    """Submit text for the next step, normal completion, or interruption."""
     if user.is_anonymous or user.id is None:
         raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to queue chat messages")
     user_id = user.id
@@ -1552,6 +1553,34 @@ def withdraw_pending_chat_message(
         )
         if pending is None:
             raise OnyxError(OnyxErrorCode.CONFLICT, "This message is no longer pending")
+        db_session.commit()
+    except LookupError as error:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
+        ) from error
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    dispatch_pending_chat_messages(session_id, user.id)
+    return pending
+
+
+@router.post("/chat-session/{session_id}/pending-messages/{message_id}/interrupt")
+def interrupt_with_pending_chat_message(
+    session_id: UUID,
+    message_id: str,
+    target_response_id: int | None = Query(default=None, gt=0),
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+    _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
+) -> PendingChatMessage:
+    """Interrupt current work and start the pending message after execution drains."""
+    if user.is_anonymous or user.id is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to send queued messages")
+    try:
+        pending = interrupt_human_message__no_commit(
+            db_session, session_id, user.id, message_id, target_response_id
+        )
         db_session.commit()
     except LookupError as error:
         raise OnyxError(

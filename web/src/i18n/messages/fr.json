@@ -12462,14 +12462,15 @@
           "tooltip": "La voix n'est pas configurée. Configurez-la dans les paramètres d'administration."
         },
         "pendingMessages": {
-          "queueHint": "Mettre en file pour le prochain tour · Entrée",
-          "sendHint": "Envoyer à la prochaine étape · Ctrl/⌘ + Entrée",
-          "sendLabel": "Envoyer maintenant",
-          "keyboardHint": "Entrée pour mettre en file · Ctrl/⌘ + Entrée pour envoyer maintenant",
+          "keyboardHint": "Entrée pour envoyer · Ctrl ou Commande + Entrée pour mettre en attente",
           "preparingHint": "Vous pouvez mettre des messages en file dès que la réponse commence.",
           "attachmentsHint": "Envoyez les pièces jointes une fois cette réponse terminée.",
           "chooseResponseHint": "Choisissez une réponse avant de mettre un message en file.",
-          "incognitoHint": "Attendez la fin de la réponse dans le chat incognito."
+          "incognitoHint": "Attendez la fin de la réponse dans le chat incognito.",
+          "sendHint": "Envoyer une fois la génération et les outils en cours terminés",
+          "interruptHint": "Interrompre le travail en cours et envoyer ce message",
+          "sendLabel": "Envoyer",
+          "queueLabel": "En attente"
         }
       },
       "baseInputBar": {
@@ -12582,6 +12583,13 @@
         "editButton": {
           "tooltip": "Modifier le message en file",
           "clearDraftTooltip": "Videz votre brouillon pour modifier un message en file"
+        },
+        "sendButton": {
+          "label": "Envoyer maintenant",
+          "tooltip": "Interrompre le travail en cours et envoyer ce message"
+        },
+        "sendHint": {
+          "label": "envoyer ·"
         }
       },
       "sharedAppInputBar": {
@@ -12596,7 +12604,8 @@
         "submitFailed": "Impossible d’envoyer le message. Votre brouillon a été conservé.",
         "withdrawFailed": "Impossible de retirer le message en attente.",
         "loadFailed": "Impossible de charger les messages en attente.",
-        "alreadyAccepted": "Ce message a déjà été accepté et ne peut plus être modifié ni retiré."
+        "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
+        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente."
       }
     },
     "mcpApiKey": {
@@ -12691,9 +12700,6 @@
         },
         "timedOut": {
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
-        },
-        "acceptedInput": {
-          "label": "Envoyé pendant cette réponse"
         }
       },
       "codeBlock": {
@@ -16436,6 +16442,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Échec de l'enregistrement des préférences"
+      },
+      "sendBehavior": {
+        "title": "Comportement d’Envoi Pendant le Travail",
+        "description": "Choisissez l’action d’Entrée et du bouton d’envoi pendant une réponse. Ctrl/Cmd+Entrée met toujours le message en attente.",
+        "afterStep": "Après l’étape en cours",
+        "interrupt": "Interrompre le travail en cours"
       }
     },
     "connectors": {

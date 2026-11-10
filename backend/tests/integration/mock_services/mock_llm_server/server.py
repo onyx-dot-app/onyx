@@ -28,6 +28,7 @@ MAX_RECORDED_REQUESTS = 1000
 _COMPLETION_ID = "chatcmpl-mock"
 _FRAGMENTS = 3
 _GATE_TIMEOUT_S = 60
+_GATE_HEARTBEAT_INTERVAL_S = 0.25
 
 
 @dataclass
@@ -189,8 +190,17 @@ def _sse(
         yield _delta(model, {"reasoning_content": piece})
     for index, piece in enumerate(_fragments(reply.text or "")):
         yield _delta(model, {"content": piece})
-        if index == 0 and gate is not None and not gate.wait(_GATE_TIMEOUT_S):
-            raise TimeoutError("mock LLM stream gate was not released")
+        if index == 0 and gate is not None:
+            deadline = time.monotonic() + _GATE_TIMEOUT_S
+            while not gate.wait(
+                min(_GATE_HEARTBEAT_INTERVAL_S, _GATE_TIMEOUT_S)
+                if reply.heartbeat_while_paused
+                else _GATE_TIMEOUT_S
+            ):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("mock LLM stream gate was not released")
+                # Whitespace reaches adapters that discard empty transport heartbeats.
+                yield _delta(model, {"content": " "})
     for index, call in enumerate(reply.tool_calls):
         function = {"name": call.name, "arguments": ""}
         opening = {"index": index, "id": call.id, "type": "function"}

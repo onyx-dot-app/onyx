@@ -145,6 +145,7 @@ def _serialize_inputs(messages: list[Message]) -> list[dict[str, JsonValue]]:
 class MessageDelivery(str, Enum):
     SEND = "send"
     QUEUE = "queue"
+    INTERRUPT = "interrupt"
 
 
 class AgentMessageStatus(str, Enum):
@@ -165,7 +166,7 @@ class AgentMessageRequest(BaseModel):
     agent_id: str
     parent_id: str
     message: UserMessage
-    delivery: MessageDelivery
+    delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE]
     max_steps: int = Field(gt=0)
     total_timeout_s: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     parent_run_id: str

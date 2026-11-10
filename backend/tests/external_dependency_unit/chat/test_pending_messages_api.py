@@ -18,10 +18,12 @@ from onyx.auth.users import get_anonymous_user
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.models import PendingChatMessage
+from onyx.chat.presentation import replay_response
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
-from onyx.db.chat import translate_db_message_to_chat_message_detail
+from onyx.db.chat_inputs import inputs_available, receive_messages
+from onyx.db.chat_response import read_response_record
 from onyx.db.enums import HookPoint, IncognitoRecordMode
 from onyx.db.models import ChatInput, ChatMessage, ChatSession, User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -31,15 +33,19 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingResponse,
 )
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import GenerationContext, LLMConfig
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationEvent,
     GenerationRequest,
+    GenerationStartEvent,
     TextContent,
+    TextDeltaEvent,
     UserMessage,
 )
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.streaming_models import UserMessagePacket
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -172,6 +178,43 @@ def test_withdraw_returns_editable_text_and_resubmission_joins_queue_tail(
     ]
 
 
+def test_promoting_prefetched_input_prevents_between_step_acceptance(
+    client: TestClient, response: ChatMessage, db_session: Session
+) -> None:
+    path = f"/chat/chat-session/{response.chat_session_id}/pending-messages"
+    submitted = client.post(
+        path,
+        json={
+            "message": "Change direction",
+            "delivery": "send",
+            "target_response_id": response.id,
+        },
+    )
+    assert submitted.status_code == 200, submitted.text
+    message_id = submitted.json()["id"]
+    messages = receive_messages(
+        db_session, str(response.chat_session_id), str(response.id), []
+    )
+    assert len(messages) == 1
+    db_session.rollback()
+    assert (
+        client.post(
+            f"{path}/{message_id}/interrupt",
+            params={"target_response_id": response.id + 1},
+        ).status_code
+        == 409
+    )
+    promoted = client.post(
+        f"{path}/{message_id}/interrupt", params={"target_response_id": response.id}
+    )
+    assert promoted.status_code == 200, promoted.text
+    assert not inputs_available(
+        db_session, response.id, messages, ownership_version=None
+    )
+    db_session.rollback()
+    assert client.get(path).json() == [promoted.json()]
+
+
 def test_queue_routes_reject_other_owners(
     client: TestClient,
     db_session: Session,
@@ -188,6 +231,7 @@ def test_queue_routes_reject_other_owners(
         == 404
     )
     assert client.delete(f"{path}/unknown").status_code == 404
+    assert client.post(f"{path}/unknown/interrupt").status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -287,6 +331,7 @@ def test_queue_routes_reject_incognito(
         == 400
     )
     assert client.delete(f"{path}/unknown").status_code == 400
+    assert client.post(f"{path}/unknown/interrupt").status_code == 400
 
 
 def test_queue_routes_reject_anonymous_users(
@@ -306,6 +351,7 @@ def test_queue_routes_reject_anonymous_users(
         == 403
     )
     assert client.delete(f"{path}/unknown").status_code == 403
+    assert client.post(f"{path}/unknown/interrupt").status_code == 403
 
 
 @pytest.mark.parametrize(
@@ -343,6 +389,15 @@ def test_pending_messages_require_the_selected_response(
             },
         )
         assert rejected.status_code == 400, rejected.text
+    queued = client.post(
+        path,
+        json={
+            "message": "Original branch",
+            "delivery": "queue",
+            "target_response_id": response.id,
+        },
+    )
+    assert queued.status_code == 200, queued.text
     question = response.parent_message
     assert question is not None
     sibling = ChatMessage(
@@ -366,7 +421,14 @@ def test_pending_messages_require_the_selected_response(
         },
     )
     assert rejected.status_code == 400, rejected.text
-    assert client.get(path).json() == []
+    assert (
+        client.post(
+            f"{path}/{queued.json()['id']}/interrupt",
+            params={"target_response_id": response.id},
+        ).status_code
+        == 409
+    )
+    assert client.get(path).json() == [queued.json()]
 
 
 class QueueTestLLM(FakeModelClient):
@@ -379,6 +441,166 @@ class QueueTestLLM(FakeModelClient):
             max_input_tokens=32768,
             temperature=0,
         )
+
+
+@pytest.mark.parametrize("promote", [False, True])
+def test_interrupt_saves_partial_response_and_starts_before_queued_messages(
+    client: TestClient,
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    promote: bool,
+) -> None:
+    path = f"/chat/chat-session/{chat.id}/pending-messages"
+    entered, cancelled, release = Event(), Event(), Event()
+    requests: list[GenerationRequest] = []
+
+    class InterruptibleModel(QueueTestLLM):
+        @override
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            requests.append(request)
+            if len(requests) != 1:
+                yield from super().stream(request, context)
+                return
+            assert context is not None and context.cancellation is not None
+            signal = context.cancellation
+            yield GenerationStartEvent()
+            yield TextDeltaEvent(content_index=0, text="Partial answer")
+            with signal.on_cancel(cancelled.set):
+                entered.set()
+                assert release.wait(30)
+            signal.check()
+            pytest.fail("The first response must be interrupted")
+
+    model = InterruptibleModel(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    stream = handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Initial question", chat_session_id=chat.id
+        ),
+        user=owner,
+    )
+    assert isinstance(stream, Generator)
+    try:
+        next(stream)
+        stream.close()
+        assert entered.wait(15)
+        response = db_session.scalar(
+            select(ChatMessage).where(
+                ChatMessage.chat_session_id == chat.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        )
+        assert response is not None
+        next_step = client.post(
+            path,
+            json={
+                "message": "Apply this next",
+                "delivery": "send",
+                "target_response_id": response.id,
+            },
+        )
+        assert next_step.status_code == 200, next_step.text
+        queued = client.post(
+            path,
+            json={
+                "message": "Do this later",
+                "delivery": "queue",
+                "target_response_id": response.id,
+            },
+        )
+        assert queued.status_code == 200, queued.text
+        immediate = client.post(
+            path,
+            json={
+                "message": "Change direction now",
+                "delivery": "queue" if promote else "interrupt",
+                "target_response_id": response.id,
+            },
+        )
+        assert immediate.status_code == 200, immediate.text
+        pending_id = immediate.json()["id"]
+        if promote:
+            promoted = client.post(
+                f"{path}/{pending_id}/interrupt",
+                params={"target_response_id": response.id},
+            )
+            assert promoted.status_code == 200, promoted.text
+            assert promoted.json() == {
+                **immediate.json(),
+                "delivery": "interrupt",
+            }
+            assert (
+                client.post(
+                    f"{path}/{pending_id}/interrupt",
+                    params={"target_response_id": response.id},
+                ).json()
+                == promoted.json()
+            )
+        assert cancelled.wait(5)
+        if promote:
+            additional = client.post(
+                path,
+                json={
+                    "message": "Another instruction",
+                    "delivery": "interrupt",
+                    "target_response_id": response.id,
+                },
+            )
+            assert additional.status_code == 200, additional.text
+        # Cancellation does not release admission until the existing worker exits.
+        assert len(requests) == 1
+        assert len(client.get(path).json()) == (4 if promote else 3)
+        release.set()
+        assert chat_turn_work.wait_idle(timeout=30)
+        db_session.expire_all()
+        responses = list(
+            db_session.scalars(
+                select(ChatMessage)
+                .where(
+                    ChatMessage.chat_session_id == chat.id,
+                    ChatMessage.message_type == MessageType.ASSISTANT,
+                )
+                .order_by(ChatMessage.id)
+            )
+        )
+        assert responses[0].response_status == RunStatus.CANCELLED
+        assert responses[0].message.startswith("Partial answer")
+        saved = read_response_record(responses[0], "root")
+        assert saved.steps[0].message.text == "Partial answer"
+        assert [(row.message, row.response_status) for row in responses[1:]] == [
+            ("Done", RunStatus.COMPLETE),
+            ("Done", RunStatus.COMPLETE),
+            ("Done", RunStatus.COMPLETE),
+        ] + ([("Done", RunStatus.COMPLETE)] if promote else [])
+        assert list(
+            db_session.scalars(
+                select(ChatMessage.message)
+                .where(
+                    ChatMessage.chat_session_id == chat.id,
+                    ChatMessage.message_type == MessageType.USER,
+                )
+                .order_by(ChatMessage.id)
+            )
+        ) == [
+            "Initial question",
+            "Change direction now",
+            "Apply this next",
+            "Do this later",
+        ] + (["Another instruction"] if promote else [])
+        assert client.get(path).json() == []
+        assert client.post(f"{path}/{pending_id}/interrupt").status_code == 409
+    finally:
+        release.set()
+        stream.close()
+        assert chat_turn_work.wait_idle(timeout=30)
 
 
 def test_submitted_messages_process_once_and_execute_without_a_browser(
@@ -498,13 +720,15 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
             ("Answer 4", RunStatus.COMPLETE),
         ]
         assert [
-            detail.model_dump()["accepted_user_messages"]
-            for detail in map(translate_db_message_to_chat_message_detail, responses)
-        ] == [
-            [{"id": submitted[0].id, "message": "Accepted Use the latest source"}],
-            [],
-            [],
-        ]
+            [
+                (packet.obj.id, packet.obj.message)
+                for packet in replay_response(
+                    read_response_record(row, "root"), {}, {}, {}
+                )
+                if isinstance(packet.obj, UserMessagePacket)
+            ]
+            for row in responses
+        ] == [[(submitted[0].id, "Accepted Use the latest source")], [], []]
         assert len(requests) == 4
         assert any(
             isinstance(message, UserMessage)
@@ -532,6 +756,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
         ]
         assert queries == [
             "Initial question",
+            "Rejected instruction",
             "Rejected instruction",
             "Rejected instruction",
             "Use the latest source",

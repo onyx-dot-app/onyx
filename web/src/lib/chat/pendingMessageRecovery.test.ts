@@ -183,7 +183,7 @@ test("completion follows a backend-started turn and streams its output before th
   }
 });
 
-test("accepted send inputs refresh without replacing live packets or rewinding newer inputs", async () => {
+test("queue refresh preserves a live response and its accepted input packets", async () => {
   const raw = [
     savedMessage(1, "user", "Question"),
     savedMessage(2, "assistant", ""),
@@ -197,6 +197,10 @@ test("accepted send inputs refresh without replacing live packets or rewinding n
         placement: { turn_index: 0 },
         obj: { type: "message_delta", content: "Live" },
       },
+      {
+        placement: { turn_index: 1 },
+        obj: { type: "user_message", id: "send", message: "Focus here" },
+      },
     ],
   };
   tree.set(2, live);
@@ -206,10 +210,6 @@ test("accepted send inputs refresh without replacing live packets or rewinding n
     sendAcknowledged: Promise.resolve(2),
     readerFinished: new Promise<void>(() => {}),
   });
-  raw[1] = {
-    ...raw[1]!,
-    accepted_user_messages: [{ id: "send", message: "Focus here" }],
-  };
   jest
     .spyOn(global, "fetch")
     .mockImplementation(async () => Response.json(savedSession(raw, 2)));
@@ -218,17 +218,8 @@ test("accepted send inputs refresh without replacing live packets or rewinding n
     .getState()
     .sessions.get("session")
     ?.messageTree.get(2);
-  expect(refreshed?.acceptedUserMessages).toEqual([
-    { id: "send", message: "Focus here" },
-  ]);
   expect(refreshed?.packets).toBe(live.packets);
   expect(refreshed?.replayCursor).toBe(7);
-  raw[1] = { ...raw[1]!, accepted_user_messages: [] };
-  await refreshChatSession("session", "Check again");
-  expect(
-    useChatSessionStore.getState().sessions.get("session")?.messageTree.get(2)
-      ?.acceptedUserMessages
-  ).toEqual(refreshed?.acceptedUserMessages);
 });
 
 test("a delayed queue refresh cannot undo a branch selection", async () => {

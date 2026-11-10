@@ -193,7 +193,10 @@ class PendingChatMessageRequest(BaseModel):
 
     message: str = Field(min_length=1)
     delivery: MessageDelivery = Field(
-        description="send adds input to the active response; queue starts a later turn."
+        description=(
+            "send adds input at the next step; queue waits for normal completion; "
+            "interrupt stops current work and starts a new turn."
+        )
     )
     target_response_id: int | None = Field(
         default=None,
@@ -261,11 +264,6 @@ class ChatSessionsResponse(BaseModel):
     has_more: bool = False
 
 
-class AcceptedUserMessage(BaseModel):
-    id: str
-    message: str
-
-
 class ChatMessageDetail(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int
@@ -273,7 +271,6 @@ class ChatMessageDetail(BaseModel):
     latest_child_message: int | None = None
     message: str
     reasoning_tokens: str | None = None
-    accepted_user_messages: list[AcceptedUserMessage] = Field(default_factory=list)
     message_type: MessageType
     context_docs: list[SavedSearchDoc] | None = None
     # Dict mapping citation number to document_id

@@ -12462,14 +12462,15 @@
           "tooltip": "Sprachfunktion nicht konfiguriert. Richten Sie sie in den Administrator-Einstellungen ein."
         },
         "pendingMessages": {
-          "queueHint": "Für die nächste Runde einreihen · Eingabe",
-          "sendHint": "Beim nächsten Schritt senden · Strg/⌘ + Eingabe",
-          "sendLabel": "Jetzt senden",
-          "keyboardHint": "Eingabe zum Einreihen · Strg/⌘ + Eingabe zum sofortigen Senden",
+          "keyboardHint": "Enter zum Senden · Strg oder Command + Enter zum Einreihen",
           "preparingHint": "Nach Beginn der Antwort können Sie Nachrichten einreihen.",
           "attachmentsHint": "Senden Sie angehängte Dateien nach dieser Antwort.",
           "chooseResponseHint": "Wählen Sie eine Antwort aus, bevor Sie eine Nachricht einreihen.",
-          "incognitoHint": "Warten Sie im Inkognito-Chat, bis die Antwort fertig ist."
+          "incognitoHint": "Warten Sie im Inkognito-Chat, bis die Antwort fertig ist.",
+          "sendHint": "Senden, sobald die aktuelle Modellgenerierung und die Werkzeuge fertig sind",
+          "interruptHint": "Aktuelle Arbeit unterbrechen und diese Nachricht senden",
+          "sendLabel": "Senden",
+          "queueLabel": "Einreihen"
         }
       },
       "baseInputBar": {
@@ -12582,6 +12583,13 @@
         "editButton": {
           "tooltip": "Eingereihte Nachricht bearbeiten",
           "clearDraftTooltip": "Leeren Sie Ihren Entwurf, um eine eingereihte Nachricht zu bearbeiten"
+        },
+        "sendButton": {
+          "label": "Jetzt senden",
+          "tooltip": "Aktuelle Arbeit unterbrechen und diese Nachricht senden"
+        },
+        "sendHint": {
+          "label": "jetzt senden ·"
         }
       },
       "sharedAppInputBar": {
@@ -12596,7 +12604,8 @@
         "submitFailed": "Die Nachricht konnte nicht gesendet werden. Ihr Entwurf wurde behalten.",
         "withdrawFailed": "Die ausstehende Nachricht konnte nicht entfernt werden.",
         "loadFailed": "Ausstehende Nachrichten konnten nicht geladen werden.",
-        "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und kann nicht bearbeitet oder entfernt werden."
+        "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
+        "interruptFailed": "Diese Nachricht konnte nicht sofort gesendet werden. Sie bleibt ausstehend."
       }
     },
     "mcpApiKey": {
@@ -12691,9 +12700,6 @@
         },
         "timedOut": {
           "text": "Die Antwort wurde gestoppt, weil sie ihr Zeitlimit erreicht hat."
-        },
-        "acceptedInput": {
-          "label": "Während dieser Antwort gesendet"
         }
       },
       "codeBlock": {
@@ -16436,6 +16442,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Einstellungen konnten nicht gespeichert werden"
+      },
+      "sendBehavior": {
+        "title": "Sendeverhalten Während Der Verarbeitung",
+        "description": "Wähle, was Enter und die Senden-Taste während einer Antwort tun. Strg/Cmd+Enter reiht eine Folgefrage ein.",
+        "afterStep": "Nach dem aktuellen Schritt",
+        "interrupt": "Aktuelle Arbeit unterbrechen"
       }
     },
     "connectors": {

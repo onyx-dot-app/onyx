@@ -6,6 +6,7 @@ import {
 } from "@/app/app/services/streamingModels";
 
 interface AuthError {
+  turnIndex: number;
   toolName: string;
   toolId: number | null;
 }
@@ -37,6 +38,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
 
     if (!alreadyPresent) {
       errors.push({
+        turnIndex: packet.placement.turn_index,
         toolName: delta.tool_name,
         toolId: delta.tool_id ?? null,
       });

@@ -291,6 +291,48 @@ describe("usePacketProcessor", () => {
   });
 
   describe("onRenderComplete callback", () => {
+    test.each([false, true])(
+      "completion follows the answer after accepted input (has next answer: %s)",
+      (hasNextAnswer) => {
+        const packets = [createMessageStartPacket({ turn_index: 0 })];
+        const { result, rerender } = renderHook(
+          ({ packets }) => usePacketProcessor(packets, 1),
+          { initialProps: { packets } }
+        );
+        act(() => result.current.onRenderComplete());
+
+        packets.push(
+          createPacket(
+            PacketType.USER_MESSAGE,
+            { turn_index: 1 },
+            {
+              id: "accepted-input",
+              message: "Use the latest report",
+            }
+          )
+        );
+        rerender({ packets });
+        expect(result.current.isComplete).toBe(false);
+
+        packets.push(createSearchToolStartPacket({ turn_index: 2 }));
+        rerender({ packets });
+        expect(
+          result.current.displayGroups.map((group) => group.turn_index)
+        ).toEqual([0, 1]);
+
+        if (hasNextAnswer) {
+          packets.push(createMessageStartPacket({ turn_index: 3 }));
+        }
+        packets.push(createStopPacket());
+        rerender({ packets });
+        expect(result.current.isComplete).toBe(!hasNextAnswer);
+        if (hasNextAnswer) {
+          act(() => result.current.onRenderComplete());
+          expect(result.current.isComplete).toBe(true);
+        }
+      }
+    );
+
     test("sets isComplete when finalAnswerComing and stopPacketSeen", () => {
       const packets = [
         createMessageStartPacket({ turn_index: 0 }),

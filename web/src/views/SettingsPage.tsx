@@ -1185,6 +1185,7 @@ function ChatPreferencesSettings() {
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserPasteAsTile,
+    updateUserInterruptOnSend,
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
@@ -1447,6 +1448,32 @@ function ChatPreferencesSettings() {
                   </Section>
                 </InputHorizontal>
               )}
+
+            <InputHorizontal
+              title={t("chats.sendBehavior.title")}
+              description={t("chats.sendBehavior.description")}
+              withLabel
+            >
+              <InputSingleSelect
+                placeholder={t("chats.sendBehavior.title")}
+                defaultOption="send"
+                value={
+                  user?.preferences.interrupt_on_send ? "interrupt" : "send"
+                }
+                options={[
+                  { value: "send", title: t("chats.sendBehavior.afterStep") },
+                  {
+                    value: "interrupt",
+                    title: t("chats.sendBehavior.interrupt"),
+                  },
+                ]}
+                onValueChange={(value) => {
+                  void updateUserInterruptOnSend(value === "interrupt").catch(
+                    () => toast.error(t("chats.toasts.saveFailed"))
+                  );
+                }}
+              />
+            </InputHorizontal>
 
             <InputHorizontal
               title={t("chats.autoScroll.title")}

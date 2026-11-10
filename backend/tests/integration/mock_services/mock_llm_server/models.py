@@ -52,6 +52,7 @@ class Reply(BaseModel):
     required: bool = True
     # Hold the stream after its first text chunk until the test releases this gate.
     pause_after_first_chunk: str | None = None
+    heartbeat_while_paused: bool = False
 
 
 class Conversation(BaseModel):

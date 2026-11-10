@@ -1425,6 +1425,8 @@ def test_parallel_search_packets_complete_without_waiting_for_an_earlier_call() 
     "outcome, failure, reason",
     [
         (RunStatus.COMPLETE, None, "finished"),
+        (RunStatus.LIMIT, None, "finished"),
+        (RunStatus.ERROR, None, "finished"),
         (RunStatus.CANCELLED, None, "user_cancelled"),
         (
             RunStatus.CANCELLED,
@@ -1446,3 +1448,4 @@ def test_stop_reason_is_the_same_live_and_on_replay(
     for packets in (output, replay):
         stops = [p.obj for p in packets if isinstance(p.obj, OverallStop)]
         assert [stop.stop_reason for stop in stops] == [reason]
+        assert [stop.response_status for stop in stops] == [outcome]
