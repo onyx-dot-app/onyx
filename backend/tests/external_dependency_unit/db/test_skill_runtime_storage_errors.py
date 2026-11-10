@@ -11,6 +11,7 @@ from google.api_core.exceptions import NotFound
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
+from onyx.db.skill import RuntimeSkillCandidate, SkillRuntimePriority
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill import api
 from onyx.skills.push import _assemble_fileset
@@ -68,14 +69,28 @@ def test_runtime_cloud_404_requires_confirmed_absence(
             size.side_effect = TimeoutError("Metadata service unavailable")
         else:
             size.return_value = 123 if metadata == "exists" else None
-        assert _assemble_fileset([skill], user, session) == {}
+        assert (
+            _assemble_fileset(
+                [RuntimeSkillCandidate(skill, SkillRuntimePriority.ENABLED, None, 0)],
+                user,
+                session,
+            ).files
+            == {}
+        )
     session.refresh(version)
     assert version.bundle_file_id == original_file_id
     if metadata == "missing":
         assert version.is_valid is False
     else:
         assert version.is_valid is None
-        assert "retryable-reader/SKILL.md" in _assemble_fileset([skill], user, session)
+        assert (
+            "retryable-reader/SKILL.md"
+            in _assemble_fileset(
+                [RuntimeSkillCandidate(skill, SkillRuntimePriority.ENABLED, None, 0)],
+                user,
+                session,
+            ).files
+        )
         session.refresh(version)
         assert version.is_valid is True
 
@@ -109,7 +124,14 @@ def test_runtime_definitive_storage_errors(
         patch.object(store, "read_file", side_effect=error),
         patch.object(store, "get_file_size") as size,
     ):
-        assert _assemble_fileset([skill], user, session) == {}
+        assert (
+            _assemble_fileset(
+                [RuntimeSkillCandidate(skill, SkillRuntimePriority.ENABLED, None, 0)],
+                user,
+                session,
+            ).files
+            == {}
+        )
         size.assert_not_called()
     session.refresh(version)
     assert version.is_valid is expected
