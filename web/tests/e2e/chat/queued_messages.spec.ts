@@ -73,6 +73,7 @@ pendingTest(
     await expect(chatPage.inputBar.textbox).toHaveText("Edit this");
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
     await chatPage.reload();
+    await chatPage.expectHumanMessage(heldResponse.question);
     await expect(chatPage.inputBar.textbox).toHaveText("Edit this");
     await chatPage.inputBar.submitPending("Edited instruction");
     await releaseMockLlmGate(heldResponse.gateId);
