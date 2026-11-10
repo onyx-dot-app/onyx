@@ -41,6 +41,7 @@ import {
   resetSkillMarketplaceAccess,
 } from "@/lib/skills/api";
 import { canReadSkillHistory, canShareSkill } from "@/lib/skills/permissions";
+import { useInstallationPolicyOptions } from "@/lib/skills/hooks";
 import type {
   CustomSkill,
   SkillEditableDetail,
@@ -56,8 +57,6 @@ import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
-  SvgLock,
-  SvgOrganization,
   SvgBlocks,
   SvgUser,
   SvgUserManage,
@@ -119,6 +118,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const skillCopy = useTranslations("skills");
   const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
+  const installationOptions = useInstallationPolicyOptions();
   const { data: shareableUsersData } = useShareableUsers({
     includeApiKeys: true,
   });
@@ -564,32 +564,19 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               flexDirection="row"
               aria-label={t("share.installation.title")}
               gap={2}
+              wrap
               height="auto"
               alignItems="stretch"
             >
-              {(
-                [
-                  {
-                    value: "AVAILABLE",
-                    label: "available",
-                    icon: SvgUser,
-                  },
-                  {
-                    value: "DEFAULT",
-                    label: "default",
-                    icon: SvgOrganization,
-                  },
-                  {
-                    value: "REQUIRED",
-                    label: "required",
-                    icon: SvgLock,
-                  },
-                ] as const
-              ).map((option) => (
-                <Section key={option.value} height="full" className="min-w-0">
+              {installationOptions.map((option) => (
+                <Section
+                  key={option.value}
+                  height="full"
+                  className="min-w-0 grow basis-32"
+                >
                   <SelectCard
                     role="button"
-                    aria-label={t(`share.installation.${option.label}`)}
+                    aria-label={option.label}
                     aria-pressed={installationPolicy === option.value}
                     state={
                       installationPolicy === option.value ? "selected" : "empty"
@@ -605,29 +592,19 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                         aria-hidden
                         className="shrink-0 stroke-text-03"
                       />
-                      <Text font="main-ui-action">
-                        {t(`share.installation.${option.label}`)}
-                      </Text>
+                      <Text font="main-ui-action">{option.label}</Text>
                     </Section>
                   </SelectCard>
                 </Section>
               ))}
             </Section>
-            {installationPolicy !== "NOT_AVAILABLE" && (
-              <Text color="text-03" font="secondary-body" role="status">
-                {t(
-                  `share.installation.${
-                    (
-                      {
-                        AVAILABLE: "availableDescription",
-                        DEFAULT: "defaultDescription",
-                        REQUIRED: "requiredDescription",
-                      } as const
-                    )[installationPolicy]
-                  }`
-                )}
-              </Text>
-            )}
+            <Text color="text-03" font="secondary-body" role="status">
+              {
+                installationOptions.find(
+                  (option) => option.value === installationPolicy
+                )?.description
+              }
+            </Text>
           </Section>
         )}
 

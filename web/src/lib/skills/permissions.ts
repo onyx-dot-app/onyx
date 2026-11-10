@@ -21,7 +21,11 @@ export function canDeleteSkill({
   if (skill.marketplace) return false;
   return (
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR") &&
-    (skill.installation_policy !== "REQUIRED" || canManageCompanySkills)
+    (canManageCompanySkills ||
+      (skill.installation_policy !== "REQUIRED" &&
+        !skill.group_shares.some(
+          ({ installation_policy }) => installation_policy === "REQUIRED"
+        )))
   );
 }
 

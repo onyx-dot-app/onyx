@@ -17275,7 +17275,9 @@
           "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
           "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
           "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
-          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
+          "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。",
+          "notAvailable": "利用不可",
+          "notAvailableDescription": "グループの設定で利用可能にならない限り、ライブラリとエージェントから非表示になります。オーナーと直接共有されたユーザーには引き続き表示されます。"
         },
         "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
         "accessTitle": "アクセス範囲",
@@ -17332,7 +17334,8 @@
       "empty": {
         "noMatches": {
           "description": "別の検索をお試しください。",
-          "title": "一致するスキルがありません"
+          "title": "一致するスキルがありません",
+          "groupDescription": "このグループに一致するスキルはありません。別のグループまたは検索語を試してください。"
         },
         "noSkills": {
           "title": "カスタムスキルはまだありません",
@@ -17504,6 +17507,17 @@
       "loadOlderCompact": "以前の版",
       "files": "ファイル",
       "noFiles": "追加ファイルはありません。"
+    },
+    "groups": {
+      "columnTitle": "グループ",
+      "marketplace": "マーケットプレイス",
+      "marketplacePolicy": "{policy} · マーケットプレイス",
+      "more": "{count, plural, other {他 # グループ}}",
+      "compact": "{count, plural, other {グループ: {names}}}",
+      "filter": {
+        "placeholder": "グループで絞り込む",
+        "all": "すべてのグループ"
+      }
     }
   },
   "opensearchHealth": {

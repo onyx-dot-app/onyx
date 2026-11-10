@@ -35,12 +35,21 @@ upload, or sync Skills. Open **Edit sharing** for access and installation settin
 
 <img className="rounded-image" src="/assets/admins/managing_features/skills-table.webp" alt="Admin Skills table with access, installation policies, and row actions"/>
 
+The **Groups** column lists the groups that you can see for each Skill, with each group's installation setting.
+A group without an override has no installation label and uses **Installation**.
+Hover over or focus **+ more groups** to read the remaining groups and their installation settings.
+**Marketplace** marks a group that comes from the Skill's company marketplace. Owners, editors,
+and global skill managers see every group. Other users see only the groups they belong to or manage.
+An empty cell does not mean that the Skill has no groups. On narrow screens, the group names show below the Skill name.
+
 ## Manage several Skills
 
 <Steps>
   <Step title="Select the Skills">
     Open **Admin Panel → Skills** and use the checkboxes on the custom Skill rows.
     Use the checkbox in the table header to select all visible custom Skills. Search first to limit the selection.
+    To show only the Skills of one group, select it in **Filter by group**. The filter works with search.
+    A change of search or group clears the selection, so a bulk action never changes a hidden Skill.
     For a nonempty list, the count below search shows the number of matching custom Skills, then the number selected.
     Search and bulk controls stay visible when you scroll the list. Bulk actions appear beside the count,
     or below it when space is limited. A loading indicator beside the count shows when a bulk change is in progress.
@@ -275,7 +284,7 @@ Users with global manage-skills permission set how a shared Skill is installed f
 | **Available to install** | Users can install or uninstall the Skill at any time. |
 | **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
 | **Required** | Onyx selects it automatically. Users cannot turn it off directly. Name conflicts still follow library priority below. Deleting it requires global manage-skills permission. |
-| **Not available** (API) | The Skill does not load and cannot be enabled. Owners and direct recipients can still see it. |
+| **Not available** | The Skill cannot load or be enabled unless a group override makes it available. Owners and direct recipients can still see it. |
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
 Bulk sharing preserves existing grants and group install settings that the request omits. In the sharing API,
@@ -288,7 +297,12 @@ For example, an opt-out returns when a group changes from **Required** back to *
 Not available keeps saved enabled choices for later policy changes.
 Explicitly enabling another same-name Skill clears the previous enabled choice.
 The Skills API returns the organization setting in `installation_policy` and your resolved setting in
-`effective_installation_policy`. Removing a group share also removes its setting.
+`effective_installation_policy`. List and detail responses also include read-only `group_summaries`.
+Each summary identifies the group, its nullable installation override, and a `direct` or `marketplace` source.
+Owners and editors see all sharing groups. Other users see only groups they belong to or manage.
+Use the sharing endpoint to edit grants; summaries are not a replacement for its `group_shares` list.
+Sharing endpoint responses include the nullable `installation_policy` of each `group_shares` entry.
+Removing a group share also removes its setting.
 Removing a nonempty setting requires the same management authority as changing it.
 The group Skills API lists and changes one group's settings.
 It shows one row for each company marketplace and for each directly shared Skill.

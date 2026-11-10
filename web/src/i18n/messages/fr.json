@@ -17275,7 +17275,9 @@
           "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
           "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
           "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
-          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
+          "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès.",
+          "notAvailable": "Non disponible",
+          "notAvailableDescription": "Masquée dans la bibliothèque et pour l'agent, sauf si un paramètre de groupe la rend disponible. Les propriétaires et les personnes avec un partage direct la voient toujours."
         },
         "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
         "accessTitle": "Qui peut accéder",
@@ -17332,7 +17334,8 @@
       "empty": {
         "noMatches": {
           "description": "Essayez une autre recherche.",
-          "title": "Aucune compétence correspondante"
+          "title": "Aucune compétence correspondante",
+          "groupDescription": "Aucune compétence de ce groupe ne correspond. Essayez un autre groupe ou une autre recherche."
         },
         "noSkills": {
           "title": "Aucune compétence personnalisée pour le moment",
@@ -17504,6 +17507,17 @@
       "loadOlderCompact": "Précédentes",
       "files": "Fichiers",
       "noFiles": "Aucun fichier supplémentaire."
+    },
+    "groups": {
+      "columnTitle": "Groupes",
+      "marketplace": "Marketplace",
+      "marketplacePolicy": "{policy} · Marketplace",
+      "more": "{count, plural, one {+# autre groupe} other {+# autres groupes}}",
+      "compact": "{count, plural, one {Groupe : {names}} other {Groupes : {names}}}",
+      "filter": {
+        "placeholder": "Filtrer par groupe",
+        "all": "Tous les groupes"
+      }
     }
   },
   "opensearchHealth": {

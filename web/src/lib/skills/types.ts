@@ -11,6 +11,13 @@ export type SkillInstallationPolicy =
   | "REQUIRED"
   | "NOT_AVAILABLE";
 
+export const SKILL_INSTALLATION_POLICIES: readonly SkillInstallationPolicy[] = [
+  "AVAILABLE",
+  "DEFAULT",
+  "REQUIRED",
+  "NOT_AVAILABLE",
+];
+
 export type SkillSource = "builtin" | "custom";
 export type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
 export type SkillSharePermission = "EDITOR" | "VIEWER";
@@ -27,6 +34,18 @@ export interface SkillGroupShare {
   group_id: number;
   group_name: string;
   permission: SkillSharePermission;
+  /** Omitted preserves the policy; null inherits the skill-wide policy. */
+  installation_policy?: SkillInstallationPolicy | null;
+}
+
+/** Read-only group label. Filtered by the viewer's authority, so it is never
+ * a full list of grants and never a replacement for `group_shares`. */
+export interface SkillGroupSummary {
+  group_id: number;
+  group_name: string;
+  /** Null inherits the skill-wide policy. */
+  installation_policy: SkillInstallationPolicy | null;
+  source: "direct" | "marketplace";
 }
 
 export interface SkillExternalAppDependency {
@@ -60,6 +79,7 @@ export interface Skill {
   enabled: boolean;
   can_toggle: boolean;
   installation_policy: SkillInstallationPolicy;
+  effective_installation_policy: SkillInstallationPolicy;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -71,6 +91,7 @@ export interface Skill {
   updated_at: string | null;
   user_shares: SkillUserShare[];
   group_shares: SkillGroupShare[];
+  group_summaries: SkillGroupSummary[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
   external_app: SkillExternalAppDependency | null;

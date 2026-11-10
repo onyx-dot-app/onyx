@@ -54,6 +54,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     enabled: true,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    effective_installation_policy: overrides.installation_policy ?? "AVAILABLE",
     author_user_id: "user-id",
     author_email: "owner@example.com",
     owner: { id: "user-id", email: "owner@example.com" },
@@ -65,6 +66,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     updated_at: null,
     user_shares: [],
     group_shares: [],
+    group_summaries: [],
     public_permission: null,
     user_permission: "OWNER",
     external_app: null,
@@ -223,6 +225,31 @@ describe("SkillCard", () => {
       "Your organization admin requires you to have this skill."
     );
   });
+
+  it.each([
+    { company: "AVAILABLE", effective: "REQUIRED", required: true },
+    { company: "REQUIRED", effective: "AVAILABLE", required: false },
+  ] as const)(
+    "shows the effective $effective policy over company $company",
+    ({ company, effective, required }) => {
+      render(
+        <SkillCard
+          item={custom({
+            installation_policy: company,
+            effective_installation_policy: effective,
+            can_toggle: !required,
+          })}
+        />
+      );
+      if (required) {
+        expect(screen.getByText("Required")).toBeInTheDocument();
+        expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+      } else {
+        expect(screen.queryByText("Required")).not.toBeInTheDocument();
+        expect(screen.getByRole("switch")).toBeInTheDocument();
+      }
+    }
+  );
 
   it("shows required skills without a switch or delete action", () => {
     render(

@@ -41,7 +41,11 @@ function AllTheProviders({ children, swrConfig = {} }: AllProvidersProps) {
     >
       {/* Tests always render the English catalog, matching the app default. */}
       <NextIntlClientProvider locale="en" messages={englishMessages}>
-        <TooltipPrimitive.Provider>{children}</TooltipPrimitive.Provider>
+        {/* Radix's 700 ms default open delay leaves `findByRole("tooltip")`
+        only 300 ms of its 1000 ms wait on a busy CI worker. */}
+        <TooltipPrimitive.Provider delayDuration={0}>
+          {children}
+        </TooltipPrimitive.Provider>
       </NextIntlClientProvider>
     </SWRConfig>
   );

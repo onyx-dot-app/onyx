@@ -1,4 +1,8 @@
 import * as yup from "yup";
+import {
+  SKILL_INSTALLATION_POLICIES,
+  type SkillInstallationPolicy,
+} from "@/lib/skills/types";
 
 // Matches server/features/skill/marketplace_models.py and skills/marketplace/models.py.
 const identifier = yup.string().uuid().defined();
@@ -7,8 +11,8 @@ const sharePermission = yup
   .oneOf(["VIEWER", "EDITOR"])
   .defined();
 const installationPolicy = yup
-  .string<"AVAILABLE" | "DEFAULT" | "REQUIRED" | "NOT_AVAILABLE">()
-  .oneOf(["AVAILABLE", "DEFAULT", "REQUIRED", "NOT_AVAILABLE"])
+  .string<SkillInstallationPolicy>()
+  .oneOf([...SKILL_INSTALLATION_POLICIES])
   .defined();
 
 export const marketplaceSourceSchema = yup

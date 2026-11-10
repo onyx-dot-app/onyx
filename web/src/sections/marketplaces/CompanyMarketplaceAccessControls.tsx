@@ -13,6 +13,7 @@ import {
 import { InputVertical, Section } from "@opal/layouts";
 import { SvgUsers } from "@opal/icons";
 import useShareableGroups from "@/hooks/useShareableGroups";
+import { useInstallationPolicyOptions } from "@/lib/skills/hooks";
 import type { useCompanyMarketplaceAccess } from "@/lib/marketplaces/hooks";
 import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
@@ -42,23 +43,15 @@ export default function CompanyMarketplaceAccessControls({
   );
   const paid = status === "paid";
   const locked = disabled || !ready;
-  const policies = [
-    {
-      value: "AVAILABLE",
-      title: shared("installation.available"),
-      description: shared("installation.availableDescription"),
-    },
-    {
-      value: "DEFAULT",
-      title: shared("installation.default"),
-      description: shared("installation.defaultDescription"),
-    },
-    {
-      value: "REQUIRED",
-      title: shared("installation.required"),
-      description: shared("installation.requiredDescription"),
-    },
-  ];
+  const installationOptions = useInstallationPolicyOptions();
+  const policies = installationOptions.map(
+    ({ value, label, description, icon }) => ({
+      value,
+      title: label,
+      description,
+      icon,
+    })
+  );
 
   return (
     <Section height="auto" alignItems="stretch" gap={4}>
@@ -138,13 +131,11 @@ export default function CompanyMarketplaceAccessControls({
           defaultOption="AVAILABLE"
           disabled={locked}
           onValueChange={(policy) => {
-            if (
-              policy === "AVAILABLE" ||
-              policy === "DEFAULT" ||
-              policy === "REQUIRED"
-            ) {
-              setDraft({ ...draft, installation_policy: policy });
-            }
+            const option = installationOptions.find(
+              ({ value }) => value === policy
+            );
+            if (option)
+              setDraft({ ...draft, installation_policy: option.value });
           }}
         />
         <Text font="secondary-body" color="text-03" role="status">

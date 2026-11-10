@@ -25,9 +25,13 @@ import type {
   CustomSkillCardItem,
   SkillCardProps,
 } from "@/sections/cards/SkillCard";
-import { useSkillPresentation } from "@/lib/skills/hooks";
+import {
+  useInstallationPolicyOptions,
+  useSkillPresentation,
+} from "@/lib/skills/hooks";
 import SkillVersionLabel from "@/sections/skills/SkillVersionLabel";
 import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
+import SkillGroupSummaries from "@/sections/skills/SkillGroupSummaries";
 
 type SkillTableItem = SkillCardProps & {
   item: CustomSkillCardItem;
@@ -102,6 +106,9 @@ function SkillName({
       )}
       {item.skill.marketplace && (
         <SkillMarketplaceLabel marketplace={item.skill.marketplace} />
+      )}
+      {isMobile && (
+        <SkillGroupSummaries summaries={item.skill.group_summaries} compact />
       )}
     </Section>
   );
@@ -206,6 +213,7 @@ export default function SkillsTable({
   const t = useTranslations("skills");
   const cards = useTranslations("cards");
   const { isMobile } = useScreenSize();
+  const installationOptions = useInstallationPolicyOptions();
   const duplicateNames = useMemo(() => {
     const seen = new Set<string>();
     const duplicates = new Set<string>();
@@ -222,7 +230,7 @@ export default function SkillsTable({
         kind: "display",
         id: "skill",
         title: t("page.header.title"),
-        width: { weight: 48, minWidth: isMobile ? 88 : 160 },
+        width: { weight: 40, minWidth: isMobile ? 88 : 160 },
         hideable: false,
         cell: (props) => <SkillName {...props} />,
       },
@@ -230,7 +238,7 @@ export default function SkillsTable({
         kind: "display",
         id: "access",
         title: t("modals.share.accessTitle"),
-        width: { weight: 25, minWidth: 148 },
+        width: { weight: 18, minWidth: 128 },
         hideable: false,
         cell: ({ item: { skill } }) => (
           <Section
@@ -257,25 +265,24 @@ export default function SkillsTable({
                 )}
               />
             </Section>
-            {skill.group_shares.length > 0 && (
-              <Text
-                font="secondary-body"
-                color="text-03"
-                as="p"
-                maxLines={1}
-                overflowTooltip
-              >
-                {skill.group_shares.map((share) => share.group_name).join(", ")}
-              </Text>
-            )}
           </Section>
+        ),
+      },
+      {
+        kind: "display",
+        id: "groups",
+        title: t("groups.columnTitle"),
+        width: { weight: 22, minWidth: 140 },
+        hideable: false,
+        cell: ({ item: { skill } }) => (
+          <SkillGroupSummaries summaries={skill.group_summaries} />
         ),
       },
       {
         kind: "display",
         id: "installation",
         title: t("modals.share.installation.title"),
-        width: { weight: 24, minWidth: 156 },
+        width: { weight: 20, minWidth: 148 },
         hideable: false,
         cell: ({ item: { skill } }) => (
           <Text
@@ -284,13 +291,11 @@ export default function SkillsTable({
             maxLines={1}
             overflowTooltip
           >
-            {t(
-              skill.installation_policy === "REQUIRED"
-                ? "modals.share.installation.required"
-                : skill.installation_policy === "DEFAULT"
-                  ? "modals.share.installation.default"
-                  : "modals.share.installation.available"
-            )}
+            {
+              installationOptions.find(
+                ({ value }) => value === skill.installation_policy
+              )?.label
+            }
           </Text>
         ),
       },
@@ -304,7 +309,7 @@ export default function SkillsTable({
         cell: (props) => <SkillActions {...props} />,
       },
     ],
-    [t, cards, isMobile]
+    [t, cards, isMobile, installationOptions]
   );
   const visibleColumns = useMemo(
     () =>
@@ -312,7 +317,9 @@ export default function SkillsTable({
         ? columns.filter(
             (column) =>
               column.kind !== "display" ||
-              (column.id !== "access" && column.id !== "installation")
+              (column.id !== "access" &&
+                column.id !== "groups" &&
+                column.id !== "installation")
           )
         : columns,
     [columns, isMobile]

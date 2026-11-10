@@ -13,6 +13,7 @@ import {
   Collapsible,
   InputTypeIn,
   InputCheckbox,
+  InputSingleSelect,
   MessageCard,
   Dropdown,
   type DropdownMenuRow,
@@ -40,6 +41,7 @@ import {
   SvgShare,
   SvgTrash,
   SvgUploadCloud,
+  SvgUsers,
   SvgXCircle,
 } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
@@ -111,6 +113,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const deleteModal = useCreateModal();
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
   const [builtinsOpen, setBuiltinsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [githubSyncOpen, setGitHubSyncOpen] = useState(false);
@@ -413,17 +416,47 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     [items]
   );
 
+  const groupOptions = useMemo(() => {
+    if (!admin) return [];
+    const names = new Map<number, string>();
+    for (const item of items) {
+      if (item.source !== "custom") continue;
+      for (const summary of item.skill.group_summaries) {
+        names.set(summary.group_id, summary.group_name);
+      }
+    }
+    return Array.from(names, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+  }, [admin, items]);
+  // A group that left every visible summary after a refresh stops filtering.
+  const activeGroupId =
+    groupOptions.find((group) => String(group.id) === groupFilter)?.id ?? null;
+
+  useEffect(() => {
+    if (groupFilter && groupFilter !== "all" && activeGroupId === null) {
+      setGroupFilter("");
+      setSelectedIds(new Set());
+      setBulkFailures([]);
+    }
+  }, [activeGroupId, groupFilter]);
+
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return items.filter(
       (item) =>
         (focusedAppName === null ||
           item.external_app?.external_app_id === focusedExternalAppId) &&
+        (activeGroupId === null ||
+          (item.source === "custom" &&
+            item.skill.group_summaries.some(
+              (summary) => summary.group_id === activeGroupId
+            ))) &&
         (!q ||
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q))
     );
-  }, [focusedAppName, focusedExternalAppId, items, searchQuery]);
+  }, [activeGroupId, focusedAppName, focusedExternalAppId, items, searchQuery]);
 
   const selectableItems = visibleItems.filter(
     (item): item is CustomSkillCardItem => item.source === "custom"
@@ -573,6 +606,36 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       }}
       icon="search"
     />
+  );
+  const groupFilterInput = groupOptions.length > 0 && (
+    <Section
+      height="auto"
+      alignItems="stretch"
+      className="min-w-0 grow basis-48"
+    >
+      <InputSingleSelect
+        search
+        placeholder={t("groups.filter.placeholder")}
+        value={activeGroupId === null ? "all" : String(activeGroupId)}
+        defaultOption="all"
+        disabled={bulkBusy}
+        options={[
+          { value: "all", title: t("groups.filter.all"), icon: SvgUsers },
+          {
+            options: groupOptions.map((group) => ({
+              value: String(group.id),
+              title: group.name,
+              icon: SvgUsers,
+            })),
+          },
+        ]}
+        onValueChange={(value) => {
+          setGroupFilter(value);
+          setSelectedIds(new Set());
+          setBulkFailures([]);
+        }}
+      />
+    </Section>
   );
   const selectionControls = (
     <Section
@@ -779,7 +842,22 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           {admin && (
             <StickyBox.Item stick="top" shadow ref={adminControlsRef}>
               <Section height="auto" gap={1} className="bg-background-tint-01">
-                {searchInput}
+                <Section
+                  flexDirection="row"
+                  wrap
+                  gap={2}
+                  height="auto"
+                  alignItems="stretch"
+                >
+                  <Section
+                    height="auto"
+                    alignItems="stretch"
+                    className="min-w-0 grow-[3] basis-64"
+                  >
+                    {searchInput}
+                  </Section>
+                  {groupFilterInput}
+                </Section>
                 {selectionControls}
               </Section>
             </StickyBox.Item>
@@ -856,7 +934,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                   description={
                     items.length === 0
                       ? t("page.empty.noSkills.description")
-                      : t("page.empty.noMatches.description")
+                      : activeGroupId !== null
+                        ? t("page.empty.noMatches.groupDescription")
+                        : t("page.empty.noMatches.description")
                   }
                 />
               ) : (

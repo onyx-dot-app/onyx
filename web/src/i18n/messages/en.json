@@ -17275,7 +17275,9 @@
           "availableDescription": "Users can install or uninstall anytime.",
           "defaultDescription": "Installed automatically. Users can disable or uninstall anytime.",
           "requiredDescription": "Installed automatically. Users cannot disable or uninstall.",
-          "description": "Choose how this skill is installed for everyone with access."
+          "description": "Choose how this skill is installed for everyone with access.",
+          "notAvailable": "Not available",
+          "notAvailableDescription": "Hidden from the library and the agent unless a group override makes it available. Owners and people with a direct share still see it."
         },
         "description": "Choose who can use this skill and how it is installed.",
         "accessTitle": "Who can access",
@@ -17332,7 +17334,8 @@
       "empty": {
         "noMatches": {
           "description": "Try a different search.",
-          "title": "No matching skills"
+          "title": "No matching skills",
+          "groupDescription": "No skills in this group match. Try a different group or search."
         },
         "noSkills": {
           "title": "No custom skills yet",
@@ -17504,6 +17507,17 @@
       "loadOlderCompact": "Older",
       "files": "Files",
       "noFiles": "No additional files."
+    },
+    "groups": {
+      "columnTitle": "Groups",
+      "marketplace": "Marketplace",
+      "marketplacePolicy": "{policy} · Marketplace",
+      "more": "{count, plural, one {+# more group} other {+# more groups}}",
+      "compact": "{count, plural, one {Group: {names}} other {Groups: {names}}}",
+      "filter": {
+        "placeholder": "Filter by group",
+        "all": "All groups"
+      }
     }
   },
   "opensearchHealth": {
