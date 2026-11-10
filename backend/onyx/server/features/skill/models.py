@@ -14,9 +14,10 @@ from onyx.db.enums import (
 )
 from onyx.db.models import Skill
 from onyx.db.skill import SkillSharingChange
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.limits import SkillLimit
+from onyx.skills.limits import SkillLimit, SkillLimitViolation
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
 from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
@@ -459,6 +460,18 @@ class SkillBulkActionRequest(BaseModel):
 class SkillBulkFailure(BaseModel):
     skill_id: UUID
     detail: str
+    skill_limit: SkillLimitViolation | None = None
+
+    @classmethod
+    def from_error(cls, skill_id: UUID, error: OnyxError) -> "SkillBulkFailure":
+        limit = error.extra.get("skill_limit") if error.extra else None
+        return cls(
+            skill_id=skill_id,
+            detail=error.detail,
+            skill_limit=(
+                SkillLimitViolation.model_validate(limit) if limit is not None else None
+            ),
+        )
 
 
 class SkillBulkResponse(BaseModel):
