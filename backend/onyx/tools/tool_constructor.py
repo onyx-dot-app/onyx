@@ -502,6 +502,14 @@ def _construct_tools_impl(
             if custom_tool_config and custom_tool_config.mcp_headers:
                 additional_mcp_headers = custom_tool_config.mcp_headers
 
+            if not mcp_credentials.can_authenticate_with_headers(
+                additional_mcp_headers
+            ):
+                logger.debug(
+                    "Skipping MCP server %s: credentials required", mcp_server.id
+                )
+                continue
+
             mcp_tool_cache[db_tool_model.mcp_server_id] = {}
             # Find the matching tool definition
             for saved_tool in saved_tools:
