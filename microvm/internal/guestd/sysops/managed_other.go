@@ -30,3 +30,6 @@ func (Managed) Mount(string, string, bool) error { return ErrUnsupported }
 
 // DetachTop is Linux only.
 func (Managed) DetachTop(string) error { return ErrUnsupported }
+
+// MountedOn is Linux only.
+func (Managed) MountedOn(string, uint64) (bool, error) { return false, ErrUnsupported }

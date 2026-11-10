@@ -62,7 +62,8 @@ func (o *slotOps) Mount(dev, _ string, _ bool) error {
 	o.top = dev
 	return nil
 }
-func (o *slotOps) DetachTop(string) error { return nil }
+func (o *slotOps) DetachTop(string) error                 { return nil }
+func (o *slotOps) MountedOn(string, uint64) (bool, error) { return false, nil }
 
 func initDirect(t *testing.T, uds string) {
 	t.Helper()

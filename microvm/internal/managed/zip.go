@@ -92,12 +92,23 @@ func Extract(zr *zip.Reader, dst string, lim Limits) (Stats, error) {
 	// seen: every name so far; dirs: the directories among them.
 	seen, dirs := map[string]bool{}, map[string]bool{}
 	entries := 0
+	// count adds one file or directory, before it is made.
+	count := func() error {
+		if entries >= lim.MaxEntries {
+			return bundleErr("more than %d files and directories", lim.MaxEntries)
+		}
+		entries++
+		return nil
+	}
 	mkdir := func(rel string) error {
 		if dirs[rel] {
 			return nil
 		}
 		if seen[rel] {
 			return bundleErr("%q is a file and a directory", rel)
+		}
+		if err := count(); err != nil {
+			return err
 		}
 		if err := os.Mkdir(filepath.Join(dst, filepath.FromSlash(rel)), 0o755); err != nil {
 			if errors.Is(err, fs.ErrExist) {
@@ -107,7 +118,6 @@ func Extract(zr *zip.Reader, dst string, lim Limits) (Stats, error) {
 		}
 		seen[rel], dirs[rel] = true, true
 		st.Dirs++
-		entries++
 		return nil
 	}
 	parents := func(rel string) error {
@@ -142,6 +152,9 @@ func Extract(zr *zip.Reader, dst string, lim Limits) (Stats, error) {
 			return st, bundleErr("entry %q is in the bundle twice", name)
 		}
 		seen[name] = true
+		if err := count(); err != nil {
+			return st, err
+		}
 		perm := os.FileMode(0o644)
 		if mode.Perm()&0o111 != 0 {
 			perm = 0o755
@@ -151,12 +164,8 @@ func Extract(zr *zip.Reader, dst string, lim Limits) (Stats, error) {
 			return st, err
 		}
 		st.Files++
-		entries++
 		st.Bytes += n
 		st.Blocks += (n + 4095) / 4096
-		if entries > lim.MaxEntries {
-			return st, bundleErr("more than %d files and directories", lim.MaxEntries)
-		}
 	}
 	return st, nil
 }

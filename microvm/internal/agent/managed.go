@@ -292,7 +292,11 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 		res.Err = apierr.New(pb.ErrorReason_MANAGED_SWAP_UNSUPPORTED, "the guest has no device for managed slot %s", idle)
 		return res
 	}
-	if gs.Slots[idle].InUse {
+	// A busy idle slot that already holds this image is a swap that stopped
+	// after its guest mount: the guest Mount finishes it, with no drive
+	// change. Another busy slot still holds the drive of an older swap.
+	resume := gs.Slots[idle].InUse && gs.Slots[idle].UUID == img.UUID
+	if gs.Slots[idle].InUse && !resume {
 		res.Err = apierr.New(pb.ErrorReason_MANAGED_SLOT_BUSY,
 			"slot %s still holds the drive before the last swap: a guest process has a file open on it", idle)
 		return res
@@ -306,10 +310,12 @@ func (m *Manager) swapOne(ctx context.Context, img ManagedImage, t SwapTarget) S
 		res.Err = err
 		return res
 	}
-	driveID, file := SlotDrive(idle)
-	if err := dr.ReplaceDrive(ctx, driveID, file, img.Path); err != nil {
-		res.Err = apierr.New(pb.ErrorReason_VMM_FAILED, "put image %s behind slot %s: %v", img.ID, idle, err)
-		return res
+	if !resume {
+		driveID, file := SlotDrive(idle)
+		if err := dr.ReplaceDrive(ctx, driveID, file, img.Path); err != nil {
+			res.Err = apierr.New(pb.ErrorReason_VMM_FAILED, "put image %s behind slot %s: %v", img.ID, idle, err)
+			return res
+		}
 	}
 	if err := m.setManaged(e, func(s *ManagedState) { s.setImage(idle, img.ID) }); err != nil {
 		res.Err = err

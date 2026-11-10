@@ -198,3 +198,12 @@ func fsLog(fsfd int) string {
 func (Managed) DetachTop(mountPoint string) error {
 	return unix.Unmount(mountPoint, unix.MNT_DETACH)
 }
+
+// MountedOn implements guestd.ManagedOps.
+func (Managed) MountedOn(mountPoint string, rdev uint64) (bool, error) {
+	raw, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return false, err
+	}
+	return mountedOn(string(raw), mountPoint, unix.Major(rdev), unix.Minor(rdev)), nil
+}

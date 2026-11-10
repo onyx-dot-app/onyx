@@ -31,13 +31,16 @@ type fakeKernel struct {
 	// stack is the mount stack on the mount point, bottom first.
 	stack []string
 	// openOnTop: the top mount has open files, so its detach keeps a ref.
-	openOnTop bool
-	ops       []string
-	failMount error
-	noResize  bool
+	openOnTop  bool
+	ops        []string
+	failMount  error
+	failDetach error
+	noResize   bool
 }
 
-func (k *fakeKernel) op(format string, args ...any) { k.ops = append(k.ops, fmt.Sprintf(format, args...)) }
+func (k *fakeKernel) op(format string, args ...any) {
+	k.ops = append(k.ops, fmt.Sprintf(format, args...))
+}
 
 func (k *fakeKernel) Probe(dev string) (DevState, error) {
 	k.mu.Lock()
@@ -97,11 +100,25 @@ func (k *fakeKernel) Mount(dev, _ string, beneath bool) error {
 	return nil
 }
 
+func (k *fakeKernel) MountedOn(_ string, rdev uint64) (bool, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for _, dev := range k.stack {
+		if k.disks[dev].rdev == rdev {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (k *fakeKernel) DetachTop(string) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	top := k.stack[len(k.stack)-1]
 	k.op("detach %s", top)
+	if k.failDetach != nil {
+		return k.failDetach
+	}
 	k.stack = k.stack[:len(k.stack)-1]
 	if !k.openOnTop {
 		k.disks[top].refs--
@@ -201,6 +218,38 @@ func TestMountManagedOldReaderKeepsSlotBusy(t *testing.T) {
 	r, err = c.MountManaged(ctx, back)
 	if err != nil || r.GetActive() != pb.ManagedSlot_MANAGED_SLOT_A {
 		t.Fatalf("after close: %v %v", r, err)
+	}
+}
+
+// A swap that stopped between the mount and the detach (a daemon restart or
+// a failed detach) leaves slot B beneath slot A. A repeat finishes it.
+func TestMountManagedFinishesAnInterruptedSwap(t *testing.T) {
+	k := newManagedKernel()
+	k.failDetach = errors.New("EBUSY")
+	c := managedHarness(t, k)
+	ctx := keyed(context.Background())
+	if _, err := c.MountManaged(ctx, slotB); reason(err) != "MANAGED_MOUNT_FAILED" {
+		t.Fatalf("failed detach: %v", err)
+	}
+	if len(k.stack) != 2 || k.stack[0] != "/dev/vdf" {
+		t.Fatalf("stack %v, want vdf beneath vdc", k.stack)
+	}
+	// Another UUID for the slot beneath is refused, nothing is detached.
+	k.failDetach = nil
+	k.ops = nil
+	bad := &pb.MountManagedRequest{Slot: pb.ManagedSlot_MANAGED_SLOT_B, SizeBytes: 16 << 20, FsUuid: "cccccccc-0000-4000-8000-000000000003"}
+	if _, err := c.MountManaged(ctx, bad); reason(err) != "MANAGED_DEVICE_MISMATCH" || len(k.ops) != 0 {
+		t.Fatalf("other UUID: %v ops %v", err, k.ops)
+	}
+	r, err := c.MountManaged(ctx, slotB)
+	if err != nil || r.GetActive() != pb.ManagedSlot_MANAGED_SLOT_B || !r.GetChanged() || r.GetPrevious() != pb.ManagedSlot_MANAGED_SLOT_A {
+		t.Fatalf("repeat: %v %v", r, err)
+	}
+	if got := strings.Join(k.ops, ","); got != "detach /dev/vdc" {
+		t.Fatalf("ops %s, want only the detach", got)
+	}
+	if len(k.stack) != 1 || k.stack[0] != "/dev/vdf" || k.disks["/dev/vdc"].refs != 0 {
+		t.Fatalf("kernel %v %+v", k.stack, k.disks["/dev/vdc"])
 	}
 }
 

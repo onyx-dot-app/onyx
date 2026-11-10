@@ -353,8 +353,9 @@ message). The image ID is the zip's SHA256. The agent:
 4. writes `<id>.json` (ext4 SHA256, size, UUID, file count). A repeat upload of the same zip returns the
    image without reading the data.
 
-GC (after each upload and swap) keeps the `--managed-keep` (default 3) newest images and every image that
-a VM has behind a slot. Each VM chroot has its own reflink copy, so GC never changes a running VM.
+GC (after each upload and swap) keeps the `--managed-keep` (default 3) newest images, every image that
+a VM has behind a slot, and the image of a swap that runs. It does not touch an image while its upload
+runs. Each VM chroot has its own reflink copy, so GC never changes a running VM.
 
 **Swap.** `SwapManaged` takes an image ID and the target VMs, each with its attempt, generation and
 `sandboxd_key` (the agent does not keep the key, so the caller sends it). It swaps one VM at a time, in
@@ -364,7 +365,9 @@ order; one failure does not stop the others. For each VM:
    slot device is in use. The guest is the truth, so a swap that an agent restart cut short is seen here.
    If the active slot already has the image's UUID, the call only fixes the journal (`changed` false).
 2. The idle slot is the other one. If the guest still uses it (a detached mount from the last swap with
-   open files), the VM gets `MANAGED_SLOT_BUSY` and nothing changes.
+   open files), the VM gets `MANAGED_SLOT_BUSY` and nothing changes. If the busy slot already has the
+   image's UUID, a swap stopped after its guest mount: the agent skips step 3, and `MountManaged`
+   detaches the old top mount.
 3. The journal records the pending swap. The agent puts a reflink copy of the image at
    `/managed.ext4` or `/managed-b.ext4` in the chroot and calls Firecracker `PATCH /drives/<id>`.
 4. Daemon `MountManaged(slot, size, uuid)`: wait until the device has the new size (Firecracker sends a

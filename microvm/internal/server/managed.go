@@ -154,7 +154,7 @@ func (s *Service) managedStore() (*ManagedImages, error) {
 
 func (s *Service) gcManaged() []string {
 	mi := s.Managed
-	removed, err := mi.Store.GC(mi.Keep, s.M.ManagedImagesInUse())
+	removed, err := mi.Store.GC(mi.Keep, s.M.ManagedImagesInUse)
 	if err != nil {
 		s.log().Error("managed image GC", "err", err)
 	}
@@ -251,6 +251,9 @@ func (s *Service) SwapManaged(ctx context.Context, r *pb.SwapManagedRequest) (*p
 			SandboxID: t.GetSandboxId(), Attempt: t.GetAttempt(), Generation: t.GetGeneration(), Key: t.GetSandboxdKey(),
 		})
 	}
+	// The pin keeps GC away until every target recorded the image.
+	unpin := mi.Store.Pin(r.GetImageId())
+	defer unpin()
 	img, err := mi.Store.Get(r.GetImageId())
 	if err != nil {
 		if errors.Is(err, managed.ErrMissing) {

@@ -270,6 +270,26 @@ func TestSwapManagedReconcilesFromTheGuest(t *testing.T) {
 	}
 }
 
+// A swap whose guest mount stopped before the old drive was detached left
+// slot B busy with the new image, beneath slot A. A repeat skips the drive
+// change and lets the guest finish the mount.
+func TestSwapManagedResumesAnInterruptedMount(t *testing.T) {
+	sf := newSwapFixture(t)
+	img := sf.image("one")
+	sf.g.vm("vm-1")
+	sf.g.uuids["vm-1"][slotB], sf.g.busy["vm-1"][slotB] = img.UUID, true
+	res := sf.m.SwapManaged(context.Background(), img, []SwapTarget{sf.target(sb1)})
+	if res[0].Err != nil || res[0].Active != slotB || !res[0].Changed {
+		t.Fatalf("%+v", res)
+	}
+	if got := strings.Join(sf.g.ops, ","); got != "status,mount b" {
+		t.Fatalf("ops %s, want no drive change", got)
+	}
+	if r := sf.record(t, sb1); r.Managed.Active != "b" || r.Managed.B != img.ID || r.Managed.Pending != nil {
+		t.Fatalf("journal %+v", r.Managed)
+	}
+}
+
 func TestSwapManagedRefusals(t *testing.T) {
 	sf := newSwapFixture(t)
 	ctx := context.Background()

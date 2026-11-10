@@ -161,6 +161,14 @@ func TestExtractLimits(t *testing.T) {
 	if _, _, err := extract(t, makeZip(t, entry{name: "a/b/c/d/e/f/g/h/i/j/k", data: "1"}), lim); !errors.Is(err, ErrBundle) {
 		t.Fatalf("too many implied dirs: %v", err)
 	}
+	// Directory entries count, also with no file in the bundle.
+	dirsOnly := makeZip(t, entry{name: "a/b/c/", mode: fs.ModeDir | 0o755})
+	if _, _, err := extract(t, dirsOnly, Limits{MaxZipBytes: 1 << 30, MaxBytes: 1 << 20, MaxEntries: 2}); !errors.Is(err, ErrBundle) {
+		t.Fatalf("directory-only bundle over the limit: %v", err)
+	}
+	if _, st, err := extract(t, dirsOnly, Limits{MaxZipBytes: 1 << 30, MaxBytes: 1 << 20, MaxEntries: 3}); err != nil || st.Dirs != 3 {
+		t.Fatalf("directory-only bundle at the limit: %+v %v", st, err)
+	}
 }
 
 var uuidRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
@@ -270,7 +278,7 @@ func TestStorePutGetGC(t *testing.T) {
 		}
 		ids = append(ids, sum(z))
 	}
-	removed, err := s.GC(2, map[string]bool{id1: true})
+	removed, err := s.GC(2, func() map[string]bool { return map[string]bool{id1: true} })
 	if err != nil || len(removed) != 1 || removed[0] != ids[0] {
 		t.Fatalf("gc removed %v %v, want %s", removed, err, ids[0])
 	}
@@ -280,6 +288,51 @@ func TestStorePutGetGC(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(s.Dir, ids[0]+".ext4")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("GC left the image file: %v", err)
+	}
+}
+
+func TestStoreGCKeepsPinnedAndBuildingImages(t *testing.T) {
+	var calls []string
+	now := time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
+	s := &Store{Dir: t.TempDir(), Limits: DefaultLimits, Mkfs: fakeMkfs(&calls), Now: func() time.Time { now = now.Add(time.Minute); return now }}
+	ctx := context.Background()
+	var ids []string
+	for i := range 2 {
+		z := makeZip(t, entry{name: "s/SKILL.md", data: "v" + strings.Repeat("x", i+2)})
+		if _, _, err := s.Put(ctx, sum(z), int64(len(z)), bytes.NewReader(z)); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, sum(z))
+	}
+	none := func() map[string]bool { return nil }
+	// A swap pins the older image: GC with keep 0 removes only the other.
+	unpin := s.Pin(ids[0])
+	removed, err := s.GC(0, none)
+	if err != nil || len(removed) != 1 || removed[0] != ids[1] {
+		t.Fatalf("gc with a pin removed %v %v, want %s", removed, err, ids[1])
+	}
+	unpin()
+	unpin()
+	// A Put of an ID runs (its lock is held): its files stay.
+	building := strings.Repeat("c", 64)
+	stray := filepath.Join(s.Dir, building+".ext4")
+	if err := os.WriteFile(stray, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unlock := s.lockID(building)
+	removed, err = s.GC(0, none)
+	if err != nil || len(removed) != 1 || removed[0] != ids[0] {
+		t.Fatalf("gc after unpin removed %v %v, want %s", removed, err, ids[0])
+	}
+	if _, err := os.Stat(stray); err != nil {
+		t.Fatalf("GC removed the file of a running Put: %v", err)
+	}
+	unlock()
+	if _, err := s.GC(0, none); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stray); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("GC left an unfinished image file: %v", err)
 	}
 }
 

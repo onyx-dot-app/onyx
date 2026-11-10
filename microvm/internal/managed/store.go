@@ -92,6 +92,31 @@ type Store struct {
 	building map[string]*sync.Mutex
 	// verified holds the file identity of images whose hash was checked.
 	verified map[string]fileID
+
+	// gcMu orders Pin with GC.
+	gcMu sync.Mutex
+	pins map[string]int
+}
+
+// Pin keeps image id from GC until the returned func runs. A swap pins its
+// image from before Get until the VMs record it.
+func (s *Store) Pin(id string) func() {
+	s.gcMu.Lock()
+	defer s.gcMu.Unlock()
+	if s.pins == nil {
+		s.pins = map[string]int{}
+	}
+	s.pins[id]++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.gcMu.Lock()
+			defer s.gcMu.Unlock()
+			if s.pins[id]--; s.pins[id] <= 0 {
+				delete(s.pins, id)
+			}
+		})
+	}
 }
 
 type fileID struct {
@@ -402,10 +427,16 @@ func (s *Store) List() ([]Image, error) {
 	return out, nil
 }
 
-// GC keeps the keep newest images and every image in inUse, and removes the
-// others (also files of broken or unfinished images). A VM chroot has its own
-// reflink copy of an image, so GC never changes a running VM's drive.
-func (s *Store) GC(keep int, inUse map[string]bool) ([]string, error) {
+// GC keeps the keep newest images, every pinned image and every image in
+// inUse(), and removes the others (also files of broken or unfinished
+// images). inUse runs after the pins are frozen. Each removal holds the
+// image's Put lock, so an image that a Put publishes during GC is kept. A VM
+// chroot has its own reflink copy of an image, so GC never changes a running
+// VM's drive.
+func (s *Store) GC(keep int, inUse func() map[string]bool) ([]string, error) {
+	s.gcMu.Lock()
+	defer s.gcMu.Unlock()
+	used := inUse()
 	imgs, err := s.List()
 	if err != nil {
 		return nil, err
@@ -414,10 +445,16 @@ func (s *Store) GC(keep int, inUse map[string]bool) ([]string, error) {
 	var removed []string
 	for i, img := range imgs {
 		valid[img.ID] = true
-		if i < keep || inUse[img.ID] {
+		if i < keep || used[img.ID] || s.pins[img.ID] > 0 {
 			continue
 		}
-		if err := s.remove(img.ID); err != nil {
+		unlock, ok := s.tryLockID(img.ID)
+		if !ok {
+			continue
+		}
+		err := s.remove(img.ID)
+		unlock()
+		if err != nil {
 			return removed, err
 		}
 		removed = append(removed, img.ID)
@@ -429,28 +466,43 @@ func (s *Store) GC(keep int, inUse map[string]bool) ([]string, error) {
 	for _, e := range ents {
 		name := e.Name()
 		id := strings.TrimSuffix(strings.TrimSuffix(name, ".json"), ".ext4")
-		if ValidID(id) && !valid[id] && !inUse[id] && !s.locked(id) {
-			if err := os.Remove(filepath.Join(s.Dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return removed, err
-			}
+		if !ValidID(id) || valid[id] || used[id] || s.pins[id] > 0 {
+			continue
+		}
+		unlock, ok := s.tryLockID(id)
+		if !ok {
+			continue // a Put of id runs
+		}
+		// A Put that ended after List published a valid image: keep it.
+		if s.Has(id) {
+			unlock()
+			continue
+		}
+		err := os.Remove(filepath.Join(s.Dir, name))
+		unlock()
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return removed, err
 		}
 	}
 	return removed, nil
 }
 
-// locked reports whether a Put of id runs.
-func (s *Store) locked(id string) bool {
+// tryLockID takes the Put lock of id if no Put of id runs.
+func (s *Store) tryLockID(id string) (func(), bool) {
 	s.mu.Lock()
+	if s.building == nil {
+		s.building = map[string]*sync.Mutex{}
+	}
 	l := s.building[id]
-	s.mu.Unlock()
 	if l == nil {
-		return false
+		l = &sync.Mutex{}
+		s.building[id] = l
 	}
-	if l.TryLock() {
-		l.Unlock()
-		return false
+	s.mu.Unlock()
+	if !l.TryLock() {
+		return nil, false
 	}
-	return true
+	return l.Unlock, true
 }
 
 func (s *Store) remove(id string) error {

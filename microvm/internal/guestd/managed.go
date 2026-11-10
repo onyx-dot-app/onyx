@@ -43,6 +43,9 @@ type ManagedOps interface {
 	Mount(dev, mountPoint string, beneath bool) error
 	// DetachTop lazily unmounts the top mount on mountPoint (MNT_DETACH).
 	DetachTop(mountPoint string) error
+	// MountedOn reports whether device rdev is mounted on mountPoint, at
+	// any place in its mount stack.
+	MountedOn(mountPoint string, rdev uint64) (bool, error)
 }
 
 // ManagedConfig names the managed mount point and the slot devices.
@@ -113,7 +116,9 @@ func (s *Server) ManagedStatus(context.Context, *pb.ManagedStatusRequest) (*pb.M
 
 // MountManaged implements pb.SandboxdServer. Steps, in order: check the
 // slot is idle, wait for its new size, drop cached blocks, check the ext4
-// UUID, mount it beneath the current mount, detach the old top mount.
+// UUID, mount it beneath the current mount, detach the old top mount. A
+// swap that stopped after its mount (a daemon restart, a failed detach)
+// left the slot mounted beneath the old one; a repeat detaches the old top.
 func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*pb.MountManagedResponse, error) {
 	mc, err := s.managed()
 	if err != nil {
@@ -149,11 +154,26 @@ func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*
 		}
 		return &pb.MountManagedResponse{Active: active, Previous: active}, nil
 	}
-	if st.InUse {
-		return nil, apiError(pb.ErrorReason_MANAGED_SLOT_BUSY,
-			"slot %s device %s is in use (a detached mount still has open files)", r.GetSlot(), dev)
-	}
 	t0 := time.Now()
+	if st.InUse {
+		beneath, err := mc.Ops.MountedOn(mc.MountPoint, st.Rdev)
+		if err != nil {
+			return nil, apiError(pb.ErrorReason_INTERNAL, "managed mounts: %v", err)
+		}
+		if !beneath {
+			return nil, apiError(pb.ErrorReason_MANAGED_SLOT_BUSY,
+				"slot %s device %s is in use (a detached mount still has open files)", r.GetSlot(), dev)
+		}
+		if st.UUID != r.GetFsUuid() {
+			return nil, apiError(pb.ErrorReason_MANAGED_DEVICE_MISMATCH,
+				"slot %s is mounted beneath with UUID %q, the request has %q", r.GetSlot(), st.UUID, r.GetFsUuid())
+		}
+		if err := mc.Ops.DetachTop(mc.MountPoint); err != nil {
+			return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "detach the old mount on %s: %v", mc.MountPoint, err)
+		}
+		s.cfg.Log.Warn("finished a managed swap that stopped after its mount", "slot", r.GetSlot(), "device", dev)
+		return s.mountedResponse(mc, r.GetSlot(), dev, active, 0, t0)
+	}
 	wait := mc.SizeWait
 	if wait <= 0 {
 		wait = 5 * time.Second
@@ -193,18 +213,24 @@ func (s *Server) MountManaged(ctx context.Context, r *pb.MountManagedRequest) (*
 			return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "detach the old mount on %s: %v", mc.MountPoint, err)
 		}
 	}
+	return s.mountedResponse(mc, r.GetSlot(), dev, active, waitMS, t0)
+}
+
+// mountedResponse checks that slot is now the top mount and reports the swap.
+func (s *Server) mountedResponse(mc *ManagedConfig, slot pb.ManagedSlot, dev string, previous pb.ManagedSlot,
+	waitMS uint64, t0 time.Time) (*pb.MountManagedResponse, error) {
 	now, _, states, err := mc.slotStates()
 	if err != nil {
 		return nil, apiError(pb.ErrorReason_INTERNAL, "managed status: %v", err)
 	}
-	if now != r.GetSlot() {
-		return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "after the mount, slot %s is on %s, not %s", now, mc.MountPoint, r.GetSlot())
+	if now != slot {
+		return nil, apiError(pb.ErrorReason_MANAGED_MOUNT_FAILED, "after the mount, slot %s is on %s, not %s", now, mc.MountPoint, slot)
 	}
-	resp := &pb.MountManagedResponse{Active: now, Changed: true, Previous: active, WaitMs: waitMS}
-	if prev, ok := states[active]; ok {
+	resp := &pb.MountManagedResponse{Active: now, Changed: true, Previous: previous, WaitMs: waitMS}
+	if prev, ok := states[previous]; ok {
 		resp.PreviousInUse = prev.InUse
 	}
-	s.cfg.Log.Info("managed drive mounted", "slot", now, "device", dev, "previous", active,
+	s.cfg.Log.Info("managed drive mounted", "slot", now, "device", dev, "previous", previous,
 		"previous_in_use", resp.PreviousInUse, "wait_ms", waitMS, "ms", time.Since(t0).Milliseconds())
 	return resp, nil
 }

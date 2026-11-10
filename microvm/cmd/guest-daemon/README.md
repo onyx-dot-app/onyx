@@ -88,7 +88,7 @@ agent, every call also carries `x-sandbox-id`.
 | Files, `CaptureSession`, `RestoreSession` | Reserved for ENG-4572. `UNIMPLEMENTED`. |
 | `BrowserStart`, `BrowserStop` | Reserved for ENG-4573. `UNIMPLEMENTED`. |
 | `ManagedStatus` | The slot on `/workspace/managed` (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
-| `MountManaged(slot, size_bytes, fs_uuid)` | Makes the slot the drive on `/workspace/managed`, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). The node agent calls it during `SwapManaged`. |
+| `MountManaged(slot, size_bytes, fs_uuid)` | Makes the slot the drive on `/workspace/managed`, in this order: refuse a slot in use (`MANAGED_SLOT_BUSY`); wait up to 5 s for the device size (Firecracker's config change after `PATCH /drives`); `BLKFLSBUF`; check the ext4 UUID (`MANAGED_DEVICE_MISMATCH`); `fsopen`/`fsmount` (`ro`, `noload`; `nodev`, `nosuid`, `noexec`, private) and `move_mount(MOVE_MOUNT_BENEATH)` beneath the current mount; `umount2(MNT_DETACH)` of the old top mount. Open files on the old drive keep working. The same slot with the same UUID is a no-op (`changed` false). A slot in use that is mounted beneath the top mount with the requested UUID is a swap that stopped before its detach: the call detaches the old top mount and finishes it. The node agent calls it during `SwapManaged`. |
 
 Why the mount goes beneath: a mount covered by another mount cannot be reached by path, and a lazy
 unmount of it (also through `/proc/self/fd/<n>`) removes the top mount instead (tested on #17241).
@@ -149,11 +149,6 @@ protoc -I proto -I "$PROTOC_INCLUDE" \
   --go_out=paths=source_relative:proto --go-grpc_out=paths=source_relative:proto \
   proto/sandboxd/v1/sandboxd.proto
 ```
-
-Why the mount goes beneath: a mount covered by another mount cannot be reached by path, and a lazy
-unmount of it (also through `/proc/self/fd/<n>`) removes the top mount instead (tested on #17241).
-`MOVE_MOUNT_BENEATH` puts the new drive under the old one; the old top mount then detaches by path, and
-the new drive shows at once.
 
 Python stubs (track D) come from the same file, for example
 `python -m grpc_tools.protoc -I microvm/proto -I "$PROTOC_INCLUDE" --python_out=<out> --grpc_python_out=<out> --pyi_out=<out> microvm/proto/sandboxd/v1/sandboxd.proto`.
