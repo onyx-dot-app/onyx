@@ -7,9 +7,12 @@ from uuid import UUID
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from onyx.db.marketplace_access import materialize_marketplace_access__no_commit
 from onyx.db.models import Marketplace, Skill, SkillVersion
 from onyx.db.resource_version import prune_resource_bundles, write_resource_version
+from onyx.db.skill import affected_user_ids_for_skills
 from onyx.db.skill_version import SkillVersionAdapter
+from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.ingest import IngestedBundle
@@ -82,6 +85,7 @@ def reconcile_marketplace__no_commit(
             or bundle.canonical_name != entry.path.rsplit("/", 1)[-1]
         ):
             raise ValueError(f"Staged bundle does not match marketplace entry: {key}")
+    lock_group_membership(db_session)
     with db_session.begin_nested():
         marketplace = db_session.scalar(
             select(Marketplace)
@@ -109,6 +113,7 @@ def reconcile_marketplace__no_commit(
                 .where(
                     Skill.marketplace_id == marketplace_id, Skill.retired_at.is_(None)
                 )
+                .order_by(Skill.id)
                 .with_for_update(of=Skill)
                 .execution_options(populate_existing=True)
             )
@@ -134,6 +139,9 @@ def reconcile_marketplace__no_commit(
                 reason=marketplace.last_error,
                 cleanup_file_ids=cleanup,
             )
+        before = affected_user_ids_for_skills(
+            [skill.id for skill in live.values()], db_session
+        )
         now = datetime.now(timezone.utc)
         for skill in missing:
             skill.retired_at = now
@@ -217,6 +225,18 @@ def reconcile_marketplace__no_commit(
             cleanup.update(prune_resource_bundles(adapter, db_session))
             used.add(bundle.bundle_file_id)
             changed.append(skill.id)
+        access_changed = materialize_marketplace_access__no_commit(
+            marketplace_id, db_session
+        )
+        affected_skills = (
+            set(changed) | access_changed | {skill.id for skill in missing}
+        )
+        after = affected_user_ids_for_skills(affected_skills, db_session)
+        affected = {
+            user_id
+            for skill_id in affected_skills
+            for user_id in before.get(skill_id, set()) | after.get(skill_id, set())
+        }
         marketplace.blocked_entries = blocked
         marketplace.last_error = None
         marketplace.last_synced_revision = revision
@@ -224,7 +244,8 @@ def reconcile_marketplace__no_commit(
         db_session.flush()
         return ReconciliationResult(
             status="applied",
-            changed_skill_ids=changed,
+            changed_skill_ids=sorted(set(changed) | access_changed),
+            affected_user_ids=affected,
             retired_skill_ids=[skill.id for skill in missing],
             blocked_entries=blocked,
             cleanup_file_ids=cleanup - used,

@@ -14,6 +14,7 @@ from onyx.db.enums import (
     AccountType,
     Permission,
     PersonaSharePermission,
+    SandboxStatus,
     SkillSharePermission,
 )
 from onyx.db.models import (
@@ -26,6 +27,8 @@ from onyx.db.models import (
     Hook,
     LLMProvider,
     LLMProvider__UserGroup,
+    Marketplace,
+    Marketplace__UserGroup,
     MCPServer,
     MCPServer__UserGroup,
     PermissionGrant,
@@ -33,6 +36,7 @@ from onyx.db.models import (
     Persona__UserFile,
     Persona__UserGroup,
     PublicExternalUserGroup,
+    Sandbox,
     ScimToken,
     Skill,
     Skill__UserGroup,
@@ -291,6 +295,22 @@ def remove_custom_user_groups__no_commit(db_session: Session) -> int:
     resources public and every connector already public, the groups gate
     nothing a sync would need to rewrite."""
     lock_group_membership(db_session)
+    db_session.execute(
+        update(Marketplace)
+        .where(Marketplace.owner_user_id.is_(None))
+        .values(public_permission=SkillSharePermission.VIEWER)
+    )
+    db_session.execute(delete(Marketplace__UserGroup))
+    db_session.execute(
+        update(Skill)
+        .where(
+            Skill.marketplace_id.in_(
+                select(Marketplace.id).where(Marketplace.owner_user_id.is_(None))
+            ),
+            Skill.follows_marketplace_access.is_(True),
+        )
+        .values(public_permission=SkillSharePermission.VIEWER)
+    )
     # Row-locked so a share edit that races this waits and then fails on the
     # missing group. Unlocked, it could commit a share this run then drops.
     group_ids: list[int] = list(
@@ -344,3 +364,12 @@ def disable_paid_features__no_commit(db_session: Session) -> None:
         update(ScimToken).where(ScimToken.is_active.is_(True)).values(is_active=False)
     )
     remove_all_api_keys__no_commit(db_session)
+
+
+def community_skill_push_recipients(db_session: Session) -> set[UUID]:
+    """Downgrade can broaden access across the workspace; refresh active sandboxes."""
+    return set(
+        db_session.scalars(
+            select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
+        )
+    )

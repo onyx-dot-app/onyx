@@ -319,6 +319,16 @@ Onyx keeps files for the newest ten versions, including a newly restored version
 false`. Preview and restore return `404` with "The files of this version are no longer kept." if the bundle is absent.
 A version ID from another Skill also returns `404`.
 
+## Reset marketplace Skill access through the API
+
+For a Skill from a company marketplace,
+use `POST /api/skills/custom/{skill_id}/reset-marketplace-access` with no request body.
+The request requires global permission to manage Skills. It returns the Skill and its sharing details.
+
+Reset removes individual user shares and restores the marketplace's company visibility, group access,
+and installation settings. Later marketplace access changes apply to the Skill again.
+Reset preserves content and version history. Personal marketplace Skills and retired Skills cannot use this endpoint.
+
 ## Troubleshooting
 
 <AccordionGroup>

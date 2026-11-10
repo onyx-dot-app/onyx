@@ -5442,6 +5442,17 @@ class Marketplace(Base):
     login_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
+    public_permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False), nullable=True
+    )
+    installation_policy: Mapped[SkillInstallationPolicy] = mapped_column(
+        Enum(SkillInstallationPolicy, native_enum=False),
+        nullable=False,
+        default=SkillInstallationPolicy.AVAILABLE,
+        server_default=SkillInstallationPolicy.AVAILABLE.value,
+    )
+    group_shares: Mapped[list["Marketplace__UserGroup"]] = relationship(viewonly=True)
+
     last_synced_revision: Mapped[str | None] = mapped_column(String, nullable=True)
     last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
