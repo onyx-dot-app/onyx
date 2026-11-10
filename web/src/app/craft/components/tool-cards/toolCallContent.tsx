@@ -154,7 +154,8 @@ export function getToolCallStepIcon(
   if (toolCall.status === "pending" || toolCall.status === "in_progress") {
     return SpinningLoader;
   }
-  if (toolCall.status === "failed") {
+  // A stopped call must not look finished.
+  if (toolCall.status === "failed" || toolCall.status === "cancelled") {
     return SvgAlertCircle;
   }
   // A finished skill leads with its sparkle.

@@ -18,6 +18,7 @@ import { TimelineHeaderRow } from "@/lib/timeline/primitives/TimelineHeaderRow";
 import { groupTimelineEntries } from "@/lib/timeline/entries";
 import type { TimelineStepPosition } from "@/lib/timeline/types";
 import TaskBody from "@/app/craft/components/tool-cards/TaskBody";
+import SkillBadge from "@/app/craft/components/tool-cards/SkillBadge";
 import ThinkingMarkdown from "@/app/craft/components/ThinkingMarkdown";
 import {
   getToolCallStepIcon,
@@ -93,6 +94,11 @@ function CraftTimelineStep({
       stepIcon={getToolCallStepIcon(toolCall)}
       header={
         <span className="block truncate">{renderToolCallHeader(toolCall)}</span>
+      }
+      headerAccessory={
+        toolCall.skillName && toolCall.toolName !== "skill" ? (
+          <SkillBadge name={toolCall.skillName} />
+        ) : undefined
       }
       toggleLabel={toolCall.title}
       isExpanded={isExpanded}
@@ -187,6 +193,7 @@ export default function CraftTimeline({
               size="md"
               icon={isOpen ? SvgFold : SvgExpand}
               onClick={() => setIsOpen((prev) => !prev)}
+              aria-expanded={isOpen}
               aria-label={tTimeline(
                 isOpen ? "collapseButton.ariaLabel" : "expandButton.ariaLabel"
               )}
