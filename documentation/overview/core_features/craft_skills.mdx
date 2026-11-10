@@ -249,6 +249,13 @@ If a Skill does not fit, Craft leaves it out and tries the remaining Skills.
 Stored content and your saved choices stay unchanged. Turn off Skills you do not need, or reduce their size,
 then reload or start a session.
 
+### Session API
+
+Session and reload responses include `skill_runtime_notice` when a Skill did not load. The notice lists omitted Skills,
+their charged sizes, file counts and the limit that failed. It describes the last successful delivery.
+Failed delivery preserves the previous notice. Only the session owner's sandbox supplies this notice.
+If every Skill fits, the field is null.
+
 ## Troubleshooting
 
 <AccordionGroup>

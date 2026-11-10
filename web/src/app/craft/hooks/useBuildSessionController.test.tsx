@@ -226,6 +226,53 @@ describe("useBuildSessionController", () => {
     ).toBe(false);
   });
 
+  it("drops a runtime notice from a refresh that a reload superseded", async () => {
+    let resolveRefresh: ((value: unknown) => void) | undefined;
+    jest.mocked(api.fetchSession).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }) as never
+    );
+
+    renderHook(() =>
+      useBuildSessionController({ existingSessionId: SESSION_ID })
+    );
+    await waitFor(() => expect(api.fetchSession).toHaveBeenCalled());
+
+    await act(async () => {
+      // The reload response arrives first and reports no omissions.
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        skillsStale: false,
+        skillRuntimeNotice: null,
+      });
+      resolveRefresh?.({
+        skills_stale: false,
+        skill_runtime_notice: {
+          max_bytes: 900 * 1024 * 1024,
+          max_files: 10_000,
+          max_directories: 10_000,
+          max_path_bytes: 4033,
+          max_path_component_bytes: 255,
+          omissions: [
+            {
+              skill_id: "old",
+              name: "old",
+              charged_bytes: 1,
+              file_count: 1,
+              failed_limit: "bytes",
+            },
+          ],
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+        ?.skillRuntimeNotice
+    ).toBeNull();
+  });
+
   it("applies stale state after an unrelated session update", async () => {
     let resolveRefresh:
       | ((value: { skills_stale: boolean }) => void)

@@ -46,6 +46,7 @@ from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.db.sandbox import (
+    SandboxSkillsState,
     begin_provisioning_attempt__no_commit,
     begin_recovery_attempt__no_commit,
     create_sandbox__no_commit,
@@ -58,11 +59,11 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
     get_snapshots_for_session,
     has_active_craft_pat,
-    lock_sandbox_skills_hashes,
+    lock_sandbox_skills_states,
     provisioning_attempt_is_current,
     record_cleanup_checkpoint__no_commit,
     set_sandbox_mcp_config_hashes__no_commit,
-    set_sandbox_skills_hashes__no_commit,
+    set_sandbox_skills_states__no_commit,
     sleep_running_sandbox__no_commit,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -239,7 +240,7 @@ def build_managed_content_payload(
     user: User, db_session: DBSession
 ) -> ManagedContentPayload:
     """Read-only assembly of the Skill payload and its hashes.
-    Callers lock the sandbox row first (``lock_sandbox_skills_hashes``) and keep
+    Callers lock the sandbox row first (``lock_sandbox_skills_states``) and keep
     it through the push and the record: a Skill change that commits between
     the build and the record would otherwise get the old payload's hash."""
     skills = build_user_skills_payload(user, db_session)
@@ -314,13 +315,20 @@ def record_managed_content_hashes__no_commit(
 ) -> None:
     """Stamp the sandbox with the content state that was actually pushed.
     The MCP fingerprint is recorded regardless of the skill push (MCP config
-    is written per session), the skills hash only when the push landed."""
+    is written per session), the skills hash and omissions only when the push
+    landed."""
     set_sandbox_mcp_config_hashes__no_commit(
         db_session, {sandbox_id: payload.mcp_fingerprint}
     )
     if skills_hydrated:
-        set_sandbox_skills_hashes__no_commit(
-            db_session, {sandbox_id: payload.skills_hash}
+        set_sandbox_skills_states__no_commit(
+            db_session,
+            {
+                sandbox_id: SandboxSkillsState(
+                    skills_hash=payload.skills_hash,
+                    omissions=payload.skill_omissions,
+                )
+            },
         )
 
 
@@ -334,7 +342,7 @@ def sync_managed_content(
     lock makes a concurrent membership change retry instead of letting this
     payload overwrite its pending marker. Library delivery holds no row lock. Commits;
     callers must be at a clean transaction boundary."""
-    lock_sandbox_skills_hashes(db_session, {sandbox_id})
+    lock_sandbox_skills_states(db_session, {sandbox_id})
     payload = build_managed_content_payload(user, db_session)
     skills_hydrated = push_managed_skills(sandbox_manager, sandbox_id, payload)
     record_managed_content_hashes__no_commit(
@@ -693,7 +701,7 @@ def reconcile_sandbox(
     # until the stale-attempt threshold.
     try:
         _check_attempt_deadline(attempt_deadline, sandbox_id, attempt_number)
-        lock_sandbox_skills_hashes(db_session, {sandbox_id})
+        lock_sandbox_skills_states(db_session, {sandbox_id})
         if not provisioning_attempt_is_current(db_session, sandbox_id, attempt_number):
             db_session.rollback()
             raise StaleProvisioningAttemptError(
