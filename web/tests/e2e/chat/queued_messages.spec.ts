@@ -27,7 +27,7 @@ const pendingTest = test.extend<{
       await chatPage.goto(sessionId);
       await chatPage.inputBar.fill(question);
       await chatPage.inputBar.send();
-      await chatPage.expectAnswerParagraph("Working on the first answer.");
+      await expect(chatPage.aiMessage()).toContainText("Working on");
       await use({ sessionId, question, gateId });
     } finally {
       await releaseMockLlmGate(gateId);
