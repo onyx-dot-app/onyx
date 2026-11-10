@@ -140,16 +140,20 @@ def test_concurrent_creation(
                 session.commit()
                 return "conflict" if result.blocked_entries else "created"
             try:
-                skill = create_skill_from_ingested_bundle(
+                actor = session.get(User, owner_ids[index])
+                assert actor is not None
+                create_skill_from_bundle__no_commit(
                     bundle(name),
-                    owner_ids[index],
-                    session,
-                    intended_public_permission=SkillSharePermission.VIEWER
+                    SkillSharingChange(
+                        public_permission=SkillSharePermission.VIEWER,
+                        set_public_permission=True,
+                    )
                     if same_library
                     else None,
+                    False,
+                    actor,
+                    session,
                 )
-                if same_library:
-                    skill.public_permission = SkillSharePermission.VIEWER
                 session.commit()
                 return "created"
             except OnyxError as exc:
@@ -178,7 +182,10 @@ def test_concurrent_creation(
         db_session.commit()
 
 
-def test_direct_version_writer_rejects_renaming(db_session: Session) -> None:
+@pytest.mark.parametrize("initial", [False, True])
+def test_direct_version_writer_rejects_renaming(
+    db_session: Session, initial: bool
+) -> None:
     user = make_user(db_session, standard_account=True)
     ingested = bundle(f"g3-{uuid4().hex}")
     skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
@@ -192,7 +199,7 @@ def test_direct_version_writer_rejects_renaming(db_session: Session) -> None:
             ingested._replace(canonical_name="different-name"),
             user.id,
             db_session,
-            initial=True,
+            initial=initial,
         )
     assert skill.current_version_id == version_id
     assert (

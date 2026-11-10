@@ -5,7 +5,11 @@
 
 import * as yup from "yup";
 
-export type SkillInstallationPolicy = "AVAILABLE" | "DEFAULT" | "REQUIRED";
+export type SkillInstallationPolicy =
+  | "AVAILABLE"
+  | "DEFAULT"
+  | "REQUIRED"
+  | "NOT_AVAILABLE";
 
 export type SkillSource = "builtin" | "custom";
 export type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";

@@ -25,9 +25,9 @@ from onyx.db.models import (
     ExternalAppUserCredential,
     Skill,
     User,
-    UserSkillPreference,
 )
 from onyx.db.skill_mutation import assert_skill_mutable, is_company_marketplace_skill
+from onyx.db.users import lock_group_membership
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -724,27 +724,53 @@ def delete_external_app(
 ) -> None:
     """Delete an app, detach custom skills, and remove provider-owned skills.
 
-    Detached custom skills remain organization-visible but become ordinary
-    disabled skills. Flush only; the caller owns the transaction.
+    Automatic settings become Available. Not available settings and hidden
+    choices survive, as do explicit opt-outs. The caller owns the transaction.
     """
-    app = get_external_app_by_id(db_session, external_app_id)
+    from onyx.db.skill import clear_enabled_skill_preferences__no_commit
+
+    lock_group_membership(db_session)
+    app = db_session.scalar(
+        select(ExternalApp)
+        .where(ExternalApp.id == external_app_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
         )
 
-    skills = get_skills_for_external_app(db_session, app.id)
-    custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
-    for skill in skills:
-        if skill.is_custom:
-            skill.installation_policy = SkillInstallationPolicy.AVAILABLE
-    if custom_skill_ids:
-        db_session.execute(
-            delete(UserSkillPreference).where(
-                UserSkillPreference.skill_id.in_(custom_skill_ids)
+    skills = list(
+        db_session.scalars(
+            select(Skill)
+            .join(ExternalApp__Skill)
+            .where(
+                ExternalApp__Skill.external_app_id == app.id,
+                Skill.retired_at.is_(None),
             )
+            .order_by(Skill.id)
+            .with_for_update(of=Skill)
+            .options(selectinload(Skill.group_shares))
+            .execution_options(populate_existing=True)
         )
+    )
+    custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
+    clear_enabled_skill_preferences__no_commit(custom_skill_ids, db_session)
+    automatic = {SkillInstallationPolicy.DEFAULT, SkillInstallationPolicy.REQUIRED}
+    for skill in skills:
+        if not skill.is_custom:
+            continue
+        policy_changed = skill.installation_policy in automatic
+        if policy_changed:
+            skill.installation_policy = SkillInstallationPolicy.AVAILABLE
+        for share in skill.group_shares:
+            if share.installation_policy in automatic:
+                share.installation_policy = SkillInstallationPolicy.AVAILABLE
+                policy_changed = True
+        if policy_changed and skill.marketplace_id is not None:
+            skill.follows_marketplace_access = False
 
     db_session.delete(app)
     for skill in skills:
@@ -825,24 +851,27 @@ def disconnect_external_app_for_user(
     external_app_id: int,
     user_id: UUID,
 ) -> None:
-    """Remove app credentials and enabled selections; preserve explicit opt-outs.
+    """Remove credentials and available enabled choices; keep opt-outs and hidden choices.
 
     Flush only; the caller refreshes the user's sandbox and commits.
     """
+    from onyx.db.skill import clear_enabled_skill_preferences__no_commit
+
+    lock_group_membership(db_session)
     db_session.execute(
         delete(ExternalAppUserCredential).where(
             ExternalAppUserCredential.external_app_id == external_app_id,
             ExternalAppUserCredential.user_id == user_id,
         )
     )
-    associated_skill_ids = select(ExternalApp__Skill.skill_id).where(
-        ExternalApp__Skill.external_app_id == external_app_id
-    )
-    db_session.execute(
-        delete(UserSkillPreference).where(
-            UserSkillPreference.user_id == user_id,
-            UserSkillPreference.skill_id.in_(associated_skill_ids),
-            UserSkillPreference.enabled.is_(True),
+    associated_skill_ids = list(
+        db_session.scalars(
+            select(ExternalApp__Skill.skill_id).where(
+                ExternalApp__Skill.external_app_id == external_app_id
+            )
         )
+    )
+    clear_enabled_skill_preferences__no_commit(
+        associated_skill_ids, db_session, user_id=user_id
     )
     db_session.flush()

@@ -16,6 +16,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccountType,
     Permission,
+    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.external_app import (
@@ -40,8 +41,10 @@ from onyx.db.skill import (
     fetch_skill,
     list_skills,
     replace_skill_bundle,
+    resolve_skill_installation_policies,
     set_skill_enabled_for_user,
     share_skill__no_commit,
+    skill_user_states,
     transfer_skill_ownership,
 )
 from onyx.db.skill_library import lock_skill_library_names
@@ -226,6 +229,7 @@ def _import_response(
     *,
     allow_management: bool,
 ) -> GitHubSkillsImportResponse:
+    states = skill_user_states(user, [skill.id for skill, _ in created], db_session)
     return GitHubSkillsImportResponse(
         imported=[
             GitHubImportedSkill(
@@ -234,10 +238,16 @@ def _import_response(
                     user,
                     db_session,
                     include_share_details=True,
+                    state=states.get(skill.id),
                     allow_management=allow_management,
                 ),
                 disabled_reason=(
-                    f"Another skill named “{skill.name}” is already enabled."
+                    (
+                        "This skill is Not available for you."
+                        if states[skill.id].effective_installation_policy
+                        == SkillInstallationPolicy.NOT_AVAILABLE
+                        else f"Another skill named “{skill.name}” is already enabled."
+                    )
                     if auto_enable and not enabled
                     else None
                 ),
@@ -813,6 +823,11 @@ def create_custom_skill_from_editor(
                 db_session,
                 allow_management=allow_management,
             )
+        if should_auto_enable:
+            policy = resolve_skill_installation_policies(
+                [user.id], [skill.id], db_session
+            )[user.id, skill.id]
+            should_auto_enable = policy != SkillInstallationPolicy.NOT_AVAILABLE
         if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):

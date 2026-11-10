@@ -48,7 +48,7 @@ const marketplace = {
 
 afterEach(() => jest.restoreAllMocks());
 
-test.each(["AVAILABLE"] as const)(
+test.each(["AVAILABLE", "NOT_AVAILABLE"] as const)(
   "reads %s source settings, counts and retained skills",
   async (installation_policy) => {
     const row = {
