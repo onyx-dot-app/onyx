@@ -6212,6 +6212,10 @@
           "syncing": "此用户组正在同步。请稍候再试。",
           "updateFailed": "更新用户组失败",
           "updated": "已更新用户组“{name}”"
+        },
+        "tabs": {
+          "group": "群组",
+          "skills": "技能"
         }
       },
       "form": {
@@ -6369,6 +6373,26 @@
         }
       },
       "skills": {
+        "intro": "选择如何为此群组的成员安装技能。每项设置在更改后立即保存。“保存更改”不会保存这些设置。",
+        "marketplaces": {
+          "title": "公司市场",
+          "description": "跟随市场的技能在此群组中使用该市场的设置。",
+          "empty": "没有与此群组共享的公司市场。"
+        },
+        "direct": {
+          "title": "共享的技能",
+          "description": "逐个与此群组共享的技能。",
+          "empty": "没有直接与此群组共享的技能。"
+        },
+        "empty": {
+          "title": "没有与此群组共享的技能",
+          "description": "请在技能页面将公司市场或技能与此群组共享。"
+        },
+        "noAccess": {
+          "title": "技能设置不可用",
+          "description": "你没有管理此群组技能的权限。"
+        },
+        "loadFailed": "无法加载此群组的技能设置。",
         "marketplace": {
           "followers": "{count, plural, =0 {没有技能跟随此市场} other {# 个技能跟随此市场}}"
         },

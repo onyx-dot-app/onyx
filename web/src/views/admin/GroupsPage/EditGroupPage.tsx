@@ -2,6 +2,7 @@
 
 import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
+import { useScreenSize } from "@opal/hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
@@ -14,6 +15,7 @@ import {
   MessageCard,
   InputSwitch,
   Table,
+  Tabs,
   useCreateModal,
   type TableColumn,
 } from "@opal/components";
@@ -40,10 +42,11 @@ import {
   isNotFoundError,
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
-import { AccountType } from "@/lib/types";
+import { AccountType, Permission } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 import type { MemberRow } from "./types";
@@ -69,6 +72,7 @@ import { userGroupUrl } from "@/hooks/useGroups";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
 import GroupSpendingLimitsSection from "./GroupSpendingLimitsSection";
+import GroupSkillsTab from "@/views/admin/GroupsPage/GroupSkillsTab";
 import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +85,7 @@ interface EditGroupPageProps {
 
 function EditGroupPage({ groupId }: EditGroupPageProps) {
   const t = useTranslations("admin.groups");
+  const { isMobile } = useScreenSize();
   const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const settings = useSettings();
@@ -88,6 +93,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const currentUserId = user?.id;
   const isEnterpriseTier = tierAtLeast(settings.tier, Tier.ENTERPRISE);
   const tokenLimitsDisabledTooltip = markdown(t("tokenLimits.disabledTooltip"));
+  // Skill settings need Manage Skills, not group membership rights; the
+  // server checks each row.
+  const skillsAuthority = usePermissionAuthority(Permission.MANAGE_SKILLS);
+  const showSkillsTab =
+    (settings.onyx_craft_available ?? false) &&
+    (skillsAuthority.isGlobalHolder || skillsAuthority.isScopedManager);
 
   // Fetch the group data — poll every 5s while syncing so the UI updates
   // automatically when the backend finishes processing the previous edit.
@@ -286,7 +297,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           const isOwnManager = isOwnManagerRow(userId);
           const isLastGroup = isLastGroupMember(row);
           return (
-            <div className="flex items-center gap-1">
+            <Section
+              flexDirection="row"
+              alignItems="center"
+              justifyContent="start"
+              width="auto"
+              height="auto"
+              gap={1}
+            >
               {canManage && (
                 <Button
                   icon={isPending ? IconLoader : SvgUserShield}
@@ -330,7 +348,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   handleRemoveMember(userId);
                 }}
               />
-            </div>
+            </Section>
           );
         },
       },
@@ -551,6 +569,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     <>
       <SettingsLayouts.Root
         loading={isLoading}
+        narrowGutters
         error={error ? t("edit.loadError.text") : false}
       >
         <SettingsLayouts.Header
@@ -559,11 +578,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           divider
           cancel={() => navigation.go("/admin/groups")}
           actions={headerActions}
+          stackActionsOnMobile
+          sticky={!isMobile}
         />
 
         <SettingsLayouts.Body>
           {group && (
-            <>
+            <EditGroupTabs groupId={groupId} showSkills={showSkillsTab}>
               {isDefaultGroup && (
                 <MessageCard
                   variant="info"
@@ -646,7 +667,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 {isAddingMembers ? (
                   <Table
                     key="add-members"
-                    items={allRows as MemberRow[]}
+                    items={allRows}
                     columns={addModeColumns}
                     getRowId={(row) => row.id ?? row.email}
                     pageSize={PAGE_SIZE}
@@ -749,7 +770,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   </Section>
                 </Card>
               )}
-            </>
+            </EditGroupTabs>
           )}
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -786,6 +807,44 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         </ConfirmationModalLayout>
       </deleteModal.Provider>
     </>
+  );
+}
+
+interface EditGroupTabsProps {
+  groupId: number;
+  showSkills: boolean;
+  /** The group form. It stays mounted on the Skills tab to keep its drafts. */
+  children: React.ReactNode;
+}
+
+function EditGroupTabs({ groupId, showSkills, children }: EditGroupTabsProps) {
+  const t = useTranslations("admin.groups.edit.tabs");
+  const [tab, setTab] = useState("group");
+  // Load Skills on first visit, then keep the panel so unsaved row errors survive.
+  const [skillsOpened, setSkillsOpened] = useState(false);
+  if (!showSkills) return <>{children}</>;
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(value) => {
+        setTab(value);
+        if (value === "skills") setSkillsOpened(true);
+      }}
+      gap={6}
+    >
+      <Tabs.List>
+        <Tabs.Trigger value="group">{t("group")}</Tabs.Trigger>
+        <Tabs.Trigger value="skills">{t("skills")}</Tabs.Trigger>
+      </Tabs.List>
+      <Tabs.Content value="group" keepMounted>
+        <Section gap={8} height="auto" alignItems="stretch">
+          {children}
+        </Section>
+      </Tabs.Content>
+      <Tabs.Content value="skills" keepMounted={skillsOpened}>
+        {skillsOpened && <GroupSkillsTab groupId={groupId} />}
+      </Tabs.Content>
+    </Tabs>
   );
 }
 

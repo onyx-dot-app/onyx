@@ -6212,6 +6212,10 @@
           "syncing": "Ce groupe est en cours de synchronisation. Patientez un instant et réessayez.",
           "updateFailed": "Échec de la mise à jour du groupe",
           "updated": "Groupe \"{name}\" mis à jour"
+        },
+        "tabs": {
+          "group": "Groupe",
+          "skills": "Skills"
         }
       },
       "form": {
@@ -6369,6 +6373,26 @@
         }
       },
       "skills": {
+        "intro": "Choisissez comment les Skills s’installent pour les membres de ce groupe. Chaque paramètre est enregistré dès que vous le modifiez. Enregistrer les modifications n’enregistre pas ces paramètres.",
+        "marketplaces": {
+          "title": "Marketplaces de l’entreprise",
+          "description": "Les Skills qui suivent une marketplace utilisent son paramètre pour ce groupe.",
+          "empty": "Aucune marketplace de l’entreprise n’est partagée avec ce groupe."
+        },
+        "direct": {
+          "title": "Skills partagés",
+          "description": "Skills partagés avec ce groupe un par un.",
+          "empty": "Aucun Skill n’est partagé directement avec ce groupe."
+        },
+        "empty": {
+          "title": "Aucun Skill partagé avec ce groupe",
+          "description": "Partagez une marketplace de l’entreprise ou un Skill avec ce groupe depuis la page Skills."
+        },
+        "noAccess": {
+          "title": "Paramètres des Skills indisponibles",
+          "description": "Vous n’avez pas l’autorisation de gérer les Skills de ce groupe."
+        },
+        "loadFailed": "Impossible de charger les paramètres des Skills de ce groupe.",
         "marketplace": {
           "followers": "{count, plural, =0 {Aucun Skill ne suit cette marketplace} one {# Skill suit cette marketplace} other {# Skills suivent cette marketplace}}"
         },

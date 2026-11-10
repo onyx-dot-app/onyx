@@ -916,10 +916,23 @@ still propagate unexpected storage errors.
     after an authorization or not-found response. Only an authorized response
     restores rows, including after a transient failure or remount. A delayed PUT
     cannot replace a cached denial or write into a different group after navigation.
-    `GroupSkillSettingRow` uses shared policy choices, saves one override at a time,
-    and keeps failed choices for retry. The saving guard blocks duplicate writes
-    without disabling the focused select. Read-only rows follow `can_edit`.
-    Dropdown width stays inside the available viewport, including at enlarged text.
+27. `group-skills-tab` **The group page saves Skill settings per row, apart from its form.**
+    `web/src/views/admin/GroupsPage/EditGroupPage.tsx:EditGroupTabs` adds a
+    **Skills** tab when Craft is available and the caller holds `MANAGE_SKILLS`
+    (global or scoped). It sits inside the existing `manage_members` gate, so it
+    widens no group read. The group form panel stays mounted, so its drafts
+    survive a tab switch, and page Save never sends Skill settings.
+    `GroupSkillsTab` loads only after the first visit. Each
+    `GroupSkillSettingRow` uses the shared installation policy options and saves
+    on change through `useUserGroupSkills`, blocks a
+    second save while one runs without disabling the focused select, keeps the confirmed choice
+    until a new server row arrives, and keeps a failed choice with the server reason and
+    a retry, and disables itself when `can_edit` is false. Retry returns focus to
+    the setting before saving. Persistent live regions announce save results. Overlapping saves
+    refetch the list after the last one settles, because each response replaces
+    the whole list. Transient refetch failures keep rows and drafts mounted; authorization and not-found failures clear them.
+    The row content stays within its card at enlarged text sizes.
+    On phones, the group header scrolls with the form so it does not cover these controls.
 
 
 ---

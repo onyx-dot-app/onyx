@@ -6212,6 +6212,10 @@
           "syncing": "This group is currently syncing. Please wait a moment and try again.",
           "updateFailed": "Failed to update group",
           "updated": "Group \"{name}\" updated"
+        },
+        "tabs": {
+          "group": "Group",
+          "skills": "Skills"
         }
       },
       "form": {
@@ -6369,6 +6373,26 @@
         }
       },
       "skills": {
+        "intro": "Choose how Skills install for members of this group. Each setting saves when you change it. Save Changes does not save these settings.",
+        "marketplaces": {
+          "title": "Company Marketplaces",
+          "description": "Skills that follow a marketplace use its setting for this group.",
+          "empty": "No company marketplaces are shared with this group."
+        },
+        "direct": {
+          "title": "Shared Skills",
+          "description": "Skills shared with this group one at a time.",
+          "empty": "No Skills are shared directly with this group."
+        },
+        "empty": {
+          "title": "No Skills shared with this group",
+          "description": "Share a company marketplace or a Skill with this group on the Skills page."
+        },
+        "noAccess": {
+          "title": "Skill settings unavailable",
+          "description": "You do not have permission to manage Skills for this group."
+        },
+        "loadFailed": "Could not load the Skill settings for this group.",
         "marketplace": {
           "followers": "{count, plural, =0 {No Skills follow this marketplace} one {# Skill follows this marketplace} other {# Skills follow this marketplace}}"
         },
