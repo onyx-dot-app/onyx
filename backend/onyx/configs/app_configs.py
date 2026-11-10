@@ -1374,6 +1374,31 @@ def _load_google_api_endpoint_override() -> str | None:
     return raw if raw.endswith("/") else f"{raw}/"
 
 
+# Off by default. When on, the workers that index Google Drive share one budget
+# of Google API calls for each credential, kept in Redis, so that many workers
+# do not each find Google's quota through 429 answers.
+ENABLE_SOURCE_API_LIMITER = (
+    os.environ.get("ENABLE_SOURCE_API_LIMITER", "").lower() == "true"
+)
+# Google's quota model for the Drive API of the customer's GCP project: "units"
+# (each call has a cost in quota units) or "requests" (each call counts as one).
+GOOGLE_DRIVE_QUOTA_MODEL = (
+    os.environ.get("GOOGLE_DRIVE_QUOTA_MODEL") or "units"
+).lower()
+# The budgets for one minute. Set them to the quotas of the GCP project.
+GOOGLE_DRIVE_QUOTA_PER_PROJECT = int(
+    os.environ.get("GOOGLE_DRIVE_QUOTA_PER_PROJECT")
+    or (12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 1_000_000)
+)
+GOOGLE_DRIVE_QUOTA_PER_USER = int(
+    os.environ.get("GOOGLE_DRIVE_QUOTA_PER_USER")
+    or (12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 325_000)
+)
+GOOGLE_DOCS_READS_PER_PROJECT = int(
+    os.environ.get("GOOGLE_DOCS_READS_PER_PROJECT") or 3_000
+)
+GOOGLE_DOCS_READS_PER_USER = int(os.environ.get("GOOGLE_DOCS_READS_PER_USER") or 300)
+
 # Testing only. Sends the Google connectors' token, Drive, Admin SDK and Docs API
 # calls to this base URL instead of Google, e.g. to the mock Drive server in
 # backend/tests/integration/mock_services/mock_google_drive_server.
