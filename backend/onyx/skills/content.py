@@ -4,12 +4,15 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from onyx.db.models import Skill
+from onyx.db.skill_version import read_version_bundle
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.file_store.models import FileSizeLimitExceeded
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
+    STORED_BUNDLE_LIMITS,
     TEMPLATE_SUFFIX,
     read_custom_bundle_instructions,
     strip_skill_md_frontmatter,
@@ -59,17 +62,33 @@ def read_custom_skill_bundle_bytes(
     skill: Skill,
     file_store: FileStore | None = None,
 ) -> bytes:
-    if skill.bundle_file_id is None:
+    if skill.current_version is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
-            f"Custom skill '{skill.name}' has no bundle.",
+            f"Custom skill '{skill.name}' has no current version.",
         )
-    store = file_store or get_default_file_store()
     try:
-        bundle_bytes = store.read_file(skill.bundle_file_id).read()
+        return read_version_bundle(
+            skill.current_version,
+            file_store or get_default_file_store(),
+            max_bytes=STORED_BUNDLE_LIMITS.max_stored_bytes,
+        )
+    except FileSizeLimitExceeded as exc:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            f"Stored bundle for skill '{skill.name}' exceeds the "
+            f"{STORED_BUNDLE_LIMITS.max_stored_bytes}-byte read limit.",
+        ) from exc
+    except OnyxError as exc:
+        # Pruning never removes the current bundle, so a missing one is a fault.
+        if exc.error_code == OnyxErrorCode.NOT_FOUND:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                f"Failed to read bundle for skill '{skill.name}'.",
+            ) from exc
+        raise
     except Exception as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Failed to read bundle for skill '{skill.name}'.",
         ) from exc
-    return bundle_bytes

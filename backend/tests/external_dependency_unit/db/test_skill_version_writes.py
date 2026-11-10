@@ -99,6 +99,7 @@ def tenant(
             "file_content",
             "key_value_store",
             "cache_store",
+            "image_generation_config",
         }
         tables = {Base.metadata.tables[name] for name in names}
         while (
@@ -330,7 +331,7 @@ def test_lazy_validity_copies_to_current_version(
     current.is_valid = skill.is_valid = None
     session.commit()
     persist_skill_validity(
-        [SkillValidityUpdate(skill.id, skill.bundle_file_id, classified)]
+        [SkillValidityUpdate(skill.id, current.id, current.bundle_file_id, classified)]
     )
     if save:
         api.patch_current_user_skill(

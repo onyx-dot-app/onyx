@@ -34,11 +34,10 @@ from sqlalchemy import (
     exists,
     or_,
     select,
-    update,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, contains_eager, selectinload
 
 from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.auth.scoped_permissions import assert_within_scope
@@ -69,7 +68,11 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
-from onyx.db.skill_version import save_skill_version
+from onyx.db.skill_version import (
+    persist_skill_version_validity,
+    save_skill_version,
+    skill_bundle_file_ids,
+)
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import is_fk_violation, is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -86,6 +89,7 @@ class SkillManagementPolicy(str, Enum):
 @dataclass(frozen=True)
 class SkillValidityUpdate:
     skill_id: UUID
+    version_id: UUID
     bundle_file_id: str | None
     is_valid: bool
 
@@ -238,10 +242,15 @@ def _exclude_unavailable_built_in_skills(
 
 
 def _skill_select_with_eager_load(*, order_by_name: bool) -> Select[tuple[Skill]]:
-    stmt = select(Skill).options(
-        selectinload(Skill.author),
-        selectinload(Skill.user_shares).selectinload(Skill__User.user),
-        selectinload(Skill.group_shares).selectinload(Skill__UserGroup.user_group),
+    stmt = (
+        select(Skill)
+        .outerjoin(Skill.current_version)
+        .options(
+            contains_eager(Skill.current_version),
+            selectinload(Skill.author),
+            selectinload(Skill.user_shares).selectinload(Skill__User.user),
+            selectinload(Skill.group_shares).selectinload(Skill__UserGroup.user_group),
+        )
     )
     if order_by_name:
         stmt = stmt.order_by(Skill.name, Skill.id)
@@ -377,8 +386,7 @@ def list_runtime_skills_for_user(
         ),
         or_(
             Skill.built_in_skill_id.isnot(None),
-            Skill.is_valid.is_(None),
-            Skill.is_valid.is_(True),
+            and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
         ),
     )
     return list(
@@ -402,7 +410,10 @@ def fetch_skill(
     ).where(Skill.id == skill_id)
     if lock_for_update:
         stmt = stmt.with_for_update(of=Skill)
-    return db_session.scalars(stmt).one_or_none()
+    skill = db_session.scalars(stmt).one_or_none()
+    if skill is not None and lock_for_update:
+        db_session.refresh(skill, ["current_version"])
+    return skill
 
 
 def add_new_skill__no_commit(
@@ -535,10 +546,13 @@ def skill_user_states(
             skill_visible_to_user(user).label("visible"),
             and_(
                 Skill.built_in_skill_id.is_(None),
-                Skill.is_valid.is_not(False),
+                SkillVersion.id.is_not(None),
+                SkillVersion.is_valid.is_not(False),
                 Skill.installation_policy != SkillInstallationPolicy.REQUIRED,
             ).label("supports_preference"),
-        ).where(Skill.id.in_(requested_ids))
+        )
+        .outerjoin(Skill.current_version)
+        .where(Skill.id.in_(requested_ids))
     )
     return {
         skill_id: SkillUserState(
@@ -763,15 +777,7 @@ def transfer_skill_ownership(
 def delete_skill(skill: Skill, db_session: Session) -> list[str]:
     """Hard-delete a locked skill and its versions. Returns every bundle file id
     for cleanup after commit."""
-    file_ids = {
-        file_id
-        for file_id in db_session.scalars(
-            select(SkillVersion.bundle_file_id).where(SkillVersion.skill_id == skill.id)
-        )
-        if file_id is not None
-    }
-    if skill.bundle_file_id is not None:
-        file_ids.add(skill.bundle_file_id)
+    file_ids = skill_bundle_file_ids(skill, db_session)
     db_session.delete(skill)
     db_session.flush()
     return sorted(file_ids)
@@ -786,19 +792,12 @@ def persist_skill_validity(
 
     with get_session_with_current_tenant() as db_session:
         for validity_update in updates:
-            bundle_matches = (
-                Skill.bundle_file_id == validity_update.bundle_file_id
-                if validity_update.bundle_file_id is not None
-                else Skill.bundle_file_id.is_(None)
-            )
-            db_session.execute(
-                update(Skill)
-                .where(
-                    Skill.id == validity_update.skill_id,
-                    bundle_matches,
-                    Skill.is_valid.is_(None),
-                )
-                .values(is_valid=validity_update.is_valid)
+            persist_skill_version_validity(
+                skill_id=validity_update.skill_id,
+                version_id=validity_update.version_id,
+                bundle_file_id=validity_update.bundle_file_id,
+                is_valid=validity_update.is_valid,
+                db_session=db_session,
             )
         db_session.commit()
 

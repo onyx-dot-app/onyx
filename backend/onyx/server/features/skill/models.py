@@ -122,7 +122,7 @@ class SkillResponse(BaseModel):
             id=skill.id,
             name=skill.name,
             description=skill.description,
-            is_valid=skill.is_valid,
+            is_valid=skill.current_is_valid,
             installation_policy=skill.installation_policy,
             enabled=enabled,
             can_toggle=can_toggle,

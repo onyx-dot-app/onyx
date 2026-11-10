@@ -39,8 +39,13 @@ def _delete_bundles(db_session: Session, name: str) -> list[Skill]:
     rows = list(db_session.scalars(select(Skill).where(Skill.name == name)))
     file_store = get_default_file_store()
     for row in rows:
-        if row.bundle_file_id is not None:
-            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+        if (
+            row.current_version is not None
+            and row.current_version.bundle_file_id is not None
+        ):
+            file_store.delete_file(
+                row.current_version.bundle_file_id, error_on_missing=False
+            )
     return rows
 
 
@@ -149,8 +154,13 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
 
     file_store = get_default_file_store()
     for row in created_rows:
-        if row.bundle_file_id is not None:
-            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+        if (
+            row.current_version is not None
+            and row.current_version.bundle_file_id is not None
+        ):
+            file_store.delete_file(
+                row.current_version.bundle_file_id, error_on_missing=False
+            )
 
 
 def test_import_enables_only_first_new_skill_with_each_name(
@@ -212,8 +222,14 @@ def test_import_enables_only_first_new_skill_with_each_name(
     file_store = get_default_file_store()
     for result in response.imported:
         row = db_session.get(Skill, result.skill.id)
-        if row is not None and row.bundle_file_id is not None:
-            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+        if (
+            row is not None
+            and row.current_version is not None
+            and row.current_version.bundle_file_id is not None
+        ):
+            file_store.delete_file(
+                row.current_version.bundle_file_id, error_on_missing=False
+            )
 
 
 def test_import_applies_shared_access_before_publication(
