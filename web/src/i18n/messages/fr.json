@@ -17297,6 +17297,13 @@
           "confirmReset": "Réinitialiser l’accès",
           "resetSuccess": "Accès du marketplace rétabli",
           "resetError": "Impossible de réinitialiser l’accès. Réessayez."
+        },
+        "groupInstallation": {
+          "title": "Installation par Groupe",
+          "description": "Le paramètre d’un groupe remplace celui de l’entreprise pour ses membres. Entre groupes, l’ordre de priorité est : Obligatoire, Installé par défaut, Disponible à l’installation, puis Non disponible.",
+          "ariaLabel": "Installation pour {name}",
+          "inherit": "Paramètre de l'entreprise",
+          "inheritDescription": "Utiliser le paramètre de l'entreprise pour ce groupe."
         }
       },
       "placeholders": {
@@ -17464,7 +17471,9 @@
       "invitedOnly": "Personnes et groupes invités",
       "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
       "apply": "{count, plural, one {Appliquer à # compétence} other {Appliquer à # compétences}}",
-      "moreActions": "Plus d’actions"
+      "moreActions": "Plus d’actions",
+      "groupInstallationDescription": "Ajoutez un paramètre pour chaque nouveau groupe. « Ne pas modifier » conserve le paramètre de groupe actuel de chaque compétence.",
+      "detachWarning": "{count, plural, one {# compétence sélectionnée suit sa marketplace d'entreprise. L'enregistrement lui donne son propre accès, que les synchronisations suivantes conservent.} other {# compétences sélectionnées suivent leur marketplace d'entreprise. L'enregistrement leur donne leur propre accès, que les synchronisations suivantes conservent.}}"
     },
     "synced": {
       "view": "Voir le contenu",

@@ -442,6 +442,13 @@ still propagate unexpected storage errors.
     its value; explicit NULL clears it. Removing a share with a non-null policy
     requires the same management authority as changing that policy. Personal synced
     owners keep audience rights for shares without policies. Not available is accepted through these guards.
+    Share detail `group_shares` include each nullable override. The share dialog's
+    Group Installation section sends only changed overrides (null for Company
+    setting); it disables edits without global or private-skill scoped authority
+    and hides Remove for a saved override. Global managers can edit group policies
+    on personal synced Skills while audience controls remain owner-only. The bulk dialog offers the same choices
+    plus Keep unchanged (omitted) per added group, and warns before it detaches
+    selected company synced skills that follow marketplace access.
     Bulk organization access shows Keep unchanged when the actor or selection cannot change it.
     Bulk sharing adds or updates grants and preserves omitted grants and policies. It reads
     affected users in two batch queries and pushes once after commit. Expected
