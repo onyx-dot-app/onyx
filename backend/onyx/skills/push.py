@@ -1,8 +1,6 @@
 """Push skill bundles to running sandboxes."""
 
 import hashlib
-import io
-import zipfile
 from collections.abc import Iterable
 from uuid import UUID
 
@@ -18,6 +16,7 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_index import ZipIndex
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
@@ -129,11 +128,12 @@ def _render_template(
 def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
     try:
         bundle_files: FileSet = {}
-        with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as zf:
-            for info in zf.infolist():
+        with ZipIndex(bundle_bytes) as zf:
+            for info in zf.infos():
                 if info.is_dir():
                     continue
-                bundle_files[f"{skill.name}/{info.filename}"] = zf.read(info)
+                with zf.open(info) as source:
+                    bundle_files[f"{skill.name}/{info.filename}"] = source.read()
         files.update(bundle_files)
     except Exception:
         logger.warning(
