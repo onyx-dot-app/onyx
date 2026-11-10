@@ -3,10 +3,20 @@ import SkillCard, {
   type BuiltinSkillCardItem,
   type CustomSkillCardItem,
 } from "@/sections/cards/SkillCard";
+import { Permission } from "@/lib/types";
 import type { CustomSkill } from "@/lib/skills/types";
 
+let mockPermissions: string[] = [];
+beforeEach(() => {
+  mockPermissions = [];
+});
+
 jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ isAdmin: false }),
+  useUser: () => ({
+    isAdmin: false,
+    permissions: mockPermissions,
+    adminCapabilities: [Permission.MANAGE_SKILLS],
+  }),
 }));
 
 jest.mock("@/lib/settings/hooks", () => ({
@@ -442,4 +452,17 @@ test("built-in skills never expose Delete", () => {
   expect(
     screen.queryByRole("button", { name: "Delete skill" })
   ).not.toBeInTheDocument();
+});
+
+it("lets a global nonadmin delete a required skill", async () => {
+  mockPermissions = [Permission.MANAGE_SKILLS];
+  const user = setupUser();
+  const onDelete = jest.fn();
+  const item = custom({
+    installation_policy: "REQUIRED",
+    user_permission: "EDITOR",
+  });
+  render(<SkillCard item={item} onDelete={onDelete} />);
+  await user.click(screen.getByRole("button", { name: "Delete skill" }));
+  expect(onDelete).toHaveBeenCalledWith(item);
 });
