@@ -158,6 +158,7 @@ def test_chat_mcp_tools_require_usable_credentials(
     headers: dict[str, str] | None,
     available: bool,
 ) -> None:
+    """Both chat surfaces filter tools and resolve each server only once."""
     credentials = ResolvedMCPCredentials(
         connection_config_id=None,
         connection_data=data,
@@ -206,8 +207,8 @@ def test_chat_mcp_tools_require_usable_credentials(
     with (
         patch(f"{MODULE}.get_current_search_settings"),
         patch(f"{MODULE}.get_default_document_index"),
-        patch(f"{MODULE}.get_mcp_server_by_id", return_value=server),
-        patch(f"{MODULE}.resolve_mcp_credentials", return_value=credentials),
+        patch(f"{MODULE}.get_mcp_server_by_id", return_value=server) as get_server,
+        patch(f"{MODULE}.resolve_mcp_credentials", return_value=credentials) as resolve,
         patch(f"{MODULE}.get_mcp_server_user_preferences", return_value={}),
         patch(f"{MODULE}.get_tool_user_preferences", return_value={}),
         patch(f"{MODULE}.user_can_access_mcp_server", return_value=True),
@@ -223,3 +224,6 @@ def test_chat_mcp_tools_require_usable_credentials(
     assert [
         tool.tool_definition().name for tools in result.values() for tool in tools
     ] == (["action_1", "action_2"] if available else [])
+
+    get_server.assert_called_once()
+    resolve.assert_called_once()

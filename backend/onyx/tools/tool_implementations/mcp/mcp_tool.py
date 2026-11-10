@@ -200,6 +200,7 @@ class MCPTool(Tool):
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        """Check credentials, call the server, and report tool or authentication errors."""
         _start = time.monotonic()
         _server = self.mcp_server.name
         outcome = MCPToolCallStatus.ERROR

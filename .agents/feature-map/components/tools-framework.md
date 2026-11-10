@@ -112,7 +112,8 @@ captured tools in order and applies these gates:
      (`DEFAULT_PERSONA_ID`). The MCP branch then applies
      `user_can_access_mcp_server` in Default Chat only
      ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
-     credentials, and applies the same `can_authenticate_with_headers` gate
+     credentials once per server, including unavailable servers, and applies
+     the same `can_authenticate_with_headers` gate
      as execution before building `MCPTool` instances from the captured rows.
      Missing or rejected credentials exclude the server's tools; refreshable
      OAuth grants and request-supplied credentials remain usable
