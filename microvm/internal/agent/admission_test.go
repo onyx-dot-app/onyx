@@ -388,3 +388,51 @@ func TestDrainDuringAdmission(t *testing.T) {
 		t.Fatalf("launches %d vms %d", f.l.count(), len(f.m.List()))
 	}
 }
+
+// A draining node refuses a template build VM and keeps its UIDs.
+func TestDrainRefusesBuildVM(t *testing.T) {
+	f := newFixture(t, 1)
+	if _, err := f.m.SetDrain(true); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := f.m.BuildSlot("tpl-abc", 1024)
+	wantReason(t, err, pb.ErrorReason_NODE_DRAINING)
+	if d := f.m.Drain(); d.State != pb.DrainState_DRAIN_STATE_DRAINED {
+		t.Fatalf("refused build holds the drain: %+v", d)
+	}
+	f.m.SetNodeDrain([]string{"node.kubernetes.io/unschedulable=:NoSchedule"}, nil)
+	if _, err := f.m.SetDrain(false); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = f.m.BuildSlot("tpl-abc", 1024)
+	wantReason(t, err, pb.ErrorReason_NODE_DRAINING)
+	f.m.SetNodeDrain(nil, nil)
+	// The one UID of the pool was not taken by the refusals.
+	_, done, err := f.m.BuildSlot("tpl-abc", 1024)
+	if err != nil {
+		t.Fatalf("build after the drain: %v", err)
+	}
+	done(false)
+}
+
+// A build VM that started before the drain holds it in DRAINING until the
+// build is done.
+func TestDrainWaitsForBuildVM(t *testing.T) {
+	f := newFixture(t, 10)
+	_, done, err := f.m.BuildSlot("tpl-abc", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, err := f.m.SetDrain(true); err != nil || d.State != pb.DrainState_DRAIN_STATE_DRAINING {
+		t.Fatalf("drain with a build VM: %+v %v", d, err)
+	}
+	if n, err := f.m.NodeInfo(); err != nil || n.Drain.State != pb.DrainState_DRAIN_STATE_DRAINING {
+		t.Fatalf("node info: %+v %v", n.Drain, err)
+	}
+	_, _, err = f.m.BuildSlot("tpl-def", 1024)
+	wantReason(t, err, pb.ErrorReason_NODE_DRAINING)
+	done(false)
+	if d := f.m.Drain(); d.State != pb.DrainState_DRAIN_STATE_DRAINED {
+		t.Fatalf("build done: %+v", d)
+	}
+}

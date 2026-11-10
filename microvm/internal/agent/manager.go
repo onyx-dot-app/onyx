@@ -832,9 +832,9 @@ func (m *Manager) TemplatesInUse() map[string]bool {
 }
 
 // BuildSlot gives a template build VM with jailer ID id and memMiB of guest
-// memory a jailer UID. It admits the build on memory as Create does, and
-// the build counts as a starting VM until done. The process scan does not count the VM as untracked while
-// it runs. Call done when the VM is gone; done(true) puts the VM in doubt
+// memory a jailer UID. It refuses the build on a draining node and admits
+// it on memory as Create does, and the build counts as a starting VM until
+// done. The process scan does not count the VM as untracked while it runs. Call done when the VM is gone; done(true) puts the VM in doubt
 // with its UID, for a VM that may still run, and a later scan frees the UID
 // once it is gone.
 func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), error) {
@@ -845,6 +845,9 @@ func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), 
 	defer m.mu.Unlock()
 	if _, ok := m.building[id]; ok || m.vms[id] != nil || m.doubt[id] != nil {
 		return 0, nil, apierr.New(pb.ErrorReason_INTERNAL, "build VM %s already runs", id)
+	}
+	if err := m.drainErrLocked(); err != nil {
+		return 0, nil, err
 	}
 	if err := m.admitMemoryLocked(memMiB); err != nil {
 		return 0, nil, err

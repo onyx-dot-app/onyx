@@ -74,7 +74,8 @@ service HostAgent {
   rpc SwapManaged(SwapManagedRequest) returns (SwapManagedResponse);
 
   // Drain (ENG-4569). A draining node refuses every Create that would start
-  // a new VM (NODE_DRAINING). Running VMs keep running; automatic evacuation
+  // a new VM and every BuildTemplate that would boot a template VM
+  // (NODE_DRAINING). Running VMs keep running; automatic evacuation
   // by the api_server is planned (ENG-4580), so until then the operator stops
   // each VM and waits for DRAINED. The node drains while the manual drain flag is set
   // or while it has a drain taint (the agent's --watch-node-drain).
@@ -162,9 +163,9 @@ enum ErrorReason {
   // SwapManaged: the guest daemon could not mount the new drive. The old
   // drive stays mounted.
   MANAGED_MOUNT_FAILED = 27;
-  // Create: the node is draining (the manual drain flag or a node drain
-  // taint). Create the VM on another node. A repeat Create of a VM that
-  // already runs here still returns it.
+  // Create, BuildTemplate: the node is draining (the manual drain flag or a
+  // node drain taint). Create the VM on another node. A repeat Create of a
+  // VM that already runs here still returns it.
   NODE_DRAINING = 28;
 }
 

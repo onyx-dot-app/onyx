@@ -301,7 +301,7 @@ is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-
 
 #### Manifest and checks
 
-`manifest.json` (schema = layout version, 3 for new builds):
+`manifest.json` (schema = layout version, 4 for new builds):
 
 - `key`: `image_ref`, `image_digest`, `rootfs_sha256`, `rootfs_manifest_sha256`, `guest_kernel` (release),
   `guest_kernel_sha256`, `firecracker_version`, `cpu_model`, `host_kernel`, `ca_fingerprint`,
@@ -382,7 +382,8 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
 
 - A draining node refuses every Create that would start a new VM with `NODE_DRAINING`
   (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
-  returns it.
+  returns it. It also refuses a template build that must boot a template VM (`BuildTemplate` and the
+  start-up build) with `NODE_DRAINING`; a template that is already on the node is still returned.
 - Running VMs keep running. Automatic evacuation by the api_server is planned (ENG-4580), not built.
   Until then, save the data you need, `Stop` each VM from `List`, and wait for `NodeInfo.drain.state`
   `DRAINED` before you take the node down.

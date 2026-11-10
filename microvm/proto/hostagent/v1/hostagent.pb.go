@@ -101,9 +101,9 @@ const (
 	// SwapManaged: the guest daemon could not mount the new drive. The old
 	// drive stays mounted.
 	ErrorReason_MANAGED_MOUNT_FAILED ErrorReason = 27
-	// Create: the node is draining (the manual drain flag or a node drain
-	// taint). Create the VM on another node. A repeat Create of a VM that
-	// already runs here still returns it.
+	// Create, BuildTemplate: the node is draining (the manual drain flag or a
+	// node drain taint). Create the VM on another node. A repeat Create of a
+	// VM that already runs here still returns it.
 	ErrorReason_NODE_DRAINING ErrorReason = 28
 )
 
