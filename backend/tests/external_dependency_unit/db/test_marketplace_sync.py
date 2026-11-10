@@ -291,7 +291,8 @@ def test_equal_content_recovery(
     skill, healthy = rows(session)
     old_version = skill.current_version_id
     healthy_version = healthy.current_version_id
-    old_file = skill.bundle_file_id
+    assert skill is not None and skill.current_version is not None
+    old_file = skill.current_version.bundle_file_id
     assert old_file is not None
     store = get_default_file_store()
     if damage == "missing":
@@ -326,6 +327,7 @@ def test_equal_content_recovery(
             assert session.scalar(select(1)) == 1
     elif damage == "pruned":
         assert skill.current_version is not None
+        assert skill is not None and skill.current_version is not None
         skill.current_version.bundle_file_id = None
         session.commit()
     else:
@@ -354,11 +356,15 @@ def test_equal_content_recovery(
     skill, healthy = rows(session)
     assert skill.current_version_id != old_version
     assert healthy.current_version_id == healthy_version
-    assert skill.bundle_file_id != old_file
-    assert skill.bundle_file_id not in result.cleanup_file_ids
+    assert skill is not None and skill.current_version is not None
+    assert skill.current_version.bundle_file_id != old_file
+    assert skill is not None and skill.current_version is not None
+    assert skill.current_version.bundle_file_id not in result.cleanup_file_ids
     assert skill.current_version is not None
-    assert skill.bundle_file_id is not None
-    with store.read_file(skill.bundle_file_id) as source:
+    assert skill is not None and skill.current_version is not None
+    assert skill.current_version.bundle_file_id is not None
+    assert skill is not None and skill.current_version is not None
+    with store.read_file(skill.current_version.bundle_file_id) as source:
         assert source.read().startswith(b"PK")
     assert len(list(session.scalars(select(SkillVersion)))) == 3
     assert marketplace.last_synced_revision == github.revision
@@ -588,7 +594,11 @@ def test_commit_acknowledgement_failure_keeps_referenced_uploads(
         cleanup.assert_not_called()
     assert len(rows(session)) == 2
     assert marketplace.last_synced_revision == github.revision
-    assert stored_bundles(session) == {row.bundle_file_id for row in rows(session)}
+    assert stored_bundles(session) == {
+        row.current_version.bundle_file_id
+        for row in rows(session)
+        if row.current_version is not None
+    }
     assert sync.sync_marketplace(marketplace.id, tenant) is None
 
 
@@ -654,8 +664,10 @@ def test_unrepairable_bundle_does_not_repeat_archive_download(
 ) -> None:
     run(marketplace, tenant)
     skill = rows(session)[0]
-    assert skill.bundle_file_id is not None
-    get_default_file_store().delete_file(skill.bundle_file_id)
+    assert skill is not None and skill.current_version is not None
+    assert skill.current_version.bundle_file_id is not None
+    assert skill is not None and skill.current_version is not None
+    get_default_file_store().delete_file(skill.current_version.bundle_file_id)
     github.archive = _archive(
         {CLAUDE: _catalog(skills=["./skills"])}
         | {"skills/alpha/SKILL.md": b"invalid", "skills/beta/SKILL.md": _md("beta")}

@@ -229,8 +229,6 @@ def _make_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> 
         name=built_in_skill_id,
         description="test built-in",
         built_in_skill_id=built_in_skill_id,
-        bundle_file_id=None,
-        bundle_sha256=None,
         public_permission=SkillSharePermission.VIEWER,
     )
     db_session.add(skill)
@@ -257,7 +255,10 @@ def _seed_custom_skill(
 
     from onyx.configs.constants import FileOrigin
     from onyx.db.models import Skill__UserGroup
+    from onyx.db.resource_version import write_resource_version
+    from onyx.db.skill_version import SkillVersionAdapter
     from onyx.file_store.file_store import get_default_file_store
+    from onyx.utils.bundle import compute_bundle_metadata
 
     bundle_bytes = _bundle(name, body)
     file_store = get_default_file_store()
@@ -268,8 +269,10 @@ def _seed_custom_skill(
         file_origin=FileOrigin.SKILL_BUNDLE,
         file_type="application/zip",
     )
+    initial_version_id = uuid4()
     skill = Skill(
         id=uuid4(),
+        current_version_id=initial_version_id,
         name=name,
         description=f"Seeded skill {name}",
         bundle_file_id=bundle_file_id,
@@ -278,6 +281,15 @@ def _seed_custom_skill(
     )
     db_session.add(skill)
     db_session.flush()
+    write_resource_version(
+        SkillVersionAdapter(skill, initial_version_id=initial_version_id),
+        bundle_file_id=bundle_file_id,
+        bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
+        is_valid=True,
+        metadata=compute_bundle_metadata(bundle_bytes),
+        created_by_user_id=None,
+        db_session=db_session,
+    )
     if group is not None:
         db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
         db_session.flush()
