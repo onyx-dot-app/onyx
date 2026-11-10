@@ -7623,7 +7623,7 @@
             "targetUriParseFailed": "Die Ziel-URI konnte nicht ausgewertet werden — es werden die ursprünglichen Werte verwendet."
           },
           "validation": {
-            "targetUriInvalid": "Die Ziel-URI muss eine gültige URL mit dem Abfrageparameter api-version und entweder einem Bereitstellungsnamen im Pfad oder /openai/responses sein",
+            "targetUriInvalid": "Die Ziel-URI muss eine gültige URL sein: eine /openai/v1/-URL oder eine URL mit dem Abfrageparameter api-version und entweder einem Bereitstellungsnamen im Pfad oder /openai/responses",
             "targetUriRequired": "Die Ziel-URI ist erforderlich"
           }
         },
