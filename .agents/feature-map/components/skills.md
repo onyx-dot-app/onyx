@@ -89,7 +89,8 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
        lock_sandbox_skills_hashes        SELECT ... FOR UPDATE on Sandbox rows
        build_user_skills_payload         per sandbox user
          list_runtime_skills_for_user    db/skill.py: the one runtime gate
-         _assemble_fileset               built-ins from disk, custom from FileStore
+         _assemble_fileset               built-ins from disk, custom from FileStore;
+                                         resolves ${CLAUDE_SKILL_DIR} in each SKILL.md
          build_connectable_apps_list     guidance for unconnected apps
        compute_skill_runtime_hash        once per sandbox; skip sandboxes whose hash matches
        push_to_sandboxes(SKILLS_MOUNT_PATH)
@@ -251,6 +252,20 @@ The library preview of an external-app skill calls the same renderer
     unpacked size, file count and SKILL.md columns stay NULL until an
     application backfill.
     Do not use these snapshots as runtime content during this rollout.
+16. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
+    `skills/push.py:_resolve_skill_dirs` replaces each `${CLAUDE_SKILL_DIR}` in
+    a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
+    sent bytes change. The stored bundle, its SHA-256 and other files keep the
+    placeholder. Before substitution, the push checks the predicted instruction
+    size against both the configured file limit and the receiver file limit.
+    Expansion must also fit the receiver total, including other Skills. An
+    oversized expansion skips that whole Skill, logs a warning and continues.
+    Files without placeholders keep their previous delivery behavior.
+    The sent bytes feed the runtime hash. OpenCode adds the base
+    folder line and the relative-path rule itself, so the push adds neither.
+    `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
+    `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
+    still does this.
 
 ---
 
