@@ -226,7 +226,7 @@ func TestSavesKVM(t *testing.T) {
 	}
 	e.Template = getenv("KVM_SAVES_TEMPLATE", "kvmtest-saves-1")
 	cmd := newCommand(t, e)
-	buildTemplateWith(t, e, cmd, getenv("KVM_PT_BOOT_ARGS", ptBootArgs), waitDaemon)
+	buildTemplateWith(t, &e, cmd, getenv("KVM_PT_BOOT_ARGS", ptBootArgs), waitDaemon)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Minute)
 	defer cancel()
 	samples := 3
