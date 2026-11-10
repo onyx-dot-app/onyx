@@ -175,9 +175,9 @@ Folders do not count. The ZIP limit applies to both the uploaded ZIP and the ZIP
 Standalone files use the per-file limit before compression.
 Each Skill from a GitHub repository must also pass these limits.
 Single-bundle uploads over a limit return HTTP 413 with `limit` and `limit_value`.
-Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `not_imported`,
-with a `reason` for each refusal.
-Repository-wide GitHub size checks can reject the whole request with HTTP 413 before individual Skills are inspected.
+Batch uploads can return HTTP 200 with rejected Skills in `not_imported`, with a `reason` for each refusal.
+Marketplace preview reports blocked Skills and unsupported plugins separately.
+A repository-wide limit can fail the preview or sync before Onyx inspects individual Skills.
 Previously saved Skills keep the existing per-file and expanded-total limits.
 Lowering the upload ZIP-size or file-count limit does not change stored-bundle validation.
 Stored ZIP reads default to `SKILL_BUNDLE_TOTAL_MAX_BYTES` (100 MiB unless configured).
