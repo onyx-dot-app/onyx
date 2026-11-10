@@ -7629,7 +7629,7 @@
             "targetUriParseFailed": "ターゲット URI を解析できませんでした。元の値を使用します。"
           },
           "validation": {
-            "targetUriInvalid": "ターゲット URI は、api-version クエリパラメータを含み、パスにデプロイ名または /openai/responses を含む有効な URL である必要があります",
+            "targetUriInvalid": "ターゲット URI は有効な URL である必要があります: /openai/v1/ の URL、または api-version クエリパラメータを含み、パスにデプロイ名または /openai/responses を含む URL",
             "targetUriRequired": "ターゲット URI は必須です"
           }
         },
