@@ -44,6 +44,7 @@ class SkillMarketplaceResponse(BaseModel):
     personal: bool
     folder: str | None
     follows_access: bool
+    can_share: bool
 
 
 class SkillResponse(BaseModel):

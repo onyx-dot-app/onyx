@@ -9,7 +9,6 @@
 import type {
   CustomSkill,
   GitHubSkillsImportResult,
-  GitHubSkillsPreview,
   Skill,
   SkillBundleContents,
   SkillEditableDetail,
@@ -46,36 +45,6 @@ async function handle<T>(res: Response): Promise<T> {
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
-
-export async function previewGitHubSkills(
-  repository: string
-): Promise<GitHubSkillsPreview> {
-  const res = await fetch("/api/skills/github/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ repository }),
-  });
-  return handle<GitHubSkillsPreview>(res);
-}
-
-export async function importGitHubSkills(
-  preview: Pick<GitHubSkillsPreview, "repository" | "revision" | "subpath">,
-  paths: string[],
-  sharing?: SkillShareUpdatePayload
-): Promise<GitHubSkillsImportResult> {
-  const res = await fetch("/api/skills/github/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      repository: preview.repository,
-      revision: preview.revision,
-      subpath: preview.subpath,
-      paths,
-      sharing,
-    }),
-  });
-  return handle<GitHubSkillsImportResult>(res);
-}
 
 export async function uploadSkillBundles(
   bundles: File[],

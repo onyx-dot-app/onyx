@@ -20,9 +20,8 @@
   after the user connects that app. Until then the user cannot turn it on, and
   the library says why.
 - **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
-  or a single SKILL.md, or imports Skills once from GitHub.
-  Import uses the user's GitHub connection in Craft. Marketplace dialogs exist,
-  but the Skills pages do not mount them yet. Owners and editors of uploaded
+  or a single SKILL.md, or syncs a marketplace from GitHub after a catalog preview.
+  Sync uses the user's GitHub connection in Craft. Owners and editors of uploaded
   skills can share with users or groups as viewer or editor, subject to group scope.
   Owners can transfer ownership; global `MANAGE_SKILLS` holders can transfer skills
   with vacant ownership. Synced skills keep their source ownership.
@@ -93,11 +92,13 @@
   and confirms reset for global managers of overridden company skills. Reset replaces
   the draft with saved defaults; failures keep the draft. Personal synced owners
   control audience, while other managers can change installation policy only.
-  Synced ownership transfer is hidden. `canShareSkill` checks retirement and
-  `user_permission`. Non-owner editors of personal synced Skills also need
-  global `MANAGE_SKILLS` to see sharing. Other Skills allow owners and editors.
-  Mutation endpoints recheck authority; the response has no `can_share` field.
-  Other recipients use a read-only preview.
+  Synced ownership transfer is hidden. Non-owner personal editors have no sharing action.
+  `marketplace.can_share` supplies synced sharing eligibility to every row,
+  editor, preview and bulk action. The server reuses `within_scope` with preloaded
+  managed groups for company Skills; all current groups must be managed and
+  the Skill must be private unless the actor is global. Explicit Editor grants
+  alone do not allow company sharing. The flag respects token caps and retirement;
+  writes still recheck authority. Other editors use a read-only preview.
   Individual grants on ownerless Skills require global management authority;
   scoped managers keep group controls in single and bulk sharing dialogs.
 
@@ -740,8 +741,8 @@ still propagate unexpected storage errors.
     unsupported entries and offers a sample for a missing catalog. Connection
     guidance uses the existing Apps flow and cache. The sync dialog requires an
     explicit ref and invalidates preview on edits and close. Company creation
-    requires global authority and a host-supplied company contract. The host
-    owns the access draft and saves source and defaults in one creation request.
+    requires global authority. The dialog owns a fresh access draft and saves
+    source and defaults in one creation request.
     Revoked company authority keeps the checked scope visible so the user can return to personal creation.
     Acceptance means sync requested. Shared summaries separate pending work
     from the last applied revision. Hosts can override or hide skill counts
@@ -763,10 +764,10 @@ still propagate unexpected storage errors.
     resets its creation session. The list owns its SWR read and accepts host kind
     filters and count labels. Hiding the list clears its open detail. List changes
     refresh host Skills once, including after removal. Pending work polls every three seconds while
-    visible; polling never requests source sync. Skills pages still open
-    `ImportSkillsFromGitHubModal`; marketplace page integration remains pending.
-    Pending and failed sources stay visible in the shared list with zero Skills.
-    Access callbacks do not close detail; the host must arrange that handoff.
+    visible; polling never requests source sync. Both Skills pages mount the list
+    before the library controls. Add offers Upload a skill, Create a skill, and
+    Sync from GitHub. Pending and failed sources stay visible with zero Skills.
+    Opening company defaults closes source detail first.
 
 
 ---

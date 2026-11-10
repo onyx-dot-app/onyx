@@ -1,16 +1,8 @@
 import type { CustomSkill } from "@/lib/skills/types";
 
-export function canShareSkill({
-  skill,
-  canManageCompanySkills,
-}: {
-  skill: CustomSkill;
-  canManageCompanySkills: boolean;
-}): boolean {
+export function canShareSkill({ skill }: { skill: CustomSkill }): boolean {
   if (skill.retired_at) return false;
-  if (skill.marketplace?.personal && skill.user_permission !== "OWNER") {
-    return skill.user_permission === "EDITOR" && canManageCompanySkills;
-  }
+  if (skill.marketplace) return skill.marketplace.can_share;
   return (
     skill.user_permission === "OWNER" || skill.user_permission === "EDITOR"
   );

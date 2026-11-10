@@ -140,7 +140,14 @@ export default function MarketplaceList({
           open
           marketplaceId={selected}
           onClose={() => setSelected(null)}
-          onConfigureAccess={onConfigureAccess}
+          onConfigureAccess={
+            onConfigureAccess
+              ? (row) => {
+                  setSelected(null);
+                  onConfigureAccess(row);
+                }
+              : undefined
+          }
           getCountLabel={getCountLabel}
         />
       )}

@@ -7,15 +7,17 @@ import { Permission } from "@/lib/types";
 import type { CustomSkill } from "@/lib/skills/types";
 
 let mockPermissions: string[] = [];
+let mockAdminCapabilities: string[] = [Permission.MANAGE_SKILLS];
 beforeEach(() => {
   mockPermissions = [];
+  mockAdminCapabilities = [Permission.MANAGE_SKILLS];
 });
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
     isAdmin: false,
     permissions: mockPermissions,
-    adminCapabilities: [Permission.MANAGE_SKILLS],
+    adminCapabilities: mockAdminCapabilities,
   }),
 }));
 
@@ -483,6 +485,7 @@ it.each([false, true])(
         personal: false,
         folder: "skills/reports",
         follows_access: true,
+        can_share: true,
       },
     });
     render(
@@ -514,6 +517,51 @@ it("keeps personal synced content visible but hides sharing from a non-owner edi
       personal: true,
       folder: "skills/reports",
       follows_access: false,
+      can_share: false,
+    },
+  });
+  render(<SkillCard item={item} onEdit={jest.fn()} onShare={jest.fn()} />);
+  expect(screen.getByRole("button", { name: "View content" })).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "Edit sharing" })
+  ).not.toBeInTheDocument();
+});
+
+it.each([null, "EDITOR"] as const)(
+  "hides company sharing from an ordinary editor (public=%s)",
+  (public_permission) => {
+    mockAdminCapabilities = [];
+    const item = custom({
+      user_permission: "EDITOR",
+      public_permission,
+      marketplace: {
+        id: "source",
+        name: "Company tools",
+        personal: false,
+        folder: "skills/reports",
+        follows_access: true,
+        can_share: false,
+      },
+    });
+    render(<SkillCard item={item} onEdit={jest.fn()} onShare={jest.fn()} />);
+    expect(screen.getByRole("button", { name: "View content" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Edit sharing" })
+    ).not.toBeInTheDocument();
+  }
+);
+
+it("respects server sharing eligibility for a scoped company editor", () => {
+  mockAdminCapabilities = [Permission.MANAGE_SKILLS];
+  const item = custom({
+    user_permission: "EDITOR",
+    marketplace: {
+      id: "source",
+      name: "Private company source",
+      personal: false,
+      folder: "skills/reports",
+      follows_access: true,
+      can_share: false,
     },
   });
   render(<SkillCard item={item} onEdit={jest.fn()} onShare={jest.fn()} />);
