@@ -570,7 +570,12 @@ def test_remove_deletes_skills_and_bundles_after_commit(
         db_session.scalars(select(Skill).where(Skill.marketplace_id == identifier))
     )
     skill_ids = [skill.id for skill in current]
-    bundle_ids = [skill.bundle_file_id for skill in current]
+    bundle_ids = [
+        skill.current_version.bundle_file_id
+        for skill in current
+        if skill.current_version is not None
+    ]
+    assert len(bundle_ids) == len(current)
     db_session.commit()
 
     def published(affected: set[UUID], _session: Session) -> None:

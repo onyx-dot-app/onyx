@@ -49,6 +49,7 @@ from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     fetch_default_group,
 )
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 
 def test_every_uncascaded_group_link_is_deleted_by_hand() -> None:
@@ -289,17 +290,12 @@ def test_what_a_group_shared_becomes_public(db_session: Session) -> None:
 
 
 def _make_skill(db_session: Session, author: User) -> Skill:
-    skill = Skill(
-        id=uuid4(),
+    return make_skill(
+        db_session,
         name=f"downgrade-{uuid4().hex[:8]}",
         description="",
-        bundle_file_id=f"downgrade-{uuid4().hex[:8]}",
-        bundle_sha256="0" * 64,
-        public_permission=None,
         author_user_id=author.id,
     )
-    db_session.add(skill)
-    return skill
 
 
 @pytest.mark.usefixtures("tenant_context")
