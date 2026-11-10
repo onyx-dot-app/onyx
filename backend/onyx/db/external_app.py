@@ -215,6 +215,8 @@ def get_skill_external_app_dependencies(
     """Return dependency state for all or selected associated skills."""
     stmt = (
         select(ExternalApp__Skill.skill_id, ExternalApp, ExternalAppUserCredential)
+        .join(Skill, Skill.id == ExternalApp__Skill.skill_id)
+        .where(Skill.retired_at.is_(None))
         .join(
             ExternalApp,
             ExternalApp.id == ExternalApp__Skill.external_app_id,
@@ -422,10 +424,14 @@ def associate_custom_skill_with_external_app__no_commit(
         )
 
     skill = db_session.scalar(
-        select(Skill).where(Skill.id == skill_id).with_for_update(of=Skill)
+        select(Skill)
+        .where(Skill.id == skill_id)
+        .with_for_update(of=Skill)
+        .execution_options(populate_existing=True)
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found.")
+    assert_skill_mutable(skill)
     db_session.refresh(skill, ["current_version"])
     if not skill.is_custom:
         raise OnyxError(
@@ -457,6 +463,7 @@ def associate_custom_skill_with_external_app__no_commit(
         .where(
             ExternalApp__Skill.external_app_id == app.id,
             Skill.name == skill.name,
+            Skill.retired_at.is_(None),
             Skill.id != skill.id,
         )
         .limit(1)
@@ -467,7 +474,6 @@ def associate_custom_skill_with_external_app__no_commit(
             (f"App '{app.name}' already has an associated skill named '{skill.name}'."),
         )
 
-    assert_skill_mutable(skill)
     if not is_company_marketplace_skill(skill, db_session):
         skill.public_permission = SkillSharePermission.VIEWER
     db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))

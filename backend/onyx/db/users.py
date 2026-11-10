@@ -990,6 +990,7 @@ def delete_user_from_db__no_commit(
                 Skill.author_user_id == user_to_delete.id,
                 Skill.built_in_skill_id.is_(None),
                 Skill.public_permission.is_(None),
+                Skill.marketplace_id.is_(None),
             )
             .limit(1)
         )

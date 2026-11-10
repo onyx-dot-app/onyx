@@ -14,7 +14,9 @@ export class SkillUploadDialog {
   async selectFiles(
     files: Parameters<Locator["setInputFiles"]>[0]
   ): Promise<void> {
-    await this.dialog.locator('input[type="file"]').setInputFiles(files);
+    await this.dialog
+      .getByLabel("file upload", { exact: true })
+      .setInputFiles(files);
   }
 
   async expectMessage(text: string | RegExp): Promise<void> {

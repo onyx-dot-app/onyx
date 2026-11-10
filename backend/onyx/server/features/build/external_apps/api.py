@@ -120,7 +120,11 @@ def _to_admin_response(
                 is_valid=skill.current_is_valid,
             )
             for skill in sorted(
-                (skill for skill in app.associated_skills if skill.is_custom),
+                (
+                    skill
+                    for skill in app.associated_skills
+                    if skill.is_custom and skill.retired_at is None
+                ),
                 key=lambda skill: (skill.name, str(skill.id)),
             )
         ],
