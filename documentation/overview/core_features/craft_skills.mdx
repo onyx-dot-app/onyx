@@ -260,6 +260,17 @@ or adjust sharing, then retry.
 A marketplace lists each blocked entry with the failed limit and affected user count.
 Other sync errors keep their original explanation. A later sync retries blocked entries.
 
+## App Skills that stay off
+
+An App connection can succeed while some associated Skills exceed your write limit. The App remains connected.
+Its details list the Skills that stayed off and your current usage.
+
+Make space, then use **Review skills** to turn on Skills with an available switch.
+If other blocked Skills need a reconnect, both actions remain available.
+For a Required or built-in Skill on your own connection, select **Disconnect to reconnect** below the warning.
+Confirm **Disconnect**, then connect the App again. Disconnecting stops tools that use that connection.
+The warning disappears when the Skills fit. A setup card links to **Manage skills** after connection.
+
 ## Skill usage API
 
 `GET /api/skills/limit/me` returns measured usage and the totals used to check write limits.

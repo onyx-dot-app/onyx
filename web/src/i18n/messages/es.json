@@ -12210,6 +12210,10 @@
         "connectApp": "Conecta la app “{app}” desde la página Apps para usar esta habilidad.",
         "invalid": "Esta habilidad no es válida. Elimínala y crea una habilidad nueva.",
         "unavailable": "La habilidad no está disponible ahora mismo. Haz clic para ver los detalles."
+      },
+      "limit": {
+        "retry": "Desactivada: tus habilidades superarían el {limit, select, files {límite de archivos} other {límite de tamaño}}. Libera espacio y luego actívala.",
+        "reconnect": "Desactivada: tus habilidades superarían el {limit, select, files {límite de archivos} other {límite de tamaño}}. Libera espacio y luego vuelve a conectar {app}."
       }
     }
   },
@@ -17632,6 +17636,14 @@
         "loadError": "No se pudo cargar el uso de habilidades",
         "retry": "Reintentar",
         "loading": "Comprobando el uso de habilidades…"
+      },
+      "app": {
+        "title": "{count, plural, one {# habilidad de {app} está desactivada} other {# habilidades de {app} están desactivadas}}",
+        "description": "{app} está conectada, pero estas habilidades harían que tus habilidades superaran el {limit, select, files {límite de archivos} other {límite de tamaño}}. {retry, select, toggle {Libera espacio y luego actívalas.} other {Libera espacio y luego vuelve a conectar {app}.}}",
+        "usage": "Tus habilidades usan {size} de {maxSize} y {files, plural, one {# archivo} other {# archivos}} de {maxFiles, number}.",
+        "usageEstimated": "Tus habilidades usan unos {size} estimados de {maxSize} y {files, plural, one {# archivo} other {# archivos}} de {maxFiles, number}. La estimación cuenta las habilidades aún no medidas con el tamaño máximo permitido.",
+        "manage": "Gestionar habilidades",
+        "disconnectToReconnect": "Desconectar para volver a conectar"
       }
     }
   },

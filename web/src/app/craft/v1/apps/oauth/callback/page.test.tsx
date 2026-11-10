@@ -32,6 +32,7 @@ afterEach(() => jest.restoreAllMocks());
 test("member OAuth routes to verified completion before sending any popup result", async () => {
   jest.mocked(completeExternalAppOAuthCallback).mockResolvedValue({
     success: true,
+    skill_limit_blocked_skill_ids: [],
     external_app_id: 7,
     return_path:
       "/app/plugins/oauth/complete?pluginKind=external-app&pluginId=7&attempt=nonce",
@@ -47,9 +48,11 @@ test("member OAuth routes to verified completion before sending any popup result
 });
 
 test("legacy SetupCard OAuth retains its original popup message and close", async () => {
-  jest
-    .mocked(completeExternalAppOAuthCallback)
-    .mockResolvedValue({ success: true, external_app_id: 7 });
+  jest.mocked(completeExternalAppOAuthCallback).mockResolvedValue({
+    success: true,
+    skill_limit_blocked_skill_ids: [],
+    external_app_id: 7,
+  });
   render(<ExternalAppsOAuthCallbackPage />);
   await waitFor(() =>
     expect(window.opener.postMessage).toHaveBeenCalledWith(
@@ -64,6 +67,7 @@ test("legacy SetupCard OAuth retains its original popup message and close", asyn
 test("rejects an external return URL without signalling success", async () => {
   jest.mocked(completeExternalAppOAuthCallback).mockResolvedValue({
     success: true,
+    skill_limit_blocked_skill_ids: [],
     external_app_id: 7,
     return_path: "https://example.com/app/plugins/oauth/complete",
   });

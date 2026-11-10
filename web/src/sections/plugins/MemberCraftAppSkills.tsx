@@ -83,54 +83,69 @@ export default function MemberCraftAppSkills({
 
       {visible.length ? (
         <ul className="m-0 list-none divide-y divide-border-01 rounded-12 border border-border-01 p-0">
-          {visible.map((skill) => (
-            <li key={`${skill.source}:${skill.id}`} className="px-4 py-3">
-              <ContentAction
-                font="main-ui-action"
-                padding={0}
-                title={skill.name}
-                titleMaxLines={1}
-                description={skill.description}
-                descriptionMaxLines={2}
-                rightChildren={
-                  <Section
-                    flexDirection="row"
-                    justifyContent="start"
-                    alignItems="center"
-                    gap={3}
-                    width="auto"
-                    height="auto"
-                  >
-                    <Button
-                      prominence="secondary"
-                      size="sm"
-                      disabled={disabled}
-                      onClick={() => onPreview(skill)}
+          {visible.map((skill) => {
+            const limitStatus =
+              skill.skill_limit_block && skill.external_app
+                ? cards(skill.can_toggle ? "limit.retry" : "limit.reconnect", {
+                    limit: skill.skill_limit_block,
+                    app: skill.external_app.name,
+                  })
+                : null;
+            return (
+              <li key={`${skill.source}:${skill.id}`} className="px-4 py-3">
+                <ContentAction
+                  font="main-ui-action"
+                  padding={0}
+                  title={skill.name}
+                  titleMaxLines={1}
+                  description={limitStatus ?? skill.description}
+                  descriptionMaxLines={limitStatus ? undefined : 2}
+                  rightChildren={
+                    <Section
+                      flexDirection="row"
+                      justifyContent="start"
+                      alignItems="center"
+                      gap={3}
+                      width="auto"
+                      height="auto"
                     >
-                      {t("preview")}
-                    </Button>
-                    <Tooltip tooltip={skill.unavailable_reason ?? undefined}>
-                      <InputSwitch
-                        checked={changes[skill.id] ?? skill.enabled}
-                        onCheckedChange={(enabled) => onChange(skill, enabled)}
-                        disabled={
-                          disabled ||
-                          !skill.can_toggle ||
-                          skill.is_valid === false
+                      <Button
+                        prominence="secondary"
+                        size="sm"
+                        disabled={disabled}
+                        onClick={() => onPreview(skill)}
+                      >
+                        {t("preview")}
+                      </Button>
+                      <Tooltip
+                        tooltip={
+                          limitStatus ?? skill.unavailable_reason ?? undefined
                         }
-                        aria-label={cards(
-                          (changes[skill.id] ?? skill.enabled)
-                            ? "toggle.disable.ariaLabel"
-                            : "toggle.enable.ariaLabel",
-                          { name: skill.name }
-                        )}
-                      />
-                    </Tooltip>
-                  </Section>
-                }
-              />
-            </li>
-          ))}
+                      >
+                        <InputSwitch
+                          checked={changes[skill.id] ?? skill.enabled}
+                          onCheckedChange={(enabled) =>
+                            onChange(skill, enabled)
+                          }
+                          disabled={
+                            disabled ||
+                            !skill.can_toggle ||
+                            skill.is_valid === false
+                          }
+                          aria-label={cards(
+                            (changes[skill.id] ?? skill.enabled)
+                              ? "toggle.disable.ariaLabel"
+                              : "toggle.enable.ariaLabel",
+                            { name: skill.name }
+                          )}
+                        />
+                      </Tooltip>
+                    </Section>
+                  }
+                />
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <Text font="secondary-body" color="text-03">

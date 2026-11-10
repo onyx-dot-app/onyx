@@ -596,7 +596,6 @@
         "src/sections/plugins/MemberMCPPreferences.tsx",
         "src/sections/plugins/MemberMCPToolsList.tsx",
         "src/sections/plugins/MemberOpenAPIPreferences.tsx",
-        "src/sections/plugins/MemberPluginDetailModal.tsx",
         "src/sections/plugins/MemberPluginsPage.tsx",
         "src/sections/plugins/OpenAPIEndpointList.tsx",
         "src/sections/plugins/OpenAPIPluginDetailPage.tsx",

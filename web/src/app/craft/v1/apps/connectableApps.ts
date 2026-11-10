@@ -96,7 +96,9 @@ export function externalAppToConnectable(
     credentialKeys: app.credential_keys,
     credentialValues: app.credential_values,
     startOAuth: async () => (await startExternalAppOAuth(app.id)).authorize_url,
-    saveCredentials: (values) => upsertUserCredentials(app.id, values),
+    saveCredentials: async (values) => {
+      await upsertUserCredentials(app.id, values);
+    },
     disconnect: () => disconnectUserFromApp(app.id),
   };
 }

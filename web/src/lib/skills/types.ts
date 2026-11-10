@@ -4,7 +4,7 @@
  */
 
 import * as yup from "yup";
-import type { SkillLimitViolation } from "@/lib/skills/limits";
+import type { SkillLimitKind, SkillLimitViolation } from "@/lib/skills/limits";
 
 export type SkillInstallationPolicy =
   | "AVAILABLE"
@@ -99,6 +99,8 @@ export interface Skill {
   marketplace: SkillMarketplace | null;
   retired_at: string | null;
   current_version_number: number | null;
+  /** The limit that kept this app Skill off at connection; it is then disabled. */
+  skill_limit_block?: SkillLimitKind | null;
 }
 
 export type BuiltinSkill = Skill & {

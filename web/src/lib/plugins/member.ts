@@ -332,6 +332,9 @@ export async function refreshMemberPluginCaches(
         key === SWR_KEYS.tools ||
         key === SWR_KEYS.oauthTokenStatus ||
         key === SWR_KEYS.agents ||
+        // An app connection can turn its Skills on or leave them off.
+        key === SWR_KEYS.userSkills ||
+        key === SWR_KEYS.skillLimitMe ||
         /^\/api\/persona\/\d+(?:\?|$)/.test(key))
   );
 }

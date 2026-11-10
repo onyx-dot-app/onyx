@@ -83,8 +83,19 @@ export function useSkillPresentation(
   const isInactive = !item.enabled || isDependencyUnavailable;
   const isInvalid = item.source === "custom" && item.skill.is_valid === false;
   const isBuiltinUnavailable = item.source === "builtin" && !item.is_available;
-  let dependencyStatus: string | null = null;
-  if (dependency) {
+  const limitBlock = item.skill_limit_block ?? null;
+  // Blocks exist only for app Skills: a toggle retries, others need a reconnect.
+  const limitStatus =
+    limitBlock && dependency
+      ? item.can_toggle
+        ? t("skill.limit.retry", { limit: limitBlock })
+        : t("skill.limit.reconnect", {
+            limit: limitBlock,
+            app: dependency.name,
+          })
+      : null;
+  let dependencyStatus: string | null = limitStatus;
+  if (dependency && !limitStatus) {
     if (!dependency.ready) {
       dependencyStatus = dependency.enabled
         ? item.enabled
@@ -102,6 +113,8 @@ export function useSkillPresentation(
   let tooltip: string | undefined;
   if (isInvalid) {
     tooltip = t("skill.tooltips.invalid");
+  } else if (limitStatus) {
+    tooltip = limitStatus;
   } else if (isBuiltinUnavailable) {
     tooltip = t("skill.tooltips.unavailable");
   } else if (isDependencyUnavailable && dependency) {

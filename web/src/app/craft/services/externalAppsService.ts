@@ -139,7 +139,12 @@ export async function startExternalAppOAuth(
   return res.json();
 }
 
-interface OAuthCallbackResponse {
+/** App Skills a successful connection left off for the Skill limit. */
+export interface ExternalAppConnectResponse {
+  skill_limit_blocked_skill_ids: string[];
+}
+
+interface OAuthCallbackResponse extends ExternalAppConnectResponse {
   success: boolean;
   external_app_id: number;
   return_path?: string | null;
@@ -187,7 +192,7 @@ export async function postConnectAppDecision(
 export async function upsertUserCredentials(
   externalAppId: number,
   userCredentials: Record<string, unknown>
-): Promise<void> {
+): Promise<ExternalAppConnectResponse> {
   const res = await fetch(
     `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
     {
@@ -199,6 +204,7 @@ export async function upsertUserCredentials(
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to save credentials"));
   }
+  return res.json();
 }
 
 export async function disconnectUserFromApp(

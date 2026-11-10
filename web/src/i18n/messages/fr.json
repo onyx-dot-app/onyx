@@ -12210,6 +12210,10 @@
         "connectApp": "Connectez l'application “{app}” depuis la page Applications pour utiliser cette compétence.",
         "invalid": "Cette compétence n'est pas valide. Supprimez-la et créez une nouvelle compétence.",
         "unavailable": "La compétence est actuellement indisponible. Cliquez pour voir les détails."
+      },
+      "limit": {
+        "retry": "Désactivée : vos compétences dépasseraient {limit, select, files {la limite de fichiers} other {la limite de taille}}. Libérez de la place, puis activez-la.",
+        "reconnect": "Désactivée : vos compétences dépasseraient {limit, select, files {la limite de fichiers} other {la limite de taille}}. Libérez de la place, puis reconnectez {app}."
       }
     }
   },
@@ -17632,6 +17636,14 @@
         "loadError": "Impossible de charger l’utilisation des compétences",
         "retry": "Réessayer",
         "loading": "Vérification de l’utilisation des compétences…"
+      },
+      "app": {
+        "title": "{count, plural, one {# compétence de {app} est désactivée} other {# compétences de {app} sont désactivées}}",
+        "description": "{app} est connectée, mais ces compétences feraient dépasser à vos compétences {limit, select, files {la limite de fichiers} other {la limite de taille}}. {retry, select, toggle {Libérez de la place, puis activez-les.} other {Libérez de la place, puis reconnectez {app}.}}",
+        "usage": "Vos compétences utilisent {size} sur {maxSize} et {files, plural, one {# fichier} other {# fichiers}} sur {maxFiles, number}.",
+        "usageEstimated": "Vos compétences utilisent environ {size} sur {maxSize} et {files, plural, one {# fichier} other {# fichiers}} sur {maxFiles, number}. L’estimation compte les compétences pas encore mesurées à la taille maximale autorisée.",
+        "manage": "Gérer les compétences",
+        "disconnectToReconnect": "Déconnecter pour reconnecter"
       }
     }
   },
