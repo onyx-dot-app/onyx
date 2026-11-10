@@ -353,7 +353,7 @@
         "clientMetadataRejected": "The provider could not use the client metadata document. If this instance is not reachable from the public internet, turn off “Use client metadata document” and connect again.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
         "connectionFailed": "The server could not be reached. Check the server URL and try again.",
-        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
+        "oauthFailed": "OAuth sign-in failed. Try again, or check the server's OAuth settings.",
         "oauthInitFailed": "Failed to initiate OAuth: {detail}"
       },
       "header": {
@@ -14242,6 +14242,11 @@
       },
       "completeFailed": {
         "message": "Failed to complete authorization"
+      },
+      "desktopHandoff": {
+        "button": "Open Onyx",
+        "description": "Your browser opens the Onyx desktop app to finish connecting. You can close this tab after the app opens.",
+        "title": "Return to Onyx"
       },
       "genericError": {
         "description": "An error occurred during the OAuth process. Please try again.",
