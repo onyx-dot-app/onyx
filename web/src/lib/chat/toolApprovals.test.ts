@@ -20,7 +20,7 @@ import {
   useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import type { ApprovalStatus } from "@/lib/approvals/types";
-import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import type { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
 
 function request(approvalId: string, agentName: string | null = null): Packet {
   return {

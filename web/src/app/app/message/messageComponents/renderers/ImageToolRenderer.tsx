@@ -11,7 +11,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { isGroupEndPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import GeneratingImageDisplay from "@/app/app/components/tools/GeneratingImageDisplay";
 
