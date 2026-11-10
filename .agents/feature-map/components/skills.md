@@ -883,11 +883,20 @@ still propagate unexpected storage errors.
     company marketplace share and per direct Skill share for one group. Company
     followers appear only under their marketplace; detached company Skills and
     personal marketplace Skills are direct rows. Retired Skills, personal
-    marketplace shares, other groups and provider data stay out. Reads refresh
-    the actor without the membership lock and require token-capped `MANAGE_SKILLS`.
-    Global holders can target any group; scoped holders can target managed groups.
-    `can_edit` reflects resource scope and is false for built-in rows. This layer
-    provides the list only; installation-setting writes follow separately.
+    marketplace shares, other groups and provider data stay out. Reads use the
+    refreshed actor without the membership lock. Writes change only
+    `group_installation_policies` through `mutate_resource_access`:
+    `GroupSkillAccessAdapter` refuses followers, and marketplace rows use
+    `MarketplaceAccessAdapter`, which copies changes to followers. Routes require
+    `MANAGE_SKILLS` and the same token scope. Global holders can target any group;
+    scoped holders can target only managed groups. The resource must also pass
+    A1's existing scope check (private and shared only within the managed groups).
+    No separate group-management permission is required. Writes recheck authority
+    under the membership lock, resolve tier before locks, commit, then push once.
+    `can_edit` is a hint only. The client hook replaces cached rows with a denial
+    after an authorization or not-found response. Only an authorized response
+    restores rows, including after a transient failure or remount. A delayed PUT
+    cannot replace a cached denial or write into a different group after navigation.
 
 
 ---
