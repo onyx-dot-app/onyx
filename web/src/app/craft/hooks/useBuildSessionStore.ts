@@ -15,6 +15,7 @@ import {
 
 import {
   ApiSessionResponse,
+  type ApiSkillRuntimeNotice,
   Artifact,
   BuildMessage,
   BuildMessageAttachment,
@@ -751,6 +752,10 @@ export interface BuildSessionData {
   skillsStale: boolean;
   /** Incremented only with skillsStale so async refreshes can reject stale responses. */
   skillsStaleRevision: number;
+  /** Skills left out of the sandbox. Set together with skillsStale. */
+  skillRuntimeNotice: ApiSkillRuntimeNotice | null;
+  /** Explicit dismissal survives same-session refetches and remounts. */
+  skillRuntimeNoticeDismissed: boolean;
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
@@ -975,6 +980,7 @@ function reconcileCompletedTranscript(
               ? null
               : { ...current.turnSettlement, phase: "ready" },
         });
+        void useBuildSessionStore.getState().refreshSessionSkills(sessionId);
         return;
       }
       fail(null);
@@ -1206,6 +1212,7 @@ interface BuildSessionStore {
   abortSession: (sessionId: string) => void;
 
   // Actions - Session Lifecycle
+  refreshSessionSkills: (sessionId: string) => Promise<void>;
   loadSession: (
     sessionId: string,
     options?: { force?: boolean }
@@ -1386,6 +1393,8 @@ const createInitialSessionData = (
     agentModel: null,
     skillsStale: false,
     skillsStaleRevision: 0,
+    skillRuntimeNotice: null,
+    skillRuntimeNoticeDismissed: false,
     origin: "INTERACTIVE",
     abortController: new AbortController(),
     lastAccessed: new Date(),
@@ -1595,6 +1604,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         ...updates,
+        ...(updates.skillRuntimeNotice !== undefined &&
+          JSON.stringify(updates.skillRuntimeNotice) !==
+            JSON.stringify(session.skillRuntimeNotice) && {
+            skillRuntimeNoticeDismissed: false,
+          }),
         skillsStaleRevision:
           updates.skillsStale === undefined
             ? session.skillsStaleRevision
@@ -2145,6 +2159,30 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Session Lifecycle
   // ===========================================================================
 
+  refreshSessionSkills: async (sessionId) => {
+    const owner = get().sessions.get(sessionId);
+    if (!owner) return;
+    // Fence older reads, including a history load begun before turn acceptance.
+    get().updateSessionData(sessionId, { skillsStale: owner.skillsStale });
+    const revision = owner.skillsStaleRevision + 1;
+    try {
+      const response = await fetchSession(sessionId, { checkWorkspace: false });
+      const current = get().sessions.get(sessionId);
+      if (
+        current?.instanceId !== owner.instanceId ||
+        current.turnGeneration !== owner.turnGeneration ||
+        current.skillsStaleRevision !== revision
+      )
+        return;
+      get().updateSessionData(sessionId, {
+        skillsStale: response.skills_stale,
+        skillRuntimeNotice: response.skill_runtime_notice,
+      });
+    } catch {
+      // Retain cached state on transient read failures; focus retries the read.
+    }
+  },
+
   loadSession: async (sessionId: string, options?: { force?: boolean }) => {
     const { updateSessionData, sessions } = get();
 
@@ -2315,7 +2353,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           }),
         isLoaded: true,
         loadError: null,
-        ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
+        ...(canApplySkillsStale() && {
+          skillsStale: sessionData.skills_stale,
+          skillRuntimeNotice: sessionData.skill_runtime_notice,
+        }),
         origin: sessionData.origin,
       });
       if (!needsRestore) {
@@ -2367,6 +2408,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
             skillsStaleRevisionBeforeRestore && {
             skillsStale: sessionData.skills_stale,
+            skillRuntimeNotice: sessionData.skill_runtime_notice,
           }),
           filesNeedsRefresh:
             (get().sessions.get(sessionId)?.filesNeedsRefresh ?? 0) + 1,

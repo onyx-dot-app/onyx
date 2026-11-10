@@ -20,6 +20,7 @@ describe("SkillsStaleNotice", () => {
     });
     jest.mocked(api.reloadSessionSkills).mockResolvedValue({
       skills_stale: false,
+      skill_runtime_notice: null,
     });
   });
 

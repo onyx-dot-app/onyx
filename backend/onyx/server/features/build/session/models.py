@@ -14,9 +14,17 @@ from onyx.db.enums import (
     SessionOrigin,
     SharingScope,
 )
+from onyx.db.skill_runtime_models import SkillRuntimeOmission
 from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     MANIFEST_MAX_ENTRIES,
+    PUSH_MAX_COMPONENT_BYTES,
+    PUSH_MAX_DIRECTORIES,
+)
+from onyx.skills.push import (
+    SKILL_RUNTIME_MAX_BYTES,
+    SKILL_RUNTIME_MAX_FILES,
+    SKILL_RUNTIME_MAX_PATH_BYTES,
 )
 
 if TYPE_CHECKING:
@@ -153,6 +161,36 @@ class ArtifactResponse(BaseModel):
         )
 
 
+class SkillRuntimeNoticeResponse(BaseModel):
+    """Skills the runtime limit left out of the content delivered to the
+    owner's sandbox."""
+
+    max_bytes: int
+    max_files: int
+    max_directories: int = PUSH_MAX_DIRECTORIES
+    max_path_bytes: int = SKILL_RUNTIME_MAX_PATH_BYTES
+    max_path_component_bytes: int = PUSH_MAX_COMPONENT_BYTES
+    omissions: list[SkillRuntimeOmission]
+
+    @classmethod
+    def for_owner(
+        cls, owner_id: UUID | None, sandbox: Union["Sandbox", None]
+    ) -> "SkillRuntimeNoticeResponse | None":
+        """Only the sandbox owner may see its Skill names and sizes."""
+        if (
+            sandbox is None
+            or owner_id is None
+            or sandbox.user_id != owner_id
+            or not sandbox.skill_runtime_omissions
+        ):
+            return None
+        return cls(
+            max_bytes=SKILL_RUNTIME_MAX_BYTES,
+            max_files=SKILL_RUNTIME_MAX_FILES,
+            omissions=sandbox.skill_runtime_omissions,
+        )
+
+
 class SessionResponse(BaseModel):
     """Response containing session details."""
 
@@ -170,6 +208,7 @@ class SessionResponse(BaseModel):
     agent_provider: str | None
     agent_model: str | None
     skills_stale: bool
+    skill_runtime_notice: SkillRuntimeNoticeResponse | None
 
     @classmethod
     def from_model(
@@ -197,11 +236,18 @@ class SessionResponse(BaseModel):
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
             skills_stale=session_runtime_stale(session, sandbox),
+            skill_runtime_notice=(
+                SkillRuntimeNoticeResponse.for_owner(session.user_id, sandbox)
+                if session.origin != SessionOrigin.SCHEDULED
+                or (sandbox is not None and session.skills_hash == sandbox.skills_hash)
+                else None
+            ),
         )
 
 
 class SessionSkillsStateResponse(BaseModel):
     skills_stale: bool
+    skill_runtime_notice: SkillRuntimeNoticeResponse | None
 
 
 class DetailedSessionResponse(SessionResponse):

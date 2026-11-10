@@ -12,10 +12,7 @@ import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
-import {
-  checkPreProvisionedSession,
-  fetchSession,
-} from "@/app/craft/services/apiServices";
+import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
 interface UseBuildSessionControllerProps {
   /** Session ID from search params, or null for new session */
@@ -60,9 +57,6 @@ export function useBuildSessionController({
     (state) => state.setCurrentSession
   );
   const loadSession = useBuildSessionStore((state) => state.loadSession);
-  const updateSessionData = useBuildSessionStore(
-    (state) => state.updateSessionData
-  );
 
   // Controller state from Zustand (replaces refs for better race condition handling)
   const controllerState = useBuildSessionStore(
@@ -100,45 +94,23 @@ export function useBuildSessionController({
   const isPreProvisioning = preProvisioning.status === "provisioning";
   const isPreProvisioningReady = preProvisioning.status === "ready";
 
-  const refreshCachedSessionState = useCallback(
-    async (sessionId: string) => {
-      const cachedSession = useBuildSessionStore
+  const refreshCachedSessionState = useCallback(async (sessionId: string) => {
+    const cachedSession = useBuildSessionStore
+      .getState()
+      .sessions.get(sessionId);
+    if (!cachedSession?.isLoaded) return;
+    if (
+      cachedSession.status !== "running" &&
+      cachedSession.status !== "creating" &&
+      cachedSession.activeTurnId === null
+    ) {
+      void useBuildSessionStore
         .getState()
-        .sessions.get(sessionId);
-      if (!cachedSession?.isLoaded) return;
-      const skillsStaleRevision = cachedSession.skillsStaleRevision;
-      if (
-        cachedSession.status !== "running" &&
-        cachedSession.status !== "creating" &&
-        cachedSession.activeTurnId === null
-      ) {
-        void useBuildSessionStore
-          .getState()
-          .refreshOutputInventory(sessionId, { silent: true });
-      }
+        .refreshOutputInventory(sessionId, { silent: true });
+    }
 
-      try {
-        const session = await fetchSession(sessionId, {
-          checkWorkspace: false,
-        });
-        const currentSession = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId);
-        if (
-          currentSession?.instanceId !== cachedSession.instanceId ||
-          currentSession.turnGeneration !== cachedSession.turnGeneration ||
-          currentSession.skillsStaleRevision !== skillsStaleRevision
-        )
-          return;
-        updateSessionData(sessionId, {
-          skillsStale: session.skills_stale,
-        });
-      } catch {
-        // Keep the usable cached session on transient refresh failures.
-      }
-    },
-    [updateSessionData]
-  );
+    await useBuildSessionStore.getState().refreshSessionSkills(sessionId);
+  }, []);
 
   // Effect: Handle session changes based on URL
   useEffect(() => {
