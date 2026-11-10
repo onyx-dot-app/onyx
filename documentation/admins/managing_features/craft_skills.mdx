@@ -311,7 +311,9 @@ Do not transfer ownership to bots, service accounts, limited accounts, or inacti
 
 Owners, editors, and admins can read and restore custom Skill versions through the API. Viewers cannot list, preview,
 or restore historical versions. These requests return `404` for users without edit access.
-Built-in Skills do not have version history.
+Built-in Skills do not have version history. For retired Skills,
+only the personal owner or a global Skill manager can read history. Restore remains unavailable.
+A Personal Access Token must include Manage Skills to use global management authority.
 
 Use a [Personal Access Token](/developers/overview) with access to the Skill:
 
@@ -372,7 +374,12 @@ You can still change permitted sharing settings and enable the Skill for yoursel
 When sync retires a Skill, it disappears from libraries, App skill lists, and future sandbox skill payloads.
 Its name becomes available for another Skill. Existing sessions use the normal reload flow to receive skill changes.
 Retirement preserves version history for internal retention and cleanup.
-Retired Skills reject all user changes except deletion.
+Retired Skills reject all user changes except deletion. To delete one, open its marketplace under **Marketplaces**.
+
+<img className="rounded-image" src="/assets/admins/managing_features/retired_skill_versions.webp" alt="Read-only version history for a retired Skill, with Preview and Back to marketplace actions"/>
+
+Retired Skills show a **Retired** badge, read-only **Versions**, and a **Delete** action. Select **Delete**,
+review the named Skill, then confirm. Deletion permanently removes the Skill and its version history.
 Only the personal owner or a global manage-skills user can delete a retired synced Skill.
 An editor grant alone does not permit deletion. The same rule applies to bulk deletion.
 

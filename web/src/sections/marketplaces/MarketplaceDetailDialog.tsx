@@ -3,9 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
-import { Button, MessageCard, Modal, OnyxLoader, Text } from "@opal/components";
+import {
+  Badge,
+  Button,
+  MessageCard,
+  Modal,
+  OnyxLoader,
+  Text,
+} from "@opal/components";
 import { IllustrationContent, Section } from "@opal/layouts";
 import { SvgGitHub } from "@opal/logos";
+import { SvgArrowLeft, SvgHistory } from "@opal/icons";
+import useScreenSize from "@opal/hooks/useScreenSize";
 import type { RichStr } from "@opal/types";
 import {
   confirmMarketplaceRetirements,
@@ -16,6 +25,7 @@ import {
 } from "@/lib/marketplaces/api";
 import type {
   Marketplace,
+  MarketplaceDetail,
   RetirementConfirmation,
 } from "@/lib/marketplaces/types";
 import {
@@ -23,10 +33,12 @@ import {
   isAuthStatusError,
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
+import { deleteUserSkill } from "@/lib/skills/api";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import GitHubConnection from "@/sections/marketplaces/GitHubConnection";
+import SkillVersions from "@/sections/skills/SkillVersions";
 import MarketplaceSummary from "@/sections/marketplaces/MarketplaceSummary";
 
 export interface MarketplaceDetailDialogProps {
@@ -41,6 +53,10 @@ export interface MarketplaceDetailDialogProps {
 
 type Action =
   | { kind: "overview" | "remove" | "replace" }
+  | {
+      kind: "deleteSkill" | "history";
+      skill: MarketplaceDetail["skills"][number];
+    }
   | { kind: "retire"; confirmation: RetirementConfirmation; names: string[] };
 
 export default function MarketplaceDetailDialog(
@@ -59,6 +75,8 @@ function DetailSession({
   getCountLabel,
 }: MarketplaceDetailDialogProps) {
   const t = useTranslations("marketplaces");
+  const versionsT = useTranslations("skills.versions");
+  const { isSmallScreen } = useScreenSize();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_SKILLS);
   const cache = useSWRConfig();
   const { data, error, mutate } = useSWR(
@@ -120,17 +138,36 @@ function DetailSession({
     });
   }
 
-  async function run(operation: "sync" | "replace" | "remove" | "retire") {
+  async function run(
+    operation: "sync" | "replace" | "remove" | "retire" | "deleteSkill"
+  ) {
     if (pending || !row || error) return;
     if (
       operation === "retire" &&
       (action.kind !== "retire" || !sameProposal || row.sync_pending)
     )
       return;
+    if (
+      operation === "deleteSkill" &&
+      (action.kind !== "deleteSkill" ||
+        !data?.skills.some(
+          (skill) => skill.id === action.skill.id && skill.retired_at
+        ))
+    )
+      return;
     setPending(true);
     setFailure(null);
     setRequested(false);
     try {
+      if (operation === "deleteSkill" && action.kind === "deleteSkill") {
+        await deleteUserSkill(action.skill.id);
+        await Promise.all([mutate(), cache.mutate(SWR_KEYS.marketplaces)]);
+        if (alive.current) {
+          setAction({ kind: "overview" });
+          onChanged?.();
+        }
+        return;
+      }
       if (operation === "remove") {
         await removeMarketplace(marketplaceId);
         await cache.mutate(SWR_KEYS.marketplaces);
@@ -164,9 +201,12 @@ function DetailSession({
       }
     } catch (caught) {
       if (alive.current) {
-        setFailure(fetchErrorDetail(caught) ?? t("requestError"));
+        setFailure(
+          fetchErrorDetail(caught) ??
+            (caught instanceof Error ? caught.message : t("requestError"))
+        );
         // A rejected confirmation must be reviewed again against fresh detail.
-        setAction({ kind: "overview" });
+        if (operation !== "deleteSkill") setAction({ kind: "overview" });
         await mutate().catch(() => undefined);
       }
     } finally {
@@ -178,6 +218,43 @@ function DetailSession({
     if (!pending) onClose();
   }
 
+  const scrollingHeader = isSmallScreen && action.kind === "history";
+  const header = (
+    <Modal.Header
+      icon={
+        scrollingHeader
+          ? undefined
+          : action.kind === "history"
+            ? SvgHistory
+            : SvgGitHub
+      }
+      title={
+        action.kind === "history"
+          ? action.skill.name
+          : t(
+              action.kind === "deleteSkill"
+                ? "deleteSkillTitle"
+                : action.kind === "remove"
+                  ? "removeTitle"
+                  : action.kind === "retire"
+                    ? "retireTitle"
+                    : action.kind === "replace"
+                      ? "replaceLogin"
+                      : "details"
+            )
+      }
+      padding={scrollingHeader ? 0 : 2}
+      reserveCloseSpace={scrollingHeader}
+      onClose={pending ? undefined : close}
+    >
+      {action.kind === "history" && (
+        <Section padding={2} height="auto" width="fit">
+          <Badge title={t("retiredLabel")} size={5} />
+        </Section>
+      )}
+    </Modal.Header>
+  );
+
   return (
     <Modal
       open
@@ -186,25 +263,14 @@ function DetailSession({
       }}
     >
       <Modal.Content
-        width="md"
-        height="fit"
+        width={action.kind === "history" ? "lg" : "md"}
+        height={action.kind === "history" ? "lg" : "fit"}
         maxHeight="85dvh"
         restoreOpeningFocus
       >
-        <Modal.Header
-          icon={SvgGitHub}
-          title={t(
-            action.kind === "remove"
-              ? "removeTitle"
-              : action.kind === "retire"
-                ? "retireTitle"
-                : action.kind === "replace"
-                  ? "replaceLogin"
-                  : "details"
-          )}
-          onClose={pending ? undefined : close}
-        />
-        <Modal.Body>
+        {!scrollingHeader && header}
+        <Modal.Body padding={scrollingHeader ? 2 : 4}>
+          {scrollingHeader && header}
           <Section height="auto" alignItems="stretch" gap={3}>
             {error ? (
               <>
@@ -220,10 +286,12 @@ function DetailSession({
               <OnyxLoader />
             ) : (
               <>
-                <MarketplaceSummary
-                  marketplace={data.marketplace}
-                  countLabel={getCountLabel?.(data.marketplace)}
-                />
+                {action.kind !== "history" && (
+                  <MarketplaceSummary
+                    marketplace={data.marketplace}
+                    countLabel={getCountLabel?.(data.marketplace)}
+                  />
+                )}
                 {failure && (
                   <MessageCard
                     variant="error"
@@ -255,11 +323,61 @@ function DetailSession({
                       )
                     )}
                     {data.skills.map((skill) => (
-                      <Text key={skill.id} font="secondary-body">
-                        {t(skill.retired_at ? "retiredSkill" : "activeSkill", {
-                          name: skill.name,
-                        })}
-                      </Text>
+                      <Section
+                        key={skill.id}
+                        height="auto"
+                        flexDirection="row"
+                        justifyContent="between"
+                        gap={2}
+                      >
+                        <Section
+                          height="auto"
+                          alignItems="start"
+                          gap={1}
+                          className="min-w-0"
+                        >
+                          <Text font="secondary-body" wordWrap="wrap-anywhere">
+                            {skill.name}
+                          </Text>
+                          {skill.retired_at && (
+                            <Badge title={t("retiredLabel")} size={5} />
+                          )}
+                        </Section>
+                        {skill.retired_at && (
+                          <Section
+                            flexDirection="row"
+                            wrap
+                            gap={2}
+                            height="auto"
+                            width="auto"
+                          >
+                            <Button
+                              prominence="secondary"
+                              size="sm"
+                              onClick={() =>
+                                setAction({ kind: "history", skill })
+                              }
+                            >
+                              {versionsT("title")}
+                            </Button>
+                            <Button
+                              variant="danger"
+                              prominence="tertiary"
+                              size="sm"
+                              disabled={pending}
+                              onClick={() => {
+                                setFailure(null);
+                                setAction({ kind: "deleteSkill", skill });
+                              }}
+                              aria-label={t("deleteSkill", {
+                                name: skill.name,
+                              })}
+                            >
+                              {t("confirmDeleteSkill")}
+                            </Button>
+                          </Section>
+                        )}
+                      </Section>
                     ))}
                     {proposal && !proposal.approved && (
                       <Button
@@ -322,11 +440,32 @@ function DetailSession({
                     </Section>
                   </>
                 )}
+                {action.kind === "history" && (
+                  <Section height="auto" alignItems="stretch" gap={2}>
+                    <SkillVersions
+                      key={action.skill.id}
+                      kind="retired"
+                      skillId={action.skill.id}
+                      onBusyChange={setPending}
+                      onRestored={() => onChanged?.()}
+                    />
+                  </Section>
+                )}
                 {action.kind === "remove" && (
                   <MessageCard
                     variant="warning"
                     title={t("removeDescription", {
                       name: data.marketplace.name,
+                    })}
+                    outerPadding={1}
+                    innerPadding={1}
+                  />
+                )}
+                {action.kind === "deleteSkill" && (
+                  <MessageCard
+                    variant="warning"
+                    title={t("deleteSkillDescription", {
+                      name: action.skill.name,
                     })}
                     outerPadding={1}
                     innerPadding={1}
@@ -366,8 +505,8 @@ function DetailSession({
             )}
           </Section>
         </Modal.Body>
-        <Modal.Footer>
-          {data && !error && (
+        <Modal.Footer padding={scrollingHeader ? 2 : 4}>
+          {data && !error && action.kind !== "history" && (
             <Button
               prominence="tertiary"
               disabled={pending}
@@ -376,18 +515,33 @@ function DetailSession({
               {t("retry")}
             </Button>
           )}
-          <Button
-            prominence="secondary"
-            disabled={pending}
-            onClick={
-              action.kind === "overview"
-                ? close
-                : () => setAction({ kind: "overview" })
-            }
-          >
-            {t(action.kind === "overview" ? "close" : "cancel")}
-          </Button>
+          {action.kind === "history" ? (
+            <Button
+              icon={SvgArrowLeft}
+              responsiveHideText
+              tooltip={t("backToMarketplace")}
+              aria-label={t("backToMarketplace")}
+              prominence="secondary"
+              disabled={pending}
+              onClick={() => setAction({ kind: "overview" })}
+            >
+              {t("backToMarketplace")}
+            </Button>
+          ) : (
+            <Button
+              prominence="secondary"
+              disabled={pending}
+              onClick={
+                action.kind === "overview"
+                  ? close
+                  : () => setAction({ kind: "overview" })
+              }
+            >
+              {t(action.kind === "overview" ? "close" : "cancel")}
+            </Button>
+          )}
           {action.kind !== "overview" &&
+            action.kind !== "history" &&
             !error &&
             data &&
             (action.kind === "retire" && !sameProposal ? (
@@ -399,26 +553,35 @@ function DetailSession({
                 variant={action.kind === "replace" ? "default" : "danger"}
                 disabled={
                   pending ||
-                  (action.kind === "retire" && data.marketplace.sync_pending)
+                  (action.kind === "retire" && data.marketplace.sync_pending) ||
+                  (action.kind === "deleteSkill" &&
+                    !data.skills.some(
+                      (skill) =>
+                        skill.id === action.skill.id && skill.retired_at
+                    ))
                 }
                 onClick={() =>
                   void run(
-                    action.kind === "remove"
-                      ? "remove"
-                      : action.kind === "replace"
-                        ? "replace"
-                        : "retire"
+                    action.kind === "deleteSkill"
+                      ? "deleteSkill"
+                      : action.kind === "remove"
+                        ? "remove"
+                        : action.kind === "replace"
+                          ? "replace"
+                          : "retire"
                   )
                 }
               >
                 {t(
                   pending
                     ? "working"
-                    : action.kind === "remove"
-                      ? "confirmRemove"
-                      : action.kind === "replace"
-                        ? "replaceLogin"
-                        : "confirmRetire"
+                    : action.kind === "deleteSkill"
+                      ? "confirmDeleteSkill"
+                      : action.kind === "remove"
+                        ? "confirmRemove"
+                        : action.kind === "replace"
+                          ? "replaceLogin"
+                          : "confirmRetire"
                 )}
               </Button>
             ))}
