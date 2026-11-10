@@ -14,7 +14,6 @@ from onyx.db.external_app import create_external_app
 from onyx.db.models import FileRecord, PermissionGrant, Skill, User
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.server.features.skill import api
-from onyx.skills.models import GitHubRepository, GitHubSkillBundle
 from tests.external_dependency_unit.db.skill_api_client import client_for
 from tests.external_dependency_unit.db.test_skill_access_mutations import manager
 from tests.external_dependency_unit.db.test_skill_version_writes import bundle
@@ -47,18 +46,10 @@ def create(
             data={"auto_enable": "false", "sharing": json.dumps(sharing)},
             files={"bundles": ("skill.zip", bundle("creation-token"))},
         )
-    return client.post(
-        "/skills/github/import",
-        json={
-            "repository": "owner/repo",
-            "revision": "a" * 40,
-            "paths": ["skills/creation-token"],
-            "sharing": sharing,
-        },
-    )
+    raise ValueError(f"Unsupported creation route: {route}")
 
 
-@pytest.mark.parametrize("route", ["editor", "batch", "github"])
+@pytest.mark.parametrize("route", ["editor", "batch"])
 @pytest.mark.parametrize("change", ["public", "policy", "group_policy", "none"])
 @pytest.mark.parametrize("limited", [False, True])
 def test_creation_scopes_sharing_and_rolls_back_rejected_bundles(
@@ -96,22 +87,6 @@ def test_creation_scopes_sharing_and_rolls_back_rejected_bundles(
         ) as client,
         patch.object(api, "push_skill_to_affected_sandboxes"),
         patch.object(api, "push_skills_for_users"),
-        patch.object(api, "github_authorization_header", return_value=None),
-        patch.object(
-            api,
-            "fetch_github_skill_bundles",
-            return_value=(
-                GitHubRepository(owner="owner", repo="repo", revision="a" * 40),
-                [
-                    GitHubSkillBundle(
-                        path="skills/creation-token",
-                        name="creation-token",
-                        description="Test",
-                        bundle_bytes=bundle("creation-token"),
-                    )
-                ],
-            ),
-        ),
     ):
         response = create(client, route, sharing)
         if route == "editor":

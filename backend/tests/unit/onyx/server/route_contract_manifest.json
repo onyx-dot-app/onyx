@@ -709,8 +709,6 @@
   "POST /skills/custom/{skill_id}/reset-marketplace-access": "manage:skills",
   "POST /skills/custom/{skill_id}/transfer-ownership": "basic",
   "POST /skills/custom/{skill_id}/versions/{version_id}/restore": "basic",
-  "POST /skills/github/import": "basic",
-  "POST /skills/github/preview": "basic",
   "POST /tenants/anonymous-user": "none",
   "POST /tenants/anonymous-user-path": "admin",
   "POST /tenants/create-checkout-session": "admin",

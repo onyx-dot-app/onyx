@@ -388,16 +388,23 @@ def _is_ignored_bundle_path(path: str) -> bool:
     )
 
 
+_PLUGIN_MANIFESTS: Final[frozenset[str]] = frozenset(
+    {".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json"}
+)
+
+
 @dataclass
 class _BundleShape:
-    """What the wrapper checks need, gathered one file at a time."""
+    """What the wrapper and plugin checks need, gathered one file at a time."""
 
     file_count: int = 0
     has_ignored: bool = False
     has_root_skill_md: bool = False
     all_nested: bool = True
+    has_root_manifest: bool = False
     # At most two distinct values: callers only ask whether there is one.
     roots: set[str] | None = None
+    manifest_roots: set[str] | None = None
     wrapped_skill_md: list[str] | None = None
 
     def add(self, path: str) -> None:
@@ -408,13 +415,36 @@ class _BundleShape:
         root, slash, rest = path.partition("/")
         self.has_root_skill_md |= path == SKILL_MD_NAME
         self.all_nested &= bool(slash)
+        self.has_root_manifest |= path in _PLUGIN_MANIFESTS
         self.roots = _add_capped(self.roots, root)
+        if rest in _PLUGIN_MANIFESTS:
+            self.manifest_roots = _add_capped(self.manifest_roots, root)
         if rest == SKILL_MD_NAME:
             wrapped = self.wrapped_skill_md or []
             self.wrapped_skill_md = (wrapped + [path])[:2]
 
-    def wrapper_prefix(self) -> str | None:
+    def reject_plugin(self, *, check_wrapper: bool = True) -> None:
+        roots = self.roots or set()
+        single_wrapper = (
+            check_wrapper
+            and not self.has_root_skill_md
+            and len(roots) == 1
+            and self.all_nested
+        )
+        # Reserve package-root markers even when their JSON is malformed. Nested
+        # reference manifests are supporting files, not the uploaded package type.
+        if self.has_root_manifest or (
+            single_wrapper and roots <= (self.manifest_roots or set())
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This is a plugin. Plugin upload is not supported yet.",
+            )
+
+    def wrapper_prefix(self, *, reject_plugins: bool) -> str | None:
         """Identify an optional single directory wrapped around a skill bundle."""
+        if reject_plugins:
+            self.reject_plugin()
         roots = self.roots or set()
         if self.has_root_skill_md:
             return None
@@ -568,6 +598,7 @@ def _add_output_path(
 def normalize_custom_bundle(
     zip_bytes: bytes,
     *,
+    reject_plugins: bool = False,
     zip_max_bytes: int | None = DEFAULT_ZIP_MAX_BYTES,
     max_file_count: int | None = DEFAULT_MAX_FILE_COUNT,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
@@ -584,6 +615,7 @@ def normalize_custom_bundle(
     stored before those limits existed use it, and then the central directory
     has no size cap either. Path sets live in SQLite, so memory does not grow
     with the number of entries.
+    New-content callers set ``reject_plugins``; stored reads keep legacy files.
     """
     if zip_max_bytes is not None and len(zip_bytes) > zip_max_bytes:
         raise _zip_too_large_error(zip_max_bytes)
@@ -602,7 +634,7 @@ def normalize_custom_bundle(
             if not info.is_dir():
                 shape.add(normalized)
         _check_bundle_file_count(shape.file_count, max_file_count)
-        wrapper_prefix = shape.wrapper_prefix()
+        wrapper_prefix = shape.wrapper_prefix(reject_plugins=reject_plugins)
         needs_rewrite = wrapper_prefix is not None or shape.has_ignored
 
         _add_output_directories(source_zip, wrapper_prefix, output_directories)
@@ -738,9 +770,15 @@ def update_custom_bundle_files(
             ):
                 return normalize_custom_bundle(
                     upload_archive_bytes,
+                    reject_plugins=True,
                     per_file_max_bytes=per_file_max_bytes,
                     total_max_bytes=total_max_bytes,
                 ).content
+            upload_shape = _BundleShape()
+            for path in upload_file_paths:
+                upload_shape.add(path)
+            # Supporting files keep their paths; only complete bundles unwrap.
+            upload_shape.reject_plugin(check_wrapper=False)
             if not upload_file_paths:
                 raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload contains no files")
             if len(upload_file_paths) != len(set(upload_file_paths)):

@@ -77,7 +77,18 @@ export class AdminOpenApiPluginPage {
       name: "Save Changes",
       exact: true,
     });
+    const toolId = new URL(this.page.url()).pathname.match(
+      /\/openapi\/(\d+)$/
+    )?.[1];
+    if (!toolId) throw new Error("OpenAPI plugin detail URL has no tool ID");
+    const responsePromise = this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/admin/tool/custom/${toolId}` &&
+        response.request().method() === "PUT"
+    );
     await save.click();
+    expect((await responsePromise).ok()).toBeTruthy();
     await expect(save).toBeDisabled();
     await expect(dialog).toBeVisible();
   }
