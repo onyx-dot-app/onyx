@@ -23,6 +23,7 @@ func (v FirecrackerVMM) Boot(ctx context.Context, id string, uid uint32, files [
 	}
 	p, err := v.Launcher.Boot(ctx, id, uid, fs, fcvm.BootSpec{
 		Kernel: cfg.KernelFile, BootArgs: cfg.BootArgs, Drives: cfg.Drives, VCPUs: cfg.VCPUs, MemMiB: cfg.MemMiB,
+		Balloon: cfg.Balloon,
 	})
 	if err != nil {
 		if errors.Is(err, agent.ErrVMLeft) {

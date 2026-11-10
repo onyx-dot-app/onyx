@@ -33,7 +33,7 @@ import (
 // startTBAgent runs the agent binary in a privileged container (private
 // cgroup namespace, like the DaemonSet) that builds its template from
 // rootfsDir.
-func startTBAgent(t *testing.T, e env, name, rootfsDir, ca, certDir string, certs *testcerts.Set) {
+func startTBAgent(t *testing.T, e env, name, rootfsDir, ca, certDir string, certs *testcerts.Set, extra ...string) {
 	t.Helper()
 	bin := getenv("KVM_AGENT_BIN", "/opt/agent/host-agent")
 	// The image needs mkfs.ext4 (e2fsprogs) for the template's empty drives.
@@ -48,6 +48,7 @@ func startTBAgent(t *testing.T, e env, name, rootfsDir, ca, certDir string, cert
 		"--listen", ptListen, "--tls-cert", certs.ServerCert, "--tls-key", certs.ServerKey, "--client-ca", certs.ClientCA,
 		"--rootfs-dir", rootfsDir, "--egress-ca", ca,
 		"--template-vcpus", fmt.Sprint(tplVCPUs), "--template-mem-mib", fmt.Sprint(tplMemMiB), "--template-scratch-gib", fmt.Sprint(tplScratchGiB)}
+	args = append(args, extra...)
 	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
 		t.Fatalf("docker run: %v: %s", err, out)
 	}

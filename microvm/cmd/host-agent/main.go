@@ -31,6 +31,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
 	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
+	"github.com/onyx-dot-app/onyx/microvm/internal/nodewatch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
@@ -84,6 +85,10 @@ type flags struct {
 	managedFiles  int
 	managedBuilds int
 	swapTimeout   time.Duration
+	memOverhead   uint
+	watchDrain    bool
+	drainTaints   string
+	drainPoll     time.Duration
 }
 
 func main() {
@@ -127,6 +132,10 @@ func main() {
 	flag.IntVar(&f.managedFiles, "managed-max-files", managed.DefaultLimits.MaxEntries, "most files and directories in a managed bundle")
 	flag.IntVar(&f.managedBuilds, "managed-max-builds", 1, "most managed bundle uploads that receive and build at once")
 	flag.DurationVar(&f.swapTimeout, "managed-swap-timeout", 30*time.Second, "limit for the managed drive swap of one VM")
+	flag.UintVar(&f.memOverhead, "vm-mem-overhead-mib", jailer.DefaultMemOverheadMiB, "memory each VM scope gets on top of the guest memory (cgroup memory.max = mem_mib + this)")
+	flag.BoolVar(&f.watchDrain, "watch-node-drain", false, "read this pod's Node (--node-id) and drain while it has a --drain-taints taint; needs RBAC get on nodes")
+	flag.StringVar(&f.drainTaints, "drain-taints", strings.Join(nodewatch.DefaultTaintKeys, ","), "comma-separated taint keys that drain the node")
+	flag.DurationVar(&f.drainPoll, "drain-poll-interval", 10*time.Second, "how often --watch-node-drain reads the Node")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -183,7 +192,7 @@ func run(f flags, log *slog.Logger) error {
 	if cgroups.Private {
 		log.Info("private cgroup namespace: VM scopes are checked in the host cgroup tree", "host_cgroup_fs", cgroups.HostCgroupFS)
 	}
-	launcher := &fcvm.Launcher{Cmd: cmd, Log: log, Cgroups: cgroups}
+	launcher := &fcvm.Launcher{Cmd: cmd, Log: log, Cgroups: cgroups, MemOverheadMiB: uint32(f.memOverhead)}
 	store := &template.Store{Dir: filepath.Join(f.dataDir, "templates")}
 	versions := agent.Versions{
 		Firecracker: bins.Version, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(), Agent: version,
@@ -205,6 +214,9 @@ func run(f flags, log *slog.Logger) error {
 		log,
 	)
 	m.UseJournal(&journal.Journal{Dir: filepath.Join(f.dataDir, "journal")})
+	if err := m.UseDrainFile(filepath.Join(f.dataDir, "drain.json")); err != nil {
+		return err
+	}
 	if f.daemonPort == 0 || f.daemonPort > math.MaxUint32 {
 		return fmt.Errorf("--daemon-port %d is not a vsock port", f.daemonPort)
 	}
@@ -214,6 +226,9 @@ func run(f flags, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := setupEgress(ctx, f, m, log); err != nil {
+		return err
+	}
+	if err := startDrainWatch(ctx, f, m, log); err != nil {
 		return err
 	}
 	t0 := time.Now()
@@ -335,6 +350,32 @@ func parsePorts(s string) ([]uint32, error) {
 	return out, nil
 }
 
+// startDrainWatch reads the agent's Node every --drain-poll-interval and
+// drains the node while it has a drain taint (ENG-4569). The first read
+// runs before the API serves, so a restarted agent on a cordoned node
+// never admits a VM.
+func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) error {
+	if !f.watchDrain {
+		return nil
+	}
+	keys := splitList(f.drainTaints)
+	if len(keys) == 0 {
+		return errors.New("--watch-node-drain needs --drain-taints")
+	}
+	if f.drainPoll < time.Second {
+		return fmt.Errorf("--drain-poll-interval %v must be at least 1s", f.drainPoll)
+	}
+	src, err := nodewatch.NewInCluster(f.nodeID)
+	if err != nil {
+		return fmt.Errorf("--watch-node-drain: %w", err)
+	}
+	w := &nodewatch.Watcher{Source: src, Keys: keys, Interval: f.drainPoll, Timeout: 10 * time.Second, Apply: m.SetNodeDrain}
+	w.Once(ctx)
+	go w.Run(ctx)
+	log.Info("watching the node for drain taints", "node", f.nodeID, "taints", keys, "interval", f.drainPoll)
+	return nil
+}
+
 // setupEgress makes a fresh node signing key, attaches the relay to the
 // Manager and keeps the key registered with the api_server.
 func setupEgress(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) error {
@@ -417,6 +458,9 @@ func checkRanges(f flags) error {
 	if f.managedKeep < 1 || f.managedZipMiB < 1 || f.managedMaxMiB < 1 || f.managedFiles < 1 || f.managedBuilds < 1 || f.swapTimeout <= 0 {
 		return fmt.Errorf("bad managed limits --managed-keep %d --managed-max-zip-mib %d --managed-max-mib %d --managed-max-files %d --managed-max-builds %d --managed-swap-timeout %v",
 			f.managedKeep, f.managedZipMiB, f.managedMaxMiB, f.managedFiles, f.managedBuilds, f.swapTimeout)
+	}
+	if f.memOverhead < 16 || f.memOverhead > 4096 {
+		return fmt.Errorf("--vm-mem-overhead-mib %d must be 16 to 4096", f.memOverhead)
 	}
 	if f.maxScratchGiB > math.MaxUint32 {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)

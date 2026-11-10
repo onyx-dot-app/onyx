@@ -136,6 +136,7 @@ func (s *Service) NodeInfo(context.Context, *pb.NodeInfoRequest) (*pb.NodeInfoRe
 		MemTotalMib: n.MemTotalMiB, MemAvailableMib: n.MemAvailableMiB, DiskFreeMib: n.DiskFreeMiB,
 		VmCount: uint32(n.VMCount), CpuModel: n.Versions.CPUModel, FirecrackerVersion: n.Versions.Firecracker,
 		HostKernel: n.Versions.HostKernel, AgentVersion: n.Versions.Agent,
+		MemReserveMib: n.MemReserveMiB, MemStartingMib: n.MemStartingMiB, Drain: toDrainStatus(n.Drain),
 	}
 	for _, t := range n.Templates {
 		out.Templates = append(out.Templates, toTemplateInfo(t, n.Versions.NodeKey()))
@@ -150,6 +151,23 @@ func (s *Service) NodeInfo(context.Context, *pb.NodeInfoRequest) (*pb.NodeInfoRe
 		}
 	}
 	return out, nil
+}
+
+// SetDrain implements pb.HostAgentServer.
+func (s *Service) SetDrain(_ context.Context, r *pb.SetDrainRequest) (*pb.SetDrainResponse, error) {
+	d, err := s.M.SetDrain(r.GetDrain())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &pb.SetDrainResponse{Drain: toDrainStatus(d)}, nil
+}
+
+func toDrainStatus(d agent.DrainStatus) *pb.DrainStatus {
+	out := &pb.DrainStatus{State: d.State, Manual: d.Manual, Taints: d.Taints, WatchError: d.WatchError}
+	if !d.Since.IsZero() {
+		out.Since = timestamppb.New(d.Since)
+	}
+	return out
 }
 
 // BuildTemplate implements pb.HostAgentServer.
@@ -173,7 +191,7 @@ func toTemplateInfo(t *template.Template, node template.NodeKey) *pb.TemplateInf
 		GuestKernel: t.GuestKernel, FirecrackerVersion: t.FirecrackerVersion,
 		ImageRef: t.ImageRef, ImageDigest: t.ImageDigest, RootfsSha256: t.RootfsSHA256, KeySha256: t.KeySHA256,
 		CaFingerprint: t.CAFingerprint, BuiltAt: timestamppb.New(t.BuiltAt), Compatible: t.CheckNode(node) == nil,
-		ManagedSlots: uint32(t.ManagedSlots()),
+		ManagedSlots: uint32(t.ManagedSlots()), Balloon: t.HasBalloon(),
 	}
 }
 

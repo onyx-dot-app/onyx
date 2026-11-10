@@ -28,6 +28,7 @@ const (
 	HostAgent_BuildTemplate_FullMethodName    = "/craft.hostagent.v1.HostAgent/BuildTemplate"
 	HostAgent_PutManagedImage_FullMethodName  = "/craft.hostagent.v1.HostAgent/PutManagedImage"
 	HostAgent_SwapManaged_FullMethodName      = "/craft.hostagent.v1.HostAgent/SwapManaged"
+	HostAgent_SetDrain_FullMethodName         = "/craft.hostagent.v1.HostAgent/SetDrain"
 )
 
 // HostAgentClient is the client API for HostAgent service.
@@ -88,6 +89,10 @@ type HostAgentClient interface {
 	// the active slot in the journal. A failure of one VM does not stop the
 	// others; each target has its own result.
 	SwapManaged(ctx context.Context, in *SwapManagedRequest, opts ...grpc.CallOption) (*SwapManagedResponse, error)
+	// SetDrain sets or clears the manual drain flag. The agent keeps the flag
+	// on disk, so it stays set across agent restarts. Clearing it does not end
+	// a drain that a node taint causes.
+	SetDrain(ctx context.Context, in *SetDrainRequest, opts ...grpc.CallOption) (*SetDrainResponse, error)
 }
 
 type hostAgentClient struct {
@@ -194,6 +199,16 @@ func (c *hostAgentClient) SwapManaged(ctx context.Context, in *SwapManagedReques
 	return out, nil
 }
 
+func (c *hostAgentClient) SetDrain(ctx context.Context, in *SetDrainRequest, opts ...grpc.CallOption) (*SetDrainResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetDrainResponse)
+	err := c.cc.Invoke(ctx, HostAgent_SetDrain_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HostAgentServer is the server API for HostAgent service.
 // All implementations must embed UnimplementedHostAgentServer
 // for forward compatibility.
@@ -252,6 +267,10 @@ type HostAgentServer interface {
 	// the active slot in the journal. A failure of one VM does not stop the
 	// others; each target has its own result.
 	SwapManaged(context.Context, *SwapManagedRequest) (*SwapManagedResponse, error)
+	// SetDrain sets or clears the manual drain flag. The agent keeps the flag
+	// on disk, so it stays set across agent restarts. Clearing it does not end
+	// a drain that a node taint causes.
+	SetDrain(context.Context, *SetDrainRequest) (*SetDrainResponse, error)
 	mustEmbedUnimplementedHostAgentServer()
 }
 
@@ -288,6 +307,9 @@ func (UnimplementedHostAgentServer) PutManagedImage(grpc.ClientStreamingServer[P
 }
 func (UnimplementedHostAgentServer) SwapManaged(context.Context, *SwapManagedRequest) (*SwapManagedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SwapManaged not implemented")
+}
+func (UnimplementedHostAgentServer) SetDrain(context.Context, *SetDrainRequest) (*SetDrainResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetDrain not implemented")
 }
 func (UnimplementedHostAgentServer) mustEmbedUnimplementedHostAgentServer() {}
 func (UnimplementedHostAgentServer) testEmbeddedByValue()                   {}
@@ -450,6 +472,24 @@ func _HostAgent_SwapManaged_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HostAgent_SetDrain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetDrainRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).SetDrain(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_SetDrain_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).SetDrain(ctx, req.(*SetDrainRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HostAgent_ServiceDesc is the grpc.ServiceDesc for HostAgent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -484,6 +524,10 @@ var HostAgent_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SwapManaged",
 			Handler:    _HostAgent_SwapManaged_Handler,
+		},
+		{
+			MethodName: "SetDrain",
+			Handler:    _HostAgent_SetDrain_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

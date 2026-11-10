@@ -72,7 +72,7 @@ func (l *Launcher) Launch(ctx context.Context, s agent.LaunchSpec) (agent.Proces
 		}
 		files = append(files, fs)
 	}
-	p, err := l.Spawn(ctx, s.ID, s.UID, files)
+	p, err := l.Spawn(ctx, s.ID, s.UID, files, l.limits(t.VCPUs, t.MemMiB))
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (l *Launcher) Launch(ctx context.Context, s agent.LaunchSpec) (agent.Proces
 
 // Spawn prepares the chroot of VM id and starts Firecracker under the jailer
 // in the host slice. Firecracker waits on its API socket when Spawn returns.
-func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []FileSource) (*Proc, error) {
+func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []FileSource, lim jailer.Limits) (*Proc, error) {
 	lay := l.Cmd.Layout
 	chroot := lay.ChrootDir(id)
 	root := lay.RootDir(id)
@@ -146,7 +146,7 @@ func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []Fil
 	}
 	defer func() { _ = console.Close() }()
 
-	argv, err := l.Cmd.Argv(id, uid)
+	argv, err := l.Cmd.Argv(id, uid, lim)
 	if err != nil {
 		return nil, err
 	}

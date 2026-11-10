@@ -121,6 +121,20 @@ Commands:
 Errors are gRPC statuses with one `google.rpc.ErrorInfo`: domain `sandboxd.craft.onyx.app`, reason an
 `ErrorReason` name (`KEY_NOT_SET`, `NOT_INITIALIZED`, `UNAUTHENTICATED`, `EXECUTION_NOT_FOUND`, ...).
 
+### Memory (ENG-4569)
+
+The VM has the Firecracker balloon with free page reporting (template layout 4, module README).
+
+- `--page-reporting-order` (default 0): the daemon writes it to
+  `/sys/module/page_reporting/parameters/page_reporting_order` at start. A boot parameter has no effect:
+  the kernel sets the order when the balloon driver registers. Order 0 reports every free page. `-1`
+  leaves the kernel default (9). Without the balloon or the kernel knob, the daemon logs a warning.
+- `--reclaim-idle` (default 5m, 0 = off, else at least 1m): after this long with no daemon call open or
+  ended (Health does not count; refused calls do not count), the daemon writes 3 to
+  `/proc/sys/vm/drop_caches` and 1 to `/proc/sys/vm/compact_memory`, once per idle period. Free page
+  reporting then gives the pages to the node. Programs that run with no daemon call (a dev server) do not
+  count as activity; a reclaim costs them only page cache misses.
+
 ## Egress relay
 
 `/craft-fc/bin/egress-relay`, run by `craft-init` as uid 65534 (code: `cmd/egress-relay`,

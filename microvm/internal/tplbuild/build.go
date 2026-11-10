@@ -42,6 +42,8 @@ type BootConfig struct {
 	Drives     []template.Drive
 	VCPUs      uint32
 	MemMiB     uint32
+	// Balloon is the balloon device of the template VM; nil: none.
+	Balloon *template.BalloonConfig
 }
 
 // VM is a running template build VM.
@@ -282,6 +284,7 @@ func (b *Builder) build(ctx context.Context, r *Rootfs, key template.Key, name s
 	t1 := b.now()
 	vm, err := b.VMM.Boot(ctx, id, uid, files, BootConfig{
 		KernelFile: KernelFile, BootArgs: key.BootArgs, Drives: template.Drives, VCPUs: b.VCPUs, MemMiB: b.MemMiB,
+		Balloon: template.BalloonFor(template.LayoutVersion),
 	})
 	if err != nil {
 		left = errors.Is(err, ErrVMLeft)

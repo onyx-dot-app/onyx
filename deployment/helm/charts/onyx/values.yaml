@@ -2089,6 +2089,16 @@ craft:
         memory: 1Gi
     priorityClassName: ""
     terminationGracePeriodSeconds: 30
+    # Drain: the agent reads its own Node and refuses new VMs while the Node
+    # has one of these taint keys (kubectl cordon and kubectl drain set
+    # node.kubernetes.io/unschedulable). The api_server then saves and
+    # stops the VMs on the node. The chart gives the agent a ServiceAccount
+    # with "get" on nodes. false: no RBAC; only the manual drain (SetDrain).
+    drainWatch:
+      enabled: true
+      # Comma-separated taint keys.
+      taints: "node.kubernetes.io/unschedulable"
+      pollInterval: 10s
     # Extra host-agent flags, for example ["--max-scratch-gib=200"].
     extraArgs: []
 

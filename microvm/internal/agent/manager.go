@@ -91,7 +91,8 @@ func (v Versions) NodeKey() template.NodeKey {
 
 // Config holds the node limits.
 type Config struct {
-	// MinFreeMemMiB: Create needs MemAvailable >= mem_mib + MinFreeMemMiB.
+	// MinFreeMemMiB is the memory reserve: Create needs MemAvailable >=
+	// (guest memory of the starting VMs) + mem_mib + MinFreeMemMiB.
 	MinFreeMemMiB uint64
 	// MinFreeDiskBytes: Create needs this much free space on the data disk.
 	MinFreeDiskBytes uint64
@@ -191,6 +192,9 @@ type Manager struct {
 
 	managedGuest ManagedGuest
 	swapTimeout  time.Duration
+
+	// drain is the drain state (drain.go), under mu.
+	drain drainState
 }
 
 // NewManager returns a Manager with an empty VM table.
@@ -348,6 +352,12 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			m.mu.Unlock()
 			return VM{}, false, err
 		}
+		// Refuse early, before the template hash check. The check under
+		// the lock below is the one that counts.
+		if err := m.drainErrLocked(); err != nil {
+			m.mu.Unlock()
+			return VM{}, false, err
+		}
 		m.mu.Unlock()
 		break
 	}
@@ -368,6 +378,16 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 	}
 	// A Create and Stop of the same sandbox may have run during admission.
 	if err := m.staleLocked(req); err != nil {
+		m.mu.Unlock()
+		return VM{}, false, err
+	}
+	// Drain and memory are checked under the lock, so two Creates never
+	// count the same free memory.
+	if err := m.drainErrLocked(); err != nil {
+		m.mu.Unlock()
+		return VM{}, false, err
+	}
+	if err := m.admitMemoryLocked(req.MemMiB); err != nil {
 		m.mu.Unlock()
 		return VM{}, false, err
 	}
@@ -494,14 +514,6 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 	if err := scratch.CheckSize(req.ScratchGiB, tpl.ScratchGiB, m.cfg.MaxScratchGiB); err != nil {
 		return nil, err
 	}
-	_, avail, err := m.stats.MemInfo()
-	if err != nil {
-		return nil, fmt.Errorf("read memory info: %w", err)
-	}
-	if avail < uint64(req.MemMiB)+m.cfg.MinFreeMemMiB {
-		return nil, apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
-			"node has %d MiB available, the VM needs %d MiB plus a %d MiB reserve", avail, req.MemMiB, m.cfg.MinFreeMemMiB)
-	}
 	free, err := m.stats.DiskFreeBytes()
 	if err != nil {
 		return nil, fmt.Errorf("read disk space: %w", err)
@@ -511,6 +523,63 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 			"data disk has %d MiB free, the node keeps %d MiB free", free>>20, m.cfg.MinFreeDiskBytes>>20)
 	}
 	return tpl, nil
+}
+
+// admitMemoryLocked admits a VM of memMiB on measured memory: the node's
+// MemAvailable must hold the guest memory of the VMs that are starting
+// (their pages are not in use yet), the full guest memory of the new VM and
+// the reserve. The balloon's free page reporting (layout 4) returns the
+// memory that guests free, so MemAvailable is the real use, not the sum of
+// guest sizes.
+func (m *Manager) admitMemoryLocked(memMiB uint32) error {
+	total, avail, err := m.stats.MemInfo()
+	if err != nil {
+		return fmt.Errorf("read memory info: %w", err)
+	}
+	starting := m.startingMiBLocked()
+	need := starting + uint64(memMiB) + m.cfg.MinFreeMemMiB
+	if avail >= need {
+		return nil
+	}
+	e := apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
+		"node has %d MiB available of %d MiB; it needs %d MiB: %d MiB for the VM, %d MiB for %d starting VMs and a %d MiB reserve",
+		avail, total, need, memMiB, starting, m.startingCountLocked(), m.cfg.MinFreeMemMiB)
+	e.Metadata = map[string]string{
+		"mem_total_mib":     fmt.Sprint(total),
+		"mem_available_mib": fmt.Sprint(avail),
+		"mem_needed_mib":    fmt.Sprint(need),
+		"vm_mem_mib":        fmt.Sprint(memMiB),
+		"mem_starting_mib":  fmt.Sprint(starting),
+		"mem_reserve_mib":   fmt.Sprint(m.cfg.MinFreeMemMiB),
+	}
+	m.log.Warn("create refused: memory", "mem_available_mib", avail, "mem_needed_mib", need,
+		"mem_starting_mib", starting, "mem_reserve_mib", m.cfg.MinFreeMemMiB)
+	return e
+}
+
+// startingMiBLocked is the guest memory of the VMs that are starting and of
+// the template build VMs.
+func (m *Manager) startingMiBLocked() uint64 {
+	var n uint64
+	for _, mib := range m.building {
+		n += uint64(mib)
+	}
+	for _, e := range m.vms {
+		if e.vm.State == pb.VMState_VM_STATE_STARTING {
+			n += uint64(e.vm.MemMiB)
+		}
+	}
+	return n
+}
+
+func (m *Manager) startingCountLocked() int {
+	n := len(m.building)
+	for _, e := range m.vms {
+		if e.vm.State == pb.VMState_VM_STATE_STARTING {
+			n++
+		}
+	}
+	return n
 }
 
 // StopResult is the output of Stop.
@@ -763,9 +832,9 @@ func (m *Manager) TemplatesInUse() map[string]bool {
 }
 
 // BuildSlot gives a template build VM with jailer ID id and memMiB of guest
-// memory a jailer UID. It refuses the build when the node lacks the memory,
-// as Create does. The process scan does not count the VM as untracked while
-// it runs. Call done when the VM is gone; done(true) puts the VM in doubt
+// memory a jailer UID. It refuses the build on a draining node and admits
+// it on memory as Create does, and the build counts as a starting VM until
+// done. The process scan does not count the VM as untracked while it runs. Call done when the VM is gone; done(true) puts the VM in doubt
 // with its UID, for a VM that may still run, and a later scan frees the UID
 // once it is gone.
 func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), error) {
@@ -777,13 +846,11 @@ func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), 
 	if _, ok := m.building[id]; ok || m.vms[id] != nil || m.doubt[id] != nil {
 		return 0, nil, apierr.New(pb.ErrorReason_INTERNAL, "build VM %s already runs", id)
 	}
-	_, avail, err := m.stats.MemInfo()
-	if err != nil {
-		return 0, nil, fmt.Errorf("read memory info: %w", err)
+	if err := m.drainErrLocked(); err != nil {
+		return 0, nil, err
 	}
-	if avail < uint64(memMiB)+m.cfg.MinFreeMemMiB {
-		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
-			"node has %d MiB available, the template build VM needs %d MiB plus a %d MiB reserve", avail, memMiB, m.cfg.MinFreeMemMiB)
+	if err := m.admitMemoryLocked(memMiB); err != nil {
+		return 0, nil, err
 	}
 	uid, ok := m.uids.Get()
 	if !ok {
@@ -812,6 +879,11 @@ type NodeInfo struct {
 	VMCount         int
 	Templates       []*template.Template
 	Versions        Versions
+	// MemReserveMiB is the memory reserve; MemStartingMiB is the guest
+	// memory of the starting VMs (see admitMemoryLocked).
+	MemReserveMiB  uint64
+	MemStartingMiB uint64
+	Drain          DrainStatus
 }
 
 // NodeInfo returns the node capacity, versions and templates.
@@ -828,17 +900,16 @@ func (m *Manager) NodeInfo() (NodeInfo, error) {
 	if err != nil {
 		return NodeInfo{}, err
 	}
+	m.rescanForDrain()
 	m.mu.Lock()
-	n := 0
-	for _, e := range m.vms {
-		if e.vm.State != pb.VMState_VM_STATE_EXITED {
-			n++
-		}
-	}
+	n := m.liveVMsLocked()
+	starting := m.startingMiBLocked()
+	drain := m.drainStatusLocked()
 	m.mu.Unlock()
 	return NodeInfo{
 		MemTotalMiB: total, MemAvailableMiB: avail, DiskFreeMiB: free >> 20,
 		VMCount: n, Templates: tpls, Versions: m.versions,
+		MemReserveMiB: m.cfg.MinFreeMemMiB, MemStartingMiB: starting, Drain: drain,
 	}, nil
 }
 

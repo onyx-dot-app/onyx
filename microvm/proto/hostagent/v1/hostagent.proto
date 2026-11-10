@@ -54,7 +54,7 @@ service HostAgent {
   rpc BuildTemplate(BuildTemplateRequest) returns (BuildTemplateResponse);
 
   // Managed drive (ENG-4614). The managed drive is the read-only ext4 on
-  // /workspace/managed in each VM (the skills). Each VM from a layout 3
+  // /workspace/managed in each VM (the skills). Each VM from a layout 3 or later
   // template has two managed slots: A (/dev/vdc) and B (/dev/vdf).
 
   // PutManagedImage uploads a managed bundle (a zip of the tree to show on
@@ -72,6 +72,18 @@ service HostAgent {
   // the active slot in the journal. A failure of one VM does not stop the
   // others; each target has its own result.
   rpc SwapManaged(SwapManagedRequest) returns (SwapManagedResponse);
+
+  // Drain (ENG-4569). A draining node refuses every Create that would start
+  // a new VM and every BuildTemplate that would boot a template VM
+  // (NODE_DRAINING). Running VMs keep running; automatic evacuation
+  // by the api_server is planned (ENG-4580), so until then the operator stops
+  // each VM and waits for DRAINED. The node drains while the manual drain flag is set
+  // or while it has a drain taint (the agent's --watch-node-drain).
+
+  // SetDrain sets or clears the manual drain flag. The agent keeps the flag
+  // on disk, so it stays set across agent restarts. Clearing it does not end
+  // a drain that a node taint causes.
+  rpc SetDrain(SetDrainRequest) returns (SetDrainResponse);
 }
 
 // The reason of a host agent error (google.rpc.ErrorInfo.reason).
@@ -151,6 +163,23 @@ enum ErrorReason {
   // SwapManaged: the guest daemon could not mount the new drive. The old
   // drive stays mounted.
   MANAGED_MOUNT_FAILED = 27;
+  // Create, BuildTemplate: the node is draining (the manual drain flag or a
+  // node drain taint). Create the VM on another node. A repeat Create of a
+  // VM that already runs here still returns it.
+  NODE_DRAINING = 28;
+}
+
+// Drain state of the node (NodeInfo, SetDrain).
+enum DrainState {
+  DRAIN_STATE_UNSPECIFIED = 0;
+  // The node admits new VMs.
+  DRAIN_STATE_ACTIVE = 1;
+  // The node refuses new VMs and still has VMs that are starting or running,
+  // Firecracker processes in doubt or template build VMs, or no process scan
+  // that worked.
+  DRAIN_STATE_DRAINING = 2;
+  // The node refuses new VMs and runs no Firecracker process.
+  DRAIN_STATE_DRAINED = 3;
 }
 
 // A managed drive slot of a VM.
@@ -158,7 +187,7 @@ enum ManagedSlot {
   MANAGED_SLOT_UNSPECIFIED = 0;
   // Drive "managed", guest /dev/vdc.
   MANAGED_SLOT_A = 1;
-  // Drive "managed_b", guest /dev/vdf (layout 3 templates).
+  // Drive "managed_b", guest /dev/vdf (layout 3 and later).
   MANAGED_SLOT_B = 2;
 }
 
@@ -242,7 +271,7 @@ message VM {
 
 // The managed drive slots of a VM, as the journal records them.
 message ManagedState {
-  // 2 for a VM that can swap its managed drive (layout 3), else 1.
+  // 2 for a VM that can swap its managed drive (layout 3 and later), else 1.
   uint32 slots = 1;
   // The slot on /workspace/managed after the last swap.
   ManagedSlot active = 2;
@@ -289,6 +318,38 @@ message NodeInfoResponse {
   string agent_version = 8;
   uint64 disk_free_mib = 9;
   repeated ManagedImageInfo managed_images = 10;
+
+  // Memory admission and drain (ENG-4569). Create needs
+  // mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
+  // The memory reserve (--min-free-mem-mib).
+  uint64 mem_reserve_mib = 11;
+  // Guest memory of the VMs that are starting. Their memory is not in
+  // mem_available_mib yet, so Create counts it.
+  uint64 mem_starting_mib = 12;
+  DrainStatus drain = 13;
+}
+
+message DrainStatus {
+  DrainState state = 1;
+  // True when the manual drain flag (SetDrain) is set.
+  bool manual = 2;
+  // The drain taints on the node, as "key=value:effect" (value may be
+  // empty), from the last node read.
+  repeated string taints = 3;
+  // When the node started to drain. Not set while it is active.
+  google.protobuf.Timestamp since = 4;
+  // The error of the last node read, if it failed. The agent then keeps
+  // the taints of the last read that worked.
+  string watch_error = 5;
+}
+
+message SetDrainRequest {
+  // True sets the manual drain flag, false clears it.
+  bool drain = 1;
+}
+
+message SetDrainResponse {
+  DrainStatus drain = 1;
 }
 
 message TemplateInfo {
@@ -310,9 +371,14 @@ message TemplateInfo {
   // True when the template key fits this node. Create refuses the others
   // with TEMPLATE_INCOMPATIBLE.
   bool compatible = 13;
-  // Managed drive slots of the template's VMs: 2 (layout 3, the VMs can
+  // Managed drive slots of the template's VMs: 2 (layout 3 and later, the VMs can
   // swap the managed drive) or 1.
   uint32 managed_slots = 14;
+
+  // True when the template VMs have the balloon device with free page
+  // reporting (layout 4 and later, ENG-4569): the guest returns free
+  // memory to the node.
+  bool balloon = 15;
 }
 
 message BuildTemplateRequest {}

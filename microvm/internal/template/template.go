@@ -9,6 +9,11 @@
 //	upload-a.ext4  read-only upload slot A      (drive "upload_a", /dev/vdd)
 //	upload-b.ext4  read-only upload slot B      (drive "upload_b", /dev/vde)
 //	managed-b.ext4 read-only managed slot B     (drive "managed_b", /dev/vdf; layout 3)
+//
+// Layout 4 has the same files and adds the balloon device (Balloon) to the
+// template VM. Firecracker sets the balloon only before boot, and a restore
+// keeps it.
+//
 //	vmstate        snapshot state
 //	mem            snapshot memory
 //
@@ -45,8 +50,10 @@ import (
 // builds: the file names, the drive slots and their order. Layout 3 adds
 // managed slot B (the spare for a managed drive swap) as the last drive, so
 // the guest devices of the older slots do not move. The agent still restores
-// layout 2 templates; their VMs cannot swap the managed drive.
-const LayoutVersion = 3
+// layout 2 templates; their VMs cannot swap the managed drive. Layout 4
+// adds the balloon device with free page reporting (ENG-4569); VMs of older
+// layouts never return free memory to the node.
+const LayoutVersion = 4
 
 // OldestLayout is the oldest layout that the agent restores.
 const OldestLayout = 2
@@ -102,6 +109,44 @@ var layoutDrives = map[int][]Drive{
 		{UploadBDriveID, UploadBFile, true},
 		{ManagedBDriveID, ManagedBFile, true},
 	},
+	4: {
+		{RootfsDriveID, RootfsFile, true},
+		{ScratchDriveID, ScratchFile, false},
+		{ManagedDriveID, ManagedFile, true},
+		{UploadADriveID, UploadAFile, true},
+		{UploadBDriveID, UploadBFile, true},
+		{ManagedBDriveID, ManagedBFile, true},
+	},
+}
+
+// BalloonLayout is the first layout whose template VM has the balloon.
+const BalloonLayout = 4
+
+// BalloonConfig is the Firecracker balloon device of a template VM.
+type BalloonConfig struct {
+	AmountMiB         int64
+	DeflateOnOOM      bool
+	StatsIntervalS    int64
+	FreePageReporting bool
+	FreePageHinting   bool
+}
+
+// Balloon is the balloon of layout 4 templates (results/mem.md): free page
+// reporting returns the pages that the guest frees, so the node sees the
+// real use. The balloon never inflates (amount 0): a VM that works against
+// an inflated balloon is many times slower. Free page hinting is a
+// Firecracker developer preview with a memory corruption race, so it is
+// off. Statistics are on, because Firecracker can turn them on later only
+// if they were on at boot.
+var Balloon = BalloonConfig{AmountMiB: 0, DeflateOnOOM: true, StatsIntervalS: 5, FreePageReporting: true}
+
+// BalloonFor returns the balloon of a layout, or nil for a layout without one.
+func BalloonFor(layout int) *BalloonConfig {
+	if layout < BalloonLayout || !SupportedLayout(layout) {
+		return nil
+	}
+	b := Balloon
+	return &b
 }
 
 // DrivesFor returns the drive slots of a layout, or nil for a layout that
@@ -295,6 +340,9 @@ func (t *Template) ManagedSlots() int {
 	}
 	return 1
 }
+
+// HasBalloon reports whether the template's VMs have the balloon device.
+func (t *Template) HasBalloon() bool { return BalloonFor(t.LayoutVersion) != nil }
 
 // CheckUnchanged fails if a file changed since Store.Verify hashed it. Call
 // it after the files are copied, so the copies are the verified content.

@@ -48,7 +48,9 @@ type Config struct {
 	BaseEnv map[string]string
 	// Managed configures ManagedStatus and MountManaged. Nil: they fail.
 	Managed *ManagedConfig
-	Log     *slog.Logger
+	// Reclaimer drops the guest page cache when the VM is idle. Nil: off.
+	Reclaimer *Reclaimer
+	Log       *slog.Logger
 }
 
 // DefaultBaseEnv is the command env before Init adds to it.

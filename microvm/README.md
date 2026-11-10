@@ -21,7 +21,8 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 | `Stop(sandbox_id, attempt, generation)` | Stops the VM only if all three match. A repeat Stop of the same instance succeeds with `already_stopped`. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes every relay connection of the VM. New connections still work. Stop and VM exit also close them. |
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
-| `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk (with their key and `compatible`), CPU model, Firecracker, host kernel and guest kernel versions. |
+| `NodeInfo()` | Total and free memory, the memory reserve and the memory of starting VMs, free disk, VM count, the drain state, templates on disk (with their key, `compatible` and `balloon`), CPU model, Firecracker, host kernel and guest kernel versions. |
+| `SetDrain(drain)` | Sets or clears the manual drain flag (see Memory, admission and drain). |
 | `BuildTemplate()` | Builds the node's template from `--rootfs-dir` if no valid one for its key is there, then removes old templates (see Templates). |
 | `PutManagedImage(stream: header{sha256, size_bytes}, data...)` | Uploads a managed bundle (a zip) and builds its read-only ext4 image on the node (see Managed drive). |
 | `SwapManaged(image_id, targets[{sandbox_id, attempt, generation, sandboxd_key}])` | Puts a managed image into running VMs, one VM at a time, without a restart (see Managed drive). One result per target. |
@@ -113,9 +114,8 @@ process. VMs and their programs keep running; callers retry.
 
 ### How a VM starts
 
-1. Admission: template, shape, scratch size, then memory (`MemAvailable >= mem_mib + --min-free-mem-mib`),
-   disk (`--min-free-disk-gib`) and a free jailer UID. The full admission policy is ENG-4569.
-   Firecracker checks nothing about a snapshot when it loads it. So before every restore the agent checks
+1. Admission: drain, template, shape, scratch size, disk (`--min-free-disk-gib`), memory and a free
+   jailer UID (see Memory, admission and drain). Firecracker checks nothing about a snapshot when it loads it. So before every restore the agent checks
    that the template key fits the node and that the files match their SHA256 (see Templates). Otherwise
    Create fails with `TEMPLATE_INCOMPATIBLE` and starts nothing.
 2. The chroot `<data-dir>/jail/firecracker/<sandbox_id>/root/` gets a reflink copy of each template file,
@@ -124,9 +124,10 @@ process. VMs and their programs keep running; callers retry.
    `managed-b.ext4`, `vmstate`, `mem`) are root-owned, mode 0644. `scratch.ext4` is extended to `scratch_gib` and owned by
    the VM UID. After the copy, the agent checks that no template file changed since its hash check.
 3. The agent runs
-   `nsenter -t 1 -m -- systemd-run --scope --slice=fcvms.slice --unit=fcvm-<sandbox_id> -- jailer ... --new-pid-ns`.
+   `nsenter -t 1 -m -- systemd-run --scope --slice=fcvms.slice --unit=fcvm-<sandbox_id> --property=MemoryMax=... --property=CPUQuota=... -- jailer ... --new-pid-ns`.
    Each VM gets its own cgroup (the scope) in the host slice, outside the agent's container cgroup, so it
-   survives an agent restart. The jailer gives it its own UID/GID (from `--uid-base`, `--uid-count`), a
+   survives an agent restart. The scope has `memory.max` = guest memory + `--vm-mem-overhead-mib` and
+   `cpu.max` = one CPU per vCPU (see Memory, admission and drain). The jailer gives it its own UID/GID (from `--uid-base`, `--uid-count`), a
    chroot and a PID namespace.
 4. The agent checks the PID (`comm` is `firecracker`, the cgroup is the VM scope), restores the snapshot
    and resumes the VM.
@@ -300,7 +301,7 @@ is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-
 
 #### Manifest and checks
 
-`manifest.json` (schema = layout version, 3 for new builds):
+`manifest.json` (schema = layout version, 4 for new builds):
 
 - `key`: `image_ref`, `image_digest`, `rootfs_sha256`, `rootfs_manifest_sha256`, `guest_kernel` (release),
   `guest_kernel_sha256`, `firecracker_version`, `cpu_model`, `host_kernel`, `ca_fingerprint`,
@@ -322,11 +323,75 @@ Before every restore, Create checks:
    checks compare the fingerprints and hash again only if one changed. A changed file is
    `TEMPLATE_INCOMPATIBLE`.
 
-Layouts: the agent builds layout 3 (six drives, managed slot B last, so the older drives keep their guest
-devices) and still restores layout 2 templates (five drives). A VM of a layout 2 template cannot swap its
-managed drive (`MANAGED_SWAP_UNSUPPORTED`). `TemplateInfo.managed_slots` says which one a template is.
+Layouts: the agent builds layout 4 and still restores layouts 2 and 3.
+
+- Layout 4 (ENG-4569): the drives of layout 3, plus the balloon device (see Memory, admission and drain).
+  Firecracker accepts a balloon only before boot, and a restore keeps it, so the template VM has it.
+  `TemplateInfo.balloon` is true.
+- Layout 3: six drives, managed slot B last, so the older drives keep their guest devices. No balloon: its
+  VMs never give free memory back to the node.
+- Layout 2: five drives. Its VMs cannot swap the managed drive (`MANAGED_SWAP_UNSUPPORTED`).
+  `TemplateInfo.managed_slots` says which one a template is.
 
 `internal/kvmtest/helpers_test.go` (`buildTemplate`) uses the same pipeline for the older KVM tests.
+
+### Memory, admission and drain (ENG-4569)
+
+Results: `plans/craft-sandbox-bench/results/mem.md` (decision test) and `results/mem-admission.md`.
+
+**Balloon.** Layout 4 templates boot with the Firecracker balloon: `amount_mib` 0, `deflate_on_oom`,
+statistics every 5 s, free page reporting on, free page hinting off (a developer preview with a memory
+corruption race). The balloon never inflates: a guest that works against an inflated balloon is many
+times slower. Free page reporting gives the pages that the guest frees back to the node.
+
+**Guest side** (guest daemon flags, `cmd/guest-daemon/README.md`):
+
+- At start the daemon sets the page reporting order to 0 (`--page-reporting-order`). The kernel default
+  (9) reports only free 2 MiB blocks and returns about half of the free memory. The template snapshot
+  keeps the setting, so every restore has it.
+- After `--reclaim-idle` (default 5 min) with no daemon call (Health does not count), the daemon drops
+  the page cache and compacts memory, once per idle period. Reporting then returns those pages too.
+
+**Cgroup limits.** Each VM scope has `memory.max` = `mem_mib` + `--vm-mem-overhead-mib` (default 128) and
+`cpu.max` = `vcpus` CPUs. The scope also counts the host page cache of the VM's drive and memory files;
+the kernel reclaims it at the limit. A guest cannot use more than its memory, so a guest memory hog meets
+the guest's own OOM killer first in the KVM test (also with a 16 MiB overhead). That test covers one
+workload; it does not prove every VM shape. If guest memory plus the host memory that the scope counts
+(Firecracker, page cache) reaches `memory.max` first, the cgroup OOM killer kills Firecracker before the
+guest OOM killer acts. Keep the default overhead unless a test of the VM shape shows a smaller one is
+safe. A Firecracker that grows past the limit is OOM-killed; the kernel kills that VM only, and the agent
+shows it as `EXITED` and cleans it up. `io.max` is not set.
+
+**Admission.** Create needs `MemAvailable` (measured, `/proc/meminfo`) >= guest memory of the VMs that are
+starting + `mem_mib` + `--min-free-mem-mib` (default 2048). Starting VMs count at their full size because
+their memory is not in use yet; running VMs count at what they use, because the balloon returns what the
+guests free. The check runs under the agent lock, so two Creates never take the same memory. A refusal is
+`CAPACITY_MEMORY` with the numbers in the message and in `ErrorInfo.metadata`: `mem_total_mib`,
+`mem_available_mib`, `mem_needed_mib`, `vm_mem_mib`, `mem_starting_mib`, `mem_reserve_mib`. `NodeInfo`
+returns `mem_reserve_mib` and `mem_starting_mib`.
+
+**Drain.** The node drains while the manual flag is set (`SetDrain`, kept in `<data-dir>/drain.json`
+across restarts) or while its Node has a taint from `--drain-taints` (default
+`node.kubernetes.io/unschedulable`, which `kubectl cordon` and `kubectl drain` set). With
+`--watch-node-drain`, the agent reads its own Node (`--node-id`, from `$NODE_NAME`) every
+`--drain-poll-interval` (default 10 s) with the pod's ServiceAccount (RBAC: `get` on nodes). The first read
+runs before the API serves. If a read fails, the agent keeps the last taints and shows the error in
+`NodeInfo.drain.watch_error`. The agent does not keep taints across a restart: if the first read after a
+restart fails, the agent has no taints and admits VMs on a cordoned Node until a read works. Set the
+manual flag (`SetDrain`) before a planned drain to close this gap.
+
+- A draining node refuses every Create that would start a new VM with `NODE_DRAINING`
+  (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
+  returns it. It also refuses a template build that must boot a template VM (`BuildTemplate` and the
+  start-up build) with `NODE_DRAINING`; a template that is already on the node is still returned.
+- Running VMs keep running. Automatic evacuation by the api_server is planned (ENG-4580), not built.
+  Until then, save the data you need, `Stop` each VM from `List`, and wait for `NodeInfo.drain.state`
+  `DRAINED` before you take the node down.
+- `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, while the agent
+  keeps Firecracker processes in doubt or runs a template build VM, and while no process scan worked;
+  `DRAINED` when none of these is left), `manual`, `taints`, `since`, `watch_error`. While draining,
+  `NodeInfo` scans the processes again, so a doubt whose process exited clears. Clearing the manual flag does not end a drain that a
+  taint causes.
 
 ### Managed drive (ENG-4614)
 
@@ -458,6 +523,10 @@ KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.tes
 # Managed drive swap (ENG-4614): same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
 # managed drive, swaps of every VM, guest checks (content, old reader, noexec, no rw remount, no restart).
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestManagedSwapKVM
+# Memory, admission and drain (ENG-4569): same inputs, root drive built with
+# --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m"; balloon on restores, reclaim on KVM_VMS
+# idle VMs, scope limits and a guest memory hog, fill the node to CAPACITY_MEMORY, manual drain.
+KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestMemAdmissionKVM
 ```
 
 The KVM tests take the template version from the build (`KVM_TEMPLATE` is no longer used).

@@ -87,18 +87,26 @@ func (f *fakeLauncher) count() int {
 type fakeStats struct {
 	availMiB uint64
 	freeDisk uint64
-	// onMem runs once, inside the next admission check.
+	// onDisk runs once, inside the next admission check (the disk check
+	// runs before the Manager takes its lock).
+	onDisk func()
+	// onMem runs inside each memory read (under the Manager lock).
 	onMem func()
 }
 
 func (s *fakeStats) MemInfo() (uint64, uint64, error) {
-	if h := s.onMem; h != nil {
-		s.onMem = nil
-		h()
+	if s.onMem != nil {
+		s.onMem()
 	}
 	return 64 << 10, s.availMiB, nil
 }
-func (s *fakeStats) DiskFreeBytes() (uint64, error) { return s.freeDisk, nil }
+func (s *fakeStats) DiskFreeBytes() (uint64, error) {
+	if h := s.onDisk; h != nil {
+		s.onDisk = nil
+		h()
+	}
+	return s.freeDisk, nil
+}
 
 const (
 	sb1 = "11111111-1111-4111-8111-111111111111"
@@ -402,7 +410,7 @@ func TestCreatePinsItsTemplateAgainstGC(t *testing.T) {
 	var removed []string
 	var gcErr error
 	// GC runs while Create is in admission, before its VM is in the table.
-	f.stats.onMem = func() {
+	f.stats.onDisk = func() {
 		removed, gcErr = f.m.templates.GC(0, f.m.TemplatesInUse)
 	}
 	if _, _, err := f.m.Create(context.Background(), req(sb1, 1)); err != nil {
@@ -447,7 +455,7 @@ func TestCreateRechecksStoppedAttemptAfterAdmission(t *testing.T) {
 	f := newFixture(t, 10)
 	ctx := context.Background()
 	// While attempt 1 is in admission, attempt 2 starts and stops.
-	f.stats.onMem = func() {
+	f.stats.onDisk = func() {
 		vm, _, err := f.m.Create(ctx, req(sb1, 2))
 		if err != nil {
 			t.Error(err)
