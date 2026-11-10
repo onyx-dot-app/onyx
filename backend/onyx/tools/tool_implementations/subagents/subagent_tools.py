@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
+from onyx.agents.models import AgentMessageStatus
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentLifetime, ToolInvocation
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
@@ -45,7 +46,8 @@ class SpawnAgentTool(_SubagentTool):
     description = (
         "Start an independent agent with the tools configured for this chat. Returns immediately. "
         "The agent continues after this response ends. Its result arrives automatically "
-        "before your next model step or on a later turn. Use wait_agent when you have "
+        "before your next model step, or starts a follow-up response after this one ends. "
+        "Use wait_agent when you have "
         "no other work. Give it complete instructions; it cannot see this conversation."
     )
     input_model = SpawnAgentInput
@@ -66,7 +68,9 @@ class SpawnAgentTool(_SubagentTool):
             lifetime=AgentLifetime.BACKGROUND,
             total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
         )
-        return ToolResult(content=started.model_dump_json())
+        return ToolResult(
+            content=f"Started {started.agent_path} (agent_id: {started.agent_id})."
+        )
 
 
 class ListAgentsTool(_SubagentTool):
@@ -74,21 +78,25 @@ class ListAgentsTool(_SubagentTool):
     display_name = "List agents"
     description = (
         "List agents available on this chat branch, including agents from earlier turns, "
-        "their status, and pending message IDs."
+        "their status, and whether messages are queued."
     )
     input_model = ListAgentsInput
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         parse_tool_arguments(ListAgentsInput, invocation.arguments)
         children = invocation.agents.discover_children()
-        return ToolResult(
-            content="["
-            + ",".join(
-                child.model_dump_json(exclude={"restoration_config"})
-                for child in children
-            )
-            + "]"
-        )
+        if not children:
+            return ToolResult(content="No agents are available on this chat branch.")
+        lines: list[str] = []
+        for child in children:
+            status = child.status.value if child.status is not None else "not started"
+            line = f"{child.path} (agent_id: {child.id}): {status}"
+            if child.pending_messages:
+                line += f"; {len(child.pending_messages)} queued messages"
+            if child.queue_paused:
+                line += "; queue paused"
+            lines.append(line)
+        return ToolResult(content="\n".join(lines))
 
 
 class SendMessageTool(_SubagentTool):
@@ -112,7 +120,11 @@ class SendMessageTool(_SubagentTool):
             max_steps=self.max_steps,
             total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
         )
-        return ToolResult(content=receipt.model_dump_json())
+        return ToolResult(
+            content="Message accepted by the agent."
+            if receipt.status == AgentMessageStatus.ACCEPTED
+            else "Message queued for the agent's next model step."
+        )
 
 
 class QueueMessageTool(_SubagentTool):
@@ -137,7 +149,11 @@ class QueueMessageTool(_SubagentTool):
             max_steps=self.max_steps,
             total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
         )
-        return ToolResult(content=receipt.model_dump_json())
+        return ToolResult(
+            content="The agent started a new run with your message."
+            if receipt.status == AgentMessageStatus.ACCEPTED
+            else "Message queued for a new run."
+        )
 
 
 class WaitAgentTool(_SubagentTool):

@@ -12424,6 +12424,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Sous-agents en cours",
         "attachFilesButton": {
           "tooltip": "Joindre des fichiers"
         },

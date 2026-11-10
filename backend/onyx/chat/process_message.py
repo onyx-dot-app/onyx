@@ -54,6 +54,7 @@ from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
     get_default_base_system_prompt,
 )
+from onyx.chat.stop_signal_checker import is_stop_requested
 from onyx.chat.stream_buffer import ChatStream
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
 from onyx.configs.constants import (
@@ -71,6 +72,9 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_inputs import (
     accept_human_message__no_commit,
+    fail_agent_result_response__no_commit,
+    lock_agent,
+    pending_agent_result_response,
     pending_human_message__no_commit,
 )
 from onyx.db.document_set import filter_document_set_names_by_user_access
@@ -166,26 +170,6 @@ def _load_session(
         db_session=db_session,
         project_id=chat_session.project_id,
     )
-    persona = chat_session.persona
-    tenant_id = get_current_tenant_id()
-    # Record the user's first chat for milestone tracking.
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
-        event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
-    )
-    mt_cloud_telemetry(
-        tenant_id=tenant_id,
-        distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
-        event=MilestoneRecordType.USER_MESSAGE_SENT,
-        properties={
-            "origin": request.origin.value,
-            "has_files": len(request.file_descriptors) > 0,
-            "has_project": chat_session.project_id is not None,
-            "has_persona": persona is not None and persona.id != DEFAULT_PERSONA_ID,
-            "deep_research": request.deep_research,
-        },
-    )
 
     return chat_session
 
@@ -276,6 +260,7 @@ def prepare_chat_turn(
     slack_context: SlackContext | None = None,
     additional_context: str | None = None,
     pending_message_id: str | None = None,
+    continue_after_response_id: int | None = None,
 ) -> ChatTurnSetup:
     """Capture configuration, load files, then reserve responses before execution."""
     admission = ChatTurnAdmission(
@@ -286,6 +271,28 @@ def prepare_chat_turn(
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
             admission.claim(chat_session.id)
+            if continue_after_response_id is None:
+                persona = chat_session.persona
+                tenant_id = get_current_tenant_id()
+                # Record the user's first chat for milestone tracking.
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
+                    event=MilestoneRecordType.MULTIPLE_ASSISTANTS,
+                )
+                mt_cloud_telemetry(
+                    tenant_id=tenant_id,
+                    distinct_id=str(user.id) if not user.is_anonymous else tenant_id,
+                    event=MilestoneRecordType.USER_MESSAGE_SENT,
+                    properties={
+                        "origin": new_msg_req.origin.value,
+                        "has_files": len(new_msg_req.file_descriptors) > 0,
+                        "has_project": chat_session.project_id is not None,
+                        "has_persona": persona is not None
+                        and persona.id != DEFAULT_PERSONA_ID,
+                        "deep_research": new_msg_req.deep_research,
+                    },
+                )
             if pending_message_id is not None:
                 pending = pending_human_message__no_commit(
                     db_session, chat_session.id, user.id
@@ -301,6 +308,26 @@ def prepare_chat_turn(
                     chat_session_id=chat_session.id,
                     parent_message_id=pending.target_response_id,
                 )
+            if continue_after_response_id is not None:
+                if is_stop_requested(
+                    chat_session.id,
+                    admission.cache,
+                    stream_id=continue_after_response_id,
+                ):
+                    raise OnyxError(OnyxErrorCode.CONFLICT, "The response was stopped.")
+                if (
+                    pending_agent_result_response(db_session, chat_session.id, user.id)
+                    != continue_after_response_id
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.CONFLICT,
+                        "The completed agent result is no longer ready to deliver.",
+                    )
+                new_msg_req = SendMessageRequest(
+                    message="",
+                    chat_session_id=chat_session.id,
+                    parent_message_id=continue_after_response_id,
+                )
             selected_models = _select_models(
                 new_msg_req,
                 chat_session,
@@ -315,7 +342,10 @@ def prepare_chat_turn(
             )
             accepted_text = None
             # Regeneration reuses the user message and its accepted query.
-            if parent_message.message_type != MessageType.USER:
+            if (
+                continue_after_response_id is None
+                and parent_message.message_type != MessageType.USER
+            ):
                 # Submitted input already passed the hook before entering the queue.
                 accepted_text = (
                     new_msg_req.message
@@ -355,7 +385,10 @@ def prepare_chat_turn(
                 )
                 chat_history.append(user_message)
             persona = chat_session.persona
-            user_message_id = chat_history[-1].id
+            response_parent_id = chat_history[-1].id
+            user_message_id = (
+                response_parent_id if continue_after_response_id is None else None
+            )
             context_user_files = capture_user_file_metadata(
                 resolve_context_user_files(
                     persona, chat_session.project_id, user.id, db_session
@@ -527,7 +560,7 @@ def prepare_chat_turn(
         if not record_mode_persists_content(incognito_record_mode):
             admission.refresh()
             history_store = RedisChatHistoryStore(
-                message_id=user_message_id,
+                message_id=response_parent_id,
                 chat_session_id=chat_session_id,
                 admission=admission,
             )
@@ -541,10 +574,27 @@ def prepare_chat_turn(
         admission.refresh()
         # Reserve assistant message IDs so each model response has a saved identity.
         with get_session_with_current_tenant() as db_session:
+            if continue_after_response_id is not None:
+                # User submissions and branch changes can arrive during file preparation.
+                lock_agent(db_session, str(chat_session_id))
+                if is_stop_requested(
+                    chat_session_id,
+                    admission.cache,
+                    stream_id=continue_after_response_id,
+                ):
+                    raise OnyxError(OnyxErrorCode.CONFLICT, "The response was stopped.")
+                if (
+                    pending_agent_result_response(db_session, chat_session_id, user.id)
+                    != continue_after_response_id
+                ):
+                    raise OnyxError(
+                        OnyxErrorCode.CONFLICT,
+                        "The completed agent result is no longer ready to deliver.",
+                    )
             response_ids = reserve_chat_response_ids(
                 db_session=db_session,
                 chat_session_id=chat_session_id,
-                parent_message_id=user_message_id,
+                parent_message_id=response_parent_id,
                 model_display_names=[name for _, name in selected_models],
             )
         models = [
@@ -573,12 +623,20 @@ def prepare_chat_turn(
                 session_id=str(chat_session_id),
             ),
             responses=models,
-            messages=history.messages[: history.input_start],
-            input_messages=history.messages[history.input_start :],
+            messages=(
+                history.messages
+                if continue_after_response_id is not None
+                else history.messages[: history.input_start]
+            ),
+            input_messages=(
+                []
+                if continue_after_response_id is not None
+                else history.messages[history.input_start :]
+            ),
             previous_run_id=previous_run_id,
             additional_context=additional_context or new_msg_req.additional_context,
             extracted_context_files=extracted_files,
-            stream_id=user_message_id if is_multi else models[0].message_id,
+            stream_id=response_parent_id if is_multi else models[0].message_id,
             reasoning_effort=reasoning_effort,
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
@@ -601,7 +659,7 @@ def prepare_chat_turn(
 
 
 def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None:
-    """Start an eligible queued turn independently of its submitting browser."""
+    """Deliver submitted messages and child results through normal chat admission."""
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
         if is_chat_session_processing(chat_session_id, cache):
@@ -610,7 +668,16 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
             pending = pending_human_message__no_commit(
                 db_session, chat_session_id, user_id
             )
-        if pending is None:
+            continue_after_response_id = (
+                pending_agent_result_response(db_session, chat_session_id, user_id)
+                if pending is None
+                else None
+            )
+        if pending is None and continue_after_response_id is None:
+            return
+        if continue_after_response_id is not None and is_stop_requested(
+            chat_session_id, cache, stream_id=continue_after_response_id
+        ):
             return
 
         def start_pending_turn() -> None:
@@ -625,6 +692,8 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
                         or not user.is_active
                         or not has_global_permission(user, Permission.WRITE_CHAT)
                     ):
+                        if continue_after_response_id is not None:
+                            raise OnyxError(OnyxErrorCode.INSUFFICIENT_PERMISSIONS)
                         logger.warning(
                             "Queued chat message cannot start: user lacks chat access"
                         )
@@ -632,42 +701,81 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
                 check_token_rate_limits(user)
                 setup = prepare_chat_turn(
                     new_msg_req=SendMessageRequest(
-                        message=pending.message,
+                        message=pending.message if pending is not None else "",
                         chat_session_id=chat_session_id,
-                        parent_message_id=pending.target_response_id,
+                        parent_message_id=(
+                            pending.target_response_id
+                            if pending is not None
+                            else continue_after_response_id
+                        ),
                     ),
                     user=user,
                     llm_overrides=None,
-                    pending_message_id=pending.id,
+                    pending_message_id=pending.id if pending is not None else None,
+                    continue_after_response_id=continue_after_response_id,
                 )
                 stream = start_chat_turn(
                     setup,
                     user,
-                    on_turn_finished=partial(
+                    dispatch_pending_messages=partial(
                         dispatch_pending_chat_messages, chat_session_id, user_id
                     ),
                 )
                 # Delivery and persistence continue without a browser reader.
                 stream.close()
-            except OnyxError as error:
-                if error.error_code is OnyxErrorCode.CONFLICT:
-                    logger.debug(
-                        "Queued chat message was withdrawn or claimed elsewhere"
-                    )
+            except Exception as error:
+                if (
+                    isinstance(error, OnyxError)
+                    and error.error_code is OnyxErrorCode.CONFLICT
+                ):
+                    logger.debug("Queued chat work was withdrawn or claimed elsewhere")
                     try:
                         with get_session_with_current_tenant() as db_session:
                             following = pending_human_message__no_commit(
                                 db_session, chat_session_id, user_id
                             )
                         # A withdrawal can expose a new head while admission was held.
-                        if following is not None and following.id != pending.id:
+                        if following is not None and (
+                            pending is None or following.id != pending.id
+                        ):
                             dispatch_pending_chat_messages(chat_session_id, user_id)
                     except Exception:
                         logger.exception("Could not dispatch the next queued message")
-                else:
+                    return
+                if isinstance(error, OnyxError):
                     log_onyx_error(error)
-            except Exception:
-                logger.exception("Could not start queued chat message")
+                else:
+                    logger.exception("Could not start queued chat work")
+                if continue_after_response_id is None:
+                    return
+                admission = ChatTurnAdmission(cache)
+                try:
+                    admission.claim(chat_session_id)
+                    if is_stop_requested(
+                        chat_session_id, cache, stream_id=continue_after_response_id
+                    ):
+                        return
+                    with get_session_with_current_tenant() as db_session:
+                        fail_agent_result_response__no_commit(
+                            db_session,
+                            chat_session_id,
+                            user_id,
+                            continue_after_response_id,
+                        )
+                        db_session.commit()
+                except OnyxError as failure:
+                    if failure.error_code is OnyxErrorCode.CONFLICT:
+                        logger.debug(
+                            "Another response claimed the chat before failure recording"
+                        )
+                    else:
+                        log_onyx_error(failure)
+                except Exception:
+                    logger.exception(
+                        "Could not save automatic response startup failure"
+                    )
+                finally:
+                    admission.release()
             finally:
                 Scope.reset_current_span(span_token)
                 Scope.reset_current_trace(trace_token)
@@ -716,7 +824,7 @@ def _stream_chat_turn(
             user,
             response_future,
             query_observation=query_observation,
-            on_turn_finished=partial(
+            dispatch_pending_messages=partial(
                 dispatch_pending_chat_messages, setup.chat_session_id, user.id
             )
             if setup.incognito_record_mode is None

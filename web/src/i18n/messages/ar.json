@@ -12424,6 +12424,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "الوكلاء الفرعيون يعملون",
         "attachFilesButton": {
           "tooltip": "إرفاق ملفات"
         },

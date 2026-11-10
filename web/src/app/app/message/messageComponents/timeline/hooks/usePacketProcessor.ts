@@ -38,7 +38,6 @@ export interface UsePacketProcessorResult {
   // Status (derived from packets)
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
-  hasSteps: boolean;
   generatedImages: PlacedImage[];
   // Whether final answer is coming (MESSAGE_START seen)
   finalAnswerComing: boolean;
@@ -165,7 +164,6 @@ export function usePacketProcessor(
     // Status (derived from packets)
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
-    hasSteps: toolTurnGroups.length > 0,
     generatedImages: state.generatedImages,
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,

@@ -22,6 +22,8 @@ import {
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface MultiModelResponseViewProps {
   responses: MultiModelResponse[];
@@ -293,6 +295,7 @@ export default function MultiModelResponseView({
     [responses.length, onHiddenPanelsChange]
   );
 
+  const { mutate: mutateCache } = useSWRConfig();
   const updateSessionMessageTree = useChatSessionStore(
     (state) => state.updateSessionMessageTree
   );
@@ -342,9 +345,18 @@ export default function MultiModelResponseView({
       if (!response) return;
 
       if (parentMessage?.messageId && response.messageId && currentSessionId) {
-        setPreferredResponse(parentMessage.messageId, response.messageId).catch(
-          (err) => console.error("Failed to persist preferred response:", err)
-        );
+        void setPreferredResponse(parentMessage.messageId, response.messageId)
+          .then((saved) => {
+            if (!saved.ok) {
+              throw new Error(
+                `Preferred response selection failed: ${saved.status}`
+              );
+            }
+            return mutateCache(SWR_KEYS.chatSessionStatus(currentSessionId));
+          })
+          .catch((err) =>
+            console.error("Failed to persist preferred response:", err)
+          );
 
         const tree = useChatSessionStore
           .getState()
@@ -365,6 +377,7 @@ export default function MultiModelResponseView({
       parentMessage,
       currentSessionId,
       updateSessionMessageTree,
+      mutateCache,
     ]
   );
 

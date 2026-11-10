@@ -211,6 +211,12 @@ class ResponseAncestry(BaseModel):
     parent_response_id: int | None
 
 
+class ChatBackgroundActivity(BaseModel):
+    latest_response_id: int | None = None
+    running_response_ids: list[int] = Field(default_factory=list)
+    has_pending_results: bool = False
+
+
 class ChatBranch(BaseModel):
     chat_session_id: UUID
     message_ids: list[int]
@@ -668,7 +674,8 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     research_tool_id: int | None
     checkpoint: CompactionCheckpoint | None
-    user_message_id: int
+    # Child-result delivery has no new user message.
+    user_message_id: int | None
     user_identity: LLMUserIdentity
     responses: list[ReservedChatResponse]
     messages: list[Message]

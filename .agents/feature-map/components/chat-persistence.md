@@ -125,8 +125,9 @@ a `USAGE_ONLY` answer takes the legacy path. Reasoning display
 `backend/onyx/db/README.md` describes only the legacy format.
 
 **The tree.** Each session has one root row: `SYSTEM` type, no parent, empty
-text (`db/chat.py:get_or_create_root_message`). Messages alternate user and
-assistant below it. An edit adds a sibling user row under the same parent. A
+text (`db/chat.py:get_or_create_root_message`). A user message starts a turn;
+an unread child result can add another assistant response after a completed
+assistant response. An edit adds a sibling user row under the same parent. A
 regenerate is a send whose parent is the user row, so
 `chat/process_message.py:prepare_chat_turn` reuses that row and adds a sibling
 answer. Each row's `latest_child_message_id` marks the active child. Walking
@@ -144,7 +145,9 @@ no `SYSTEM` root: its first question has no parent, and
 `ChatRunStore.reserve_run_id` saves first. A later call to the same sub-agent
 reuses its child session and chains the new question to the previous
 response, which must be terminal. Creation links determine authorized ancestors;
-the invoking tool identifies the requester of each run. An ancestor can request
+the invoking tool identifies the requester of each run. An automatic response
+to child output links directly to the previous assistant response and retains
+its original invocation. It creates no user-message row. An ancestor can request
 a grandchild's next run without changing the grandchild's session ancestry.
 `db/chat_response.py:_ResponseWriter.store`
 refuses a run tree deeper than 8 or larger than 512 runs, and a run with more
@@ -192,8 +195,12 @@ uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
 Accepted result inputs reference their source response; reconstructed history
 retains that provenance across compaction. The directory selects unread results
 for the invoking agent on the active branch, so receipt on one branch
-does not consume a result on another. An ended parent receives results on its
-next user turn; completion alone does not create a turn.
+does not consume a result on another. A completed parent gets a new assistant
+response when unread child output arrives, including nested parents. The saved
+child response is the pending notification; no separate pending result is copied.
+The first model step records its consumption. Cancelled, failed, and step-limited
+parents do not restart automatically. User-submitted queued messages take priority.
+Result inputs remain model context and do not render as user messages.
 Search documents and `tool_id` come from the `ToolCall` rows and their search-doc
 links (`db/chat_response.py:read_response_replay_data`), not from the typed
 result: the saved `SearchDocsResponse` holds no documents. Only

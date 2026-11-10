@@ -151,6 +151,7 @@ export async function refreshChatSession(
             ?.messageId;
     store.updateSessionData(sessionId, {
       messageTree: messages,
+      hasActiveSubagents: saved.has_active_subagents ?? false,
       hasOlderMessages:
         messages === current.messageTree
           ? current.hasOlderMessages
@@ -273,6 +274,7 @@ export async function settleChatSession({
         const latestType = getLatestMessageChain(messageTree).at(-1)?.type;
         store.updateSessionData(sessionId, {
           messageTree,
+          hasActiveSubagents: settled.has_active_subagents ?? false,
           hasOlderMessages:
             messageTree === local
               ? current.hasOlderMessages

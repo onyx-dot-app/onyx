@@ -42,8 +42,10 @@ from onyx.agents.tools import (
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES
+from onyx.chat.execution import chat_turn_work
 from onyx.chat.history_store import PostgresChatHistoryStore, get_chat_history_store
 from onyx.chat.models import (
+    ChatBranch,
     ChatFeatureState,
     ChatMessageMetadata,
     CheckpointBinding,
@@ -51,9 +53,11 @@ from onyx.chat.models import (
     SavedAgentContext,
 )
 from onyx.chat.presentation import project_response
+from onyx.chat.process_message import dispatch_pending_chat_messages
 from onyx.chat.response import response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files, restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
+from onyx.chat.stop_signal_checker import clear_stop, request_stop
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, FileOrigin, MessageType
 from onyx.context.search.models import SearchDoc
@@ -63,10 +67,13 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
+from onyx.db.chat_inputs import get_selected_response, read_chat_background_activity
 from onyx.db.chat_response import (
+    read_chat_execution,
     read_response__no_commit,
     save_response_record__no_commit,
 )
+from onyx.db.chat_subagents import pending_agent_completion_ids, unread_agent_result_ids
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import (
     ChatInput,
@@ -99,6 +106,7 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
@@ -1509,7 +1517,13 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         assert first.wait_for_idle(timeout=10)
         spawned_result = first.snapshot().steps[0].tools["spawn"].result
         assert spawned_result is not None
-        child = SpawnResult.model_validate_json(spawned_result.text)
+        info = next(
+            info for info in first_owner.discovery() if info.parent_id == str(branch[0])
+        )
+        assert info.latest_run_id is not None
+        child = SpawnResult(
+            agent_id=info.id, agent_path=info.path, run_id=info.latest_run_id
+        )
         direct_child = child
         assert (
             first_owner.read_run_status(child.run_id, str(branch[0]))
@@ -1570,7 +1584,15 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             child_state = first_coordinator.completion(child.run_id).result(timeout=10)
             leaf_result = child_state.steps[0].tools["spawn_leaf"].result
             assert leaf_result is not None
-            child = SpawnResult.model_validate_json(leaf_result.text)
+            info = next(
+                info
+                for info in first_owner.discovery()
+                if info.parent_id == child.agent_id
+            )
+            assert info.latest_run_id is not None
+            child = SpawnResult(
+                agent_id=info.id, agent_path=info.path, run_id=info.latest_run_id
+            )
             # The root can still reach a live grandchild after its parent finishes.
             assert any(
                 info.id == child.agent_id
@@ -1664,7 +1686,8 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         )
         listed = later_results[0]
         assert listed is not None
-        assert child.agent_id in {item["id"] for item in json.loads(listed.text)}
+        assert child.agent_id in listed.text
+        assert child.agent_path in listed.text
         later_coordinator.completion(later.id).result(timeout=10)
         first_coordinator.completion(child.run_id).result(timeout=10)
         saved = later_owner.read_run(child.run_id, str(branch[0]))
@@ -1815,7 +1838,13 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
         assert first.wait_for_idle(timeout=10)
         spawned = first.snapshot().steps[0].tools["spawn"].result
         assert spawned is not None
-        child = SpawnResult.model_validate_json(spawned.text)
+        info = next(
+            info for info in first_owner.discovery() if info.parent_id == str(branch[0])
+        )
+        assert info.latest_run_id is not None
+        child = SpawnResult(
+            agent_id=info.id, agent_path=info.path, run_id=info.latest_run_id
+        )
         assert child_started.wait(timeout=10)
         if not child_is_running:
             first_coordinator.completion(child.run_id).result(timeout=15)
@@ -2213,4 +2242,198 @@ def test_input_acceptance_failure_preserves_committed_history(
             assert restored_input.metadata.source == InputSource.HUMAN
     finally:
         release.set()
+        assert coordinator.close(timeout=10)
+
+
+def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
+    make_test_user: MakeTestUser,
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+) -> None:
+    owner = store(branch)
+    coordinator = AgentCoordinator()
+    release_leaf = threading.Event()
+    continued = threading.Event()
+    response = db_session.get(ChatMessage, branch[1])
+    assert response is not None and response.parent_message is not None
+    response.parent_message.latest_child_message_id = response.id
+    user = make_test_user("automatic-agent-response")
+    response.chat_session.user_id = user.id
+    db_session.commit()
+
+    def leaf_reply(
+        _request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        assert release_leaf.wait(10)
+        return AssistantMessage(
+            content=[TextContent(text="The leaf found the evidence")]
+        )
+
+    def create_leaf() -> Agent:
+        return Agent(
+            FakeModelClient(leaf_reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+
+    child_replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="leaf",
+                        name="spawn_agent",
+                        arguments={"name": "leaf", "instruction": "Collect evidence"},
+                    )
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="Research delegated")]),
+        ]
+    )
+
+    def child_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(
+            isinstance(message, UserMessage)
+            and "The leaf found the evidence" in message.text
+            for message in request.messages
+        ):
+            continued.set()
+            return AssistantMessage(
+                content=[TextContent(text="The final research report")]
+            )
+        return next(child_replies)
+
+    def create_child() -> Agent:
+        return Agent(
+            FakeModelClient(child_reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[SpawnAgentTool(create_leaf, max_steps=3).bind(ToolContext)],
+        )
+
+    root_replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="research",
+                        name="spawn_agent",
+                        arguments={
+                            "name": "research",
+                            "instruction": "Find the answer",
+                        },
+                    )
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="Research is running")]),
+        ]
+    )
+    root = Agent(
+        FakeModelClient(lambda *_: next(root_replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id=str(branch[0]),
+        tools=[SpawnAgentTool(create_child, max_steps=3).bind(ToolContext)],
+    )
+    view = owner.bind(
+        coordinator,
+        directory=directory(owner),
+        build_agent=lambda _: pytest.fail("No checkpoint restore expected"),
+    )
+    try:
+        run = root.start(messages=[user_message], max_steps=3, coordinator=view)
+        assert run.result(timeout=10).output.text == "Research is running"
+        assert run.wait_for_idle(timeout=10)
+        info = next(
+            info for info in owner.discovery() if info.parent_id == str(branch[0])
+        )
+        assert info.latest_run_id is not None
+        child = coordinator.completion(info.latest_run_id).result(timeout=10)
+        local_child = view.child_run(child.run_id, str(branch[0]))
+        assert local_child is not None and local_child.wait_for_idle(timeout=10)
+        leaf = next(
+            info for info in owner.discovery() if info.parent_id == child.agent_id
+        )
+        assert leaf.latest_run_id is not None
+        db_session.expire_all()
+        activity = read_chat_background_activity(db_session, response.chat_session)
+        assert activity.latest_response_id == int(run.id)
+        assert int(leaf.latest_run_id) in activity.running_response_ids
+        release_leaf.set()
+        coordinator.completion(leaf.latest_run_id).result(timeout=10)
+        leaf_run = view.child_run(leaf.latest_run_id, str(branch[0]))
+        assert leaf_run is not None and leaf_run.wait_for_idle(timeout=10)
+        selected = ChatBranch(chat_session_id=branch[0], message_ids=[branch[1]])
+        db_session.expire_all()
+        assert int(child.run_id) in pending_agent_completion_ids(db_session, selected)
+        assert read_chat_background_activity(
+            db_session, response.chat_session
+        ).has_pending_results
+        owner.poll_control()
+        assert continued.wait(10)
+        latest = next(info for info in owner.discovery() if info.id == child.agent_id)
+        assert latest.latest_run_id is not None and latest.latest_run_id != child.run_id
+        resumed = view.child_run(latest.latest_run_id, str(branch[0]))
+        assert resumed is not None
+        assert resumed.result(timeout=10).output.text == "The final research report"
+        assert resumed.wait_for_idle(timeout=10)
+        db_session.expire_all()
+        stored = db_session.get(ChatMessage, int(resumed.id))
+        assert stored is not None
+        assert stored.parent_message_id == int(child.run_id)
+        assert (
+            stored.parent_message is not None
+            and stored.parent_message.message_type == MessageType.ASSISTANT
+        )
+        assert root_response_id(db_session, stored) == branch[1]
+        assert len(stored.response_items[0].inputs) == 1
+        assert stored.response_items[0].inputs[0].source == InputSource.AGENT_RESULT
+        assert stored.response_items[0].inputs[0].source_response_id == int(
+            leaf.latest_run_id
+        )
+        assert child.agent_id is not None
+        assert unread_agent_result_ids(db_session, selected, child.agent_id) == []
+        history = PostgresChatHistoryStore(
+            message_id=branch[1], chat_session_id=branch[0]
+        ).load_agent_history(child.agent_id)
+        assert history.previous_run_id == resumed.id
+        assert history.messages[-1].text == "The final research report"
+        execution = read_chat_execution(response)
+        assert execution is not None
+        assert resumed.id in {item.run_id for item in execution.response.child_runs}
+        owner.poll_control()
+        assert (
+            next(
+                info for info in owner.discovery() if info.id == child.agent_id
+            ).latest_run_id
+            == resumed.id
+        )
+        with patch(
+            "onyx.chat.process_message.check_token_rate_limits",
+            side_effect=RuntimeError("Model startup unavailable"),
+        ) as check_limits:
+            request_stop(branch[0], owner.cache, stream_id=branch[1])
+            dispatch_pending_chat_messages(branch[0], user.id)
+            assert chat_turn_work.wait_idle(timeout=10)
+            check_limits.assert_not_called()
+            clear_stop(branch[0], owner.cache, stream_id=branch[1])
+            dispatch_pending_chat_messages(branch[0], user.id)
+            assert chat_turn_work.wait_idle(timeout=10)
+            db_session.expire_all()
+            failed = get_selected_response(db_session, branch[0])
+            assert failed is not None
+            assert failed.id != branch[1]
+            assert failed.parent_message_id == branch[1]
+            assert failed.message_type == MessageType.ASSISTANT
+            assert failed.response_status == RunStatus.ERROR
+            assert failed.response_failure is not None
+            assert (
+                failed.response_failure.message == "The agent response could not start"
+            )
+            assert failed.response_items == []
+            dispatch_pending_chat_messages(branch[0], user.id)
+            assert chat_turn_work.wait_idle(timeout=10)
+            check_limits.assert_called_once()
+    finally:
+        release_leaf.set()
         assert coordinator.close(timeout=10)

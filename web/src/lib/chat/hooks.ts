@@ -24,13 +24,95 @@ import {
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
-import type { PendingChatMessage } from "@/lib/chat/types";
+import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
+import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useShallow } from "zustand/react/shallow";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const PENDING_MESSAGES_POLL_MS = 1000;
+const SUBAGENT_ACTIVITY_POLL_MS = 2000;
+
+/** Discover background work without making it part of the root response's busy state. */
+export function useSubagentActivity(
+  sessionId: string | null,
+  enabled: boolean
+) {
+  const tReadiness = useTranslations("chat.readiness");
+  const { chatState, hasActiveSubagents, readerFinished } = useChatSessionStore(
+    useShallow((state) => {
+      const session = sessionId ? state.sessions.get(sessionId) : undefined;
+      return {
+        chatState: session?.chatState,
+        hasActiveSubagents: session?.hasActiveSubagents ?? false,
+        readerFinished: session?.readerFinished,
+      };
+    })
+  );
+  const key =
+    enabled && sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
+  const refreshing = useRef(false);
+  const { mutate } = useSWR<ChatSessionStatus, Error>(
+    key,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (status) =>
+        hasActiveSubagents ||
+        status?.has_active_subagents ||
+        chatState === "loading" ||
+        chatState === "streaming" ||
+        chatState === "cancelling"
+          ? SUBAGENT_ACTIVITY_POLL_MS
+          : 0,
+      onErrorRetry: skipRetryOnAuthError,
+      onSuccess: (status) => {
+        if (!sessionId) return;
+        const store = useChatSessionStore.getState();
+        const session = store.sessions.get(sessionId);
+        if (!session) return;
+        if (session.hasActiveSubagents !== status.has_active_subagents) {
+          store.updateSessionData(sessionId, {
+            hasActiveSubagents: status.has_active_subagents,
+          });
+        }
+        // A reply can finish between polls, so inspect its identity as well as liveness.
+        if (
+          session.chatState !== "input" ||
+          refreshing.current ||
+          status.latest_response_id === null ||
+          (!status.is_processing &&
+            getMessageByMessageId(
+              session.messageTree,
+              status.latest_response_id
+            ))
+        )
+          return;
+        refreshing.current = true;
+        void refreshChatSession(sessionId, tReadiness("checkFailed")).finally(
+          () => {
+            refreshing.current = false;
+          }
+        );
+      },
+    }
+  );
+  useEffect(() => {
+    if (!key || !readerFinished) return;
+    let active = true;
+    const refresh = () => {
+      if (active)
+        void mutate().catch((error: unknown) => {
+          console.error("Could not refresh subagent activity", error);
+        });
+    };
+    void readerFinished.then(refresh, refresh);
+    return () => {
+      active = false;
+    };
+  }, [key, mutate, readerFinished]);
+  return enabled && hasActiveSubagents;
+}
 
 /** The server owns acceptance and ordering; this cache only displays pending input. */
 export function usePendingChatMessages(

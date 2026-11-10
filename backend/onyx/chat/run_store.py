@@ -4,6 +4,7 @@ import threading
 import time
 from collections.abc import Callable, Collection, Iterator, Sequence
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from onyx.agents.agent_coordination import (
@@ -40,6 +41,7 @@ from onyx.chat.presentation import project_response
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.configs.constants import MessageType
+from onyx.db.chat import response_invocation, root_response_id, visible_message_ids
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
@@ -54,6 +56,7 @@ from onyx.db.chat_inputs import (
     enqueue_message,
     fail_pending_message,
     fail_reserved_message,
+    get_selected_response,
     inputs_available,
     latest_agent_response,
     latest_agent_responses,
@@ -70,6 +73,7 @@ from onyx.db.chat_response import (
     finish_checkpoint__no_commit,
     read_response__no_commit,
     read_response_status__no_commit,
+    reserve_agent_continuation__no_commit,
     reserve_child_response__no_commit,
     save_chat_turn,
     save_response_record__no_commit,
@@ -77,9 +81,12 @@ from onyx.db.chat_response import (
 from onyx.db.chat_subagents import (
     background_response_statuses,
     load_session_agent_metadata,
+    pending_agent_completion_ids,
     read_agent_completions,
+    unread_agent_result_ids,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import Message, UserMessage
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -94,6 +101,15 @@ OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
 INPUT_POLL_SECONDS = 1.0
+RESPONSE_OWNER_KEY_PREFIX = "chat_response_owner:"
+
+
+def active_response_ids(cache: CacheBackend, response_ids: Collection[int]) -> set[int]:
+    keys = {
+        f"{RESPONSE_OWNER_KEY_PREFIX}{response_id}": response_id
+        for response_id in response_ids
+    }
+    return {keys[key] for key in cache.exists_many(keys)} if keys else set()
 
 
 class _OwnershipLost(RuntimeError):
@@ -165,6 +181,7 @@ class ChatRunStore(RunStore, RunOwnership):
         self._pending_dispatch = False
         self._input_revision = 0
         self._next_input_poll = 0.0
+        self._completion_step_limit: int | None = None
 
     def _with_tenant[T](self, operation: Callable[[], T]) -> T:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
@@ -174,7 +191,7 @@ class ChatRunStore(RunStore, RunOwnership):
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     def _owner_key(self, response_id: int) -> str:
-        return f"chat_response_owner:{response_id}"
+        return f"{RESPONSE_OWNER_KEY_PREFIX}{response_id}"
 
     def _stop_key(self, response_id: int) -> str:
         return f"chat_response_stop:{response_id}"
@@ -347,7 +364,11 @@ class ChatRunStore(RunStore, RunOwnership):
                 return
             revision = self._input_revision
             self._next_input_poll = time.monotonic() + INPUT_POLL_SECONDS
-        if coordinator is None or not self._dispatch_lock.acquire(blocking=False):
+        if (
+            coordinator is None
+            or coordinator.is_closed
+            or not self._dispatch_lock.acquire(blocking=False)
+        ):
             return
         try:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -381,11 +402,22 @@ class ChatRunStore(RunStore, RunOwnership):
                     if can_start_message(row, latest):
                         requests.append(queued_request(row))
                         selected.add(agent_id)
+                selected_root = get_selected_response(session, self.chat_session_id)
+                completions = (
+                    pending_agent_completion_ids(session, self._input_branch)
+                    if selected_root is not None
+                    and self.response_id in visible_message_ids(session, selected_root)
+                    else []
+                )
                 with self._lock:
                     self._pending_dispatch = (
                         self._input_revision != revision
                         or bool(requests)
                         or bool(owners)
+                        or any(
+                            response_id not in self.visible_response_ids
+                            for response_id in completions
+                        )
                     )
             for request in requests:
                 lock = self.cache.lock(
@@ -414,8 +446,78 @@ class ChatRunStore(RunStore, RunOwnership):
                         session.commit()
                 finally:
                     lock.release()
+            self._dispatch_completions(coordinator, completions, selected)
         finally:
             self._dispatch_lock.release()
+
+    def _dispatch_completions(
+        self,
+        coordinator: AgentCoordinator,
+        completions: list[int],
+        submitted_agent_ids: set[str],
+    ) -> None:
+        for previous_id in completions:
+            if (
+                self._completion_step_limit is None
+                or previous_id in self.visible_response_ids
+            ):
+                continue
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                response = find_response__no_commit(session, previous_id)
+                if response is None:
+                    continue
+                agent_id = str(response.chat_session_id)
+                invocation = response_invocation(response)
+                if invocation is None or invocation.parent_chat_message_id is None:
+                    raise ValueError("Agent continuation has no original invocation")
+                parent_run_id = str(invocation.parent_chat_message_id)
+                parent_message_id = f"{parent_run_id}:{invocation.turn_number}"
+                parent_tool_call_id = invocation.tool_call_id
+            if agent_id in submitted_agent_ids:
+                continue
+            previous = coordinator.active_run(agent_id)
+            if previous is not None and not previous.wait_for_idle(timeout=0):
+                continue
+            lock = self.cache.lock(
+                f"chat_agent_dispatch:{agent_id}", timeout=OWNER_LOCK_SECONDS
+            )
+            if not lock.acquire(blocking_timeout=0):
+                continue
+            try:
+                agent = coordinator.resolve_child(agent_id, str(self.chat_session_id))
+                agent.start(
+                    max_steps=self._completion_step_limit,
+                    coordinator=coordinator,
+                    cancellation=CancellationSignal(),
+                    deadline_at=datetime.now(timezone.utc)
+                    + timedelta(seconds=OPERATION_TIMEOUT_SECONDS),
+                    parent_run_id=parent_run_id,
+                    parent_message_id=parent_message_id,
+                    parent_tool_call_id=parent_tool_call_id,
+                )
+            except _MessageChanged:
+                continue
+            except Exception:
+                logger.exception("Could not continue agent after child completion")
+                if coordinator.is_closed:
+                    return
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    lock_agent(session, agent_id)
+                    latest = latest_agent_response(
+                        session, self._input_branch, agent_id
+                    )
+                    if (
+                        latest is not None
+                        and latest.id == previous_id
+                        and latest.response_status == RunStatus.COMPLETE
+                    ):
+                        failed_id = reserve_agent_continuation__no_commit(
+                            session, latest
+                        )
+                        fail_reserved_message(session, failed_id)
+                        session.commit()
+            finally:
+                lock.release()
 
     def completed_agents(
         self,
@@ -559,39 +661,83 @@ class ChatRunStore(RunStore, RunOwnership):
             queued_start = (
                 instruction is not None and instruction.id in self._starting_messages
             )
-        if queued_start and instruction is not None:
+        completion_start = (
+            not messages
+            and previous_run_id is not None
+            and agent.id != str(self.chat_session_id)
+        )
+        if queued_start or completion_start:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 lock_agent(session, agent.id)
-                row = next(
-                    (
-                        item
-                        for item in pending_inputs(
+                if queued_start:
+                    assert instruction is not None
+                    row = next(
+                        (
+                            item
+                            for item in pending_inputs(
+                                session, self._input_branch, agent.id
+                            )
+                            if item.message_id == instruction.id
+                        ),
+                        None,
+                    )
+                    if row is None:
+                        raise _MessageChanged("Message is no longer pending")
+                    latest = latest_agent_response(
+                        session, self._input_branch, agent.id
+                    )
+                    if (
+                        not can_start_message(row, latest)
+                        or (str(latest.id) if latest else None) != previous_run_id
+                    ):
+                        raise _MessageChanged(
+                            "Agent execution changed before message acceptance"
+                        )
+                    request = queued_request(row)
+                    if (parent_run_id, parent_message_id, parent_tool_call_id) != (
+                        request.parent_run_id,
+                        request.parent_message_id,
+                        request.parent_tool_call_id,
+                    ):
+                        raise ValueError("Message invocation changed")
+                    message_id, root_id = reserve_input_response(
+                        session, row, agent, latest
+                    )
+                else:
+                    latest = latest_agent_response(
+                        session, self._input_branch, agent.id
+                    )
+                    if (
+                        latest is None
+                        or str(latest.id) != previous_run_id
+                        or latest.response_status != RunStatus.COMPLETE
+                        or not unread_agent_result_ids(
                             session, self._input_branch, agent.id
                         )
-                        if item.message_id == instruction.id
-                    ),
-                    None,
-                )
-                if row is None:
-                    raise _MessageChanged("Message is no longer pending")
-                latest = latest_agent_response(session, self._input_branch, agent.id)
-                if (
-                    not can_start_message(row, latest)
-                    or (str(latest.id) if latest else None) != previous_run_id
-                ):
-                    raise _MessageChanged(
-                        "Agent execution changed before message acceptance"
-                    )
-                request = queued_request(row)
-                if (parent_run_id, parent_message_id, parent_tool_call_id) != (
-                    request.parent_run_id,
-                    request.parent_message_id,
-                    request.parent_tool_call_id,
-                ):
-                    raise ValueError("Message invocation changed")
-                message_id, root_id = reserve_input_response(
-                    session, row, agent, latest
-                )
+                    ):
+                        raise _MessageChanged(
+                            "Agent has no unread completion to accept"
+                        )
+                    invocation = response_invocation(latest)
+                    if invocation is None or (
+                        parent_run_id,
+                        parent_message_id,
+                        parent_tool_call_id,
+                    ) != (
+                        str(invocation.parent_chat_message_id),
+                        f"{invocation.parent_chat_message_id}:{invocation.turn_number}",
+                        invocation.tool_call_id,
+                    ):
+                        raise ValueError("Continuation changed its original invocation")
+                    root_id = root_response_id(session, latest)
+                    selected_root = get_selected_response(session, self.chat_session_id)
+                    if selected_root is None or root_id not in visible_message_ids(
+                        session, selected_root
+                    ):
+                        raise _MessageChanged(
+                            "Agent continuation is no longer on the selected branch"
+                        )
+                    message_id = reserve_agent_continuation__no_commit(session, latest)
                 owner = ResponseOwner(token=uuid4(), root_message_id=root_id)
                 lease = _OwnerLease(owner)
                 with self._ownership_lock(message_id):
@@ -669,6 +815,10 @@ class ChatRunStore(RunStore, RunOwnership):
         response_id = int(run.id)
         snapshot = run.snapshot(include_children=False)
         with self._lock:
+            if response_id == self.response_id:
+                if snapshot.progress is None:
+                    raise ValueError("New response has no execution budget")
+                self._completion_step_limit = snapshot.progress.step_limit
             lease = self._leases.get(response_id)
             claimed = lease.owner if lease is not None else None
             parent = (
@@ -827,6 +977,10 @@ class ChatRunStore(RunStore, RunOwnership):
             with self._lock:
                 self._owned.pop(response_id, None)
                 self._message_reservations.pop(response_id, None)
+                if response_id != self.response_id:
+                    self._input_revision += 1
+                    self._pending_dispatch = True
+                    self._next_input_poll = 0.0
 
     def _refresh_owner(self, response_id: int, owner: ResponseOwner) -> None:
         if not self.control_cache.renew_if_value(

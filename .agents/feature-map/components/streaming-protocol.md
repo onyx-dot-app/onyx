@@ -294,6 +294,10 @@ its background task end ([[#pure-asgi-middleware]]).
     before releasing input. Web also follows `current_stream` when a queued
     turn starts, through
     `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
+    Background children can remain active after the root response becomes
+    idle. `has_active_subagents` controls the activity indicator, not input
+    availability. Web checks `current_stream` and `latest_response_id` to
+    follow automatic replies, including replies that finish between polls.
     Other clients wait for the session to become idle:
     `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
     `cli/internal/api/client.go:IsChatSessionProcessing` and

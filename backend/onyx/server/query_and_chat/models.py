@@ -312,6 +312,8 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
+    has_active_subagents: bool = False
+    latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
 
 
@@ -332,6 +334,7 @@ class ChatSessionDetailResponse(BaseModel):
     packets: list[list[Packet]]
     # The buffer also retains interrupted work until its cache TTL expires.
     current_stream: CurrentStreamInfo | None = None
+    has_active_subagents: bool = False
     # Readiness is independent of whether a stream can be replayed.
     is_processing: bool = False
     # True for sessions pinned to an incognito record mode, so a reload can

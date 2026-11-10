@@ -100,6 +100,8 @@ export const SWR_KEYS = {
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
+  chatSessionStatus: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/status`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
   adminSsoProviders: "/api/admin/sso/provider",

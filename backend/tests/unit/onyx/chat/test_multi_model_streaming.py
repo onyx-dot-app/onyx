@@ -2734,14 +2734,16 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
     polled_after_release = threading.Event()
     outcome = Future[ChatResponseOutcome]()
     dispatched = threading.Event()
+    dispatched_after_children = threading.Event()
 
     def dispatch_pending() -> None:
         assert released.is_set()
-        assert not dispatched.is_set()
         dispatched.set()
+        if not store.has_owned_work:
+            dispatched_after_children.set()
 
     turn = ChatTurnExecution(
-        _make_setup(), MagicMock(), outcome, on_turn_finished=dispatch_pending
+        _make_setup(), MagicMock(), outcome, dispatch_pending_messages=dispatch_pending
     )
     store = MagicMock(spec=ChatRunStore)
     store.has_owned_work = True
@@ -2780,6 +2782,7 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
         patch("onyx.chat.history_store.save_chat_response_to_db"),
         patch("onyx.chat.execution.is_stop_requested", side_effect=check_stop),
         patch("onyx.chat.execution._CANCEL_POLL_INTERVAL_S", 0.01),
+        patch("onyx.chat.execution._INPUT_POLL_INTERVAL_S", 3600),
         patch("onyx.chat.execution.PROCESSING_REFRESH_INTERVAL_S", 0),
         patch.object(
             turn.setup.admission, "release", side_effect=release_admission
@@ -2809,6 +2812,7 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
             store.has_owned_work = False
             turn._completion_changed.set()
             _wait_for_chat_workers(chat_workers)
+            assert dispatched_after_children.is_set()
             release_chat.assert_called_once()
             end_trace.assert_called_once()
         finally:
@@ -3209,7 +3213,7 @@ def test_stop_waits_for_model_read_and_persistence_before_ending_delivery(
     )
     dispatch_pending = MagicMock()
     turn = ChatTurnExecution(
-        _make_setup(), MagicMock(), outcome, on_turn_finished=dispatch_pending
+        _make_setup(), MagicMock(), outcome, dispatch_pending_messages=dispatch_pending
     )
     with (
         patch.object(turn.setup.admission, "release") as release_admission,

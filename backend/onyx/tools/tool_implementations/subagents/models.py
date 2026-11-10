@@ -26,7 +26,9 @@ class SpawnAgentInput(BaseModel):
 class SubagentSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    agent_id: str = Field(min_length=1)
+    agent_id: str = Field(
+        min_length=1, description="The agent_id returned by spawn_agent or list_agents."
+    )
 
 
 class AgentMessageInput(SubagentSelection):

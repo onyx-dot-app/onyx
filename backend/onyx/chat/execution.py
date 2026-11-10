@@ -101,7 +101,7 @@ def start_chat_turn(
     response_future: Future[ChatResponseOutcome] | None = None,
     *,
     query_observation: QueryObservation | None = None,
-    on_turn_finished: Callable[[], None] | None = None,
+    dispatch_pending_messages: Callable[[], None] | None = None,
 ) -> ChatStream:
     """Publish response identity and launch work that outlives its stream reader."""
     mode = setup.incognito_record_mode
@@ -132,7 +132,7 @@ def start_chat_turn(
             response_future,
             stream_buffer,
             query_observation=query_observation,
-            on_turn_finished=on_turn_finished,
+            dispatch_pending_messages=dispatch_pending_messages,
         )
         startup_error: Exception | None = None
         try:
@@ -201,13 +201,13 @@ class ChatTurnExecution:
         stream_buffer: StreamBufferWriter | None = None,
         *,
         query_observation: QueryObservation | None = None,
-        on_turn_finished: Callable[[], None] | None = None,
+        dispatch_pending_messages: Callable[[], None] | None = None,
     ) -> None:
         self.setup = setup
         self.user = user
         self.delivery = ChatDelivery(stream_buffer, query_observation=query_observation)
         self._query_observation = query_observation
-        self._on_turn_finished = on_turn_finished
+        self._dispatch_pending_messages = dispatch_pending_messages
         self._stores: list[ChatRunStore] = []
         self.cancellation = CancellationSignal()
         self._response_future = response_future
@@ -376,6 +376,12 @@ class ChatTurnExecution:
                     if self._admission_released and not any(
                         store.has_owned_work for store in stores
                     ):
+                        # The last child may have saved after the timed dispatch check.
+                        if (
+                            not self.cancellation.cancelled
+                            and self._dispatch_pending_messages
+                        ):
+                            self._dispatch_pending_messages()
                         return
                 self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
 
@@ -435,7 +441,7 @@ class ChatTurnExecution:
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return
-        if self._on_turn_finished is None:
+        if self._dispatch_pending_messages is None:
             return
         try:
             if self.cancellation.cancelled:
@@ -449,7 +455,7 @@ class ChatTurnExecution:
                     )
                 if not interrupted:
                     return
-            self._on_turn_finished()
+            self._dispatch_pending_messages()
         except Exception:
             logger.exception("Could not dispatch queued chat input")
 
@@ -622,6 +628,14 @@ class ChatTurnExecution:
 
         # Background children keep their leases after this response releases the chat.
         if self._admission_released:
+            now = time.monotonic()
+            if (
+                not self.cancellation.cancelled
+                and self._dispatch_pending_messages is not None
+                and now - self._last_input_poll >= _INPUT_POLL_INTERVAL_S
+            ):
+                self._last_input_poll = now
+                self._dispatch_pending_messages()
             return
 
         if (

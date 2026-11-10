@@ -407,7 +407,6 @@ def test_attachment_loading_releases_preparation_session_before_reservation_fail
 
 
 def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> None:
-    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from uuid import uuid4
 
@@ -428,7 +427,7 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message._load_session",
-            return_value=SimpleNamespace(id=session_id, persona=None),
+            return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models", side_effect=fail_model_setup),
         pytest.raises(RuntimeError, match="model setup failed"),
@@ -438,7 +437,6 @@ def test_admission_precedes_model_setup_and_releases_after_setup_failure() -> No
 
 
 def test_busy_session_rejects_before_model_or_history_setup() -> None:
-    from types import SimpleNamespace
     from unittest.mock import MagicMock
     from uuid import uuid4
 
@@ -459,7 +457,7 @@ def test_busy_session_rejects_before_model_or_history_setup() -> None:
         patch("onyx.chat.process_message.get_session_with_current_tenant"),
         patch(
             "onyx.chat.process_message._load_session",
-            return_value=SimpleNamespace(id=session_id, persona=None),
+            return_value=ChatSession(id=session_id, persona=None),
         ),
         patch("onyx.chat.process_message._select_models") as select_models,
         patch("onyx.chat.process_message.load_message_branch") as load_branch,

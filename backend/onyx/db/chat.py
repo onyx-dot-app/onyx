@@ -965,10 +965,14 @@ def reserve_chat_response_ids(
     if parent:
         if (
             len(reserved) == 1
-            and parent.message_type == MessageType.USER
+            and parent.message_type in (MessageType.USER, MessageType.ASSISTANT)
             and parent.latest_child_message_id is None
         ):
-            previous = parent.parent_message
+            previous = (
+                parent.parent_message
+                if parent.message_type == MessageType.USER
+                else parent
+            )
             previous_response_id = (
                 previous.id
                 if previous is not None
@@ -994,6 +998,29 @@ def reserve_chat_response_ids(
 
     db_session.commit()
     return [message.id for message in reserved]
+
+
+def chat_response_ids_for_stream(
+    db_session: Session, chat_session_id: UUID, stream_id: int
+) -> list[int]:
+    """Resolve a response stream or a user row that groups simultaneous responses."""
+    grouped_stream = select(ChatMessage.id).where(
+        ChatMessage.id == stream_id,
+        ChatMessage.chat_session_id == chat_session_id,
+        ChatMessage.message_type == MessageType.USER,
+    )
+    return list(
+        db_session.scalars(
+            select(ChatMessage.id).where(
+                ChatMessage.chat_session_id == chat_session_id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+                or_(
+                    ChatMessage.id == stream_id,
+                    ChatMessage.parent_message_id.in_(grouped_stream),
+                ),
+            )
+        )
+    )
 
 
 def set_preferred_response(
@@ -1518,7 +1545,6 @@ def create_chat_history_chain(
             )
 
     current_message: ChatMessage | None = root_message
-    previous_message: ChatMessage | None = None
     while current_message is not None:
         child_msg = current_message.latest_child_message
 
@@ -1530,21 +1556,7 @@ def create_chat_history_chain(
             break
         current_message = child_msg
 
-        if (
-            current_message.message_type == MessageType.ASSISTANT
-            and previous_message is not None
-            and previous_message.message_type == MessageType.ASSISTANT
-            and mainline_messages
-        ):
-            # Note that 2 user messages in a row is fine since this is often used for
-            # adding custom prompts and reminders
-            raise RuntimeError(
-                "Invalid message chain, cannot have two assistant messages in a row"
-            )
-        else:
-            mainline_messages.append(current_message)
-
-        previous_message = current_message
+        mainline_messages.append(current_message)
 
     return mainline_messages
 
@@ -1759,6 +1771,18 @@ def agent_session_path(db_session: Session, agent: ChatSession) -> str:
     )
 
 
+def response_invocation(response: ChatMessage) -> ToolCall | None:
+    """Find the invocation that owns this response and its automatic continuations."""
+    predecessor = response.parent_message
+    visited: set[int] = set()
+    while predecessor is not None and predecessor.message_type == MessageType.ASSISTANT:
+        if predecessor.id in visited or len(visited) >= MAX_AGENT_HISTORY_RUNS:
+            raise ValueError("Response history is cyclic or too long")
+        visited.add(predecessor.id)
+        predecessor = predecessor.parent_message
+    return predecessor.invoking_tool_call if predecessor is not None else None
+
+
 def root_response_id(db_session: Session, response: ChatMessage) -> int:
     current = response
     visited: set[int] = set()
@@ -1766,8 +1790,7 @@ def root_response_id(db_session: Session, response: ChatMessage) -> int:
         if current.id in visited or len(visited) >= MAX_AGENT_DEPTH:
             raise ValueError("Child response hierarchy is cyclic or too deep")
         visited.add(current.id)
-        question = current.parent_message
-        invocation = question.invoking_tool_call if question else None
+        invocation = response_invocation(current)
         if invocation is None or invocation.parent_chat_message_id is None:
             raise ValueError("Child response is missing its invocation")
         parent = db_session.get(ChatMessage, invocation.parent_chat_message_id)

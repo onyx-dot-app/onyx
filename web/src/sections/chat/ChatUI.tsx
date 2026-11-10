@@ -387,7 +387,9 @@ const ChatUI = React.memo(
                   {message.type === "error" && (
                     <ErrorBanner
                       resubmit={
-                        chatState === "input" && i === messages.length - 1
+                        chatState === "input" &&
+                        previousMessage?.type === "user" &&
+                        i === messages.length - 1
                           ? onResubmit
                           : undefined
                       }

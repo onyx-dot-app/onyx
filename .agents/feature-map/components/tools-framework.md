@@ -177,7 +177,10 @@ run and preserves the conversation for later messages.
 Results reach the requesting agent before its next model call. `wait_agent` waits
 for an unread result or instruction, with a bounded timeout. It does not consume
 the message. The wait keeps the run active and preserves code cells.
-A completed root receives pending results on its next user turn.
+An idle agent starts a follow-up response for unread child results. These results
+stay in model history; only the parent's response appears as a chat message.
+Tool replies use concise text. The `agent_id` from spawn/list is the control
+handle; paths are display labels and need not be unique.
 
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and

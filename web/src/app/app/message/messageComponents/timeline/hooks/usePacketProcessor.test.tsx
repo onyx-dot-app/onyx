@@ -457,24 +457,6 @@ describe("usePacketProcessor", () => {
     });
   });
 
-  describe("hasSteps flag", () => {
-    test("false when no tool groups", () => {
-      const packets = [createMessageStartPacket({ turn_index: 0 })];
-
-      const { result } = renderHook(() => usePacketProcessor(packets, 1));
-
-      expect(result.current.hasSteps).toBe(false);
-    });
-
-    test("true when tool groups exist", () => {
-      const packets = [createSearchToolStartPacket({ turn_index: 0 })];
-
-      const { result } = renderHook(() => usePacketProcessor(packets, 1));
-
-      expect(result.current.hasSteps).toBe(true);
-    });
-  });
-
   describe("toolTurnGroups transformation", () => {
     test("groups tools by turn index", () => {
       const packets = [
@@ -515,7 +497,6 @@ describe("usePacketProcessor", () => {
 
       expect(result.current.toolGroups.length).toBe(1);
       expect(result.current.displayGroups.length).toBe(1);
-      expect(result.current.hasSteps).toBe(true);
       expect(result.current.stopPacketSeen).toBe(true);
       expect(result.current.stopReason).toBe(StopReason.FINISHED);
       expect(result.current.finalAnswerComing).toBe(true);
@@ -554,7 +535,7 @@ describe("usePacketProcessor", () => {
       expect(result.current.generatedImages.map((i) => i.file_id)).toEqual([
         "img1",
       ]);
-      expect(result.current.hasSteps).toBe(true);
+      expect(result.current.toolTurnGroups).toHaveLength(1);
       expect(result.current.finalAnswerComing).toBe(true);
       expect(result.current.displayGroups.length).toBe(1);
     });
@@ -579,7 +560,7 @@ describe("usePacketProcessor", () => {
         "reloaded-0",
         "reloaded-1",
       ]);
-      expect(result.current.hasSteps).toBe(true);
+      expect(result.current.toolTurnGroups).toHaveLength(1);
       expect(result.current.displayGroups.length).toBe(0);
       expect(result.current.stopPacketSeen).toBe(true);
       expect(result.current.isComplete).toBe(true);

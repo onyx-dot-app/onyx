@@ -74,6 +74,10 @@ export class ChatPage {
     );
   }
 
+  regenerateControl(index: number): Locator {
+    return this.aiMessage(index).getByTestId("AgentMessage/regenerate");
+  }
+
   humanMessage(index = 0): Locator {
     return this.humanMessages.nth(index);
   }
@@ -372,6 +376,14 @@ export class ChatPage {
     await this.openModelSettings(modelName);
     await this.modelPopover.getByRole("slider").first().press("End");
     await this.page.keyboard.press("Escape");
+  }
+
+  async selectPreviousHumanMessage(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByTestId("MessageSwitcher/container")
+      .getByRole("button")
+      .first()
+      .click();
   }
 
   async editHumanMessage(text: string, index = 0): Promise<void> {

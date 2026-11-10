@@ -30,6 +30,7 @@ export class InputBar {
   readonly processingFileChips: Locator;
   readonly queuedMessages: Locator;
   readonly pendingMessageHint: Locator;
+  readonly subagentActivity: Locator;
   readonly composerSendNowButton: Locator;
 
   readonly tile: Locator;
@@ -47,6 +48,7 @@ export class InputBar {
     this.textbox = page.locator("#onyx-chat-input-textbox");
     this.sendButton = page.locator("#onyx-chat-input-send-button");
     this.processingFileChips = this.container.getByText("Processing...");
+    this.subagentActivity = this.container.getByTestId("subagent-activity");
     this.queuedMessages = page.getByTestId("queued-message-bar");
     this.pendingMessageHint = this.container.getByTestId(
       "pending-message-hint"

@@ -34,6 +34,11 @@
   accepted messages cannot be withdrawn. Stop and failed responses pause the queue.
   Pending submission is text-only and unavailable in incognito. Craft keeps its
   own queue; only the queue display and keyboard navigation are shared.
+- **Subagents can continue after the answer ends.** A small activity indicator
+  stays visible while background work remains. The input stays usable. Session
+  status polling discovers automatic follow-up responses and uses the normal
+  history refresh and stream-replay path. Internal agent results do not become
+  user message bubbles.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.
@@ -400,7 +405,8 @@ up its own branding.
    backend accepts a send only when its parent is on the server's active branch
    ([[chat-persistence#send-parent-on-active-branch]]), and a reload shows the
    server's branch. A UI path that changes `latestChildNodeId` without the PUT
-   breaks both.
+   breaks both. After selection succeeds, refresh session status: an idle
+   branch has no polling timer to discover another branch's active children.
 8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
    follow-up to an unpicked multi-model turn picks the most visible answer,
    applies it locally and PUTs it. `web/src/hooks/useChatController.ts:onSubmit`

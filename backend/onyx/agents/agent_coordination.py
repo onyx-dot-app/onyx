@@ -1104,6 +1104,11 @@ class AgentCoordinator:
             self._state.latest.clear()
         return True
 
+    @property
+    def is_closed(self) -> bool:
+        with self._state.lock:
+            return self._state.closed
+
     def check_open(self) -> None:
         with self._state.lock:
             if self._state.closed:

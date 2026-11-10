@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   nameChatSession,
   processRawChatHistory,
@@ -90,6 +92,7 @@ export default function useChatSessionController({
   onSubmit,
 }: UseChatSessionControllerProps) {
   const navigation = useNavigation();
+  const { mutate: mutateCache } = useSWRConfig();
   const tReadiness = useTranslations("chat.readiness");
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
@@ -506,26 +509,34 @@ export default function useChatSessionController({
           // Once the server has the new branch, load its last page.
           const branch = getLatestMessageChain(newMessageTree);
           const nextId = branch[branch.length - 1]?.latestChildNodeId;
-          if (
-            currentSessionId &&
-            nextId !== null &&
-            nextId !== undefined &&
-            !newMessageTree.has(nextId)
-          ) {
-            void saved.then((response) => {
-              if (response.ok) return reloadLatestChatPage(currentSessionId);
-              console.error("Failed to save the selected branch", {
-                messageId: message.messageId,
-                status: response.status,
-              });
+          void saved
+            .then(async (response) => {
+              if (!response.ok) {
+                console.error("Failed to save the selected branch", {
+                  messageId: message.messageId,
+                  status: response.status,
+                });
+                return;
+              }
+              if (!currentSessionId) return;
+              if (nextId != null && !newMessageTree.has(nextId)) {
+                await reloadLatestChatPage(currentSessionId);
+              }
+              await mutateCache(SWR_KEYS.chatSessionStatus(currentSessionId));
+            })
+            .catch((error: unknown) => {
+              console.error("Could not refresh the selected branch", error);
             });
-          }
         } else {
           console.error("Message has no messageId", nodeId);
         }
       }
     },
-    [updateCurrentSelectedNodeForDocDisplay, updateSessionMessageTree]
+    [
+      updateCurrentSelectedNodeForDocDisplay,
+      updateSessionMessageTree,
+      mutateCache,
+    ]
   );
 
   return {

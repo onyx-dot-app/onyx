@@ -31,7 +31,9 @@
 - **Stop.** The user presses stop. The input shows that the turn is stopping
   until active model, tool and save work drains. The partial answer stays, with
   "Generation was stopped by the user." after it. A reload shows the same saved
-  text. Anonymous users cannot stop ([[#anonymous-send]]).
+  text. Multi-model Stop also marks the individual response IDs, so automatic
+  child-result delivery can check the same stop request. Anonymous users cannot
+  stop ([[#anonymous-send]]).
 - **Leaving is not stopping.** If the user closes the tab, navigates away or loses
   the network, the run continues on the server and is saved. When the user returns
   while the run is live, the client resumes the stream ([[streaming-protocol]]).
@@ -170,12 +172,16 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 `CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
 `DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
 preparation that has not started a run. When response workers finish, it finishes delivery and releases admission.
-`chat/process_message.py:dispatch_pending_chat_messages` checks for queued user text
-after submission, withdrawal, and release. It starts an ordinary turn with current
-session settings and fresh authorization checks. Withdrawal removes pending text
-atomically; editing resubmits a new entry. No browser reader is needed.
+`chat/process_message.py:dispatch_pending_chat_messages` gives queued user text
+priority over unread child results. It starts a response with current session
+settings and fresh authorization checks. A child result starts an assistant
+response after the completed assistant row, without a new user row. The result
+enters model history and remains hidden from user messages. Accepted input
+provenance prevents delivery twice on the same branch. If automatic preparation
+fails, a saved error response prevents repeated startup attempts. Withdrawal removes pending
+text atomically; editing resubmits a new entry. No browser reader is needed.
 Background children keep running; the same control thread polls their owner
-leases until they finish. It no longer checks the released turn's Stop key,
+leases and dispatches completed results until they finish. It no longer checks the released turn's Stop key,
 admission lease or deadline. Foreground children still drain with their parent. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's

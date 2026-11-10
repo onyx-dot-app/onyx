@@ -12424,6 +12424,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "하위 에이전트 작업 중",
         "attachFilesButton": {
           "tooltip": "파일 첨부"
         },

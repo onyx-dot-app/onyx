@@ -23,7 +23,7 @@ from onyx.agents.models import (
     StepInput,
 )
 from onyx.agents.runtime import Run
-from onyx.agents.tools import SpawnResult, ToolInvocation
+from onyx.agents.tools import ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -1031,13 +1031,13 @@ def test_chat_delegates_to_an_independent_agent(
     entered, release = threading.Event(), threading.Event()
     child_requests: list[GenerationRequest] = []
     saved: list[RunState] = []
-    spawned: list[SpawnResult] = []
+    child_run_ids: list[str] = []
 
     class SlowTool(EchoTool):
         def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
             if invocation.arguments["value"] == "parent":
                 release.set()
-                coordinator.completion(spawned[0].run_id).result(10)
+                coordinator.completion(child_run_ids[0]).result(10)
             else:
                 entered.set()
                 assert release.wait(10)
@@ -1125,8 +1125,13 @@ def test_chat_delegates_to_an_independent_agent(
                 ]
             )
         if len(results) == 1:
-            started = SpawnResult.model_validate_json(results[0].content)
-            spawned.append(started)
+            (started,) = [
+                child
+                for child in coordinator.discover_children(agent.id)
+                if child.parent_id == agent.id
+            ]
+            assert started.latest_run_id is not None
+            child_run_ids.append(started.latest_run_id)
             assert entered.wait(10)
             if parent_action == "wait":
                 release.set()
@@ -1203,7 +1208,7 @@ def test_chat_delegates_to_an_independent_agent(
             coordinator=coordinator,
         )
         assert result.output.text == "Parent answer"
-        child_run = coordinator.child_run(spawned[0].run_id, agent.id)
+        child_run = coordinator.child_run(child_run_ids[0], agent.id)
         assert child_run is not None
         progress = child_run.snapshot().progress
         assert progress is not None
@@ -1352,11 +1357,12 @@ def test_chat_message_tools_continue_a_completed_child(message_tool: str) -> Non
                 ]
             )
         if not child_ids:
-            started = SpawnResult.model_validate_json(results[0].content)
-            child_ids.append(started.agent_id)
-            child_runs.append(started.run_id)
+            (started,) = coordinator.discover_children(agent.id)
+            assert started.latest_run_id is not None
+            child_ids.append(started.id)
+            child_runs.append(started.latest_run_id)
             assert (
-                coordinator.completion(started.run_id).result(10).status
+                coordinator.completion(started.latest_run_id).result(10).status
                 == RunStatus.COMPLETE
             )
         if any(message.text == "Continue the child" for message in request.messages):
@@ -1512,7 +1518,7 @@ def test_wait_agent_timeout_keeps_code_program_running() -> None:
 
 def test_stopping_wait_agent_leaves_its_background_child_running() -> None:
     entered, release, waiting = threading.Event(), threading.Event(), threading.Event()
-    spawned: list[SpawnResult] = []
+    child_run_ids: list[str] = []
 
     class SlowTool(EchoTool):
         def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -1543,7 +1549,9 @@ def test_stopping_wait_agent_leaves_its_background_child_running() -> None:
                     )
                 ]
             )
-        spawned.append(SpawnResult.model_validate_json(results[0].content))
+        (started,) = coordinator.discover_children(agent.id)
+        assert started.latest_run_id is not None
+        child_run_ids.append(started.latest_run_id)
         assert entered.wait(10)
         return AssistantMessage(
             content=[
@@ -1588,7 +1596,7 @@ def test_stopping_wait_agent_leaves_its_background_child_running() -> None:
         run.cancel()
         with pytest.raises(AgentCancelled):
             run.result(10)
-        child_run = coordinator.child_run(spawned[0].run_id, agent.id)
+        child_run = coordinator.child_run(child_run_ids[0], agent.id)
         assert child_run is not None and not child_run.cancellation_signal.cancelled
         release.set()
         assert child_run.result(10).output.text == "Child answer"

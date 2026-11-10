@@ -4,7 +4,7 @@ from collections.abc import Collection
 from uuid import UUID, uuid4
 
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, aliased, load_only
+from sqlalchemy.orm import Session, load_only
 
 from onyx.agents.models import (
     AgentInfo,
@@ -18,20 +18,29 @@ from onyx.agents.models import (
     RunFailureKind,
     RunStatus,
 )
-from onyx.chat.models import ChatBranch, PendingChatMessage
+from onyx.chat.models import ChatBackgroundActivity, ChatBranch, PendingChatMessage
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     configure_response_transaction__no_commit,
     get_owned_chat_session,
     root_response_id,
     session_ancestors,
+    visible_message_ids,
 )
 from onyx.db.chat_checkpoint import check_checkpoint_owner__no_commit
 from onyx.db.chat_response import (
     read_response_input,
+    reserve_agent_continuation__no_commit,
     reserve_child_response__no_commit,
 )
-from onyx.db.chat_subagents import _agent_metadata, _selected_responses, _visible_agent
+from onyx.db.chat_subagents import (
+    _agent_metadata,
+    _selected_responses,
+    _visible_agent,
+    active_subagent_response_ids,
+    pending_agent_completion_ids,
+    unread_agent_result_ids,
+)
 from onyx.db.models import (
     ChatInput,
     ChatMessage,
@@ -95,7 +104,9 @@ def _pending_human_message(row: ChatInput) -> PendingChatMessage:
     )
 
 
-def _selected_response(session: Session, chat_session_id: UUID) -> ChatMessage | None:
+def get_selected_response(
+    session: Session, chat_session_id: UUID
+) -> ChatMessage | None:
     # Follow only IDs; queue checks do not need response content or tool results.
     branch = (
         select(ChatMessage.id, ChatMessage.latest_child_message_id)
@@ -120,6 +131,7 @@ def _selected_response(session: Session, chat_session_id: UUID) -> ChatMessage |
         .options(
             load_only(
                 ChatMessage.id,
+                ChatMessage.chat_session_id,
                 ChatMessage.response_status,
                 ChatMessage.response_inputs_closed,
             )
@@ -139,7 +151,7 @@ def submit_human_message__no_commit(
     """Submit text on the selected branch. The caller commits the pending row."""
     get_human_input_session(session, chat_session_id, user_id)
     lock_agent(session, str(chat_session_id))
-    selected = _selected_response(session, chat_session_id)
+    selected = get_selected_response(session, chat_session_id)
     if target_response_id is None:
         has_messages = session.scalar(
             select(ChatMessage.id)
@@ -240,7 +252,7 @@ def interrupt_human_message__no_commit(
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "This message now targets another response"
         )
-    selected = _selected_response(session, chat_session_id)
+    selected = get_selected_response(session, chat_session_id)
     if row.target_response_id != (selected.id if selected else None):
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "This message belongs to another response branch"
@@ -282,7 +294,7 @@ def pending_human_message__no_commit(
     )
     if session.scalar(query.with_only_columns(ChatInput.id).limit(1)) is None:
         return None
-    selected = _selected_response(session, chat_session_id)
+    selected = get_selected_response(session, chat_session_id)
     if selected is not None:
         if selected.response_status is None or not selected.response_status.is_terminal:
             return None
@@ -312,6 +324,47 @@ def pending_human_message__no_commit(
         .limit(1)
     )
     return _pending_human_message(row) if row is not None else None
+
+
+def pending_agent_result_response(
+    session: Session, chat_session_id: UUID, user_id: UUID
+) -> int | None:
+    """Select an idle root that has unread child output; callers claim admission."""
+    get_human_input_session(session, chat_session_id, user_id)
+    selected = get_selected_response(session, chat_session_id)
+    if selected is None or selected.response_status != RunStatus.COMPLETE:
+        return None
+    if pending_human_message__no_commit(session, chat_session_id, user_id) is not None:
+        return None
+    branch = ChatBranch(
+        chat_session_id=chat_session_id,
+        message_ids=visible_message_ids(session, selected),
+    )
+    return (
+        selected.id
+        if unread_agent_result_ids(session, branch, str(chat_session_id))
+        else None
+    )
+
+
+def fail_agent_result_response__no_commit(
+    session: Session,
+    chat_session_id: UUID,
+    user_id: UUID,
+    expected_response_id: int,
+) -> None:
+    """Record one failed automatic response; the caller holds chat admission."""
+    lock_agent(session, str(chat_session_id))
+    if (
+        pending_agent_result_response(session, chat_session_id, user_id)
+        != expected_response_id
+    ):
+        return
+    previous = session.get(ChatMessage, expected_response_id)
+    if previous is None:
+        raise ValueError("Completed response disappeared during reservation")
+    response_id = reserve_agent_continuation__no_commit(session, previous)
+    fail_reserved_message(session, response_id)
 
 
 def accept_human_message__no_commit(
@@ -365,14 +418,11 @@ def latest_agent_responses(
     if not agent_ids:
         return {}
     selected = _selected_responses(branch)
-    question = aliased(ChatMessage)
     rows = session.scalars(
         select(ChatMessage)
-        .join(question, ChatMessage.parent_message_id == question.id)
-        .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
+        .join(selected, ChatMessage.id == selected.c.id)
         .where(
             ChatMessage.chat_session_id.in_([UUID(agent_id) for agent_id in agent_ids]),
-            ToolCall.parent_chat_message_id.in_(select(selected.c.id)),
         )
         .distinct(ChatMessage.chat_session_id)
         .order_by(ChatMessage.chat_session_id, ChatMessage.id.desc())
@@ -613,7 +663,7 @@ def fail_reserved_message(session: Session, response_id: int) -> None:
     response.response_status = RunStatus.ERROR
     response.response_failure = RunFailure(
         kind=RunFailureKind.EXECUTION,
-        message="The queued agent run could not start",
+        message="The agent response could not start",
     )
     response.response_inputs_closed = True
 
@@ -650,3 +700,33 @@ def fail_pending_message(
     )
     response_id, _ = reserve_input_response(session, row, info, latest)
     fail_reserved_message(session, response_id)
+
+
+def read_chat_background_activity(
+    session: Session, chat_session: ChatSession
+) -> ChatBackgroundActivity:
+    """Read selected response and descendant work after session authorization."""
+    selected = get_selected_response(session, chat_session.id)
+    if selected is None:
+        return ChatBackgroundActivity()
+    if chat_session.incognito_record_mode is not None or chat_session.deleted:
+        return ChatBackgroundActivity(latest_response_id=selected.id)
+    if (
+        session.scalar(
+            select(ChatSession.id)
+            .join(ChatMessage, ChatSession.spawned_by_message_id == ChatMessage.id)
+            .where(ChatMessage.chat_session_id == chat_session.id)
+            .limit(1)
+        )
+        is None
+    ):
+        return ChatBackgroundActivity(latest_response_id=selected.id)
+    branch = ChatBranch(
+        chat_session_id=chat_session.id,
+        message_ids=visible_message_ids(session, selected),
+    )
+    return ChatBackgroundActivity(
+        latest_response_id=selected.id,
+        running_response_ids=active_subagent_response_ids(session, branch),
+        has_pending_results=bool(pending_agent_completion_ids(session, branch)),
+    )

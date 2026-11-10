@@ -27,6 +27,7 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     get_processing_stream_id,
@@ -42,6 +43,7 @@ from onyx.chat.incognito import (
 )
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import (
+    ChatBackgroundActivity,
     ChatFullResponse,
     ChatResponseOutcome,
     CreateChatSessionID,
@@ -55,6 +57,7 @@ from onyx.chat.process_message import (
     run_chat_turn,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
+from onyx.chat.run_store import active_response_ids
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -72,6 +75,7 @@ from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
+    chat_response_ids_for_stream,
     create_chat_history_chain,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
@@ -91,6 +95,7 @@ from onyx.db.chat_inputs import (
     get_human_input_session,
     interrupt_human_message__no_commit,
     list_human_messages,
+    read_chat_background_activity,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
@@ -102,7 +107,13 @@ from onyx.db.incognito import (
     is_incognito_teardown_target,
     mark_incognito_user_files_deleting,
 )
-from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
+from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
+    ChatSessionSharedStatus,
+    Persona,
+    User,
+)
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
@@ -496,10 +507,19 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
+    background_activity = read_chat_background_activity(db_session, chat_session)
+    has_active_subagents = background_activity.has_pending_results
     current_stream: CurrentStreamInfo | None = None
     is_processing = True
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        background_activity = _refresh_background_activity(
+            chat_session, background_activity, cache
+        )
+        has_active_subagents = bool(
+            background_activity.running_response_ids
+            or background_activity.has_pending_results
+        )
         is_processing = is_chat_session_processing(session_id, cache)
         stream_id = get_processing_stream_id(session_id, cache)
         if stream_id is not None:
@@ -538,6 +558,7 @@ def get_chat_session(
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_stream=current_stream,
+        has_active_subagents=has_active_subagents,
         is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
         has_older_messages=has_older_messages,
@@ -1366,31 +1387,73 @@ def search_chats(
 _RESUME_MAX_CHUNKS_PER_READ = 32
 
 
+def _refresh_background_activity(
+    chat_session: ChatSession,
+    activity: ChatBackgroundActivity,
+    cache: CacheBackend,
+) -> ChatBackgroundActivity:
+    missing_owners = set(activity.running_response_ids) - active_response_ids(
+        cache, activity.running_response_ids
+    )
+    if not missing_owners:
+        return activity
+    # A child saves before releasing ownership. Read its result or successor
+    # before declaring idle; otherwise the browser can miss the handoff.
+    with get_session_with_current_tenant() as db_session:
+        refreshed = read_chat_background_activity(db_session, chat_session)
+    refreshed.running_response_ids = [
+        response_id
+        for response_id in refreshed.running_response_ids
+        if response_id not in missing_owners
+    ]
+    return refreshed
+
+
 @router.get("/chat-session/{session_id}/status")
 def get_chat_session_processing_status(
     session_id: UUID,
+    background_tasks: BackgroundTasks,
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
 ) -> ChatSessionProcessingStatus:
     with get_session_with_current_tenant() as db_session:
         try:
-            get_chat_session_by_id(
+            chat_session = get_chat_session_by_id(
                 chat_session_id=session_id,
                 user_id=user.id,
                 db_session=db_session,
             )
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
-    cache = get_cache_backend()
+        background_activity = read_chat_background_activity(db_session, chat_session)
+    cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+    background_activity = _refresh_background_activity(
+        chat_session, background_activity, cache
+    )
     stream_id = get_processing_stream_id(session_id, cache)
-    return ChatSessionProcessingStatus(
+    status = ChatSessionProcessingStatus(
+        latest_response_id=background_activity.latest_response_id,
+        has_active_subagents=bool(
+            background_activity.has_pending_results
+            or background_activity.running_response_ids
+        ),
         is_processing=stream_id is not None
         or is_chat_session_processing(session_id, cache),
         current_stream=CurrentStreamInfo(stream_id=stream_id)
         if stream_id is not None
         else None,
     )
+
+    if (
+        background_activity.has_pending_results
+        and not status.is_processing
+        and chat_session.user_id == user.id
+        and user.id is not None
+    ):
+        # A result can outlive the process that delivered its parent's response.
+        background_tasks.add_task(dispatch_pending_chat_messages, session_id, user.id)
+    return status
 
 
 @router.get("/chat-session/{session_id}/resume-stream")
@@ -1612,7 +1675,15 @@ def stop_chat_session(
         ) from error
 
     cache = get_cache_backend()
-    target_stream_id = stream_id or get_processing_stream_id(chat_session_id, cache)
+    current_stream_id = get_processing_stream_id(chat_session_id, cache)
+    target_stream_id = stream_id or current_stream_id
     if target_stream_id is not None:
         request_stop(chat_session_id, cache, stream_id=target_stream_id)
+        if target_stream_id == current_stream_id:
+            # Persist Stop for each response when a multi-model stream uses its user ID.
+            for response_id in chat_response_ids_for_stream(
+                db_session, chat_session_id, target_stream_id
+            ):
+                if response_id != target_stream_id:
+                    request_stop(chat_session_id, cache, stream_id=response_id)
     return StopChatResponse(message="Chat session stopped")

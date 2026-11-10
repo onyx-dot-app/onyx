@@ -30,7 +30,7 @@ import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
-import { usePendingChatMessages } from "@/lib/chat/hooks";
+import { usePendingChatMessages, useSubagentActivity } from "@/lib/chat/hooks";
 import { useQueuedMessageHandoff } from "@/lib/chat/useQueuedMessageHandoff";
 import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
@@ -186,6 +186,10 @@ const AppInputBar = React.memo(
       })
     );
     const pendingMessages = usePendingChatMessages(
+      currentSessionId,
+      !incognitoEnabled
+    );
+    const hasActiveSubagents = useSubagentActivity(
       currentSessionId,
       !incognitoEnabled
     );
@@ -1286,6 +1290,24 @@ const AppInputBar = React.memo(
             </div>
 
             {chatControls}
+
+            {hasActiveSubagents && (
+              <Section
+                width="auto"
+                gap={1}
+                padding={1}
+                data-testid="subagent-activity"
+                role="status"
+              >
+                <span
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-status-info-05 motion-safe:animate-pulse"
+                />
+                <Text font="secondary-body" color="text-03">
+                  {t("appInputBar.subagentsWorking")}
+                </Text>
+              </Section>
+            )}
 
             {/* First recording cycle waveform below input */}
             {shouldShowRecordingWaveformBelow && (

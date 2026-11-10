@@ -222,6 +222,7 @@ export interface BackendChatSession {
   // Set while a run is in flight and resumable via the resume-stream endpoint
   current_stream?: { stream_id: number } | null;
   is_processing?: boolean;
+  has_active_subagents?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
   // Set on a paged load when the current branch has messages before the page.
