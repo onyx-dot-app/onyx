@@ -134,6 +134,7 @@ covers new files that match it.
 | `backend/onyx/db/persona.py`, `backend/onyx/db/persona_sharing.py`, `backend/onyx/db/pinned_personas.py`, `backend/onyx/server/features/persona/`, `backend/onyx/server/features/default_assistant/`, `backend/ee/onyx/db/persona.py` | agents-personas |
 | `backend/onyx/db/projects.py`, `backend/onyx/server/features/projects/` | projects |
 | `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/skill_version.py`, `backend/onyx/utils/bundle.py`, `backend/scripts/check_skill_version_cutover.py`, `backend/onyx/server/features/skill/` | skills |
+| `backend/onyx/db/resource_access.py` | skills, authorization |
 | `backend/onyx/background/celery/tasks/skills/`, `backend/onyx/background/celery/tasks/skill_versions/` | skills, background-jobs |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |

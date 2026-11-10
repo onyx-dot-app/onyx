@@ -14,6 +14,7 @@ from onyx.server.features.skill.api import import_github_skills
 from onyx.server.features.skill.models import GitHubSkillsImportRequest
 from onyx.skills.bundle import build_skill_md
 from onyx.skills.models import GitHubRepository, GitHubSkillBundle
+from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 _REVISION = "a" * 40
@@ -234,7 +235,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
 
 def test_import_applies_shared_access_before_publication(
     db_session: Session,
-    test_user: User,
+    make_test_user: MakeTestUser,
     initialize_file_store: None,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
@@ -267,27 +268,27 @@ def test_import_applies_shared_access_before_publication(
     monkeypatch.setattr(
         "onyx.server.features.skill.api.push_skills_for_users", record_publication
     )
-    result = import_github_skills(
-        GitHubSkillsImportRequest(
-            repository="owner/repository",
-            revision=_REVISION,
-            paths=[name],
-            sharing=SkillShareRequest(public_permission=SkillSharePermission.VIEWER),
-        ),
-        user=test_user,
-        db_session=db_session,
+    request = GitHubSkillsImportRequest(
+        repository="owner/repository",
+        revision=_REVISION,
+        paths=[name],
+        sharing=SkillShareRequest(public_permission=SkillSharePermission.VIEWER),
     )
+    admin = make_test_user("import-admin", is_admin=True)
     try:
+        result = import_github_skills(request, user=admin, db_session=db_session)
         assert result.not_imported == []
         assert len(result.imported) == 1
         assert published == [SkillSharePermission.VIEWER]
     finally:
-        _delete_bundles(db_session, name)
+        for row in _delete_bundles(db_session, name):
+            db_session.delete(row)
+        db_session.commit()
 
 
 def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
     db_session: Session,
-    test_user: User,
+    make_test_user: MakeTestUser,
     initialize_file_store: None,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
@@ -316,10 +317,8 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
     monkeypatch.setattr(
         "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
     )
-    monkeypatch.setattr(
-        "onyx.db.skill.has_global_permission",
-        lambda *_args, **_kwargs: True,
-    )
+    # Installation policy needs global manage-skills; only the Admin group grants it.
+    admin = make_test_user("import-policy-admin", is_admin=True)
 
     response = import_github_skills(
         GitHubSkillsImportRequest(
@@ -330,7 +329,7 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
                 installation_policy=SkillInstallationPolicy.DEFAULT
             ),
         ),
-        user=test_user,
+        user=admin,
         db_session=db_session,
     )
 
@@ -342,4 +341,6 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
         assert [item.path for item in response.not_imported] == [paths[1]]
         assert len(_delete_bundles(db_session, name)) == 1
     finally:
-        _delete_bundles(db_session, name)
+        for row in _delete_bundles(db_session, name):
+            db_session.delete(row)
+        db_session.commit()

@@ -172,7 +172,7 @@ def get_skills_for_external_app(
     db_session: Session,
     external_app_id: int,
 ) -> list[Skill]:
-    """Return every skill associated with an external app in stable order."""
+    """Return skills associated with an external app in stable order."""
     return list(
         db_session.scalars(
             select(Skill)
@@ -498,18 +498,23 @@ def replace_custom_skill_associations__no_commit(
             f"External app with id {external_app_id} not found.",
         )
 
-    target_skills = (
-        list(
-            db_session.scalars(
-                select(Skill)
-                .where(Skill.id.in_(target_ids))
-                .order_by(Skill.id)
-                .with_for_update(of=Skill)
+    associated_ids = set(
+        db_session.scalars(
+            select(ExternalApp__Skill.skill_id).where(
+                ExternalApp__Skill.external_app_id == app.id
             )
         )
-        if target_ids
-        else []
     )
+    locked_skills = list(
+        db_session.scalars(
+            select(Skill)
+            .where(Skill.id.in_(target_ids | associated_ids))
+            .order_by(Skill.id)
+            .with_for_update(of=Skill)
+            .execution_options(populate_existing=True)
+        )
+    )
+    target_skills = [skill for skill in locked_skills if skill.id in target_ids]
     if len(target_skills) != len(target_ids):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "One or more skills were not found.")
     for skill in target_skills:
@@ -529,7 +534,7 @@ def replace_custom_skill_associations__no_commit(
             f"Invalid skill '{invalid_skill.name}' cannot be associated with an app.",
         )
 
-    associated_skills = get_skills_for_external_app(db_session, app.id)
+    associated_skills = [skill for skill in locked_skills if skill.id in associated_ids]
     provider_skills = [skill for skill in associated_skills if not skill.is_custom]
     current_custom_skills = [skill for skill in associated_skills if skill.is_custom]
     seen_names: set[str] = set()
@@ -697,7 +702,13 @@ def delete_external_app(
     Detached custom skills remain organization-visible but become ordinary
     disabled skills. Flush only; the caller owns the transaction.
     """
-    app = get_external_app_by_id(db_session, external_app_id)
+    # Lock the app before its Skills, in the same order as association replacement.
+    app = db_session.scalar(
+        select(ExternalApp)
+        .options(selectinload(ExternalApp.associated_skills))
+        .where(ExternalApp.id == external_app_id)
+        .with_for_update(of=ExternalApp)
+    )
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,

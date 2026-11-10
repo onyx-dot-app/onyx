@@ -24,7 +24,9 @@ from onyx.db.external_app import (
     get_external_app_by_id,
 )
 from onyx.db.models import Skill, User
+from onyx.db.resource_access import mutate_resource_access
 from onyx.db.skill import (
+    SkillAccessAdapter,
     SkillManagementPolicy,
     SkillSharingChange,
     affected_user_ids_for_skill,
@@ -295,26 +297,38 @@ def bulk_update_skills(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillBulkResponse:
-    change = (
-        request.sharing.to_change()
-        if isinstance(request, SkillBulkShareRequest)
-        else None
-    )
     succeeded: list[UUID] = []
     failed: list[SkillBulkFailure] = []
     affected: set[UUID] = set()
     deleted_file_ids: list[str] = []
-    for skill_id in sorted(set(request.skill_ids)):
-        try:
-            item_affected, item_file_ids = bulk_update_skill__no_commit(
-                skill_id, request.action, change, user, db_session
-            )
-        except OnyxError as exc:
-            failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
-            continue
-        succeeded.append(skill_id)
-        affected |= item_affected
-        deleted_file_ids.extend(item_file_ids)
+    if isinstance(request, SkillBulkShareRequest):
+        result = mutate_resource_access(
+            request.skill_ids,
+            request.sharing.to_change(),
+            user,
+            db_session,
+            SkillAccessAdapter(),
+            add_only=True,
+            allow_partial=True,
+        )
+        succeeded = result.succeeded
+        failed = [
+            SkillBulkFailure(skill_id=key, detail=value)
+            for key, value in result.failed.items()
+        ]
+        affected = result.affected
+    else:
+        for skill_id in sorted(set(request.skill_ids)):
+            try:
+                item_affected, item_file_ids = bulk_update_skill__no_commit(
+                    skill_id, request.action, user, db_session
+                )
+            except OnyxError as exc:
+                failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
+                continue
+            succeeded.append(skill_id)
+            affected |= item_affected
+            deleted_file_ids.extend(item_file_ids)
     db_session.commit()
     push_skills_for_users(affected, db_session)
     db_session.commit()
@@ -875,7 +889,10 @@ def patch_current_user_skill(
     )
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
-    if "public_permission" in patch_req.model_fields_set:
+    if (
+        "public_permission" in patch_req.model_fields_set
+        and patch_req.public_permission != skill.public_permission
+    ):
         ensure_can_edit_org_visibility(skill, user)
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
         return skill_response_for_user(

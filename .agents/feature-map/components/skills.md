@@ -26,7 +26,7 @@
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
-  and the user cannot turn it off). Only an admin can delete a required skill.
+  and the user cannot turn it off). Global manage-skills permission is required to delete a required skill.
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
@@ -227,38 +227,28 @@ still propagate unexpected storage errors.
 10. `app-skill-org-visible` **An app skill stays visible to the
     organization.** `db/skill.py:set_skill_public_permission` accepts only `VIEWER` for a
     skill linked to an external app. A private custom skill must have an
-    owner: `ck_private_skill_has_owner` rejects a private skill with no
-    author, so transfer or delete private skills before their owner is
-    removed.
+    owner: `ck_private_skill_has_owner` enforces this in SQL, and the
+    visibility setter applies the same rule. Transfer or delete private skills
+    before removing their owner.
 11. `push-holds-row-locks` **The push holds row locks during network I/O.**
     `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then calls the
     sandbox push while the transaction is open. The hash write is a savepoint,
     and the caller commits. The push catches and logs every exception, so a
     failed push never fails the API call. The next push repairs it, because
     the hash of a failed sandbox is not written.
-12. `sharing-single-entry` **Sharing and policy writes go through
-    `db/skill.py:share_skill__no_commit`.** The share route, the editor create
-    route, the patch route's visibility change, bulk sharing and imports with
-    access settings all call it with a `SkillSharingChange`
-    (`SkillShareRequest.to_change()` builds one). A change
-    to `installation_policy` needs `FULL_ADMIN_PANEL_ACCESS`, and
-    `db/skill.py:set_skill_installation_policy` refuses a built-in. EDIT on a
-    skill is not enough to change its groups:
-    `db/skill.py:_assert_group_share_within_scope` treats any change to the
-    group set or levels as a `MANAGE_SKILLS` action within scope
-    ([[authorization]]). Without it, an owner could push a skill into any
-    group manager's scope. It compares against the stored shares, and the
-    privacy check uses the stored visibility and the request, so a
-    public-to-private change in the same request cannot get past it. A
-    `public_permission` change needs the author or global `MANAGE_SKILLS`
-    (`db/skill.py:ensure_can_edit_org_visibility`; the patch route calls it
-    too). A new sharing entry point must call `share_skill__no_commit`, not
-    `db/skill.py:replace_skill_shares`.
-    Agents apply a looser form of the rule
-    ([[agents-personas#group-share-needs-manage-agents]]).
-    `POST /skills/bulk` applies each item in a savepoint, reports expected
-    business errors per skill, and pushes the combined affected audience after
-    commit. Bulk enable and disable change only the caller's preference.
+12. `sharing-single-entry` **Access writes use the resource adapter.**
+    `db/resource_access.py:mutate_resource_access` handles single and bulk changes.
+    `db/skill.py:SkillAccessAdapter` supplies skill grants with real foreign keys,
+    locked EDIT authorization and eligibility checks. A company visibility change
+    needs the owner or global `MANAGE_SKILLS`
+    (`db/skill.py:ensure_can_edit_org_visibility` on the patch route). Installation
+    settings require global `MANAGE_SKILLS`. Changed group grants use
+    `assert_within_scope` against stored groups and visibility.
+    Bulk sharing adds or updates grants and preserves omitted grants. It reads
+    affected users in two batch queries and pushes once after commit. Expected
+    failures roll back one skill's savepoint. Bulk toggles affect only the caller.
+    New access entry points must use the
+    adapter function, not `db/skill.py:replace_skill_shares`.
     `POST /skills/custom/batch` and GitHub import create each bundle through
     `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
     so a bad bundle or a name conflict under a DEFAULT or REQUIRED policy lands

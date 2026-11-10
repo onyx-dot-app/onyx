@@ -243,17 +243,20 @@ enable or disable the Skill, and delete it.
 
 A Skill that is associated with an App stays visible to the organization. You cannot make it private.
 
+Group managers can change sharing only within the groups they manage.
+
 ## Choose an installation policy
 
-Admins set how a shared Skill is installed for everyone with access:
+Users with global manage-skills permission set how a shared Skill is installed for everyone with access:
 
 | Policy | Effect |
 | --- | --- |
 | **Available to install** | Users can install or uninstall the Skill at any time. |
 | **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
-| **Required** | Onyx installs it automatically. Users cannot disable or uninstall it. Only Admins can delete it. |
+| **Required** | Onyx installs it automatically. Users cannot disable or uninstall it. Deleting it requires global manage-skills permission. |
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
+Bulk sharing preserves existing grants that the request omits.
 
 ## Maintain a Skill
 
