@@ -23,6 +23,7 @@ import {
   SvgPause,
   SvgPlayCircle,
   SvgSettings,
+  SvgUser,
   SvgUsers,
   SvgUserSync,
 } from "@opal/icons";
@@ -61,6 +62,7 @@ const ACCESS_ICONS = {
   private: SvgUsers,
   sync: SvgUserSync,
   sync_restricted: SvgUserSync,
+  personal: SvgUser,
 } satisfies Record<AccessType, IconFunctionComponent>;
 
 export interface ConnectorRowProps {

@@ -1569,6 +1569,9 @@ def _apply_connector_status_filters(
     # The "sync" filter covers restricted perm-synced pairs too.
     if AccessType.SYNC in access_type_filters:
         access_type_filters = [*access_type_filters, AccessType.SYNC_RESTRICTED]
+    # The "private" filter covers owner-only pairs too.
+    if AccessType.PRIVATE in access_type_filters:
+        access_type_filters = [*access_type_filters, AccessType.PERSONAL]
 
     for status in statuses:
         # Filter by access type

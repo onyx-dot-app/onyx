@@ -194,7 +194,9 @@ function countStates(
 function formAccessType(values: Record<string, unknown>): AccessType {
   const formValue: unknown = values.access_type;
   const accessType: AccessType =
-    formValue === "private" || formValue === "sync" ? formValue : "public";
+    formValue === "private" || formValue === "sync" || formValue === "personal"
+      ? formValue
+      : "public";
   return toWireAccess(accessType, {
     restrict_access_to_groups: values.restrict_access_to_groups === true,
     restriction_group_ids: Array.isArray(values.restriction_group_ids)

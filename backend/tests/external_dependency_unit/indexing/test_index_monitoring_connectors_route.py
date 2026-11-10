@@ -170,7 +170,8 @@ def _share_with_groups(
     db_session: Session, cc_pair: ConnectorCredentialPair, names: list[str]
 ) -> None:
     """Shares the pair with new groups the way pair creation does for a private
-    pair: each group both manages the pair and reads its documents."""
+    pair: each group manages the pair, and reads its documents when the access
+    type takes data-access groups."""
     for name in names:
         group = UserGroup(name=name)
         db_session.add(group)
@@ -182,9 +183,14 @@ def _share_with_groups(
                 role=ConnectorManageRole.OPERATOR,
             )
         )
-        db_session.add(
-            UserGroup__CCPairDataAccess(user_group_id=group.id, cc_pair_id=cc_pair.id)
-        )
+        if cc_pair.access_type in AccessType.data_access_types():
+            db_session.add(
+                UserGroup__CCPairDataAccess(
+                    user_group_id=group.id,
+                    cc_pair_id=cc_pair.id,
+                    access_type=cc_pair.access_type,
+                )
+            )
     db_session.commit()
 
 

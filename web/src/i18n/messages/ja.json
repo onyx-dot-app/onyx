@@ -2621,8 +2621,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "全員がソースから同期されたアクセス権を保持します。",
-          "title": "グループを追加するまで制限はありません"
+          "description": "制限にはグループが必要です。ソースから同期されたアクセスを維持するには、制限をオフにしてください。",
+          "title": "グループを1つ以上選択してください"
         },
         "loadError": "グループを読み込めませんでした。ページを再読み込みして、もう一度お試しください。",
         "memberCount": "{count, plural, other {#人のメンバー}}",
@@ -2968,6 +2968,7 @@
           "sync": "ドキュメントへのアクセスは**{source} と同期**",
           "managedByAdmins": "**管理者**が管理",
           "managedByGroups": "**{count, plural, one {# 件のグループ} other {# 件のグループ}}**が管理",
+          "onlyMe": "ドキュメントは**アカウント所有者のみ**に表示されます",
           "syncRestricted": "ドキュメントへのアクセスは**{source} と同期**し、**{count, plural, one {# 件のグループ} other {# 件のグループ}}**に制限",
           "groupsPending": "ドキュメントは**特定のグループ**と共有",
           "syncRestrictedPending": "ドキュメントへのアクセスは**{source} と同期**し、**特定のグループ**に制限"
@@ -3751,15 +3752,19 @@
             "description": "このコネクタでインデックスされたドキュメントは、組織内の全員が利用できます。",
             "title": "組織内の全員"
           },
+          "onlyMe": {
+            "description": "このコネクタが使用するアカウントの所有者だけがドキュメントを閲覧できます。",
+            "title": "自分のみ"
+          },
           "specificGroups": {
             "description": "このコネクタのドキュメントにアクセスできるグループを指定します。",
-            "required": "グループを 1 つ以上選択してください。",
             "title": "特定のグループ"
           },
           "sync": {
             "description": "{appName}はソースと権限を同期します。ユーザーはソースで閲覧できるものだけを検索できます。",
             "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
-            "title": "{source}と同期"
+            "title": "{source}と同期",
+            "restrictionRequired": "グループを1つ以上選択するか、制限をオフにしてください。"
           },
           "title": "ドキュメントへのアクセス"
         },
@@ -7496,7 +7501,8 @@
           "public": "組織全体に公開",
           "private": "{count, plural, =0 {非公開} other {# 個のグループと共有}}",
           "sync": "権限を自動同期",
-          "sync_restricted": "権限を自動同期"
+          "sync_restricted": "権限を自動同期",
+          "personal": "自分のみ"
         },
         "detail": {
           "queued": "キューの {position, selectordinal, other {#}} 番目",
