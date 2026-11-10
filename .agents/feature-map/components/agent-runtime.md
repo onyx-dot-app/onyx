@@ -33,9 +33,12 @@ document does not repeat it.
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
 - **Independent children.** ChatAgent and its children expose controls from
-  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, wait for results, and interrupt children. Incognito omits these controls. Children survive
-  the root response. Later turns use the branch-scoped directory and run store
-  to access them. The runtime accepts submitted instructions and unread results
+  `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito omits these controls. Children survive
+  the root response. A subagent must incorporate work it delegates before completing.
+  `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
+  the last model step for synthesis. Dependencies belong to the current run, not the
+  agent's entire history. Failure and cancellation remain terminal outcomes.
+  Later turns use the branch-scoped directory and run store to access children. The runtime accepts submitted instructions and unread results
   before a model call. Chat can remap citations through `PreparedStep.input_messages`.
   Accepted inputs retain their identity and source in saved history.
   `MessageStartEvent.input_messages` contains the inputs durably accepted by
@@ -43,9 +46,7 @@ document does not repeat it.
   `send_message` targets the next step or starts an idle child with fresh limits.
   `queue_message` waits for normal completion; Stop, failure, and step limits pause
   queued work. `interrupt_agent` cancels the current run while retaining its conversation.
-  `wait_agent` waits for an unread result or incoming instruction on its tool worker;
-  it does not suspend the run. It polls storage across pods and never starts
-  a new model turn after the parent finishes.
+  Chat starts a follow-up response when an idle parent has unread child results.
 - [[tools-framework]]: `tools/interface.py:Tool.bind` turns each chat `Tool`
   into an `AgentTool`.
 - **A backend developer who builds a feature on the runtime.** Start from the

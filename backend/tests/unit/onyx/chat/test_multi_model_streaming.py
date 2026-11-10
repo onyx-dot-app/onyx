@@ -26,6 +26,7 @@ from onyx.agents.models import RunFailureKind, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool, InputMode, PendingToolInput
 from onyx.chat.agent import ChatAgent
+from onyx.chat.chat_processing_checker import BACKGROUND_CONTROL_PREFIX
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import EmptyLLMResponseError, chat_error
 from onyx.chat.execution import (
@@ -112,6 +113,7 @@ from onyx.utils.threadpool_concurrency import (
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
@@ -2742,9 +2744,14 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
         if not store.has_owned_work:
             dispatched_after_children.set()
 
+    setup = _make_setup()
+    cache = FakeCache()
+    setup.cache = cache
+    setup.admission.cache = cache
     turn = ChatTurnExecution(
-        _make_setup(), MagicMock(), outcome, dispatch_pending_messages=dispatch_pending
+        setup, MagicMock(), outcome, dispatch_pending_messages=dispatch_pending
     )
+    presence_key = f"{BACKGROUND_CONTROL_PREFIX}{turn.setup.responses[0].message_id}"
     store = MagicMock(spec=ChatRunStore)
     store.has_owned_work = True
     turn._stores.append(store)
@@ -2804,6 +2811,7 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
             assert released.wait(5)
             assert dispatched.wait(5)
             assert polled_after_release.wait(5)
+            assert cache.exists(presence_key)
             if packets is not None:
                 assert _stop_reasons(packets.result(timeout=5)) == ["finished"]
             assert not turn.cancellation.cancelled
@@ -2813,6 +2821,7 @@ def test_finished_response_releases_chat_while_polling_background_ownership(
             turn._completion_changed.set()
             _wait_for_chat_workers(chat_workers)
             assert dispatched_after_children.is_set()
+            assert not cache.exists(presence_key)
             release_chat.assert_called_once()
             end_trace.assert_called_once()
         finally:
@@ -3688,7 +3697,8 @@ def test_chat_turn_excludes_delegation_tools_in_incognito(
         patch("onyx.chat.execution.construct_tools", side_effect=construct),
         patch("onyx.chat.execution.get_llm_token_counter", return_value=len),
         patch(
-            "onyx.chat.history_store.RedisChatHistoryStore.list_agents", return_value=[]
+            "onyx.chat.history_store.RedisChatHistoryStore.list_agents",
+            side_effect=AssertionError("Temporary chat does not discover subagents"),
         ),
         patch("onyx.chat.history_store.save_chat_response_to_db"),
         patch("onyx.chat.history_store.save_incognito_response"),
@@ -3705,7 +3715,6 @@ def test_chat_turn_excludes_delegation_tools_in_incognito(
                 "coding_agent",
                 "spawn_agent",
                 "list_agents",
-                "wait_agent",
                 "interrupt_agent",
                 "send_message",
                 "queue_message",

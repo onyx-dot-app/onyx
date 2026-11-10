@@ -57,23 +57,27 @@ from onyx.chat.process_message import dispatch_pending_chat_messages
 from onyx.chat.response import response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files, restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
-from onyx.chat.stop_signal_checker import clear_stop, request_stop
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, FileOrigin, MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.db.chat import delete_messages_and_files_from_chat_session, root_response_id
+from onyx.db.chat import (
+    delete_messages_and_files_from_chat_session,
+    get_selected_response,
+    root_response_id,
+)
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
-from onyx.db.chat_inputs import get_selected_response, read_chat_background_activity
 from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
     save_response_record__no_commit,
 )
-from onyx.db.chat_subagents import pending_agent_completion_ids, unread_agent_result_ids
+from onyx.db.chat_subagents import (
+    unread_agent_result_ids,
+)
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import (
     ChatInput,
@@ -1395,7 +1399,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         assert second.close(timeout=10)
 
 
-@pytest.mark.parametrize("action", ["cancel", "wait", "completed", "cancelled"])
+@pytest.mark.parametrize("action", ["cancel", "running", "completed", "cancelled"])
 @pytest.mark.parametrize("nested", [False, True])
 def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
     branch: tuple[UUID, int],
@@ -1422,6 +1426,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         for _ in range(1000):
             cancellation.check()
             if release_child.wait(0.01):
+                cancellation.check()
                 return AssistantMessage(
                     content=[TextContent(text="Child answer [1]")],
                 )
@@ -1451,8 +1456,6 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         )
 
     def create_child() -> Agent:
-        if not nested:
-            return create_leaf()
         replies = iter(
             [
                 AssistantMessage(
@@ -1468,6 +1471,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                     ]
                 ),
                 AssistantMessage(content=[TextContent(text="Leaf started")]),
+                AssistantMessage(content=[TextContent(text="Leaf result collected")]),
             ]
         )
 
@@ -1504,7 +1508,11 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         FakeModelClient(lambda *_: next(first_replies)),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         agent_id=str(branch[0]),
-        tools=[SpawnAgentTool(create_child, max_steps=4).bind(ToolContext)],
+        tools=[
+            SpawnAgentTool(create_child if nested else create_leaf, max_steps=4).bind(
+                ToolContext
+            )
+        ],
     )
     first_view = first_owner.bind(
         first_coordinator, directory=directory(first_owner), build_agent=no_restore
@@ -1579,9 +1587,14 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         )
         for info in later_owner.discovery():
             later_view.register(info)
+        later_owner.poll_control()
+        assert not later_owner.has_owned_work
         spawn_leaf.set()
         if nested:
-            child_state = first_coordinator.completion(child.run_id).result(timeout=10)
+            local_child = first_view.child_run(child.run_id, first_agent.id)
+            assert local_child is not None
+            child_state = local_child.wait_until_settled(timeout=10)
+            assert child_state.status == RunStatus.SUSPENDED
             leaf_result = child_state.steps[0].tools["spawn_leaf"].result
             assert leaf_result is not None
             info = next(
@@ -1593,7 +1606,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             child = SpawnResult(
                 agent_id=info.id, agent_path=info.path, run_id=info.latest_run_id
             )
-            # The root can still reach a live grandchild after its parent finishes.
+            # Later root turns can reach a live grandchild while its parent waits.
             assert any(
                 info.id == child.agent_id
                 for info in first_view.discover_children(first_agent.id)
@@ -1601,12 +1614,12 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             assert first_view.child_run(child.run_id, first_agent.id) is not None
             assert later_view.registration(child.agent_id) is None
         assert child_started.wait(timeout=10)
-        if action == "cancelled":
-            first_owner.cancel_run(child.run_id, str(branch[0]))
-            first_coordinator.completion(child.run_id).result(timeout=10)
-        elif action == "completed":
-            release_child.set()
-            first_coordinator.completion(child.run_id).result(timeout=10)
+        if action in {"completed", "cancelled"}:
+            if cancel_child:
+                first_owner.cancel_run(child.run_id, str(branch[0]))
+            else:
+                release_child.set()
+            first_coordinator.completion(direct_child.run_id).result(timeout=10)
         later_calls = [ToolCall(id="list", name="list_agents", arguments={})]
         if action == "cancel":
             later_calls.append(
@@ -1623,10 +1636,7 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
                     arguments={"agent_id": child.agent_id},
                 )
             )
-        if action in {"wait", "cancel"}:
-            later_calls.append(
-                ToolCall(id="wait", name="wait_agent", arguments={"timeout_seconds": 5})
-            )
+            later_calls.append(ToolCall(id="refresh", name="list_agents", arguments={}))
         calls = iter(later_calls)
 
         def later_reply(
@@ -1635,8 +1645,21 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             call = next(calls, None)
             if call is None:
                 return AssistantMessage(content=[TextContent(text="Checked")])
-            if action == "wait" and call.name == "wait_agent":
+            if call.id == "interrupt":
+                observer = store(
+                    (branch[0], later_response.id), visible_response_ids=[branch[1]]
+                )
+                observer.bind(
+                    later_coordinator,
+                    directory=directory(observer),
+                    build_agent=no_restore,
+                )
+                observer.poll_control()
+                assert observer.has_owned_work
+            if action == "running":
                 release_child.set()
+            if action == "running" or call.id == "refresh":
+                first_coordinator.completion(direct_child.run_id).result(timeout=10)
             return AssistantMessage(content=[call])
 
         later_agent = ChatAgent(
@@ -1716,7 +1739,11 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             "cancelled" if cancel_child and not nested else "complete"
         )
         assert notification["answer"] == (
-            "Leaf started" if nested else "" if cancel_child else "Child answer [1]"
+            "Leaf result collected"
+            if nested
+            else ""
+            if cancel_child
+            else "Child answer [1]"
         )
         assert not later_view.completed_agents(
             later_agent.id, later.received_agent_run_ids
@@ -1763,6 +1790,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
     first_owner = store(branch)
     release_child = threading.Event()
     child_started = threading.Event()
+    child_answered = threading.Event()
 
     def make_agent(
         llm: LLM,
@@ -1801,6 +1829,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
             if child_is_running:
                 assert release_child.wait(timeout=20)
             if any(message.text == "follow up" for message in request.messages):
+                child_answered.set()
                 return AssistantMessage(
                     content=[TextContent(text="Second child answer")]
                 )
@@ -1882,6 +1911,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
                 )
                 assert any(message.text == "follow up" for message in request.messages)
                 assert "Current settings" in request.messages[0].text
+                child_answered.set()
                 return AssistantMessage(
                     content=[TextContent(text="Second child answer")]
                 )
@@ -1904,15 +1934,21 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
                     ]
                 )
             release_child.set()
-            if "wait_agent" not in result_names:
+            if "list_agents" not in result_names:
+                assert child_answered.wait(timeout=15)
+                current_child = later_directory.lookup_agent(
+                    child.agent_id, str(branch[0])
+                )
+                assert (
+                    current_child is not None
+                    and current_child.latest_run_id is not None
+                )
+                child_owner = (
+                    first_coordinator if child_is_running else later_coordinator
+                )
+                child_owner.completion(current_child.latest_run_id).result(timeout=15)
                 return AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="wait",
-                            name="wait_agent",
-                            arguments={"timeout_seconds": 10},
-                        )
-                    ]
+                    content=[ToolCall(id="list", name="list_agents", arguments={})]
                 )
             assert any(
                 "Second child answer" in message.text for message in request.messages
@@ -2251,9 +2287,18 @@ def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
     db_session: Session,
     user_message: UserMessage,
 ) -> None:
-    owner = store(branch)
+    owner = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=branch[0],
+        response_id=branch[1],
+        visible_response_ids=[],
+        cache=get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
+    )
     coordinator = AgentCoordinator()
     release_leaf = threading.Event()
+    release_child = threading.Event()
+    release_middle = threading.Event()
+    middle_continued = threading.Event()
     continued = threading.Event()
     response = db_session.get(ChatMessage, branch[1])
     assert response is not None and response.parent_message is not None
@@ -2262,18 +2307,52 @@ def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
     response.chat_session.user_id = user.id
     db_session.commit()
 
-    def leaf_reply(
+    def evidence_reply(
         _request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
         assert release_leaf.wait(10)
-        return AssistantMessage(
-            content=[TextContent(text="The leaf found the evidence")]
+        return AssistantMessage(content=[TextContent(text="The deepest evidence")])
+
+    def create_evidence() -> Agent:
+        return Agent(
+            FakeModelClient(evidence_reply),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         )
+
+    leaf_replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="evidence",
+                        name="spawn_agent",
+                        arguments={"name": "evidence", "instruction": "Find evidence"},
+                    )
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="Evidence delegated")]),
+        ]
+    )
+
+    def leaf_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(
+            isinstance(message, UserMessage) and "The deepest evidence" in message.text
+            for message in request.messages
+        ):
+            middle_continued.set()
+            assert release_middle.wait(10)
+            return AssistantMessage(
+                content=[TextContent(text="The leaf found the evidence")]
+            )
+        return next(leaf_replies)
 
     def create_leaf() -> Agent:
         return Agent(
             FakeModelClient(leaf_reply),
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[SpawnAgentTool(create_evidence, max_steps=3).bind(ToolContext)],
         )
 
     child_replies = iter(
@@ -2303,7 +2382,10 @@ def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
             return AssistantMessage(
                 content=[TextContent(text="The final research report")]
             )
-        return next(child_replies)
+        reply = next(child_replies)
+        if not reply.tool_calls:
+            assert release_child.wait(10)
+        return reply
 
     def create_child() -> Agent:
         return Agent(
@@ -2348,75 +2430,71 @@ def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
             info for info in owner.discovery() if info.parent_id == str(branch[0])
         )
         assert info.latest_run_id is not None
-        child = coordinator.completion(info.latest_run_id).result(timeout=10)
-        local_child = view.child_run(child.run_id, str(branch[0]))
-        assert local_child is not None and local_child.wait_for_idle(timeout=10)
+        release_child.set()
+        child = view.child_run(info.latest_run_id, str(branch[0]))
+        assert child is not None
+        assert child.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         leaf = next(
             info for info in owner.discovery() if info.parent_id == child.agent_id
         )
         assert leaf.latest_run_id is not None
-        db_session.expire_all()
-        activity = read_chat_background_activity(db_session, response.chat_session)
-        assert activity.latest_response_id == int(run.id)
-        assert int(leaf.latest_run_id) in activity.running_response_ids
-        release_leaf.set()
-        coordinator.completion(leaf.latest_run_id).result(timeout=10)
         leaf_run = view.child_run(leaf.latest_run_id, str(branch[0]))
-        assert leaf_run is not None and leaf_run.wait_for_idle(timeout=10)
+        assert leaf_run is not None
+        assert leaf_run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
+        evidence = next(info for info in owner.discovery() if info.parent_id == leaf.id)
+        assert evidence.latest_run_id is not None
         selected = ChatBranch(chat_session_id=branch[0], message_ids=[branch[1]])
-        db_session.expire_all()
-        assert int(child.run_id) in pending_agent_completion_ids(db_session, selected)
-        assert read_chat_background_activity(
-            db_session, response.chat_session
-        ).has_pending_results
-        owner.poll_control()
+        assert owner.completed_agents(str(branch[0]), (), limit=8) == []
+        release_leaf.set()
+        assert middle_continued.wait(10)
+        assert owner.completed_agents(str(branch[0]), (), limit=8) == []
+        release_middle.set()
         assert continued.wait(10)
-        latest = next(info for info in owner.discovery() if info.id == child.agent_id)
-        assert latest.latest_run_id is not None and latest.latest_run_id != child.run_id
-        resumed = view.child_run(latest.latest_run_id, str(branch[0]))
-        assert resumed is not None
-        assert resumed.result(timeout=10).output.text == "The final research report"
-        assert resumed.wait_for_idle(timeout=10)
+        assert child.result(timeout=10).output.text == "The final research report"
+        assert child.wait_for_idle(timeout=10)
         db_session.expire_all()
-        stored = db_session.get(ChatMessage, int(resumed.id))
+        stored = db_session.get(ChatMessage, int(child.id))
         assert stored is not None
-        assert stored.parent_message_id == int(child.run_id)
-        assert (
-            stored.parent_message is not None
-            and stored.parent_message.message_type == MessageType.ASSISTANT
-        )
         assert root_response_id(db_session, stored) == branch[1]
-        assert len(stored.response_items[0].inputs) == 1
-        assert stored.response_items[0].inputs[0].source == InputSource.AGENT_RESULT
-        assert stored.response_items[0].inputs[0].source_response_id == int(
-            leaf.latest_run_id
-        )
-        assert child.agent_id is not None
+        accepted_results = [
+            entry
+            for item in stored.response_items
+            for entry in item.inputs
+            if entry.source == InputSource.AGENT_RESULT
+        ]
+        assert len(accepted_results) == 1
+        assert accepted_results[0].source_response_id == int(leaf.latest_run_id)
         assert unread_agent_result_ids(db_session, selected, child.agent_id) == []
         history = PostgresChatHistoryStore(
             message_id=branch[1], chat_session_id=branch[0]
         ).load_agent_history(child.agent_id)
-        assert history.previous_run_id == resumed.id
+        assert history.previous_run_id == child.id
         assert history.messages[-1].text == "The final research report"
         execution = read_chat_execution(response)
         assert execution is not None
-        assert resumed.id in {item.run_id for item in execution.response.child_runs}
+        assert child.id in {item.run_id for item in execution.response.child_runs}
+        fresh_owner = store(branch)
+        assert (
+            fresh_owner.read_run_status(child.id, str(branch[0])) == RunStatus.COMPLETE
+        )
+        saved_child = fresh_owner.read_run(child.id, str(branch[0]))
+        assert saved_child is not None
+        assert saved_child.parent_run_id == str(branch[1])
+        assert [
+            completion.run_id
+            for completion in fresh_owner.completed_agents(str(branch[0]), (), limit=8)
+        ] == [child.id]
         owner.poll_control()
         assert (
             next(
                 info for info in owner.discovery() if info.id == child.agent_id
             ).latest_run_id
-            == resumed.id
+            == child.id
         )
         with patch(
             "onyx.chat.process_message.check_token_rate_limits",
             side_effect=RuntimeError("Model startup unavailable"),
         ) as check_limits:
-            request_stop(branch[0], owner.cache, stream_id=branch[1])
-            dispatch_pending_chat_messages(branch[0], user.id)
-            assert chat_turn_work.wait_idle(timeout=10)
-            check_limits.assert_not_called()
-            clear_stop(branch[0], owner.cache, stream_id=branch[1])
             dispatch_pending_chat_messages(branch[0], user.id)
             assert chat_turn_work.wait_idle(timeout=10)
             db_session.expire_all()
@@ -2435,5 +2513,7 @@ def test_nested_completion_starts_one_response_without_a_synthetic_user_message(
             assert chat_turn_work.wait_idle(timeout=10)
             check_limits.assert_called_once()
     finally:
+        release_middle.set()
+        release_child.set()
         release_leaf.set()
         assert coordinator.close(timeout=10)

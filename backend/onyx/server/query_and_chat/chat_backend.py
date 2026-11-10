@@ -30,6 +30,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
+    BACKGROUND_CONTROL_PREFIX,
     get_processing_stream_id,
     is_chat_session_processing,
 )
@@ -75,7 +76,6 @@ from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
-    chat_response_ids_for_stream,
     create_chat_history_chain,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
@@ -95,11 +95,11 @@ from onyx.db.chat_inputs import (
     get_human_input_session,
     interrupt_human_message__no_commit,
     list_human_messages,
-    read_chat_background_activity,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_search import search_chat_sessions
+from onyx.db.chat_subagents import read_chat_background_activity
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, Permission, record_mode_persists_content
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
@@ -508,7 +508,7 @@ def get_chat_session(
     ]
 
     background_activity = read_chat_background_activity(db_session, chat_session)
-    has_active_subagents = background_activity.has_pending_results
+    has_active_subagents = background_activity.has_pending_root_results
     current_stream: CurrentStreamInfo | None = None
     is_processing = True
     try:
@@ -518,7 +518,8 @@ def get_chat_session(
         )
         has_active_subagents = bool(
             background_activity.running_response_ids
-            or background_activity.has_pending_results
+            or background_activity.has_pending_root_results
+            or background_activity.completion_host_response_ids
         )
         is_processing = is_chat_session_processing(session_id, cache)
         stream_id = get_processing_stream_id(session_id, cache)
@@ -1395,18 +1396,25 @@ def _refresh_background_activity(
     missing_owners = set(activity.running_response_ids) - active_response_ids(
         cache, activity.running_response_ids
     )
-    if not missing_owners:
-        return activity
-    # A child saves before releasing ownership. Read its result or successor
-    # before declaring idle; otherwise the browser can miss the handoff.
-    with get_session_with_current_tenant() as db_session:
-        refreshed = read_chat_background_activity(db_session, chat_session)
-    refreshed.running_response_ids = [
-        response_id
-        for response_id in refreshed.running_response_ids
-        if response_id not in missing_owners
-    ]
-    return refreshed
+    if missing_owners:
+        # A child saves before releasing ownership. Read its result or successor
+        # before declaring idle; otherwise the browser can miss the handoff.
+        with get_session_with_current_tenant() as db_session:
+            activity = read_chat_background_activity(db_session, chat_session)
+        activity.running_response_ids = [
+            response_id
+            for response_id in activity.running_response_ids
+            if response_id not in missing_owners
+        ]
+    if activity.completion_host_response_ids:
+        keys = {
+            f"{BACKGROUND_CONTROL_PREFIX}{response_id}": response_id
+            for response_id in activity.completion_host_response_ids
+        }
+        activity.completion_host_response_ids = [
+            keys[key] for key in cache.exists_many(keys)
+        ]
+    return activity
 
 
 @router.get("/chat-session/{session_id}/status")
@@ -1435,8 +1443,9 @@ def get_chat_session_processing_status(
     status = ChatSessionProcessingStatus(
         latest_response_id=background_activity.latest_response_id,
         has_active_subagents=bool(
-            background_activity.has_pending_results
+            background_activity.has_pending_root_results
             or background_activity.running_response_ids
+            or background_activity.completion_host_response_ids
         ),
         is_processing=stream_id is not None
         or is_chat_session_processing(session_id, cache),
@@ -1446,7 +1455,7 @@ def get_chat_session_processing_status(
     )
 
     if (
-        background_activity.has_pending_results
+        background_activity.has_pending_root_results
         and not status.is_processing
         and chat_session.user_id == user.id
         and user.id is not None
@@ -1675,15 +1684,7 @@ def stop_chat_session(
         ) from error
 
     cache = get_cache_backend()
-    current_stream_id = get_processing_stream_id(chat_session_id, cache)
-    target_stream_id = stream_id or current_stream_id
+    target_stream_id = stream_id or get_processing_stream_id(chat_session_id, cache)
     if target_stream_id is not None:
         request_stop(chat_session_id, cache, stream_id=target_stream_id)
-        if target_stream_id == current_stream_id:
-            # Persist Stop for each response when a multi-model stream uses its user ID.
-            for response_id in chat_response_ids_for_stream(
-                db_session, chat_session_id, target_stream_id
-            ):
-                if response_id != target_stream_id:
-                    request_stop(chat_session_id, cache, stream_id=response_id)
     return StopChatResponse(message="Chat session stopped")

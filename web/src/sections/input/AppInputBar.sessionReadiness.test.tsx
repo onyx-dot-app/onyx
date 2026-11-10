@@ -412,7 +412,7 @@ test.each(["{Enter}", "{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])(
   }
 );
 
-test("failed pending submission retains the draft and does not add a local message", async () => {
+test("failed pending submission retains an editable local preview", async () => {
   const user = setupUser();
   fetchSpy.mockImplementation(
     async (_url, init) =>
@@ -429,9 +429,9 @@ test("failed pending submission retains the draft and does not add a local messa
   const textbox = screen.getByRole("textbox", { name: "Message input" });
   await user.click(textbox);
   await user.keyboard("{Enter}");
-  expect(textbox).toHaveTextContent("Keep this draft");
+  expect(textbox).toHaveTextContent(/^$/);
+  expect(await screen.findByText("Keep this draft")).toBeVisible();
   expect(pending).toHaveLength(1);
-  expect(mockClearDraft).not.toHaveBeenCalled();
 });
 
 test("handoff hides only the next entry and restores it when the session becomes idle", async () => {
@@ -560,8 +560,8 @@ test("a successful queue request keeps text typed while it was pending", async (
     pending.push(item);
     submission.resolve(new Response(JSON.stringify(item)));
   });
-  expect(textbox).toHaveTextContent("Keep this draft more");
-  expect(mockClearDraft).not.toHaveBeenCalled();
+  expect(textbox).toHaveTextContent("more");
+  expect(mockClearDraft).toHaveBeenCalled();
 });
 
 test("an input accepted before POST returns refreshes the active conversation", async () => {
@@ -768,3 +768,180 @@ test.each(["queue", "send"] as const)(
     }
   }
 );
+
+test("pending messages appear before acknowledgement and keep their response scope", async () => {
+  pending = [];
+  const acknowledgement = deferred<number | null>();
+  const store = useChatSessionStore.getState();
+  store.updateSessionMessageTree("session", new Map());
+  store.updateChatState("session", "loading");
+  const user = setupUser();
+  render(<AppInputBar {...props("loading")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await user.click(textbox);
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  expect(await screen.findByText("Keep this draft")).toBeVisible();
+  expect(textbox).toHaveTextContent(/^$/);
+  await user.keyboard("Second instruction{Enter}");
+  expect(await screen.findByText("Second instruction")).toBeVisible();
+  expect(
+    requestLog.filter((request) => request.method === "POST")
+  ).toHaveLength(0);
+  await act(async () => {
+    store.updateSessionData("session", {
+      sendAcknowledged: acknowledgement.promise,
+    });
+    acknowledgement.resolve(42);
+  });
+  await waitFor(() => expect(pending).toHaveLength(2));
+  expect(
+    pending.map(({ message, delivery, target_response_id }) => ({
+      message,
+      delivery,
+      target_response_id,
+    }))
+  ).toEqual([
+    { message: "Keep this draft", delivery: "queue", target_response_id: 42 },
+    { message: "Second instruction", delivery: "send", target_response_id: 42 },
+  ]);
+});
+
+test("editing a local pending message withdraws it before acknowledgement", async () => {
+  pending = [];
+  const acknowledgement = deferred<number | null>();
+  const store = useChatSessionStore.getState();
+  store.updateSessionData("session", {
+    sendAcknowledged: acknowledgement.promise,
+  });
+  store.updateSessionMessageTree("session", new Map());
+  store.updateChatState("session", "loading");
+  const user = setupUser();
+  render(<AppInputBar {...props("loading")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await user.click(textbox);
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await user.click(
+    await screen.findByRole("button", { name: "Edit queued message" })
+  );
+  expect(textbox).toHaveTextContent("Keep this draft");
+  await act(async () => acknowledgement.resolve(42));
+  expect(requestLog.filter((request) => request.method !== "GET")).toHaveLength(
+    0
+  );
+});
+
+test("interrupting a local preview waits for the response acknowledgement", async () => {
+  pending = [];
+  const acknowledgement = deferred<number | null>();
+  const store = useChatSessionStore.getState();
+  store.updateSessionData("session", {
+    sendAcknowledged: acknowledgement.promise,
+  });
+  store.updateSessionMessageTree("session", new Map());
+  store.updateChatState("session", "loading");
+  const user = setupUser();
+  render(<AppInputBar {...props("loading")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await user.click(textbox);
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await user.click(await screen.findByTestId("queued-message-bar"));
+  expect(await screen.findByRole("button", { name: "Send now" })).toBeEnabled();
+  await user.keyboard("{Enter}");
+  expect(
+    requestLog.filter((request) => request.method === "POST")
+  ).toHaveLength(0);
+  await act(async () => acknowledgement.resolve(42));
+  await waitFor(() => expect(pending).toHaveLength(1));
+  expect(
+    requestLog
+      .filter((request) => request.method === "POST")
+      .map((request) => request.body)
+  ).toEqual([
+    JSON.stringify({
+      message: "Keep this draft",
+      delivery: "interrupt",
+      target_response_id: 42,
+    }),
+  ]);
+  expect(pending[0]).toMatchObject({
+    delivery: "interrupt",
+    target_response_id: 42,
+  });
+});
+
+test.each(["rejected", "preparation failed"])(
+  "a %s root send keeps the pending message available for editing",
+  async (failure) => {
+    pending = [];
+    const acknowledgement = deferred<number | null>();
+    const store = useChatSessionStore.getState();
+    if (failure === "rejected")
+      store.updateSessionData("session", {
+        sendAcknowledged: acknowledgement.promise,
+      });
+    store.updateSessionMessageTree("session", new Map());
+    store.updateChatState("session", "loading");
+    const user = setupUser();
+    render(<AppInputBar {...props("loading")} />);
+    const textbox = screen.getByRole("textbox", { name: "Message input" });
+    await user.click(textbox);
+    await user.keyboard("{Enter}");
+    await act(async () => {
+      if (failure === "rejected") acknowledgement.resolve(null);
+      else store.updateChatState("session", "input");
+    });
+    expect(await screen.findByText("Keep this draft")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Edit queued message" })
+    );
+    expect(textbox).toHaveTextContent("Keep this draft");
+    expect(
+      requestLog.filter((request) => request.method !== "GET")
+    ).toHaveLength(0);
+  }
+);
+
+test("polling and repeated removal reconcile a POST whose response is delayed", async () => {
+  pending = [];
+  const postResponse = deferred<Response>();
+  const reader = deferred<void>();
+  useChatSessionStore
+    .getState()
+    .updateSessionData("session", { readerFinished: reader.promise });
+  const saved = {
+    id: "server-pending",
+    message: "Keep this draft",
+    delivery: "queue" as const,
+    target_response_id: 2,
+  };
+  fetchSpy.mockImplementation(async (_url, init) => {
+    if (init?.method === "POST") {
+      pending = [saved];
+      return postResponse.promise;
+    }
+    if (init?.method === "DELETE") {
+      pending = [];
+      return new Response(JSON.stringify(saved));
+    }
+    return new Response(JSON.stringify(pending));
+  });
+  const user = setupUser();
+  render(<AppInputBar {...props("streaming")} />);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  await waitFor(() => expect(pending).toHaveLength(1));
+  await act(async () => reader.resolve());
+  expect(screen.getAllByTestId("queued-message-bar")).toHaveLength(1);
+  const remove = screen.getByRole("button", { name: "Remove queued message" });
+  await user.click(remove);
+  await user.click(remove);
+  await act(async () =>
+    postResponse.resolve(new Response(JSON.stringify(saved)))
+  );
+  await waitFor(() =>
+    expect(screen.queryByTestId("queued-message-bar")).not.toBeInTheDocument()
+  );
+  expect(
+    fetchSpy.mock.calls.filter(([, init]) => init?.method === "DELETE")
+  ).toHaveLength(1);
+});

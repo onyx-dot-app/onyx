@@ -397,8 +397,11 @@ up its own branding.
    it stays in SWR until acceptance. Ordinary Stop, failure, and confirmed idle
    remove the preview. An explicit interrupt can preview its promoted message
    after cancellation. History refresh precedes removal of an accepted queued item.
-   Editing waits for DELETE to return the withdrawn text. A conflict refreshes
-   the list without restoring text that was already accepted.
+   Before response acknowledgement, submissions appear locally and wait for that
+   response ID before posting. Local edits withdraw the unsent submission; failed
+   submissions remain editable. After posting, editing waits for DELETE to return
+   the withdrawn text. A conflict refreshes the list without restoring text that
+   was already accepted.
 7. `branch-switch-reaches-server` **A branch switch must reach the server.**
    `web/src/hooks/useChatSessionController.ts:onMessageSelection` updates the
    local tree and calls `app/app/services/lib.tsx:patchMessageToBeLatest`. The

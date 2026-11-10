@@ -15,6 +15,7 @@ logger = setup_logger()
 
 PREFIX = "chatprocessing"
 FENCE_PREFIX = f"{PREFIX}_fence"
+BACKGROUND_CONTROL_PREFIX = "chat_background_control:"
 PREPARATION_LEASE_SECONDS = 120
 ACTIVE_LEASE_SECONDS = 60
 ADMISSION_CACHE_TIMEOUT_S = 1.0

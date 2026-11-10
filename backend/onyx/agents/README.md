@@ -333,11 +333,11 @@ If the child is idle, it starts a fresh run with the supplied step limit.
 An explicit send can start fresh work after a pause. Chat's `interrupt_agent` tool cancels the current run and preserves its conversation.
 Submitted instructions are stored immediately in Chat; pending input is distinct from accepted conversation history.
 
-Chat's `wait_agent(timeout_seconds)` waits for an unread background result or incoming instruction.
-It returns availability or timeout; the runtime supplies the actual message to the next model call.
-This bounded wait uses the existing tool worker and does not suspend the run or close code-mode cells.
-Local completions wake it; a directory-backed coordinator also polls shared storage.
-If the parent has finished, its next user turn receives pending results. Completion does not start a new model turn.
+Background results arrive automatically before the parent's next model step.
+Chat starts a follow-up response when an idle parent has unread child results.
+A subagent suspends before finishing if its delegated work is still pending;
+this releases its execution thread until it can incorporate the results.
+The root can finish its response while background children continue.
 Background results return to the agent that requested the work, including a later ancestor sending a follow-up.
 Foreground tools retain their `ChildRunWait` result path.
 

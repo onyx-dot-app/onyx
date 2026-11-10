@@ -327,7 +327,6 @@ def test_restored_chat_keeps_the_saved_code_mode(
         *offered,
         "spawn_agent",
         "list_agents",
-        "wait_agent",
         "interrupt_agent",
         "send_message",
         "queue_message",

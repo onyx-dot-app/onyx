@@ -634,13 +634,6 @@ class Run:
             coordinator.notify_inputs()
         return True
 
-    @property
-    def has_pending_messages(self) -> bool:
-        with self.execution_lock:
-            return self._state.progress is not None and bool(
-                self._progress.pending_messages
-            )
-
     def cancel_message(self, message_id: str) -> bool:
         """Remove only an instruction that no model step has accepted."""
         with self.execution_lock:
@@ -1590,6 +1583,16 @@ def _advance_loop(
             ):
                 raise RuntimeError("Execution is missing its terminal decision")
             return progress.outcome
+        if progress.action == RunAction.WAIT_CHILDREN:
+            if not run.begin_work_cycle():
+                return RunStatus.SUSPENDED
+            if run.coordination is None:
+                raise RuntimeError("Waiting for delegated work requires a coordinator")
+            if run.coordination.wait_for_delegations():
+                return RunStatus.SUSPENDED
+            with run.execution_lock:
+                progress.action = RunAction.PREPARE
+                run._state.revision += 1
         if progress.action == RunAction.PREPARE:
             if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
@@ -1817,13 +1820,13 @@ def _advance_step(
             and message.metadata.source == InputSource.AGENT_RESULT
             and message.metadata.source_run_id is not None
         )
-        if coordination is not None:
-            coordination.coordinator.accepted_messages(
-                [message.id for message in inputs if message.id is not None]
-            )
         if run.event_delivery:
             run.event_delivery.publish(started)
 
+    if coordination is not None:
+        coordination.coordinator.accepted_messages(
+            [message.id for message in inputs if message.id is not None]
+        )
     if request is None:
         request = _compact_context(
             run, llm, source, prepared, generation_context, tools=definitions
@@ -2129,6 +2132,16 @@ def _complete_step(run: Run) -> None:
             results and all(result.terminate for result in results)
         )
     cancellation_signal.check()
+    has_delegated_work = (
+        run.parent_run_id is not None
+        and run.coordination is not None
+        and run.coordination.has_unconsumed_delegations()
+    )
+    # Collect delegated results before accepting an early answer or using the last step.
+    wait_for_children = has_delegated_work and (
+        not should_continue or progress.step_index + 2 >= progress.step_limit
+    )
+    should_continue = should_continue or has_delegated_work
     with run.execution_lock:
         progress.previous_options = progress.options
         can_continue = progress.step_index + 1 < progress.step_limit
@@ -2151,7 +2164,9 @@ def _complete_step(run: Run) -> None:
                 run._state.answer_step_index = progress.step_index
         else:
             progress.step_index += 1
-            progress.action = RunAction.PREPARE
+            progress.action = (
+                RunAction.WAIT_CHILDREN if wait_for_children else RunAction.PREPARE
+            )
             progress.finalized_tool_call_ids.clear()
             progress.pending_tool_calls = {}
             progress.options = None

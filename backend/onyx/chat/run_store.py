@@ -20,6 +20,7 @@ from onyx.agents.models import (
     AgentMessageReceipt,
     AgentMessageRequest,
     AgentState,
+    BackgroundDelegation,
     ExecutionCheckpoint,
     RunState,
     RunStatus,
@@ -41,7 +42,12 @@ from onyx.chat.presentation import project_response
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.configs.constants import MessageType
-from onyx.db.chat import response_invocation, root_response_id, visible_message_ids
+from onyx.db.chat import (
+    get_selected_response,
+    response_invocation,
+    root_response_id,
+    visible_message_ids,
+)
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
@@ -56,7 +62,6 @@ from onyx.db.chat_inputs import (
     enqueue_message,
     fail_pending_message,
     fail_reserved_message,
-    get_selected_response,
     inputs_available,
     latest_agent_response,
     latest_agent_responses,
@@ -66,6 +71,7 @@ from onyx.db.chat_inputs import (
     queued_request,
     receive_messages,
     reserve_input_response,
+    resolve_delegation_messages,
 )
 from onyx.db.chat_response import (
     abort_response_start__no_commit,
@@ -79,6 +85,7 @@ from onyx.db.chat_response import (
     save_response_record__no_commit,
 )
 from onyx.db.chat_subagents import (
+    active_subagent_response_ids,
     background_response_statuses,
     load_session_agent_metadata,
     pending_agent_completion_ids,
@@ -299,6 +306,15 @@ class ChatRunStore(RunStore, RunOwnership):
             self._next_input_poll = 0.0
         return receipt
 
+    def resolve_delegation_messages(
+        self, parent_run_id: str, delegations: Sequence[BackgroundDelegation]
+    ) -> dict[str, str | None]:
+        with self._lock:
+            if int(parent_run_id) not in self._owned:
+                raise ValueError("Delegation sender has no execution ownership")
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            return resolve_delegation_messages(session, int(parent_run_id), delegations)
+
     def pending_messages(
         self, agent_id: str | None = None
     ) -> list[AgentMessageReceipt]:
@@ -379,16 +395,20 @@ class ChatRunStore(RunStore, RunOwnership):
                     {str(row.recipient_session_id) for row in rows},
                 )
                 running = {
-                    self._owner_key(latest.id): latest
-                    for latest in latest_by_agent.values()
-                    if latest.response_status == RunStatus.RUNNING
+                    self._owner_key(response_id): response_id
+                    for response_id in active_subagent_response_ids(
+                        session, self._input_branch
+                    )
                 }
                 owners = (
                     self.control_cache.exists_many(running.keys()) if running else set()
                 )
-                for key, latest in running.items():
+                for key, response_id in running.items():
                     if key not in owners:
-                        self._load_status(latest.id)
+                        self._load_status(response_id)
+                for latest in latest_by_agent.values():
+                    owner_key = self._owner_key(latest.id)
+                    if owner_key in running and owner_key not in owners:
                         session.expire(latest, ["response_status"])
                 requests = []
                 selected: set[str] = set()
@@ -413,7 +433,10 @@ class ChatRunStore(RunStore, RunOwnership):
                     self._pending_dispatch = (
                         self._input_revision != revision
                         or bool(requests)
-                        or bool(owners)
+                        or any(
+                            self._owner_key(latest.id) in owners
+                            for latest in latest_by_agent.values()
+                        )
                         or any(
                             response_id not in self.visible_response_ids
                             for response_id in completions
@@ -447,6 +470,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 finally:
                     lock.release()
             self._dispatch_completions(coordinator, completions, selected)
+            coordinator.notify_inputs()
         finally:
             self._dispatch_lock.release()
 
@@ -669,8 +693,7 @@ class ChatRunStore(RunStore, RunOwnership):
         if queued_start or completion_start:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 lock_agent(session, agent.id)
-                if queued_start:
-                    assert instruction is not None
+                if queued_start and instruction is not None:
                     row = next(
                         (
                             item

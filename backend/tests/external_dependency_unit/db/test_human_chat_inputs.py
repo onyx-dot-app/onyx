@@ -1,6 +1,6 @@
 """Pending human input follows responses and cannot reappear after withdrawal."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -14,7 +14,9 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
-from onyx.chat.stop_signal_checker import is_stop_requested
+from onyx.chat.execution import ChatTurnExecution
+from onyx.chat.models import ChatTurnSetup, ReservedChatResponse
+from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_history_chain,
@@ -30,7 +32,8 @@ from onyx.db.chat_inputs import (
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_response import read_response_input, write_response_inputs
-from onyx.db.models import ChatResponseItem, ChatSession
+from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession
+from onyx.llm.interfaces import LLM
 from onyx.llm.models import AssistantMessage, TextContent
 from onyx.server.query_and_chat.chat_backend import stop_chat_session
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -176,8 +179,9 @@ def test_assistant_continuation_preserves_history_and_pending_messages(
     assert queued[0].target_response_id == continuation_ids[0]
 
 
-def test_multi_model_stop_targets_current_responses_not_later_regeneration(
-    db_session: Session, make_test_user: MakeTestUser
+@pytest.mark.parametrize("stop_before_save", [False, True])
+def test_multi_model_stop_survives_cache_expiry_without_stopping_regeneration(
+    db_session: Session, make_test_user: MakeTestUser, stop_before_save: bool
 ) -> None:
     owner = make_test_user("grouped-stop")
     conversation = ChatSession(id=uuid4(), user_id=owner.id)
@@ -193,9 +197,24 @@ def test_multi_model_stop_targets_current_responses_not_later_regeneration(
         db_session,
         commit=False,
     )
+    previous_id = reserve_chat_response_ids(
+        db_session, conversation.id, question.id, ["Previous answer"]
+    )[0]
+    previous = db_session.get(ChatMessage, previous_id)
+    assert previous is not None
+    previous.response_status = RunStatus.COMPLETE
     responses = reserve_chat_response_ids(
         db_session, conversation.id, question.id, ["First", "Second"]
     )
+    first = db_session.get(ChatMessage, responses[0])
+    second = db_session.get(ChatMessage, responses[1])
+    assert first is not None and second is not None
+    first.message = "Saved answer"
+    first.response_status = (
+        RunStatus.RUNNING if stop_before_save else RunStatus.COMPLETE
+    )
+    second.response_status = RunStatus.ERROR
+    db_session.commit()
     cache = FakeCache()
     admission = ChatTurnAdmission(cache)
     admission.claim(conversation.id)
@@ -211,15 +230,43 @@ def test_multi_model_stop_targets_current_responses_not_later_regeneration(
                 user=owner,
                 db_session=db_session,
             )
-        assert all(
-            is_stop_requested(conversation.id, cache, stream_id=ident)
-            for ident in responses
-        )
+        assert is_stop_requested(conversation.id, cache, stream_id=question.id)
+        if stop_before_save:
+            # A provider can finish after Stop is submitted but before control observes it.
+            first.response_status = RunStatus.COMPLETE
+            db_session.commit()
+        setup = MagicMock(spec=ChatTurnSetup)
+        setup.chat_session_id = conversation.id
+        setup.stream_id = question.id
+        setup.admission = admission
+        setup.responses = [
+            ReservedChatResponse(
+                llm=MagicMock(spec=LLM),
+                message_id=response_id,
+                display_name="Test model",
+            )
+            for response_id in responses
+        ]
+        turn = ChatTurnExecution(setup, owner)
+        turn._clear_processing_status()
+        assert turn._admission_released
+        clear_stop(conversation.id, cache, stream_id=question.id)
+        db_session.refresh(first)
+        db_session.refresh(second)
+        assert first.response_status == RunStatus.CANCELLED
+        assert first.message == "Saved answer"
+        assert second.response_status == RunStatus.ERROR
+        db_session.refresh(previous)
+        assert previous.response_status == RunStatus.COMPLETE
     finally:
         admission.release()
     regenerated = reserve_chat_response_ids(
         db_session, conversation.id, question.id, ["Regenerated"]
     )[0]
+    regenerated_response = db_session.get(ChatMessage, regenerated)
+    assert regenerated_response is not None
+    regenerated_response.response_status = RunStatus.COMPLETE
+    db_session.commit()
     admission.claim(conversation.id)
     admission.publish(regenerated)
     try:
@@ -234,5 +281,7 @@ def test_multi_model_stop_targets_current_responses_not_later_regeneration(
                 db_session=db_session,
             )
         assert not is_stop_requested(conversation.id, cache, stream_id=regenerated)
+        db_session.refresh(regenerated_response)
+        assert regenerated_response.response_status == RunStatus.COMPLETE
     finally:
         admission.release()

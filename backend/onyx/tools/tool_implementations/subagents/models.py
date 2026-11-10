@@ -2,9 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DEFAULT_AGENT_WAIT_SECONDS = 30
-MAX_AGENT_WAIT_SECONDS = 300
-
 
 class ChatConfiguration(BaseModel):
     """A chat child uses the current request's authorized tools and settings."""
@@ -37,14 +34,3 @@ class AgentMessageInput(SubagentSelection):
 
 class ListAgentsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-class WaitAgentInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    timeout_seconds: int = Field(
-        default=DEFAULT_AGENT_WAIT_SECONDS,
-        ge=1,
-        le=MAX_AGENT_WAIT_SECONDS,
-        description="Maximum time to wait for any unread agent completion.",
-    )

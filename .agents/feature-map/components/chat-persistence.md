@@ -198,8 +198,13 @@ for the invoking agent on the active branch, so receipt on one branch
 does not consume a result on another. A completed parent gets a new assistant
 response when unread child output arrives, including nested parents. The saved
 child response is the pending notification; no separate pending result is copied.
-The first model step records its consumption. Cancelled, failed, and step-limited
-parents do not restart automatically. User-submitted queued messages take priority.
+The first model step records its consumption. Automatic revisions of one tool
+invocation deliver only the latest result. The runtime suspends a subagent before
+completion until work delegated during that run finishes and its results are
+incorporated. Storage selects unread results; it does not infer completion from
+the state of descendants.
+Cancelled, failed, and step-limited parents do not restart automatically.
+User-submitted queued messages take priority.
 Result inputs remain model context and do not render as user messages.
 Search documents and `tool_id` come from the `ToolCall` rows and their search-doc
 links (`db/chat_response.py:read_response_replay_data`), not from the typed

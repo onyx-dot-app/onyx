@@ -71,7 +71,6 @@ from tests.unit.onyx.tools.code_mode.fakes import search_doc
 SUBAGENT_TOOLS = [
     "spawn_agent",
     "list_agents",
-    "wait_agent",
     "interrupt_agent",
     "send_message",
     "queue_message",

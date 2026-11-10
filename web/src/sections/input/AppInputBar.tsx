@@ -437,7 +437,9 @@ const AppInputBar = React.memo(
       canStopGeneration &&
       !incognitoEnabled &&
       !isSearchMode &&
-      targetResponseId !== null &&
+      !needsResponseSelection &&
+      (targetResponseId !== null ||
+        (!isMultiModelActive && pendingMessages.canAwaitAcknowledgement)) &&
       currentMessageFiles.length === 0 &&
       !pendingMessages.isSubmitting &&
       !isEditingQueuedMessage;
@@ -459,13 +461,7 @@ const AppInputBar = React.memo(
     async function submitPendingMessage(
       delivery: "send" | "queue" | "interrupt"
     ) {
-      if (
-        !canSubmitPending ||
-        targetResponseId === null ||
-        !message.trim() ||
-        disabled ||
-        isClassifying
-      )
+      if (!canSubmitPending || !message.trim() || disabled || isClassifying)
         return;
       const submittedText = message;
       const submittedSession = currentSessionId;
@@ -722,13 +718,35 @@ const AppInputBar = React.memo(
       <div
         {...(isSearchMode ? { inert: true } : {})}
         className={cn(
-          "flex justify-between items-center w-full",
+          "relative flex justify-between items-center w-full",
           isSearchMode
             ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
             : "opacity-100 p-1 h-11 pointer-events-auto",
           "transition-all duration-150"
         )}
       >
+        {hasActiveSubagents && !isSearchMode && (
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            width="auto"
+            height="fit"
+            gap={1}
+            padding={1}
+            data-testid="subagent-activity"
+            role="status"
+            className="pointer-events-none absolute left-1/2 -translate-x-1/2"
+          >
+            <span
+              aria-hidden
+              className="size-1.5 shrink-0 rounded-full bg-status-info-05 motion-safe:animate-pulse"
+            />
+            <Text font="secondary-body" color="text-03" maxLines={1}>
+              {t("appInputBar.subagentsWorking")}
+            </Text>
+          </Section>
+        )}
+
         {/* Bottom left controls */}
         <div className="flex flex-row items-center">
           {/* (+) button - always visible */}
@@ -863,7 +881,9 @@ const AppInputBar = React.memo(
             className="min-w-0 flex-1"
           >
             <Section
-              width="auto"
+              flexDirection="row"
+              justifyContent="end"
+              width="full"
               height="fit"
               gap={1}
               data-testid="pending-message-hint"
@@ -876,12 +896,12 @@ const AppInputBar = React.memo(
               {canSubmitPending ? (
                 <>
                   <Keycap>↵</Keycap>
-                  <Text font="secondary-body" color="text-03">
+                  <Text font="secondary-body" color="text-03" maxLines={1}>
                     {t("appInputBar.pendingMessages.sendLabel")}
                   </Text>
                   <Keycap>{isMac ? "⌘" : "Ctrl"}</Keycap>
                   <Keycap>↵</Keycap>
-                  <Text font="secondary-body" color="text-03">
+                  <Text font="secondary-body" color="text-03" maxLines={1}>
                     {t("appInputBar.pendingMessages.queueLabel")}
                   </Text>
                 </>
@@ -1290,24 +1310,6 @@ const AppInputBar = React.memo(
             </div>
 
             {chatControls}
-
-            {hasActiveSubagents && (
-              <Section
-                width="auto"
-                gap={1}
-                padding={1}
-                data-testid="subagent-activity"
-                role="status"
-              >
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-full bg-status-info-05 motion-safe:animate-pulse"
-                />
-                <Text font="secondary-body" color="text-03">
-                  {t("appInputBar.subagentsWorking")}
-                </Text>
-              </Section>
-            )}
 
             {/* First recording cycle waveform below input */}
             {shouldShowRecordingWaveformBelow && (

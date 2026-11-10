@@ -23,14 +23,12 @@ from onyx.chat.models import (
     IncognitoResponseReceipt,
     IncognitoState,
     PromptMetadata,
-    ResponseRecord,
     SavedAgentContext,
 )
 from onyx.chat.response import restore_response_sources
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.chat_subagents import (
     load_agent_history,
-    load_saved_response,
     load_session_agent_metadata,
     lookup_session_agent,
 )
@@ -84,8 +82,6 @@ class ChatHistoryStore(Protocol):
 
     def load_agent_history(self, agent_id: str) -> SavedAgentContext: ...
 
-    def load_saved_run(self, run_id: str, parent_id: str) -> ResponseRecord | None: ...
-
     def save_response(self, response: ChatResponseSnapshot) -> None: ...
 
 
@@ -111,11 +107,6 @@ class PostgresChatHistoryStore(ChatHistoryStore):
 
     def load_agent_history(self, agent_id: str) -> SavedAgentContext:
         return load_agent_history(self.message_id, agent_id)
-
-    def load_saved_run(self, run_id: str, parent_id: str) -> ResponseRecord | None:
-        if not run_id.isdecimal():
-            return None
-        return load_saved_response(self.message_id, int(run_id), parent_id)
 
     def save_response(self, response: ChatResponseSnapshot) -> None:
         save_chat_response_to_db(
@@ -146,9 +137,6 @@ class RedisChatHistoryStore(ChatHistoryStore):
 
     def load_agent_history(self, agent_id: str) -> SavedAgentContext:  # noqa: ARG002 -- Incognito has no subagents.
         raise ValueError("Subagents are not available in incognito")
-
-    def load_saved_run(self, run_id: str, parent_id: str) -> ResponseRecord | None:  # noqa: ARG002 -- Incognito has no subagents.
-        return None
 
     def prepare_messages(
         self,

@@ -24,7 +24,11 @@ import {
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
-import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
+import type {
+  ChatSessionStatus,
+  PendingChatMessage,
+  PendingChatSubmission,
+} from "@/lib/chat/types";
 import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -124,15 +128,17 @@ export function usePendingChatMessages(
   const key =
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   const { mutate: mutateCache } = useSWRConfig();
-  const { readerFinished, sendAcknowledged } = useChatSessionStore(
-    useShallow((state) => {
-      const session = sessionId ? state.sessions.get(sessionId) : undefined;
-      return {
-        readerFinished: session?.readerFinished,
-        sendAcknowledged: session?.sendAcknowledged,
-      };
-    })
-  );
+  const { readerFinished, sendAcknowledged, abortController } =
+    useChatSessionStore(
+      useShallow((state) => {
+        const session = sessionId ? state.sessions.get(sessionId) : undefined;
+        return {
+          readerFinished: session?.readerFinished,
+          sendAcknowledged: session?.sendAcknowledged,
+          abortController: session?.abortController,
+        };
+      })
+    );
   useEffect(() => {
     if (!key) return;
     let active = true;
@@ -158,6 +164,7 @@ export function usePendingChatMessages(
   );
   const submitting = useRef(false);
   const withdrawing = useRef(new Set<string>());
+  const localSubmissions = useRef(new Map<string, PendingChatSubmission>());
   const previous = useRef<{
     key: string | null;
     deliveries: Map<string, PendingChatMessage["delivery"]>;
@@ -166,6 +173,16 @@ export function usePendingChatMessages(
     key,
     async (url: string): Promise<PendingChatMessage[]> => {
       const messages = await errorHandlingFetcher<PendingChatMessage[]>(url);
+      // A GET can see a row before its POST response replaces the local preview.
+      const submitted = await Promise.all(
+        [...localSubmissions.current.values()]
+          .filter((submission) => submission.key === url && submission.request)
+          .map((submission) => submission.request)
+      );
+      for (const message of submitted) {
+        if (message && !messages.some((item) => item.id === message.id))
+          messages.push(message);
+      }
       if (activeKey.current !== url || !sessionId) return messages;
       const ids = new Set(messages.map((message) => message.id));
       const accepted =
@@ -182,18 +199,27 @@ export function usePendingChatMessages(
           await refresh;
         }
       }
-      return messages;
+      return [
+        ...messages,
+        ...[...localSubmissions.current.values()]
+          .filter((submission) => submission.key === url)
+          .map((submission) => submission.message),
+      ];
     },
     {
       refreshInterval: (messages) =>
-        messages?.length ? PENDING_MESSAGES_POLL_MS : 0,
+        messages?.some((message) => !localSubmissions.current.has(message.id))
+          ? PENDING_MESSAGES_POLL_MS
+          : 0,
       onErrorRetry: skipRetryOnAuthError,
       onSuccess: (messages) => {
         if (activeKey.current !== key) return;
         previous.current = {
           key,
           deliveries: new Map(
-            messages.map((message) => [message.id, message.delivery])
+            messages
+              .filter((message) => !localSubmissions.current.has(message.id))
+              .map((message) => [message.id, message.delivery])
           ),
         };
       },
@@ -201,16 +227,22 @@ export function usePendingChatMessages(
   );
 
   async function rememberPendingMessage(
-    pending: PendingChatMessage
+    pending: PendingChatMessage,
+    localId?: string
   ): Promise<void> {
     if (!key || !sessionId) return;
     // Revalidation may already omit an input accepted before the POST returned.
     await mutateCache<PendingChatMessage[]>(
       key,
-      (messages = []) =>
-        messages.some((item) => item.id === pending.id)
-          ? messages.map((item) => (item.id === pending.id ? pending : item))
-          : [...messages, pending],
+      (messages = []) => {
+        const replacement =
+          messages.find((item) => item.id === localId) ??
+          messages.find((item) => item.id === pending.id);
+        if (!replacement) return [...messages, pending];
+        return messages
+          .filter((item) => item.id !== pending.id || item === replacement)
+          .map((item) => (item === replacement ? pending : item));
+      },
       { revalidate: false }
     );
     if (activeKey.current === key) {
@@ -230,42 +262,136 @@ export function usePendingChatMessages(
   async function submit(
     message: string,
     delivery: PendingChatMessage["delivery"],
-    targetResponseId: number
+    targetResponseId: number | null
   ): Promise<boolean> {
+    if (!key || !sessionId || (targetResponseId === null && !abortController))
+      return false;
+    const previousSubmission = [...localSubmissions.current.values()].findLast(
+      (item) => item.key === key
+    );
+    const finished = Promise.withResolvers<void>();
+    const id = `local:${crypto.randomUUID()}`;
+    const submission: PendingChatSubmission = {
+      key,
+      message: { id, message, delivery, target_response_id: targetResponseId },
+      request: null,
+      failed: false,
+      finished: finished.promise,
+    };
+    localSubmissions.current.set(id, submission);
+    await mutateCache<PendingChatMessage[]>(
+      key,
+      (messages = []) => [...messages, submission.message],
+      { revalidate: false }
+    );
+    void (async () => {
+      try {
+        const acknowledgement =
+          targetResponseId ??
+          sendAcknowledged ??
+          (await new Promise<number | null>((resolve) => {
+            if (!abortController) {
+              resolve(null);
+              return;
+            }
+            const finish = (value: Promise<number | null> | null) => {
+              unsubscribe();
+              abortController.signal.removeEventListener("abort", abort);
+              resolve(value);
+            };
+            const abort = () => finish(null);
+            const check = () => {
+              const current = useChatSessionStore
+                .getState()
+                .sessions.get(sessionId);
+              if (
+                abortController.signal.aborted ||
+                current?.abortController !== abortController
+              )
+                finish(null);
+              else if (current.sendAcknowledged)
+                finish(current.sendAcknowledged);
+              else if (
+                current.chatState === "input" ||
+                current.chatState === "unconfirmed"
+              )
+                finish(null);
+            };
+            const unsubscribe = useChatSessionStore.subscribe(check);
+            abortController.signal.addEventListener("abort", abort, {
+              once: true,
+            });
+            check();
+          }));
+        const responseId = targetResponseId ?? (await acknowledgement);
+        await previousSubmission?.finished;
+        if (!localSubmissions.current.has(id)) return;
+        if (responseId == null) throw new Error(t("submitFailed"));
+        submission.message = {
+          ...submission.message,
+          target_response_id: responseId,
+        };
+        submission.request = errorHandlingFetchWith<PendingChatMessage>(key, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            delivery: submission.message.delivery,
+            target_response_id: responseId,
+          }),
+        })
+          .then(async (pending) => {
+            localSubmissions.current.delete(id);
+            await rememberPendingMessage(pending, id);
+            return pending;
+          })
+          .catch((failure: unknown) => {
+            toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
+            return null;
+          });
+        if (!(await submission.request)) {
+          submission.request = null;
+          submission.failed = true;
+        }
+      } catch (failure) {
+        submission.failed = true;
+        toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
+      } finally {
+        finished.resolve();
+      }
+    })();
+    return true;
+  }
+
+  async function interrupt(id: string): Promise<boolean> {
     if (!key || !sessionId || submitting.current) return false;
     submitting.current = true;
     setSubmittingSession(sessionId);
     try {
-      const pending = await errorHandlingFetchWith<PendingChatMessage>(key, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          delivery,
-          target_response_id: targetResponseId,
-        }),
-      });
-      await rememberPendingMessage(pending);
-      return true;
-    } catch (failure) {
-      toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
-      return false;
-    } finally {
-      submitting.current = false;
-      setSubmittingSession(null);
-    }
-  }
-
-  async function interrupt(id: string): Promise<boolean> {
-    const queued = data?.find((message) => message.id === id);
-    if (!key || !sessionId || !queued || submitting.current) return false;
-    const target =
-      queued.target_response_id === null
-        ? ""
-        : `?target_response_id=${queued.target_response_id}`;
-    submitting.current = true;
-    setSubmittingSession(sessionId);
-    try {
+      const local = localSubmissions.current.get(id);
+      if (local?.failed) {
+        toast.error(t("submitFailed"));
+        return false;
+      }
+      if (local && !local.request) {
+        local.message = { ...local.message, delivery: "interrupt" };
+        await mutateCache<PendingChatMessage[]>(
+          local.key,
+          (messages = []) =>
+            messages.map((item) => (item.id === id ? local.message : item)),
+          { revalidate: false }
+        );
+        return true;
+      }
+      const queued = local
+        ? await local.request
+        : data?.find((message) => message.id === id);
+      if (!queued) return false;
+      id = queued.id;
+      const target =
+        queued.target_response_id === null
+          ? ""
+          : `?target_response_id=${queued.target_response_id}`;
       const pending = await errorHandlingFetchWith<PendingChatMessage>(
         `${key}/${id}/interrupt${target}`,
         { method: "POST" }
@@ -290,8 +416,25 @@ export function usePendingChatMessages(
 
   async function withdraw(id: string): Promise<PendingChatMessage | null> {
     if (!key || !sessionId || withdrawing.current.has(id)) return null;
-    withdrawing.current.add(id);
+    const localId = id;
+    withdrawing.current.add(localId);
     try {
+      const local = localSubmissions.current.get(id);
+      if (local && !local.request) {
+        localSubmissions.current.delete(id);
+        await mutateCache<PendingChatMessage[]>(
+          local.key,
+          (messages = []) => messages.filter((item) => item.id !== id),
+          { revalidate: false }
+        );
+        return local.message;
+      }
+      if (local) {
+        const submitted = await local.request;
+        if (!submitted) return null;
+        id = submitted.id;
+      }
+      withdrawing.current.add(id);
       const withdrawn = await errorHandlingFetchWith<PendingChatMessage>(
         `${key}/${id}`,
         { method: "DELETE" }
@@ -312,6 +455,7 @@ export function usePendingChatMessages(
       );
       return null;
     } finally {
+      withdrawing.current.delete(localId);
       withdrawing.current.delete(id);
       void mutateCache(key).catch((failure: unknown) =>
         console.error("Failed to refresh pending messages", failure)
@@ -322,6 +466,7 @@ export function usePendingChatMessages(
   return {
     messages: data ?? EMPTY_PENDING_MESSAGES,
     isLoading,
+    canAwaitAcknowledgement: Boolean(abortController),
     isSubmitting: submittingSession === sessionId && submittingSession !== null,
     error: error ? t("loadFailed") : null,
     submit,

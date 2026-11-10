@@ -12468,7 +12468,7 @@
           "attachmentsHint": "Senden Sie angehängte Dateien nach dieser Antwort.",
           "chooseResponseHint": "Wählen Sie eine Antwort aus, bevor Sie eine Nachricht einreihen.",
           "incognitoHint": "Warten Sie im Inkognito-Chat, bis die Antwort fertig ist.",
-          "sendHint": "Senden, sobald die aktuelle Modellgenerierung und die Werkzeuge fertig sind",
+          "sendHint": "Im nächsten Schritt dieser Antwort senden",
           "interruptHint": "Aktuelle Arbeit unterbrechen und diese Nachricht senden",
           "sendLabel": "Senden",
           "queueLabel": "Einreihen"
@@ -12602,7 +12602,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "Die Nachricht konnte nicht gesendet werden. Ihr Entwurf wurde behalten.",
+        "submitFailed": "Die Nachricht konnte nicht gesendet werden. Sie können sie in den ausstehenden Nachrichten bearbeiten oder entfernen.",
         "withdrawFailed": "Die ausstehende Nachricht konnte nicht entfernt werden.",
         "loadFailed": "Ausstehende Nachrichten konnten nicht geladen werden.",
         "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",

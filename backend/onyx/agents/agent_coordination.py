@@ -24,9 +24,13 @@ from onyx.agents.models import (
     AgentMessageRequest,
     AgentMessageStatus,
     AgentResultDetails,
+    BackgroundDelegation,
     InputMessageMetadata,
     InputSource,
     MessageDelivery,
+    RunAction,
+    RunFailure,
+    RunFailureKind,
     RunResult,
     RunState,
     RunStatus,
@@ -58,6 +62,25 @@ MAX_CHILD_DEPTH = 8
 REMOTE_POLL_SECONDS = 1.0
 CHILD_TERMINAL_TIMEOUT_SECONDS = 18.0
 MAX_AGENT_COMPLETIONS_PER_STEP = 8
+
+
+def _agent_completion(info: AgentInfo, state: RunState) -> AgentCompletion:
+    output_index = (
+        state.answer_step_index
+        if state.answer_step_index is not None
+        else len(state.steps) - 1
+    )
+    output = state.steps[output_index].message if state.steps else None
+    return AgentCompletion(
+        agent_id=info.id,
+        agent_path=info.path,
+        run_id=state.run_id,
+        status=state.status,
+        output=output.model_copy(deep=True) if output is not None else None,
+        failure=state.failure.model_copy(deep=True)
+        if state.failure is not None
+        else None,
+    )
 
 
 class RunStore(Protocol):
@@ -120,6 +143,12 @@ class AgentDirectory(Protocol):
 
     def cancel_run(self, run_id: str, parent_id: str) -> None: ...
 
+    def resolve_delegation_messages(
+        self, parent_run_id: str, delegations: Sequence[BackgroundDelegation]
+    ) -> dict[str, str | None]:
+        """Map instructions to accepted runs; None is pending, absent means withdrawn."""
+        ...
+
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt: ...
 
 
@@ -163,7 +192,6 @@ class _CoordinatorState:
         self.work = ExecutionWork()
         self.closed = False
         self.lock = threading.RLock()
-        self.completion_waiters: set[threading.Event] = set()
         self.pending_messages: dict[str, _QueuedMessage] = {}
 
 
@@ -397,10 +425,6 @@ class AgentCoordinator:
             return existing
         if not completion.done():
             completion.set_result(saved)
-        with self._state.lock:
-            waiters = tuple(self._state.completion_waiters)
-        for waiter in waiters:
-            waiter.set()
         return restored
 
     def completion(self, run_id: str) -> Future[RunState]:
@@ -427,7 +451,7 @@ class AgentCoordinator:
             )
         with self._state.lock:
             candidates = [
-                (run_id, tracked.completion)
+                tracked.completion
                 for run_id, tracked in self._state.tracked_runs.items()
                 if tracked.notification_parent_id == parent_id
                 and run_id in self._visible_run_ids
@@ -436,39 +460,41 @@ class AgentCoordinator:
                 and tracked.completion.exception() is None
             ][:limit]
         results: list[AgentCompletion] = []
-        for run_id, completion in candidates:
+        for completion in candidates:
             state = completion.result()
             if state.agent_id is None or not state.status.is_terminal:
                 raise ValueError("Agent completion has no terminal identity")
             with self._state.lock:
                 info = self._state.registrations[state.agent_id]
-            output_index = (
-                state.answer_step_index
-                if state.answer_step_index is not None
-                else len(state.steps) - 1
-            )
-            output = state.steps[output_index].message if state.steps else None
-            results.append(
-                AgentCompletion(
-                    agent_id=info.id,
-                    agent_path=info.path,
-                    run_id=run_id,
-                    status=state.status,
-                    output=output.model_copy(deep=True) if output is not None else None,
-                    failure=state.failure.model_copy(deep=True)
-                    if state.failure is not None
-                    else None,
-                )
-            )
+            results.append(_agent_completion(info, state))
         return results
 
     def receive_inputs(self, run: Run) -> list[UserMessage]:
         messages = (
             self._ownership.receive_inputs(run) if self._ownership is not None else []
         )
-        for completion in self.completed_agents(
-            run.agent_id, run.received_agent_run_ids
-        ):
+        completions: list[AgentCompletion] = []
+        received = set(run.received_agent_run_ids)
+        with run.execution_lock:
+            required = [
+                item.run_id
+                for item in run._progress.background_delegations
+                if item.run_id is not None and item.run_id not in received
+            ]
+        for run_id in dict.fromkeys(required):
+            completion = self.child_completion(run_id, run.agent_id)
+            if not completion.done():
+                continue
+            state = completion.result()
+            if state.agent_id is None:
+                raise ValueError("Completed delegation has no agent identity")
+            info = self.lookup_agent(state.agent_id, run.agent_id)
+            if info is None:
+                raise ValueError("Completed delegation is unavailable to its parent")
+            completions.append(_agent_completion(info, state))
+            received.add(run_id)
+        completions.extend(self.completed_agents(run.agent_id, received))
+        for completion in completions:
             output = completion.output
             messages.append(
                 UserMessage(
@@ -501,14 +527,24 @@ class AgentCoordinator:
 
     def notify_inputs(self) -> None:
         with self._state.lock:
-            waiters = tuple(self._state.completion_waiters)
-        for waiter in waiters:
-            waiter.set()
-
-    def has_pending_inputs(self, run: Run) -> bool:
-        return run.has_pending_messages or (
-            self._ownership is not None and bool(self._ownership.receive_inputs(run))
-        )
+            runs = [
+                tracked.execution
+                for tracked in self._state.tracked_runs.values()
+                if tracked.execution is not None
+            ]
+        for run in runs:
+            with run.execution_lock:
+                progress = run._state.progress
+                waiting = (
+                    progress is not None
+                    and progress.action == RunAction.WAIT_CHILDREN
+                    and not run._state.status.is_terminal
+                    and any(
+                        item.run_id is None for item in progress.background_delegations
+                    )
+                )
+            if waiting:
+                run._wake_execution()
 
     def close_inputs(self, run: Run, *, can_continue: bool) -> bool:
         return (
@@ -551,10 +587,9 @@ class AgentCoordinator:
         try:
             active = self.active_run(request.agent_id)
             if request.delivery == MessageDelivery.SEND and active is not None:
-                with active.execution_lock:
-                    if active.send_message(request.message):
-                        with self._state.lock:
-                            queued.target_run_id = active.id
+                if active.send_message(request.message):
+                    with self._state.lock:
+                        queued.target_run_id = active.id
         except BaseException:
             with self._state.lock:
                 self._state.pending_messages.pop(message_id, None)
@@ -607,9 +642,6 @@ class AgentCoordinator:
         )
         with self._state.lock:
             self._state.tracked_runs[run.id].notification_parent_id = request.parent_id
-            waiters = tuple(self._state.completion_waiters)
-        for waiter in waiters:
-            waiter.set()
         return run
 
     def _advance_messages(self, agent_id: str) -> None:
@@ -658,6 +690,18 @@ class AgentCoordinator:
                 with self._state.lock:
                     queued.starting = False
                 raise
+            if run is not None:
+                with self._state.lock:
+                    sender = self._state.tracked_runs.get(queued.request.parent_run_id)
+                    sender_run = sender.execution if sender is not None else None
+                if sender_run is not None:
+                    with sender_run.execution_lock:
+                        for item in sender_run._progress.background_delegations:
+                            if item.message_id == message_id:
+                                item.run_id = run.id
+                        waiting = sender_run._progress.action == RunAction.WAIT_CHILDREN
+                    if waiting:
+                        sender_run._wake_execution()
             if run is not None and previous_run is not None:
                 previous_run.cancel_message(message_id)
             with self._state.lock:
@@ -666,6 +710,7 @@ class AgentCoordinator:
                     queued.target_run_id = run.id
                 else:
                     queued.starting = False
+            self.notify_inputs()
             if run is None or not run.wait_for_idle(timeout=0):
                 return
 
@@ -677,6 +722,7 @@ class AgentCoordinator:
         with self._state.lock:
             for message_id in message_ids:
                 self._state.pending_messages.pop(message_id, None)
+        self.notify_inputs()
 
     def child_completion(self, run_id: str, parent_id: str) -> Future[RunState]:
         """Authorize a dependency and use its persisted completion as the result."""
@@ -780,11 +826,6 @@ class AgentCoordinator:
             raise
         else:
             future.set_result(run.snapshot())
-        finally:
-            with self._state.lock:
-                waiters = tuple(self._state.completion_waiters)
-            for waiter in waiters:
-                waiter.set()
 
     def reserve_run_id(
         self,
@@ -1432,9 +1473,6 @@ class RunCoordination:
                 self.coordinator._state.tracked_runs[
                     run.id
                 ].notification_parent_id = self.run.agent_id
-                waiters = tuple(self.coordinator._state.completion_waiters)
-            for waiter in waiters:
-                waiter.set()
         else:
             with self._lock:
                 if self._finished:
@@ -1443,6 +1481,11 @@ class RunCoordination:
                 else:
                     self._include_predecessors(run)
                     self._attach(run.id)
+        if lifetime == AgentLifetime.BACKGROUND and self.run.parent_run_id is not None:
+            with self._lock:
+                self.run._progress.background_delegations.append(
+                    BackgroundDelegation(agent_id=agent.id, run_id=run.id)
+                )
         return run
 
     def _include_predecessors(self, run: Run) -> None:
@@ -1487,6 +1530,114 @@ class RunCoordination:
             for run_id in run_ids:
                 if run_id in self.children:
                     self.children[run_id] = True
+
+    def has_unconsumed_delegations(self) -> bool:
+        received = self.run.received_agent_run_ids
+        with self._lock:
+            return any(
+                item.run_id not in received
+                for item in self.run._progress.background_delegations
+            )
+
+    def wait_for_delegations(self) -> bool:
+        """Resolve submitted instructions and suspend until their child results are saved."""
+        with self._lock:
+            messages = {
+                item.message_id
+                for item in self.run._progress.background_delegations
+                if item.message_id is not None and item.run_id is None
+            }
+        if messages:
+            directory = self.coordinator._directory
+            if directory is not None:
+                with self._lock:
+                    unresolved = [
+                        item.model_copy()
+                        for item in self.run._progress.background_delegations
+                        if item.message_id in messages
+                    ]
+                resolved = directory.resolve_delegation_messages(
+                    self.run.id, unresolved
+                )
+            else:
+                with self.coordinator._state.lock:
+                    resolved = {
+                        message_id: None
+                        for message_id in messages
+                        if message_id in self.coordinator._state.pending_messages
+                    }
+                    missing_messages = messages - resolved.keys()
+                    tracked_runs = (
+                        list(self.coordinator._state.tracked_runs.items())
+                        if missing_messages
+                        else []
+                    )
+                for run_id, tracked in tracked_runs:
+                    execution = tracked.execution
+                    if execution is not None:
+                        with execution.execution_lock:
+                            state = execution._state
+                            accepted = {
+                                message.id for message in state.input_messages
+                            } | execution.received_input_ids
+                    elif (
+                        tracked.completion.done()
+                        and tracked.completion.exception() is None
+                    ):
+                        state = tracked.completion.result()
+                        accepted = {message.id for message in state.input_messages} | {
+                            message.id
+                            for step in state.steps
+                            for message in step.input_messages
+                        }
+                    else:
+                        continue
+                    for message_id in missing_messages & accepted:
+                        resolved[message_id] = run_id
+            with self._lock:
+                retained = []
+                for item in self.run._progress.background_delegations:
+                    if item.message_id in messages and item.run_id is None:
+                        if item.message_id not in resolved:
+                            logger.debug(
+                                "Delegated instruction %s was withdrawn",
+                                item.message_id,
+                            )
+                            continue
+                        item.run_id = resolved[item.message_id]
+                    retained.append(item)
+                self.run._progress.background_delegations = retained
+        received = self.run.received_agent_run_ids
+        with self._lock:
+            delegations = [
+                item.model_copy() for item in self.run._progress.background_delegations
+            ]
+        pending: list[str] = []
+        for item in delegations:
+            if item.run_id is None:
+                recipient = self.coordinator.lookup_agent(
+                    item.agent_id, self.run.agent_id
+                )
+                if recipient is not None and recipient.queue_paused:
+                    raise RunFailed(
+                        RunFailure(
+                            kind=RunFailureKind.EXECUTION,
+                            message="A delegated instruction cannot start because the child agent's queue is paused.",
+                        )
+                    )
+                continue
+            if item.run_id in received:
+                continue
+            completion = self.coordinator.child_completion(
+                item.run_id, self.run.agent_id
+            )
+            if completion.done():
+                completion.result()
+            else:
+                pending.append(item.run_id)
+        if pending:
+            self.run.watch_children(pending)
+        return bool(pending) or any(item.run_id is None for item in delegations)
 
     def observed_children(self) -> list[str]:
         with self._lock:
@@ -1628,7 +1779,12 @@ class _ToolControl(AgentControl):
             raise ValueError("Agent instructions must not be empty")
         if total_timeout_s is not None and not math.isfinite(total_timeout_s):
             raise ValueError("Child timeout must be finite")
-        return self.owner.coordinator.submit_message(
+        recipient = (
+            self.owner.coordinator.lookup_agent(agent_id, self.owner.run.agent_id)
+            if self.owner.run.parent_run_id is not None
+            else None
+        )
+        receipt = self.owner.coordinator.submit_message(
             AgentMessageRequest(
                 agent_id=agent_id,
                 parent_id=self.owner.run.agent_id,
@@ -1644,6 +1800,19 @@ class _ToolControl(AgentControl):
                 parent_tool_call_id=self.call_id,
             )
         )
+        if recipient is not None:
+            with self.owner._lock:
+                self.owner.run._progress.background_delegations.append(
+                    BackgroundDelegation(
+                        agent_id=agent_id,
+                        message_id=receipt.id,
+                        tool_call_id=self.call_id,
+                        run_id=receipt.run_id
+                        if receipt.status == AgentMessageStatus.ACCEPTED
+                        else None,
+                    )
+                )
+        return receipt
 
     def send_message(
         self,
@@ -1803,42 +1972,6 @@ class _ToolControl(AgentControl):
 
         except TimeoutError:
             return None
-
-    def wait_for_agent_message(self, *, timeout: float) -> bool:
-        """Wait in the calling tool worker; leave child execution independent."""
-        if not math.isfinite(timeout) or not 0 < timeout <= OPERATION_TIMEOUT_SECONDS:
-            raise ValueError("Wait timeout is outside its allowed bounds")
-        self.owner.check_tool_active(self.active)
-        coordinator = self.owner.coordinator
-        activity = threading.Event()
-        with coordinator._state.lock:
-            coordinator._state.completion_waiters.add(activity)
-        deadline = time.monotonic() + timeout
-        try:
-            with self.owner.run.cancellation_signal.on_cancel(activity.set):
-                while True:
-                    activity.clear()
-                    self.owner.check_tool_active(self.active)
-                    if coordinator.has_pending_inputs(
-                        self.owner.run
-                    ) or coordinator.completed_agents(
-                        self.owner.run.agent_id,
-                        self.owner.run.received_agent_run_ids,
-                        limit=1,
-                    ):
-                        return True
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        return False
-                    activity.wait(
-                        min(remaining, REMOTE_POLL_SECONDS)
-                        if coordinator._directory is not None
-                        or coordinator._ownership is not None
-                        else remaining
-                    )
-        finally:
-            with coordinator._state.lock:
-                coordinator._state.completion_waiters.discard(activity)
 
     def _result_from_child(self, state: RunState) -> RunResult:
         self.owner.observe_children([state.run_id])

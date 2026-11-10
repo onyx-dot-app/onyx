@@ -329,6 +329,7 @@ class RunAction(str, Enum):
     PREPARE = "prepare"
     TOOLS = "tools"
     AFTER_STEP = "after_step"
+    WAIT_CHILDREN = "wait_children"
     FINISH = "finish"
 
 
@@ -372,6 +373,15 @@ def messages_from_steps(steps: list[StepRecord]) -> list[Message]:
     return messages
 
 
+class BackgroundDelegation(BaseModel):
+    """A child request whose result must be consumed before this run completes."""
+
+    agent_id: str
+    run_id: str | None = None
+    message_id: str | None = None
+    tool_call_id: str | None = None
+
+
 class RunProgress(BaseModel):
     """Saved execution position and unfinished work within the current step."""
 
@@ -401,6 +411,7 @@ class RunProgress(BaseModel):
     _serialize_input_messages = field_serializer("pending_messages", when_used="json")(
         _serialize_inputs
     )
+    background_delegations: list[BackgroundDelegation] = Field(default_factory=list)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None

@@ -196,10 +196,19 @@ pendingTest(
 
 pendingTest(
   "Enter adds an instruction after the current step",
-  async ({ chatPage, heldResponse }) => {
+  async ({ page, chatPage, heldResponse }) => {
     const instruction = "Focus on durability";
+    const submission = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        response
+          .url()
+          .endsWith(`/chat-session/${heldResponse.sessionId}/pending-messages`)
+    );
     await chatPage.inputBar.submitPending(instruction, "send");
     await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+    // The optimistic tile appears before the server accepts the instruction.
+    expect((await submission).ok()).toBe(true);
     await releaseMockLlmGate(heldResponse.gateId);
     await chatPage.expectAnswerParagraph(
       "The additional instruction was received."

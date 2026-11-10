@@ -54,7 +54,6 @@ from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
     get_default_base_system_prompt,
 )
-from onyx.chat.stop_signal_checker import is_stop_requested
 from onyx.chat.stream_buffer import ChatStream
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
 from onyx.configs.constants import (
@@ -309,12 +308,6 @@ def prepare_chat_turn(
                     parent_message_id=pending.target_response_id,
                 )
             if continue_after_response_id is not None:
-                if is_stop_requested(
-                    chat_session.id,
-                    admission.cache,
-                    stream_id=continue_after_response_id,
-                ):
-                    raise OnyxError(OnyxErrorCode.CONFLICT, "The response was stopped.")
                 if (
                     pending_agent_result_response(db_session, chat_session.id, user.id)
                     != continue_after_response_id
@@ -577,12 +570,6 @@ def prepare_chat_turn(
             if continue_after_response_id is not None:
                 # User submissions and branch changes can arrive during file preparation.
                 lock_agent(db_session, str(chat_session_id))
-                if is_stop_requested(
-                    chat_session_id,
-                    admission.cache,
-                    stream_id=continue_after_response_id,
-                ):
-                    raise OnyxError(OnyxErrorCode.CONFLICT, "The response was stopped.")
                 if (
                     pending_agent_result_response(db_session, chat_session_id, user.id)
                     != continue_after_response_id
@@ -675,10 +662,6 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
             )
         if pending is None and continue_after_response_id is None:
             return
-        if continue_after_response_id is not None and is_stop_requested(
-            chat_session_id, cache, stream_id=continue_after_response_id
-        ):
-            return
 
         def start_pending_turn() -> None:
             # A queued turn starts a new root trace while retaining tenant context.
@@ -751,10 +734,6 @@ def dispatch_pending_chat_messages(chat_session_id: UUID, user_id: UUID) -> None
                 admission = ChatTurnAdmission(cache)
                 try:
                     admission.claim(chat_session_id)
-                    if is_stop_requested(
-                        chat_session_id, cache, stream_id=continue_after_response_id
-                    ):
-                        return
                     with get_session_with_current_tenant() as db_session:
                         fail_agent_result_response__no_commit(
                             db_session,

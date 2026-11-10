@@ -23,6 +23,8 @@ from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import ChatAgent, build_chat_agent
 from onyx.chat.chat_processing_checker import (
+    ACTIVE_LEASE_SECONDS,
+    BACKGROUND_CONTROL_PREFIX,
     PROCESSING_REFRESH_INTERVAL_S,
 )
 from onyx.chat.emitter import Emitter
@@ -44,7 +46,10 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
-from onyx.db.chat_inputs import has_pending_human_interrupt
+from onyx.db.chat_inputs import (
+    cancel_completed_responses__no_commit,
+    has_pending_human_interrupt,
+)
 from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
@@ -191,7 +196,7 @@ def start_chat_turn(
 
 
 class ChatTurnExecution:
-    """Own response execution, Stop control, and delivery for one user message."""
+    """Own chat response execution, Stop control, and delivery."""
 
     def __init__(
         self,
@@ -223,7 +228,7 @@ class ChatTurnExecution:
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
         self._response_stops: dict[int, OverallStop] = {}
-        self._last_refresh = time.monotonic()
+        self._last_refresh = 0.0
         self._last_input_poll = 0.0
         # Each response run cancels itself at this time and records a DEADLINE failure.
         self._deadline_at = datetime.now(timezone.utc) + timedelta(
@@ -272,14 +277,18 @@ class ChatTurnExecution:
             len(self.setup.responses) == 1 and self.setup.new_msg_req.deep_research
         )
         # The trace stays open while background agents still own work.
-        with trace(
-            "run_deep_research" if research else "chat",
-            group_id=str(self.setup.chat_session_id),
-            metadata=ChatTraceMetadata(
-                chat_session_id=str(self.setup.chat_session_id),
-                user_id=self.setup.user_identity.user_id,
-            ).model_dump(),
+        with (
+            trace(
+                "run_deep_research" if research else "chat",
+                group_id=str(self.setup.chat_session_id),
+                metadata=ChatTraceMetadata(
+                    chat_session_id=str(self.setup.chat_session_id),
+                    user_id=self.setup.user_identity.user_id,
+                ).model_dump(),
+            ),
+            ExitStack() as cleanup,
         ):
+            cleanup.callback(self._clear_control_presence)
             try:
                 self.delivery.events.start()
             except Exception as error:
@@ -436,6 +445,26 @@ class ChatTurnExecution:
 
     def _clear_processing_status(self) -> None:
         try:
+            if self._stopped_by_user or is_stop_requested(
+                self.setup.chat_session_id,
+                self.setup.admission.cache,
+                stream_id=self.setup.stream_id,
+            ):
+                self._stopped_by_user = True
+                self.cancellation.cancel()
+                try:
+                    self.setup.admission.check_owner(self.setup.chat_session_id)
+                except CacheLockLostError:
+                    logger.debug("Chat admission changed before Stop was saved")
+                else:
+                    # Saves have drained, so no writer can replace this terminal status.
+                    with get_session_with_current_tenant() as session:
+                        cancel_completed_responses__no_commit(
+                            session,
+                            self.setup.chat_session_id,
+                            [response.message_id for response in self.setup.responses],
+                        )
+                        session.commit()
             self.setup.admission.release()
             self._admission_released = True
         except Exception:
@@ -517,26 +546,27 @@ class ChatTurnExecution:
             if store is not None:
                 with self._lock:
                     self._stores.append(store)
-            history_store = get_chat_history_store(
-                message_id=persistence.message_id,
-                chat_session_id=self.setup.chat_session_id,
-                persist_content=persist_content,
-                branch=branch,
-            )
-            saved_agents = history_store.list_agents()
-            directory = ChatAgentDirectory(
-                history_store=history_store,
-                store=store,
-                build_agent=partial(
-                    restore_subagent,
-                    setup=self.setup,
-                    llm=persistence.llm,
-                    tools=configured_tools,
-                    inject_memories=self.user.use_memories,
-                ),
-            )
-            coordinator = (
-                store.bind(
+            if store is None:
+                coordinator = persistence.coordinator.view(store=persistence)
+            else:
+                history_store = get_chat_history_store(
+                    message_id=persistence.message_id,
+                    chat_session_id=self.setup.chat_session_id,
+                    persist_content=True,
+                    branch=branch,
+                )
+                directory = ChatAgentDirectory(
+                    history_store=history_store,
+                    store=store,
+                    build_agent=partial(
+                        restore_subagent,
+                        setup=self.setup,
+                        llm=persistence.llm,
+                        tools=configured_tools,
+                        inject_memories=self.user.use_memories,
+                    ),
+                )
+                coordinator = store.bind(
                     persistence.coordinator,
                     build_agent=partial(
                         restore_chat_agent,
@@ -546,13 +576,8 @@ class ChatTurnExecution:
                     ),
                     directory=directory,
                 )
-                if store is not None
-                else persistence.coordinator.view(
-                    directory=directory, store=persistence
-                )
-            )
-            for info in saved_agents:
-                coordinator.register(info)
+                for info in history_store.list_agents():
+                    coordinator.register(info)
             coordinator.register(
                 AgentInfo(
                     id=chat_agent.id,
@@ -616,7 +641,31 @@ class ChatTurnExecution:
             return overall_stop(RunStatus.CANCELLED, None)
         return None
 
+    def _clear_control_presence(self) -> None:
+        for response in self.setup.responses:
+            try:
+                self.setup.cache.delete(
+                    f"{BACKGROUND_CONTROL_PREFIX}{response.message_id}"
+                )
+            except Exception:
+                logger.exception("Could not clear background chat control presence")
+
     def _poll_control(self) -> None:
+        now = time.monotonic()
+        should_refresh = now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S
+        if should_refresh:
+            self._last_refresh = now
+        if should_refresh and self.setup.incognito_record_mode is None:
+            try:
+                # Each reserved response has one control worker, even after its run ends.
+                for response in self.setup.responses:
+                    self.setup.cache.set(
+                        f"{BACKGROUND_CONTROL_PREFIX}{response.message_id}",
+                        1,
+                        ex=ACTIVE_LEASE_SECONDS,
+                    )
+            except Exception:
+                logger.exception("Could not refresh background chat control presence")
         with self._lock:
             stores = tuple(self._stores)
         for store in stores:
@@ -675,8 +724,7 @@ class ChatTurnExecution:
                     self.cancellation.cancel()
             except Exception:
                 logger.exception("Failed to read chat Stop request; will retry")
-        if now - self._last_refresh >= PROCESSING_REFRESH_INTERVAL_S:
-            self._last_refresh = now
+        if should_refresh:
             try:
                 self.setup.admission.refresh()
             except CacheLockLostError:

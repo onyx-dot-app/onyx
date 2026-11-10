@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import BaseModel
 from sqlalchemy import delete, event, func, inspect, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, raiseload
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
 from ee.onyx.db.usage_export import get_empty_chat_messages_entries__paginated
@@ -28,6 +28,7 @@ from onyx.agents.models import (
     AgentInfo,
     AgentMessageRequest,
     AgentState,
+    BackgroundDelegation,
     CompactionCheckpoint,
     ExecutionCheckpoint,
     ExecutionStatus,
@@ -89,21 +90,26 @@ from onyx.db.chat_checkpoint import (
     publish_checkpoint__no_commit,
 )
 from onyx.db.chat_inputs import (
+    activate_reserved_message,
     can_start_message,
     close_response_inputs,
     enqueue_message,
     fail_pending_message,
+    fail_reserved_message,
     inputs_available,
     latest_agent_response,
     lock_agent,
     pending_inputs,
     receive_messages,
+    reserve_input_response,
+    resolve_delegation_messages,
 )
 from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
     read_response_replay_data,
     read_response_steps,
+    reserve_agent_continuation__no_commit,
     reserve_child_response__no_commit,
     save_chat_response_to_db,
     save_chat_turn,
@@ -438,6 +444,141 @@ def test_agent_completion_discovery_scopes_branch_parent_and_received_results(
     )
 
 
+def test_completion_revisions_preserve_separate_invocations_and_accepted_results(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First assignment")
+    grandchild = _child_record(db_session, child, uuid4(), "Evidence")
+    parent.steps[0].message = parent.steps[0].message.model_copy(deep=True)
+    child.steps[0].message = child.steps[0].message.model_copy(deep=True)
+    parent.steps[0].message.tool_calls[0].name = "spawn_agent"
+    child.steps[0].message.tool_calls[0].name = "spawn_agent"
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.chat_session.restoration_config = ChatConfiguration(kind="chat")
+
+    later_response = _response(db_session, conversation, previous=response)
+    later_parent = _record(later_response)
+    another_assignment = _child_record(
+        db_session,
+        later_parent,
+        UUID(child.agent_id),
+        "Second assignment",
+        child.run_id,
+    )
+    later_parent.steps[0].message = later_parent.steps[0].message.model_copy(deep=True)
+    later_parent.steps[0].message.tool_calls[0].name = "send_message"
+    _save(db_session, later_response, later_parent)
+    branch = ChatBranch(
+        chat_session_id=conversation.id, message_ids=[response.id, later_response.id]
+    )
+    # Storage trusts terminal status; execution owns dependency completion.
+    assert background_response_statuses(
+        db_session, branch, str(conversation.id), ()
+    ) == {
+        int(child.run_id): RunStatus.COMPLETE,
+        int(another_assignment.run_id): RunStatus.COMPLETE,
+    }
+
+    continuation_id = reserve_agent_continuation__no_commit(db_session, child_row)
+    continuation = child.model_copy(
+        update={
+            "run_id": str(continuation_id),
+            "previous_run_id": child.run_id,
+            "input_messages": [],
+            "child_runs": [],
+            "steps": _steps(
+                str(continuation_id),
+                [
+                    AssistantMessage(
+                        content=[TextContent(text="Final first assignment")]
+                    )
+                ],
+            ),
+            "answer_step_index": 0,
+        }
+    )
+    continuation.steps[0].input_messages = [
+        UserMessage(
+            id=f"agent-result:{grandchild.run_id}",
+            content="Evidence",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT,
+                source_run_id=grandchild.run_id,
+                sender_agent_id=grandchild.agent_id,
+            ),
+        )
+    ]
+    save_response_record__no_commit(db_session, response.id, continuation)
+    db_session.flush()
+    assert background_response_statuses(
+        db_session, branch, str(conversation.id), ()
+    ) == {
+        int(another_assignment.run_id): RunStatus.COMPLETE,
+        continuation_id: RunStatus.COMPLETE,
+    }
+
+    later_parent.steps[0].input_messages = [
+        UserMessage(
+            id=f"agent-result:{result.run_id}",
+            content=result.steps[0].message.text,
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT,
+                source_run_id=result.run_id,
+                sender_agent_id=result.agent_id,
+            ),
+        )
+        for result in (another_assignment, continuation)
+    ]
+    _save(db_session, later_response, later_parent)
+    assert (
+        background_response_statuses(db_session, branch, str(conversation.id), ()) == {}
+    )
+
+    grandchild_row = db_session.get(ChatMessage, int(grandchild.run_id))
+    assert grandchild_row is not None
+    orphan_id = reserve_agent_continuation__no_commit(db_session, grandchild_row)
+    orphan = db_session.get(ChatMessage, orphan_id)
+    assert orphan is not None
+    orphan.response_status = RunStatus.RUNNING
+    db_session.commit()
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    owner = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=conversation.id,
+        response_id=later_response.id,
+        visible_response_ids=branch.message_ids,
+        cache=cache,
+        control_cache=cache,
+    )
+    coordinator = AgentCoordinator()
+    owner.bind(
+        coordinator,
+        directory=ChatAgentDirectory(
+            history_store=get_chat_history_store(
+                message_id=later_response.id,
+                chat_session_id=conversation.id,
+                persist_content=True,
+                branch=branch,
+            ),
+            store=owner,
+            build_agent=lambda _: pytest.fail("No execution should be restored"),
+        ),
+        build_agent=lambda _: pytest.fail("No execution should be restored"),
+    )
+    try:
+        owner.poll_control()
+        db_session.refresh(orphan)
+        assert orphan.response_status == RunStatus.ERROR
+        assert orphan.response_failure is not None
+        assert orphan.response_failure.kind == RunFailureKind.EXECUTION
+    finally:
+        assert coordinator.close(timeout=10)
+
+
 def test_abandoned_background_child_is_delivered_as_failure(
     db_session: Session, conversation: ChatSession
 ) -> None:
@@ -501,7 +642,15 @@ def test_agent_completion_preserves_cited_output_and_durable_input_receipt(
         presentation=projected.presentation,
     )
     db_session.expire_all()
+    answer = db_session.scalar(
+        select(ChatResponseItem)
+        .where(ChatResponseItem.chat_message_id == child_row.id)
+        .options(raiseload(ChatResponseItem.inputs))
+    )
+    assert answer is not None
+    db_session.expire(answer, ["inputs"])
     [completion] = read_agent_completions(db_session, [child_row.id])
+    assert "inputs" in inspect(answer).unloaded
     assert completion.run_id == child.run_id
     assert completion.agent_path == "/root/research"
     assert completion.output is not None
@@ -934,8 +1083,9 @@ def test_suspended_search_result_restores_after_database_round_trip(
             StepRecord(
                 input_messages=[
                     UserMessage(
-                        id="agent-result:completed-child",
-                        content="Background agent completed its report.",
+                        id="follow-up-instruction",
+                        content="Include the supporting evidence.",
+                        metadata=InputMessageMetadata(source=InputSource.HUMAN),
                     )
                 ],
                 message=AssistantMessage(
@@ -3390,6 +3540,99 @@ def test_agent_inbox_acceptance_preserves_content_and_source(
     assert rows[0].response_item_id == f"{child.run_id}:1"
     assert rows[0].position == 0
     assert rows[0].delivery is None
+
+
+@pytest.mark.parametrize("outcome", ["send", "queue", "failed", "withdrawn"])
+def test_delegation_tracks_instruction_from_queue_into_child_history(
+    db_session: Session, conversation: ChatSession, outcome: str
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    parent.steps.append(
+        StepRecord(
+            generation_status=ExecutionStatus.COMPLETE,
+            message=AssistantMessage(
+                id=f"{parent.run_id}:1",
+                content=[ToolCall(id="followup", name="send_message", arguments={})],
+            ),
+        )
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.chat_session.restoration_config = ChatConfiguration(kind="chat")
+    child_row.response_status = (
+        RunStatus.RUNNING if outcome == "send" else RunStatus.COMPLETE
+    )
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    receipt = enqueue_message(
+        db_session,
+        branch,
+        AgentMessageRequest(
+            agent_id=child.agent_id,
+            parent_id=str(conversation.id),
+            message=UserMessage(content="Verify the evidence"),
+            delivery=MessageDelivery.SEND
+            if outcome == "send"
+            else MessageDelivery.QUEUE,
+            max_steps=3,
+            parent_run_id=parent.run_id,
+            parent_message_id=f"{parent.run_id}:1",
+            parent_tool_call_id="followup",
+        ),
+    )
+    delegation = BackgroundDelegation(
+        agent_id=child.agent_id,
+        message_id=receipt.id,
+        tool_call_id="followup",
+    )
+    assert resolve_delegation_messages(db_session, response.id, [delegation]) == {
+        receipt.id: None
+    }
+    assert (
+        resolve_delegation_messages(db_session, int(child.run_id), [delegation]) == {}
+    )
+    [pending] = pending_inputs(db_session, branch, child.agent_id)
+    if outcome == "withdrawn":
+        db_session.delete(pending)
+        db_session.flush()
+        assert resolve_delegation_messages(db_session, response.id, [delegation]) == {}
+        return
+    if outcome == "send":
+        [accepted] = receive_messages(db_session, child.agent_id, child.run_id, [])
+        child.steps.append(
+            StepRecord(
+                input_messages=[accepted],
+                message=AssistantMessage(id=f"{child.run_id}:1"),
+                generation_status=ExecutionStatus.RUNNING,
+            )
+        )
+        write_response_items(db_session, child_row, child, {})
+        expected_response_id = child.run_id
+    else:
+        response_id, _ = reserve_input_response(
+            db_session,
+            pending,
+            AgentInfo(
+                id=child.agent_id,
+                path=child.agent_path,
+                parent_id=parent.agent_id,
+                description="Research child",
+                restoration_config=ChatConfiguration(kind="chat"),
+            ),
+            child_row,
+        )
+        if outcome == "failed":
+            fail_reserved_message(db_session, response_id)
+        else:
+            activate_reserved_message(db_session, response_id)
+        expected_response_id = str(response_id)
+    db_session.flush()
+    db_session.expire_all()
+    assert resolve_delegation_messages(db_session, response.id, [delegation]) == {
+        receipt.id: expected_response_id,
+    }
 
 
 def test_agent_inbox_close_preserves_pending_and_retargets_late_input(

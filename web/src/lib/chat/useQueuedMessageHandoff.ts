@@ -43,7 +43,9 @@ export function useQueuedMessageHandoff(
         ? lastPacket.response_status
         : response.responseStatus;
     const eligible = pending.filter(
-      (message) => message.target_response_id === response.messageId
+      (message) =>
+        !message.id.startsWith("local:") &&
+        message.target_response_id === response.messageId
     );
     const next =
       eligible.find((message) => message.delivery === "interrupt") ??

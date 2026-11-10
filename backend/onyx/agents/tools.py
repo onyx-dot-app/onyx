@@ -119,10 +119,6 @@ class AgentControl(Protocol):
         """
         ...
 
-    def wait_for_agent_message(self, *, timeout: float) -> bool:
-        """Wait for an incoming instruction or child completion without consuming it."""
-        ...
-
     def cancel_run(self, run_id: str) -> None: ...
 
     def send_message(

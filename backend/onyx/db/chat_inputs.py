@@ -1,16 +1,17 @@
 """Chat input storage. Callers own transactions and response leases."""
 
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy import Select, func, select, update
+from sqlalchemy.orm import Session, aliased, load_only
 
 from onyx.agents.models import (
     AgentInfo,
     AgentMessageReceipt,
     AgentMessageRequest,
     AgentMessageStatus,
+    BackgroundDelegation,
     InputMessageMetadata,
     InputSource,
     MessageDelivery,
@@ -18,11 +19,12 @@ from onyx.agents.models import (
     RunFailureKind,
     RunStatus,
 )
-from onyx.chat.models import ChatBackgroundActivity, ChatBranch, PendingChatMessage
+from onyx.chat.models import ChatBranch, PendingChatMessage
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     configure_response_transaction__no_commit,
     get_owned_chat_session,
+    get_selected_response,
     root_response_id,
     session_ancestors,
     visible_message_ids,
@@ -37,8 +39,6 @@ from onyx.db.chat_subagents import (
     _agent_metadata,
     _selected_responses,
     _visible_agent,
-    active_subagent_response_ids,
-    pending_agent_completion_ids,
     unread_agent_result_ids,
 )
 from onyx.db.models import (
@@ -67,6 +67,23 @@ def lock_agent(session: Session, agent_id: str) -> ChatSession:
     if agent is None:
         raise ValueError("Agent is unavailable")
     return agent
+
+
+def cancel_completed_responses__no_commit(
+    session: Session, chat_session_id: UUID, response_ids: Collection[int]
+) -> None:
+    """Preserve a late Stop after terminal output is saved; the caller commits."""
+    lock_agent(session, str(chat_session_id))
+    session.execute(
+        update(ChatMessage)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatMessage.response_status == RunStatus.COMPLETE,
+            ChatMessage.id.in_(response_ids),
+        )
+        .values(response_status=RunStatus.CANCELLED)
+    )
 
 
 def get_human_input_session(
@@ -101,41 +118,6 @@ def _pending_human_message(row: ChatInput) -> PendingChatMessage:
         message=row.content,
         delivery=row.delivery,
         target_response_id=row.target_response_id,
-    )
-
-
-def get_selected_response(
-    session: Session, chat_session_id: UUID
-) -> ChatMessage | None:
-    # Follow only IDs; queue checks do not need response content or tool results.
-    branch = (
-        select(ChatMessage.id, ChatMessage.latest_child_message_id)
-        .where(
-            ChatMessage.chat_session_id == chat_session_id,
-            ChatMessage.parent_message_id.is_(None),
-        )
-        .cte("input_branch", recursive=True)
-    )
-    branch = branch.union_all(
-        select(ChatMessage.id, ChatMessage.latest_child_message_id)
-        .join(branch, ChatMessage.id == branch.c.latest_child_message_id)
-        .where(ChatMessage.chat_session_id == chat_session_id)
-    )
-    return session.scalar(
-        select(ChatMessage)
-        .where(
-            ChatMessage.id.in_(select(branch.c.id)),
-            ChatMessage.latest_child_message_id.is_(None),
-            ChatMessage.message_type == MessageType.ASSISTANT,
-        )
-        .options(
-            load_only(
-                ChatMessage.id,
-                ChatMessage.chat_session_id,
-                ChatMessage.response_status,
-                ChatMessage.response_inputs_closed,
-            )
-        )
     )
 
 
@@ -702,31 +684,54 @@ def fail_pending_message(
     fail_reserved_message(session, response_id)
 
 
-def read_chat_background_activity(
-    session: Session, chat_session: ChatSession
-) -> ChatBackgroundActivity:
-    """Read selected response and descendant work after session authorization."""
-    selected = get_selected_response(session, chat_session.id)
-    if selected is None:
-        return ChatBackgroundActivity()
-    if chat_session.incognito_record_mode is not None or chat_session.deleted:
-        return ChatBackgroundActivity(latest_response_id=selected.id)
-    if (
-        session.scalar(
-            select(ChatSession.id)
-            .join(ChatMessage, ChatSession.spawned_by_message_id == ChatMessage.id)
-            .where(ChatMessage.chat_session_id == chat_session.id)
-            .limit(1)
+def resolve_delegation_messages(
+    session: Session,
+    parent_response_id: int,
+    delegations: Sequence[BackgroundDelegation],
+) -> dict[str, str | None]:
+    """Resolve current-run instructions, including those moved into child history."""
+    messages = {
+        item.message_id: item for item in delegations if item.message_id is not None
+    }
+    rows = session.execute(
+        select(ChatInput.message_id, ChatResponseItem.chat_message_id)
+        .join(ToolCall, ToolCall.id == ChatInput.invoking_tool_call_id)
+        .outerjoin(ChatResponseItem, ChatResponseItem.id == ChatInput.response_item_id)
+        .where(
+            ToolCall.parent_chat_message_id == parent_response_id,
+            ChatInput.source == InputSource.AGENT,
+            ChatInput.message_id.in_(messages),
         )
-        is None
-    ):
-        return ChatBackgroundActivity(latest_response_id=selected.id)
-    branch = ChatBranch(
-        chat_session_id=chat_session.id,
-        message_ids=visible_message_ids(session, selected),
     )
-    return ChatBackgroundActivity(
-        latest_response_id=selected.id,
-        running_response_ids=active_subagent_response_ids(session, branch),
-        has_pending_results=bool(pending_agent_completion_ids(session, branch)),
+    resolved = {
+        message_id: str(response_id) if response_id is not None else None
+        for message_id, response_id in rows
+    }
+    missing = {
+        message_id: item
+        for message_id, item in messages.items()
+        if message_id not in resolved
+    }
+    if not missing:
+        return resolved
+    question = aliased(ChatMessage)
+    response = aliased(ChatMessage)
+    rows = session.execute(
+        select(ToolCall.tool_call_id, question.chat_session_id, response.id)
+        .join(question, question.invoking_tool_call_id == ToolCall.id)
+        .join(response, response.parent_message_id == question.id)
+        .where(
+            ToolCall.parent_chat_message_id == parent_response_id,
+            ToolCall.tool_call_id.in_([item.tool_call_id for item in missing.values()]),
+            question.message_type == MessageType.USER,
+            response.message_type == MessageType.ASSISTANT,
+        )
     )
+    for call_id, agent_id, response_id in rows:
+        for message_id, item in missing.items():
+            if item.tool_call_id != call_id or item.agent_id != str(agent_id):
+                continue
+            if message_id in resolved:
+                raise ValueError("Delegated instruction has ambiguous child history")
+            resolved[message_id] = str(response_id)
+    return resolved

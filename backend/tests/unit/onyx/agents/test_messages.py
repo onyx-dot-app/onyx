@@ -2,7 +2,7 @@
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Literal, override
+from typing import Literal
 
 import pytest
 
@@ -21,23 +21,18 @@ from onyx.agents.models import (
     StepInput,
 )
 from onyx.agents.runtime import Agent, Run
-from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
     TextContent,
-    ToolCall,
-    ToolDefinition,
-    ToolResult,
     UserMessage,
 )
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import (
     FakeAgentDirectory,
     FakeModelClient,
-    FakeRunOwnership,
 )
 
 
@@ -255,67 +250,6 @@ def test_ancestor_can_message_a_descendant_and_receive_its_completion() -> None:
         assert [completion.run_id for completion in completions] == [receipt.run_id]
         assert not owner.completed_agents(middle.id, set())
         assert owner.run(receipt.run_id).parent_run_id == root_run.id
-    finally:
-        assert owner.close(3)
-
-
-@pytest.mark.parametrize("remote", [False, True])
-def test_wait_wakes_for_instructions_without_accepting_them(remote: bool) -> None:
-    entered, arrived = threading.Event(), threading.Event()
-    runs: list[Run] = []
-    messages: list[list[str]] = []
-    incoming = UserMessage(
-        id="incoming",
-        content="new instruction",
-        metadata=InputMessageMetadata(source=InputSource.HUMAN),
-    )
-
-    class Ownership(FakeRunOwnership):
-        @override
-        def receive_inputs(self, run: Run) -> list[UserMessage]:
-            return [incoming.model_copy(deep=True)] if arrived.is_set() else []
-
-    def wait(invocation: ToolInvocation) -> ToolResult:
-        entered.set()
-        assert invocation.agents.wait_for_agent_message(timeout=30)
-        assert not any(step.input_messages for step in runs[0].snapshot().steps)
-        return ToolResult(content="input ready")
-
-    def generate(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        messages.append([message.text for message in request.messages])
-        return AssistantMessage(
-            content=[
-                ToolCall(id="wait", name="wait", arguments={})
-                if len(messages) == 1
-                else TextContent(text="answer")
-            ]
-        )
-
-    owner = AgentCoordinator(ownership=Ownership() if remote else None)
-    agent = Agent(
-        FakeModelClient(generate),
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[
-            AgentTool(
-                definition=ToolDefinition(name="wait", description="", parameters={}),
-                execute=wait,
-            )
-        ],
-    )
-    run = agent.start(max_steps=2, coordinator=owner)
-    runs.append(run)
-    try:
-        assert entered.wait(3)
-        if remote:
-            arrived.set()
-        else:
-            assert run.send_message(incoming)
-        assert run.result(3).output.text == "answer"
-        assert run.wait_for_idle(3)
-        assert messages[-1].count("new instruction") == 1
-        assert run.snapshot().steps[1].input_messages[0].id == "incoming"
     finally:
         assert owner.close(3)
 

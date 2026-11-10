@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from sqlalchemy import delete, inspect, select
+from sqlalchemy import delete, inspect, literal, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
@@ -1195,7 +1195,37 @@ def finish_checkpoint__no_commit(session: Session, message_id: int) -> None:
 def _read_response_ancestry(
     session: Session, response_id: int
 ) -> ResponseAncestry | None:
-    question = aliased(ChatMessage)
+    predecessors = (
+        select(
+            ChatMessage.parent_message_id,
+            ChatMessage.chat_session_id,
+            ChatMessage.message_type,
+            ChatMessage.invoking_tool_call_id,
+            literal(0).label("depth"),
+        )
+        .where(ChatMessage.id == response_id)
+        .cte("response_predecessors", recursive=True)
+    )
+    predecessors = predecessors.union_all(
+        select(
+            ChatMessage.parent_message_id,
+            ChatMessage.chat_session_id,
+            ChatMessage.message_type,
+            ChatMessage.invoking_tool_call_id,
+            predecessors.c.depth + 1,
+        )
+        .join(predecessors, ChatMessage.id == predecessors.c.parent_message_id)
+        .where(
+            ChatMessage.chat_session_id == predecessors.c.chat_session_id,
+            predecessors.c.message_type == MessageType.ASSISTANT,
+            predecessors.c.depth < MAX_AGENT_HISTORY_RUNS,
+        )
+    )
+    invocation_id = (
+        select(predecessors.c.invoking_tool_call_id)
+        .where(predecessors.c.message_type == MessageType.USER)
+        .scalar_subquery()
+    )
     spawning_response = aliased(ChatMessage)
     row = (
         session.execute(
@@ -1208,8 +1238,7 @@ def _read_response_ancestry(
                 ToolCall.parent_chat_message_id.label("parent_response_id"),
             )
             .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
-            .outerjoin(question, question.id == ChatMessage.parent_message_id)
-            .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+            .outerjoin(ToolCall, ToolCall.id == invocation_id)
             .outerjoin(
                 spawning_response,
                 spawning_response.id == ChatSession.spawned_by_message_id,

@@ -4,7 +4,7 @@ import gc
 import threading
 import time
 import weakref
-from collections.abc import Callable, Collection, Generator
+from collections.abc import Callable, Generator
 from concurrent.futures import Future
 from contextvars import ContextVar
 from datetime import timedelta
@@ -20,7 +20,6 @@ from onyx.agents.agent_coordination import (
 )
 from onyx.agents.events import AgentEvent, MessageEndEvent
 from onyx.agents.models import (
-    AgentCompletion,
     AgentInfo,
     ExecutionCheckpoint,
     ExecutionStatus,
@@ -3615,26 +3614,12 @@ def test_background_completion_preserves_selected_and_partial_answers(
     status: RunStatus,
     answer_step_index: int | None,
     expected: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     owner = AgentCoordinator()
     spawned: list[SpawnResult] = []
-    mailbox_checked = threading.Event()
-    read_completions = owner.completed_agents
-
-    def completed_agents(
-        parent_id: str, received_run_ids: Collection[str], *, limit: int = 8
-    ) -> list[AgentCompletion]:
-        results = read_completions(parent_id, received_run_ids, limit=limit)
-        if not results:
-            mailbox_checked.set()
-        return results
-
-    monkeypatch.setattr(owner, "completed_agents", completed_agents)
 
     def spawn(invocation: ToolInvocation) -> ToolResult:
         if spawned:
-            assert invocation.agents.wait_for_agent_message(timeout=30)
             return ToolResult(content="received")
         spawned.append(
             invocation.agents.spawn_agent(
@@ -3670,10 +3655,8 @@ def test_background_completion_preserves_selected_and_partial_answers(
                 else ExecutionStatus(status.value),
             ),
         ]
-        mailbox_checked.clear()
-        waiting = parent.start(max_steps=2, coordinator=owner)
-        assert mailbox_checked.wait(3)
         owner.restore_completed(saved)
+        waiting = parent.start(max_steps=2, coordinator=owner)
         assert waiting.result(3).output.text == "second finished"
         received = [
             message
@@ -3732,3 +3715,245 @@ def test_background_completion_does_not_turn_failed_persistence_into_a_result() 
         assert owner.completed_agents(parent.id, set()) == []
     finally:
         assert owner.close(3)
+
+
+@pytest.mark.parametrize(
+    ("delivery", "child_fails"), [("send", False), ("queue", False), ("queue", True)]
+)
+def test_nested_agent_collects_followup_before_completion(
+    delivery: str, child_fails: bool
+) -> None:
+    child_started = threading.Event()
+    release_child = threading.Event()
+    coordinator = AgentCoordinator()
+    spawned: list[SpawnResult] = []
+
+    def child_reply(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        if not any(message.text == "followup" for message in request.messages):
+            child_started.set()
+            assert release_child.wait(5)
+            signal.check()
+            if child_fails:
+                raise ValueError("Child failed")
+            return AssistantMessage(content=[TextContent(text="initial result")])
+        return AssistantMessage(content=[TextContent(text="followup result")])
+
+    child = Agent(
+        FakeModelClient(child_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        started = invocation.agents.spawn_agent(
+            child,
+            name="leaf",
+            description="",
+            messages=[UserMessage(content="initial")],
+            max_steps=3,
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        assert child_started.wait(3)
+        if delivery == "send":
+            invocation.agents.send_message(
+                started.agent_id, message="followup", max_steps=3
+            )
+        else:
+            invocation.agents.queue_message(
+                started.agent_id, message="followup", max_steps=3
+            )
+        return ToolResult(content="delegated")
+
+    def middle_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any("followup result" in message.text for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="collected followup")])
+        if any(message.text == "delegated" for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="premature answer")])
+        return AssistantMessage(
+            content=[ToolCall(id="delegate", name="delegate", arguments={})]
+        )
+
+    middle = Agent(
+        FakeModelClient(middle_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
+        ],
+    )
+
+    def spawn_middle(invocation: ToolInvocation) -> ToolResult:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                middle,
+                name="middle",
+                description="",
+                messages=[],
+                max_steps=3,
+                lifetime=AgentLifetime.BACKGROUND,
+            )
+        )
+        return ToolResult(content="started")
+
+    root = parent_agent(spawn_middle)
+    try:
+        run_agent(root, max_steps=2, coordinator=coordinator)
+        assert child_started.wait(3)
+        middle_run = coordinator.run(spawned[0].run_id)
+        assert middle_run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        checkpoint = ExecutionCheckpoint.model_validate_json(
+            middle_run.capture().model_dump_json()
+        )
+        assert checkpoint.run_state.progress is not None
+        assert len(checkpoint.run_state.progress.background_delegations) == 2
+        release_child.set()
+        if child_fails:
+            with pytest.raises(RunFailed, match="queue is paused"):
+                middle_run.result(5)
+            leaf = coordinator.lookup_agent(child.id, middle.id)
+            assert leaf is not None and len(leaf.pending_messages) == 1
+        else:
+            assert middle_run.result(5).output.text == "collected followup"
+
+    finally:
+        release_child.set()
+        assert coordinator.close(5)
+
+
+@pytest.mark.parametrize("delivery", ["send", "queue"])
+def test_subagent_collects_grandchild_followup_before_completing(delivery: str) -> None:
+    coordinator = AgentCoordinator()
+    child_started, release_child = threading.Event(), threading.Event()
+
+    def child_reply(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(message.text == "followup" for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="followup result")])
+        child_started.set()
+        assert release_child.wait(5)
+        signal.check()
+        return AssistantMessage(content=[TextContent(text="initial result")])
+
+    child = Agent(
+        FakeModelClient(child_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+
+    def instruct(invocation: ToolInvocation) -> ToolResult:
+        if delivery == "send":
+            invocation.agents.send_message(child.id, message="followup", max_steps=3)
+        else:
+            invocation.agents.queue_message(child.id, message="followup", max_steps=3)
+        return ToolResult(content="instruction submitted")
+
+    def sender_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if not any(message.text == "delegate" for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="initialized")])
+        if any("followup result" in message.text for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="collected followup")])
+        if any(message.text == "instruction submitted" for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="premature answer")])
+        return AssistantMessage(
+            content=[ToolCall(id="instruct", name="instruct", arguments={})]
+        )
+
+    sender = Agent(
+        FakeModelClient(sender_reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="instruct", description="", parameters={}
+                ),
+                execute=instruct,
+            )
+        ],
+    )
+    root, bridge = [
+        Agent(
+            FakeModelClient(
+                lambda *_: AssistantMessage(content=[TextContent(text="done")])
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+        for _ in range(2)
+    ]
+    try:
+        previous = root.start(max_steps=1, coordinator=coordinator, background=False)
+        for parent, agent in [(root, sender), (sender, bridge), (bridge, child)]:
+            assert previous.wait_for_idle(3)
+            coordinator.register_child(
+                agent,
+                parent_id=parent.id,
+                name="worker",
+                description="",
+                restoration_config=None,
+            )
+            previous = agent.start(
+                max_steps=3, coordinator=coordinator, parent_run_id=previous.id
+            )
+        assert child_started.wait(3)
+        run = sender.start(
+            messages=[UserMessage(content="delegate")],
+            max_steps=3,
+            coordinator=coordinator,
+            parent_run_id=root.latest_run_id,
+        )
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        release_child.set()
+        assert run.result(5).output.text == "collected followup"
+    finally:
+        release_child.set()
+        assert coordinator.close(5)
+
+
+def test_subagent_cannot_message_parent() -> None:
+    coordinator = AgentCoordinator()
+    child_runs: list[Run] = []
+
+    def ask_parent(invocation: ToolInvocation) -> ToolResult:
+        invocation.agents.send_message(
+            root.id, message="Need more context", max_steps=3
+        )
+        return ToolResult(content="asked parent")
+
+    child = parent_agent(ask_parent)
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        started = invocation.agents.spawn_agent(
+            child,
+            name="child",
+            description="",
+            messages=[],
+            max_steps=2,
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        child_run = coordinator.run(started.run_id)
+        child_runs.append(child_run)
+        assert child_run.result(3).output.text == "first finished"
+        return ToolResult(content="child done")
+
+    root = parent_agent(delegate)
+    try:
+        assert (
+            run_agent(root, max_steps=2, coordinator=coordinator).output.text
+            == "first finished"
+        )
+        state = child_runs[0].snapshot()
+        assert state.progress is not None
+        assert state.progress.background_delegations == []
+        result = state.steps[0].tools["first"].result
+        assert result is not None and result.is_error
+        assert "not available to this parent" in result.content
+    finally:
+        assert coordinator.close(3)

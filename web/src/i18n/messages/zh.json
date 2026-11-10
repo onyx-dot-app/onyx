@@ -12468,7 +12468,7 @@
           "attachmentsHint": "请在此回复结束后发送附件。",
           "chooseResponseHint": "请先选择回复，再将消息加入队列。",
           "incognitoHint": "在无痕聊天中，请等待回复结束。",
-          "sendHint": "在当前模型生成和工具执行完成后发送",
+          "sendHint": "在此回复的下一步发送",
           "interruptHint": "中断当前工作并发送此消息",
           "sendLabel": "发送",
           "queueLabel": "排队"
@@ -12602,7 +12602,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "无法提交消息。草稿已保留。",
+        "submitFailed": "无法提交消息。你可以在待发送消息中编辑或移除它。",
         "withdrawFailed": "无法移除待处理消息。",
         "loadFailed": "无法加载待处理消息。",
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",

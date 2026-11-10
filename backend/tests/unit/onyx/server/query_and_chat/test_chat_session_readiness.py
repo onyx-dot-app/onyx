@@ -4,11 +4,13 @@ from uuid import uuid4
 import pytest
 from fastapi import BackgroundTasks
 
+from onyx.chat.chat_processing_checker import BACKGROUND_CONTROL_PREFIX
 from onyx.chat.models import ChatBackgroundActivity
 from onyx.db.models import ChatSession, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat.chat_backend import get_chat_session_processing_status
+from tests.unit.fakes import FakeCache
 
 
 @pytest.mark.parametrize(
@@ -105,24 +107,50 @@ def test_status_does_not_report_idle_when_cache_fails() -> None:
 
 
 @pytest.mark.parametrize(
-    "refreshed, expected_active",
+    "refreshed, control_alive, expected_active",
     [
-        (ChatBackgroundActivity(latest_response_id=12, has_pending_results=True), True),
+        (
+            ChatBackgroundActivity(
+                latest_response_id=12, has_pending_root_results=True
+            ),
+            False,
+            True,
+        ),
         (
             ChatBackgroundActivity(latest_response_id=13, running_response_ids=[14]),
+            False,
             True,
         ),
         (
             ChatBackgroundActivity(latest_response_id=12, running_response_ids=[11]),
             False,
+            False,
+        ),
+        (
+            ChatBackgroundActivity(
+                latest_response_id=12, completion_host_response_ids=[12]
+            ),
+            True,
+            True,
+        ),
+        (
+            ChatBackgroundActivity(
+                latest_response_id=12, completion_host_response_ids=[12]
+            ),
+            False,
+            False,
         ),
     ],
 )
 def test_status_observes_result_handoff_when_child_releases_ownership(
-    refreshed: ChatBackgroundActivity, expected_active: bool
+    refreshed: ChatBackgroundActivity, control_alive: bool, expected_active: bool
 ) -> None:
     user = User(id=uuid4(), email="reader@example.com")
     chat = ChatSession(id=uuid4(), user_id=user.id)
+    cache = FakeCache()
+    if control_alive:
+        cache.set(f"{BACKGROUND_CONTROL_PREFIX}12", 1)
+    background_tasks = BackgroundTasks()
     with (
         patch(
             "onyx.server.query_and_chat.chat_backend.get_session_with_current_tenant"
@@ -131,7 +159,10 @@ def test_status_observes_result_handoff_when_child_releases_ownership(
             "onyx.server.query_and_chat.chat_backend.get_chat_session_by_id",
             return_value=chat,
         ),
-        patch("onyx.server.query_and_chat.chat_backend.get_cache_backend"),
+        patch(
+            "onyx.server.query_and_chat.chat_backend.get_cache_backend",
+            return_value=cache,
+        ),
         patch(
             "onyx.server.query_and_chat.chat_backend.read_chat_background_activity",
             side_effect=[
@@ -155,7 +186,8 @@ def test_status_observes_result_handoff_when_child_releases_ownership(
         ),
     ):
         status = get_chat_session_processing_status(
-            chat.id, background_tasks=BackgroundTasks(), user=user
+            chat.id, background_tasks=background_tasks, user=user
         )
     assert status.has_active_subagents is expected_active
     assert status.latest_response_id == refreshed.latest_response_id
+    assert bool(background_tasks.tasks) is refreshed.has_pending_root_results

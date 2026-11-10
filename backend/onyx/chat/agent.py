@@ -81,7 +81,6 @@ from onyx.tools.tool_implementations.subagents.subagent_tools import (
     QueueMessageTool,
     SendMessageTool,
     SpawnAgentTool,
-    WaitAgentTool,
 )
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tracing.flows import LLMFlow
@@ -115,7 +114,9 @@ class ChatAgent(Agent, RestorableFeature):
         agent_id: str | None = None,
         additional_context: str | None = None,
         code_mode: bool = False,
+        is_subagent: bool = False,
     ) -> None:
+        self.is_subagent = is_subagent
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
@@ -179,7 +180,6 @@ class ChatAgent(Agent, RestorableFeature):
                 [
                     SpawnAgentTool(self.create_subagent, max_steps=self.max_steps),
                     ListAgentsTool(),
-                    WaitAgentTool(),
                     InterruptAgentTool(),
                     SendMessageTool(max_steps=self.max_steps),
                     QueueMessageTool(max_steps=self.max_steps),
@@ -210,6 +210,7 @@ class ChatAgent(Agent, RestorableFeature):
         """Build a child conversation with this chat's current tools and settings."""
         return ChatAgent(
             messages=[],
+            is_subagent=True,
             tools=self.configured_tools,
             code_mode=self.code_mode,
             custom_agent_prompt=self.custom_agent_prompt,
@@ -382,6 +383,7 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             assemble_messages=partial(
                 prepare_prompt,
+                is_subagent=self.is_subagent,
                 system_prompt=prompt.system_prompt,
                 user_info_prompt=prompt.user_info_prompt,
                 custom_agent_prompt=prompt.custom_prompt,
@@ -499,10 +501,12 @@ def build_chat_agent(
     inject_memories: bool,
     preferred_tool_id: int | None = None,
     additional_context: str | None = None,
+    is_subagent: bool = False,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature."""
     return ChatAgent(
         agent_id=agent_id,
+        is_subagent=is_subagent,
         messages=state.messages,
         checkpoint=state.checkpoint,
         previous_run_id=previous_run_id,

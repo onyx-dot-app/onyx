@@ -67,6 +67,7 @@ def restore_subagent(
             llm=llm,
             tools=tools,
             inject_memories=inject_memories,
+            is_subagent=True,
         )
     if isinstance(configuration, ResearchConfiguration):
         return ResearchAgent(
@@ -103,6 +104,7 @@ def restore_chat_agent(
     token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
         return ChatAgent(
+            is_subagent=snapshot.parent_run_id is not None,
             messages=context.messages,
             tools=tools,
             code_mode=state.code_mode,

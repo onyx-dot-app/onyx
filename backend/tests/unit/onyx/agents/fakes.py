@@ -23,6 +23,7 @@ from onyx.agents.models import (
     AgentInfo,
     AgentMessageReceipt,
     AgentMessageRequest,
+    BackgroundDelegation,
     RunResult,
     RunState,
     RunStatus,
@@ -113,6 +114,12 @@ class FakeAgentDirectory(AgentDirectory):
         if self._cancel_run is None:
             raise ValueError("Remote run cancellation is unavailable")
         self._cancel_run(run_id, parent_id)
+
+    @override
+    def resolve_delegation_messages(
+        self, parent_run_id: str, delegations: Sequence[BackgroundDelegation]
+    ) -> dict[str, str | None]:
+        raise ValueError("Remote messaging is unavailable")
 
     @override
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:

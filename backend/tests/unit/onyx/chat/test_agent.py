@@ -12,7 +12,7 @@ import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.events import AgentEvent, ToolStartEvent
+from onyx.agents.events import AgentEvent
 from onyx.agents.models import (
     AgentCompletion,
     AgentStep,
@@ -64,6 +64,7 @@ from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
+    SUBAGENT_INSTRUCTIONS,
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
@@ -846,7 +847,6 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
                 "echo",
                 "spawn_agent",
                 "list_agents",
-                "wait_agent",
                 "interrupt_agent",
                 "send_message",
                 "queue_message",
@@ -988,7 +988,6 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
             "other",
             "spawn_agent",
             "list_agents",
-            "wait_agent",
             "interrupt_agent",
             "send_message",
             "queue_message",
@@ -1023,10 +1022,10 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     )
 
 
-@pytest.mark.parametrize("parent_action", ["finish", "wait", "work"])
+@pytest.mark.parametrize("parent_action", ["finish", "work"])
 @pytest.mark.parametrize("code_mode", [False, True])
 def test_chat_delegates_to_an_independent_agent(
-    parent_action: Literal["finish", "wait", "work"], code_mode: bool
+    parent_action: Literal["finish", "work"], code_mode: bool
 ) -> None:
     entered, release = threading.Event(), threading.Event()
     child_requests: list[GenerationRequest] = []
@@ -1048,6 +1047,18 @@ def test_chat_delegates_to_an_independent_agent(
         request: GenerationRequest, cancellation: CancellationSignal
     ) -> AssistantMessage:
         cancellation.check()
+        is_child = any(
+            message.text in {"Independent task", "Leaf task"}
+            for message in request.messages
+        )
+        role_messages = [
+            message
+            for message in request.messages
+            if message.text == SUBAGENT_INSTRUCTIONS
+        ]
+        assert len(role_messages) == int(is_child)
+        if role_messages:
+            assert role_messages[0].cacheable
         names = {tool.name for tool in request.tools}
         results = [
             message
@@ -1058,7 +1069,6 @@ def test_chat_delegates_to_an_independent_agent(
             *({"execute_code", "wait_code"} if code_mode else {"echo"}),
             "spawn_agent",
             "list_agents",
-            "wait_agent",
             "interrupt_agent",
             "send_message",
             "queue_message",
@@ -1094,17 +1104,14 @@ def test_chat_delegates_to_an_independent_agent(
                         )
                     ]
                 )
-            if len(results) == 1:
+            if not any(
+                isinstance(message, UserMessage)
+                and '"answer": "Leaf answer"' in message.text
+                for message in request.messages
+            ):
                 return AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="wait-leaf",
-                            name="wait_agent",
-                            arguments={"timeout_seconds": 10},
-                        )
-                    ]
+                    content=[TextContent(text="Leaf work is pending")]
                 )
-            assert results[-1].content == "An agent message is ready."
             assert any(
                 isinstance(message, UserMessage)
                 and '"answer": "Leaf answer"' in message.text
@@ -1133,17 +1140,6 @@ def test_chat_delegates_to_an_independent_agent(
             assert started.latest_run_id is not None
             child_run_ids.append(started.latest_run_id)
             assert entered.wait(10)
-            if parent_action == "wait":
-                release.set()
-                return AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="wait",
-                            name="wait_agent",
-                            arguments={"timeout_seconds": 10},
-                        )
-                    ]
-                )
             if parent_action == "work":
                 return AssistantMessage(
                     content=[
@@ -1235,6 +1231,130 @@ def test_chat_delegates_to_an_independent_agent(
         )
     finally:
         release.set()
+        assert coordinator.close(10)
+
+
+@pytest.mark.parametrize("leaf_outcome", ["complete", "error", "cancelled"])
+@pytest.mark.parametrize("child_steps", [2, 4])
+def test_nested_agent_collects_child_result_before_completing(
+    leaf_outcome: Literal["complete", "error", "cancelled"],
+    child_steps: int,
+) -> None:
+    leaf_entered = threading.Event()
+    release_leaf = threading.Event()
+    middle_answered = threading.Event()
+    final_inputs: list[str] = []
+
+    def reply(
+        request: GenerationRequest, cancellation: CancellationSignal
+    ) -> AssistantMessage:
+        instructions = {message.text for message in request.messages}
+        results = [
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if "Leaf task" in instructions:
+            leaf_entered.set()
+            assert release_leaf.wait(10)
+            cancellation.check()
+            if leaf_outcome == "error":
+                raise ValueError("Research source unavailable")
+            return AssistantMessage(content=[TextContent(text="Verified evidence")])
+        if "Middle task" in instructions:
+            received = [
+                message.text
+                for message in request.messages
+                if isinstance(message, UserMessage)
+                and "Background agent result" in message.text
+            ]
+            if received:
+                final_inputs.extend(received)
+                return AssistantMessage(
+                    content=[TextContent(text="Final child answer")]
+                )
+            if results:
+                middle_answered.set()
+                return AssistantMessage(content=[TextContent(text="Research underway")])
+            target = "Leaf"
+        else:
+            if results:
+                return AssistantMessage(
+                    content=[TextContent(text="I started the research")]
+                )
+            target = "Middle"
+        return AssistantMessage(
+            content=[
+                ToolCall(
+                    id=f"spawn-{target.lower()}",
+                    name="spawn_agent",
+                    arguments={"name": target.lower(), "instruction": f"{target} task"},
+                )
+            ]
+        )
+
+    agent = ChatAgent(
+        messages=[],
+        tools=[],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=lambda text: len(text) // 4,
+    )
+    for tool in agent.application_tools:
+        if isinstance(tool, SpawnAgentTool):
+            tool.max_steps = child_steps
+    coordinator = AgentCoordinator()
+    try:
+        root = agent.start(
+            messages=[UserMessage(content="Root task")],
+            max_steps=4,
+            coordinator=coordinator,
+        )
+        assert root.result(10).output.text == "I started the research"
+        if child_steps > 2:
+            assert middle_answered.wait(10)
+        assert leaf_entered.wait(10)
+        middle_info = next(
+            info
+            for info in coordinator.discover_children(agent.id)
+            if info.parent_id == agent.id
+        )
+        assert middle_info.latest_run_id is not None
+        middle = coordinator.child_run(middle_info.latest_run_id, agent.id)
+        assert middle is not None
+        assert middle.wait_until_settled(10).status == RunStatus.SUSPENDED
+        assert coordinator.completed_agents(agent.id, ()) == []
+        if leaf_outcome == "cancelled":
+            leaf_info = next(
+                info
+                for info in coordinator.discover_children(middle_info.id)
+                if info.parent_id == middle_info.id
+            )
+            leaf = coordinator.active_run(leaf_info.id)
+            assert leaf is not None
+            leaf.cancel()
+        release_leaf.set()
+        assert middle.result(10).output.text == "Final child answer"
+        assert middle.wait_for_idle(10)
+        completed = coordinator.completed_agents(agent.id, ())
+        assert len(completed) == 1
+        assert completed[0].output is not None
+        assert completed[0].output.text == "Final child answer"
+        assert len(final_inputs) == 1
+        assert f'"status": "{leaf_outcome}"' in final_inputs[0]
+    finally:
+        release_leaf.set()
         assert coordinator.close(10)
 
 
@@ -1430,178 +1550,6 @@ def test_chat_message_tools_continue_a_completed_child(message_tool: str) -> Non
             parents.append(parent_run_id)
         assert len(set(parents)) == 2
     finally:
-        assert coordinator.close(10)
-
-
-def test_wait_agent_timeout_keeps_code_program_running() -> None:
-    entered, release = threading.Event(), threading.Event()
-    invocations: list[ToolInvocation] = []
-
-    class SlowTool(EchoTool):
-        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-            invocations.append(invocation)
-            entered.set()
-            assert release.wait(10)
-            invocation.cancellation.check()
-            return ToolResult(content="Program completed")
-
-    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
-        results = [
-            message
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-        ]
-        if not results:
-            call = ToolCall(
-                id="program",
-                name="execute_code",
-                arguments={
-                    "code": "print(await echo(value='work'))",
-                    "yield_time_ms": 0,
-                },
-            )
-        elif len(results) == 1:
-            assert entered.wait(10)
-            assert "Cell 1 continues" in results[0].content
-            call = ToolCall(
-                id="wait", name="wait_agent", arguments={"timeout_seconds": 1}
-            )
-        elif len(results) == 2:
-            assert results[-1].content == "No agent message arrived before the timeout."
-            assert not invocations[0].cancellation.cancelled
-            release.set()
-            call = ToolCall(
-                id="program-result",
-                name="wait_code",
-                arguments={"cell_id": 1, "yield_time_ms": 10000},
-            )
-        else:
-            assert not results[-1].is_error
-            assert "Program completed" in results[-1].content
-            return AssistantMessage(content=[TextContent(text="Done")])
-        return AssistantMessage(content=[call])
-
-    agent = ChatAgent(
-        messages=[],
-        tools=[SlowTool()],
-        code_mode=True,
-        custom_agent_prompt=None,
-        base_system_prompt="",
-        context_files=ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
-        ),
-        persona=None,
-        user_memory_context=None,
-        llm=FakeModelClient(reply),
-        token_counter=len,
-    )
-    coordinator = AgentCoordinator()
-    try:
-        assert (
-            run_agent(
-                agent,
-                messages=[UserMessage(content="Work")],
-                max_steps=4,
-                coordinator=coordinator,
-            ).output.text
-            == "Done"
-        )
-    finally:
-        release.set()
-        assert coordinator.close(10)
-
-
-def test_stopping_wait_agent_leaves_its_background_child_running() -> None:
-    entered, release, waiting = threading.Event(), threading.Event(), threading.Event()
-    child_run_ids: list[str] = []
-
-    class SlowTool(EchoTool):
-        def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-            entered.set()
-            assert release.wait(10)
-            invocation.cancellation.check()
-            return ToolResult(content="Child work completed")
-
-    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
-        results = [
-            message
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-        ]
-        if any(message.text == "Child task" for message in request.messages):
-            if results:
-                return AssistantMessage(content=[TextContent(text="Child answer")])
-            return AssistantMessage(
-                content=[ToolCall(id="work", name="echo", arguments={"value": "work"})]
-            )
-        if not results:
-            return AssistantMessage(
-                content=[
-                    ToolCall(
-                        id="spawn",
-                        name="spawn_agent",
-                        arguments={"name": "child", "instruction": "Child task"},
-                    )
-                ]
-            )
-        (started,) = coordinator.discover_children(agent.id)
-        assert started.latest_run_id is not None
-        child_run_ids.append(started.latest_run_id)
-        assert entered.wait(10)
-        return AssistantMessage(
-            content=[
-                ToolCall(
-                    id="wait", name="wait_agent", arguments={"timeout_seconds": 10}
-                )
-            ]
-        )
-
-    agent = ChatAgent(
-        messages=[],
-        tools=[SlowTool()],
-        custom_agent_prompt=None,
-        base_system_prompt="",
-        context_files=ExtractedContextFiles(
-            file_texts=[],
-            image_files=[],
-            use_as_search_filter=False,
-            total_token_count=0,
-            file_metadata=[],
-            uncapped_token_count=None,
-        ),
-        persona=None,
-        user_memory_context=None,
-        llm=FakeModelClient(reply),
-        token_counter=len,
-    )
-
-    def observe(event: AgentEvent) -> None:
-        if isinstance(event, ToolStartEvent) and event.tool_call.name == "wait_agent":
-            waiting.set()
-
-    coordinator = AgentCoordinator()
-    run = agent.start(
-        messages=[UserMessage(content="Delegate")],
-        max_steps=3,
-        coordinator=coordinator,
-        on_event=observe,
-    )
-    try:
-        assert waiting.wait(10)
-        run.cancel()
-        with pytest.raises(AgentCancelled):
-            run.result(10)
-        child_run = coordinator.child_run(child_run_ids[0], agent.id)
-        assert child_run is not None and not child_run.cancellation_signal.cancelled
-        release.set()
-        assert child_run.result(10).output.text == "Child answer"
-    finally:
-        release.set()
         assert coordinator.close(10)
 
 

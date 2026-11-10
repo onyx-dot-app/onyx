@@ -1000,29 +1000,6 @@ def reserve_chat_response_ids(
     return [message.id for message in reserved]
 
 
-def chat_response_ids_for_stream(
-    db_session: Session, chat_session_id: UUID, stream_id: int
-) -> list[int]:
-    """Resolve a response stream or a user row that groups simultaneous responses."""
-    grouped_stream = select(ChatMessage.id).where(
-        ChatMessage.id == stream_id,
-        ChatMessage.chat_session_id == chat_session_id,
-        ChatMessage.message_type == MessageType.USER,
-    )
-    return list(
-        db_session.scalars(
-            select(ChatMessage.id).where(
-                ChatMessage.chat_session_id == chat_session_id,
-                ChatMessage.message_type == MessageType.ASSISTANT,
-                or_(
-                    ChatMessage.id == stream_id,
-                    ChatMessage.parent_message_id.in_(grouped_stream),
-                ),
-            )
-        )
-    )
-
-
 def set_preferred_response(
     db_session: Session,
     user_message_id: int,
@@ -1654,6 +1631,41 @@ def find_summary_for_branch(
         db_session,
         chat_history[0].chat_session_id,
         [message.id for message in reversed(chat_history)],
+    )
+
+
+def get_selected_response(
+    session: Session, chat_session_id: UUID
+) -> ChatMessage | None:
+    # Follow only IDs; queue checks do not need response content or tool results.
+    branch = (
+        select(ChatMessage.id, ChatMessage.latest_child_message_id)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.parent_message_id.is_(None),
+        )
+        .cte("input_branch", recursive=True)
+    )
+    branch = branch.union_all(
+        select(ChatMessage.id, ChatMessage.latest_child_message_id)
+        .join(branch, ChatMessage.id == branch.c.latest_child_message_id)
+        .where(ChatMessage.chat_session_id == chat_session_id)
+    )
+    return session.scalar(
+        select(ChatMessage)
+        .where(
+            ChatMessage.id.in_(select(branch.c.id)),
+            ChatMessage.latest_child_message_id.is_(None),
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+        .options(
+            load_only(
+                ChatMessage.id,
+                ChatMessage.chat_session_id,
+                ChatMessage.response_status,
+                ChatMessage.response_inputs_closed,
+            )
+        )
     )
 
 

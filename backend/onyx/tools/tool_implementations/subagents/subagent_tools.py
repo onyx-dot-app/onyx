@@ -23,7 +23,6 @@ from onyx.tools.tool_implementations.subagents.models import (
     ListAgentsInput,
     SpawnAgentInput,
     SubagentSelection,
-    WaitAgentInput,
 )
 
 
@@ -45,10 +44,10 @@ class SpawnAgentTool(_SubagentTool):
     display_name = "Start agent"
     description = (
         "Start an independent agent with the tools configured for this chat. Returns immediately. "
-        "The agent continues after this response ends. Its result arrives automatically "
-        "before your next model step, or starts a follow-up response after this one ends. "
-        "Use wait_agent when you have "
-        "no other work. Give it complete instructions; it cannot see this conversation."
+        "Its result arrives automatically before your next model step. A root response "
+        "may end while the agent works and receive a follow-up when it finishes. "
+        "Subagents must collect their delegated results before finishing. "
+        "Give it complete instructions; it cannot see this conversation."
     )
     input_model = SpawnAgentInput
 
@@ -153,28 +152,6 @@ class QueueMessageTool(_SubagentTool):
             content="The agent started a new run with your message."
             if receipt.status == AgentMessageStatus.ACCEPTED
             else "Message queued for a new run."
-        )
-
-
-class WaitAgentTool(_SubagentTool):
-    name = "wait_agent"
-    display_name = "Wait for agents"
-    description = (
-        "Wait for unread agent instructions or a background agent completion, or until the timeout. "
-        "The message is delivered separately before your next model step. "
-        "Other agents and code programs continue. Stopping this wait does not cancel them."
-    )
-    input_model = WaitAgentInput
-
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        request = parse_tool_arguments(WaitAgentInput, invocation.arguments)
-        ready = invocation.agents.wait_for_agent_message(
-            timeout=request.timeout_seconds
-        )
-        return ToolResult(
-            content="An agent message is ready."
-            if ready
-            else "No agent message arrived before the timeout."
         )
 
 

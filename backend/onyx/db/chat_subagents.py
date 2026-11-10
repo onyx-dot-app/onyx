@@ -15,8 +15,16 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    true,
 )
-from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
+from sqlalchemy.orm import (
+    Session,
+    aliased,
+    joinedload,
+    load_only,
+    raiseload,
+    selectinload,
+)
 from sqlalchemy.sql.selectable import CTE
 
 from onyx.agents.execution_records import run_input_message_id
@@ -29,11 +37,11 @@ from onyx.agents.models import (
 )
 from onyx.chat.models import (
     MAX_DISCOVERED_AGENTS,
+    ChatBackgroundActivity,
     ChatBranch,
     ChatMessageMetadata,
     MessageRendering,
     ResponseLink,
-    ResponseRecord,
     SavedAgentContext,
     SessionAncestor,
 )
@@ -44,12 +52,12 @@ from onyx.db.chat import (
     agent_path_from_ancestors,
     checkpoint_from_summary,
     find_summary_for_ancestry,
+    get_selected_response,
     session_ancestors,
     translate_db_search_doc_to_saved_search_doc,
     visible_message_ids,
 )
 from onyx.db.chat_response import (
-    read_response_record,
     read_response_steps,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -117,35 +125,6 @@ def _selected_responses(branch: ChatBranch) -> CTE:
     """Follow branch-visible invocations without loading response payloads."""
     question = aliased(ChatMessage)
     previous = aliased(ChatMessage)
-    # Invocation edges enter another agent; continuation edges stay in its history.
-    edges = (
-        select(
-            ChatMessage.id.label("id"),
-            ToolCall.parent_chat_message_id.label("parent_id"),
-            question.parent_message_id.label("previous_response_id"),
-            ToolCall.id.label("invocation_id"),
-            literal(1).label("depth_increment"),
-        )
-        .join(question, ChatMessage.parent_message_id == question.id)
-        .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
-        .union_all(
-            select(
-                ChatMessage.id,
-                previous.id,
-                previous.id,
-                cast(literal(None), Integer),
-                literal(0),
-            )
-            .join(previous, ChatMessage.parent_message_id == previous.id)
-            .where(
-                ChatMessage.message_type == MessageType.ASSISTANT,
-                previous.message_type == MessageType.ASSISTANT,
-                ChatMessage.chat_session_id == previous.chat_session_id,
-                ChatMessage.chat_session_id != branch.chat_session_id,
-            )
-        )
-        .subquery("response_edges")
-    )
     responses = (
         select(
             ChatMessage.id,
@@ -169,6 +148,35 @@ def _selected_responses(branch: ChatBranch) -> CTE:
         )
         .cte("selected_responses", recursive=True)
     )
+    # Restrict each edge lookup to the current response before combining them.
+    edges = (
+        select(
+            ChatMessage.id.label("id"),
+            question.parent_message_id.label("previous_response_id"),
+            ToolCall.id.label("invocation_id"),
+            literal(1).label("depth_increment"),
+        )
+        .join(question, ChatMessage.parent_message_id == question.id)
+        .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
+        .where(ToolCall.parent_chat_message_id == responses.c.id)
+        .correlate(responses)
+        .union_all(
+            select(
+                ChatMessage.id,
+                ChatMessage.parent_message_id,
+                cast(literal(None), Integer),
+                literal(0),
+            )
+            .where(
+                ChatMessage.parent_message_id == responses.c.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+                ChatMessage.chat_session_id == responses.c.chat_session_id,
+                ChatMessage.chat_session_id != branch.chat_session_id,
+            )
+            .correlate(responses)
+        )
+        .lateral("response_edges")
+    )
     responses = responses.union_all(
         select(
             ChatMessage.id,
@@ -180,7 +188,7 @@ def _selected_responses(branch: ChatBranch) -> CTE:
             func.coalesce(edges.c.invocation_id, responses.c.invocation_id),
         )
         .select_from(responses)
-        .join(edges, edges.c.parent_id == responses.c.id)
+        .join(edges, true())
         .join(ChatMessage, ChatMessage.id == edges.c.id)
         .where(
             ChatMessage.response_status.is_not(None),
@@ -192,6 +200,7 @@ def _selected_responses(branch: ChatBranch) -> CTE:
 
 def _unread_agent_results(selected: CTE) -> Select[tuple[int, RunStatus | None, UUID]]:
     recipient_history = selected.alias("recipient_history")
+    later_revision = selected.alias("later_revision")
     invocation = aliased(ToolCall)
     generation = aliased(ChatResponseItem)
     accepted = (
@@ -225,6 +234,13 @@ def _unread_agent_results(selected: CTE) -> Select[tuple[int, RunStatus | None, 
             ),
         )
         .where(
+            ~select(later_revision.c.id)
+            .where(
+                later_revision.c.invocation_id == selected.c.invocation_id,
+                later_revision.c.id > selected.c.id,
+            )
+            .correlate(selected)
+            .exists(),
             ~accepted,
             or_(
                 *[
@@ -299,7 +315,7 @@ def pending_agent_completion_ids(db_session: Session, branch: ChatBranch) -> lis
             ChatSession.deleted.is_(False),
             or_(
                 ChatSession.id == branch.chat_session_id,
-                ChatSession.restoration_config.is_not(None),
+                ChatSession.restoration_config["kind"].as_string().is_not(None),
             ),
             ChatMessage.chat_session_id.in_(
                 select(unread.c.recipient_id).where(
@@ -355,6 +371,7 @@ def read_agent_completions(
                 ChatMessage.response_failure,
             ),
             load_only(ChatResponseItem.message, ChatResponseItem.rendering),
+            raiseload(ChatResponseItem.inputs),
         )
     ).all()
     ancestors = session_ancestors(
@@ -637,51 +654,6 @@ def load_agent_history(message_id: int, agent_id: str) -> SavedAgentContext:
         )
 
 
-def load_saved_response(
-    message_id: int, response_id: int, parent_agent_id: str
-) -> ResponseRecord | None:
-    """Read a completed child response after authorizing its parent branch."""
-    branch = load_chat_branch(message_id)
-    with get_session_with_current_tenant() as db_session:
-        session_id = db_session.scalar(
-            select(ChatMessage.chat_session_id).where(
-                ChatMessage.id == response_id, ChatMessage.response_status.is_not(None)
-            )
-        )
-        if session_id is None:
-            return None
-        agent = _visible_agent(db_session, branch, str(session_id))
-        ancestors = session_ancestors(db_session, [agent.id])
-        parent_id = UUID(parent_agent_id)
-        if parent_id == agent.id or parent_id not in ancestors:
-            return None
-        links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
-        if not any(link.id == response_id for link in links):
-            return None
-        _check_history_size(db_session, [response_id])
-        response = db_session.scalar(
-            select(ChatMessage)
-            .where(ChatMessage.id == response_id)
-            .options(
-                selectinload(ChatMessage.response_items),
-                selectinload(ChatMessage.tool_calls),
-                joinedload(ChatMessage.parent_message).joinedload(
-                    ChatMessage.parent_message
-                ),
-            )
-        )
-        if response is None:
-            return None
-        record = read_response_record(
-            response, agent_path_from_ancestors(agent.id, ancestors)
-        )
-        summary = find_summary_for_ancestry(
-            db_session, agent.id, visible_message_ids(db_session, response)
-        )
-        record.checkpoint = checkpoint_from_summary(summary)
-        return record
-
-
 def _agent_metadata(
     agent: ChatSession,
     ancestors: dict[UUID, SessionAncestor],
@@ -827,4 +799,47 @@ def active_subagent_response_ids(db_session: Session, branch: ChatBranch) -> lis
             )
             .distinct()
         )
+    )
+
+
+def read_chat_background_activity(
+    session: Session, chat_session: ChatSession
+) -> ChatBackgroundActivity:
+    """Read selected response and descendant work after session authorization."""
+    selected = get_selected_response(session, chat_session.id)
+    if selected is None:
+        return ChatBackgroundActivity()
+    if chat_session.incognito_record_mode is not None or chat_session.deleted:
+        return ChatBackgroundActivity(latest_response_id=selected.id)
+    if (
+        session.scalar(
+            select(ChatSession.id)
+            .join(ChatMessage, ChatSession.spawned_by_message_id == ChatMessage.id)
+            .where(ChatMessage.chat_session_id == chat_session.id)
+            .limit(1)
+        )
+        is None
+    ):
+        return ChatBackgroundActivity(latest_response_id=selected.id)
+    branch = ChatBranch(
+        chat_session_id=chat_session.id,
+        message_ids=visible_message_ids(session, selected),
+    )
+    recipients = pending_agent_completion_ids(session, branch)
+    return ChatBackgroundActivity(
+        latest_response_id=selected.id,
+        running_response_ids=active_subagent_response_ids(session, branch),
+        has_pending_root_results=selected.id in recipients,
+        completion_host_response_ids=(
+            list(
+                session.scalars(
+                    select(ChatMessage.id).where(
+                        ChatMessage.id.in_(branch.message_ids),
+                        ChatMessage.message_type == MessageType.ASSISTANT,
+                    )
+                )
+            )
+            if any(response_id != selected.id for response_id in recipients)
+            else []
+        ),
     )

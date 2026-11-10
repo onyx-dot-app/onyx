@@ -174,9 +174,9 @@ including children whose parent has finished. It cannot control siblings or ance
 `send_message` reaches the next model step or starts an idle child with fresh limits.
 `queue_message` waits for normal completion. `interrupt_agent` cancels the current
 run and preserves the conversation for later messages.
-Results reach the requesting agent before its next model call. `wait_agent` waits
-for an unread result or instruction, with a bounded timeout. It does not consume
-the message. The wait keeps the run active and preserves code cells.
+Results reach the requesting agent automatically before its next model call.
+A subagent suspends before completing until its delegated results are available.
+The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results. These results
 stay in model history; only the parent's response appears as a chat message.
 Tool replies use concise text. The `agent_id` from spawn/list is the control

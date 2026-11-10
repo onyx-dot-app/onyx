@@ -12468,7 +12468,7 @@
           "attachmentsHint": "Send attached files after this response finishes.",
           "chooseResponseHint": "Choose a response before queueing a message.",
           "incognitoHint": "Wait for the response to finish in incognito chat.",
-          "sendHint": "Send after the current model generation and tools finish",
+          "sendHint": "Send at the next step of this response",
           "interruptHint": "Interrupt current work and send this message",
           "sendLabel": "Send",
           "queueLabel": "Queue"
@@ -12602,7 +12602,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "Could not submit the message. Your draft was kept.",
+        "submitFailed": "Could not submit the message. You can edit or remove it from the pending messages.",
         "withdrawFailed": "Could not remove the pending message.",
         "loadFailed": "Could not load pending messages.",
         "alreadyAccepted": "This message was already accepted and is no longer pending.",

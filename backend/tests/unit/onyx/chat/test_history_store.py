@@ -1,7 +1,6 @@
 """Temporary content saves follow the database recording-policy check."""
 
 from contextlib import nullcontext
-from functools import partial
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
@@ -19,7 +18,6 @@ from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.history_store import (
-    ChatHistoryStore,
     PostgresChatHistoryStore,
     RedisChatHistoryStore,
     get_chat_history_store,
@@ -35,6 +33,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.restoration import restore_subagent
+from onyx.chat.run_store import ChatRunStore
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -99,15 +98,6 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root() -> No
         ],
         previous_run_id="earlier-run",
     )
-    store = Mock(spec=ChatHistoryStore)
-    store.lookup_agent.return_value = AgentInfo(
-        id="child",
-        path="/root/child",
-        parent_id="root",
-        description="",
-        restoration_config=configuration,
-    )
-    store.load_agent_history.return_value = history
 
     def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
         assert any(message.text == "Earlier answer" for message in request.messages)
@@ -116,18 +106,13 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root() -> No
         return AssistantMessage(content=[TextContent(text="Continued")])
 
     llm = FakeModelClient(reply)
-    directory = ChatAgentDirectory(
-        history_store=store,
-        store=None,
-        build_agent=partial(
-            restore_subagent,
-            setup=setup,
-            llm=llm,
-            tools=[],
-            inject_memories=False,
-        ),
+    restored = restore_subagent(
+        history,
+        setup=setup,
+        llm=llm,
+        tools=[],
+        inject_memories=False,
     )
-    restored = directory.restore_agent("child", "root")
     assert isinstance(restored, ChatAgent)
     assert restored.id == "child"
     assert (
@@ -369,11 +354,13 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
     )
     token = CURRENT_TENANT_ID_CONTEXTVAR.set("conversation-tenant")
     try:
+        run_store = Mock(spec=ChatRunStore, tenant_id="conversation-tenant")
+        run_store.pending_messages.return_value = []
         directory = ChatAgentDirectory(
             history_store=PostgresChatHistoryStore(
                 message_id=17, chat_session_id=uuid4()
             ),
-            store=None,
+            store=run_store,
             build_agent=lambda _: pytest.fail("Restoration was not requested"),
         )
         CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")

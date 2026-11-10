@@ -15,6 +15,9 @@
 - **Custom agent instructions** apply for the whole chat, not only the first
   few turns. Inside a project, the project instructions also apply. When the two
   conflict, the agent instructions win.
+- **Subagent role.** Child chat agents add fixed delegation instructions after the shared
+  system, user, and custom instructions, before files and history. The block contains
+  no agent identity or task text, preserving the reusable prompt prefix.
 - **Personal context.** The assistant knows the user's name, email, role,
   directory profile, preferred language, preferences and memories. An agent
   author can write `{{user.<key>}}` in an agent prompt, and each user sees their

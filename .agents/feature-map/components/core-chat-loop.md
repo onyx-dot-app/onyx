@@ -172,6 +172,8 @@ not cancelled, refreshes the admission lease every 5 s, and lets each
 `CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
 `DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
 preparation that has not started a run. When response workers finish, it finishes delivery and releases admission.
+The final Stop check is the completion boundary. A Stop observed there marks
+only this turn's completed responses cancelled, preserving their content.
 `chat/process_message.py:dispatch_pending_chat_messages` gives queued user text
 priority over unread child results. It starts a response with current session
 settings and fresh authorization checks. A child result starts an assistant
@@ -182,7 +184,10 @@ fails, a saved error response prevents repeated startup attempts. Withdrawal rem
 text atomically; editing resubmits a new entry. No browser reader is needed.
 Background children keep running; the same control thread polls their owner
 leases and dispatches completed results until they finish. It no longer checks the released turn's Stop key,
-admission lease or deadline. Foreground children still drain with their parent. API shutdown
+admission lease or deadline. The control thread also renews a presence key for
+each root response every 5 seconds, with a 60-second expiry, and removes it on
+exit. This tells activity polling whether pending nested results still have a
+dispatcher; it does not reserve execution. Foreground children still drain with their parent. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's
 termination grace period is much shorter, so it ends running turns first
@@ -285,11 +290,15 @@ termination grace period is much shorter, so it ends running turns first
     marks each run's row `RUNNING` and sets `chat_response_owner:<response_id>`
     (60 s TTL, renewed every 10 s). After a crash a root response stays `RUNNING`,
     and a reload replays it as is. Only a sub-agent response gets marked `ERROR`,
-    when a later parent run reads it as a child through
+    when a parent reads it or a live control worker checks its missing owner through
     `ChatRunStore._load_status` ([[chat-persistence#save-chat-turn-one-commit]]). A row that was
     reserved but never registered keeps the placeholder text from
     `db/chat.py:reserve_chat_response_ids`. Stream resume does not restart work;
     only a suspended checkpoint (`ChatRunStore.handoff` and `resume`) restores it.
+    Saved results can still start a new root response through status polling.
+    Pending nested delivery needs a live chat control worker; a crashed worker
+    is not recreated by status polling. Its activity indicator clears when the
+    control presence expires. A later chat turn can dispatch the saved results.
 13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
     to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to
     `Placement` handling also reaches deep research, the research agent and the

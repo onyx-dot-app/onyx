@@ -12468,7 +12468,7 @@
           "attachmentsHint": "Envía los archivos adjuntos cuando termine esta respuesta.",
           "chooseResponseHint": "Elige una respuesta antes de poner un mensaje en cola.",
           "incognitoHint": "Espera a que termine la respuesta en el chat de incógnito.",
-          "sendHint": "Enviar cuando terminen la generación y las herramientas actuales",
+          "sendHint": "Enviar en el siguiente paso de esta respuesta",
           "interruptHint": "Interrumpir el trabajo actual y enviar este mensaje",
           "sendLabel": "Enviar",
           "queueLabel": "En cola"
@@ -12602,7 +12602,7 @@
         }
       },
       "pendingMessages": {
-        "submitFailed": "No se pudo enviar el mensaje. Se conservó el borrador.",
+        "submitFailed": "No se pudo enviar el mensaje. Puedes editarlo o eliminarlo de los mensajes pendientes.",
         "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
         "loadFailed": "No se pudieron cargar los mensajes pendientes.",
         "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",

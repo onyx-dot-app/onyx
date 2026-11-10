@@ -214,7 +214,8 @@ class ResponseAncestry(BaseModel):
 class ChatBackgroundActivity(BaseModel):
     latest_response_id: int | None = None
     running_response_ids: list[int] = Field(default_factory=list)
-    has_pending_results: bool = False
+    has_pending_root_results: bool = False
+    completion_host_response_ids: list[int] = Field(default_factory=list)
 
 
 class ChatBranch(BaseModel):
