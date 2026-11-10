@@ -20,7 +20,7 @@ Callers normally control the transaction boundary so multi-step operations can
 roll back atomically.
 """
 
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, IntEnum
@@ -80,6 +80,7 @@ from onyx.db.external_app import (
     get_skill_external_app_dependencies,
 )
 from onyx.db.models import (
+    ExternalApp,
     ExternalApp__Skill,
     Marketplace,
     Sandbox,
@@ -89,6 +90,7 @@ from onyx.db.models import (
     SkillVersion,
     User,
     User__UserGroup,
+    UserSkillLimitBlock,
     UserSkillPreference,
 )
 from onyx.db.resource_access import (
@@ -137,6 +139,9 @@ from onyx.skills.limits import (
     SkillUsageSummary,
     failed_skill_limit,
 )
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # Past these sizes, a usage query finds each name's shared winner once.
 # Smaller queries cost less to expand each user over each name.
@@ -164,6 +169,8 @@ class SkillUserState:
     external_app_dependency: SkillExternalAppDependencyState | None
     effective_installation_policy: SkillInstallationPolicy
     hidden_by_skill_id: UUID | None = None
+    # Set when connecting the skill's app would have passed the write limit.
+    skill_limit_block: SkillLimit | None = None
 
 
 class SkillRuntimePriority(IntEnum):
@@ -710,6 +717,10 @@ def _runtime_eligibility(
             and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
         ),
         built_in_available,
+        ~exists().where(
+            UserSkillLimitBlock.user_id == user_id,
+            UserSkillLimitBlock.skill_id == Skill.id,
+        ),
     ]
 
 
@@ -910,7 +921,7 @@ def _user_specific_skill_names(
     """Each user and Skill name whose winner can differ from the generic winner.
 
     Lists every row that ties a user to a Skill: preference, direct or group
-    share, app readiness, authorship or marketplace ownership.
+    share, limit block, app readiness, authorship or marketplace ownership.
     Without one, a name has the same winner as for a user with no rows. Extra
     pairs are safe: they get a full per-user winner.
     """
@@ -934,6 +945,7 @@ def _user_specific_skill_names(
             Skill__UserGroup,
             Skill__UserGroup.user_group_id == User__UserGroup.user_group_id,
         ),
+        select(UserSkillLimitBlock.user_id, UserSkillLimitBlock.skill_id),
         select(apps.c.user_id, ExternalApp__Skill.skill_id).join(
             ExternalApp__Skill,
             ExternalApp__Skill.external_app_id == apps.c.external_app_id,
@@ -1489,6 +1501,126 @@ def assert_skill_limit(
         raise skill_limit_error(violations, actor_id)
 
 
+def skill_limit_blocks(
+    user_id: UUID, skill_ids: Collection[UUID], db_session: Session
+) -> dict[UUID, SkillLimit]:
+    if not skill_ids:
+        return {}
+    return dict(
+        db_session.execute(
+            select(
+                UserSkillLimitBlock.skill_id, UserSkillLimitBlock.failed_limit
+            ).where(
+                UserSkillLimitBlock.user_id == user_id,
+                UserSkillLimitBlock.skill_id.in_(skill_ids),
+            )
+        )
+        .tuples()
+        .all()
+    )
+
+
+def connect_external_app_within_skill_limit__no_commit(
+    external_app_id: int,
+    user_id: UUID,
+    connect: Callable[[], object],
+    db_session: Session,
+) -> dict[UUID, SkillLimit]:
+    """Run ``connect`` and keep it; leave off the app's skills that do not fit.
+
+    Earlier blocks for the app's skills are retried. Skills are tried in name
+    order. A skill left off is tried again after a later one turns on, because
+    that skill can replace a larger one of its name. The limit check never
+    discards the connection: if it fails, the app connects without blocks and
+    the runtime limit applies.
+    """
+    app_skill_ids = (
+        select(Skill.id)
+        .join(ExternalApp__Skill, ExternalApp__Skill.skill_id == Skill.id)
+        .where(ExternalApp__Skill.external_app_id == external_app_id)
+        .order_by(Skill.name, Skill.id)
+    )
+    skill_ids: list[UUID] | None = None
+    baseline: SkillLimitBaseline | None = None
+    try:
+        with db_session.begin_nested():
+            lock_group_membership(db_session)
+            # Association writers lock the app row; this holds them off until commit.
+            db_session.execute(
+                select(ExternalApp.id)
+                .where(ExternalApp.id == external_app_id)
+                .with_for_update(key_share=True)
+            )
+            skill_ids = list(db_session.scalars(app_skill_ids))
+            baseline = capture_skill_limit_baseline(
+                skill_ids, db_session, user_ids=[user_id]
+            )
+    except Exception:
+        logger.exception("Skill limit baseline failed for app %s", external_app_id)
+    connect()
+    db_session.flush()
+    if skill_ids is None:
+        skill_ids = list(db_session.scalars(app_skill_ids))
+    if not skill_ids:
+        return {}
+    blocked: dict[UUID, SkillLimit] = {}
+    try:
+        with db_session.begin_nested():
+            db_session.execute(
+                delete(UserSkillLimitBlock).where(
+                    UserSkillLimitBlock.user_id == user_id,
+                    UserSkillLimitBlock.skill_id.in_(skill_ids),
+                )
+            )
+        # A failed usage check must not restore blocks from an earlier connection.
+        if baseline is None:
+            return {}
+        with db_session.begin_nested():
+            if not skill_limit_violations(baseline, db_session):
+                return {}
+            db_session.execute(
+                insert(UserSkillLimitBlock).values(
+                    [
+                        {
+                            "user_id": user_id,
+                            "skill_id": skill_id,
+                            "failed_limit": SkillLimit.BYTES,
+                        }
+                        for skill_id in skill_ids
+                    ]
+                )
+            )
+            pending = list(skill_ids)
+            failures = 0
+            # Stop when every skill left off fails with no turn-on in between.
+            while failures < len(pending):
+                skill_id = pending.pop(0)
+                block = (
+                    UserSkillLimitBlock.user_id == user_id,
+                    UserSkillLimitBlock.skill_id == skill_id,
+                )
+                db_session.execute(delete(UserSkillLimitBlock).where(*block))
+                violation = skill_limit_violations(baseline, db_session).get(user_id)
+                if violation is None:
+                    blocked.pop(skill_id, None)
+                    failures = 0
+                    continue
+                blocked[skill_id] = violation[1]
+                pending.append(skill_id)
+                failures += 1
+                db_session.execute(
+                    insert(UserSkillLimitBlock).values(
+                        user_id=user_id,
+                        skill_id=skill_id,
+                        failed_limit=violation[1],
+                    )
+                )
+    except Exception:
+        logger.exception("Skill limit check failed for app %s", external_app_id)
+        return {}
+    return blocked
+
+
 def fetch_skill(
     skill_id: UUID,
     *,
@@ -1743,9 +1875,12 @@ def skill_user_states(
         .join(policies, policies.c.skill_id == Skill.id)
         .where(Skill.id.in_(requested_ids), Skill.retired_at.is_(None))
     )
+    blocks = skill_limit_blocks(user.id, requested_ids, db_session)
     return {
         skill_id: SkillUserState(
-            enabled=enabled and winners.get(skill_id, skill_id) == skill_id,
+            enabled=enabled
+            and skill_id not in blocks
+            and winners.get(skill_id, skill_id) == skill_id,
             can_toggle=visible
             and supports_preference
             and (
@@ -1760,6 +1895,7 @@ def skill_user_states(
                 if skill_id in winners and winners[skill_id] != skill_id
                 else None
             ),
+            skill_limit_block=blocks.get(skill_id),
         )
         for skill_id, effective_policy, enabled, visible, supports_preference in rows
     }
@@ -1798,6 +1934,13 @@ def set_skill_enabled_for_user(
         )
     # A disable can also grow usage when it reveals a larger skill of that name.
     baseline = capture_skill_limit_baseline([skill.id], db_session, user_ids=[user.id])
+    # An explicit choice retries a skill that an app connection left off.
+    db_session.execute(
+        delete(UserSkillLimitBlock).where(
+            UserSkillLimitBlock.user_id == user.id,
+            UserSkillLimitBlock.skill_id == skill.id,
+        )
+    )
 
     if enabled:
         required_names = resolve_skill_runtime_names(

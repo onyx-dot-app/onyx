@@ -23,6 +23,7 @@ from onyx.db.models import (
     Skill__User,
     Skill__UserGroup,
     User,
+    UserSkillLimitBlock,
     UserSkillPreference,
 )
 from onyx.db.skill import (
@@ -175,6 +176,15 @@ class _World:
         for user in self.users:
             for skill in rng.sample(self.skills, 4):
                 self._prefer(user, skill, rng.random() < 0.6)
+        for user in rng.sample(self.users, 2):
+            session.add(
+                UserSkillLimitBlock(
+                    user_id=user.id,
+                    skill_id=rng.choice(self.skills).id,
+                    failed_limit=SkillLimit.BYTES,
+                )
+            )
+        session.flush()
 
     def _prefer(self, user: User, skill: Skill, enabled: bool) -> None:
         if enabled:
@@ -257,7 +267,13 @@ class _World:
 
             return [skill.id], None, apply
 
-        return [resize, resize, toggle, access, access]
+        def unblock() -> Plan:
+            block = session.scalars(select(UserSkillLimitBlock)).first()
+            if block is None:
+                return resize()
+            return [block.skill_id], [block.user_id], lambda: session.delete(block)
+
+        return [resize, resize, toggle, access, access, unblock]
 
 
 @pytest.mark.parametrize("seed", range(6))
@@ -303,9 +319,9 @@ def test_each_user_row_kind_replaces_the_generic_winner(clean: Session) -> None:
     Every user's total must still equal the single-user runtime resolver.
     """
     session = clean
-    users = [make_user(session, standard_account=True) for _ in range(8)]
-    plain, preferring, shared, grouped, credentialed = users[:5]
-    author, owner, stranger = users[5:]
+    users = [make_user(session, standard_account=True) for _ in range(9)]
+    plain, preferring, shared, grouped, blocked, credentialed = users[:6]
+    author, owner, stranger = users[6:]
     # Available needs an explicit enable.
     enable(session, preferring, sized_skill(session, size=1, policy=Policy.AVAILABLE))
     personal = sized_skill(session, size=2, author=author)
@@ -319,6 +335,11 @@ def test_each_user_row_kind_replaces_the_generic_winner(clean: Session) -> None:
         )
     )
     common = sized_skill(session, size=8)
+    session.add(
+        UserSkillLimitBlock(
+            user_id=blocked.id, skill_id=common.id, failed_limit=SkillLimit.BYTES
+        )
+    )
     app = make_external_app(
         session,
         skill=sized_skill(session, size=16),
@@ -355,6 +376,7 @@ def test_each_user_row_kind_replaces_the_generic_winner(clean: Session) -> None:
         preferring.id: 1,
         shared.id: 2,
         grouped.id: 4,
+        blocked.id: -8,
         credentialed.id: 16,
         author.id: 2 + 4,
         owner.id: 64 - 32,

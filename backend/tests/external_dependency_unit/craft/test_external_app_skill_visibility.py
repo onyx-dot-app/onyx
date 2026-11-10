@@ -8,10 +8,12 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ExternalAppType, SkillSharePermission
+from onyx.db.enums import ExternalAppType, SkillInstallationPolicy, SkillSharePermission
 from onyx.db.external_app import (
     get_external_app_by_skill_id,
+    get_skill_external_app_dependencies,
     get_skills_for_external_app,
+    upsert_external_app_user_credential__no_commit,
 )
 from onyx.db.models import ExternalApp__Skill, User, UserSkillPreference
 from onyx.db.skill import (
@@ -61,6 +63,29 @@ def _runtime_skill_ids(user: User, db_session: Session) -> set[UUID]:
             db_session=db_session,
         )
     }
+
+
+def test_runtime_uses_replaced_credentials_without_expiring_loaded_rows(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, is_public=True)
+    skill.installation_policy = SkillInstallationPolicy.DEFAULT
+    app = make_external_app(db_session, skill=skill, auth_template=_AUTH_TEMPLATE)
+    credential = make_user_credential(
+        db_session, app=app, user=user, user_credentials=_FULL_CREDS
+    )
+    assert get_skill_external_app_dependencies(db_session, user)[skill.id].ready
+    assert skill.id in _runtime_skill_ids(user, db_session)
+
+    replaced = upsert_external_app_user_credential__no_commit(
+        db_session, app.id, user.id, {}
+    )
+
+    assert replaced is credential
+    assert not get_skill_external_app_dependencies(db_session, user)[skill.id].ready
+    assert skill.id not in _runtime_skill_ids(user, db_session)
 
 
 def test_view_exposes_associated_custom_skill_regardless_of_authentication(

@@ -100,6 +100,7 @@ def tenant(
             "skill__user",
             "skill__user_group",
             "user_skill_preference",
+            "user_skill_limit_block",
             "user_group",
             "permission_grant",
             "user__user_group",
