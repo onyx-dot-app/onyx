@@ -747,3 +747,29 @@ def test_process_heartbeat_only_reports_api_deployment_type(
     assert heartbeat["data"].get("deployment_type") == (
         deployment_type.value if service == "api" else None
     )
+
+
+def test_corpus_count_carries_counts_by_reviewed_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.connectors.models import DocumentTypeLabel
+
+    sender = make_sender()
+    monkeypatch.setattr(fleet, "_client", sender)
+    fleet.emit_corpus_count(
+        7,
+        3,
+        "google_drive",
+        window_start=0.0,
+        window_end=100.0,
+        duration_ms=5,
+        docs_by_type={DocumentTypeLabel.PDF: 3, DocumentTypeLabel.DOCUMENT: 2},
+        bytes_by_type={DocumentTypeLabel.PDF: 30},
+        partial=True,
+    )
+    (counted,) = sender._take_batch()
+    assert counted["event_type"] == "corpus"
+    assert counted["data"]["expected_docs"] == 5
+    assert counted["data"]["expected_partial"] is True
+    assert counted["data"]["expected_by_type"] == {"pdf": 3, "document": 2}
+    assert counted["data"]["expected_bytes_by_type"] == {"pdf": 30}

@@ -63,6 +63,8 @@ from .stats import Stats
 LatencyClass = Literal["metadata", "list", "content", "docs_api"]
 
 _LIST_CACHE_ENTRIES = 512
+# Stands in for orderBy when the ignore_order_by fault is on.
+_ARBITRARY_ORDER = "mock-arbitrary-order"
 _DEFAULT_FILE_FIELDS = "kind,id,name,mimeType"
 _DEFAULT_FILE_LIST_FIELDS = (
     "kind,incompleteSearch,nextPageToken,files(kind,id,name,mimeType)"
@@ -475,6 +477,8 @@ class MockGoogleApi:
         q: str,
         order_by: str,
     ) -> list[str]:
+        if self.settings.faults.ignore_order_by:
+            order_by = _ARBITRARY_ORDER
         key = (
             self.corpus_version,
             me,
@@ -548,6 +552,9 @@ class MockGoogleApi:
         return ordered
 
     def _sort(self, ids: list[str], order_by: str) -> None:
+        if order_by == _ARBITRARY_ORDER:
+            ids.sort(key=lambda f: hashlib.sha1(f.encode()).digest())
+            return
         files = self.corpus.files
         for clause in reversed([c.strip() for c in order_by.split(",") if c.strip()]):
             field, _, direction = clause.partition(" ")

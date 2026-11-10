@@ -10,7 +10,7 @@ the gap: the organizer saw 25 items in shared_drive_1, a reader saw 23.
 Nothing here calls the retrieval path; it only decides who should do the call.
 """
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from enum import Enum
 
 from pydantic import BaseModel
@@ -245,41 +245,57 @@ def select_drive_organizer(
     google_domain: str,
     expand_group: Callable[[str], list[str]],
     can_list_drive: Callable[[str], bool],
+    busy: Collection[str] = (),
 ) -> OrganizerChoice:
     """Pick the identity to impersonate for a shared drive.
 
     Walks roles from organizer downward, and within a role takes direct user
-    members before group members. Every candidate is verified with a cheap
-    listing before it is returned, because a named organizer can still fail to
-    impersonate (suspended account, delegation gap).
+    members before group members. Within a role, members in `busy` (already
+    listing another drive) come last: Google's quotas are per user, so drives
+    listed by different users fetch in parallel. Every candidate is verified
+    with a cheap listing before it is returned, because a named organizer can
+    still fail to impersonate (suspended account, delegation gap).
     """
-    for role in _ROLE_PREFERENCE:
-        for email in _candidate_emails(members, role, google_domain, expand_group):
-            if not can_list_drive(email):
-                logger.info(
-                    "Candidate %s holds %s on drive %s but cannot list it; trying next.",
-                    email,
-                    role.value,
-                    drive_id,
-                )
-                continue
 
-            complete = role is DriveRole.ORGANIZER
-            if not complete:
-                logger.warning(
-                    "Drive %s has no usable organizer; falling back to %s (%s). "
-                    "Limited-access folders may be missed.",
-                    drive_id,
-                    email,
-                    role.value,
-                )
-            return OrganizerChoice(
-                drive_id=drive_id,
-                email=email,
-                role=role,
-                complete=complete,
-                reason=f"verified {role.value}",
+    def verified(email: str, role: DriveRole) -> OrganizerChoice | None:
+        if not can_list_drive(email):
+            logger.info(
+                "Candidate %s holds %s on drive %s but cannot list it; trying next.",
+                email,
+                role.value,
+                drive_id,
             )
+            return None
+        complete = role is DriveRole.ORGANIZER
+        if not complete:
+            logger.warning(
+                "Drive %s has no usable organizer; falling back to %s (%s). "
+                "Limited-access folders may be missed.",
+                drive_id,
+                email,
+                role.value,
+            )
+        return OrganizerChoice(
+            drive_id=drive_id,
+            email=email,
+            role=role,
+            complete=complete,
+            reason=f"verified {role.value}",
+        )
+
+    for role in _ROLE_PREFERENCE:
+        deferred: list[str] = []
+        for email in _candidate_emails(members, role, google_domain, expand_group):
+            if email in busy:
+                deferred.append(email)
+                continue
+            choice = verified(email, role)
+            if choice is not None:
+                return choice
+        for email in deferred:
+            choice = verified(email, role)
+            if choice is not None:
+                return choice
 
     logger.warning(
         "No impersonable principal found for drive %s among %s members.",

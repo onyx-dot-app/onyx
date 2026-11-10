@@ -88,8 +88,8 @@ def _execute_with_retry(request: Any) -> Any:
             attempt += 1
 
             if _is_rate_limit_error(error):
-                # Attempt to get 'Retry-After' from headers
-                retry_after = parse_retry_after_seconds(error.resp.get("Retry-After"))
+                # httplib2 stores header names in lowercase.
+                retry_after = parse_retry_after_seconds(error.resp.get("retry-after"))
                 if retry_after is not None:
                     sleep_time = bound_server_wait(retry_after, "google")
                 else:
