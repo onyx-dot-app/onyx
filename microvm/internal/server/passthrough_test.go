@@ -149,9 +149,14 @@ type mapLauncher struct {
 	uds   map[string]string
 	mu    sync.Mutex
 	procs map[string]*guestProc
+	// fail, if set, fails every launch.
+	fail error
 }
 
 func (l *mapLauncher) Launch(_ context.Context, s agent.LaunchSpec) (agent.Process, error) {
+	if l.fail != nil {
+		return nil, l.fail
+	}
 	p := &guestProc{uds: l.uds[s.ID], done: make(chan struct{})}
 	l.mu.Lock()
 	defer l.mu.Unlock()
