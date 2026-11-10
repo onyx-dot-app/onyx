@@ -129,6 +129,7 @@ func TestAdvertiseAddress(t *testing.T) {
 		"no port":                  {flags{listen: ":7443", advertise: "10.0.3.7"}, ""},
 		"no host":                  {flags{listen: ":7443", advertise: ":7443"}, ""},
 		"bad port":                 {flags{listen: ":7443", advertise: "a:99999"}, ""},
+		"leading-zero port":        {flags{listen: ":7443", advertise: "a:0000080"}, ""},
 		"unbracketed IPv6":         {flags{listen: ":7443", advertise: "fd00::7:7443"}, ""},
 		"host the API rejects":     {flags{listen: ":7443", advertise: "agent_0.local:7443"}, ""},
 		"IPv6 zone":                {flags{listen: ":7443", advertise: "[fe80::1%eth0]:7443"}, ""},

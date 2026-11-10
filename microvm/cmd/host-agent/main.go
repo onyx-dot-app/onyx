@@ -520,7 +520,8 @@ func advertiseAddress(f flags, podIP string) (string, error) {
 		if err != nil || (net.ParseIP(host) == nil && !dnsHost.MatchString(host)) {
 			return "", fmt.Errorf("--advertise-address %q must be host:port with a DNS name or IP address", f.advertise)
 		}
-		if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 {
+		// Canonical decimal only: the api_server rejects ports over five digits.
+		if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 || strconv.FormatUint(n, 10) != port {
 			return "", fmt.Errorf("--advertise-address %q has a bad port", f.advertise)
 		}
 		return f.advertise, nil
