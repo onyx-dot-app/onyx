@@ -63,11 +63,27 @@ listings share the crawl (`GoogleDriveConnector._fetch_drive_items`).
 `GoogleDriveConnector.normalize_url` returns several candidate ids for a pasted
 URL, because the URL often does not say the file type.
 
+**Conversion.** Each connector call converts what it lists on a pool of
+`DRIVE_CONVERSION_WORKERS` threads (`BoundedParallelRunner`) while the listing
+goes on. Files reach the pool round-robin by retriever user
+(`connectors/google_drive/connector.py:_interleave_by_user`), and a shared drive
+prefers an organizer that lists no other drive, because Google's quotas are per
+user: the Docs API allows 300 reads a minute per user. A call converts
+everything it lists before it returns, so the order does not change what the
+checkpoint records. A file's parent node is yielded before the file is
+submitted, so nodes still precede their documents.
+
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates
-the given user with a service-account key. The gateway keeps one Drive client
-per thread (`threading.local`), because `googleapiclient` over `httplib2` is
-not thread safe.
+the given user with a service-account key. The gateway impersonates each user
+once and shares that credential across threads, so each user's token is fetched
+once (`GoogleDriveSourceOperations._impersonated`). It keeps the Drive and
+directory clients and the Docs API session per thread (`threading.local`),
+because `googleapiclient` over `httplib2` and a `requests` session are not
+thread safe. `GOOGLE_API_ENDPOINT_OVERRIDE` (testing only) sends every client,
+token refresh and Docs API call to another URL; the clients are then built from
+the bundled discovery document with its root URL replaced, so batch requests
+follow too.
 
 ---
 
@@ -128,3 +144,8 @@ not thread safe.
 - External dependency tests:
   `backend/tests/external_dependency_unit/connectors/google_drive/`.
 - Daily tests against a live domain: `backend/tests/daily/connectors/google_drive/`.
+- Without a Workspace: the mock server in
+  `backend/tests/integration/mock_services/mock_google_drive_server/` serves the
+  token, Drive, Admin SDK and Docs calls, with Google's quotas and errors.
+  `GOOGLE_API_ENDPOINT_OVERRIDE` points the connector at it, and
+  `backend/scripts/benchmark_google_drive_connector.py` measures throughput.

@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pypdfium2
 
-from onyx.file_processing import extract_file_text
-from onyx.file_processing.extract_file_text import PDFIUM_REOPEN_RSS_GROWTH_BYTES
+from onyx.file_processing import pdfium_text
+from onyx.file_processing.pdfium_text import PDFIUM_REOPEN_RSS_GROWTH_BYTES
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MIB = 1024 * 1024
@@ -26,9 +26,9 @@ def _extract_with_rss(rss_at_open: int, rss_after: int) -> tuple[str, int]:
     )
     with (
         patch.object(pypdfium2, "PdfDocument", wraps=pypdfium2.PdfDocument) as opens,
-        patch.object(extract_file_text.psutil, "Process", return_value=process),
+        patch.object(pdfium_text.psutil, "Process", return_value=process),
     ):
-        text = extract_file_text._extract_pdf_text_pdfium(
+        text = pdfium_text.extract_pdf_text_pdfium(
             (FIXTURES / "multipage.pdf").read_bytes(), None
         )
     return text, opens.call_count

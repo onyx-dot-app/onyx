@@ -18,12 +18,12 @@ from onyx.connectors.google_drive.doc_conversion import (
 )
 from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.source_operations import (
+    _DOCS_FETCH_TRIES,
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import ConnectorFailure, Document, TextSection
 
-_GATEWAY_MODULE = "onyx.connectors.google_drive.source_operations"
 _USER = "user@example.com"
 _DOC = {"tabs": []}
 
@@ -65,7 +65,9 @@ def _fetch(errors: list[Exception | None]) -> tuple[Any, MagicMock]:
     )
     with (
         patch.object(GoogleDriveSourceOperations, "_creds", return_value=MagicMock()),
-        patch(f"{_GATEWAY_MODULE}.get_google_authorized_session", return_value=session),
+        patch.object(
+            GoogleDriveSourceOperations, "_docs_session", return_value=session
+        ),
         patch("time.sleep"),
     ):
         try:
@@ -95,11 +97,11 @@ def test_a_transient_error_is_retried(error: Exception) -> None:
 
 
 def test_a_rate_limit_that_outlasts_the_retries_raises() -> None:
-    result, session = _fetch([_http_error(429)] * 5)
+    result, session = _fetch([_http_error(429)] * _DOCS_FETCH_TRIES)
 
     assert isinstance(result, GoogleDriveHttpError)
     assert result.rate_limited
-    assert session.get.call_count == 5
+    assert session.get.call_count == _DOCS_FETCH_TRIES
 
 
 def test_an_access_error_is_not_retried() -> None:

@@ -41,6 +41,10 @@ class DriveFileFieldType(Enum):
 
 # `role` is needed to pick a shared drive organizer, who is the one principal
 # guaranteed to see every item in that drive.
+# The largest files.list page Drive serves. A call costs the same quota at any
+# page size, so full pages need the fewest calls.
+DRIVE_LIST_PAGE_SIZE = 1000
+
 PERMISSION_FULL_DESCRIPTION = (
     "permissions(id, emailAddress, type, domain, allowFileDiscovery, role, "
     "permissionDetails)"
@@ -129,6 +133,7 @@ def _get_folders_in_parent(
 
     for file in files_only(
         ops.list_files(
+            page_size=DRIVE_LIST_PAGE_SIZE,
             variant=DriveCorpus.ALL_DRIVES,
             user_email=user_email,
             query=query,
@@ -378,6 +383,7 @@ def _get_files_in_parent(
 
     for file in files_only(
         ops.list_files(
+            page_size=DRIVE_LIST_PAGE_SIZE,
             variant=DriveCorpus.ALL_DRIVES,
             user_email=user_email,
             query=query,
@@ -506,6 +512,7 @@ def get_files_in_shared_drive(
         folder_query += " and trashed = false"
         for folder in files_only(
             ops.list_files(
+                page_size=DRIVE_LIST_PAGE_SIZE,
                 variant=DriveCorpus.DRIVE,
                 user_email=user_email,
                 drive_id=drive_id,
@@ -522,6 +529,7 @@ def get_files_in_shared_drive(
     file_query += generate_time_range_filter(start, end)
 
     for file in ops.list_files(
+        page_size=DRIVE_LIST_PAGE_SIZE,
         variant=DriveCorpus.DRIVE,
         user_email=user_email,
         drive_id=drive_id,
@@ -574,6 +582,7 @@ def get_all_files_in_my_drive_and_shared(
         found_folders = False
         for folder in files_only(
             ops.list_files(
+                page_size=DRIVE_LIST_PAGE_SIZE,
                 variant=DriveCorpus.USER,
                 user_email=user_email,
                 query=folder_query,
@@ -595,6 +604,7 @@ def get_all_files_in_my_drive_and_shared(
         ops,
         user_email,
         ops.list_files(
+            page_size=DRIVE_LIST_PAGE_SIZE,
             variant=DriveCorpus.USER,
             user_email=user_email,
             query=file_query,
@@ -642,6 +652,7 @@ def get_all_files_for_oauth(
         ops,
         user_email,
         ops.list_files(
+            page_size=DRIVE_LIST_PAGE_SIZE,
             variant=corpus,
             user_email=user_email,
             query=file_query,

@@ -12,6 +12,7 @@ import pytest
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.utils import threadpool_concurrency
 from onyx.utils.threadpool_concurrency import (
+    BoundedParallelRunner,
     ThreadSafeDict,
     parallel_yield,
     run_in_background,
@@ -503,3 +504,39 @@ def test_cancellation_logs_unexpected_cleanup_failure() -> None:
             )
     log.assert_called_once_with("Coroutine cleanup failed after cancellation")
     assert not cancellation._callbacks
+
+
+def test_bounded_parallel_runner_caps_pending_calls() -> None:
+    running = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def work(n: int) -> int:
+        nonlocal running, peak
+        with lock:
+            running += 1
+            peak = max(peak, running)
+        time.sleep(0.02)
+        with lock:
+            running -= 1
+        return n
+
+    results: list[int] = []
+    with BoundedParallelRunner[int](max_workers=8, max_in_flight=3) as runner:
+        for n in range(20):
+            results.extend(runner.submit(work, n))
+            assert len(runner._pending) <= 3
+        results.extend(runner.drain())
+
+    assert sorted(results) == list(range(20))
+    assert peak <= 3
+
+
+def test_bounded_parallel_runner_raises_the_call_error() -> None:
+    def fail() -> int:
+        raise ValueError("boom")
+
+    with BoundedParallelRunner[int](max_workers=2) as runner:
+        runner.submit(fail)
+        with pytest.raises(ValueError, match="boom"):
+            list(runner.drain())

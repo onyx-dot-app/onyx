@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 from pypdfium2 import PdfiumError
 
-from onyx.file_processing import extract_file_text, pdf_image_utils
+from onyx.file_processing import extract_file_text, pdf_image_utils, pdfium_text
 from onyx.file_processing.extract_file_text import pdf_to_text, read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
 from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
@@ -48,7 +48,7 @@ class TestReadPdfFile:
 
     def test_text_extraction_uses_pdfium(self) -> None:
         """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf."""
-        text = extract_file_text._extract_pdf_text_pdfium(
+        text = pdfium_text.extract_pdf_text_pdfium(
             (FIXTURES / "multipage.pdf").read_bytes(), None
         )
         assert "Page one content" in text
