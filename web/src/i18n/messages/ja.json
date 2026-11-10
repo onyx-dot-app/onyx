@@ -17535,5 +17535,17 @@
     "jvmMemoryTitle": "JVMメモリ",
     "vectorMemoryTitle": "ベクトルメモリ",
     "viewDetails": "詳細を表示"
+  },
+  "marketplaces": {
+    "retry": "更新",
+    "connectionError": "GitHub 接続を確認できませんでした。",
+    "previewFailed": "マーケットプレイスを読み取れません",
+    "sampleTitle": "マーケットプレイスファイルを追加",
+    "sampleDescription": "選択したフォルダーに .claude-plugin/marketplace.json として保存します。team-skills/skills/example/SKILL.md にスキルを配置し、再度プレビューしてください。",
+    "copySample": "サンプルをコピー",
+    "emptyPreview": "このカタログには項目がありません。",
+    "ok": "準備完了",
+    "blocked": "ブロック済み",
+    "not_supported": "未対応"
   }
 }

@@ -17535,5 +17535,17 @@
     "jvmMemoryTitle": "Memoria de JVM",
     "vectorMemoryTitle": "Memoria de vectores",
     "viewDetails": "Ver detalles"
+  },
+  "marketplaces": {
+    "retry": "Actualizar",
+    "connectionError": "No se pudo comprobar tu conexión con GitHub.",
+    "previewFailed": "No se puede leer el marketplace",
+    "sampleTitle": "Añadir un archivo de marketplace",
+    "sampleDescription": "Guarda esto como .claude-plugin/marketplace.json en la carpeta seleccionada. Coloca las habilidades en team-skills/skills/example/SKILL.md y vuelve a previsualizar.",
+    "copySample": "Copiar ejemplo",
+    "emptyPreview": "Este catálogo no tiene entradas.",
+    "ok": "Listo",
+    "blocked": "Bloqueado",
+    "not_supported": "No compatible"
   }
 }
