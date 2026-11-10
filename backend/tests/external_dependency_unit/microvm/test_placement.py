@@ -79,15 +79,20 @@ def test_picks_most_free_memory_and_writes_record(
     ]
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [HostAgentErrorReason.CAPACITY_VM_SLOTS, HostAgentErrorReason.NODE_DRAINING],
+)
 def test_refusal_moves_to_next_node(
     shared_cache: CacheBackend,
     tenant_cache: CacheBackend,
     client_factory: InsecureClientFactory,
     add_node: AddNode,
     new_sandbox_id: NewSandboxId,
+    reason: HostAgentErrorReason,
 ) -> None:
     refusing = add_node(_node("refuses"), FakeHostAgent(mem_available_mib=32_768))
-    refusing.agent.refuse_create = HostAgentErrorReason.CAPACITY_VM_SLOTS
+    refusing.agent.refuse_create = reason
     second_id = _node("second")
     add_node(second_id, FakeHostAgent(mem_available_mib=8192))
 

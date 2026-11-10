@@ -1,5 +1,5 @@
-# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob 141d38cc444960eaf251a9542a2d1d963e990389)
-# at commit 46d3937602 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob 6b31db359c9e0ceb15a23edf324ffed95f5dae99)
+# at commit 84f60fa93c by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -37,6 +37,25 @@ class ErrorReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     DIAL_LIMIT: _ClassVar[ErrorReason]
     METHOD_NOT_ALLOWED: _ClassVar[ErrorReason]
     GUEST_KEY_REJECTED: _ClassVar[ErrorReason]
+    MANAGED_IMAGE_MISSING: _ClassVar[ErrorReason]
+    MANAGED_BUNDLE_INVALID: _ClassVar[ErrorReason]
+    MANAGED_SWAP_UNSUPPORTED: _ClassVar[ErrorReason]
+    MANAGED_SLOT_BUSY: _ClassVar[ErrorReason]
+    MANAGED_MOUNT_FAILED: _ClassVar[ErrorReason]
+    NODE_DRAINING: _ClassVar[ErrorReason]
+
+class DrainState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    DRAIN_STATE_UNSPECIFIED: _ClassVar[DrainState]
+    DRAIN_STATE_ACTIVE: _ClassVar[DrainState]
+    DRAIN_STATE_DRAINING: _ClassVar[DrainState]
+    DRAIN_STATE_DRAINED: _ClassVar[DrainState]
+
+class ManagedSlot(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    MANAGED_SLOT_UNSPECIFIED: _ClassVar[ManagedSlot]
+    MANAGED_SLOT_A: _ClassVar[ManagedSlot]
+    MANAGED_SLOT_B: _ClassVar[ManagedSlot]
 
 class VMState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -67,6 +86,19 @@ VM_NOT_RUNNING: ErrorReason
 DIAL_LIMIT: ErrorReason
 METHOD_NOT_ALLOWED: ErrorReason
 GUEST_KEY_REJECTED: ErrorReason
+MANAGED_IMAGE_MISSING: ErrorReason
+MANAGED_BUNDLE_INVALID: ErrorReason
+MANAGED_SWAP_UNSUPPORTED: ErrorReason
+MANAGED_SLOT_BUSY: ErrorReason
+MANAGED_MOUNT_FAILED: ErrorReason
+NODE_DRAINING: ErrorReason
+DRAIN_STATE_UNSPECIFIED: DrainState
+DRAIN_STATE_ACTIVE: DrainState
+DRAIN_STATE_DRAINING: DrainState
+DRAIN_STATE_DRAINED: DrainState
+MANAGED_SLOT_UNSPECIFIED: ManagedSlot
+MANAGED_SLOT_A: ManagedSlot
+MANAGED_SLOT_B: ManagedSlot
 VM_STATE_UNSPECIFIED: VMState
 VM_STATE_STARTING: VMState
 VM_STATE_RUNNING: VMState
@@ -127,7 +159,7 @@ class ListResponse(_message.Message):
     def __init__(self, vms: _Optional[_Iterable[_Union[VM, _Mapping]]] = ...) -> None: ...
 
 class VM(_message.Message):
-    __slots__ = ("sandbox_id", "attempt", "generation", "template", "vcpus", "mem_mib", "scratch_gib", "state", "pid", "uid", "started_at", "tenant_id")
+    __slots__ = ("sandbox_id", "attempt", "generation", "template", "vcpus", "mem_mib", "scratch_gib", "state", "pid", "uid", "started_at", "tenant_id", "managed")
     SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
     ATTEMPT_FIELD_NUMBER: _ClassVar[int]
     GENERATION_FIELD_NUMBER: _ClassVar[int]
@@ -140,6 +172,7 @@ class VM(_message.Message):
     UID_FIELD_NUMBER: _ClassVar[int]
     STARTED_AT_FIELD_NUMBER: _ClassVar[int]
     TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    MANAGED_FIELD_NUMBER: _ClassVar[int]
     sandbox_id: str
     attempt: int
     generation: int
@@ -152,7 +185,20 @@ class VM(_message.Message):
     uid: int
     started_at: _timestamp_pb2.Timestamp
     tenant_id: str
-    def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., generation: _Optional[int] = ..., template: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., state: _Optional[_Union[VMState, str]] = ..., pid: _Optional[int] = ..., uid: _Optional[int] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant_id: _Optional[str] = ...) -> None: ...
+    managed: ManagedState
+    def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., generation: _Optional[int] = ..., template: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., state: _Optional[_Union[VMState, str]] = ..., pid: _Optional[int] = ..., uid: _Optional[int] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tenant_id: _Optional[str] = ..., managed: _Optional[_Union[ManagedState, _Mapping]] = ...) -> None: ...
+
+class ManagedState(_message.Message):
+    __slots__ = ("slots", "active", "slot_a_image", "slot_b_image")
+    SLOTS_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_FIELD_NUMBER: _ClassVar[int]
+    SLOT_A_IMAGE_FIELD_NUMBER: _ClassVar[int]
+    SLOT_B_IMAGE_FIELD_NUMBER: _ClassVar[int]
+    slots: int
+    active: ManagedSlot
+    slot_a_image: str
+    slot_b_image: str
+    def __init__(self, slots: _Optional[int] = ..., active: _Optional[_Union[ManagedSlot, str]] = ..., slot_a_image: _Optional[str] = ..., slot_b_image: _Optional[str] = ...) -> None: ...
 
 class CloseConnectionsRequest(_message.Message):
     __slots__ = ("sandbox_id", "attempt", "generation")
@@ -187,7 +233,7 @@ class NodeInfoRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class NodeInfoResponse(_message.Message):
-    __slots__ = ("mem_total_mib", "mem_available_mib", "vm_count", "templates", "cpu_model", "firecracker_version", "host_kernel", "agent_version", "disk_free_mib")
+    __slots__ = ("mem_total_mib", "mem_available_mib", "vm_count", "templates", "cpu_model", "firecracker_version", "host_kernel", "agent_version", "disk_free_mib", "managed_images", "mem_reserve_mib", "mem_starting_mib", "drain")
     MEM_TOTAL_MIB_FIELD_NUMBER: _ClassVar[int]
     MEM_AVAILABLE_MIB_FIELD_NUMBER: _ClassVar[int]
     VM_COUNT_FIELD_NUMBER: _ClassVar[int]
@@ -197,6 +243,10 @@ class NodeInfoResponse(_message.Message):
     HOST_KERNEL_FIELD_NUMBER: _ClassVar[int]
     AGENT_VERSION_FIELD_NUMBER: _ClassVar[int]
     DISK_FREE_MIB_FIELD_NUMBER: _ClassVar[int]
+    MANAGED_IMAGES_FIELD_NUMBER: _ClassVar[int]
+    MEM_RESERVE_MIB_FIELD_NUMBER: _ClassVar[int]
+    MEM_STARTING_MIB_FIELD_NUMBER: _ClassVar[int]
+    DRAIN_FIELD_NUMBER: _ClassVar[int]
     mem_total_mib: int
     mem_available_mib: int
     vm_count: int
@@ -206,20 +256,178 @@ class NodeInfoResponse(_message.Message):
     host_kernel: str
     agent_version: str
     disk_free_mib: int
-    def __init__(self, mem_total_mib: _Optional[int] = ..., mem_available_mib: _Optional[int] = ..., vm_count: _Optional[int] = ..., templates: _Optional[_Iterable[_Union[TemplateInfo, _Mapping]]] = ..., cpu_model: _Optional[str] = ..., firecracker_version: _Optional[str] = ..., host_kernel: _Optional[str] = ..., agent_version: _Optional[str] = ..., disk_free_mib: _Optional[int] = ...) -> None: ...
+    managed_images: _containers.RepeatedCompositeFieldContainer[ManagedImageInfo]
+    mem_reserve_mib: int
+    mem_starting_mib: int
+    drain: DrainStatus
+    def __init__(self, mem_total_mib: _Optional[int] = ..., mem_available_mib: _Optional[int] = ..., vm_count: _Optional[int] = ..., templates: _Optional[_Iterable[_Union[TemplateInfo, _Mapping]]] = ..., cpu_model: _Optional[str] = ..., firecracker_version: _Optional[str] = ..., host_kernel: _Optional[str] = ..., agent_version: _Optional[str] = ..., disk_free_mib: _Optional[int] = ..., managed_images: _Optional[_Iterable[_Union[ManagedImageInfo, _Mapping]]] = ..., mem_reserve_mib: _Optional[int] = ..., mem_starting_mib: _Optional[int] = ..., drain: _Optional[_Union[DrainStatus, _Mapping]] = ...) -> None: ...
+
+class DrainStatus(_message.Message):
+    __slots__ = ("state", "manual", "taints", "since", "watch_error")
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    MANUAL_FIELD_NUMBER: _ClassVar[int]
+    TAINTS_FIELD_NUMBER: _ClassVar[int]
+    SINCE_FIELD_NUMBER: _ClassVar[int]
+    WATCH_ERROR_FIELD_NUMBER: _ClassVar[int]
+    state: DrainState
+    manual: bool
+    taints: _containers.RepeatedScalarFieldContainer[str]
+    since: _timestamp_pb2.Timestamp
+    watch_error: str
+    def __init__(self, state: _Optional[_Union[DrainState, str]] = ..., manual: bool = ..., taints: _Optional[_Iterable[str]] = ..., since: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., watch_error: _Optional[str] = ...) -> None: ...
+
+class SetDrainRequest(_message.Message):
+    __slots__ = ("drain",)
+    DRAIN_FIELD_NUMBER: _ClassVar[int]
+    drain: bool
+    def __init__(self, drain: bool = ...) -> None: ...
+
+class SetDrainResponse(_message.Message):
+    __slots__ = ("drain",)
+    DRAIN_FIELD_NUMBER: _ClassVar[int]
+    drain: DrainStatus
+    def __init__(self, drain: _Optional[_Union[DrainStatus, _Mapping]] = ...) -> None: ...
 
 class TemplateInfo(_message.Message):
-    __slots__ = ("version", "vcpus", "mem_mib", "scratch_gib", "guest_kernel", "firecracker_version")
+    __slots__ = ("version", "vcpus", "mem_mib", "scratch_gib", "guest_kernel", "firecracker_version", "image_ref", "image_digest", "rootfs_sha256", "key_sha256", "ca_fingerprint", "built_at", "compatible", "managed_slots", "balloon")
     VERSION_FIELD_NUMBER: _ClassVar[int]
     VCPUS_FIELD_NUMBER: _ClassVar[int]
     MEM_MIB_FIELD_NUMBER: _ClassVar[int]
     SCRATCH_GIB_FIELD_NUMBER: _ClassVar[int]
     GUEST_KERNEL_FIELD_NUMBER: _ClassVar[int]
     FIRECRACKER_VERSION_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_REF_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_DIGEST_FIELD_NUMBER: _ClassVar[int]
+    ROOTFS_SHA256_FIELD_NUMBER: _ClassVar[int]
+    KEY_SHA256_FIELD_NUMBER: _ClassVar[int]
+    CA_FINGERPRINT_FIELD_NUMBER: _ClassVar[int]
+    BUILT_AT_FIELD_NUMBER: _ClassVar[int]
+    COMPATIBLE_FIELD_NUMBER: _ClassVar[int]
+    MANAGED_SLOTS_FIELD_NUMBER: _ClassVar[int]
+    BALLOON_FIELD_NUMBER: _ClassVar[int]
     version: str
     vcpus: int
     mem_mib: int
     scratch_gib: int
     guest_kernel: str
     firecracker_version: str
-    def __init__(self, version: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., guest_kernel: _Optional[str] = ..., firecracker_version: _Optional[str] = ...) -> None: ...
+    image_ref: str
+    image_digest: str
+    rootfs_sha256: str
+    key_sha256: str
+    ca_fingerprint: str
+    built_at: _timestamp_pb2.Timestamp
+    compatible: bool
+    managed_slots: int
+    balloon: bool
+    def __init__(self, version: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., guest_kernel: _Optional[str] = ..., firecracker_version: _Optional[str] = ..., image_ref: _Optional[str] = ..., image_digest: _Optional[str] = ..., rootfs_sha256: _Optional[str] = ..., key_sha256: _Optional[str] = ..., ca_fingerprint: _Optional[str] = ..., built_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., compatible: bool = ..., managed_slots: _Optional[int] = ..., balloon: bool = ...) -> None: ...
+
+class BuildTemplateRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class BuildTemplateResponse(_message.Message):
+    __slots__ = ("template", "built", "build_ms", "removed")
+    TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    BUILT_FIELD_NUMBER: _ClassVar[int]
+    BUILD_MS_FIELD_NUMBER: _ClassVar[int]
+    REMOVED_FIELD_NUMBER: _ClassVar[int]
+    template: TemplateInfo
+    built: bool
+    build_ms: int
+    removed: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, template: _Optional[_Union[TemplateInfo, _Mapping]] = ..., built: bool = ..., build_ms: _Optional[int] = ..., removed: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class PutManagedImageRequest(_message.Message):
+    __slots__ = ("header", "data")
+    HEADER_FIELD_NUMBER: _ClassVar[int]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    header: ManagedBundleHeader
+    data: bytes
+    def __init__(self, header: _Optional[_Union[ManagedBundleHeader, _Mapping]] = ..., data: _Optional[bytes] = ...) -> None: ...
+
+class ManagedBundleHeader(_message.Message):
+    __slots__ = ("sha256", "size_bytes")
+    SHA256_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    sha256: str
+    size_bytes: int
+    def __init__(self, sha256: _Optional[str] = ..., size_bytes: _Optional[int] = ...) -> None: ...
+
+class PutManagedImageResponse(_message.Message):
+    __slots__ = ("image", "built", "build_ms", "removed")
+    IMAGE_FIELD_NUMBER: _ClassVar[int]
+    BUILT_FIELD_NUMBER: _ClassVar[int]
+    BUILD_MS_FIELD_NUMBER: _ClassVar[int]
+    REMOVED_FIELD_NUMBER: _ClassVar[int]
+    image: ManagedImageInfo
+    built: bool
+    build_ms: int
+    removed: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, image: _Optional[_Union[ManagedImageInfo, _Mapping]] = ..., built: bool = ..., build_ms: _Optional[int] = ..., removed: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class ManagedImageInfo(_message.Message):
+    __slots__ = ("image_id", "image_sha256", "size_bytes", "fs_uuid", "files", "content_bytes", "built_at", "vms")
+    IMAGE_ID_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_SHA256_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    FS_UUID_FIELD_NUMBER: _ClassVar[int]
+    FILES_FIELD_NUMBER: _ClassVar[int]
+    CONTENT_BYTES_FIELD_NUMBER: _ClassVar[int]
+    BUILT_AT_FIELD_NUMBER: _ClassVar[int]
+    VMS_FIELD_NUMBER: _ClassVar[int]
+    image_id: str
+    image_sha256: str
+    size_bytes: int
+    fs_uuid: str
+    files: int
+    content_bytes: int
+    built_at: _timestamp_pb2.Timestamp
+    vms: int
+    def __init__(self, image_id: _Optional[str] = ..., image_sha256: _Optional[str] = ..., size_bytes: _Optional[int] = ..., fs_uuid: _Optional[str] = ..., files: _Optional[int] = ..., content_bytes: _Optional[int] = ..., built_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., vms: _Optional[int] = ...) -> None: ...
+
+class SwapManagedRequest(_message.Message):
+    __slots__ = ("image_id", "targets")
+    IMAGE_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGETS_FIELD_NUMBER: _ClassVar[int]
+    image_id: str
+    targets: _containers.RepeatedCompositeFieldContainer[SwapTarget]
+    def __init__(self, image_id: _Optional[str] = ..., targets: _Optional[_Iterable[_Union[SwapTarget, _Mapping]]] = ...) -> None: ...
+
+class SwapTarget(_message.Message):
+    __slots__ = ("sandbox_id", "attempt", "generation", "sandboxd_key")
+    SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
+    ATTEMPT_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    SANDBOXD_KEY_FIELD_NUMBER: _ClassVar[int]
+    sandbox_id: str
+    attempt: int
+    generation: int
+    sandboxd_key: str
+    def __init__(self, sandbox_id: _Optional[str] = ..., attempt: _Optional[int] = ..., generation: _Optional[int] = ..., sandboxd_key: _Optional[str] = ...) -> None: ...
+
+class SwapManagedResponse(_message.Message):
+    __slots__ = ("results",)
+    RESULTS_FIELD_NUMBER: _ClassVar[int]
+    results: _containers.RepeatedCompositeFieldContainer[SwapResult]
+    def __init__(self, results: _Optional[_Iterable[_Union[SwapResult, _Mapping]]] = ...) -> None: ...
+
+class SwapResult(_message.Message):
+    __slots__ = ("sandbox_id", "ok", "reason", "message", "active", "changed", "ms", "previous_in_use")
+    SANDBOX_ID_FIELD_NUMBER: _ClassVar[int]
+    OK_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_FIELD_NUMBER: _ClassVar[int]
+    CHANGED_FIELD_NUMBER: _ClassVar[int]
+    MS_FIELD_NUMBER: _ClassVar[int]
+    PREVIOUS_IN_USE_FIELD_NUMBER: _ClassVar[int]
+    sandbox_id: str
+    ok: bool
+    reason: ErrorReason
+    message: str
+    active: ManagedSlot
+    changed: bool
+    ms: int
+    previous_in_use: bool
+    def __init__(self, sandbox_id: _Optional[str] = ..., ok: bool = ..., reason: _Optional[_Union[ErrorReason, str]] = ..., message: _Optional[str] = ..., active: _Optional[_Union[ManagedSlot, str]] = ..., changed: bool = ..., ms: _Optional[int] = ..., previous_in_use: bool = ...) -> None: ...

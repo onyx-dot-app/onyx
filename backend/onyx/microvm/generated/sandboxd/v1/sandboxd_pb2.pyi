@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob c2ddca581dad1370507cc5341f810d6a6ad6f26e)
-# at commit 46d3937602 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob d542f324c527fa7ea17250f06af41d5223ab36a0)
+# at commit 84f60fa93c by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -28,6 +28,9 @@ class ErrorReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     INTERNAL: _ClassVar[ErrorReason]
     KEY_NOT_SET: _ClassVar[ErrorReason]
     KEY_ALREADY_SET: _ClassVar[ErrorReason]
+    MANAGED_SLOT_BUSY: _ClassVar[ErrorReason]
+    MANAGED_DEVICE_MISMATCH: _ClassVar[ErrorReason]
+    MANAGED_MOUNT_FAILED: _ClassVar[ErrorReason]
 
 class OutputStream(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -48,6 +51,12 @@ class ExecState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EXEC_STATE_UNSPECIFIED: _ClassVar[ExecState]
     RUNNING: _ClassVar[ExecState]
     ENDED: _ClassVar[ExecState]
+
+class ManagedSlot(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    MANAGED_SLOT_UNSPECIFIED: _ClassVar[ManagedSlot]
+    MANAGED_SLOT_A: _ClassVar[ManagedSlot]
+    MANAGED_SLOT_B: _ClassVar[ManagedSlot]
 ERROR_REASON_UNSPECIFIED: ErrorReason
 INVALID_ARGUMENT: ErrorReason
 NOT_INITIALIZED: ErrorReason
@@ -61,6 +70,9 @@ INIT_FAILED: ErrorReason
 INTERNAL: ErrorReason
 KEY_NOT_SET: ErrorReason
 KEY_ALREADY_SET: ErrorReason
+MANAGED_SLOT_BUSY: ErrorReason
+MANAGED_DEVICE_MISMATCH: ErrorReason
+MANAGED_MOUNT_FAILED: ErrorReason
 OUTPUT_STREAM_UNSPECIFIED: OutputStream
 STDOUT: OutputStream
 STDERR: OutputStream
@@ -72,6 +84,9 @@ DEADLINE_EXCEEDED: Completion
 EXEC_STATE_UNSPECIFIED: ExecState
 RUNNING: ExecState
 ENDED: ExecState
+MANAGED_SLOT_UNSPECIFIED: ManagedSlot
+MANAGED_SLOT_A: ManagedSlot
+MANAGED_SLOT_B: ManagedSlot
 
 class HealthRequest(_message.Message):
     __slots__ = ()
@@ -432,3 +447,59 @@ class BrowserStopRequest(_message.Message):
 class BrowserStopResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class ManagedStatusRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ManagedSlotState(_message.Message):
+    __slots__ = ("slot", "device", "present", "size_bytes", "fs_uuid", "mounted", "in_use")
+    SLOT_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_FIELD_NUMBER: _ClassVar[int]
+    PRESENT_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    FS_UUID_FIELD_NUMBER: _ClassVar[int]
+    MOUNTED_FIELD_NUMBER: _ClassVar[int]
+    IN_USE_FIELD_NUMBER: _ClassVar[int]
+    slot: ManagedSlot
+    device: str
+    present: bool
+    size_bytes: int
+    fs_uuid: str
+    mounted: bool
+    in_use: bool
+    def __init__(self, slot: _Optional[_Union[ManagedSlot, str]] = ..., device: _Optional[str] = ..., present: bool = ..., size_bytes: _Optional[int] = ..., fs_uuid: _Optional[str] = ..., mounted: bool = ..., in_use: bool = ...) -> None: ...
+
+class ManagedStatusResponse(_message.Message):
+    __slots__ = ("mount_point", "active", "slots")
+    MOUNT_POINT_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_FIELD_NUMBER: _ClassVar[int]
+    SLOTS_FIELD_NUMBER: _ClassVar[int]
+    mount_point: str
+    active: ManagedSlot
+    slots: _containers.RepeatedCompositeFieldContainer[ManagedSlotState]
+    def __init__(self, mount_point: _Optional[str] = ..., active: _Optional[_Union[ManagedSlot, str]] = ..., slots: _Optional[_Iterable[_Union[ManagedSlotState, _Mapping]]] = ...) -> None: ...
+
+class MountManagedRequest(_message.Message):
+    __slots__ = ("slot", "size_bytes", "fs_uuid")
+    SLOT_FIELD_NUMBER: _ClassVar[int]
+    SIZE_BYTES_FIELD_NUMBER: _ClassVar[int]
+    FS_UUID_FIELD_NUMBER: _ClassVar[int]
+    slot: ManagedSlot
+    size_bytes: int
+    fs_uuid: str
+    def __init__(self, slot: _Optional[_Union[ManagedSlot, str]] = ..., size_bytes: _Optional[int] = ..., fs_uuid: _Optional[str] = ...) -> None: ...
+
+class MountManagedResponse(_message.Message):
+    __slots__ = ("active", "changed", "previous", "previous_in_use", "wait_ms")
+    ACTIVE_FIELD_NUMBER: _ClassVar[int]
+    CHANGED_FIELD_NUMBER: _ClassVar[int]
+    PREVIOUS_FIELD_NUMBER: _ClassVar[int]
+    PREVIOUS_IN_USE_FIELD_NUMBER: _ClassVar[int]
+    WAIT_MS_FIELD_NUMBER: _ClassVar[int]
+    active: ManagedSlot
+    changed: bool
+    previous: ManagedSlot
+    previous_in_use: bool
+    wait_ms: int
+    def __init__(self, active: _Optional[_Union[ManagedSlot, str]] = ..., changed: bool = ..., previous: _Optional[_Union[ManagedSlot, str]] = ..., previous_in_use: bool = ..., wait_ms: _Optional[int] = ...) -> None: ...

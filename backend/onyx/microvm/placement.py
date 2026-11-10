@@ -96,6 +96,7 @@ _NEXT_NODE_REASONS: frozenset[HostAgentErrorReason] = frozenset(
         HostAgentErrorReason.CAPACITY_DISK,
         HostAgentErrorReason.CAPACITY_VM_SLOTS,
         HostAgentErrorReason.VMM_FAILED,
+        HostAgentErrorReason.NODE_DRAINING,
         # The VM stopped or exited during Create.
         HostAgentErrorReason.VM_NOT_RUNNING,
     }
