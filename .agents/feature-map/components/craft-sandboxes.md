@@ -391,6 +391,10 @@ the stored token on each request, so a new token takes effect at once.
 
 ## Verification
 
+- Integrated harness image: `deployment/craft-runtime/check-kvm.sh` converts
+  the image and runs the daemon, init, restore, and tool smoke tests on x86
+  KVM with the pinned guest kernel. Container smoke and rootfs conversion
+  alone do not establish VM tool coverage.
 - Unit: `backend/tests/unit/onyx/server/features/craft/sandbox/`.
 - Lifecycle, sweep and snapshots with real Postgres and Redis:
   `backend/tests/external_dependency_unit/craft/`.

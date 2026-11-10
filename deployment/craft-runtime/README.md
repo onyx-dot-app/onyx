@@ -101,6 +101,50 @@ It checks the ext4 hash, embedded programs, preserved environment, ports, and ma
 It removes the test registry, CA key, rootfs output, and temporary image tag when it exits.
 This validates conversion without KVM; it does not test VM boot, mTLS routing, or snapshot restore.
 
+## Verify the image inside Firecracker
+
+The image workflows use an Intel m8i nested-KVM runner with an 80 GB root disk.
+They build the pinned kernel and Firecracker from `Dockerfile.artifacts`, then run
+`check-kvm.sh`. Both container smoke and real VM smoke must pass before publishing.
+The rootfs converter needs space for Docker layers, the exported tree, and the ext4 disk.
+
+For a complete local check on a prepared Linux x86-64 KVM host:
+
+```bash
+sudo env "PATH=$PATH" bash deployment/craft-runtime/check-kvm.sh \
+  onyxdotapp/craft-runtime:dev /path/to/craft-fc-artifacts/craft-fc
+```
+
+The script converts the image, creates scratch/managed disks, and runs daemon,
+init, restore, and image-tool checks. It cleans up its own VM files afterward.
+
+
+Container smoke checks and rootfs conversion do not prove the tools work inside a VM.
+Use an x86-64 Linux KVM host for the published image and its 6.18 guest kernel.
+Prepare `KVM_IMG_DIR` with `vmlinux`, the converted `rootfs.ext4`, a 1 GiB ext4
+`scratch-empty.ext4`, and an empty ext4 `managed-empty.ext4`.
+The kernel and Firecracker binary come from `craft-fc-artifacts`.
+
+Keep the image and work directories on the same filesystem; the fixtures hard-link disks.
+Use a dedicated work directory, since tests replace their per-VM subdirectories.
+Compile the suite from the repository root:
+
+```bash
+mkdir -p out
+(cd microvm && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go test -c -tags kvm -o ../out/craft-runtime-kvm.test ./internal/guestd/kvmtest)
+sudo env KVM_RUNTIME_IMAGE=1 \
+  KVM_FC_BIN=/path/to/firecracker KVM_IMG_DIR=/path/to/kvm-images \
+  KVM_WORK_DIR=/var/tmp/craft-runtime-kvm \
+  out/craft-runtime-kvm.test -test.v -test.run '^TestRuntimeImageKVM$'
+```
+
+`KVM_RUNTIME_IMAGE=1` selects the new image check. Without it, the generic daemon
+suite leaves this check disabled so legacy sandbox rootfs fixtures remain usable.
+With it enabled, a missing or failing runtime smoke command fails the test.
+Interrupted commands retain partial output for diagnosis.
+ARM64 Lima runs use a test-only image variant; they do not validate the published x86-64 artifact.
+
 ## Skills and user state
 
 Skills and other managed content arrive through the read-only drive at `/workspace/managed`.

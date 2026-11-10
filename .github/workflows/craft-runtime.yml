@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "deployment/craft-runtime/**"
-      - "deployment/craft-fc/rootfs/**"
+      - "deployment/craft-fc/**"
       - "microvm/**"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
       - ".github/scripts/audit-sandbox-browser.sh"
@@ -15,7 +15,7 @@ on:
     branches: [main]
     paths:
       - "deployment/craft-runtime/**"
-      - "deployment/craft-fc/rootfs/**"
+      - "deployment/craft-fc/**"
       - "microvm/**"
       - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
       - ".github/scripts/audit-sandbox-browser.sh"
@@ -36,9 +36,14 @@ jobs:
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
+      - family=m8i.2xlarge
+      - ram=32
+      - nested-virt=true
+      - spot=false
+      - volume=80gb
       - run-id=${{ github.run_id }}-craft-runtime
       - extras=ecr-cache
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -72,12 +77,27 @@ jobs:
         with:
           go-version-file: microvm/go.mod
           cache: false
+      - name: Check interrupted command diagnostics
+        working-directory: microvm
+        run: go test -tags kvm -run '^TestCollectKeepsPartialOutput$' ./internal/guestd/kvmtest
       - name: Install rootfs build tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends e2fsprogs file openssl python3
-      - name: Check rootfs integration
+      - name: Build pinned Firecracker test artifacts
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: deployment/craft-fc
+          file: deployment/craft-fc/Dockerfile.artifacts
+          target: artifacts
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          outputs: type=local,dest=${{ runner.temp }}/craft-runtime-artifacts
+      - name: Check runtime in Firecracker KVM
         run: |
+          sudo modprobe kvm_intel
           sudo env "PATH=$PATH" "BASE_IMAGE_REGISTRY=${BASE_IMAGE_REGISTRY}" \
             "DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}" \
-            bash deployment/craft-runtime/check-rootfs.sh onyxdotapp/craft-runtime:ci
+            bash deployment/craft-runtime/check-kvm.sh onyxdotapp/craft-runtime:ci \
+              "${RUNNER_TEMP}/craft-runtime-artifacts/craft-fc"

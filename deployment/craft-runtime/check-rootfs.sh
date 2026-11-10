@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 1 ] || [ "$(uname -s)" != Linux ] || [ "$(id -u)" -ne 0 ]; then
-  echo "Usage: sudo bash deployment/craft-runtime/check-rootfs.sh IMAGE (Linux, root)" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || [ "$(uname -s)" != Linux ] || [ "$(id -u)" -ne 0 ]; then
+  echo "Usage: sudo bash deployment/craft-runtime/check-rootfs.sh IMAGE [OUTPUT_DIR] (Linux, root)" >&2
   exit 2
 fi
 for tool in docker go openssl python3 mkfs.ext4 e2fsck debugfs sha256sum file tar; do
@@ -16,9 +16,18 @@ checked_id="$(docker image inspect --format '{{.Id}}' "$image")"
 work="$(mktemp -d)"
 registry="" local_ref=""
 cleanup() {
+  result=$?
+  if [ "$result" -ne 0 ]; then
+    df -h "$work" >&2 || true
+    df -i "$work" >&2 || true
+    if [ -f "$work/rootfs/rootfs.ext4" ]; then
+      debugfs -R stats "$work/rootfs/rootfs.ext4" >&2 || true
+    fi
+  fi
   if [ -n "$local_ref" ]; then docker image rm "$local_ref" >/dev/null 2>&1 || true; fi
   if [ -n "$registry" ]; then docker rm -fv "$registry" >/dev/null 2>&1 || true; fi
   rm -rf "$work"
+  exit "$result"
 }
 trap cleanup EXIT
 
@@ -126,3 +135,9 @@ assert guest["drives"] == [
 assert guest["managed_slots"] == {"a": "/dev/vdc", "b": "/dev/vdf"}
 print("Rootfs integration check passed:", source["pinned"], digest.hexdigest())
 PY
+
+if [ "$#" -eq 2 ]; then
+  mkdir -p "$2"
+  cp --sparse=always "$work/rootfs/rootfs.ext4" "$work/rootfs/manifest.json" "$2/"
+  cp "$work/egress-relay" "$2/egress-relay"
+fi

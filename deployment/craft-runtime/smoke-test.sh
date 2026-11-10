@@ -82,7 +82,7 @@ const sharp = require('sharp');
 })().catch(error => { console.error(error); process.exit(1); });
 JS
 
-timeout 90 soffice "-env:UserInstallation=file://$work_dir/lo-profile" \
+timeout --kill-after=10s 90 soffice "-env:UserInstallation=file://$work_dir/lo-profile" \
     --headless --convert-to pdf --outdir "$work_dir" \
     "$work_dir/document.docx" "$work_dir/sheet.xlsx" "$work_dir/node-slides.pptx"
 for name in document sheet node-slides; do
@@ -97,7 +97,7 @@ trap 'rm -rf "$work_dir"; rm -f "$guest_html"' EXIT
 printf '<html><body>craft-browser-ready</body></html>' > "$guest_html"
 chmod 0644 "$guest_html"
 # shellcheck disable=SC2016
-timeout 60 runuser -u sandbox -- xvfb-run -a bash -c '
+timeout --kill-after=10s 60 runuser -u sandbox -- xvfb-run -a bash -c '
     set -euo pipefail
     export AGENT_BROWSER_HEADED=true AGENT_BROWSER_ALLOW_FILE_ACCESS=true
     trap "agent-browser --session craft-runtime-smoke close" EXIT
