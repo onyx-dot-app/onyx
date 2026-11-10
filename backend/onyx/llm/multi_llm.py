@@ -74,6 +74,7 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_request import (
     ChatCompletionMessage,
     RequestFunctionCall,
+    merge_leading_system_messages,
     serialize_request,
     serialize_tools,
 )
@@ -99,6 +100,7 @@ from onyx.llm.models import (
     resolve_reasoning_effort,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.prompt_cache.providers.factory import get_provider_adapter
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
@@ -1836,6 +1838,10 @@ class LitellmLLM(LLM):
     ) -> list[ChatCompletionMessage]:
         config = self.config
         messages, cacheable_prefix = serialize_request(request, config)
+        if not get_provider_adapter(config).caches_leading_system_messages_separately():
+            messages, cacheable_prefix = merge_leading_system_messages(
+                messages, cacheable_prefix
+            )
         if cacheable_prefix:
             messages, _ = process_with_prompt_cache(
                 llm_config=config,

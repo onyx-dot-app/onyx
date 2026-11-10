@@ -46,6 +46,11 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
         """Anthropic supports explicit prompt caching."""
         return True
 
+    def caches_leading_system_messages_separately(self) -> bool:
+        """The head breakpoint ends after the first system message, so the
+        shared system prompt caches across users."""
+        return True
+
     def prepare_messages_for_caching(
         self,
         cacheable_prefix: list[ChatCompletionMessage] | None,
