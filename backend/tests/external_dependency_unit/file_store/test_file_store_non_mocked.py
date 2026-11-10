@@ -1049,9 +1049,8 @@ class TestS3BackedFileStore:
     def test_get_file_size_nonexistent_file(
         self, file_store: S3BackedFileStore
     ) -> None:
-        """Test getting file size for a non-existent file returns None"""
+        """Confirmed absence is distinct from an unavailable size lookup."""
         nonexistent_file_id = f"{uuid.uuid4()}.txt"
 
-        file_size = file_store.get_file_size(nonexistent_file_id)
-
-        assert file_size is None
+        with pytest.raises(FileNotFoundError):
+            file_store.get_file_size(nonexistent_file_id)

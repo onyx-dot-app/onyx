@@ -4,10 +4,9 @@ Stores file content directly in PostgreSQL via the Large Object facility,
 eliminating the need for an external S3/MinIO service.
 """
 
-import tempfile
 import uuid
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from io import BytesIO
 from typing import IO, Any, cast
 
@@ -40,14 +39,13 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
-from onyx.file_store.file_store import FileStore
+from onyx.file_store.file_store import FileStore, read_file_to_buffer
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 POSTGRES_BUCKET_SENTINEL = "postgres"
-STREAM_CHUNK_SIZE = 8 * 1024 * 1024  # 8 MB
 
 
 def _get_raw_connection(db_session: Session) -> Psycopg2Connection:
@@ -73,20 +71,6 @@ def _read_large_object(raw_conn: Psycopg2Connection, oid: int) -> bytes:
     data: bytes = lobj.read()
     lobj.close()
     return data
-
-
-def _read_large_object_to_tempfile(raw_conn: Psycopg2Connection, oid: int) -> IO[bytes]:
-    """Stream a Large Object into a temporary file to avoid OOM on large files."""
-    lobj = raw_conn.lobject(oid, "rb")
-    temp = tempfile.NamedTemporaryFile(mode="w+b", delete=True)
-    while True:
-        chunk = lobj.read(STREAM_CHUNK_SIZE)
-        if not chunk:
-            break
-        temp.write(chunk)
-    lobj.close()
-    temp.seek(0)
-    return temp
 
 
 def _delete_large_object(raw_conn: Any, oid: int) -> None:
@@ -219,6 +203,8 @@ class PostgresBackedFileStore(FileStore):
         mode: str | None = None,  # noqa: ARG002
         use_tempfile: bool = False,
         db_session: Session | None = None,
+        *,
+        max_bytes: int | None = None,
     ) -> IO[bytes]:
         with get_session_with_current_tenant_if_none(db_session) as session:
             file_content = get_file_content_by_file_id(
@@ -227,10 +213,13 @@ class PostgresBackedFileStore(FileStore):
             raw_conn = _get_raw_connection(session)
 
             with _large_object_access(session, file_content.lobj_oid, file_id):
-                if use_tempfile:
-                    return _read_large_object_to_tempfile(
-                        raw_conn, file_content.lobj_oid
-                    )
+                if use_tempfile or max_bytes is not None:
+                    with closing(
+                        raw_conn.lobject(file_content.lobj_oid, "rb")
+                    ) as source:
+                        return read_file_to_buffer(
+                            source.read, use_tempfile=use_tempfile, max_bytes=max_bytes
+                        )
 
                 data = _read_large_object(raw_conn, file_content.lobj_oid)
                 return BytesIO(data)

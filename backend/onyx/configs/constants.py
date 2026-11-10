@@ -690,6 +690,7 @@ CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT = 600
 
 
 class OnyxCeleryTask:
+    REPAIR_SKILL_VERSIONS = "repair_skill_versions"
     DEFAULT = "celery"
 
     CLOUD_BEAT_TASK_GENERATOR = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_generate_beat_tasks"

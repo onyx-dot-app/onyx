@@ -3,8 +3,11 @@ from datetime import datetime, timedelta
 from time import monotonic
 from uuid import UUID
 
+from azure.core.exceptions import ResourceNotFoundError
+from botocore.exceptions import ClientError
+from google.api_core.exceptions import NotFound
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, Select, exists, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -14,14 +17,30 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import FileRecord, Skill, SkillVersion
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.models import BundleMetadata
+from onyx.file_store.file_store import (
+    FileSizeLimitExceeded,
+    FileStore,
+    is_missing_object,
+    s3_error_code,
+)
+from onyx.file_store.models import BundleLimits, BundleMetadata
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.skills.ingest import IngestedBundle, SkillMdRecord
+from onyx.skills.bundle import STORED_BUNDLE_LIMITS
+from onyx.skills.ingest import (
+    IngestedBundle,
+    SkillMdRecord,
+    bundle_skill_md_record,
+)
+from onyx.utils.bundle import compute_bundle_metadata
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # Uploads save the bundle before the row that uses it commits.
 ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
@@ -29,6 +48,8 @@ ORPHAN_BUNDLE_MIN_AGE = timedelta(hours=1)
 _ORPHAN_BATCH_SIZE = 500
 _ORPHAN_TIME_BUDGET_SECONDS = 30
 _ORPHAN_PROGRESS_KEY = "orphan_skill_bundle_cursor"
+# Per skill: the version number below which the next metadata repair pass resumes.
+_REPAIR_RESUME_KEY_PREFIX = "skill_version_repair_resume:"
 
 
 class _OrphanCursor(BaseModel):
@@ -75,6 +96,7 @@ def _publish_skill_version(skill: Skill, version: SkillVersion) -> None:
 
 # The current version and the newest older versions keep their bundle files.
 BUNDLES_KEPT = 10
+VERSION_FILES_NOT_KEPT = "The files of this version are no longer kept."
 
 
 def fill_version_metadata(version: SkillVersion, metadata: BundleMetadata) -> None:
@@ -91,6 +113,96 @@ def fill_version_skill_md(version: SkillVersion, record: SkillMdRecord) -> None:
         version.metadata_unrepairable = True
 
 
+def read_version_bundle(
+    version: SkillVersion, file_store: FileStore, *, max_bytes: int
+) -> bytes:
+    """Raises NOT_FOUND when pruning removed the bundle, also during a race."""
+    if version.bundle_file_id is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT)
+    try:
+        with file_store.read_file(
+            version.bundle_file_id, max_bytes=max_bytes
+        ) as source:
+            return source.read()
+    except (
+        FileRecordNotFoundError,
+        FileNotFoundError,
+    ) as exc:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
+    except (ResourceNotFoundError, NotFound, ClientError) as exc:
+        if isinstance(exc, ClientError):
+            if not is_missing_object(exc):
+                raise
+            if s3_error_code(exc) in ("NoSuchKey", "NoSuchObject"):
+                raise OnyxError(
+                    OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT
+                ) from exc
+        # A provider 404 can name the bucket/container, not the object.
+        try:
+            file_store.get_file_size(version.bundle_file_id)
+        except FileNotFoundError:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, VERSION_FILES_NOT_KEPT) from exc
+        raise
+
+
+def repair_version_metadata(
+    version: SkillVersion,
+    file_store: FileStore,
+    *,
+    limits: BundleLimits,
+    verify_bundle: bool = False,
+    clear_missing_bundle: bool = False,
+) -> bool:
+    if version.bundle_file_id is None:
+        return False
+    # A version marked unrepairable after its sizes were filled kept what
+    # PostgreSQL could store of its SKILL.md.
+    metadata_complete = (
+        version.unpacked_size_bytes is not None
+        and version.file_count is not None
+        and (version.frontmatter is not None or version.metadata_unrepairable)
+    )
+    try:
+        if metadata_complete and not verify_bundle:
+            if clear_missing_bundle:
+                return file_store.get_file_size(version.bundle_file_id) is not None
+            return True
+        bundle_bytes = read_version_bundle(
+            version, file_store, max_bytes=limits.max_stored_bytes
+        )
+    except FileSizeLimitExceeded:
+        # Limits are configurable, so a later pass retries after an increase.
+        logger.warning("Version bundle exceeds stored byte limit: %s", version.id)
+        return False
+    except (FileNotFoundError, OnyxError) as exc:
+        if isinstance(exc, OnyxError) and exc.error_code != OnyxErrorCode.NOT_FOUND:
+            raise
+        logger.warning("Version bundle is missing: %s", version.id)
+        if clear_missing_bundle:
+            version.bundle_file_id = None
+        return False
+    try:
+        metadata = compute_bundle_metadata(bundle_bytes, limits=limits)
+    except FileSizeLimitExceeded:
+        logger.warning("Version bundle exceeds expanded limits: %s", version.id)
+        return False
+    except Exception:
+        logger.warning("Version bundle cannot be decoded: %s", version.id)
+        version.metadata_unrepairable = True
+        return False
+    fill_version_metadata(version, metadata)
+    try:
+        # The expanded limits above already bound SKILL.md.
+        record = bundle_skill_md_record(bundle_bytes)
+    except Exception:
+        logger.warning("Version bundle has no root SKILL.md: %s", version.id)
+        version.metadata_unrepairable = True
+        return False
+    version.metadata_unrepairable = False
+    fill_version_skill_md(version, record)
+    return record.complete
+
+
 def prune_skill_bundles(skill: Skill, db_session: Session) -> list[str]:
     """Empty the bundle file ids of versions older than the newest kept ones.
     Call under the skill lock; delete the returned files only after commit."""
@@ -104,6 +216,15 @@ def prune_skill_bundles(skill: Skill, db_session: Session) -> list[str]:
         SkillVersion.version_number < cutoff.version_number,
         SkillVersion.bundle_file_id.is_not(None),
         SkillVersion.id != current.id,
+        # Keep the only recovery source until metadata is complete or cannot be.
+        or_(
+            SkillVersion.metadata_unrepairable,
+            and_(
+                SkillVersion.unpacked_size_bytes.is_not(None),
+                SkillVersion.file_count.is_not(None),
+                SkillVersion.frontmatter.is_not(None),
+            ),
+        ),
     )
     pruned: list[str] = []
     for version in db_session.scalars(candidates):
@@ -310,3 +431,91 @@ def delete_orphan_skill_bundles() -> int:
     finally:
         if lock.owned():
             lock.release()
+
+
+def skill_version_repair_batch(
+    db_session: Session, after: UUID | None, *, drift_only: bool = False
+) -> list[Skill]:
+    statement = select(Skill).where(Skill.built_in_skill_id.is_(None))
+    if drift_only:
+        statement = statement.outerjoin(
+            SkillVersion, SkillVersion.id == Skill.current_version_id
+        ).where(
+            or_(
+                SkillVersion.id.is_(None),
+                SkillVersion.bundle_file_id.is_distinct_from(Skill.bundle_file_id),
+                SkillVersion.bundle_sha256.is_distinct_from(Skill.bundle_sha256),
+                SkillVersion.is_valid.is_distinct_from(Skill.is_valid),
+                exists()
+                .where(
+                    SkillVersion.skill_id == Skill.id,
+                    SkillVersion.bundle_file_id.is_not(None),
+                    SkillVersion.metadata_unrepairable.is_(False),
+                    or_(
+                        SkillVersion.unpacked_size_bytes.is_(None),
+                        SkillVersion.file_count.is_(None),
+                        SkillVersion.frontmatter.is_(None),
+                    ),
+                )
+                .correlate(Skill),
+            )
+        )
+    if after is not None:
+        statement = statement.where(Skill.id > after)
+    return list(db_session.scalars(statement.order_by(Skill.id).limit(50)))
+
+
+def repair_skill_version_metadata(
+    skill: Skill,
+    db_session: Session,
+    file_store: FileStore,
+    *,
+    deadline: float | None = None,
+) -> list[str]:
+    """Stops between historical versions at the deadline and saves where it
+    stopped. The next pass on this skill starts with the older versions and
+    then wraps around, so a slow or failing version cannot block the others.
+    Versions left without metadata stay in the drift query, so a later pass
+    repairs them."""
+    current = repair_skill_version(skill, db_session)
+    repair_version_metadata(current, file_store, limits=STORED_BUNDLE_LIMITS)
+    kv_store = get_kv_store()
+    resume_key = _REPAIR_RESUME_KEY_PREFIX + str(skill.id)
+    try:
+        resume_below: int | None = int(
+            str(kv_store.load(resume_key, refresh_cache=True))
+        )
+    except (KvKeyNotFoundError, ValueError):
+        resume_below = None
+    history = list(
+        db_session.scalars(skill_versions(skill).where(SkillVersion.id != current.id))
+    )
+    if resume_below is not None:
+        history = [v for v in history if v.version_number < resume_below] + [
+            v for v in history if v.version_number >= resume_below
+        ]
+    stopped_at: int | None = None
+    for version in history:
+        try:
+            with db_session.begin_nested():
+                repair_version_metadata(
+                    version,
+                    file_store,
+                    limits=STORED_BUNDLE_LIMITS,
+                    clear_missing_bundle=True,
+                )
+        except Exception:
+            logger.exception(
+                "Historical skill metadata repair failed for %s", version.id
+            )
+        if deadline is not None and monotonic() >= deadline:
+            stopped_at = version.version_number
+            break
+    if stopped_at is not None:
+        kv_store.store(resume_key, stopped_at)
+    elif resume_below is not None:
+        try:
+            kv_store.delete(resume_key)
+        except KvKeyNotFoundError:
+            pass
+    return prune_skill_bundles(skill, db_session)
