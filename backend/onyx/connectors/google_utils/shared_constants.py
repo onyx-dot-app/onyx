@@ -1,6 +1,7 @@
 from enum import Enum as PyEnum
 from typing import Any
 
+from onyx.configs.app_configs import GOOGLE_API_ENDPOINT_OVERRIDE
 from onyx.configs.constants import DocumentSource
 
 # NOTE: do not need https://www.googleapis.com/auth/documents.readonly
@@ -28,6 +29,17 @@ GOOGLE_FAMILY_SCOPES = sorted(
 
 GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
+# Where connector credentials are refreshed. It differs from GOOGLE_TOKEN_URI only
+# when GOOGLE_API_ENDPOINT_OVERRIDE points the connectors at a mock server.
+GOOGLE_API_TOKEN_URI = (
+    f"{GOOGLE_API_ENDPOINT_OVERRIDE}token"
+    if GOOGLE_API_ENDPOINT_OVERRIDE
+    else GOOGLE_TOKEN_URI
+)
+# Root URL of the Docs API, which the Drive connector calls without a client.
+GOOGLE_DOCS_API_ROOT_URL = (
+    GOOGLE_API_ENDPOINT_OVERRIDE or "https://docs.googleapis.com/"
+)
 
 # This is the Oauth token
 DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"

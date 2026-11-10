@@ -1,11 +1,15 @@
+import json
 from enum import Enum
+from functools import cache
 from typing import Literal, overload
 
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.discovery import Resource, build
+from googleapiclient.discovery import Resource, build, build_from_document
+from googleapiclient.discovery_cache import get_static_doc
 
+from onyx.configs.app_configs import GOOGLE_API_ENDPOINT_OVERRIDE
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -71,10 +75,37 @@ def get_google_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
-    creds = get_impersonated_creds(creds, user_email)
+    return build_google_service(service, get_impersonated_creds(creds, user_email))
+
+
+def build_google_service(
+    service: GoogleService, creds: ServiceAccountCredentials | OAuthCredentials
+) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
+    """A client that uses `creds` as given: impersonate before calling this."""
     service_name, service_version = service.value
-    resource: Resource = build(service_name, service_version, credentials=creds)
-    return resource  # ty: ignore[invalid-return-type]
+    resource: Resource
+    if GOOGLE_API_ENDPOINT_OVERRIDE is None:
+        resource = build(service_name, service_version, credentials=creds)
+    else:
+        resource = build_from_document(
+            _overridden_discovery_doc(service_name, service_version),
+            credentials=creds,
+        )
+    return resource
+
+
+@cache
+def _overridden_discovery_doc(service_name: str, service_version: str) -> str:
+    """The bundled discovery document with its root URL set to
+    GOOGLE_API_ENDPOINT_OVERRIDE. Batch requests read the root URL from the
+    document, so `client_options.api_endpoint` would not redirect them."""
+    raw = get_static_doc(service_name, service_version)
+    if raw is None:
+        raise ValueError(f"No bundled discovery document for {service_name}")
+    doc = json.loads(raw)
+    doc["rootUrl"] = GOOGLE_API_ENDPOINT_OVERRIDE
+    doc["mtlsRootUrl"] = GOOGLE_API_ENDPOINT_OVERRIDE
+    return json.dumps(doc)
 
 
 def get_impersonated_creds(

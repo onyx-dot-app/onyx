@@ -1355,6 +1355,30 @@ GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
     os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
 )
 
+
+def _load_google_api_endpoint_override() -> str | None:
+    raw = os.environ.get("GOOGLE_API_ENDPOINT_OVERRIDE", "").strip()
+    if not raw:
+        return None
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        logger.error(
+            "Ignoring GOOGLE_API_ENDPOINT_OVERRIDE=%r: it is not an http(s) URL.", raw
+        )
+        return None
+    logger.warning(
+        "GOOGLE_API_ENDPOINT_OVERRIDE is set: Google API calls go to %s. "
+        "Use it only for testing.",
+        raw,
+    )
+    return raw if raw.endswith("/") else f"{raw}/"
+
+
+# Testing only. Sends the Google connectors' token, Drive, Admin SDK and Docs API
+# calls to this base URL instead of Google, e.g. to the mock Drive server in
+# backend/tests/integration/mock_services/mock_google_drive_server.
+GOOGLE_API_ENDPOINT_OVERRIDE = _load_google_api_endpoint_override()
+
 # Cap the total text retained per file across a connector's extracted sections,
 # bounding worker memory when a source can't be size-checked before fetch —
 # e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and

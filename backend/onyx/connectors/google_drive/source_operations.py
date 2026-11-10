@@ -23,6 +23,7 @@ from typing import Any, ParamSpec, TypeVar, cast
 import httplib2
 import requests
 from google.auth.exceptions import RefreshError, TransportError
+from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
@@ -54,11 +55,12 @@ from onyx.connectors.google_utils.google_utils import (
 )
 from onyx.connectors.google_utils.resources import (
     GoogleService,
-    get_google_authorized_session,
-    get_google_service,
+    build_google_service,
+    get_impersonated_creds,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+    GOOGLE_DOCS_API_ROOT_URL,
     USER_FIELDS,
     GoogleCredentialKind,
 )
@@ -82,14 +84,18 @@ _DOWNLOAD_NUM_RETRIES = 3
 # Extra bytes a download chunk reads past the size threshold, so an oversized
 # file is detected without reading all of it.
 _CHUNK_SIZE_BUFFER = 64
-_DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
+_DOCS_API_DOCUMENT_URL = GOOGLE_DOCS_API_ROOT_URL + "v1/documents/{doc_id}"
 _DOCS_FETCH_TIMEOUT_SECONDS = 60
 _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
-# The Docs API's per-user read quota resets each minute; these waits add up to
-# about half a minute.
-_DOCS_FETCH_TRIES = 5
+# Google's per-minute quotas refill within a minute. These waits add up to more
+# than a minute, so a rate-limited call outlasts the window instead of failing
+# its document.
+_DOCS_FETCH_TRIES = 7
 _DOCS_FETCH_RETRY_DELAY_SECONDS = 2
-_DOCS_FETCH_RETRY_MAX_DELAY_SECONDS = 16
+_DOCS_FETCH_RETRY_MAX_DELAY_SECONDS = 32
+_RATE_LIMITED_DOWNLOAD_TRIES = 8
+_RATE_LIMITED_DOWNLOAD_DELAY_SECONDS = 1
+_RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS = 32
 _RATE_LIMIT_REASONS = frozenset({"userRateLimitExceeded", "rateLimitExceeded"})
 
 # What a requested target probe needs to decide who should crawl it.
@@ -280,6 +286,19 @@ def is_transient_google_error(error: BaseException) -> bool:
     return isinstance(error, _TRANSIENT_REQUEST_ERRORS)
 
 
+def _is_rate_limited_http_error(error: BaseException) -> bool:
+    return isinstance(error, HttpError) and _from_http_error(error).rate_limited
+
+
+# The media download retries a rate limit itself for only a few seconds.
+_retry_rate_limited_download = retry_builder(
+    tries=_RATE_LIMITED_DOWNLOAD_TRIES,
+    delay=_RATE_LIMITED_DOWNLOAD_DELAY_SECONDS,
+    max_delay=_RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS,
+    exceptions=HttpError,
+    retry_if=_is_rate_limited_http_error,
+)
+
 _retry_transient_docs_fetch = retry_builder(
     tries=_DOCS_FETCH_TRIES,
     delay=_DOCS_FETCH_RETRY_DELAY_SECONDS,
@@ -416,24 +435,57 @@ class GoogleDriveSourceOperations(SourceOperations):
             raise RuntimeError("Bug: the credential load set no credentials.")
         return self._cached_creds
 
-    def _drive(self, user_email: str) -> Any:
-        """One Drive client per thread and user. A build is not free, and a
-        client is not thread-safe."""
-        local: threading.local = vars(self).setdefault(
-            "_drive_clients", threading.local()
-        )
-        clients: dict[str, Any] = vars(local).setdefault("by_user", {})
-        if user_email not in clients:
-            clients[user_email] = get_google_service(
-                GoogleService.DRIVE, self._creds(), user_email
+    def _impersonated(
+        self, user_email: str
+    ) -> ServiceAccountCredentials | OAuthCredentials:
+        """One credential per user, shared by every thread's clients, so each
+        user's token is fetched once and refreshed when it expires."""
+        by_email: dict[str, ServiceAccountCredentials | OAuthCredentials] = vars(
+            self
+        ).setdefault("_impersonated_by_email", {})
+        creds = by_email.get(user_email)
+        if creds is None:
+            creds = by_email.setdefault(
+                user_email, get_impersonated_creds(self._creds(), user_email)
             )
-        return clients[user_email]
+        return creds
+
+    def _thread_clients(self) -> dict[tuple[str, str], Any]:
+        """This thread's clients, by kind and user. A client is not
+        thread-safe, and a build is not free."""
+        local: threading.local = vars(self).setdefault(
+            "_thread_local_clients", threading.local()
+        )
+        return vars(local).setdefault("by_key", {})
+
+    def _drive(self, user_email: str) -> Any:
+        clients = self._thread_clients()
+        key = ("drive", user_email)
+        if key not in clients:
+            clients[key] = build_google_service(
+                GoogleService.DRIVE, self._impersonated(user_email)
+            )
+        return clients[key]
 
     def _directory(self) -> Any:
         """The Admin SDK directory service, acting as the primary admin."""
-        return get_google_service(
-            GoogleService.ADMIN, self._creds(), self._auth().primary_admin_email
-        )
+        clients = self._thread_clients()
+        admin = self._auth().primary_admin_email
+        key = ("directory", admin)
+        if key not in clients:
+            clients[key] = build_google_service(
+                GoogleService.ADMIN, self._impersonated(admin)
+            )
+        return clients[key]
+
+    def _docs_session(self, user_email: str) -> AuthorizedSession:
+        """This thread's Docs API session for the user. Reusing it keeps the
+        connection open between documents."""
+        clients = self._thread_clients()
+        key = ("docs", user_email)
+        if key not in clients:
+            clients[key] = AuthorizedSession(self._impersonated(user_email))
+        return clients[key]
 
     def _domain(self) -> str:
         return self._auth().primary_admin_email.split("@")[-1]
@@ -797,7 +849,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         ``ExportSizeThresholdExceeded`` past ``size_threshold`` bytes."""
         request = self._drive(user_email).files().get_media(fileId=file_id)
         _add_resource_key_header(request, file_id, resource_key)
-        return _download(request, file_id, size_threshold)
+        return _retry_rate_limited_download(_download)(request, file_id, size_threshold)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -821,7 +873,7 @@ class GoogleDriveSourceOperations(SourceOperations):
             .export_media(fileId=file_id, mimeType=mime_type)
         )
         _add_resource_key_header(request, file_id, resource_key)
-        return _download(request, file_id, size_threshold)
+        return _retry_rate_limited_download(_download)(request, file_id, size_threshold)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -844,21 +896,20 @@ class GoogleDriveSourceOperations(SourceOperations):
     def _fetch_google_doc_once(
         self, *, user_email: str, doc_id: str, max_response_bytes: int
     ) -> dict[str, Any] | None:
-        with get_google_authorized_session(self._creds(), user_email) as session:
-            with session.get(
-                _DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
-                params={"includeTabsContent": "true"},
-                stream=True,
-                timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
-            ) as response:
-                response.raise_for_status()
-                buffer = bytearray()
-                for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
-                    if not chunk:
-                        continue
-                    if len(buffer) + len(chunk) > max_response_bytes:
-                        return None
-                    buffer.extend(chunk)
+        with self._docs_session(user_email).get(
+            _DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
+            params={"includeTabsContent": "true"},
+            stream=True,
+            timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
+        ) as response:
+            response.raise_for_status()
+            buffer = bytearray()
+            for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                if len(buffer) + len(chunk) > max_response_bytes:
+                    return None
+                buffer.extend(chunk)
         return json.loads(buffer)
 
     @source_operation(
