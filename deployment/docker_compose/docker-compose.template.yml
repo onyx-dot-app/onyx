@@ -350,12 +350,13 @@ services:
     env_file:
       - path: .env
         required: false
-    # No `cache`: unused, and the Lite overlay puts it behind a profile.
+    # No cache dependency: Lite dispatches without a broker.
     depends_on:
       - relational_db
     restart: unless-stopped
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
+      - REDIS_HOST=${REDIS_HOST:-cache}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:

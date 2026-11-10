@@ -13,6 +13,7 @@ from onyx.skills.github_auth import github_authorization_header
 from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
 from onyx.skills.marketplace.provider import get_marketplace_adapter
 from onyx.utils.github import GitHubSource, resolve_github_revision
+from shared_configs.configs import MULTI_TENANT
 
 
 @pytest.mark.parametrize(
@@ -96,7 +97,7 @@ def test_fetch_pins_branch_tag_and_commit(ref: str) -> None:
         login.assert_called_with(
             "public", marketplace.login_user_id, require_user_connection=True
         )
-        assert not adapter.supports_webhooks
+        assert adapter.supports_webhooks == (not MULTI_TENANT and len(ref) != 40)
 
 
 def test_missing_login_stops_before_fetch() -> None:
