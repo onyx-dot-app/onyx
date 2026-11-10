@@ -784,6 +784,7 @@ class OnyxCeleryTask:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
+    RECONCILE_SANDBOX_RUNTIMES = "reconcile_sandbox_runtimes"
 
     # Scheduled tasks (Craft)
     SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"

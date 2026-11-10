@@ -302,7 +302,9 @@ def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
     redis.lock.return_value.owned.return_value = lease_owned
     cache.lock.return_value.owned.return_value = lease_owned
     cache.get.return_value = None
+    manager.list_resource_tenant_ids.return_value = {"tenant-a"}
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
+    monkeypatch.setattr(tasks, "get_all_tenant_ids", lambda: ["tenant-a"])
     monkeypatch.setattr(tasks, "get_redis_client", lambda **_kwargs: redis)
     monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
     monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
@@ -323,13 +325,13 @@ def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
     monkeypatch.setattr(lifecycle, "create_session_snapshot_keep_latest", snapshot)
 
     if not lease_owned:
-        with pytest.raises(CacheLockLostError, match="Sandbox cleanup lease lost"):
-            tasks.cleanup_idle_sandboxes_task.run(tenant_id="tenant-a")  # ty: ignore[invalid-argument-type]
+        with pytest.raises(RuntimeError, match="reconciliation failed"):
+            tasks.reconcile_sandbox_runtimes_task.run()
         sleep.assert_not_called()
         snapshot.assert_not_called()
         return
 
-    tasks.cleanup_idle_sandboxes_task.run(tenant_id="tenant-a")  # ty: ignore[invalid-argument-type]
+    tasks.reconcile_sandbox_runtimes_task.run()
     if idle:
         assert sleep.call_args.kwargs["sandbox"].id == sandbox.id
         snapshot.assert_not_called()
@@ -357,21 +359,17 @@ def test_deletion_failure_does_not_skip_other_resources(
     cache.set.assert_called_once()
 
 
+@pytest.mark.usefixtures("collector")
 def test_expires_stale_provisioning_without_any_runtime_resources(
-    collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    manager, _cache = collector
-    manager.iter_resources.return_value = iter(())
     row = Sandbox(id=uuid4(), user_id=uuid4(), provisioning_attempt_number=3)
     monkeypatch.setattr(
         cleanup, "get_stale_provisioning_sandboxes", lambda *_args: [row]
     )
     expire = MagicMock()
     monkeypatch.setattr(cleanup, "fail_stale_provisioning__no_commit", expire)
-    cleanup.reconcile_sandbox_resources(
-        manager, "tenant-a", time.monotonic() + 60, lambda: None
-    )
+    cleanup.fail_stale_provisioning_sandboxes("tenant-a", lambda: None)
     assert expire.call_args.args[1:3] == (row.id, 3)
 
 
@@ -637,7 +635,7 @@ def test_legacy_secret_needs_verified_tenant_ownership(
     assert manager.delete_resource.call_count == int(has_db_owner)
 
 
-def test_task_collects_orphans_with_no_running_database_rows(
+def test_reconciler_collects_orphans_with_no_running_database_rows(
     collector: tuple[MagicMock, MagicMock],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -645,14 +643,60 @@ def test_task_collects_orphans_with_no_running_database_rows(
 
     manager, cache = collector
     manager.iter_resources.return_value = iter([_resource()])
+    manager.list_resource_tenant_ids.return_value = {"tenant-a"}
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
+    monkeypatch.setattr(tasks, "get_all_tenant_ids", lambda: ["tenant-a"])
+    monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
+    monkeypatch.setattr(tasks, "get_redis_client", MagicMock())
+    monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
+    monkeypatch.setattr(tasks, "get_running_sandboxes", lambda *_args, **_kwargs: [])
+    tasks.reconcile_sandbox_runtimes_task.run()
+    manager.delete_resource.assert_called_once()
+
+
+def test_per_tenant_sweep_does_not_inventory_runtimes(
+    collector: tuple[MagicMock, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.background.celery.tasks.build import tasks
+
+    manager, cache = collector
     monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
     monkeypatch.setattr(tasks, "get_redis_client", MagicMock())
     monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
     monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
     monkeypatch.setattr(tasks, "get_running_sandboxes", lambda *_args, **_kwargs: [])
     tasks.cleanup_idle_sandboxes_task.run(tenant_id="tenant-a")  # ty: ignore[invalid-argument-type]
-    manager.delete_resource.assert_called_once()
+    manager.iter_resources.assert_not_called()
+    manager.delete_resource.assert_not_called()
+
+
+@pytest.mark.parametrize("multi_tenant", [True, False])
+def test_reconciler_handles_runtimes_of_unknown_tenants(
+    multi_tenant: bool,
+    collector: tuple[MagicMock, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.background.celery.tasks.build import tasks
+
+    manager, _cache = collector
+    old = _resource(tenant_id="tenant-gone")
+    fresh = _resource(tenant_id="tenant-gone", created_at=datetime.now(timezone.utc))
+    legacy = _resource(tenant_id="tenant-gone", legacy_ownership=True)
+    manager.list_resource_tenant_ids.return_value = {"tenant-gone"}
+    manager.iter_resources.return_value = iter([old, fresh, legacy])
+    sweep = MagicMock()
+    monkeypatch.setattr(tasks, "MULTI_TENANT", multi_tenant)
+    monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(tasks, "get_all_tenant_ids", lambda: ["tenant-a"])
+    monkeypatch.setattr(tasks, "_sweep_tenant_sandboxes", sweep)
+
+    tasks.reconcile_sandbox_runtimes_task.run()
+
+    sweep.assert_not_called()
+    deleted = [c.args[0] for c in manager.delete_resource.call_args_list]
+    assert deleted == ([old] if multi_tenant else [])
 
 
 def test_deletion_batch_is_bounded(

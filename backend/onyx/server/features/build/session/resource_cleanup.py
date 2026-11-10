@@ -170,16 +170,10 @@ def _prepare_failed_resource_cleanup(
     return True
 
 
-def reconcile_sandbox_resources(
-    manager: SandboxManager,
-    tenant_id: str,
-    deadline: float,
-    check_ownership: Callable[[], None],
+def fail_stale_provisioning_sandboxes(
+    tenant_id: str, check_ownership: Callable[[], None]
 ) -> None:
-    """Collect abandoned resources using successful, current DB reads as evidence."""
-    if get_current_tenant_id() != tenant_id:
-        raise RuntimeError("Sandbox cleanup tenant context mismatch")
-    cache = get_cache_backend(tenant_id=tenant_id)
+    """Mark ``PROVISIONING`` rows past their attempt deadline as ``FAILED``."""
     stale_cutoff = datetime.now(timezone.utc) - timedelta(
         seconds=ATTEMPT_DEADLINE_SECONDS
     )
@@ -202,6 +196,17 @@ def reconcile_sandbox_resources(
         except SandboxProvisionContentionError:
             continue
 
+
+def reconcile_sandbox_resources(
+    manager: SandboxManager,
+    tenant_id: str,
+    deadline: float,
+    check_ownership: Callable[[], None],
+) -> None:
+    """Collect abandoned resources using successful, current DB reads as evidence."""
+    if get_current_tenant_id() != tenant_id:
+        raise RuntimeError("Sandbox cleanup tenant context mismatch")
+    cache = get_cache_backend(tenant_id=tenant_id)
     grace_cutoff = datetime.now(timezone.utc) - timedelta(
         seconds=SANDBOX_RESOURCE_GRACE_SECONDS
     )
@@ -283,5 +288,39 @@ def reconcile_sandbox_resources(
         except Exception:
             cache.set(retry_key, "retry", ex=RESOURCE_RETRY_SECONDS)
             logger.exception("Failed to reconcile sandbox resource %s", resource.name)
+        if attempted >= MAX_CLEANUP_RESOURCES:
+            break
+
+
+def delete_unknown_tenant_resources(
+    manager: SandboxManager, tenant_id: str, deadline: float
+) -> None:
+    """Delete the resources of a tenant that no longer exists.
+
+    The caller must have positive evidence that the tenant is gone. Resources
+    inside the grace period and legacy resources, which carry no tenant label,
+    are retained.
+    """
+    grace_cutoff = datetime.now(timezone.utc) - timedelta(
+        seconds=SANDBOX_RESOURCE_GRACE_SECONDS
+    )
+    attempted = 0
+    for resource in manager.iter_resources(tenant_id, deadline):
+        if resource.legacy_ownership or resource.created_at > grace_cutoff:
+            continue
+        attempted += 1
+        try:
+            manager.delete_resource(
+                resource, min(deadline, time.monotonic() + RUNTIME_TEARDOWN_SECONDS)
+            )
+            logger.info(
+                "Removed sandbox %s resource %s %s of unknown tenant %s",
+                resource.sandbox_id,
+                resource.kind.value,
+                resource.name,
+                tenant_id,
+            )
+        except Exception:
+            logger.exception("Failed to remove sandbox resource %s", resource.name)
         if attempted >= MAX_CLEANUP_RESOURCES:
             break

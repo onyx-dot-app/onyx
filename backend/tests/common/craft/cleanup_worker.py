@@ -42,12 +42,20 @@ def isolated_cleanup_deployment(k8s_client: client.CoreV1Api) -> None:
     ) == run_id, "The target namespace does not belong to this cleanup test run"
 
 
-def _send_cleanup() -> str:
+# The per-tenant sweep expires stale provisioning; the reconciler then removes
+# runtime resources that no database row justifies.
+_CLEANUP_TASKS: tuple[tuple[str, dict[str, str]], ...] = (
+    (OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES, {"tenant_id": "public"}),
+    (OnyxCeleryTask.RECONCILE_SANDBOX_RUNTIMES, {}),
+)
+
+
+def _send_cleanup(task_name: str, kwargs: dict[str, str]) -> str:
     task_id = str(uuid4())
     celery_app.send_task(
-        OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
+        task_name,
         task_id=task_id,
-        kwargs={"tenant_id": "public"},
+        kwargs=kwargs,
         queue=OnyxCeleryQueues.SANDBOX,
         expires=120,
     )
@@ -58,7 +66,17 @@ def run_cleanup(
     core: client.CoreV1Api, expected_state: Literal["SUCCESS", "FAILURE"] = "SUCCESS"
 ) -> None:
     require_isolated_cleanup_deployment()
-    task_id = _send_cleanup()
+    for task_name, kwargs in _CLEANUP_TASKS:
+        _run_cleanup_task(core, task_name, kwargs, expected_state)
+
+
+def _run_cleanup_task(
+    core: client.CoreV1Api,
+    task_name: str,
+    kwargs: dict[str, str],
+    expected_state: Literal["SUCCESS", "FAILURE"],
+) -> None:
+    task_id = _send_cleanup(task_name, kwargs)
     marker = f"(ID: {task_id}) completed with state:"
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
@@ -80,7 +98,7 @@ def run_cleanup(
                 task_id in line and "lock not acquired, skipping" in line
                 for line in lines
             ):
-                task_id = _send_cleanup()
+                task_id = _send_cleanup(task_name, kwargs)
                 marker = f"(ID: {task_id}) completed with state:"
                 break
             assert f"{marker} {expected_state}" in completed, completed

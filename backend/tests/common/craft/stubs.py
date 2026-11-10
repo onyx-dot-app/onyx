@@ -184,6 +184,7 @@ class StubSandboxManager(SandboxManager):
         # Silent no-op opt-ins for methods that legitimately return None.
         self.terminate_silent: bool = False
         self.resources_returns: list[SandboxResource] | None = None
+        self.deleted_resources: list[SandboxResource] = []
         self.workspace_storage_exists_returns: bool = True
         self.runtime_exists_returns: bool = True
         self.workspace_storage_identity_returns: str | None = "stub-workspace"
@@ -361,6 +362,14 @@ class StubSandboxManager(SandboxManager):
             if r.tenant_id == tenant_id
             and (sandbox_id is None or r.sandbox_id == sandbox_id)
         )
+
+    def list_resource_tenant_ids(self, deadline: float) -> set[str]:  # noqa: ARG002
+        return {r.tenant_id for r in self.resources_returns or []}
+
+    def delete_resource(self, resource: SandboxResource, deadline: float) -> None:  # noqa: ARG002
+        self.deleted_resources.append(resource)
+        if self.resources_returns is not None:
+            self.resources_returns.remove(resource)
 
     def terminate_observed_resources(
         self,
