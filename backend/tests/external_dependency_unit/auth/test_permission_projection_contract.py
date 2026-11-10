@@ -62,7 +62,6 @@ from onyx.db.enums import (
     Permission,
     PermissionAuthority,
     PersonaSharePermission,
-    SkillSharePermission,
 )
 from onyx.db.models import (
     Connector,
@@ -123,6 +122,7 @@ from onyx.server.features.tool.api import (
 )
 from onyx.server.manage.administrative import create_deletion_attempt_for_connector_id
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 
 def _guard_raises(
@@ -953,18 +953,13 @@ def _link_persona_tool(db_session: Session, persona: Persona, tool: Tool) -> Non
 def _make_skill(
     db_session: Session, *, is_public: bool, groups: list[UserGroup]
 ) -> Skill:
-    skill = Skill(
-        id=uuid4(),
+    skill = make_skill(
+        db_session,
         name=f"contract skill {uuid4().hex[:8]}",
         author_user_id=create_test_user(db_session, f"skill-owner-{uuid4().hex}").id,
         description="contract",
-        # custom skills need a bundle source (ck_skill_definition_source)
-        bundle_file_id=f"proj-bundle-{uuid4().hex}",
-        bundle_sha256="0" * 64,
-        public_permission=SkillSharePermission.VIEWER if is_public else None,
+        is_public=is_public,
     )
-    db_session.add(skill)
-    db_session.flush()
     for group in groups:
         db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
     db_session.commit()

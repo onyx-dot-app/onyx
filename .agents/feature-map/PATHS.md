@@ -141,6 +141,7 @@ covers new files that match it.
 | `backend/tests/unit/onyx/skills/test_push_admission.py` | skills |
 | `backend/onyx/db/resource_access.py` | skills, authorization |
 | `backend/tests/external_dependency_unit/db/test_skill_library_lock.py` | skills |
+| `backend/tests/external_dependency_unit/db/test_skill_bundle_cleanup_schema.py` | skills, multi-tenancy |
 | `backend/onyx/db/zip_metadata.py` | skills |
 | `backend/onyx/background/celery/tasks/skills/`, `backend/onyx/background/celery/tasks/skill_versions/`, `backend/onyx/background/celery/tasks/marketplace_sync/` | skills, background-jobs |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
