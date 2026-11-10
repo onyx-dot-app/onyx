@@ -2514,12 +2514,10 @@ class GoogleDriveConnector(
         checkpoint = copy.deepcopy(checkpoint)
         self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
         failures: list[ConnectorFailure] = []
+        drive_files: Generator[RetrievedDriveFile, None, None] | None = None
         try:
-            drive_files = (
-                self._parallel_listing(checkpoint, include_permissions)
-                if self._plan_parallel_listing(checkpoint, start, end)
-                else None
-            )
+            if self._plan_parallel_listing(checkpoint, start, end):
+                drive_files = self._parallel_listing(checkpoint, include_permissions)
             for batch in self._extract_slim_docs_from_google_drive(
                 checkpoint=checkpoint,
                 start=start,
@@ -2539,6 +2537,11 @@ class GoogleDriveConnector(
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise
+        finally:
+            if drive_files is not None:
+                # Also when this call fails or its caller stops early: stop
+                # the listing threads now, not when the generator is collected.
+                drive_files.close()
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
         if checkpoint.listing is not None and checkpoint.listing.is_done:
             checkpoint.completion_stage = DriveRetrievalStage.DONE
@@ -2605,7 +2608,7 @@ class GoogleDriveConnector(
 
     def _parallel_listing(
         self, checkpoint: GoogleDriveCheckpoint, include_permissions: bool
-    ) -> Iterator[RetrievedDriveFile]:
+    ) -> Generator[RetrievedDriveFile, None, None]:
         """One call of the parallel sharded listing."""
 
         def choose_drive_principal(

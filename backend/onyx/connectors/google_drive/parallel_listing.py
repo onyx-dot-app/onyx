@@ -21,7 +21,7 @@ import math
 import queue
 import threading
 import time
-from collections.abc import Callable, Collection, Iterator
+from collections.abc import Callable, Collection, Generator
 from concurrent.futures import Future
 from concurrent.futures import wait as wait_for_futures
 from datetime import datetime, timezone
@@ -289,7 +289,7 @@ class ParallelDriveLister:
 
     # --- The call -----------------------------------------------------------
 
-    def run(self) -> Iterator[RetrievedDriveFile]:
+    def run(self) -> Generator[RetrievedDriveFile, None, None]:
         with self._lock:
             for shard_id in sorted(self._state.shards):
                 self._pool.add(self._page_task(shard_id))
