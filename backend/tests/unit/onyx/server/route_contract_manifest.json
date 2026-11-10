@@ -662,6 +662,7 @@
   "POST /marketplaces/{marketplace_id}/confirm-retirements": "basic",
   "POST /marketplaces/{marketplace_id}/replace-login": "basic",
   "POST /marketplaces/{marketplace_id}/sync": "basic",
+  "POST /marketplaces/{marketplace_id}/webhook": "basic",
   "POST /mcp/oauth/callback": "basic",
   "POST /mcp/oauth/connect": "basic",
   "POST /mcp/user-credentials": "basic",

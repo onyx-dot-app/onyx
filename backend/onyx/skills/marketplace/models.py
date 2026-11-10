@@ -136,6 +136,10 @@ class MarketplaceManagementSnapshot(BaseModel):
     retirement_proposal: MarketplaceRetirementProposal | None
     live_skill_count: int = 0
     retired_skill_count: int = 0
+    webhook_available: bool = False
+    webhook_enabled: bool = False
+    webhook_ref: str | None = None
+    webhook_last_delivery_at: datetime | None = None
 
 
 class MarketplaceManagedSkill(BaseModel):
@@ -153,6 +157,16 @@ class MarketplaceManagementDetail(BaseModel):
     skills: list[MarketplaceManagedSkill]
 
 
+class MarketplaceWebhookRemoval(BaseModel):
+    """Provider inputs retained after local deletion; no signing secret."""
+
+    provider: MarketplaceProvider
+    provider_config: GitHubMarketplaceConfig
+    login_user_id: UUID | None
+    webhook_id: str
+
+
 class MarketplaceRemovalResult(BaseModel):
     cleanup_file_ids: set[str]
     affected_user_ids: set[UUID]
+    webhook: MarketplaceWebhookRemoval | None = None

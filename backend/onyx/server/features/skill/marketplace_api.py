@@ -1,5 +1,6 @@
 """Marketplace management with provider I/O before writes and dispatch after commit."""
 
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -10,6 +11,7 @@ from onyx.auth.scoped_permissions import assert_global
 from onyx.background.celery.tasks.marketplace_sync.tasks import (
     dispatch_marketplace_sync,
 )
+from onyx.configs.app_configs import WEBHOOK_PUBLIC_URL
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import Permission
 from onyx.db.marketplace import confirm_marketplace_retirement__no_commit
@@ -21,6 +23,10 @@ from onyx.db.marketplace_management import (
     replace_marketplace_login__no_commit,
     request_managed_marketplace_sync__no_commit,
     set_marketplace_default_access__no_commit,
+)
+from onyx.db.marketplace_webhook_setup import (
+    finish_marketplace_webhook__no_commit,
+    prepare_marketplace_webhook__no_commit,
 )
 from onyx.db.models import Marketplace, User
 from onyx.db.resource_access import fetch_resource_access_user
@@ -52,10 +58,85 @@ from onyx.skills.marketplace.read_models import (
 from onyx.skills.marketplace.reader import read_marketplace_archive
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, validate_outbound_http_url
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter(prefix="/marketplaces")
 logger = setup_logger()
+
+
+def _public_webhook_base_url(value: str) -> str | None:
+    try:
+        normalized = validate_outbound_http_url(
+            value, https_only=True, resolve_dns=False
+        )
+        parsed = urlparse(normalized)
+        if (
+            parsed.path in ("", "/")
+            and not (parsed.query or parsed.fragment)
+            and (parsed.port is None or parsed.port > 0)
+        ):
+            return normalized.rstrip("/")
+    except (SSRFException, ValueError):
+        pass
+    return None
+
+
+MARKETPLACE_WEBHOOK_BASE_URL = _public_webhook_base_url(WEBHOOK_PUBLIC_URL)
+
+
+@router.post("/{marketplace_id}/webhook")
+def setup_marketplace_webhook(
+    marketplace_id: UUID,
+    request: Request,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> MarketplaceManagementSnapshot:
+    if MULTI_TENANT:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND)
+    snapshot = get_marketplace(marketplace_id, request, user, db_session).marketplace
+    if MARKETPLACE_WEBHOOK_BASE_URL is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Set WEBHOOK_PUBLIC_URL to the public HTTPS address of this Onyx installation before enabling push updates.",
+        )
+    candidate = Marketplace(
+        provider=snapshot.provider,
+        provider_config=snapshot.provider_config,
+        login_user_id=snapshot.login_user_id,
+    )
+    db_session.commit()
+    adapter = get_marketplace_adapter(candidate, get_current_tenant_id())
+    full_ref = adapter.resolve_webhook_ref()
+    prepared = prepare_marketplace_webhook__no_commit(
+        marketplace_id, user, db_session, expected=snapshot, full_ref=full_ref
+    )
+    db_session.commit()
+    hook_id = get_marketplace_adapter(
+        prepared, get_current_tenant_id()
+    ).register_webhook(
+        f"{MARKETPLACE_WEBHOOK_BASE_URL}/webhook/marketplaces/{marketplace_id}/github"
+    )
+    try:
+        finish_marketplace_webhook__no_commit(prepared, hook_id, user, db_session)
+    except OnyxError as exc:
+        db_session.rollback()
+        if exc.error_code == OnyxErrorCode.NOT_FOUND:
+            prepared.webhook_id = hook_id
+            try:
+                get_marketplace_adapter(
+                    prepared, get_current_tenant_id()
+                ).remove_webhook()
+            except Exception:
+                logger.warning(
+                    "Marketplace deleted during setup; provider webhook cleanup failed: %s",
+                    marketplace_id,
+                )
+        raise
+    result = fetch_managed_marketplace(marketplace_id, user, db_session).marketplace
+    db_session.commit()
+    return result
 
 
 def _authorize_source(
@@ -297,3 +378,20 @@ def remove_marketplace(
         logger.warning(
             "Marketplace cleanup deferred to orphan sweep: %s", marketplace_id
         )
+    if removed.webhook is not None:
+        hook = removed.webhook
+        try:
+            get_marketplace_adapter(
+                Marketplace(
+                    provider=hook.provider,
+                    provider_config=hook.provider_config,
+                    login_user_id=hook.login_user_id,
+                    webhook_id=hook.webhook_id,
+                ),
+                get_current_tenant_id(),
+            ).remove_webhook()
+        except Exception:
+            logger.warning(
+                "Marketplace removed; provider webhook cleanup failed: %s",
+                marketplace_id,
+            )

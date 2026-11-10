@@ -17695,6 +17695,17 @@
       "setUpButton": {
         "label": "Set up GitHub"
       }
+    },
+    "pushUpdates": {
+      "title": "Push Updates",
+      "description": "Sync after GitHub pushes. Requires repository admin access and a public webhook address.",
+      "configured": "Push updates configured",
+      "lastDelivery": "Last verified delivery: {date}",
+      "awaitingDelivery": "Waiting for the first verified delivery",
+      "refresh": "Refresh push setup",
+      "enable": "Enable push updates",
+      "enableAction": "Enable",
+      "refreshAction": "Refresh"
     }
   }
 }

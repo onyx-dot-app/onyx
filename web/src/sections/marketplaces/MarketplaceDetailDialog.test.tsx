@@ -558,3 +558,145 @@ it("reads and previews retired history without offering restore", async () => {
     "Marketplace details"
   );
 });
+
+function jsonResponse(data: object, init?: ResponseInit): Response {
+  return new Response(JSON.stringify(data), init);
+}
+
+const pushSource = {
+  ...marketplace,
+  sync_requested: false,
+  sync_pending: false,
+  webhook_available: true,
+  webhook_ref: "refs/heads/main",
+};
+
+it("enables push updates without claiming a sync, and locks actions during setup", async () => {
+  const user = setupUser();
+  const pending = Promise.withResolvers<Response>();
+  let current = pushSource;
+  // GET detail, POST setup, then GET updated detail.
+  fetchSpy.mockImplementation(async (path, init) => {
+    if (path === `${url}/webhook` && init?.method === "POST")
+      return pending.promise;
+    return jsonResponse({ ...detail, marketplace: current });
+  });
+  const onClose = jest.fn();
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={onClose}
+    />
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Enable push updates" })
+  );
+  expect(screen.getByRole("button", { name: "Working…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Sync now" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+  expect(screen.queryByText("Push updates configured")).not.toBeInTheDocument();
+  current = { ...pushSource, webhook_enabled: true };
+  await act(async () => pending.resolve(jsonResponse(current)));
+  expect(
+    await screen.findByText("Push updates configured")
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Waiting for the first verified delivery")
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Refresh push setup" })
+  ).toBeEnabled();
+  expect(screen.queryByText("Sync requested")).not.toBeInTheDocument();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(fetchSpy).toHaveBeenCalledWith(`${url}/webhook`, { method: "POST" });
+});
+
+it.each([401, 403, 502])(
+  "keeps manual sync and setup retry after a provider error (%s)",
+  async (status) => {
+    const user = setupUser();
+    // GET detail succeeds; only GitHub setup fails.
+    fetchSpy.mockImplementation(async (path, init) => {
+      if (path === `${url}/webhook` && init?.method === "POST") {
+        return jsonResponse(
+          { detail: "Reconnect GitHub with repository admin access." },
+          { status }
+        );
+      }
+      if (path === `${url}/sync`) return jsonResponse(marketplace);
+      return jsonResponse({ ...detail, marketplace: pushSource });
+    });
+    render(
+      <MarketplaceDetailDialog
+        open
+        marketplaceId={marketplace.id}
+        onClose={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Enable push updates" })
+    );
+    expect(
+      await screen.findByText("Reconnect GitHub with repository admin access.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Enable push updates" })
+    ).toBeEnabled();
+    expect(
+      screen.queryByText("Push updates configured")
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sync now" }));
+    expect(fetchSpy).toHaveBeenCalledWith(`${url}/sync`, { method: "POST" });
+  }
+);
+
+it("shows verified delivery time and refreshes registration", async () => {
+  const user = setupUser();
+  const configured = {
+    ...pushSource,
+    webhook_enabled: true,
+    webhook_last_delivery_at: "2026-11-08T12:30:00Z",
+  };
+  // GET detail and POST setup both return persisted registration state.
+  fetchSpy.mockImplementation(async (_path, init) =>
+    jsonResponse(
+      init?.method === "POST"
+        ? configured
+        : { ...detail, marketplace: configured }
+    )
+  );
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={jest.fn()}
+    />
+  );
+  expect(await screen.findByText(/Last verified delivery:/)).toHaveTextContent(
+    "2026"
+  );
+  expect(screen.getByText("refs/heads/main")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Refresh push setup" }));
+  expect(fetchSpy).toHaveBeenCalledWith(`${url}/webhook`, { method: "POST" });
+});
+
+it("offers manual sync without push setup when the provider reports no support", async () => {
+  fetchSpy.mockResolvedValue(
+    jsonResponse({
+      ...detail,
+      marketplace: { ...pushSource, webhook_available: false },
+    })
+  );
+  render(
+    <MarketplaceDetailDialog
+      open
+      marketplaceId={marketplace.id}
+      onClose={jest.fn()}
+    />
+  );
+  expect(await screen.findByRole("button", { name: "Sync now" })).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "Enable push updates" })
+  ).not.toBeInTheDocument();
+});

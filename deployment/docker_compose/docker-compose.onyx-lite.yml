@@ -69,6 +69,13 @@ services:
         condition: service_started
         required: false
 
+  webhook_server:
+    environment:
+      - DISABLE_VECTOR_DB=true
+      - FILE_STORE_BACKEND=postgres
+      - CACHE_BACKEND=postgres
+      - AUTH_BACKEND=postgres
+
   mcp_server:
     depends_on:
       cache:
