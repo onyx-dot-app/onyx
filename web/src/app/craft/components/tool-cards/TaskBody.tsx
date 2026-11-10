@@ -18,7 +18,7 @@ import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interf
 /**
  * TaskBody - The whole "Spawning subagent: …" row. An accent-tinted, clickable
  * affordance that opens the spawned subagent's transcript, with a live status
- * icon. (Rendered directly by CraftToolCard — no collapsible body.)
+ * icon. (Rendered as the whole timeline step — no collapsible body.)
  */
 export default function TaskBody({ toolCall }: ToolCardBodyProps) {
   const subagents = useSubagents();

@@ -7,7 +7,7 @@ import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
 import type { IconFunctionComponent } from "@opal/types";
 import { CitationMap } from "@/app/app/types";
-import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
+import { TimelineSurfaceBackground } from "@/lib/timeline/primitives/TimelineSurface";
 
 export enum RenderType {
   HIGHLIGHT = "highlight",
