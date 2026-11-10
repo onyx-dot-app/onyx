@@ -187,10 +187,8 @@ export class InputBar {
   }
 
   async discardPending(index: number): Promise<void> {
-    await this.queuedMessages
-      .nth(index)
-      .getByRole("button", { name: "Remove queued message" })
-      .click();
+    await this.queuedMessages.nth(index).click();
+    await this.textbox.press("Delete");
   }
 
   async clickSend(): Promise<void> {

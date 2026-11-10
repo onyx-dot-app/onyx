@@ -27,7 +27,7 @@ const pendingTest = test.extend<{
       await chatPage.goto(sessionId);
       await chatPage.inputBar.fill(question);
       await chatPage.inputBar.send();
-      await expect(chatPage.aiMessage()).toContainText("Working on");
+      await expect(chatPage.scrollContainer).toContainText("Working on");
       await use({ sessionId, question, gateId });
     } finally {
       await releaseMockLlmGate(gateId);
@@ -121,9 +121,14 @@ pendingTest(
 
 pendingTest(
   "Stop leaves the queued message pending",
-  async ({ chatPage, heldResponse }) => {
+  async ({ page, chatPage, heldResponse }) => {
     await chatPage.inputBar.submitPending("Keep for later");
+    const stopped = page.waitForResponse((response) =>
+      response.url().includes(`/stop-chat-session/${heldResponse.sessionId}`)
+    );
     await chatPage.stop();
+    expect((await stopped).ok()).toBe(true);
+    await chatPage.expectStopping();
     await releaseMockLlmGate(heldResponse.gateId);
     await chatPage.expectCompleteAnswers(1);
     await chatPage.reload();

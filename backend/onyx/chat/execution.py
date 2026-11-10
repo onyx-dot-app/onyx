@@ -220,7 +220,7 @@ class ChatTurnExecution:
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
         self._response_stops: dict[int, OverallStop] = {}
-        self._last_refresh = self._last_stop_check = time.monotonic()
+        self._last_refresh = time.monotonic()
         # Each response run cancels itself at this time and records a DEADLINE failure.
         self._deadline_at = datetime.now(timezone.utc) + timedelta(
             seconds=CHAT_EXECUTION_TIMEOUT_S
@@ -616,11 +616,7 @@ class ChatTurnExecution:
             self.cancellation.cancel("deadline")
 
         now = time.monotonic()
-        if (
-            not self.cancellation.cancelled
-            and now - self._last_stop_check >= _CANCEL_POLL_INTERVAL_S
-        ):
-            self._last_stop_check = now
+        if not self.cancellation.cancelled:
             try:
                 if is_stop_requested(
                     self.setup.chat_session_id,
