@@ -3,12 +3,7 @@
 # Prints the new version when a file changed, and nothing when all are current.
 set -euo pipefail
 
-if ! latest="$(curl --fail --silent --show-error --location --retry 3 \
-  https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json \
-  | jq -er '.channels.Stable.version | select(test("^[0-9]+(\\.[0-9]+){3}$"))')"; then
-  echo "Could not read the current stable Chrome version." >&2
-  exit 1
-fi
+latest="$("$(dirname "$0")/chrome-stable-version.sh")"
 
 stale=()
 for file in "$@"; do

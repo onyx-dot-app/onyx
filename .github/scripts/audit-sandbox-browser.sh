@@ -19,9 +19,7 @@ installed="$(jq -er '
   | select(.name == "chrome" and .cpe == ("cpe:2.3:a:google:chrome:" + .version + ":*:*:*:*:*:*:*"))
   | .version
 ' "$inventory/browser.cdx.json")"
-latest="$(curl --fail --silent --show-error --location --retry 3 \
-  https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json \
-  | jq -er '.channels.Stable.version')"
+latest="$("$(dirname "$0")/chrome-stable-version.sh")"
 if [ "$installed" != "$latest" ]; then
   echo "Sandbox Chrome ${installed} is not current stable ${latest}; run .github/scripts/update-sandbox-browser.sh on install-browser.sh." >&2
   exit 1
