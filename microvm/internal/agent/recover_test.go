@@ -311,6 +311,28 @@ func TestRecoverScanErrorBlocksCreateUntilAScanWorks(t *testing.T) {
 	wantReason(t, err, pb.ErrorReason_SANDBOX_IN_DOUBT)
 }
 
+// A template build waits for a working scan, as Create does: an
+// unverified Firecracker may hold any UID.
+func TestRecoverScanErrorBlocksBuildSlot(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.UseJournal(&journal.Journal{Dir: t.TempDir()})
+	table := &fakeTable{scanErr: errors.New("no /proc")}
+	if _, err := f.m.Recover(context.Background(), table); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := f.m.BuildSlot("tpl-0123456789ab", 1024)
+	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
+	table.set([]Candidate{{ID: idOrphan, PID: 9, UID: 1000003}}, nil)
+	uid, done, err := f.m.BuildSlot("tpl-0123456789ab", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer done(false)
+	if uid == 1000003 {
+		t.Fatal("the build VM got the untracked VM's UID")
+	}
+}
+
 func TestCrashDuringAStartKeepsTheStoppedAttempt(t *testing.T) {
 	f := newFixture(t, 10)
 	jdir := t.TempDir()
@@ -396,5 +418,40 @@ func TestStopReportsAFailedTombstoneWrite(t *testing.T) {
 	recs, _, _ := j.Load()
 	if len(recs) != 1 || recs[0].State != journal.Stopped || f.uids.InUse() != 0 {
 		t.Fatalf("journal %+v, uids %d", recs, f.uids.InUse())
+	}
+}
+
+// A running template build VM is not an untracked Firecracker.
+func TestRescanSkipsTemplateBuildVM(t *testing.T) {
+	f := newFixture(t, 10)
+	f.m.UseJournal(&journal.Journal{Dir: t.TempDir()})
+	table := &fakeTable{}
+	if _, err := f.m.Recover(context.Background(), table); err != nil {
+		t.Fatal(err)
+	}
+	uid, done, err := f.m.BuildSlot("tpl-0123456789ab", 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table.set([]Candidate{{ID: "tpl-0123456789ab", PID: 900, UID: uid}}, nil)
+	if err := f.m.rescan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.m.mu.Lock()
+	inDoubt := f.m.doubt["tpl-0123456789ab"] != nil
+	f.m.mu.Unlock()
+	if inDoubt {
+		t.Fatal("the template build VM was put in doubt")
+	}
+	done(false)
+	// After the build, the same process would be untracked.
+	if err := f.m.rescan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.m.mu.Lock()
+	inDoubt = f.m.doubt["tpl-0123456789ab"] != nil
+	f.m.mu.Unlock()
+	if !inDoubt {
+		t.Fatal("a left-over build VM was not put in doubt")
 	}
 }

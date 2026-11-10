@@ -297,6 +297,9 @@ the stored token on each request, so a new token takes effect at once.
   cannot stop unrelated alerts.
   Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
   use the ODS allowlist or automatic issue tracking.
+  `.github/workflows/update-sandbox-browser.yml` moves the pin: it runs every
+  four hours and when a deploy audit gate fails, and opens a PR on each stale
+  branch among main and the four newest release lines.
 
 - **One sandbox per user, not per session.** Sessions share a warm pod, the
   managed skills and the user library.

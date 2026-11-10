@@ -89,6 +89,25 @@ service Sandboxd {
   // Reserved for ENG-4573 (browser). They return UNIMPLEMENTED.
   rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
   rpc BrowserStop(BrowserStopRequest) returns (BrowserStopResponse);
+
+  // Managed drive slots (ENG-4614). The node agent calls these during a
+  // managed drive swap (HostAgent SwapManaged), with the VM's key. Slot A
+  // is /dev/vdc and slot B is /dev/vdf (the image's MANAGED_DEV and
+  // MANAGED_DEV_B).
+
+  // ManagedStatus returns the slot that is mounted on /workspace/managed and
+  // the state of each slot device.
+  rpc ManagedStatus(ManagedStatusRequest) returns (ManagedStatusResponse);
+
+  // MountManaged makes a slot the drive on /workspace/managed. It waits
+  // until the device has size_bytes (Firecracker tells the guest the new
+  // size after the host changed the drive), drops the guest's cached blocks
+  // of the device, checks the ext4 UUID, mounts the device read-only
+  // (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
+  // (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
+  // files on the old drive keep working until they close. If the slot is
+  // already on /workspace/managed with this UUID, it does nothing.
+  rpc MountManaged(MountManagedRequest) returns (MountManagedResponse);
 }
 
 // The reason of a guest daemon error (google.rpc.ErrorInfo.reason).
@@ -118,6 +137,14 @@ enum ErrorReason {
   KEY_NOT_SET = 11;
   // SetKey: the daemon already has a different key.
   KEY_ALREADY_SET = 12;
+  // MountManaged: the slot device is in use (mounted, or a detached mount
+  // still has open files).
+  MANAGED_SLOT_BUSY = 13;
+  // MountManaged: the slot device does not have the expected size or ext4
+  // UUID, or it is missing.
+  MANAGED_DEVICE_MISMATCH = 14;
+  // MountManaged: the mount failed. The old drive stays mounted.
+  MANAGED_MOUNT_FAILED = 15;
 }
 
 message HealthRequest {}
@@ -376,3 +403,58 @@ message BrowserStartRequest {}
 message BrowserStartResponse {}
 message BrowserStopRequest {}
 message BrowserStopResponse {}
+
+// A managed drive slot.
+enum ManagedSlot {
+  MANAGED_SLOT_UNSPECIFIED = 0;
+  // /dev/vdc
+  MANAGED_SLOT_A = 1;
+  // /dev/vdf
+  MANAGED_SLOT_B = 2;
+}
+
+message ManagedStatusRequest {}
+
+message ManagedSlotState {
+  ManagedSlot slot = 1;
+  string device = 2;
+  // False if the guest has no such block device.
+  bool present = 3;
+  // Device size and ext4 UUID (empty if the device has no ext4).
+  uint64 size_bytes = 4;
+  string fs_uuid = 5;
+  // True if this slot is the top mount on the mount point.
+  bool mounted = 6;
+  // True if the device is in use: mounted, or a detached mount still has
+  // open files.
+  bool in_use = 7;
+}
+
+message ManagedStatusResponse {
+  string mount_point = 1;
+  // The slot on the mount point. UNSPECIFIED: another file system (for
+  // example the empty tmpfs) or nothing.
+  ManagedSlot active = 2;
+  repeated ManagedSlotState slots = 3;
+}
+
+message MountManagedRequest {
+  ManagedSlot slot = 1;
+  // Size of the new drive in bytes.
+  uint64 size_bytes = 2;
+  // ext4 UUID of the new drive (8-4-4-4-12 lowercase hex).
+  string fs_uuid = 3;
+}
+
+message MountManagedResponse {
+  // The slot on the mount point after the call.
+  ManagedSlot active = 1;
+  // False if the slot was already mounted with this UUID.
+  bool changed = 2;
+  // The slot that was on the mount point before (UNSPECIFIED: none).
+  ManagedSlot previous = 3;
+  // True if the previous slot device is still in use after the detach.
+  bool previous_in_use = 4;
+  // Time spent waiting for the device size, in milliseconds.
+  uint64 wait_ms = 5;
+}

@@ -45,6 +45,45 @@ service HostAgent {
   // the connection. When the client ends its send side, the agent keeps
   // reading until the guest closes (Firecracker vsock has no half-close).
   rpc Dial(stream DialFrame) returns (stream DialFrame);
+
+  // BuildTemplate builds the template of this node from the root drive in
+  // the agent's --rootfs-dir, unless a valid template for its key is there,
+  // and then removes old templates (the agent keeps --template-keep and the
+  // ones that VMs use). The agent also does this at start-up. A call during
+  // a build waits for it.
+  rpc BuildTemplate(BuildTemplateRequest) returns (BuildTemplateResponse);
+
+  // Managed drive (ENG-4614). The managed drive is the read-only ext4 on
+  // /workspace/managed in each VM (the skills). Each VM from a layout 3 or later
+  // template has two managed slots: A (/dev/vdc) and B (/dev/vdf).
+
+  // PutManagedImage uploads a managed bundle (a zip of the tree to show on
+  // /workspace/managed) and builds its read-only ext4 image on this node.
+  // The first message is the header, the later ones carry the zip bytes. A
+  // bundle whose image is already on the node is not built again. The image
+  // ID is the SHA256 of the zip.
+  rpc PutManagedImage(stream PutManagedImageRequest) returns (PutManagedImageResponse);
+
+  // SwapManaged puts a managed image into running VMs without a restart,
+  // one VM at a time: the agent puts the image behind the VM's idle slot
+  // (Firecracker PATCH /drives), the guest daemon mounts it beneath the
+  // current /workspace/managed mount and detaches the old mount lazily
+  // (open files on it keep working until they close), and the agent records
+  // the active slot in the journal. A failure of one VM does not stop the
+  // others; each target has its own result.
+  rpc SwapManaged(SwapManagedRequest) returns (SwapManagedResponse);
+
+  // Drain (ENG-4569). A draining node refuses every Create that would start
+  // a new VM and every BuildTemplate that would boot a template VM
+  // (NODE_DRAINING). Running VMs keep running; automatic evacuation
+  // by the api_server is planned (ENG-4580), so until then the operator stops
+  // each VM and waits for DRAINED. The node drains while the manual drain flag is set
+  // or while it has a drain taint (the agent's --watch-node-drain).
+
+  // SetDrain sets or clears the manual drain flag. The agent keeps the flag
+  // on disk, so it stays set across agent restarts. Clearing it does not end
+  // a drain that a node taint causes.
+  rpc SetDrain(SetDrainRequest) returns (SetDrainResponse);
 }
 
 // The reason of a host agent error (google.rpc.ErrorInfo.reason).
@@ -57,7 +96,9 @@ enum ErrorReason {
   // vcpus or mem_mib differ from the template. A snapshot restore keeps the
   // template's shape.
   TEMPLATE_SHAPE_MISMATCH = 3;
-  // The template was built with a different Firecracker version.
+  // The template does not fit this node (layout version, Firecracker
+  // version, CPU model, host kernel, guest kernel or egress CA), or a
+  // template file does not match the SHA256 in its manifest.
   TEMPLATE_INCOMPATIBLE = 4;
   // scratch_gib is smaller than the template's scratch disk. The scratch
   // disk can only grow.
@@ -106,6 +147,48 @@ enum ErrorReason {
   // already has a different key. Do not use the VM: Stop it and create a
   // new attempt.
   GUEST_KEY_REJECTED = 22;
+  // PutManagedImage or SwapManaged: no managed image with this ID on the node.
+  MANAGED_IMAGE_MISSING = 23;
+  // PutManagedImage: the bundle is not a safe zip (an absolute or ".." path,
+  // a link or device, a duplicate name) or is over a size limit, or its
+  // bytes do not match the header.
+  MANAGED_BUNDLE_INVALID = 24;
+  // SwapManaged: the VM cannot swap its managed drive. Its template has no
+  // managed slot B (layout 2), or its guest daemon has no MountManaged.
+  MANAGED_SWAP_UNSUPPORTED = 25;
+  // SwapManaged: a process in the guest still has a file open on the
+  // managed drive of the idle slot (the drive before the last swap). Retry
+  // after it closes the file.
+  MANAGED_SLOT_BUSY = 26;
+  // SwapManaged: the guest daemon could not mount the new drive. The old
+  // drive stays mounted.
+  MANAGED_MOUNT_FAILED = 27;
+  // Create, BuildTemplate: the node is draining (the manual drain flag or a
+  // node drain taint). Create the VM on another node. A repeat Create of a
+  // VM that already runs here still returns it.
+  NODE_DRAINING = 28;
+}
+
+// Drain state of the node (NodeInfo, SetDrain).
+enum DrainState {
+  DRAIN_STATE_UNSPECIFIED = 0;
+  // The node admits new VMs.
+  DRAIN_STATE_ACTIVE = 1;
+  // The node refuses new VMs and still has VMs that are starting or running,
+  // Firecracker processes in doubt or template build VMs, or no process scan
+  // that worked.
+  DRAIN_STATE_DRAINING = 2;
+  // The node refuses new VMs and runs no Firecracker process.
+  DRAIN_STATE_DRAINED = 3;
+}
+
+// A managed drive slot of a VM.
+enum ManagedSlot {
+  MANAGED_SLOT_UNSPECIFIED = 0;
+  // Drive "managed", guest /dev/vdc.
+  MANAGED_SLOT_A = 1;
+  // Drive "managed_b", guest /dev/vdf (layout 3 and later).
+  MANAGED_SLOT_B = 2;
 }
 
 enum VMState {
@@ -183,6 +266,18 @@ message VM {
   uint32 uid = 10;
   google.protobuf.Timestamp started_at = 11;
   string tenant_id = 12;
+  ManagedState managed = 13;
+}
+
+// The managed drive slots of a VM, as the journal records them.
+message ManagedState {
+  // 2 for a VM that can swap its managed drive (layout 3 and later), else 1.
+  uint32 slots = 1;
+  // The slot on /workspace/managed after the last swap.
+  ManagedSlot active = 2;
+  // Managed image ID behind each slot. Empty: the template's placeholder.
+  string slot_a_image = 3;
+  string slot_b_image = 4;
 }
 
 message CloseConnectionsRequest {
@@ -222,6 +317,39 @@ message NodeInfoResponse {
   string host_kernel = 7;
   string agent_version = 8;
   uint64 disk_free_mib = 9;
+  repeated ManagedImageInfo managed_images = 10;
+
+  // Memory admission and drain (ENG-4569). Create needs
+  // mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
+  // The memory reserve (--min-free-mem-mib).
+  uint64 mem_reserve_mib = 11;
+  // Guest memory of the VMs that are starting. Their memory is not in
+  // mem_available_mib yet, so Create counts it.
+  uint64 mem_starting_mib = 12;
+  DrainStatus drain = 13;
+}
+
+message DrainStatus {
+  DrainState state = 1;
+  // True when the manual drain flag (SetDrain) is set.
+  bool manual = 2;
+  // The drain taints on the node, as "key=value:effect" (value may be
+  // empty), from the last node read.
+  repeated string taints = 3;
+  // When the node started to drain. Not set while it is active.
+  google.protobuf.Timestamp since = 4;
+  // The error of the last node read, if it failed. The agent then keeps
+  // the taints of the last read that worked.
+  string watch_error = 5;
+}
+
+message SetDrainRequest {
+  // True sets the manual drain flag, false clears it.
+  bool drain = 1;
+}
+
+message SetDrainResponse {
+  DrainStatus drain = 1;
 }
 
 message TemplateInfo {
@@ -232,4 +360,119 @@ message TemplateInfo {
   // Guest kernel release.
   string guest_kernel = 5;
   string firecracker_version = 6;
+  // Source image of the root drive, for example "onyxdotapp/sandbox:v5.1.0".
+  string image_ref = 7;
+  string image_digest = 8;
+  string rootfs_sha256 = 9;
+  // SHA256 of the template key (manifest.json "key").
+  string key_sha256 = 10;
+  string ca_fingerprint = 11;
+  google.protobuf.Timestamp built_at = 12;
+  // True when the template key fits this node. Create refuses the others
+  // with TEMPLATE_INCOMPATIBLE.
+  bool compatible = 13;
+  // Managed drive slots of the template's VMs: 2 (layout 3 and later, the VMs can
+  // swap the managed drive) or 1.
+  uint32 managed_slots = 14;
+
+  // True when the template VMs have the balloon device with free page
+  // reporting (layout 4 and later, ENG-4569): the guest returns free
+  // memory to the node.
+  bool balloon = 15;
+}
+
+message BuildTemplateRequest {}
+
+message BuildTemplateResponse {
+  TemplateInfo template = 1;
+  // False when a valid template for the key was already on the node.
+  bool built = 2;
+  // Build time; 0 when built is false.
+  uint64 build_ms = 3;
+  // Templates that the garbage collection removed.
+  repeated string removed = 4;
+}
+
+message PutManagedImageRequest {
+  oneof part {
+    // The first message.
+    ManagedBundleHeader header = 1;
+    // Every later message: the next bytes of the zip (at most 4 MiB each).
+    bytes data = 2;
+  }
+}
+
+message ManagedBundleHeader {
+  // SHA256 of the whole zip, 64 lowercase hex characters. It is the image ID.
+  string sha256 = 1;
+  // Size of the zip in bytes.
+  uint64 size_bytes = 2;
+}
+
+message PutManagedImageResponse {
+  ManagedImageInfo image = 1;
+  // False when the image was already on the node.
+  bool built = 2;
+  // Unzip + mkfs time; 0 when built is false.
+  uint64 build_ms = 3;
+  // Images that the garbage collection removed.
+  repeated string removed = 4;
+}
+
+message ManagedImageInfo {
+  // SHA256 of the bundle zip.
+  string image_id = 1;
+  // SHA256 and size of the ext4 image file.
+  string image_sha256 = 2;
+  uint64 size_bytes = 3;
+  // ext4 UUID. The agent derives it from the image ID; the guest daemon
+  // checks it before it mounts the drive.
+  string fs_uuid = 4;
+  // Regular files and their total size in the bundle.
+  uint32 files = 5;
+  uint64 content_bytes = 6;
+  google.protobuf.Timestamp built_at = 7;
+  // VMs on this node that have the image behind a slot.
+  uint32 vms = 8;
+}
+
+message SwapManagedRequest {
+  // A managed image on this node (PutManagedImage).
+  string image_id = 1;
+  // The VMs, swapped one at a time in this order. At most 1000, no
+  // sandbox twice.
+  repeated SwapTarget targets = 2;
+}
+
+message SwapTarget {
+  string sandbox_id = 1;
+  uint64 attempt = 2;
+  uint64 generation = 3;
+  // The VM's guest daemon key (CreateRequest.sandboxd_key). The agent does
+  // not keep it, so the caller sends it again. The agent calls the guest
+  // daemon (ManagedStatus, MountManaged) with it.
+  string sandboxd_key = 4;
+}
+
+message SwapManagedResponse {
+  // One result per target, in request order.
+  repeated SwapResult results = 1;
+}
+
+message SwapResult {
+  string sandbox_id = 1;
+  bool ok = 2;
+  // Set when ok is false: the error reason and message.
+  ErrorReason reason = 3;
+  string message = 4;
+  // The slot on /workspace/managed after the call.
+  ManagedSlot active = 5;
+  // False when the image was already the active one.
+  bool changed = 6;
+  // Time for this VM, in milliseconds.
+  uint64 ms = 7;
+  // True when a guest process still has a file open on the old drive. The
+  // old drive stays readable for it; the next swap of this VM gets
+  // MANAGED_SLOT_BUSY until the file is closed.
+  bool previous_in_use = 8;
 }

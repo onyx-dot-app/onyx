@@ -60,7 +60,7 @@ func startAgent(t *testing.T, e env, cmd jailer.Command) pb.HostAgentClient {
 		&fcvm.Launcher{Cmd: cmd, Log: log},
 		hostinfo.Stats{DataDir: e.DataDir},
 		uids,
-		agent.Versions{Firecracker: binaries.FirecrackerVersion, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(), Agent: "kvmtest"},
+		kvmVersions(t, e),
 		log,
 	)
 	sock := filepath.Join(e.DataDir, "run", "kvmtest.sock")
@@ -97,7 +97,7 @@ func pct(ms []float64, p float64) float64 {
 func TestCoreKVM(t *testing.T) {
 	e := loadEnv()
 	cmd := newCommand(t, e)
-	buildTemplate(t, e, cmd)
+	buildTemplate(t, &e, cmd)
 	c := startAgent(t, e, cmd)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()

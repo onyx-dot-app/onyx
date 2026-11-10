@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,13 +17,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
-	"github.com/onyx-dot-app/onyx/microvm/internal/fcapi/client/operations"
-	"github.com/onyx-dot-app/onyx/microvm/internal/fcapi/models"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
+	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
-	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
+	"github.com/onyx-dot-app/onyx/microvm/internal/tplbuild"
 )
 
 // env holds the test host paths. Override them with environment variables.
@@ -30,7 +31,7 @@ type env struct {
 	DataDir      string // KVM_DATA_DIR: XFS reflink data dir
 	ImgDir       string // KVM_IMG_DIR: vmlinux, rootfs.ext4, scratch-empty.ext4
 	ArtifactsDir string // KVM_ARTIFACTS_DIR: firecracker, jailer
-	Template     string // KVM_TEMPLATE: template version to build or use
+	Template     string // set by buildTemplate
 	VMs          int    // KVM_VMS: number of VMs
 }
 
@@ -49,8 +50,8 @@ func loadEnv() env {
 		DataDir:      get("KVM_DATA_DIR", "/var/lib/craft-fc"),
 		ImgDir:       get("KVM_IMG_DIR", "/opt/craft-fc-test/img"),
 		ArtifactsDir: get("KVM_ARTIFACTS_DIR", "/opt/craft-fc"),
-		Template:     get("KVM_TEMPLATE", "kvmtest-1"),
-		VMs:          n,
+
+		VMs: n,
 	}
 }
 
@@ -84,113 +85,87 @@ func newCommand(t *testing.T, e env) jailer.Command {
 	}
 }
 
-// buildTemplate boots the kit rootfs with the prototype guest agent under the
-// jailer, then snapshots it into <data>/templates/<version>. It is the test
-// stand-in for the template pipeline (ENG-4566).
-func buildTemplate(t *testing.T, e env, cmd jailer.Command) {
+// buildTemplate builds the template from the kit rootfs (prototype guest
+// agent) with the agent's template pipeline (internal/tplbuild) and sets
+// e.Template to its version.
+func buildTemplate(t *testing.T, e *env, cmd jailer.Command) {
 	t.Helper()
 	buildTemplateWith(t, e, cmd, bootArgs, waitPing)
 }
 
 // buildTemplateWith is buildTemplate with other boot args and another check
-// that the guest is ready for the snapshot.
-func buildTemplateWith(t *testing.T, e env, cmd jailer.Command, args string, ready func(ctx context.Context, vsockPath string) error) {
+// that the guest is ready for the snapshot. If KVM_IMG_DIR has a
+// build-rootfs.sh manifest.json, the build uses it (and its boot args).
+func buildTemplateWith(t *testing.T, e *env, cmd jailer.Command, args string, ready func(ctx context.Context, vsockPath string) error) {
 	t.Helper()
-	store := &template.Store{Dir: filepath.Join(e.DataDir, "templates")}
-	if _, err := store.Get(e.Template); err == nil {
-		t.Logf("template %s already built", e.Template)
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	l := &fcvm.Launcher{Cmd: cmd, Log: slog.Default()}
-	id := "tpl-" + strings.ReplaceAll(e.Template, ".", "-")
-	const uid = 999999
-	p, err := l.Spawn(ctx, id, uid, []fcvm.FileSource{
-		{Name: "vmlinux", Src: filepath.Join(e.ImgDir, "vmlinux"), Link: true},
-		{Name: template.RootfsFile, Src: filepath.Join(e.ImgDir, "rootfs.ext4"), Link: true},
-		{Name: template.ScratchFile, Src: filepath.Join(e.ImgDir, "scratch-empty.ext4")},
-	})
+	v := kvmVersions(t, *e)
+	// Only a missing manifest falls back to the kit rootfs. A manifest that
+	// LoadRootfs rejects fails the test, as it would fail the agent.
+	var rf *tplbuild.Rootfs
+	if _, err := os.Stat(filepath.Join(e.ImgDir, tplbuild.RootfsManifestFile)); errors.Is(err, os.ErrNotExist) {
+		rf = kitRootfs(t, e.ImgDir, args)
+	} else if rf, err = tplbuild.LoadRootfs(e.ImgDir); err != nil {
+		t.Fatalf("rootfs manifest in %s: %v", e.ImgDir, err)
+	}
+	b := &tplbuild.Builder{
+		Store: &template.Store{Dir: filepath.Join(e.DataDir, "templates")},
+		VMM:   tplbuild.FirecrackerVMM{Launcher: &fcvm.Launcher{Cmd: cmd, Log: slog.Default()}},
+		Slots: kvmSlots{}, Node: v.NodeKey(), GuestKernel: v.GuestKernel, KernelPath: kernelPath(t, *e),
+		VCPUs: tplVCPUs, MemMiB: tplMemMiB, ScratchGiB: tplScratchGiB, Keep: 4, Ready: ready, Log: slog.Default(),
+	}
+	res, err := b.Build(ctx, rf)
+	if err != nil {
+		t.Fatalf("template build: %v", err)
+	}
+	e.Template = res.Template.Version
+	t.Logf("template %s (built %v, %d ms)", e.Template, res.Built, res.BuildMS)
+}
+
+// kitRootfs describes a root drive that has no build-rootfs.sh manifest.
+func kitRootfs(t *testing.T, imgDir, args string) *tplbuild.Rootfs {
+	t.Helper()
+	path := filepath.Join(imgDir, "rootfs.ext4")
+	sum, err := template.FileSHA256(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = p.Kill(context.Background()) }()
-	api := p.API()
-	must := func(what string, err error) {
-		if err != nil {
-			t.Fatalf("%s: %v (console: %s)", what, err, readTail(cmd.Layout.ConsoleLog(id)))
-		}
-	}
-	kernel := "/vmlinux"
-	_, err = api.PutGuestBootSourceContext(ctx, &operations.PutGuestBootSourceParams{Body: &models.BootSource{KernelImagePath: &kernel, BootArgs: args}})
-	must("boot source", err)
-	for _, d := range []struct {
-		id   string
-		root bool
-		ro   bool
-	}{{template.RootfsDriveID, true, true}, {template.ScratchDriveID, false, false}} {
-		driveID, root, path := d.id, d.root, "/"+map[string]string{template.RootfsDriveID: template.RootfsFile, template.ScratchDriveID: template.ScratchFile}[d.id]
-		_, err = api.PutGuestDriveByIDContext(ctx, &operations.PutGuestDriveByIDParams{
-			DriveID: driveID, Body: &models.Drive{DriveID: &driveID, IsRootDevice: &root, IsReadOnly: d.ro, PathOnHost: path},
-		})
-		must("drive "+driveID, err)
-	}
-	vcpus, mem := int64(tplVCPUs), int64(tplMemMiB)
-	_, err = api.PutMachineConfigurationContext(ctx, &operations.PutMachineConfigurationParams{Body: &models.MachineConfiguration{VcpuCount: &vcpus, MemSizeMib: &mem}})
-	must("machine config", err)
-	cid, uds := int64(template.GuestCID), template.VsockUDS
-	_, err = api.PutGuestVsockContext(ctx, &operations.PutGuestVsockParams{Body: &models.Vsock{GuestCid: &cid, UdsPath: &uds}})
-	must("vsock", err)
-	start := models.InstanceActionInfoActionTypeInstanceStart
-	_, err = api.CreateSyncActionContext(ctx, &operations.CreateSyncActionParams{Info: &models.InstanceActionInfo{ActionType: &start}})
-	must("start", err)
-	vsockPath := cmd.Layout.HostPath(id, template.VsockUDS)
-	must("guest ready", ready(ctx, vsockPath))
-	paused := models.VMStatePaused
-	_, err = api.PatchVMContext(ctx, &operations.PatchVMParams{Body: &models.VM{State: &paused}})
-	must("pause", err)
-	snapPath, memPath := "/"+template.VMStateFile, "/"+template.MemFile
-	_, err = api.CreateSnapshotContext(ctx, &operations.CreateSnapshotParams{Body: &models.SnapshotCreateParams{
-		SnapshotType: models.SnapshotCreateParamsSnapshotTypeFull, SnapshotPath: &snapPath, MemFilePath: &memPath,
-	}})
-	must("snapshot", err)
+	r := &tplbuild.Rootfs{Path: path, ManifestSHA256: sum}
+	r.Manifest.SourceImage.Ref = "kit-rootfs"
+	r.Manifest.Guest.BootArgs = args
+	r.Manifest.Output.File, r.Manifest.Output.SHA256 = "rootfs.ext4", sum
+	return r
+}
 
-	tmp := filepath.Join(store.Dir, "."+e.Template+".tmp")
-	_ = os.RemoveAll(tmp)
-	if err := os.MkdirAll(tmp, 0o755); err != nil {
+type kvmSlots struct{}
+
+func (kvmSlots) BuildSlot(string, uint32) (uint32, func(bool), error) {
+	return 999999, func(bool) {}, nil
+}
+func (kvmSlots) TemplatesInUse() map[string]bool { return nil }
+
+// kernelPath installs the guest kernel of the artifacts dir like the agent.
+func kernelPath(t *testing.T, e env) string {
+	t.Helper()
+	k, err := binaries.InstallKernel(filepath.Join(e.ArtifactsDir, "vmlinux"), filepath.Join(e.DataDir, "kernel"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	root := cmd.Layout.RootDir(id)
-	for _, f := range []string{template.VMStateFile, template.MemFile} {
-		if err := os.Rename(filepath.Join(root, f), filepath.Join(tmp, f)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := scratch.Prepare(filepath.Join(root, template.ScratchFile), filepath.Join(tmp, template.ScratchFile), int64(tplScratchGiB)*scratch.GiB, 0, 0); err != nil {
+	return k.Path
+}
+
+// kvmVersions are the node versions the agent would use on this host.
+func kvmVersions(t *testing.T, e env) agent.Versions {
+	t.Helper()
+	k, err := binaries.InstallKernel(filepath.Join(e.ArtifactsDir, "vmlinux"), filepath.Join(e.DataDir, "kernel"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Link(filepath.Join(e.ImgDir, "rootfs.ext4"), filepath.Join(tmp, template.RootfsFile)); err != nil {
-		t.Fatal(err)
+	return agent.Versions{
+		Firecracker: binaries.FirecrackerVersion, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(),
+		Agent: "kvmtest", GuestKernel: k.Release, GuestKernelSHA256: k.SHA256,
 	}
-	// Template files are shared read-only by every VM (each with its own UID).
-	for _, f := range []string{template.VMStateFile, template.MemFile, template.ScratchFile} {
-		if err := os.Chown(filepath.Join(tmp, f), 0, 0); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(filepath.Join(tmp, f), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := template.WriteManifest(tmp, template.Manifest{
-		Version: e.Template, VCPUs: tplVCPUs, MemMiB: tplMemMiB, ScratchGiB: tplScratchGiB,
-		GuestKernel: "6.18.25", FirecrackerVersion: binaries.FirecrackerVersion,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(tmp, filepath.Join(store.Dir, e.Template)); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("template %s built", e.Template)
 }
 
 // guestCmd sends one prototype guest agent command and returns the reply.

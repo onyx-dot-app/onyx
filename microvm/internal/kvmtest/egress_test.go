@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
-	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
@@ -117,7 +116,7 @@ func countLines(path, substr string) int {
 func TestEgressKVM(t *testing.T) {
 	e := loadEnv()
 	cmd := newCommand(t, e)
-	buildTemplate(t, e, cmd)
+	buildTemplate(t, &e, cmd)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	logDir := getenv("KVM_LOG_DIR", "/var/log/bench")
@@ -171,7 +170,7 @@ func TestEgressKVM(t *testing.T) {
 	m := agent.NewManager(agent.Config{MinFreeMemMiB: 2048, MinFreeDiskBytes: 10 * uint64(scratch.GiB), MaxScratchGiB: 100,
 		StartTimeout: time.Minute, StopTimeout: 30 * time.Second, TombstoneTTL: time.Hour},
 		&template.Store{Dir: filepath.Join(e.DataDir, "templates")}, &fcvm.Launcher{Cmd: cmd, Log: log},
-		hostinfo.Stats{DataDir: e.DataDir}, uids, agent.Versions{Firecracker: binaries.FirecrackerVersion}, log)
+		hostinfo.Stats{DataDir: e.DataDir}, uids, kvmVersions(t, e), log)
 	m.UseEgress(&relay.AgentEgress{Relay: rl})
 	jdir := t.TempDir()
 	m.UseJournal(&journal.Journal{Dir: jdir})
@@ -288,7 +287,7 @@ func TestEgressKVM(t *testing.T) {
 	m2 := agent.NewManager(agent.Config{MinFreeMemMiB: 2048, MinFreeDiskBytes: 10 * uint64(scratch.GiB), MaxScratchGiB: 100,
 		StartTimeout: time.Minute, StopTimeout: 30 * time.Second, TombstoneTTL: time.Hour},
 		&template.Store{Dir: filepath.Join(e.DataDir, "templates")}, &fcvm.Launcher{Cmd: cmd, Log: log},
-		hostinfo.Stats{DataDir: e.DataDir}, uids2, agent.Versions{Firecracker: binaries.FirecrackerVersion}, log)
+		hostinfo.Stats{DataDir: e.DataDir}, uids2, kvmVersions(t, e), log)
 	m2.UseJournal(&journal.Journal{Dir: jdir})
 	m2.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{Signer: signer2, Upstream: "127.0.0.1:8099", Log: log}})
 	rep, err := m2.Recover(ctx, &fcvm.Launcher{Cmd: cmd, Log: log})

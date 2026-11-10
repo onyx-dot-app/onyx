@@ -64,15 +64,22 @@ func (p *Proc) API() *operations.Client {
 // Launch restores a VM from its template. It implements agent.Launcher.
 func (l *Launcher) Launch(ctx context.Context, s agent.LaunchSpec) (agent.Process, error) {
 	t := s.Template
-	files := []FileSource{
-		{Name: template.RootfsFile, Src: t.Path(template.RootfsFile), Link: true},
-		{Name: template.VMStateFile, Src: t.Path(template.VMStateFile), Link: true},
-		{Name: template.MemFile, Src: t.Path(template.MemFile), Link: true},
-		{Name: template.ScratchFile, Src: t.Path(template.ScratchFile), Size: s.ScratchBytes},
+	files := make([]FileSource, 0, len(t.FileList()))
+	for _, f := range t.FileList() {
+		fs := FileSource{Name: f, Src: t.Path(f)}
+		if f == template.ScratchFile {
+			fs.VMOwned, fs.Size = true, s.ScratchBytes
+		}
+		files = append(files, fs)
 	}
-	p, err := l.Spawn(ctx, s.ID, s.UID, files)
+	p, err := l.Spawn(ctx, s.ID, s.UID, files, l.limits(t.VCPUs, t.MemMiB))
 	if err != nil {
 		return nil, err
+	}
+	// The copies share the blocks of the verified files only if no file
+	// changed between the hash check and the copy.
+	if err := t.CheckUnchanged(); err != nil {
+		return nil, l.abort(p, err, nil)
 	}
 	api := p.API()
 	if err := LoadSnapshot(ctx, api, "/"+template.VMStateFile, "/"+template.MemFile); err != nil {
@@ -88,7 +95,7 @@ func (l *Launcher) Launch(ctx context.Context, s agent.LaunchSpec) (agent.Proces
 
 // Spawn prepares the chroot of VM id and starts Firecracker under the jailer
 // in the host slice. Firecracker waits on its API socket when Spawn returns.
-func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []FileSource) (*Proc, error) {
+func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []FileSource, lim jailer.Limits) (*Proc, error) {
 	lay := l.Cmd.Layout
 	chroot := lay.ChrootDir(id)
 	root := lay.RootDir(id)
@@ -108,9 +115,9 @@ func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []Fil
 	}()
 	for _, f := range files {
 		dst := filepath.Join(root, f.Name)
-		if f.Link {
-			if err := os.Link(f.Src, dst); err != nil {
-				return nil, fmt.Errorf("link %s: %w", f.Name, err)
+		if !f.VMOwned {
+			if err := scratch.Clone(f.Src, dst, 0o644, 0, 0); err != nil {
+				return nil, fmt.Errorf("copy %s: %w", f.Name, err)
 			}
 			continue
 		}
@@ -139,7 +146,7 @@ func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []Fil
 	}
 	defer func() { _ = console.Close() }()
 
-	argv, err := l.Cmd.Argv(id, uid)
+	argv, err := l.Cmd.Argv(id, uid, lim)
 	if err != nil {
 		return nil, err
 	}
@@ -317,4 +324,25 @@ func readPID(path string) (int, error) {
 		return 0, fmt.Errorf("bad jailer pid file %q", strings.TrimSpace(string(raw)))
 	}
 	return pid, nil
+}
+
+// ReplaceDrive implements agent.DriveReplacer. It puts a reflink copy of src
+// (root-owned, mode 0644) at /<file> in the chroot and makes Firecracker
+// open it for drive driveID (PATCH /drives). Firecracker reads the new size
+// and tells the guest. The guest must not use the drive meanwhile.
+func (p *Proc) ReplaceDrive(ctx context.Context, driveID, file, src string) error {
+	if file == "" || strings.ContainsAny(file, "/\x00") || strings.HasPrefix(file, ".") {
+		return fmt.Errorf("bad drive file name %q", file)
+	}
+	root := p.l.Cmd.Layout.RootDir(p.ID)
+	tmp := filepath.Join(root, "."+file+".new")
+	_ = os.Remove(tmp)
+	if err := scratch.Clone(src, tmp, 0o644, 0, 0); err != nil {
+		return fmt.Errorf("copy %s: %w", file, err)
+	}
+	if err := os.Rename(tmp, filepath.Join(root, file)); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return RefreshDrive(ctx, p.API(), driveID, "/"+file)
 }

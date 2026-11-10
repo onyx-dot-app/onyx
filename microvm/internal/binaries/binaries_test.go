@@ -47,3 +47,29 @@ func TestInstallOneChecksHash(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInstallKernel(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "vmlinux")
+	img := append(make([]byte, 4096), []byte("Linux version 6.18.25 (builder@host) #1 SMP\x00")...)
+	if err := os.WriteFile(src, img, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	k, err := InstallKernel(src, filepath.Join(dir, "kernel"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k.Release != "6.18.25" || len(k.SHA256) != 64 || filepath.Base(k.Path) != "vmlinux-"+k.SHA256[:16] {
+		t.Fatalf("kernel %+v", k)
+	}
+	// A second install keeps the copy.
+	if k2, err := InstallKernel(src, filepath.Join(dir, "kernel")); err != nil || *k2 != *k {
+		t.Fatalf("second install %+v %v", k2, err)
+	}
+	if err := os.WriteFile(src, []byte("no banner"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InstallKernel(src, filepath.Join(dir, "kernel2")); err == nil {
+		t.Fatal("a file without a Linux banner was accepted")
+	}
+}
