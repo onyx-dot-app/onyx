@@ -30,10 +30,13 @@ from sqlalchemy import (
     ColumnElement,
     Select,
     and_,
+    case,
     delete,
     exists,
+    func,
     or_,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -78,6 +81,10 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.db.skill_library import (
+    assert_new_skill_name_available,
+    skill_library_owner,
+)
 from onyx.db.skill_mutation import (
     assert_skill_content_editable,
     assert_skill_deletable,
@@ -92,7 +99,7 @@ from onyx.db.skill_version import (
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.users import lock_group_membership
-from onyx.db.utils import is_fk_violation, is_unique_violation
+from onyx.db.utils import is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -117,6 +124,7 @@ class SkillUserState:
     enabled: bool
     can_toggle: bool
     external_app_dependency: SkillExternalAppDependencyState | None
+    hidden_by_skill_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -235,6 +243,7 @@ def _is_required_for_user(user: User) -> ColumnElement[bool]:
 
 
 def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
+    policy = Skill.installation_policy
     preference = (
         select(UserSkillPreference.enabled)
         .where(
@@ -244,41 +253,21 @@ def _is_enabled_for_user(user: User) -> ColumnElement[bool]:
         .correlate(Skill)
         .scalar_subquery()
     )
-    selected_name = exists().where(
-        UserSkillPreference.user_id == user.id,
-        UserSkillPreference.name == Skill.name,
-        UserSkillPreference.enabled.is_(True),
-        UserSkillPreference.skill_id.in_(
-            select(Skill.id).where(skill_visible_to_user(user)).correlate(None)
-        ),
-    )
     visible = skill_visible_to_user(user)
-    required_name = Skill.name.in_(
-        select(Skill.name).where(_is_required_for_user(user)).correlate(None)
-    )
     enabled = or_(
         Skill.built_in_skill_id.isnot(None),
-        _is_required_for_user(user),
+        policy == SkillInstallationPolicy.REQUIRED,
+        preference.is_(True),
         and_(
-            ~required_name,
-            or_(
-                preference.is_(True),
-                and_(
-                    Skill.installation_policy == SkillInstallationPolicy.DEFAULT,
-                    visible,
-                    preference.is_(None),
-                    ~selected_name,
-                ),
-            ),
+            policy == SkillInstallationPolicy.DEFAULT,
+            preference.is_(None),
         ),
     )
 
-    return and_(Skill.retired_at.is_(None), enabled)
+    return and_(Skill.retired_at.is_(None), visible, enabled)
 
 
-def _exclude_unavailable_built_in_skills(
-    stmt: Select[tuple[Skill]], db_session: Session
-) -> Select[tuple[Skill]]:
+def _available_built_in_skills(db_session: Session) -> ColumnElement[bool]:
     """Hide built-ins whose codified ``is_available(db)`` returns False.
     User-facing reads use this; admin reads don't (admins see all rows)."""
     unavailable = [
@@ -286,13 +275,9 @@ def _exclude_unavailable_built_in_skills(
         for d in BUILT_IN_SKILLS.values()
         if not d.is_available(db_session)
     ]
-    if not unavailable:
-        return stmt
-    return stmt.where(
-        or_(
-            Skill.built_in_skill_id.is_(None),
-            Skill.built_in_skill_id.notin_(unavailable),
-        )
+    return or_(
+        Skill.built_in_skill_id.is_(None),
+        Skill.built_in_skill_id.notin_(unavailable),
     )
 
 
@@ -336,7 +321,7 @@ def _skill_select_for_management_policy(
         if allow_management and has_global_permission(user, Permission.MANAGE_SKILLS):
             return stmt
         stmt = stmt.where(skill_visible_to_user(user, include_retired=include_retired))
-        return _exclude_unavailable_built_in_skills(stmt, db_session)
+        return stmt.where(_available_built_in_skills(db_session))
 
     if policy == SkillManagementPolicy.EDIT:
         stmt = stmt.where(Skill.built_in_skill_id.is_(None))
@@ -421,37 +406,99 @@ def list_skills(
     return list(db_session.scalars(stmt))
 
 
-def list_runtime_skills_for_user(
-    *,
-    db_session: Session,
+def _runtime_name_winners(
     user: User,
-) -> list[Skill]:
-    """Return the user's effective sandbox skills.
+    db_session: Session,
+    *,
+    include_skill_id: UUID | None = None,
+    required_only: bool = False,
+    dependencies: Mapping[UUID, SkillExternalAppDependencyState] | None = None,
+) -> Select[tuple[UUID, UUID]]:
+    """Map each eligible skill to its name winner, including hidden duplicates.
 
-    Management visibility, user selection, bundle validity, built-in
-    availability, and external-app readiness remain independent inputs.
+    An explicit enable can include one not-yet-enabled skill for conflict checks.
     """
-    external_app_dependencies = get_skill_external_app_dependencies(db_session, user)
+    external_app_dependencies = (
+        dependencies
+        if dependencies is not None
+        else get_skill_external_app_dependencies(db_session, user)
+    )
     ready_external_app_skill_ids = [
         skill_id
         for skill_id, dependency in external_app_dependencies.items()
         if dependency.ready
     ]
-    stmt = _skill_select_with_eager_load(order_by_name=True).where(
-        skill_visible_to_user(user),
-        _is_enabled_for_user(user),
-        or_(
-            ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
-            Skill.id.in_(ready_external_app_skill_ids),
-        ),
-        or_(
-            Skill.built_in_skill_id.isnot(None),
-            and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
-        ),
+    library_owner = skill_library_owner()
+    priority = case(
+        (library_owner.is_(None), 0),
+        (library_owner == user.id, 1),
+        else_=2,
     )
-    return list(
-        db_session.scalars(_exclude_unavailable_built_in_skills(stmt, db_session))
+    stmt = (
+        select(
+            Skill.id,
+            func.first_value(Skill.id).over(
+                partition_by=Skill.name,
+                order_by=(priority, Skill.created_at, Skill.id),
+            ),
+        )
+        .outerjoin(Skill.current_version)
+        .outerjoin(Marketplace, Skill.marketplace_id == Marketplace.id)
+        .where(
+            skill_visible_to_user(user),
+            or_(_is_enabled_for_user(user), Skill.id == include_skill_id),
+            or_(
+                ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
+                Skill.id.in_(ready_external_app_skill_ids),
+            ),
+            or_(
+                Skill.built_in_skill_id.isnot(None),
+                and_(SkillVersion.id.is_not(None), SkillVersion.is_valid.is_not(False)),
+            ),
+            _available_built_in_skills(db_session),
+        )
     )
+    if required_only:
+        stmt = stmt.where(
+            or_(_is_required_for_user(user), Skill.id == include_skill_id)
+        )
+    return stmt
+
+
+def resolve_skill_runtime_names(
+    user: User,
+    db_session: Session,
+    *,
+    include_skill_id: UUID | None = None,
+    required_only: bool = False,
+    dependencies: Mapping[UUID, SkillExternalAppDependencyState] | None = None,
+) -> dict[UUID, UUID]:
+    """Map each eligible skill to its name winner, including hidden duplicates."""
+    stmt = _runtime_name_winners(
+        user,
+        db_session,
+        include_skill_id=include_skill_id,
+        required_only=required_only,
+        dependencies=dependencies,
+    )
+    return dict(db_session.execute(stmt).tuples().all())
+
+
+def list_runtime_skills_for_user(
+    *,
+    db_session: Session,
+    user: User,
+) -> list[Skill]:
+    """Return one usable skill per name, in company/own/shared priority order."""
+    # One statement, so a concurrent revoke cannot ship a version it did not check.
+    winners = _runtime_name_winners(user, db_session).subquery()
+    skill_id, winner_id = winners.c
+    stmt = (
+        _skill_select_with_eager_load(order_by_name=True)
+        .join(winners, skill_id == Skill.id)
+        .where(winner_id == Skill.id)
+    )
+    return list(db_session.scalars(stmt))
 
 
 def fetch_skill(
@@ -485,7 +532,20 @@ def fetch_skill(
 def add_new_skill__no_commit(
     skill: Skill,
     db_session: Session,
+    *,
+    intended_public_permission: SkillSharePermission | None = None,
 ) -> Skill:
+    lock_group_membership(db_session)
+    if skill.built_in_skill_id is None:
+        public = skill.public_permission or intended_public_permission
+        owner_id = skill.author_user_id if public is None else None
+        if skill.marketplace_id is not None:
+            owner_id = db_session.execute(
+                select(Marketplace.owner_user_id).where(
+                    Marketplace.id == skill.marketplace_id
+                )
+            ).scalar_one()
+        assert_new_skill_name_available(owner_id, skill.name, db_session)
     db_session.add(skill)
     db_session.flush()
     return skill
@@ -548,7 +608,11 @@ def replace_skill_bundle(
 
 
 def create_skill_from_ingested_bundle(
-    ingested: IngestedBundle, creator_id: UUID, db_session: Session
+    ingested: IngestedBundle,
+    creator_id: UUID,
+    db_session: Session,
+    *,
+    intended_public_permission: SkillSharePermission | None = None,
 ) -> Skill:
     skill = add_new_skill__no_commit(
         Skill(
@@ -560,6 +624,7 @@ def create_skill_from_ingested_bundle(
             author_user_id=creator_id,
         ),
         db_session,
+        intended_public_permission=intended_public_permission,
     )
     save_skill_version(skill, ingested, creator_id, db_session, initial=True)
     return skill
@@ -615,7 +680,9 @@ def skill_user_states(
     external_app_dependencies = get_skill_external_app_dependencies(
         db_session,
         user,
-        requested_ids,
+    )
+    winners = resolve_skill_runtime_names(
+        user, db_session, dependencies=external_app_dependencies
     )
     rows = db_session.execute(
         select(
@@ -634,7 +701,7 @@ def skill_user_states(
     )
     return {
         skill_id: SkillUserState(
-            enabled=enabled,
+            enabled=enabled and winners.get(skill_id, skill_id) == skill_id,
             can_toggle=visible
             and supports_preference
             and (
@@ -643,6 +710,11 @@ def skill_user_states(
                 or external_app_dependencies[skill_id].ready
             ),
             external_app_dependency=external_app_dependencies.get(skill_id),
+            hidden_by_skill_id=(
+                winners[skill_id]
+                if skill_id in winners and winners[skill_id] != skill_id
+                else None
+            ),
         )
         for skill_id, enabled, visible, supports_preference in rows
     }
@@ -681,27 +753,26 @@ def set_skill_enabled_for_user(
         )
 
     if enabled:
-        required = db_session.scalar(
-            select(Skill.id).where(
-                Skill.name == skill.name,
-                Skill.id != skill.id,
-                _is_required_for_user(user),
-            )
+        required_names = resolve_skill_runtime_names(
+            user, db_session, include_skill_id=skill.id, required_only=True
         )
-        if required is not None:
+        if required_names.get(skill.id, skill.id) != skill.id:
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 "A required skill already uses this name.",
             )
+        current_names = resolve_skill_runtime_names(user, db_session)
+        current_winners = set(current_names.values())
         conflicts = db_session.scalars(
             select(Skill.id).where(
                 Skill.name == skill.name,
                 Skill.id != skill.id,
                 _is_enabled_for_user(user),
+                Skill.installation_policy != SkillInstallationPolicy.REQUIRED,
             )
         ).all()
         if conflicts:
-            if not replace_conflict:
+            if not replace_conflict and current_winners.intersection(conflicts):
                 raise OnyxError(
                     OnyxErrorCode.SKILL_NAME_CONFLICT,
                     f"Another skill named '{skill.name}' is already enabled.",
@@ -727,6 +798,16 @@ def set_skill_enabled_for_user(
                     set_={"enabled": False},
                 )
             )
+        db_session.execute(
+            update(UserSkillPreference)
+            .where(
+                UserSkillPreference.user_id == user.id,
+                UserSkillPreference.name == skill.name,
+                UserSkillPreference.skill_id != skill.id,
+                UserSkillPreference.enabled.is_(True),
+            )
+            .values(enabled=False)
+        )
     db_session.execute(
         insert(UserSkillPreference)
         .values(user_id=user.id, skill_id=skill.id, name=skill.name, enabled=enabled)
@@ -754,17 +835,8 @@ def set_skill_installation_policy(
             OnyxErrorCode.INVALID_INPUT,
             "Installation policies apply only to custom skills.",
         )
-    try:
-        with db_session.begin_nested():
-            skill.installation_policy = policy
-            db_session.flush()
-    except IntegrityError as exc:
-        if not is_unique_violation(exc, "uq_skill_automatic_name"):
-            raise
-        raise OnyxError(
-            OnyxErrorCode.SKILL_NAME_CONFLICT,
-            "Another automatically installed skill already uses this name.",
-        ) from exc
+    skill.installation_policy = policy
+    db_session.flush()
 
 
 def _flush_shares(db_session: Session, fk_violation_detail: str) -> None:
@@ -1071,7 +1143,14 @@ def create_skill_from_bundle__no_commit(
     the skill, whether it was enabled for the user, and the affected users."""
     with db_session.begin_nested():
         user = lock_resource_access_user(user.id, db_session)
-        skill = create_skill_from_ingested_bundle(ingested, user.id, db_session)
+        skill = create_skill_from_ingested_bundle(
+            ingested,
+            user.id,
+            db_session,
+            intended_public_permission=change.public_permission
+            if change is not None
+            else None,
+        )
         affected: set[UUID] = set()
         if change is not None:
             affected = share_skill__no_commit(

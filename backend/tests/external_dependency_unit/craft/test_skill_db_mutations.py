@@ -633,11 +633,14 @@ def test_installation_policies_preserve_choices_through_updates(
     assert skill_user_states(user, [skill.id], db_session)[skill.id].enabled
 
 
-def test_automatic_skill_name_conflicts(db_session: Session) -> None:
+def test_policy_does_not_override_same_library_name_priority(
+    db_session: Session,
+) -> None:
     user = make_user(db_session, standard_account=True)
     name = f"policy-conflict-{uuid4().hex[:8]}"
     optional = make_skill(db_session, name=name, is_public=True)
     automatic = make_skill(db_session, name=name, is_public=True)
+    optional.created_at = automatic.created_at.replace(year=2000)
     set_skill_enabled_for_user(
         skill_id=optional.id, enabled=True, user=user, db_session=db_session
     )
@@ -650,22 +653,17 @@ def test_automatic_skill_name_conflicts(db_session: Session) -> None:
         automatic, SkillInstallationPolicy.REQUIRED, db_session
     )
     states = skill_user_states(user, [optional.id, automatic.id], db_session)
-    assert not states[optional.id].enabled and states[automatic.id].enabled
-    with pytest.raises(OnyxError) as error:
-        set_skill_enabled_for_user(
-            skill_id=optional.id,
-            enabled=True,
-            replace_conflict=True,
-            user=user,
-            db_session=db_session,
-        )
-    assert error.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
-    with pytest.raises(OnyxError) as error:
-        set_skill_installation_policy(
-            optional, SkillInstallationPolicy.DEFAULT, db_session
-        )
-    assert error.value.error_code == OnyxErrorCode.SKILL_NAME_CONFLICT
-    assert optional.installation_policy == SkillInstallationPolicy.AVAILABLE
+    assert states[optional.id].enabled and not states[automatic.id].enabled
+    assert states[automatic.id].hidden_by_skill_id == optional.id
+    set_skill_enabled_for_user(
+        skill_id=optional.id,
+        enabled=True,
+        replace_conflict=True,
+        user=user,
+        db_session=db_session,
+    )
+    set_skill_installation_policy(optional, SkillInstallationPolicy.DEFAULT, db_session)
+    assert optional.installation_policy == SkillInstallationPolicy.DEFAULT
     set_skill_installation_policy(
         automatic, SkillInstallationPolicy.AVAILABLE, db_session
     )
@@ -757,7 +755,7 @@ def test_inaccessible_selection_does_not_suppress_default(
     )
     default = make_skill(db_session, name=selected.name, is_public=True)
     set_skill_installation_policy(default, SkillInstallationPolicy.DEFAULT, db_session)
-    assert not skill_user_states(user, [default.id], db_session)[default.id].enabled
+    assert skill_user_states(user, [default.id], db_session)[default.id].enabled
 
     replace_skill_shares(
         skill=selected, user_shares={}, group_shares={}, db_session=db_session
@@ -772,14 +770,15 @@ def test_inaccessible_selection_does_not_suppress_default(
     preference = db_session.get(UserSkillPreference, (user.id, selected.id))
     assert preference is not None and preference.enabled
 
-    # Restoring access restores the saved selection without enabling both skills.
+    # The saved choice returns, but company priority still wins.
     if share_via_group:
         share_skill_with_group(db_session, selected, group)
     else:
         share_skill_with_user(db_session, selected, user)
     states = skill_user_states(user, [default.id, selected.id], db_session)
-    assert states[selected.id].enabled
-    assert not states[default.id].enabled
+    assert not states[selected.id].enabled
+    assert states[selected.id].hidden_by_skill_id == default.id
+    assert states[default.id].enabled
 
 
 def test_replacement_clears_inaccessible_selection_and_effective_default(

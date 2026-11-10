@@ -10,7 +10,7 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillInstallationPolicy as Policy
@@ -223,9 +223,9 @@ def test_retired_reads_hidden_and_bulk_delete_allowed(
                 f"/{old.id}/preview",
                 f"/custom/{old.id}/edit",
                 f"/custom/{old.id}/share",
-                f"/custom/{old.id}/versions/{old.current_version_id}",
             ]:
                 assert client.get(f"/skills{path}").status_code == 404, path
+            # The personal owner and global managers keep read-only history.
             history = client.get(f"/skills/custom/{old.id}/versions")
             assert history.status_code == 200, history.text
             assert [row["id"] for row in history.json()] == [
@@ -302,13 +302,18 @@ def test_retirement_migration_preserves_reused_live_policy(session: Session) -> 
         )
     )
     session.flush()
-    revision = ScriptDirectory(
-        str(Path(__file__).resolve().parents[3] / "alembic")
-    ).get_revision("99814f2364b2")
-    assert revision is not None
+    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[3] / "alembic"))
+    revision = scripts.get_revision("99814f2364b2")
+    # 54013115725e later drops the index that 99814f2364b2 replaces.
+    name_index_removal = scripts.get_revision("54013115725e")
+    assert revision is not None and name_index_removal is not None
+    # Fixture inserts leave deferred checks that block index creation.
+    session.execute(text("SET CONSTRAINTS fk_skill_current_version IMMEDIATE"))
     with Operations.context(MigrationContext.configure(session.connection())):
+        name_index_removal.module.downgrade()
         revision.module.downgrade()
         revision.module.upgrade()
+        name_index_removal.module.upgrade()
     session.expire_all()
     assert new.installation_policy == Policy.DEFAULT
     assert old.installation_policy == Policy.AVAILABLE

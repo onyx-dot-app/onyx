@@ -616,7 +616,7 @@ def test_required_creation_preserves_same_name_personal_preference(
         name=personal.name,
         description="Admin required skill",
         instructions_markdown="Follow the organization instructions.",
-        sharing='{"installation_policy":"REQUIRED"}',
+        sharing='{"installation_policy":"REQUIRED","public_permission":"VIEWER"}',
         user=owner,
         db_session=db_session,
         http_request=Request({"type": "http"}),
@@ -627,7 +627,7 @@ def test_required_creation_preserves_same_name_personal_preference(
     assert personal_preference is not None and personal_preference.enabled
     share_current_user_skill(
         response.id,
-        SkillShareRequest(installation_policy=SkillInstallationPolicy.DEFAULT),
+        SkillShareRequest(installation_policy=SkillInstallationPolicy.AVAILABLE),
         user=owner,
         db_session=db_session,
         http_request=Request({"type": "http"}),
