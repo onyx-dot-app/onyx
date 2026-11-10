@@ -51,16 +51,18 @@ def isolated_engine(monkeypatch: pytest.MonkeyPatch) -> Generator[Engine, None, 
             engine.dispose()
 
 
+@pytest.mark.parametrize("after_cutover", [False, True])
 @pytest.mark.parametrize("orphan_sweep", [False, True])
 def test_cleanup_preserves_tenant_references(
-    connection: Connection, orphan_sweep: bool
+    connection: Connection, after_cutover: bool, orphan_sweep: bool
 ) -> None:
     assert connection.scalar(text("SELECT to_regclass('public.skill')")) is None
     schema = connection.scalar(text("SELECT current_schema()"))
     assert isinstance(schema, str)
     scripts = ScriptDirectory(str(Path(__file__).resolve().parents[3] / "alembic"))
     v1 = scripts.get_revision("6476b236ec97")
-    assert v1 is not None
+    v7 = scripts.get_revision("ef73786dc783")
+    assert v1 is not None and v7 is not None
     with Operations.context(MigrationContext.configure(connection)):
         v1.module.upgrade()
     Base.metadata.create_all(
@@ -100,7 +102,17 @@ def test_cleanup_preserves_tenant_references(
             update(FileRecord).values(created_at=func.now() - timedelta(hours=2))
         )
         connection.commit()
-        assert connection.scalar(text("SELECT count(*) FROM skill_version")) == 0
+        if after_cutover:
+            with Operations.context(MigrationContext.configure(connection)):
+                v7.module.upgrade()
+            connection.commit()
+            assert connection.scalar(text("SELECT bundle_file_id FROM skill")) is None
+            assert (
+                connection.scalar(text("SELECT bundle_file_id FROM skill_version"))
+                == retained
+            )
+        else:
+            assert connection.scalar(text("SELECT count(*) FROM skill_version")) == 0
         with sql_engine.get_session_with_current_tenant() as session:
             # Only schema translation may find the tenant; no search_path fallback.
             assert session.scalar(text("SELECT current_schema()")) == "public"

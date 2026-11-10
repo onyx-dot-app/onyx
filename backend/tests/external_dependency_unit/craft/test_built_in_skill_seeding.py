@@ -240,11 +240,11 @@ class TestNonUniqueBuiltInId:
 
 
 class TestDefinitionSourceInvariant:
-    def test_built_in_row_rejects_bundle_storage(self, db_session: Session) -> None:
+    def test_built_in_row_rejects_version_pointer(self, db_session: Session) -> None:
         row = make_built_in_skill_row(
             db_session, built_in_skill_id=f"invalid-source-{uuid4().hex[:8]}"
         )
-        row.bundle_file_id = "unexpected-bundle"
+        row.current_version_id = uuid4()
 
         with pytest.raises(IntegrityError):
             db_session.flush()

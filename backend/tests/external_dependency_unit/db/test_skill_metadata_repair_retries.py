@@ -13,17 +13,21 @@ from onyx.background.celery.tasks.skill_versions.tasks import (
     PROGRESS_KEY,
     repair_skill_versions,
 )
-from onyx.db.models import SkillVersion, User
+from onyx.db.models import Skill, SkillVersion, User
+from onyx.db.resource_version import write_resource_version
 from onyx.db.skill_version import (
+    SkillVersionAdapter,
     repair_skill_version_metadata,
     skill_version_repair_batch,
 )
-from onyx.file_store.file_store import get_default_file_store
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.skills.ingest import ingested_skill_bundle
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     bundle,
-    legacy_skill,
+    metadata_skill,
     skill_with_versions,
     versions,
 )
@@ -38,18 +42,18 @@ from tests.external_dependency_unit.db.test_skill_version_writes import (
 )
 
 
-@pytest.mark.parametrize("completed", [False, True])
+@pytest.mark.parametrize("initialized", [False, True])
 @pytest.mark.parametrize("blocked_count", [1, 50])
 def test_access_denied_does_not_starve_later_skills(
-    tenant: str, session: Session, user: User, completed: bool, blocked_count: int
+    tenant: str, session: Session, user: User, initialized: bool, blocked_count: int
 ) -> None:
     blocked = [
-        legacy_skill(session, user, number) for number in range(1, blocked_count + 1)
+        metadata_skill(session, user, number) for number in range(1, blocked_count + 1)
     ]
-    healthy = legacy_skill(session, user, blocked_count + 1)
-    failed_files = {skill.bundle_file_id for skill in blocked}
-    if completed:
-        get_kv_store().store(PROGRESS_KEY, "completed")
+    healthy = metadata_skill(session, user, blocked_count + 1)
+    failed_files = {versions(skill, session)[0].bundle_file_id for skill in blocked}
+    if initialized:
+        get_kv_store().store(PROGRESS_KEY, None)
     store = get_default_file_store()
     original_read = store.read_file
 
@@ -69,8 +73,12 @@ def test_access_denied_does_not_starve_later_skills(
             repair_skill_versions.run(tenant_id=tenant)
         session.expire_all()
         assert versions(healthy, session)[0].content_digest is not None
-        assert all(skill.current_version_id is None for skill in blocked)
-        pending = skill_version_repair_batch(session, None, drift_only=True)
+        assert all(
+            skill.current_version is not None
+            and skill.current_version.content_digest is None
+            for skill in blocked
+        )
+        pending = skill_version_repair_batch(session, None)
         assert {skill.id for skill in pending} == {skill.id for skill in blocked}
         session.commit()
     for _ in range(3):
@@ -78,7 +86,7 @@ def test_access_denied_does_not_starve_later_skills(
     session.expire_all()
     for skill in blocked:
         assert versions(skill, session)[0].content_digest is not None
-    assert skill_version_repair_batch(session, None, drift_only=True) == []
+    assert skill_version_repair_batch(session, None) == []
 
 
 def test_missing_metadata_keeps_its_bundle_link_for_retry(
@@ -123,13 +131,13 @@ def test_missing_metadata_keeps_its_bundle_link_for_retry(
     session.refresh(oldest)
     assert oldest.bundle_file_id == old_file_id
     assert oldest.content_digest is None
-    assert skill_version_repair_batch(session, None, drift_only=True) == [skill]
+    assert skill_version_repair_batch(session, None) == [skill]
     assert repair_skill_version_metadata(skill, session, store) == [old_file_id]
     session.commit()
     session.refresh(oldest)
     assert oldest.bundle_file_id is None
     assert oldest.content_digest is not None
-    assert skill_version_repair_batch(session, None, drift_only=True) == []
+    assert skill_version_repair_batch(session, None) == []
     assert len(list(session.scalars(select(SkillVersion)))) == 11
 
 
@@ -155,20 +163,21 @@ def test_definitively_missing_history_clears_only_historical_link(
     session.refresh(current)
     assert old.bundle_file_id is None
     assert current.bundle_file_id == current_file_id
-    assert skill.bundle_file_id == current_file_id
-    assert skill_version_repair_batch(session, None, drift_only=True) == (
+    assert skill.current_version is not None
+    assert skill.current_version.bundle_file_id == current_file_id
+    assert skill_version_repair_batch(session, None) == (
         [] if metadata_complete else [skill]
     )
 
 
-@pytest.mark.parametrize("completed", [False, True])
+@pytest.mark.parametrize("initialized", [False, True])
 def test_cleanup_failure_does_not_freeze_repair_progress(
-    tenant: str, session: Session, user: User, completed: bool
+    tenant: str, session: Session, user: User, initialized: bool
 ) -> None:
-    first = legacy_skill(session, user, 1)
-    second = legacy_skill(session, user, 2)
-    if completed:
-        get_kv_store().store(PROGRESS_KEY, "completed")
+    first = metadata_skill(session, user, 1)
+    second = metadata_skill(session, user, 2)
+    if initialized:
+        get_kv_store().store(PROGRESS_KEY, None)
     calls = 0
 
     def failed_cleanup(_files: list[str], _session: Session) -> None:
@@ -185,13 +194,13 @@ def test_cleanup_failure_does_not_freeze_repair_progress(
     session.expire_all()
     assert versions(first, session)[0].content_digest is not None
     assert versions(second, session)[0].content_digest is not None
-    if not completed:
+    if not initialized:
         assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(second.id)
-    assert skill_version_repair_batch(session, None, drift_only=True) == []
+    assert skill_version_repair_batch(session, None) == []
 
 
 @pytest.mark.parametrize("metadata_complete", [False, True])
-def test_denied_history_does_not_roll_back_legacy_current_repair(
+def test_denied_history_does_not_roll_back_current_metadata_repair(
     tenant: str, session: Session, user: User, metadata_complete: bool
 ) -> None:
     skill = skill_with_versions(session, user, 3)
@@ -204,11 +213,19 @@ def test_denied_history_does_not_roll_back_legacy_current_repair(
     with ingested_skill_bundle(
         bundle(skill.name, "Legacy writer"), "skill.zip", store
     ) as ingested:
-        skill.bundle_file_id = ingested.bundle_file_id
-        skill.bundle_sha256 = ingested.bundle_sha256
+        write_resource_version(
+            SkillVersionAdapter(skill),
+            bundle_file_id=ingested.bundle_file_id,
+            bundle_sha256=ingested.bundle_sha256,
+            is_valid=True,
+            metadata=None,
+            created_by_user_id=user.id,
+            db_session=session,
+        )
         session.commit()
-    legacy_file = skill.bundle_file_id
-    get_kv_store().store(PROGRESS_KEY, "completed")
+    assert skill.current_version is not None
+    legacy_file = skill.current_version.bundle_file_id
+    get_kv_store().store(PROGRESS_KEY, None)
     original_read = store.read_file
     original_size = store.get_file_size
 
@@ -254,7 +271,7 @@ def test_complete_history_uses_no_payload_reads_during_retries(
     assert old_file_id is not None
     oldest.content_digest = oldest.unpacked_size_bytes = oldest.file_count = None
     session.commit()
-    get_kv_store().store(PROGRESS_KEY, "completed")
+    get_kv_store().store(PROGRESS_KEY, None)
     store = get_default_file_store()
     original_read = store.read_file
     reads: list[str] = []
@@ -272,9 +289,9 @@ def test_complete_history_uses_no_payload_reads_during_retries(
         return original_read(file_id, mode, use_tempfile, max_bytes=max_bytes)
 
     with patch.object(store, "read_file", read):
-        for _ in range(3):
+        for _ in range(4):
             repair_skill_versions.run(tenant_id=tenant)
-    assert reads == [old_file_id] * 3
+    assert reads == [old_file_id] * 2
     session.expire_all()
     assert oldest.bundle_file_id == old_file_id
     assert oldest.content_digest is None
@@ -283,4 +300,32 @@ def test_complete_history_uses_no_payload_reads_during_retries(
     assert recovered.call_count == 1
     session.expire_all()
     assert oldest.content_digest is not None
-    assert skill_version_repair_batch(session, None, drift_only=True) == []
+    assert skill_version_repair_batch(session, None) == []
+
+
+def test_skill_failure_rolls_back_partial_repair_and_advances_cursor(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    failed_skill = metadata_skill(session, user, 1)
+    healthy_skill = metadata_skill(session, user, 2)
+    original_repair = repair_tasks.repair_skill_version_metadata
+
+    def conflicting_repair(
+        skill: Skill, db_session: Session, file_store: FileStore
+    ) -> list[str]:
+        stale_file_ids = original_repair(skill, db_session, file_store)
+        if skill.id == failed_skill.id:
+            db_session.flush()
+            raise OnyxError(OnyxErrorCode.CONFLICT, "Skill changed during repair")
+        return stale_file_ids
+
+    monkeypatch.setattr(
+        repair_tasks, "repair_skill_version_metadata", conflicting_repair
+    )
+    repair_skill_versions.run(tenant_id=tenant)
+    session.expire_all()
+    assert versions(failed_skill, session)[0].content_digest is None
+    assert versions(healthy_skill, session)[0].content_digest is not None
+    assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(
+        healthy_skill.id
+    )

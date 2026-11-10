@@ -153,7 +153,7 @@ def test_group_duplicates_push_one_complete_bundle(
 
 
 @pytest.mark.parametrize(
-    "reason", ["off", "invalid", "missing_version", "app", "retired", "not_available"]
+    "reason", ["off", "invalid", "app", "retired", "not_available"]
 )
 @pytest.mark.parametrize("include_fallbacks", [False, True])
 def test_unusable_company_skill_does_not_hide_own(
@@ -173,9 +173,6 @@ def test_unusable_company_skill_does_not_hide_own(
     elif reason == "invalid":
         assert company.current_version is not None
         company.current_version.is_valid = False
-    elif reason == "missing_version":
-        company.current_version = None
-        company.current_version_id = None
     elif reason == "app":
         make_external_app(db_session, skill=company, auth_template={}, enabled=False)
     elif reason == "retired":

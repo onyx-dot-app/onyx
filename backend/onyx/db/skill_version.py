@@ -17,6 +17,7 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import FileRecord, Skill, SkillVersion, User
 from onyx.db.resource_version import (
+    BUNDLES_KEPT,
     ResourceVersionAdapter,
     fill_version_metadata,
     prune_resource_bundles,
@@ -57,8 +58,6 @@ class SkillContentSnapshot:
     current_version_id: UUID | None
     current_bundle_file_id: str | None
     current_bundle_sha256: str | None
-    bundle_file_id: str | None
-    bundle_sha256: str | None
     name: str
     description: str
 
@@ -70,8 +69,6 @@ def skill_content_snapshot(skill: Skill) -> SkillContentSnapshot:
         skill.current_version_id,
         current.bundle_file_id if current else None,
         current.bundle_sha256 if current else None,
-        skill.bundle_file_id,
-        skill.bundle_sha256,
         skill.name,
         skill.description,
     )
@@ -108,25 +105,15 @@ def _prepare_metadata(
     return observed.content_digest, observed.unpacked_size_bytes, observed.file_count
 
 
-def _legacy_version(skill: Skill) -> SkillVersion:
-    current = skill.current_version
-    if current is not None and (current.bundle_file_id, current.bundle_sha256) == (
-        skill.bundle_file_id,
-        skill.bundle_sha256,
-    ):
-        return current
-    return SkillVersion(
-        bundle_file_id=skill.bundle_file_id, bundle_sha256=skill.bundle_sha256
-    )
-
-
 def prepare_skill_version_write(
     skill: Skill, ingested: IngestedBundle, db_session: Session
 ) -> PreparedSkillVersionWrite:
     """Read previous content before taking any resource or membership lock."""
     with db_session.no_autoflush:
         observation = skill_content_snapshot(skill)
-        previous = _legacy_version(skill)
+        previous = skill.current_version
+        if previous is None:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Skill has no current version")
         metadata = _prepare_metadata(
             previous,
             get_default_file_store(),
@@ -182,9 +169,6 @@ class SkillVersionAdapter(ResourceVersionAdapter[SkillVersion]):
     def publish(self, version: SkillVersion) -> None:
         self.skill.current_version_id = version.id
         self.skill.current_version = version
-        self.skill.bundle_file_id = version.bundle_file_id
-        self.skill.bundle_sha256 = version.bundle_sha256
-        self.skill.is_valid = version.is_valid
 
 
 def list_skill_versions(
@@ -234,32 +218,6 @@ def assert_skill_version_bundle_unchanged(
         )
 
 
-def repair_skill_version(skill: Skill, db_session: Session) -> SkillVersion:
-    """Legacy columns remain authoritative until all readers use versions."""
-    adapter = SkillVersionAdapter(skill)
-    adapter.lock(db_session)
-    if not skill.is_custom or skill.bundle_file_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, "Only custom skills have bundle versions"
-        )
-    current = adapter.current(db_session)
-    if current is None or (
-        current.bundle_file_id,
-        current.bundle_sha256,
-    ) != (skill.bundle_file_id, skill.bundle_sha256):
-        current = write_resource_version(
-            adapter,
-            bundle_file_id=skill.bundle_file_id,
-            bundle_sha256=skill.bundle_sha256,
-            is_valid=skill.is_valid,
-            metadata=None,
-            created_by_user_id=None,
-            db_session=db_session,
-        )
-    current.is_valid = skill.is_valid
-    return current
-
-
 def save_skill_version(
     skill: Skill,
     ingested: IngestedBundle,
@@ -290,7 +248,9 @@ def save_skill_version(
             prepared is not None
             and prepared.observation == skill_content_snapshot(skill)
         )
-        current = repair_skill_version(skill, db_session)
+        current = adapter.current(db_session)
+        if current is None:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Skill has no current version")
         if matches and prepared is not None and prepared.metadata is not None:
             _apply_metadata(current, prepared.metadata)
             reuse_current = True
@@ -327,10 +287,6 @@ def skill_bundle_file_ids_for_skills(
         )
         if file_id is not None
     }
-    # Keep cleanup compatible with pointerless legacy writes until V7.
-    file_ids.update(
-        skill.bundle_file_id for skill in skills if skill.bundle_file_id is not None
-    )
     return file_ids
 
 
@@ -347,9 +303,7 @@ def persist_skill_version_validity(
     )
     if skill is None:
         return
-    db_session.refresh(
-        skill, ["current_version_id", "bundle_file_id", "current_version"]
-    )
+    db_session.refresh(skill, ["current_version_id", "current_version"])
     if skill.current_version_id != version_id:
         return
     version = skill.current_version
@@ -360,16 +314,13 @@ def persist_skill_version_validity(
     ):
         return
     version.is_valid = is_valid
-    if skill.bundle_file_id == bundle_file_id:
-        skill.is_valid = is_valid
 
 
 def _unused_skill_bundles(*conditions: ColumnElement[bool]) -> Select[tuple[str]]:
-    """Legacy skill columns count: old writers and pointerless skills use them."""
     return select(FileRecord.file_id).where(
         FileRecord.file_origin == FileOrigin.SKILL_BUNDLE,
         ~exists().where(SkillVersion.bundle_file_id == FileRecord.file_id),
-        ~exists().where(Skill.bundle_file_id == FileRecord.file_id),
+        ~exists().where(Skill.__table__.c.bundle_file_id == FileRecord.file_id),
         *conditions,
     )
 
@@ -377,7 +328,7 @@ def _unused_skill_bundles(*conditions: ColumnElement[bool]) -> Select[tuple[str]
 def delete_unreferenced_skill_bundles(
     file_ids: Sequence[str], db_session: Session
 ) -> None:
-    """Call after commit. Keeps files that any skill or version still uses."""
+    """Call after commit. Keeps files that any version still uses."""
     if not file_ids:
         return
     unused = list(
@@ -478,32 +429,23 @@ def delete_orphan_skill_bundles() -> int:
             lock.release()
 
 
-def skill_version_repair_batch(
-    db_session: Session, after: UUID | None, *, drift_only: bool = False
-) -> list[Skill]:
-    statement = select(Skill).where(Skill.built_in_skill_id.is_(None))
-    if drift_only:
-        statement = statement.outerjoin(
-            SkillVersion, SkillVersion.id == Skill.current_version_id
-        ).where(
-            or_(
-                SkillVersion.id.is_(None),
-                SkillVersion.bundle_file_id.is_distinct_from(Skill.bundle_file_id),
-                SkillVersion.bundle_sha256.is_distinct_from(Skill.bundle_sha256),
-                SkillVersion.is_valid.is_distinct_from(Skill.is_valid),
-                exists()
-                .where(
-                    SkillVersion.skill_id == Skill.id,
-                    SkillVersion.bundle_file_id.is_not(None),
-                    or_(
-                        SkillVersion.content_digest.is_(None),
-                        SkillVersion.unpacked_size_bytes.is_(None),
-                        SkillVersion.file_count.is_(None),
-                    ),
+def skill_version_repair_batch(db_session: Session, after: UUID | None) -> list[Skill]:
+    retained = select(SkillVersion).where(
+        SkillVersion.skill_id == Skill.id, SkillVersion.bundle_file_id.is_not(None)
+    )
+    statement = select(Skill).where(
+        Skill.built_in_skill_id.is_(None),
+        or_(
+            retained.where(
+                or_(
+                    SkillVersion.content_digest.is_(None),
+                    SkillVersion.unpacked_size_bytes.is_(None),
+                    SkillVersion.file_count.is_(None),
                 )
-                .correlate(Skill),
-            )
-        )
+            ).exists(),
+            retained.with_only_columns(func.count()).scalar_subquery() > BUNDLES_KEPT,
+        ),
+    )
     if after is not None:
         statement = statement.where(Skill.id > after)
     return list(db_session.scalars(statement.order_by(Skill.id).limit(50)))
@@ -546,15 +488,12 @@ def repair_skill_version_metadata(
                 version.bundle_sha256,
                 observed,
             )
-        previous = _legacy_version(skill)
-        legacy_metadata = _prepare_metadata(previous, file_store)
     adapter.lock(db_session)
     db_session.refresh(skill, ["current_version"])
     if observation != skill_content_snapshot(skill):
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "Skill content changed. Retry metadata repair."
         )
-    current = repair_skill_version(skill, db_session)
     for version in db_session.scalars(
         adapter.versions().execution_options(populate_existing=True)
     ):
@@ -579,6 +518,4 @@ def repair_skill_version_metadata(
                         repaired.file_count,
                     ),
                 )
-    if current.bundle_file_id is not None and legacy_metadata is not None:
-        _apply_metadata(current, legacy_metadata)
     return prune_resource_bundles(adapter, db_session)
