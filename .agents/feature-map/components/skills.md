@@ -21,10 +21,11 @@
 - **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
   or a single SKILL.md, or imports skills from a GitHub repository after a
   preview of every SKILL.md found. A private repository needs the user's
-  GitHub connection in Craft; without it the import is anonymous. The owner
-  shares with users or groups as viewer or editor, publishes to the
-  organization, or transfers ownership.
-- **Admins** set the installation policy of a custom skill: available (the user
+  GitHub connection in Craft; without it the import is anonymous. Owners and editors
+  can share uploaded skills with users or groups as viewer or editor, subject to group scope.
+  Owners can transfer ownership; global `MANAGE_SKILLS` holders can transfer skills
+  with vacant ownership. Publishing requires global `MANAGE_SKILLS`.
+- **Global skill managers** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), or required (on,
   and the user cannot turn it off). Global manage-skills permission is required to delete a required skill.
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
@@ -239,11 +240,18 @@ still propagate unexpected storage errors.
 12. `sharing-single-entry` **Access writes use the resource adapter.**
     `db/resource_access.py:mutate_resource_access` handles single and bulk changes.
     `db/skill.py:SkillAccessAdapter` supplies skill grants with real foreign keys,
-    locked EDIT authorization and eligibility checks. A company visibility change
-    needs the owner or global `MANAGE_SKILLS`
-    (`db/skill.py:ensure_can_edit_org_visibility` on the patch route). Installation
-    settings require global `MANAGE_SKILLS`. Changed group grants use
-    `assert_within_scope` against stored groups and visibility.
+    locked EDIT authorization and eligibility checks. Company visibility and
+    installation settings require global `MANAGE_SKILLS`, even for owners.
+    Client company controls use `usePermissionAuthority` with that permission,
+    not ownership or scoped admin capabilities. `web/src/lib/skills/sharing.ts:serializeSkillSharing`
+    omits company fields without global authority, preserving existing public access.
+    Changed group grants use `assert_within_scope` against stored groups and
+    visibility. Group managers cannot change company settings. The share dialogs
+    list groups from `GET /manage/user-groups/minimal?permission=manage:skills`
+    (every group for a global holder, managed groups for a scoped manager, none
+    otherwise). `ShareSkillModal` enables group controls only when that rule
+    passes for every stored group on a private Skill.
+    Bulk organization access shows Keep unchanged when the actor or selection cannot change it.
     Bulk sharing adds or updates grants and preserves omitted grants. It reads
     affected users in two batch queries and pushes once after commit. Expected
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.

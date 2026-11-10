@@ -893,7 +893,7 @@ def patch_current_user_skill(
         "public_permission" in patch_req.model_fields_set
         and patch_req.public_permission != skill.public_permission
     ):
-        ensure_can_edit_org_visibility(skill, user)
+        ensure_can_edit_org_visibility(user)
     if not (patch_req.has_details_update or patch_req.has_db_field_update):
         return skill_response_for_user(
             skill,

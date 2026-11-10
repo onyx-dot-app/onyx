@@ -5,10 +5,17 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
+import { Permission } from "@/lib/types";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 
+let mockPermissions: string[] = [];
+
 jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ isAdmin: true }),
+  useUser: () => ({
+    isAdmin: false,
+    permissions: mockPermissions,
+    adminCapabilities: [Permission.MANAGE_SKILLS],
+  }),
 }));
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
@@ -25,6 +32,9 @@ jest.mock("@/hooks/useShareableGroups", () => ({
 }));
 
 describe("BulkSkillSharingModal", () => {
+  beforeEach(() => {
+    mockPermissions = [Permission.MANAGE_SKILLS];
+  });
   it("shares all selected skills organization-wide without changing their installation policy", async () => {
     const user = setupUser();
     const onSave = jest.fn().mockResolvedValue(undefined);
@@ -113,6 +123,52 @@ describe("BulkSkillSharingModal", () => {
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith({
         user_shares: [{ user_id: "user-1", permission: "VIEWER" }],
+        group_shares: [{ group_id: 7, permission: "VIEWER" }],
+      })
+    );
+  });
+  it("drops staged company changes when global authority is lost, but keeps group invitations", async () => {
+    const user = setupUser();
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    const props = {
+      count: 2,
+      canChangeOrgAccess: true,
+      open: true,
+      saving: false,
+      onClose: jest.fn(),
+      onSave,
+    };
+    const { rerender } = render(<BulkSkillSharingModal {...props} />);
+    await user.click(screen.getByRole("button", { name: "Who can access" }));
+    fireEvent.click(
+      screen.getByRole("option", { name: "Everyone in the organization" })
+    );
+    await user.click(screen.getByRole("button", { name: "Installation" }));
+    fireEvent.click(screen.getByRole("option", { name: "Required" }));
+    await user.type(
+      screen.getByRole("combobox", { name: "Add users, groups, and accounts" }),
+      "cash"
+    );
+    fireEvent.click(await screen.findByRole("option", { name: /Cash Kings/ }));
+    rerender(<BulkSkillSharingModal {...props} canChangeOrgAccess={false} />);
+    expect(
+      screen.getByRole("button", { name: "Who can access" })
+    ).toHaveTextContent("Keep unchanged");
+    rerender(<BulkSkillSharingModal {...props} />);
+    mockPermissions = [];
+    rerender(<BulkSkillSharingModal {...props} />);
+    expect(
+      screen.getByRole("button", { name: "Who can access" })
+    ).toHaveTextContent("Keep unchanged");
+    expect(
+      screen.getByRole("button", { name: "Who can access" })
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Installation" })
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Apply to 2 skills" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
         group_shares: [{ group_id: 7, permission: "VIEWER" }],
       })
     );

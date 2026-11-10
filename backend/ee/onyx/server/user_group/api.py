@@ -206,13 +206,35 @@ def get_user_group(
     )
 
 
+def _groups_within_scope(
+    user: User, db_session: Session, permission: Permission
+) -> set[int] | None:
+    authority = has_permission(user, permission)
+    if authority is PermissionAuthority.GLOBAL:
+        return None
+    if authority is PermissionAuthority.SCOPED:
+        return get_scoped_groups(user, db_session, permission)
+    return set()
+
+
 @router.get("/user-groups/minimal")
 def list_minimal_user_groups(
     include_default: bool = False,
+    permission: Permission | None = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserGroupSnapshot]:
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+    """With ``permission``, only the groups the caller may add to or remove
+    from a resource under it: every group for a global holder, the managed
+    groups for a scoped manager, none otherwise."""
+    if permission is not None:
+        user_groups = fetch_user_groups(
+            db_session,
+            only_up_to_date=False,
+            include_default=include_default,
+            restrict_to_group_ids=_groups_within_scope(user, db_session, permission),
+        )
+    elif Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
         user_groups = fetch_user_groups(
             db_session,
             only_up_to_date=False,

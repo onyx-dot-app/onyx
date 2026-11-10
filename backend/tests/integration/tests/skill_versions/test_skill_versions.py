@@ -156,7 +156,7 @@ def test_restore_prunes_oldest_bundle_but_keeps_restored_content(
 
 @pytest.mark.parametrize("public", [False, True])
 def test_viewers_and_strangers_cannot_read_or_restore_history(
-    basic_user: DATestUser, public: bool
+    basic_user: DATestUser, admin_user: DATestUser, public: bool
 ) -> None:
     viewer = UserManager.create(name=f"history_viewer_{uuid4().hex[:8]}")
     stranger = UserManager.create(name=f"history_stranger_{uuid4().hex[:8]}")
@@ -168,13 +168,17 @@ def test_viewers_and_strangers_cannot_read_or_restore_history(
     SkillManager.share(
         skill,
         basic_user,
-        public_permission=SkillSharePermission.VIEWER if public else None,
         user_shares=[
             SkillUserShareRequest(
                 user_id=UUID(viewer.id), permission=SkillSharePermission.VIEWER
             )
         ],
     )
+    if public:
+        # Company access needs global manage-skills, which the owner lacks.
+        SkillManager.share(
+            skill, admin_user, public_permission=SkillSharePermission.VIEWER
+        )
     assert (
         SkillManager.preview(skill.id, viewer).description
         == "Public current description"

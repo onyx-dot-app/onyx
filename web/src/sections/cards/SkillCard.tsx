@@ -20,7 +20,8 @@ import {
   SvgTrash,
   SvgUser,
 } from "@opal/icons";
-import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
   CustomSkill,
@@ -93,7 +94,9 @@ export default function SkillCard({
     onClick?.(item);
   }, [onClick, item]);
 
-  const { isAdmin } = useUser();
+  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
+    Permission.MANAGE_SKILLS
+  );
   const isRequired =
     item.source === "custom" && item.skill.installation_policy === "REQUIRED";
 
@@ -260,7 +263,7 @@ export default function SkillCard({
                   aria-label={t("skill.edit.tooltip")}
                   onClick={handleEditClick}
                 />
-                {onDelete && (!isRequired || isAdmin) && (
+                {onDelete && (!isRequired || canManageCompanySkills) && (
                   <Button
                     prominence="secondary"
                     variant="danger"

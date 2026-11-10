@@ -812,15 +812,12 @@ def persist_skill_validity(
 SkillBulkAction = Literal["enable", "disable", "delete"]
 
 
-def ensure_can_edit_org_visibility(skill: Skill, user: User) -> None:
-    if skill.author_user_id == user.id:
-        return
-    if has_global_permission(user, Permission.MANAGE_SKILLS):
-        return
-    raise OnyxError(
-        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-        "You do not have permission to change organization-wide skill access.",
-    )
+def ensure_can_edit_org_visibility(user: User) -> None:
+    if not has_global_permission(user, Permission.MANAGE_SKILLS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Company access changes require global manage-skills permission.",
+        )
 
 
 class SkillAccessAdapter(ResourceAccessAdapter[Skill]):

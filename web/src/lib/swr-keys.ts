@@ -248,6 +248,9 @@ export const SWR_KEYS = {
   adminUserGroupsWithDefault:
     "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
+  // Groups the caller may add to or remove from a Skill's shares.
+  skillShareableGroups:
+    "/api/manage/user-groups/minimal?permission=manage%3Askills",
   userGroupPermissions: (groupId: number) =>
     `/api/manage/admin/user-group/${groupId}/permissions`,
   permissionRegistry: "/api/manage/admin/permissions/registry",

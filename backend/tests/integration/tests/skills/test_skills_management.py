@@ -229,7 +229,7 @@ def test_direct_share_restores_existing_enabled_preference(
 
 def test_org_wide_editor_permission_grants_edit(
     basic_user: DATestUser,
-    admin_user: DATestUser,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     other_user = UserManager.create(name=f"skill_org_editor_{uuid4().hex[:8]}")
     skill = SkillManager.create_custom(
@@ -238,9 +238,16 @@ def test_org_wide_editor_permission_grants_edit(
     )
     skill_id = _skill_id(skill)
 
+    # Company access needs global manage-skills, which the owner lacks.
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.share(
+            skill, basic_user, public_permission=SkillSharePermission.EDITOR
+        )
+    assert exc_info.value.response.status_code == 403
+
     public_viewer = SkillManager.share(
         skill,
-        basic_user,
+        admin_user,
         is_public=True,
         public_permission=SkillSharePermission.VIEWER,
     )
@@ -250,7 +257,7 @@ def test_org_wide_editor_permission_grants_edit(
 
     public_editor = SkillManager.share(
         skill,
-        basic_user,
+        admin_user,
         is_public=True,
         public_permission=SkillSharePermission.EDITOR,
     )
@@ -259,11 +266,13 @@ def test_org_wide_editor_permission_grants_edit(
     assert public_editor.public_permission == SkillSharePermission.EDITOR
     editable = SkillManager.get_editable(skill_id, other_user)
     assert editable.user_permission == SkillAccessLevel.EDITOR
+    owner_editable = SkillManager.get_editable(skill_id, basic_user)
+    assert owner_editable.user_permission == SkillAccessLevel.OWNER
 
 
 def test_switching_from_org_wide_to_scoped_share_removes_org_visibility(
     basic_user: DATestUser,
-    admin_user: DATestUser,  # noqa: ARG001
+    admin_user: DATestUser,
 ) -> None:
     shared_user = UserManager.create(name=f"skill_scoped_user_{uuid4().hex[:8]}")
     unshared_user = UserManager.create(name=f"skill_unscoped_user_{uuid4().hex[:8]}")
@@ -273,12 +282,13 @@ def test_switching_from_org_wide_to_scoped_share_removes_org_visibility(
     )
     skill_id = _skill_id(skill)
 
-    SkillManager.share(skill, basic_user, is_public=True)
+    # Company access changes need global manage-skills, which the owner lacks.
+    SkillManager.share(skill, admin_user, is_public=True)
     assert SkillManager.get_for_user(str(skill_id), unshared_user).id == skill_id
 
     scoped = SkillManager.share(
         skill,
-        basic_user,
+        admin_user,
         is_public=False,
         user_shares=[
             SkillUserShareRequest(

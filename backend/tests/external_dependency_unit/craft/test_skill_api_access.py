@@ -449,7 +449,7 @@ def test_skill_owner_cannot_change_installation_policy(db_session: Session) -> N
     assert error.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
-def test_required_skill_owner_cannot_delete_but_can_change_audience(
+def test_required_skill_owner_cannot_delete_or_change_company_access(
     db_session: Session,
 ) -> None:
     owner = make_user(db_session, standard_account=True)
@@ -458,14 +458,14 @@ def test_required_skill_owner_cannot_delete_but_can_change_audience(
     db_session.flush()
     with pytest.raises(OnyxError):
         delete_current_user_skill(skill.id, user=owner, db_session=db_session)
-    response = patch_current_user_skill(
-        skill.id,
-        SkillPatchRequest(public_permission=None),
-        user=owner,
-        db_session=db_session,
-    )
-    assert response.public_permission is None
-    assert response.installation_policy == SkillInstallationPolicy.REQUIRED
+    with pytest.raises(OnyxError) as error:
+        patch_current_user_skill(
+            skill.id,
+            SkillPatchRequest(public_permission=None),
+            user=owner,
+            db_session=db_session,
+        )
+    assert error.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
 
 @pytest.mark.parametrize("is_admin", [False, True])

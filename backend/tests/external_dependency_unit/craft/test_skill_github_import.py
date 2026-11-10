@@ -274,8 +274,17 @@ def test_import_applies_shared_access_before_publication(
         paths=[name],
         sharing=SkillShareRequest(public_permission=SkillSharePermission.VIEWER),
     )
+    # Company access needs global manage-skills; only the Admin group grants it.
+    basic_user = make_test_user("import-basic")
     admin = make_test_user("import-admin", is_admin=True)
     try:
+        denied = import_github_skills(request, user=basic_user, db_session=db_session)
+        assert denied.imported == []
+        assert [item.reason for item in denied.not_imported] == [
+            "Company access changes require global manage-skills permission."
+        ]
+        assert published == []
+
         result = import_github_skills(request, user=admin, db_session=db_session)
         assert result.not_imported == []
         assert len(result.imported) == 1

@@ -8,9 +8,19 @@ import {
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
+import { Permission } from "@/lib/types";
 import SkillEditorPage from "@/views/SkillEditorPage";
 import type { SkillEditableDetail } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+
+let mockPermissions: string[] = [];
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({
+    user: null,
+    permissions: mockPermissions,
+    adminCapabilities: [Permission.MANAGE_SKILLS],
+  }),
+}));
 
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockDeleteUserSkill = jest.fn();
@@ -123,6 +133,7 @@ jest.mock("@/sections/skills/SkillFilesPicker", () => ({
 
 describe("SkillEditorPage", () => {
   beforeEach(() => {
+    mockPermissions = [];
     mockCreateCustomSkillFromEditor.mockReset();
     mockDeleteUserSkill.mockReset();
     mockDeleteUserSkill.mockResolvedValue(undefined);
@@ -144,30 +155,35 @@ describe("SkillEditorPage", () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it("includes draft sharing settings in the creation request", async () => {
-    const user = setupUser();
-    mockCreateCustomSkillFromEditor.mockResolvedValue({
-      name: "report-writer",
-    });
-    render(<SkillEditorPage />);
-    await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
-    await user.click(
-      screen.getByRole("button", { name: "Choose organization access" })
-    );
-    expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sharing: {
-          public_permission: "VIEWER",
-          user_shares: [],
-          group_shares: [],
-        },
-      }),
-      undefined
-    );
-  });
+  it.each([false, true])(
+    "gates draft company sharing on global authority (%s)",
+    async (global) => {
+      mockPermissions = global ? [Permission.MANAGE_SKILLS] : [];
+      const user = setupUser();
+      mockCreateCustomSkillFromEditor.mockResolvedValue({
+        name: "report-writer",
+      });
+      render(<SkillEditorPage />);
+      await fillRequiredFields(user);
+      await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+      await user.click(
+        screen.getByRole("button", { name: "Choose organization access" })
+      );
+      expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sharing: {
+            public_permission: global ? "VIEWER" : undefined,
+            installation_policy: global ? "AVAILABLE" : undefined,
+            user_shares: [],
+            group_shares: [],
+          },
+        }),
+        undefined
+      );
+    }
+  );
 
   it("navigates after creation even when the skill-list refresh fails", async () => {
     const user = setupUser();

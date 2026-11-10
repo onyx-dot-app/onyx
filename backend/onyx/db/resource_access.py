@@ -76,18 +76,13 @@ def mutate_resource_access[Resource](
         try:
             with db_session.begin_nested():
                 current = adapter.state(resource)
-                is_global = has_global_permission(user, adapter.permission)
                 if (
-                    change.set_public_permission
-                    and change.public_permission != current.public_permission
-                    and not is_global
-                    and current.owner_user_id != user.id
-                ):
-                    raise OnyxError(
-                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                        "You do not have permission to change organization-wide skill access.",
+                    (
+                        change.set_public_permission
+                        and change.public_permission != current.public_permission
                     )
-                if change.installation_policy is not None and not is_global:
+                    or change.installation_policy is not None
+                ) and not has_global_permission(user, adapter.permission):
                     raise OnyxError(
                         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                         "Company access changes require global manage-skills permission.",

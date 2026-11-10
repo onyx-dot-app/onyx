@@ -12,6 +12,8 @@ import useShareableGroups, {
 import useShareableUsers from "@/hooks/useShareableUsers";
 import { Content, Section, toast } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { Modal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
@@ -109,8 +111,14 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { data: transferableUsersData } = useShareableUsers({
     includeApiKeys: false,
   });
-  const { data: shareableGroupsData } = useShareableGroups();
-  const { isAdmin, user: currentUser } = useUser();
+  const { data: shareableGroupsData } = useShareableGroups(
+    SWR_KEYS.skillShareableGroups
+  );
+  const { user: currentUser } = useUser();
+  const {
+    isGlobalHolder: canManageCompanySkills,
+    isScopedManager: isScopedSkillManager,
+  } = usePermissionAuthority(Permission.MANAGE_SKILLS);
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
     null
@@ -177,14 +185,26 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
 
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
+  // Mirrors assert_within_scope: a scoped manager changes groups only on a
+  // private Skill whose groups are all ones they manage.
+  const canEditGroupShares =
+    canEditShares &&
+    (canManageCompanySkills ||
+      (isScopedSkillManager &&
+        !!skill &&
+        skill.public_permission === null &&
+        skill.group_shares.every((share) =>
+          (shareableGroupsData ?? []).some(
+            (group) => group.id === share.group_id
+          )
+        )));
   const canEditOrgVisibility =
-    !skill?.external_app &&
-    (skill?.user_permission === "OWNER" ||
-      (isAdmin && skill?.user_permission === "EDITOR"));
+    !skill?.external_app && canEditShares && canManageCompanySkills;
   const canTransfer =
     props.mode === "edit" &&
     !!skill &&
-    (skill.user_permission === "OWNER" || (isAdmin && skill.ownership_vacant));
+    (skill.user_permission === "OWNER" ||
+      (canManageCompanySkills && skill.ownership_vacant));
   const isDirty =
     !!effectiveState &&
     !!initialState &&
@@ -338,7 +358,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(nextDraft, isAdmin);
+      const payload = serializeSkillSharing(nextDraft, canManageCompanySkills);
       await updateSkillShares(props.skillId, payload);
       void refreshSkill();
       toast.success(t("share.savedToast.message"));
@@ -437,7 +457,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           )}
         </Section>
 
-        {isAdmin && (
+        {canManageCompanySkills && (
           <Section gap={3} height="auto" alignItems="stretch">
             <Content
               font="main-ui-action"
@@ -539,7 +559,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               <AddPeoplePicker
                 existingGroupIds={existingGroupIds}
                 existingUserIds={existingUserIds}
-                groups={shareableGroupsData ?? []}
+                groups={canEditGroupShares ? (shareableGroupsData ?? []) : []}
                 onAddGroup={(group) => {
                   setStagedGroups((currentGroups) => [...currentGroups, group]);
                 }}
@@ -612,7 +632,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                           ariaLabel={t("share.permissionMenu.ariaLabel", {
                             name: share.group_name,
                           })}
-                          disabled={!canEditShares}
+                          disabled={!canEditGroupShares}
                           onChange={(permission) =>
                             updateGroupSharePermission(
                               share.group_id,

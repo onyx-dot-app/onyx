@@ -41,7 +41,8 @@ import {
 } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
-import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -72,7 +73,9 @@ interface SkillsPageProps {
 export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
-  const { isAdmin } = useUser();
+  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
+    Permission.MANAGE_SKILLS
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
@@ -687,7 +690,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                                         danger: true,
                                         disabled:
                                           !canManageSelected ||
-                                          (!isAdmin &&
+                                          (!canManageCompanySkills &&
                                             selectedItems.some(
                                               (item) =>
                                                 item.skill
@@ -795,10 +798,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         count={selectedItems.length}
         canChangeOrgAccess={
           selectedItems.every((item) => item.skill.external_app === null) &&
-          (isAdmin ||
-            selectedItems.every(
-              (item) => item.skill.user_permission === "OWNER"
-            ))
+          canManageCompanySkills
         }
         open={bulkSharingOpen}
         saving={bulkBusy}

@@ -5,6 +5,7 @@ import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
 import type { SkillSharingDraft } from "@/lib/skills/sharing";
 import type { GitHubSkillsPreview } from "@/lib/skills/types";
+import { Permission } from "@/lib/types";
 import { Modal } from "@opal/components";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
@@ -83,9 +84,11 @@ const preview: GitHubSkillsPreview = {
 
 describe("ImportSkillsFromGitHubModal", () => {
   beforeEach(() => {
-    mockedUseUser.mockReturnValue({
-      isAdmin: false,
-    } as ReturnType<typeof useUser>);
+    mockedUseUser.mockImplementation(
+      jest.requireActual<typeof import("@/providers/UserProvider")>(
+        "@/providers/UserProvider"
+      ).useUser
+    );
     mockedUseUserExternalApps.mockReturnValue({
       data: [],
       error: undefined,
@@ -145,47 +148,66 @@ describe("ImportSkillsFromGitHubModal", () => {
     expect(onImported).toHaveBeenCalledTimes(1);
   });
 
-  it("applies organization access and installation policy to the entire import", async () => {
-    const user = setupUser();
-    mockedUseUser.mockReturnValue({ isAdmin: true } as ReturnType<
-      typeof useUser
-    >);
-    mockedPreview.mockResolvedValue(preview);
-    mockedImport.mockResolvedValue({ imported: [], not_imported: [] });
-    render(
-      <ImportSkillsFromGitHubModal
-        open
-        onClose={jest.fn()}
-        onImported={jest.fn()}
-      />
-    );
-    await user.type(screen.getByRole("textbox"), "owner/repository");
-    await user.click(screen.getByRole("button", { name: "Search repository" }));
-    await user.click(
-      await screen.findByRole("button", { name: "Configure access" })
-    );
-    await user.click(
-      screen.getByRole("button", {
-        name: "Share selected skills with organization",
-      })
-    );
-    expect(
-      screen.getByText("Everyone in the organization can access these skills.")
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Import 2 skills" }));
-    await waitFor(() =>
-      expect(mockedImport).toHaveBeenCalledWith(
-        preview,
-        ["skills/alpha", "skills/beta"],
-        {
-          public_permission: "VIEWER",
-          installation_policy: "DEFAULT",
-          user_shares: [],
-          group_shares: [],
-        }
-      )
-    );
-  });
+  it.each(["basic", "scoped", "global", "admin"])(
+    "uses global authority for the entire import (%s)",
+    async (role) => {
+      const canManageCompanySkills = role === "global" || role === "admin";
+      const user = setupUser();
+      const useDefaultUser = jest.requireActual<
+        typeof import("@/providers/UserProvider")
+      >("@/providers/UserProvider").useUser;
+      mockedUseUser.mockImplementation(() => ({
+        ...useDefaultUser(),
+        isAdmin: role === "admin",
+        permissions:
+          role === "admin"
+            ? [Permission.FULL_ADMIN_PANEL_ACCESS]
+            : role === "global"
+              ? [Permission.MANAGE_SKILLS]
+              : [],
+        adminCapabilities: [Permission.MANAGE_SKILLS],
+      }));
+      mockedPreview.mockResolvedValue(preview);
+      mockedImport.mockResolvedValue({ imported: [], not_imported: [] });
+      render(
+        <ImportSkillsFromGitHubModal
+          open
+          onClose={jest.fn()}
+          onImported={jest.fn()}
+        />
+      );
+      await user.type(screen.getByRole("textbox"), "owner/repository");
+      await user.click(
+        screen.getByRole("button", { name: "Search repository" })
+      );
+      await user.click(
+        await screen.findByRole("button", { name: "Configure access" })
+      );
+      await user.click(
+        screen.getByRole("button", {
+          name: "Share selected skills with organization",
+        })
+      );
+      expect(
+        screen.getByText(
+          "Everyone in the organization can access these skills."
+        )
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Import 2 skills" }));
+      await waitFor(() =>
+        expect(mockedImport).toHaveBeenCalledWith(
+          preview,
+          ["skills/alpha", "skills/beta"],
+          {
+            public_permission: canManageCompanySkills ? "VIEWER" : undefined,
+            installation_policy: canManageCompanySkills ? "DEFAULT" : undefined,
+            user_shares: [],
+            group_shares: [],
+          }
+        )
+      );
+    }
+  );
 
   it("shows name conflicts as successful disabled imports", async () => {
     const user = setupUser();

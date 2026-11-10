@@ -310,19 +310,12 @@ def test_curator_editor_cannot_edit_org_visibility() -> None:
     _share_with_groups(skill, [1])
 
     with pytest.raises(OnyxError):
-        ensure_can_edit_org_visibility(skill, curator)
+        ensure_can_edit_org_visibility(curator)
 
 
 def test_admin_editor_can_edit_org_visibility() -> None:
-    author = _user()
-    admin = _user(is_admin=True)
-    skill = _skill(author, is_public=True)
-
-    ensure_can_edit_org_visibility(skill, admin)
+    ensure_can_edit_org_visibility(_user(is_admin=True))
 
 
 def test_admin_can_edit_personal_skill_org_visibility() -> None:
-    author = _user()
-    admin = _user(is_admin=True)
-
-    ensure_can_edit_org_visibility(_skill(author), admin)
+    ensure_can_edit_org_visibility(_user(is_admin=True))

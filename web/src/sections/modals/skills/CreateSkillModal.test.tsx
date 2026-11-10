@@ -163,7 +163,7 @@ describe("CreateSkillModal", () => {
           expect.objectContaining({ name: "beta.zip" }),
         ],
         expect.objectContaining({
-          public_permission: "VIEWER",
+          public_permission: undefined,
           user_shares: [],
           group_shares: [],
         })

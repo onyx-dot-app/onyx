@@ -11,7 +11,8 @@ Open **Craft → Skills** to manage your own library.
 <Note>
   Anyone with Craft access can create a Skill and manage the Skills they own or can edit.
   Admins can inspect and manage all custom Skills, including private personal Skills.
-  Only Admins set installation policies. Craft needs a Business or Enterprise plan, or Onyx Cloud.
+  Global manage-skills permission controls company access and installation policies.
+  Craft needs a Business or Enterprise plan, or Onyx Cloud.
 </Note>
 
 ## Understand the Skills library
@@ -243,6 +244,10 @@ enable or disable the Skill, and delete it.
 
 A Skill that is associated with an App stays visible to the organization. You cannot make it private.
 
+Company visibility changes require global manage-skills permission, including changes by the owner.
+Owners without that permission can still share with individual users.
+Group sharing follows the user's group permissions.
+Editing instructions or individual access preserves existing organization access.
 Group managers can change sharing only within the groups they manage.
 
 ## Choose an installation policy
@@ -280,7 +285,7 @@ so validate important changes in a new turn or session before announcing them.
 ### Ownership
 
 Every custom Skill has one owner. The owner can transfer it to another active standard user.
-If ownership becomes vacant because the owner is inactive, an Admin can open the Skill and transfer it.
+If ownership becomes vacant because the owner is inactive, a user with global manage-skills permission can transfer it.
 
 Do not transfer ownership to bots, service accounts, limited accounts, or inactive users.
 

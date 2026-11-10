@@ -27,6 +27,8 @@ import { SvgGitHub } from "@opal/logos";
 import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
 import type {
   GitHubSkillNotImported,
@@ -50,6 +52,7 @@ interface ImportSkillsFromGitHubModalViewProps {
   loading: boolean;
   error: string | null;
   isAdmin: boolean;
+  canManageCompanySkills: boolean;
   externalApps: ExternalAppUserResponse[] | undefined;
   onClose: () => void;
   onRepositoryChange: (value: string) => void;
@@ -72,6 +75,9 @@ export default function ImportSkillsFromGitHubModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { isAdmin, user } = useUser();
+  const { isGlobalHolder: canManageCompanySkills } = usePermissionAuthority(
+    Permission.MANAGE_SKILLS
+  );
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
   const sharingModal = useCreateModal();
   const sharingDraft =
@@ -113,7 +119,7 @@ export default function ImportSkillsFromGitHubModal({
         ? await importGitHubSkills(
             preview,
             selectedPaths,
-            serializeSkillSharing(sharing, isAdmin)
+            serializeSkillSharing(sharing, canManageCompanySkills)
           )
         : await importGitHubSkills(preview, selectedPaths);
       setResult(nextResult);
@@ -143,6 +149,7 @@ export default function ImportSkillsFromGitHubModal({
         loading={loading}
         error={error}
         isAdmin={isAdmin}
+        canManageCompanySkills={canManageCompanySkills}
         externalApps={externalApps}
         onClose={onClose}
         onRepositoryChange={(value) => {
@@ -179,6 +186,7 @@ export function ImportSkillsFromGitHubModalView({
   loading,
   error,
   isAdmin,
+  canManageCompanySkills,
   externalApps,
   onClose,
   onRepositoryChange,
@@ -454,7 +462,7 @@ export function ImportSkillsFromGitHubModalView({
                   disabled={loading}
                   onConfigure={onConfigureSharing}
                 >
-                  {isAdmin && (
+                  {canManageCompanySkills && (
                     <Text font="secondary-body" color="text-03">
                       {t(
                         `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`

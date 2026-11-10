@@ -13,17 +13,19 @@ export interface MinimalUserGroupSnapshot {
 // TODO (@raunakab):
 // Refactor this hook to live inside of a special `ee` directory.
 
-export default function useShareableGroups() {
+export default function useShareableGroups(
+  swrKey: string = SWR_KEYS.shareableGroups
+) {
   const settings = useSettings();
   const isPaidEnterpriseFeaturesEnabled =
     !settings.isLoading && settings.enterprise !== null;
 
   const { data, error, isLoading } = useSWR<MinimalUserGroupSnapshot[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.shareableGroups : null,
+    isPaidEnterpriseFeaturesEnabled ? swrKey : null,
     errorHandlingFetcher
   );
 
-  const refreshShareableGroups = () => mutate(SWR_KEYS.shareableGroups);
+  const refreshShareableGroups = () => mutate(swrKey);
 
   if (settings.isLoading) {
     return {
