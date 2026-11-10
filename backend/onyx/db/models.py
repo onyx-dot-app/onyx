@@ -5378,6 +5378,47 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class SkillVersion(Base):
+    __tablename__ = "skill_version"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("skill.id", ondelete="CASCADE"), nullable=False
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Pruning removes the bundle reference but keeps the history row.
+    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Existing bundles need an application backfill to compute these values.
+    unpacked_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Root SKILL.md of this version: frontmatter `name`, the parsed frontmatter
+    # and the raw file. NULL until written or repaired.
+    name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    frontmatter: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    skill_md: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    # The stored bundle cannot be decoded, so repair stops retrying.
+    metadata_unrepairable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("skill_id", "version_number", name="uq_skill_version_number"),
+        UniqueConstraint("id", "skill_id", name="uq_skill_version_id_skill_id"),
+    )
+
+
 class Skill(Base):
     """A built-in or custom skill.
 
@@ -5409,6 +5450,10 @@ class Skill(Base):
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Existing custom rows are classified lazily before sandbox hydration.
     is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    current_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
 
     author_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -5472,6 +5517,15 @@ class Skill(Base):
             postgresql_where=text("installation_policy <> 'AVAILABLE'"),
         ),
         UniqueConstraint("name", "id", name="uq_skill_name_id"),
+        # Preallocate both IDs, insert the skill, then its version before commit.
+        ForeignKeyConstraint(
+            ["current_version_id", "id"],
+            ["skill_version.id", "skill_version.skill_id"],
+            name="fk_skill_current_version",
+            deferrable=True,
+            initially="DEFERRED",
+            use_alter=True,
+        ),
         CheckConstraint(
             "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
             name="ck_skill_definition_source",

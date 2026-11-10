@@ -14,13 +14,15 @@ from onyx.db.models import (
     Skill,
     Skill__User,
     Skill__UserGroup,
+    SkillVersion,
     WorkspaceActionPolicy,
 )
 
 # Parent -> child order (FKs all point child -> parent). Restore/insert in this
-# order; delete in reverse so FK constraints stay satisfied.
+# order; delete in reverse. The current-version FK is deferred until commit.
 _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     Skill,
+    SkillVersion,
     ExternalApp,
     GatedApp,
     Skill__User,
@@ -71,6 +73,9 @@ def restore_skill_tables(
             ):
                 session.delete(row)
         session.flush()
+
+    # Cascaded deletions can leave cached ORM rows that no longer exist.
+    session.expunge_all()
 
     # Re-insert baseline rows the test deleted and restore any it mutated
     # (parents first). ``merge`` keys on PK: insert when absent, update when
