@@ -1,8 +1,11 @@
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
+from onyx.db.models import Skill__UserGroup, UserGroup
 from onyx.server.features.skill.models import (
     SkillBulkResponse,
     SkillResponse,
@@ -15,6 +18,7 @@ from tests.integration.common_utils.managers.skill import (
     build_minimal_bundle,
 )
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.reset import reset_all
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -103,38 +107,57 @@ def test_bulk_failure_does_not_undo_other_skills(
 def test_bulk_failure_after_write_rolls_back_only_that_skill(
     admin_user: DATestUser,
 ) -> None:
-    name = f"dup-{uuid4().hex[:8]}"
-    taken = SkillManager.create_custom(admin_user, name=name)
-    conflicting = SkillManager.create_custom(admin_user, name=name, auto_enable=False)
+    conflicting = SkillManager.create_custom(admin_user)
     clean = SkillManager.create_custom(admin_user)
-
-    def share(skill_ids: list[str]) -> SkillBulkResponse:
-        response = client.post(
-            f"{API_SERVER_URL}/skills/bulk",
-            headers=admin_user.headers,
-            json={
-                "skill_ids": skill_ids,
-                "action": "share",
-                "sharing": {
-                    "public_permission": "VIEWER",
-                    "installation_policy": "DEFAULT",
-                },
-            },
+    unrelated = SkillManager.create_custom(admin_user)
+    group = UserGroupManager.create(admin_user)
+    # Legacy grants can include a default group; current writes reject them.
+    with get_session_with_current_tenant() as db_session:
+        default_group = db_session.scalars(
+            select(UserGroup).where(UserGroup.is_default.is_(True))
+        ).first()
+        assert default_group is not None
+        default_group_id = default_group.id
+        db_session.add(
+            Skill__UserGroup(
+                skill_id=conflicting.id,
+                user_group_id=default_group_id,
+                permission=SkillSharePermission.VIEWER,
+            )
         )
-        response.raise_for_status()
-        return SkillBulkResponse.model_validate(response.json())
+        db_session.commit()
 
-    assert share([str(taken.id)]).failed == []
-    # public_permission is written before the policy's unique index rejects the name
-    result = share([str(conflicting.id), str(clean.id)])
+    response = client.post(
+        f"{API_SERVER_URL}/skills/bulk",
+        headers=admin_user.headers,
+        json={
+            "skill_ids": [str(conflicting.id), str(clean.id)],
+            "action": "share",
+            "sharing": {
+                "public_permission": "VIEWER",
+                "installation_policy": "DEFAULT",
+                "group_shares": [{"group_id": group.id, "permission": "VIEWER"}],
+            },
+        },
+    )
+    response.raise_for_status()
+    result = SkillBulkResponse.model_validate(response.json())
+    # Visibility and policy flush before the merged default-group grant is rejected.
     assert result.succeeded == [clean.id]
     assert [failure.skill_id for failure in result.failed] == [conflicting.id]
-    rolled_back = SkillManager.get_for_user(conflicting.id, admin_user)
+    assert "default system group" in result.failed[0].detail
+    rolled_back = SkillManager.get_editable(conflicting.id, admin_user)
     assert rolled_back.public_permission is None
     assert rolled_back.installation_policy == "AVAILABLE"
-    applied = SkillManager.get_for_user(clean.id, admin_user)
+    assert [share.group_id for share in rolled_back.group_shares] == [default_group_id]
+    applied = SkillManager.get_editable(clean.id, admin_user)
     assert applied.public_permission == "VIEWER"
     assert applied.installation_policy == "DEFAULT"
+    assert [share.group_id for share in applied.group_shares] == [group.id]
+    untouched = SkillManager.get_editable(unrelated.id, admin_user)
+    assert untouched.public_permission is None
+    assert untouched.installation_policy == "AVAILABLE"
+    assert untouched.group_shares == []
 
 
 def test_bulk_toggle_changes_only_current_users_preferences(

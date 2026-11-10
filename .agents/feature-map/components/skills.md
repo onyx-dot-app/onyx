@@ -180,14 +180,17 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
 a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
 (`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` not
-false) and built-in availability (`_exclude_unavailable_built_in_skills`).
+false) and built-in availability.
 These inputs stay independent. A required skill still needs a ready app and a
 valid bundle.
 
 **Enablement.** `_is_enabled_for_user` is the one SQL rule for API responses
-and the runtime gate. Built-ins are on. A visible required skill is on and
-hides other skills with its name. Else an explicit preference wins. Else a
-default skill is on unless another visible skill with its name is selected.
+and the runtime gate. Built-ins and visible Required Skills are eligible.
+Otherwise, an explicit preference wins over the installation default.
+Name resolution then selects company, own, and shared libraries in that order,
+regardless of installation setting. A Required shared Skill can lose to an
+enabled own Skill. A company Default can hide an explicitly enabled own Skill;
+the saved preference remains, and applies again when the company candidate is off.
 
 **Two hashes.** `compute_skill_runtime_hash` is a SHA-256 over every rendered
 file path and its bytes, plus the connectable-apps text. `Sandbox.skills_hash`
@@ -244,11 +247,34 @@ still propagate unexpected storage errors.
    row.** Use `db/skill.py:_is_enabled_for_user`. Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
-5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
+   An explicit enable clears saved choices for other skills with the same name,
+   including hidden skills, after checking visible conflicts under the user lock.
+5. `name-uniqueness-in-db` **Resolve names after runtime eligibility.**
+   `db/skill.py:resolve_skill_runtime_names` ranks usable, enabled skills by
+   company library, the user's library, then another user's library. Older rows
+   win within a library; UUID breaks equal timestamps. `skill_library_owner`
+   also defines marketplace reconciliation's library identity. A personal
+   marketplace remains personal when one of its skills becomes public.
+   `SkillUserState.hidden_by_skill_id` names the winner for losing candidates.
+   Reads must resolve against
+   all eligible skills, even when the caller requests one row.
+   Invalid, unavailable, retired, disabled and disconnected-app skills cannot
+   hide a usable competitor. `list_runtime_skills_for_user` returns only winners,
+   so duplicate automatic names no longer fail a sandbox push.
+   The partial
    unique index `uq_user_skill_preference_name` allows one enabled choice per
-   user and name. `uq_skill_automatic_name` covers live rows with every policy except
-   AVAILABLE. Retirement disables explicit preferences in the same transaction,
-   so both automatic and personal name reservations become available.
+   user and name. No automatic-name index exists. Retirement disables
+   explicit preferences in the same transaction.
+   New manual and synced skills reject live names in their library. Both use
+   `db/skill_library.py:lock_skill_library_names`, ordered after membership and
+   marketplace locks and before skill rows. Batch import locks names in sorted order.
+   Creation checks its intended final visibility, so company creation does not
+   conflict with the creator's personal library during its private insertion.
+   Existing duplicates remain valid. Sharing and ownership changes can also create
+   same-library duplicates; creation checks do not cover those changes. Runtime
+   name resolution still delivers one winner. Low-level test fixtures can seed duplicates.
+   Built-in app skills bypass this custom-library check. Older custom names must
+   not block provider setup; new custom uploads still reject reserved built-in names.
    `server/features/skill/models.py:SkillShareRequest` and
    `db/skill.py:set_skill_installation_policy`
    reject NOT_AVAILABLE until effective-policy resolution and write rules support it.
@@ -259,8 +285,8 @@ still propagate unexpected storage errors.
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
-   `skills/push.py:_assemble_fileset` raises if two skills in one fileset share a name,
-   because the name is the sandbox directory.
+   `skills/push.py:_assemble_fileset` also skips repeated names defensively.
+   Do not bypass the resolver when assembling production payloads.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
    match (`skills/metadata.py:parse_skill_document`). Storage removes the
@@ -641,13 +667,13 @@ still propagate unexpected storage errors.
     including a no-op revert to the last synced revision. A storage failure or
     stopped worker cannot preserve approval for the old revision. Consumed approval
     cannot authorize a later replay.
+    Library name locks use the tenant context, not PostgreSQL search_path, so
+    unrelated tenant schemas do not contend for the same company name.
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
-    Reconciliation serializes each tenant/library with a transaction advisory lock.
-    Its namespace uses tenant context, not PostgreSQL search_path, because schema
-    translation can leave current_schema() identical across tenants.
-    G3 must use that same lock for manual name checks. S5 owns job
-    freshness. Retirement releases enabled preferences and automatic-policy names.
+    Reconciliation locks incoming and live names in sorted order through
+    `db/skill_library.py:lock_skill_library_names`, sharing the manual creation namespace.
+    Sync ownership fences control job freshness. Retirement releases enabled preferences and automatic-policy names.
     Access materialization and audience
     capture share the reconciliation transaction without tier lookups or external I/O.
     Management API writes persist requests for the background sync service.
@@ -913,6 +939,14 @@ still propagate unexpected storage errors.
   drift, not blob availability. Retain the command output, tenant, shard and
   deployed writer revision. Deploy current-version readers only after every check exits 0 and legacy
   writers remain stopped. Keep legacy dual writes and version repair through this release.
+- `downgrade-name-resolution` **Check name collisions before restoring the automatic-name index.**
+  Revision `54013115725e` permits duplicate names. Its downgrade restores unique `name`
+  for `installation_policy <> 'AVAILABLE' AND retired_at IS NULL`.
+  Group those rows by name and stop if any group has more than one row.
+  Operators must choose policy changes explicitly, then stop writers and repeat the check.
+  The admin Skills guide contains the read-only query and procedure.
+  Never silently rewrite policies or delete customer Skills during downgrade.
+
 - `test-skill-setup` **Set up skills for a test.** Use the integration manager
   `backend/tests/integration/common_utils/managers/skill.py`. A real push
   needs the Kubernetes harness in `backend/tests/integration/tests/craft/k8s/`.

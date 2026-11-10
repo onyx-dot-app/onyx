@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import io
 import zipfile
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
 from onyx.db.enums import SkillSharePermission
-from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.server.features.skill.models import SkillPatchRequest, SkillUserShareRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import (
@@ -229,6 +229,7 @@ def test_duplicate_name_across_users(
 
 def test_same_name_enable_requires_explicit_replacement(
     basic_user: DATestUser,
+    other_basic_user: DATestUser,
 ) -> None:
     name = f"personal-switch-{uuid4().hex[:6]}"
     first = SkillManager.create_personal(basic_user, name=name)
@@ -246,9 +247,18 @@ def test_same_name_enable_requires_explicit_replacement(
     ]
 
     second = SkillManager.create_personal(
-        basic_user,
+        other_basic_user,
         name=name,
         auto_enable=False,
+    )
+    SkillManager.share(
+        second,
+        other_basic_user,
+        user_shares=[
+            SkillUserShareRequest(
+                user_id=UUID(basic_user.id), permission=SkillSharePermission.VIEWER
+            )
+        ],
     )
     assert first.enabled is True
     assert second.enabled is False
