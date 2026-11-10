@@ -12280,7 +12280,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "Start incognito chat",
-        "lockedTooltip": "Incognito can only be set before the chat starts",
         "tooltip": "Incognito Chat"
       },
       "mode": {

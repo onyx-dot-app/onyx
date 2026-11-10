@@ -12280,7 +12280,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "Iniciar chat anônimo",
-        "lockedTooltip": "O modo anônimo só pode ser definido antes do início do chat",
         "tooltip": "Chat anônimo"
       },
       "mode": {
