@@ -898,6 +898,7 @@ func (m *Manager) NodeInfo() (NodeInfo, error) {
 	if err != nil {
 		return NodeInfo{}, err
 	}
+	m.rescanForDrain()
 	m.mu.Lock()
 	n := m.liveVMsLocked()
 	starting := m.startingMiBLocked()

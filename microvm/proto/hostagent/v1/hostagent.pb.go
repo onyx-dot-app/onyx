@@ -207,9 +207,11 @@ const (
 	DrainState_DRAIN_STATE_UNSPECIFIED DrainState = 0
 	// The node admits new VMs.
 	DrainState_DRAIN_STATE_ACTIVE DrainState = 1
-	// The node refuses new VMs and still has VMs that are starting or running.
+	// The node refuses new VMs and still has VMs that are starting or running,
+	// Firecracker processes in doubt or template build VMs, or no process scan
+	// that worked.
 	DrainState_DRAIN_STATE_DRAINING DrainState = 2
-	// The node refuses new VMs and has no VM that is starting or running.
+	// The node refuses new VMs and runs no Firecracker process.
 	DrainState_DRAIN_STATE_DRAINED DrainState = 3
 )
 

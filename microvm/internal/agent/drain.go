@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -132,6 +133,7 @@ func (m *Manager) updateSinceLocked(was bool) {
 
 // Drain returns the drain state of the node.
 func (m *Manager) Drain() DrainStatus {
+	m.rescanForDrain()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.drainStatusLocked()
@@ -144,11 +146,30 @@ func (m *Manager) drainStatusLocked() DrainStatus {
 	}
 	if m.drain.draining() {
 		s.State, s.Since = pb.DrainState_DRAIN_STATE_DRAINED, m.drain.since
-		if m.liveVMsLocked() > 0 {
+		// Kept processes in doubt, build VMs, and a scan that never worked
+		// (their processes are unknown) also hold the drain.
+		if m.liveVMsLocked() > 0 || len(m.doubt) > 0 || len(m.building) > 0 || m.needScan {
 			s.State = pb.DrainState_DRAIN_STATE_DRAINING
 		}
 	}
 	return s
+}
+
+// rescanForDrain scans the processes again while a draining node keeps
+// processes in doubt or has no scan that worked, so a doubt whose process
+// exited stops holding the drain.
+func (m *Manager) rescanForDrain() {
+	m.mu.Lock()
+	need := m.drain.draining() && (len(m.doubt) > 0 || m.needScan)
+	m.mu.Unlock()
+	if !need || m.adopter == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := m.rescan(ctx); err != nil {
+		m.log.Error("process scan for the drain state failed", "err", err)
+	}
 }
 
 // drainErrLocked refuses a new VM on a draining node.

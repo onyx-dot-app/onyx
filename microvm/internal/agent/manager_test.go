@@ -410,7 +410,7 @@ func TestCreatePinsItsTemplateAgainstGC(t *testing.T) {
 	var removed []string
 	var gcErr error
 	// GC runs while Create is in admission, before its VM is in the table.
-	f.stats.onMem = func() {
+	f.stats.onDisk = func() {
 		removed, gcErr = f.m.templates.GC(0, f.m.TemplatesInUse)
 	}
 	if _, _, err := f.m.Create(context.Background(), req(sb1, 1)); err != nil {

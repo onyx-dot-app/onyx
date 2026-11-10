@@ -379,8 +379,10 @@ runs before the API serves. If a read fails, the agent keeps the last taints and
   (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
   returns it.
 - Running VMs keep running. The api_server saves and stops each one (ENG-4580).
-- `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, `DRAINED` when none
-  are), `manual`, `taints`, `since`, `watch_error`. Clearing the manual flag does not end a drain that a
+- `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, while the agent
+  keeps Firecracker processes in doubt or runs a template build VM, and while no process scan worked;
+  `DRAINED` when none of these is left), `manual`, `taints`, `since`, `watch_error`. While draining,
+  `NodeInfo` scans the processes again, so a doubt whose process exited clears. Clearing the manual flag does not end a drain that a
   taint causes.
 
 ### Managed drive (ENG-4614)

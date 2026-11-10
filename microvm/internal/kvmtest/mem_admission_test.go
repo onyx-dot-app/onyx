@@ -395,15 +395,20 @@ func TestMemAdmissionKVM(t *testing.T) {
 	// 5. A guest memory hog with the default overhead: the guest OOM
 	// killer stops the hog, the VM lives. The overhead is anon + kernel
 	// memory of the scope above the guest size.
+	type hogResult struct {
+		r   ptResult
+		err error
+	}
 	hogOnce := func(v *memVM, what string) {
-		done := make(chan ptResult, 1)
+		done := make(chan hogResult, 1)
 		go func() {
-			r, _ := ptRun(vmCtx(ctx, v.id, v.key), sd, "sh", "-c",
+			r, err := ptRun(vmCtx(ctx, v.id, v.key), sd, "sh", "-c",
 				"cat > /tmp/hog.py <<'EOF'\n"+hogPy+"EOF\n(dd if=/dev/vda of=/dev/null bs=1M 2>/dev/null &) ; python3 /tmp/hog.py; echo hog_rc=$?; dmesg | grep -i -m2 'out of memory'")
-			done <- r
+			done <- hogResult{r: r, err: err}
 		}()
 		var maxAnon, maxKernel, maxFile uint64
 		var res ptResult
+		var runErr error
 		tick := time.NewTicker(200 * time.Millisecond)
 		defer tick.Stop()
 		limit := time.NewTimer(5 * time.Minute)
@@ -411,7 +416,8 @@ func TestMemAdmissionKVM(t *testing.T) {
 	loop:
 		for {
 			select {
-			case res = <-done:
+			case h := <-done:
+				res, runErr = h.r, h.err
 				break loop
 			case <-tick.C:
 				maxAnon = max(maxAnon, cgroupStat(v.id, "anon"))
@@ -434,6 +440,19 @@ func TestMemAdmissionKVM(t *testing.T) {
 			what, readFileTrim(filepath.Join(scopeDir(v.id), "memory.max")), mibOf(readFileTrim(filepath.Join(scopeDir(v.id), "memory.peak"))),
 			maxAnon, maxKernel, maxFile, int64(maxAnon+maxKernel)-tplMemMiB, cgroupEvent(v.id, "oom"), cgroupEvent(v.id, "oom_kill"),
 			state, alive, strings.TrimSpace(res.stdout))
+		// The guest OOM killer must stop the hog; the VM must not die.
+		if runErr != nil {
+			t.Errorf("%s: hog call: %v", what, runErr)
+		}
+		if !strings.Contains(res.stdout, "hog_rc=137") {
+			t.Errorf("%s: the guest OOM killer did not stop the hog: %q", what, res.stdout)
+		}
+		if state != pb.VMState_VM_STATE_RUNNING.String() || !alive {
+			t.Errorf("%s: VM state %s, Firecracker alive %v; want a running VM", what, state, alive)
+		}
+		if k := cgroupEvent(v.id, "oom_kill"); k != "0" {
+			t.Errorf("%s: scope oom_kill %s, want 0", what, k)
+		}
 	}
 	bystander := mustCreate()
 	hv := mustCreate()

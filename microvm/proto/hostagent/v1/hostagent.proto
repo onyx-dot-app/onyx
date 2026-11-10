@@ -172,9 +172,11 @@ enum DrainState {
   DRAIN_STATE_UNSPECIFIED = 0;
   // The node admits new VMs.
   DRAIN_STATE_ACTIVE = 1;
-  // The node refuses new VMs and still has VMs that are starting or running.
+  // The node refuses new VMs and still has VMs that are starting or running,
+  // Firecracker processes in doubt or template build VMs, or no process scan
+  // that worked.
   DRAIN_STATE_DRAINING = 2;
-  // The node refuses new VMs and has no VM that is starting or running.
+  // The node refuses new VMs and runs no Firecracker process.
   DRAIN_STATE_DRAINED = 3;
 }
 

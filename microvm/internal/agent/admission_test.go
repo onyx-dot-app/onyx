@@ -312,6 +312,48 @@ func TestManualDrain(t *testing.T) {
 	}
 }
 
+// A Firecracker process that the agent keeps in doubt holds the drain
+// until a scan finds it gone. So does a scan that never worked.
+func TestDrainWaitsForDoubtfulProcesses(t *testing.T) {
+	f := newFixture(t, 10)
+	if _, err := f.m.SetDrain(true); err != nil {
+		t.Fatal(err)
+	}
+	table := &fakeTable{cands: []Candidate{{ID: sb1, PID: 900, UID: 1000005}}}
+	f.m.mu.Lock()
+	f.m.adopter = table
+	f.m.doubt[sb1] = &doubt{reason: "a failed start may have left its VM running"}
+	f.m.mu.Unlock()
+	if d := f.m.Drain(); d.State != pb.DrainState_DRAIN_STATE_DRAINING {
+		t.Fatalf("doubt with a live process: %+v", d)
+	}
+	if n, err := f.m.NodeInfo(); err != nil || n.Drain.State != pb.DrainState_DRAIN_STATE_DRAINING {
+		t.Fatalf("node info: %+v %v", n.Drain, err)
+	}
+	// The scan fails: the doubt stays and so does the drain.
+	table.set(nil, errors.New("read /proc: permission denied"))
+	if d := f.m.Drain(); d.State != pb.DrainState_DRAIN_STATE_DRAINING {
+		t.Fatalf("failed scan: %+v", d)
+	}
+	// The process is gone: the doubt clears and the drain ends.
+	table.set(nil, nil)
+	if d := f.m.Drain(); d.State != pb.DrainState_DRAIN_STATE_DRAINED {
+		t.Fatalf("doubt cleared: %+v", d)
+	}
+	// After a restart whose scan failed, the processes are unknown.
+	f.m.mu.Lock()
+	f.m.needScan = true
+	f.m.mu.Unlock()
+	table.set(nil, errors.New("read /proc: permission denied"))
+	if d := f.m.Drain(); d.State != pb.DrainState_DRAIN_STATE_DRAINING {
+		t.Fatalf("unknown processes: %+v", d)
+	}
+	table.set(nil, nil)
+	if d := f.m.Drain(); d.State != pb.DrainState_DRAIN_STATE_DRAINED {
+		t.Fatalf("scan works again: %+v", d)
+	}
+}
+
 // A drain that starts while a Create is in admission stops that Create.
 func TestDrainDuringAdmission(t *testing.T) {
 	f := newFixture(t, 10)
