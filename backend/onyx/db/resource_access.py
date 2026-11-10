@@ -16,6 +16,7 @@ from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id, lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.skills.limits import SkillLimitBaseline
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ class ResourceAccessState:
 @dataclass
 class AccessMutationResult:
     succeeded: list[UUID] = field(default_factory=list)
-    failed: dict[UUID, str] = field(default_factory=dict)
+    failed: dict[UUID, OnyxError] = field(default_factory=dict)
     affected: set[UUID] = field(default_factory=set)
 
 
@@ -59,6 +60,12 @@ class ResourceAccessAdapter[Resource](Protocol):
         allow_management: bool,
     ) -> Resource: ...
     def state(self, resource: Resource) -> ResourceAccessState: ...
+    def capture_skill_limit(
+        self, resource: Resource, db_session: Session
+    ) -> SkillLimitBaseline: ...
+    def assert_skill_limit(
+        self, baseline: SkillLimitBaseline, db_session: Session, actor_id: UUID
+    ) -> None: ...
     def write(
         self, resource: Resource, change: ResourceAccessChange, db_session: Session
     ) -> None: ...
@@ -109,7 +116,7 @@ def mutate_resource_access[Resource](
         except OnyxError as exc:
             if not allow_partial:
                 raise
-            result.failed[resource_id] = exc.detail
+            result.failed[resource_id] = exc
     before = adapter.affected_users(resources.keys(), db_session)
     for resource_id, resource in resources.items():
         try:
@@ -218,6 +225,7 @@ def mutate_resource_access[Resource](
                         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                         "Only the owner can share personal synced skills.",
                     )
+                baseline = adapter.capture_skill_limit(resource, db_session)
                 adapter.write(
                     resource,
                     replace(
@@ -235,11 +243,12 @@ def mutate_resource_access[Resource](
                     db_session,
                 )
                 db_session.flush()
+                adapter.assert_skill_limit(baseline, db_session, user.id)
             result.succeeded.append(resource_id)
         except OnyxError as exc:
             if not allow_partial:
                 raise
-            result.failed[resource_id] = exc.detail
+            result.failed[resource_id] = exc
     after = adapter.affected_users(result.succeeded, db_session)
     for resource_id in result.succeeded:
         result.affected.update(before.get(resource_id, set()))

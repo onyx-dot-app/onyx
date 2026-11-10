@@ -1,17 +1,25 @@
 """Every Skill write that can grow a user's Skills checks the per-user limit."""
 
 import json
-from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import Request
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillInstallationPolicy as Policy
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
-from onyx.db.skill import resolve_skill_runtime_names, set_skill_enabled_for_user
+from onyx.db.models import Skill, Skill__UserGroup, User
+from onyx.db.resource_access import ResourceAccessChange, mutate_resource_access
+from onyx.db.skill import (
+    SkillAccessAdapter,
+    resolve_skill_runtime_names,
+    set_skill_enabled_for_user,
+)
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill import api
 from onyx.skills.ingest import prepare_skill_bundle
@@ -21,8 +29,12 @@ from onyx.skills.limits import (
     SkillLimit,
     SkillLimitViolation,
 )
+from tests.external_dependency_unit.conftest import delete_test_user
 from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_group,
     make_user,
+    share_skill_with_group,
     share_skill_with_user,
 )
 from tests.external_dependency_unit.db.test_skill_access_mutations import manager
@@ -130,6 +142,79 @@ def test_larger_edit_is_refused_and_keeps_the_version(clean: Session) -> None:
     assert skill is not None and skill.current_version_id == version_id
 
 
+def _group_policies(session: Session, skill_id: UUID) -> dict[int, Policy | None]:
+    return dict(
+        session.execute(
+            select(
+                Skill__UserGroup.user_group_id, Skill__UserGroup.installation_policy
+            ).where(Skill__UserGroup.skill_id == skill_id)
+        )
+        .tuples()
+        .all()
+    )
+
+
+def test_required_group_change_refused_for_one_over_member(clean: Session) -> None:
+    admin, _ = manager(clean, global_access=True)
+    over, under, also_under = (
+        make_user(clean, standard_account=True) for _ in range(3)
+    )
+    group = make_group(clean)
+    for user in (over, under, also_under):
+        add_user_to_group(clean, user, group)
+    sized_skill(clean, size=SKILL_WRITE_MAX_BYTES - MIB, author=over)
+    target = sized_skill(clean, size=2 * MIB, author=admin, policy=Policy.AVAILABLE)
+    share_skill_with_group(clean, target, group)
+
+    def set_group_policy(policy: Policy) -> None:
+        mutate_resource_access(
+            [target.id],
+            ResourceAccessChange(group_installation_policies={group.id: policy}),
+            admin,
+            clean,
+            SkillAccessAdapter(),
+        )
+
+    with pytest.raises(OnyxError) as refused:
+        set_group_policy(Policy.REQUIRED)
+    limit = _skill_limit(refused.value)
+    assert limit.affected_user_count == 1 and limit.usage is None
+    assert "1 user past" in refused.value.detail
+    assert _group_policies(clean, target.id) == {group.id: None}
+
+    # Available grants nothing until a user turns the skill on.
+    set_group_policy(Policy.AVAILABLE)
+    assert _group_policies(clean, target.id) == {group.id: Policy.AVAILABLE}
+
+
+def test_bulk_share_fails_only_the_skill_over_the_limit(clean: Session) -> None:
+    admin, _ = manager(clean, global_access=True)
+    member = make_user(clean, standard_account=True)
+    group = make_group(clean)
+    add_user_to_group(clean, member, group)
+    sized_skill(clean, size=SKILL_WRITE_MAX_BYTES - MIB, author=member)
+    fits = sized_skill(clean, size=MIB // 2, author=admin, policy=Policy.AVAILABLE)
+    too_big = sized_skill(clean, size=2 * MIB, author=admin, policy=Policy.AVAILABLE)
+
+    result = mutate_resource_access(
+        [fits.id, too_big.id],
+        ResourceAccessChange(
+            group_shares={group.id: SkillSharePermission.VIEWER},
+            group_installation_policies={group.id: Policy.REQUIRED},
+        ),
+        admin,
+        clean,
+        SkillAccessAdapter(),
+        add_only=True,
+        allow_partial=True,
+    )
+
+    assert result.succeeded == [fits.id]
+    assert set(result.failed) == {too_big.id}
+    assert "1 user past" in result.failed[too_big.id].detail
+    assert _group_policies(clean, too_big.id) == {}
+
+
 def test_user_already_over_may_reduce_but_not_grow(clean: Session) -> None:
     user = make_user(clean, standard_account=True)
     owner = make_user(clean, standard_account=True)
@@ -151,6 +236,88 @@ def test_user_already_over_may_reduce_but_not_grow(clean: Session) -> None:
         )
     usage = _skill_limit(refused.value).usage
     assert usage is not None and usage.bytes == 601 * MIB
+
+
+def _delete(skill_ids: list[UUID], users: list[User]) -> None:
+    with get_session_with_current_tenant() as cleanup:
+        cleanup.execute(delete(Skill).where(Skill.id.in_(skill_ids)))
+        delete_test_user(cleanup, *users)
+        cleanup.commit()
+
+
+def test_concurrent_admin_changes_refuse_one(db_session: Session) -> None:
+    admin = make_user(db_session, is_admin=True)
+    target, owner = (make_user(db_session, standard_account=True) for _ in range(2))
+    skills = [
+        sized_skill(db_session, size=300 * MIB, author=owner, policy=Policy.AVAILABLE)
+        for _ in range(2)
+    ]
+    for skill in skills:
+        share_skill_with_user(db_session, skill, target)
+    skill_ids = [skill.id for skill in skills]
+    db_session.commit()
+    start = Barrier(2)
+
+    def require(skill_id: UUID) -> OnyxError | None:
+        with get_session_with_current_tenant() as writer:
+            actor = writer.get(User, admin.id)
+            assert actor is not None
+            start.wait()
+            try:
+                mutate_resource_access(
+                    [skill_id],
+                    ResourceAccessChange(installation_policy=Policy.REQUIRED),
+                    actor,
+                    writer,
+                    SkillAccessAdapter(),
+                )
+            except OnyxError as exc:
+                writer.rollback()
+                return exc
+            writer.commit()
+            return None
+
+    try:
+        with ThreadPoolExecutor(2) as pool:
+            results = list(pool.map(require, skill_ids))
+        refused = [result for result in results if result is not None]
+        assert len(refused) == 1
+        assert _skill_limit(refused[0]).affected_user_count == 2
+        db_session.expire_all()
+        policies = db_session.scalars(
+            select(Skill.installation_policy).where(Skill.id.in_(skill_ids))
+        ).all()
+        assert sorted(policies) == sorted([Policy.AVAILABLE, Policy.REQUIRED])
+    finally:
+        _delete(skill_ids, [admin, target, owner])
+
+
+@pytest.mark.parametrize("action", ["share", "enable"])
+def test_bulk_response_preserves_structured_limit(clean: Session, action: str) -> None:
+    actor, _ = manager(clean, global_access=True)
+    sized_skill(clean, size=SKILL_WRITE_MAX_BYTES, author=actor)
+    target = sized_skill(clean, size=MIB, author=actor, policy=Policy.AVAILABLE)
+    request = (
+        api.SkillBulkShareRequest(
+            action="share",
+            skill_ids=[target.id],
+            sharing=api.SkillShareRequest(installation_policy=Policy.REQUIRED),
+        )
+        if action == "share"
+        else api.SkillBulkActionRequest(action="enable", skill_ids=[target.id])
+    )
+
+    response = api.bulk_update_skills(request, actor, clean, http_request=REQUEST)
+
+    assert response.succeeded == []
+    failure = response.failed[0]
+    assert failure.skill_id == target.id
+    assert failure.skill_limit is not None
+    assert failure.skill_limit.failed_limit == SkillLimit.BYTES
+    assert failure.skill_limit.affected_user_count == 1
+    assert failure.skill_limit.usage is not None
+    assert failure.skill_limit.usage.charged_bytes == SKILL_WRITE_MAX_BYTES + MIB
+    assert target.installation_policy == Policy.AVAILABLE
 
 
 @pytest.mark.parametrize("policy", [Policy.DEFAULT, Policy.REQUIRED])

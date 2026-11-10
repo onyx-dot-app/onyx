@@ -438,7 +438,7 @@ def bulk_update_skills(
         )
         succeeded = result.succeeded
         failed = [
-            SkillBulkFailure(skill_id=key, detail=value)
+            SkillBulkFailure.from_error(key, value)
             for key, value in result.failed.items()
         ]
         affected = result.affected
@@ -455,7 +455,7 @@ def bulk_update_skills(
                     ),
                 )
             except OnyxError as exc:
-                failed.append(SkillBulkFailure(skill_id=skill_id, detail=exc.detail))
+                failed.append(SkillBulkFailure.from_error(skill_id, exc))
                 continue
             succeeded.append(skill_id)
             affected |= item_affected
