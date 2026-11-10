@@ -24,7 +24,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     GoogleCredentialKind,
 )
-from onyx.connectors.interfaces import CredentialsProviderInterface
+from onyx.connectors.interfaces import CredentialsProviderInterface, SourceApiLimiter
 from onyx.connectors.models import ConnectorMissingCredentialError
 
 _ADMIN = "admin@co.com"
@@ -304,3 +304,113 @@ def test_list_files_requires_its_variant() -> None:
         _gateway().list_files(  # ty: ignore[missing-argument]
             user_email=_ADMIN, fields="nextPageToken, files(id)"
         )
+
+
+class _RecordingLimiter(SourceApiLimiter):
+    def __init__(self) -> None:
+        self.spent: list[tuple[str, int, str | None]] = []
+        self.reported: list[tuple[str, str | None, bool]] = []
+
+    def acquire(self, api: str, cost: int, user: str | None = None) -> None:
+        self.spent.append((api, cost, user))
+
+    def report_rate_limit(self, api: str, user: str | None, user_scope: bool) -> None:
+        self.reported.append((api, user, user_scope))
+
+
+def _limited_gateway() -> tuple[GoogleDriveSourceOperations, _RecordingLimiter]:
+    gateway = _gateway()
+    limiter = _RecordingLimiter()
+    source_operations.attach_source_api_limiter(gateway, limiter)
+    return gateway, limiter
+
+
+def test_each_list_page_spends_list_units_before_its_request() -> None:
+    gateway, limiter = _limited_gateway()
+    pages = [
+        {"files": [{"id": "1"}], "nextPageToken": "t"},
+        {"files": [{"id": "2"}]},
+    ]
+    drive = mock.MagicMock()
+    drive.files.return_value.list.return_value.execute.side_effect = pages
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        files = list(
+            gateway.list_files(
+                variant=DriveCorpus.USER,
+                user_email="a@co.com",
+                fields="nextPageToken, files(id)",
+            )
+        )
+
+    assert files == [{"id": "1"}, {"id": "2"}]
+    assert limiter.spent == [("drive", 100, "a@co.com")] * 2
+    assert limiter.reported == []
+
+
+def test_reads_downloads_and_docs_spend_their_own_costs() -> None:
+    gateway, limiter = _limited_gateway()
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(source_operations, "_download", return_value=b"x"),
+    ):
+        gateway.get_file(user_email="a@co.com", file_id="f", fields="id")
+        gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
+        gateway.export_file(
+            user_email="b@co.com",
+            file_id="f",
+            mime_type="text/plain",
+            size_threshold=10,
+        )
+
+    assert limiter.spent == [
+        ("drive", 5, "a@co.com"),
+        ("drive", 200, "a@co.com"),
+        ("drive", 200, "b@co.com"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "user_scope"),
+    [
+        (403, _RATE_LIMIT_BODY, True),
+        (429, b"{}", False),
+    ],
+)
+def test_a_rate_limit_answer_is_reported_with_its_scope(
+    status: int, body: bytes, user_scope: bool
+) -> None:
+    gateway, limiter = _limited_gateway()
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations, "_download", side_effect=_http_error(status, body)
+        ),
+        pytest.raises(GoogleDriveHttpError),
+    ):
+        gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
+
+    assert limiter.reported == [("drive", "a@co.com", user_scope)]
+
+
+def test_an_access_error_is_not_reported_as_a_rate_limit() -> None:
+    gateway, limiter = _limited_gateway()
+    drive = mock.MagicMock()
+    drive.files.return_value.get.return_value.execute.side_effect = _http_error(404)
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        assert gateway.get_file(user_email="a@co.com", file_id="f", fields="id") is None
+
+    assert limiter.spent == [("drive", 5, "a@co.com")]
+    assert limiter.reported == []
+
+
+def test_a_gateway_with_no_limiter_calls_google_directly() -> None:
+    gateway = _gateway()
+    drive = mock.MagicMock()
+    drive.files.return_value.get.return_value.execute.return_value = {"id": "f"}
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        assert gateway.get_file(user_email="a@co.com", file_id="f", fields="id") == {
+            "id": "f"
+        }

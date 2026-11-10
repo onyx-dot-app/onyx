@@ -1390,6 +1390,31 @@ GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
     os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
 )
 
+# Off by default. When on, the workers that index Google Drive share one budget
+# of Google API calls for each credential, kept in Redis, so that many workers
+# do not each find Google's quota through 429 answers.
+ENABLE_SOURCE_API_LIMITER = (
+    os.environ.get("ENABLE_SOURCE_API_LIMITER", "").lower() == "true"
+)
+# Google's quota model for the Drive API of the customer's GCP project: "units"
+# (each call has a cost in quota units) or "requests" (each call counts as one).
+GOOGLE_DRIVE_QUOTA_MODEL = (
+    os.environ.get("GOOGLE_DRIVE_QUOTA_MODEL") or "units"
+).lower()
+# The budgets for one minute. Set them to the quotas of the GCP project.
+GOOGLE_DRIVE_QUOTA_PER_PROJECT = int(
+    os.environ.get("GOOGLE_DRIVE_QUOTA_PER_PROJECT")
+    or (12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 1_000_000)
+)
+GOOGLE_DRIVE_QUOTA_PER_USER = int(
+    os.environ.get("GOOGLE_DRIVE_QUOTA_PER_USER")
+    or (12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 325_000)
+)
+GOOGLE_DOCS_READS_PER_PROJECT = int(
+    os.environ.get("GOOGLE_DOCS_READS_PER_PROJECT") or 3_000
+)
+GOOGLE_DOCS_READS_PER_USER = int(os.environ.get("GOOGLE_DOCS_READS_PER_USER") or 300)
+
 # Cap the total text retained per file across a connector's extracted sections,
 # bounding worker memory when a source can't be size-checked before fetch —
 # e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
