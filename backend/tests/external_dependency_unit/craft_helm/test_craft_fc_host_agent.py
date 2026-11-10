@@ -145,7 +145,7 @@ def test_agent_pod_spec() -> None:
     assert "--tls-key=/etc/craft-fc/tls/tls.key" in args
     assert "--uid-base=1000000" in args
     assert "--uid-count=65536" in args
-    assert "--dial-ports=3010" in args
+    assert "--dial-ports=3010,9222" in args
     assert "--relay-max-conns=256" in args
     assert "--dial-max-streams=64" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]

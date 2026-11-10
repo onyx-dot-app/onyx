@@ -2062,8 +2062,8 @@ craft:
     uidCount: 65536
     # mTLS listener for the api_server.
     listenPort: 7443
-    # Guest vsock ports that Dial allows (app preview). The agent always refuses the daemon port.
-    dialPorts: "3010"
+    # Guest vsock ports that Dial allows: app preview (3010) and the browser CDP port (9222). The agent always refuses the daemon port.
+    dialPorts: "3010,9222"
     # Most open egress relay connections per VM; the agent closes new ones
     # over the cap.
     relayMaxConns: 256
