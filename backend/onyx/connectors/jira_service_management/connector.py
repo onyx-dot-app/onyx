@@ -64,6 +64,29 @@ def build_jsm_jql_query(
     )
 
 
+def _apply_request_type(
+    field_value: dict[str, Any], jsm_meta: dict[str, str | list[str]]
+) -> None:
+    req_type = field_value.get("requestType")
+    if isinstance(req_type, dict):
+        req_name = req_type.get("name")
+        if isinstance(req_name, str) and req_name:
+            jsm_meta["request_type"] = req_name
+        sd_id = req_type.get("serviceDeskId") or field_value.get("serviceDeskId")
+        if sd_id is not None:
+            jsm_meta["service_desk_id"] = str(sd_id)
+        links = field_value.get("_links")
+        if isinstance(links, dict):
+            web_link = links.get("web")
+            if isinstance(web_link, str) and web_link:
+                jsm_meta["customer_request_url"] = web_link
+        current_status = field_value.get("currentStatus")
+        if isinstance(current_status, dict):
+            status_name = current_status.get("status")
+            if isinstance(status_name, str) and status_name:
+                jsm_meta["customer_status"] = status_name
+
+
 def extract_jsm_metadata(issue: JiraIssue) -> dict[str, str | list[str]]:
     """Extracts Jira Service Management specific metadata from an issue's fields
     (Customer Request Type, Service Desk ID, Customer Portal URL, Request Status,
@@ -81,26 +104,7 @@ def extract_jsm_metadata(issue: JiraIssue) -> dict[str, str | list[str]]:
     for field_value in fields.values():
         if isinstance(field_value, dict):
             # JSM Customer Request Type object contains `requestType`, `currentStatus`, `_links`, and `serviceDeskId`
-            req_type = field_value.get("requestType")
-            if isinstance(req_type, dict):
-                req_name = req_type.get("name")
-                if isinstance(req_name, str) and req_name:
-                    jsm_meta["request_type"] = req_name
-                sd_id = req_type.get("serviceDeskId") or field_value.get(
-                    "serviceDeskId"
-                )
-                if sd_id is not None:
-                    jsm_meta["service_desk_id"] = str(sd_id)
-                links = field_value.get("_links")
-                if isinstance(links, dict):
-                    web_link = links.get("web")
-                    if isinstance(web_link, str) and web_link:
-                        jsm_meta["customer_request_url"] = web_link
-                current_status = field_value.get("currentStatus")
-                if isinstance(current_status, dict):
-                    status_name = current_status.get("status")
-                    if isinstance(status_name, str) and status_name:
-                        jsm_meta["customer_status"] = status_name
+            _apply_request_type(field_value, jsm_meta)
 
             # JSM SLA field object contains `ongoingCycle` or `completedCycles`.
             # A ticket can have multiple SLA fields; mark breached if any SLA is breached.
