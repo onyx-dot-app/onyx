@@ -91,6 +91,15 @@ def test_source_labels_on_list_and_detail(
             assert detail.status_code == 200, detail.text
             assert detail.json()["marketplace"] == expected
             assert detail.json()["retired_at"] is None
+            assert detail.json()["current_version_number"] == 1
+            assert rows[str(skill.id)]["current_version_number"] == 1
+            if personal:
+                history = client.get(f"/skills/custom/{skill.id}/versions")
+                assert history.status_code == 200, history.text
+                assert (
+                    history.json()[0]["marketplace_revision"]
+                    == marketplace.last_synced_revision
+                )
 
 
 def test_source_tracks_move_and_access_override(

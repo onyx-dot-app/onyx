@@ -60,6 +60,7 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     ownership_vacant: false,
     marketplace: null,
     retired_at: null,
+    current_version_number: null,
     created_at: null,
     updated_at: null,
     user_shares: [],
@@ -96,6 +97,20 @@ function invalidCustom(): CustomSkillCardItem {
 }
 
 describe("SkillCard", () => {
+  it.each([null, undefined])(
+    "shows the current version and omits unknown version %s",
+    (version) => {
+      const { rerender } = render(
+        <SkillCard item={custom({ current_version_number: 7 })} />
+      );
+      expect(screen.getByText("Version 7")).toBeVisible();
+      rerender(
+        <SkillCard item={custom({ current_version_number: version })} />
+      );
+      expect(screen.queryByText(/Version/)).not.toBeInTheDocument();
+    }
+  );
+
   it.each([
     { label: "Personal", is_personal: true, public_permission: null },
     { label: "Shared", is_personal: false, public_permission: null },

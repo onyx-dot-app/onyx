@@ -39,6 +39,7 @@ from onyx.skills.bundle import (
 )
 from onyx.skills.ingest import IngestedBundle, save_skill_bundle_bytes
 from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.db.skill_api_client import client_for
 from tests.external_dependency_unit.db.test_skill_version_writes import (
     bundle,
     make_old,
@@ -850,3 +851,39 @@ def test_stored_restore_preserves_admission_safety(
         )
         == before_history
     )
+
+
+def test_current_version_metadata_tracks_restore(session: Session, user: User) -> None:
+    with client_for(user, session) as client:
+        created = client.post(
+            "/skills/custom",
+            files={
+                "bundle": ("history.zip", bundle("history-metadata"), "application/zip")
+            },
+            data={"auto_enable": "false"},
+        )
+        assert created.status_code == 200, created.text
+        skill = created.json()
+        assert skill["current_version_number"] == 1
+        path = f"/skills/custom/{skill['id']}"
+        history = client.get(f"{path}/versions").json()
+        original = history[0]
+        assert original["marketplace_revision"] is None
+        changed = client.patch(path, json={"instructions_markdown": "Second version"})
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["current_version_number"] == 2
+        restored = client.post(f"{path}/versions/{original['id']}/restore")
+        assert restored.status_code == 200, restored.text
+        assert restored.json()["current_version_number"] == 3
+        rows = client.get("/skills").json()["customs"]
+        assert (
+            next(row for row in rows if row["id"] == skill["id"])[
+                "current_version_number"
+            ]
+            == 3
+        )
+        detail = client.get(f"/skills/{skill['id']}").json()
+        assert detail["current_version_number"] == 3
+        history = client.get(f"{path}/versions").json()
+        assert [row["version_number"] for row in history] == [3, 2, 1]
+        assert [row["is_current"] for row in history] == [True, False, False]

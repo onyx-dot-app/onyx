@@ -189,6 +189,7 @@ function customSkill(id: string, name: string): CustomSkill {
     ownership_vacant: false,
     marketplace: null,
     retired_at: null,
+    current_version_number: null,
     created_at: null,
     updated_at: null,
     user_shares: [],
@@ -270,6 +271,32 @@ describe("SkillsPage preference toggles", () => {
     mockStageSkillCreationDraft.mockReset();
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
   });
+
+  it.each([390, 1280])(
+    "shows current versions in admin rows at width %s",
+    (width) => {
+      const originalWidth = window.innerWidth;
+      skillsData.customs = [
+        {
+          ...customSkill("versioned", "versioned-skill"),
+          current_version_number: 12,
+        },
+      ];
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: width,
+      });
+      try {
+        render(<SkillsPage admin />);
+        expect(screen.getByText("Version 12")).toBeVisible();
+      } finally {
+        Object.defineProperty(window, "innerWidth", {
+          configurable: true,
+          value: originalWidth,
+        });
+      }
+    }
+  );
 
   it.each([true, false])(
     "keeps app Skill descriptions visible when readiness is %s",
