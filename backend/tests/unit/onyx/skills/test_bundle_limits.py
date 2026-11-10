@@ -35,7 +35,7 @@ def test_upload_limit_cannot_exceed_stored_allowance(
         [
             sys.executable,
             "-c",
-            "from onyx.skills.bundle import DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES; print(DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES)",
+            "from onyx.skills.bundle import DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES, STORED_BUNDLE_LIMITS; print(DEFAULT_ZIP_MAX_BYTES, DEFAULT_STORED_ZIP_MAX_BYTES, STORED_BUNDLE_LIMITS.max_stored_bytes)",
         ],
         env={
             **os.environ,
@@ -48,7 +48,7 @@ def test_upload_limit_cannot_exceed_stored_allowance(
         check=True,
         timeout=30,
     )
-    assert result.stdout.strip() == f"{expected} 4096"
+    assert result.stdout.strip() == f"{expected} 4096 4096"
 
 
 def _bundle_settings(env: dict[str, str]) -> list[str]:

@@ -821,9 +821,8 @@ def upload_current_user_skill_files(
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
 
-    existing_bundle_bytes = read_custom_skill_bundle_bytes(skill)
     updated_bundle_bytes = update_custom_bundle_files(
-        existing_bundle_bytes,
+        lambda: read_custom_skill_bundle_bytes(skill),
         read_bundle_file(upload.file, filename=upload.filename),
         filename=upload.filename,
     )

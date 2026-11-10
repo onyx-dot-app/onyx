@@ -223,3 +223,37 @@ def test_metadata_uses_actual_size_with_overstated_zip_headers() -> None:
     metadata = compute_bundle_metadata(bytes(data), limits=limits)
     assert metadata == compute_bundle_metadata(original)
     assert (metadata.unpacked_size_bytes, metadata.file_count) == (14, 1)
+
+
+def test_metadata_skips_ignored_entries_within_limits() -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("SKILL.md", b"x" * 10)
+        archive.writestr("__MACOSX/._SKILL.md", b"m" * 1000)
+        archive.writestr("refs/.DS_Store", b"d" * 1000)
+        archive.writestr("refs/Thumbs.db", b"t" * 1000)
+    limits = BundleLimits(
+        max_stored_bytes=len(output.getvalue()), max_file_bytes=10, max_total_bytes=10
+    )
+    metadata = compute_bundle_metadata(output.getvalue(), limits=limits)
+    assert (metadata.unpacked_size_bytes, metadata.file_count) == (10, 1)
+
+
+def test_bundle_metadata_import_has_no_database_or_server_dependencies() -> None:
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import sys
+from onyx.file_store.models import BundleLimits
+from onyx.utils.bundle import compute_bundle_metadata
+assert not any(name.startswith(('onyx.db.', 'onyx.server.')) for name in sys.modules)
+""",
+        ],
+        check=True,
+        cwd=Path(__file__).resolve().parents[3],
+    )

@@ -198,6 +198,9 @@ still propagate unexpected storage errors.
    unclassified row. `db/skill.py:persist_skill_validity` writes only to rows that are still unclassified
    and still point at the observed version and bundle. The skill lock serializes
    this update with replacement; the legacy validity column is dual-written.
+   Runtime and history use the same missing-object classification. Ambiguous cloud
+   404s need a physical metadata check before runtime persists invalidity. Unknown
+   metadata or storage outages leave validity unclassified so later reads can retry.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
@@ -306,6 +309,18 @@ still propagate unexpected storage errors.
     recoverable. Missing primary buckets, containers, and uncertain errors keep the links.
     A confirmed primary object miss plus an absent legacy bucket confirms absence.
     Historical failures use separate savepoints so current pointer recovery can commit.
+    Repair receives `skills/bundle.py:STORED_BUNDLE_LIMITS`: stored bytes use
+    `SKILL_BUNDLE_STORED_ZIP_MAX_BYTES`. Expansion counts actual per-file and total bytes.
+    No upload ZIP or file-count cap applies to history.
+    Current-content reads verify expansion before inspection or editing.
+    Current-content stored-byte and expansion limits each return a specific 413.
+    History preview and restore return the same stored-byte 413 through
+    `skills/content.py:read_stored_version_bundle`; expansion limits return the
+    structured 413 from normalization. Metadata skips the OS metadata entries that
+    uploads drop (`utils/bundle.py:is_ignored_bundle_path`) and counts other
+    entries without normalization. A file upload that holds a SKILL.md replaces
+    the bundle without reading the current one, so an unreadable current bundle
+    does not block it.
     Built-ins have no versions. `background/celery/tasks/skill_versions/tasks.py` repairs each
     tenant in bounded batches through Celery or Lite's API poller. The base
     interval is five minutes; cloud uses the standard beat multiplier (eight
@@ -391,7 +406,7 @@ still propagate unexpected storage errors.
     then wraps. New arrivals cannot postpone retries of earlier failures.
     An upload saves its file before its row commits, so
     a younger file can be live. A version preview or restore must read through
-    `read_version_bundle`, which gives NOT_FOUND "The files of this version are
+    `read_version_bundle` with the resource's stored-byte limit. It gives NOT_FOUND "The files of this version are
     no longer kept." for a pruned bundle, also when pruning wins a race. A
     restore that copies an old version must read it under the version lock.
 19. `history-requires-edit` **History uses EDIT access, including its reads.**

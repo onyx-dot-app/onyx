@@ -66,6 +66,7 @@ from onyx.skills.bundle import (
     build_single_file_bundle,
     build_skill_md,
 )
+from onyx.skills.content import read_custom_skill_bundle_instructions
 from onyx.skills.ingest import ingested_skill_bundle, save_skill_bundle_bytes
 from onyx.utils.bundle import compute_bundle_metadata
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -466,9 +467,12 @@ def test_corrupt_legacy_bundle_does_not_block_repair_or_replace(
     assert versions(skill, session)[0].unpacked_size_bytes is not None
 
 
-@pytest.mark.parametrize("damage", ["missing", "invalid_zip", "different_content"])
+@pytest.mark.parametrize(
+    "damage",
+    ["missing", "invalid_zip", "different_content", "stored_limit", "expanded_limit"],
+)
 def test_identical_reupload_replaces_damaged_current_bundle(
-    session: Session, user: User, damage: str
+    session: Session, user: User, damage: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     content = bundle("recovered")
     response = api.create_custom_skill(upload(content), False, user, session)
@@ -478,12 +482,28 @@ def test_identical_reupload_replaces_damaged_current_bundle(
     store = get_default_file_store()
     store.delete_file(lost_file)
     if damage != "missing":
+        damaged = (
+            b"corrupt"
+            if damage == "invalid_zip"
+            else bundle("recovered", "Corrupted instructions")
+        )
+        if damage in {"stored_limit", "expanded_limit"}:
+            from onyx.file_store.models import BundleLimits
+
+            monkeypatch.setattr(
+                skill_version,
+                "STORED_BUNDLE_LIMITS",
+                BundleLimits(
+                    max_stored_bytes=2048, max_file_bytes=1024, max_total_bytes=2048
+                ),
+            )
+            damaged = (
+                b"x" * 2049
+                if damage == "stored_limit"
+                else bundle("recovered", "x" * 2049)
+            )
         store.save_file(
-            io.BytesIO(
-                b"corrupt"
-                if damage == "invalid_zip"
-                else bundle("recovered", "Corrupted instructions")
-            ),
+            io.BytesIO(damaged),
             "damaged.zip",
             FileOrigin.SKILL_BUNDLE,
             "application/zip",
@@ -1328,6 +1348,221 @@ def test_failed_repair_commit_keeps_pruned_files(
     assert len(stored_bundles(session)) == 10
 
 
+def test_background_repair_rejects_oversized_entry(
+    tenant: str, session: Session, user: User
+) -> None:
+    from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("large.txt", b"x" * (DEFAULT_PER_FILE_MAX_BYTES + 1))
+    store = get_default_file_store()
+    skill = Skill(
+        name="oversized-history",
+        description="Legacy",
+        bundle_file_id=save_skill_bundle_bytes(
+            output.getvalue(), display_name="old.zip", file_store=store
+        ),
+        author_user_id=user.id,
+    )
+    session.add(skill)
+    session.commit()
+    repair_skill_versions.run(tenant_id=tenant)
+    session.expire_all()
+    version = versions(skill, session)[0]
+    assert version.unpacked_size_bytes is None
+    assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
+    api.replace_current_user_skill_bundle(
+        skill.id, upload(bundle(skill.name)), user, session
+    )
+    assert len(versions(skill, session)) == 2
+    assert versions(skill, session)[0].unpacked_size_bytes is not None
+
+
+@pytest.mark.parametrize("failure", ["stored", "file", "total", "exact"])
+@pytest.mark.parametrize("background", [False, True])
+def test_legacy_byte_limits(
+    tenant: str,
+    session: Session,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+    background: bool,
+) -> None:
+    from onyx.file_store.models import BundleLimits
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("a.txt", b"a" * 1024)
+        archive.writestr("b.txt", b"b" * 1024)
+    content = output.getvalue()
+    limits = BundleLimits(
+        max_stored_bytes=len(content) - (failure == "stored"),
+        max_file_bytes=1024 - (failure == "file"),
+        max_total_bytes=2048 - (failure == "total"),
+    )
+    monkeypatch.setattr(skill_version, "STORED_BUNDLE_LIMITS", limits)
+    skill = Skill(
+        name="bounded-history",
+        description="Legacy",
+        author_user_id=user.id,
+        bundle_file_id=save_skill_bundle_bytes(
+            content, display_name="old.zip", file_store=get_default_file_store()
+        ),
+    )
+    session.add(skill)
+    session.commit()
+    if background:
+        repair_skill_versions.run(tenant_id=tenant)
+        session.expire_all()
+        assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
+    else:
+        api.replace_current_user_skill_bundle(
+            skill.id, upload(bundle(skill.name)), user, session
+        )
+    history = versions(skill, session)
+    old = history[-1]
+    assert (old.unpacked_size_bytes is not None) == (failure == "exact" and background)
+    if failure == "exact" and background:
+        assert old.unpacked_size_bytes == 2048
+        assert old.file_count == 2
+    elif background:
+        api.replace_current_user_skill_bundle(
+            skill.id, upload(bundle(skill.name)), user, session
+        )
+    if failure != "exact" or not background:
+        assert len(versions(skill, session)) == 2
+        assert versions(skill, session)[0].unpacked_size_bytes is not None
+
+
+@pytest.mark.parametrize("larger_config", [False, True])
+def test_legacy_metadata_preserves_original_content_and_old_allowance(
+    session: Session, user: User, monkeypatch: pytest.MonkeyPatch, larger_config: bool
+) -> None:
+    from onyx.file_store.models import BundleLimits
+
+    output = io.BytesIO()
+    large_size = 26 * 1024 * 1024 if larger_config else 24 * 1024 * 1024
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("wrapped/large.bin", b"a" * large_size)
+        archive.writestr("wrapped/other.bin", b"b" * (2 * 1024 * 1024))
+        for index in range(501):
+            archive.writestr(f"wrapped/{index}.txt", b"x")
+    content = output.getvalue()
+    limits = STORED_BUNDLE_LIMITS
+    if larger_config:
+        limits = BundleLimits(
+            max_stored_bytes=200 * 1024 * 1024,
+            max_file_bytes=50 * 1024 * 1024,
+            max_total_bytes=200 * 1024 * 1024,
+        )
+    monkeypatch.setattr(skill_version, "STORED_BUNDLE_LIMITS", limits)
+    skill = Skill(
+        name="legacy-allowance",
+        description="Legacy",
+        author_user_id=user.id,
+        bundle_file_id=save_skill_bundle_bytes(
+            content, display_name="old.zip", file_store=get_default_file_store()
+        ),
+    )
+    session.add(skill)
+    session.commit()
+    skill_version.repair_skill_version_metadata(
+        skill, session, get_default_file_store()
+    )
+    session.commit()
+    old = versions(skill, session)[0]
+    assert old.file_count == 503
+    assert old.unpacked_size_bytes == large_size + 2 * 1024 * 1024 + 501
+
+
+@pytest.mark.parametrize("use_tempfile", [False, True])
+@pytest.mark.parametrize("allowance", [0, 65536, 150000, 150001])
+def test_storage_bounds_actual_reads(
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    use_tempfile: bool,
+    allowance: int,
+) -> None:
+    from collections.abc import Callable
+    from importlib import import_module
+    from typing import IO
+
+    from onyx.file_store import file_store as storage
+
+    store = get_default_file_store()
+    file_id = save_skill_bundle_bytes(
+        b"x" * 150000, display_name="bytes", file_store=store
+    )
+    requests: list[int] = []
+    consumed: list[int] = []
+    copy = storage.read_file_to_buffer
+
+    def measured_copy(
+        read: Callable[[int], bytes], *, use_tempfile: bool, max_bytes: int | None
+    ) -> IO[bytes]:
+        def measured_read(size: int) -> bytes:
+            requests.append(size)
+            chunk = read(size)
+            consumed.append(len(chunk))
+            return chunk
+
+        return copy(measured_read, use_tempfile=use_tempfile, max_bytes=max_bytes)
+
+    monkeypatch.setattr(
+        import_module(type(store).__module__), "read_file_to_buffer", measured_copy
+    )
+    if allowance < 150000:
+        with pytest.raises(storage.FileSizeLimitExceeded):
+            store.read_file(file_id, use_tempfile=use_tempfile, max_bytes=allowance)
+    else:
+        with store.read_file(
+            file_id, use_tempfile=use_tempfile, max_bytes=allowance
+        ) as source:
+            assert source.read() == b"x" * 150000
+    assert requests and all(0 < size <= 65536 for size in requests)
+    assert sum(consumed) == min(allowance + 1, 150000)
+    assert session.is_active
+
+
+def test_backend_stream_failure_remains_retryable_after_progress(
+    tenant: str, session: Session, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from collections.abc import Callable
+    from importlib import import_module
+    from typing import IO
+
+    from onyx.file_store import file_store as storage
+
+    skill = legacy_skill(session, user, 1)
+    copy = storage.read_file_to_buffer
+
+    def failed_copy(
+        read: Callable[[int], bytes], *, use_tempfile: bool, max_bytes: int | None
+    ) -> IO[bytes]:
+        def failed_read(size: int) -> bytes:
+            assert read(min(size, 1))
+            raise ConnectionError("storage stream disconnected")
+
+        return copy(failed_read, use_tempfile=use_tempfile, max_bytes=max_bytes)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            import_module(type(get_default_file_store()).__module__),
+            "read_file_to_buffer",
+            failed_copy,
+        )
+        repair_skill_versions.run(tenant_id=tenant)
+    session.refresh(skill)
+    assert skill.current_version_id is None
+    assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == str(skill.id)
+    repair_skill_versions.run(tenant_id=tenant)
+    assert get_kv_store().load(PROGRESS_KEY, refresh_cache=True) == "completed"
+    repair_skill_versions.run(tenant_id=tenant)
+    session.expire_all()
+    assert versions(skill, session)[0].unpacked_size_bytes is not None
+
+
 def test_metadata_repair_preserves_history_before_pruning(
     session: Session, user: User
 ) -> None:
@@ -1369,3 +1604,26 @@ def test_metadata_repair_preserves_history_before_pruning(
     assert len(versions(skill, session)) == 11
     with store.read_file(oldest_file) as content:
         assert content.read().startswith(b"PK")
+
+
+def test_full_replacement_upload_skips_unreadable_current_bundle(
+    session: Session, user: User
+) -> None:
+    name = f"unreadable-{uuid4().hex[:8]}"
+    response = api.create_custom_skill(upload(bundle(name)), False, user, session)
+    skill = session.get(Skill, response.id)
+    assert skill is not None and skill.bundle_file_id is not None
+    get_default_file_store().delete_file(skill.bundle_file_id)
+
+    with pytest.raises(OnyxError, match="Failed to read bundle"):
+        api.upload_current_user_skill_files(
+            skill.id, upload(b"support", "notes.txt"), user, session
+        )
+    session.rollback()
+
+    api.upload_current_user_skill_files(
+        skill.id, upload(bundle(name, "Fresh instructions")), user, session
+    )
+    history = versions(skill, session)
+    assert len(history) == 2
+    assert "Fresh instructions" in read_custom_skill_bundle_instructions(skill)

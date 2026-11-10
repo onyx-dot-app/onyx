@@ -93,6 +93,11 @@ the `FileRecord` row for every backend. The Postgres backend adds a
 through `get_default_file_store` and never branch on the backend. The one
 exception is presigned URLs: only the cloud backends have them, so a caller
 checks `isinstance(store, PresignableFileStore)` first.
+`file_store/file_store.py:FileStore.read_file` accepts an optional `max_bytes`.
+All four backends enforce it before buffering the whole object, with at most
+one extra byte to detect overflow. S3 and Postgres read bounded chunks;
+GCS and Azure bound the SDK download range. Size metadata is not the guard.
+Overflow raises `FileSizeLimitExceeded`; storage errors remain distinct.
 `upsert_filerecord` also stamps a blob saved during a `USAGE_ONLY` incognito
 turn with its session id (`CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR`, set by
 `chat/execution.py:start_chat_turn`). The incognito cleanup finds blobs only
