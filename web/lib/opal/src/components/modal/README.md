@@ -31,9 +31,12 @@ Radix Dialog compound, the Figma Modal. `Modal` is the Radix root (`open`, `onOp
 | `width`                  | `"full" \| "xl" \| "lg" \| "md" \| "sm"` | `"xl"`      | Card width (`80dvw`, 60rem, 50rem, 40rem, 30rem)                                                                      |
 | `height`                 | `"fit" \| "sm" \| "lg" \| "full"`        | `"fit"`     | Card height and scroll behavior                                                                                       |
 | `preventAccidentalClose` | `boolean`                                | `true`      | After the user types in any text input, the first Escape/outside-click focuses the close button and the second closes |
+| `restoreOpeningFocus`    | `boolean`                                | `false`     | Restore the opening control when a controlled dialog closes without a Radix trigger |
 | `skipOverlay`            | `boolean`                                | `false`     | Omit the scrim                                                                                                        |
 | `background`             | `"default" \| "gray"`                    | `"default"` | Card background (`tint-00` or `tint-01`)                                                                              |
 | `bottomSlot`             | `ReactNode`                              | —           | Rendered below the card, inside the dialog's focus scope                                                              |
+
+Set `restoreOpeningFocus` on controlled dialogs without a Radix trigger to restore the opening control when the dialog closes. The default is `false`. An explicit `onCloseAutoFocus` handler can prevent this behavior.
 
 ## Modal.Backdrop
 

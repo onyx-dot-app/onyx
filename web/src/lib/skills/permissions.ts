@@ -1,4 +1,4 @@
-import type { CustomSkill } from "@/lib/skills/types";
+import type { CustomSkill, Skill } from "@/lib/skills/types";
 
 export function canShareSkill({ skill }: { skill: CustomSkill }): boolean {
   if (skill.retired_at) return false;
@@ -22,5 +22,13 @@ export function canDeleteSkill({
   return (
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR") &&
     (skill.installation_policy !== "REQUIRED" || canManageCompanySkills)
+  );
+}
+
+export function canReadSkillHistory(skill: Skill): boolean {
+  return (
+    skill.source === "custom" &&
+    !skill.retired_at &&
+    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR")
   );
 }

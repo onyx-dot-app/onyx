@@ -675,6 +675,7 @@ describe("ConfigureProviderModal", () => {
             ownership_vacant: false,
             marketplace: null,
             retired_at: null,
+            current_version_number: null,
             user_permission: "OWNER",
           }),
         ],

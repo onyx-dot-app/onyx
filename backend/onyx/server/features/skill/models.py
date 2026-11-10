@@ -74,6 +74,7 @@ class SkillResponse(BaseModel):
     external_app: SkillExternalAppDependencyResponse | None = None
     marketplace: SkillMarketplaceResponse | None = None
     retired_at: datetime.datetime | None = None
+    current_version_number: int | None = None
 
     @classmethod
     def from_builtin(
@@ -160,6 +161,9 @@ class SkillResponse(BaseModel):
             external_app=external_app,
             marketplace=marketplace,
             retired_at=skill.retired_at,
+            current_version_number=(
+                skill.current_version.version_number if skill.current_version else None
+            ),
         )
 
 
@@ -175,6 +179,7 @@ class SkillVersionResponse(BaseModel):
     created_by: MinimalUserSnapshot | None
     is_current: bool
     has_bundle: bool
+    marketplace_revision: str | None
 
 
 class SkillPreviewResponse(BaseModel):

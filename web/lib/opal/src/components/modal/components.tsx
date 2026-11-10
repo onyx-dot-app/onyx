@@ -116,6 +116,8 @@ interface ModalContentProps extends WithoutStyles<
    * instead of closing, and the second closes.
    */
   preventAccidentalClose?: boolean;
+  /** Restore focus for controlled dialogs without a Radix trigger. */
+  restoreOpeningFocus?: boolean;
 
   skipOverlay?: boolean;
 
@@ -143,6 +145,7 @@ function ModalContent({
   height = "fit",
   maxHeight,
   preventAccidentalClose = true,
+  restoreOpeningFocus = false,
   skipOverlay = false,
   background = "default",
   bottomSlot,
@@ -152,6 +155,7 @@ function ModalContent({
   const [hasAttemptedClose, setHasAttemptedClose] = React.useState(false);
   const [hasDescription, setHasDescription] = React.useState(false);
   const hasUserTypedRef = React.useRef(false);
+  const openingFocusRef = React.useRef<HTMLElement | null>(null);
 
   const resetState = React.useCallback(() => {
     setHasAttemptedClose(false);
@@ -264,11 +268,23 @@ function ModalContent({
     ...props,
     onOpenAutoFocus: (e: Event) => {
       resetState();
+      openingFocusRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
       props.onOpenAutoFocus?.(e);
     },
     onCloseAutoFocus: (e: Event) => {
       resetState();
       props.onCloseAutoFocus?.(e);
+      if (
+        restoreOpeningFocus &&
+        !e.defaultPrevented &&
+        openingFocusRef.current?.isConnected
+      ) {
+        e.preventDefault();
+        openingFocusRef.current.focus();
+      }
     },
     onEscapeKeyDown: (e: KeyboardEvent) => {
       handleInteractOutside(e);

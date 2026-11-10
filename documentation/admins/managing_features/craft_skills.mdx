@@ -320,10 +320,15 @@ curl "$ONYX_URL/api/skills/custom/$SKILL_ID/versions" \
 ```
 
 The response lists up to 50 versions from newest to oldest. Each entry contains `id`, `version_number`, `created_at`,
-`created_by`, `is_current`, and `has_bundle`. `created_by` contains the creator's `id` and `email`,
-or `null` when that information is unavailable. To read the next page,
-set `before_version` to the last entry’s `version_number`. The cursor must be a positive integer.
+`created_by`, `is_current`, `has_bundle`, and `marketplace_revision`.
+`created_by` contains the creator's `id` and `email`, or `null` when that information is unavailable.
+`marketplace_revision` identifies the source commit for a synced version; it is `null` for other versions.
+To read the next page, set `before_version` to the last entry’s `version_number`. The cursor must be a positive integer.
 Stop when the response is empty or includes version 1. New versions do not shift older pages.
+Skill list and detail responses include `current_version_number`,
+which is `null` for built-ins and custom Skills that have no version.
+Older servers can omit this field during an upgrade.
+The library hides the version label until version data is available.
 
 | Method | Path after `/api` | Result |
 | --- | --- | --- |

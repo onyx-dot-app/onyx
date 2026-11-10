@@ -18,6 +18,7 @@ export default function UnsavedChangesModal({
   return (
     <Modal open>
       <Modal.Content
+        restoreOpeningFocus
         width="sm"
         preventAccidentalClose={false}
         onInteractOutside={onCancel}

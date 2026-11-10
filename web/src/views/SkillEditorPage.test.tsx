@@ -70,6 +70,7 @@ function existingSkill(
     ownership_vacant: false,
     marketplace: null,
     retired_at: null,
+    current_version_number: null,
     created_at: null,
     updated_at: null,
     user_shares: [],
