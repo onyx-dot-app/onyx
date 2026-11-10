@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Collection
-from typing import Any, Type, cast
+from typing import TYPE_CHECKING, Any, Type, cast
 from uuid import UUID
 
 from sqlalchemy import Select, and_, func, or_, select
@@ -23,9 +25,11 @@ from onyx.db.models import (
     User,
 )
 from onyx.server.features.tool.models import Header
-from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
 from onyx.utils.headers import HeaderItemDict
+
+if TYPE_CHECKING:
+    from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 
 
 def get_tool_user_preferences(

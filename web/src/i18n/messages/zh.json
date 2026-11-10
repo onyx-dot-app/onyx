@@ -2436,6 +2436,10 @@
           "description": "调查 GitHub 仓库并回答有关其代码的问题。",
           "title": "编程智能体"
         },
+        "skills": {
+          "title": "技能",
+          "description": "查找并阅读已启用技能的说明。脚本需要 Craft 沙盒。"
+        },
         "description": "对话可以使用的工具和能力。此项不适用于智能体。",
         "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 插件。",
         "imageGeneration": {
@@ -11291,6 +11295,10 @@
           "description": "调查 GitHub 仓库并回答有关其代码的问题。",
           "title": "编码智能体"
         },
+        "skills": {
+          "title": "技能",
+          "description": "查找并阅读已启用技能的说明。脚本需要 Craft 沙盒。"
+        },
         "description": "此智能体可使用的工具和能力。",
         "imageGeneration": {
           "description": "使用 AI 驱动的工具生成和处理图像。",
@@ -17113,7 +17121,7 @@
         "pendingLabel": "正在删除..."
       },
       "details": {
-        "description": "定义 Craft 应在何时以及如何使用此技能。",
+        "description": "定义何时以及如何使用此技能。",
         "descriptionField": {
           "description": "描述何时应使用此技能。",
           "placeholder": "此技能有什么用途？",
@@ -17168,7 +17176,7 @@
         "title": "已有技能？"
       },
       "instructions": {
-        "description": "编写此技能为 Craft 添加的行为和工作流程。",
+        "description": "编写此技能提供的行为和工作流程。",
         "emptyFallback": "暂无说明。",
         "placeholder": "编写技能说明。",
         "title": "说明"
@@ -17435,7 +17443,8 @@
       },
       "header": {
         "description": "您的 Craft 智能体可调用的能力包。此页面显示内置技能、与您共享的技能以及您的个人技能。",
-        "title": "技能"
+        "title": "技能",
+        "mainDescription": "主聊天的指令。启用自己的技能或他人与你共享的技能。脚本需要 Craft 沙箱。"
       },
       "loadError": {
         "description": "请查看控制台了解详情，并尝试刷新页面。",
@@ -17594,6 +17603,9 @@
       "files": "文件",
       "noFiles": "没有其他文件。"
     },
+    "table": {
+      "installationDefault": "默认安装"
+    },
     "groups": {
       "columnTitle": "群组",
       "marketplace": "市场",
@@ -17614,7 +17626,7 @@
       },
       "admin": {
         "title": "{count, plural, one {# 位用户超出了技能上限} other {# 位用户超出了技能上限}}",
-        "description": "这些用户的技能超过了 {maxSize} 或 {maxFiles, plural, one {# 个文件} other {# 个文件}}。在回到上限以内之前，他们无法添加或启用更多技能，会话也可能遗漏他们的部分技能。",
+        "description": "技能用量超过 {maxSize} 或 {maxFiles, plural, one {# 个文件} other {# 个文件}}。用量降至限制以下之前，无法添加或启用更多技能。会话可能会省略部分技能。",
         "tableLabel": "超出技能上限的用户",
         "columns": {
           "user": "用户",

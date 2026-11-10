@@ -107,7 +107,7 @@ describe("SkillRuntimeNotice", () => {
 
     expect(toasts()).toEqual(["2 skills did not load"]);
     const description =
-      "Your skills must fit in 900 MB and 10,000 files. Individual file, folder, and path limits also apply. These skills exceed a delivery limit, so the agent cannot use them in this session.";
+      "Your skills must fit in 900 MiB and 10,000 files. Individual file, folder, and path limits also apply. These skills exceed a delivery limit, so the agent cannot use them in this session.";
     // Shown under the title and announced by the alert.
     expect(screen.getAllByText(description)).toHaveLength(2);
     const list = screen.getByRole("list");
@@ -120,7 +120,7 @@ describe("SkillRuntimeNotice", () => {
       within(list)
         .getAllByRole("listitem")
         .map((item) => item.textContent)
-    ).toEqual(["big-data: 950 MB", "many-files: 40 MB, 6,000 files"]);
+    ).toEqual(["big-data: 950 MiB", "many-files: 40 MiB, 6,000 files"]);
     expect(screen.getByRole("alert")).toHaveTextContent(
       "2 skills did not load"
     );

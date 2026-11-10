@@ -2436,6 +2436,10 @@
           "description": "GitHub 저장소를 조사하고 코드에 대한 질문에 답변합니다.",
           "title": "코딩 에이전트"
         },
+        "skills": {
+          "title": "스킬",
+          "description": "활성화된 스킬의 지침을 찾고 읽습니다. 스크립트에는 Craft 샌드박스가 필요합니다."
+        },
         "description": "채팅에서 사용할 수 있는 도구와 기능입니다. 에이전트에는 적용되지 않습니다.",
         "pluginsNote": "기본 채팅에 사용할 MCP 서버와 OpenAPI 플러그인은 [플러그인]({url})에서 설정하세요.",
         "imageGeneration": {
@@ -11291,6 +11295,10 @@
           "description": "GitHub 저장소를 조사하고 코드에 관한 질문에 답합니다.",
           "title": "코딩 에이전트"
         },
+        "skills": {
+          "title": "스킬",
+          "description": "활성화된 스킬의 지침을 찾고 읽습니다. 스크립트에는 Craft 샌드박스가 필요합니다."
+        },
         "description": "이 에이전트가 사용할 수 있는 도구와 기능입니다.",
         "imageGeneration": {
           "description": "AI 기반 도구로 이미지를 생성하고 편집합니다.",
@@ -17113,7 +17121,7 @@
         "pendingLabel": "삭제 중..."
       },
       "details": {
-        "description": "Craft가 이 스킬을 언제 어떻게 사용해야 하는지 정의하세요.",
+        "description": "이 스킬을 언제 어떻게 사용할지 정의하세요.",
         "descriptionField": {
           "description": "이 스킬을 언제 사용해야 하는지 설명하세요.",
           "placeholder": "이 스킬은 어떤 도움을 주나요?",
@@ -17168,7 +17176,7 @@
         "title": "기존 스킬이 있나요?"
       },
       "instructions": {
-        "description": "이 스킬이 Craft에 추가하는 동작과 워크플로를 작성하세요.",
+        "description": "이 스킬이 제공하는 동작과 워크플로를 작성하세요.",
         "emptyFallback": "아직 지침이 없습니다.",
         "placeholder": "스킬 지침을 작성하세요.",
         "title": "지침"
@@ -17435,7 +17443,8 @@
       },
       "header": {
         "description": "Craft 에이전트가 활용할 수 있는 기능 번들입니다. 이 페이지에는 기본 제공 스킬, 나와 공유된 스킬, 내 개인 스킬이 표시됩니다.",
-        "title": "스킬"
+        "title": "스킬",
+        "mainDescription": "기본 채팅을 위한 지침입니다. 자신의 스킬이나 공유받은 스킬을 활성화하세요. 스크립트에는 Craft 샌드박스가 필요합니다."
       },
       "loadError": {
         "description": "자세한 내용은 콘솔을 확인하고 페이지를 새로고침해 보세요.",
@@ -17594,6 +17603,9 @@
       "files": "파일",
       "noFiles": "추가 파일이 없습니다."
     },
+    "table": {
+      "installationDefault": "기본 설치"
+    },
     "groups": {
       "columnTitle": "그룹",
       "marketplace": "마켓플레이스",
@@ -17614,7 +17626,7 @@
       },
       "admin": {
         "title": "{count, plural, one {사용자 #명이 스킬 한도를 넘었습니다} other {사용자 #명이 스킬 한도를 넘었습니다}}",
-        "description": "이 사용자들의 스킬이 {maxSize} 또는 {maxFiles, plural, one {파일 #개} other {파일 #개}}를 넘었습니다. 한도 안으로 돌아올 때까지 스킬을 추가하거나 켤 수 없으며, 세션에서 일부 스킬이 빠질 수 있습니다.",
+        "description": "스킬 사용량이 {maxSize} 또는 {maxFiles, plural, one {파일 #개} other {파일 #개}}를 초과합니다. 사용량이 제한 미만이 될 때까지 스킬을 추가하거나 켤 수 없습니다. 세션에서 일부 스킬이 제외될 수 있습니다.",
         "tableLabel": "스킬 한도를 넘은 사용자",
         "columns": {
           "user": "사용자",

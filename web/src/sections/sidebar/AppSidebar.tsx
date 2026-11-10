@@ -75,6 +75,7 @@ import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgDevKit,
   SvgPlug,
+  SvgBlocks,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
@@ -215,6 +216,7 @@ function RecentsSection({
 }
 
 export default function AppSidebar() {
+  const tSkills = useTranslations("skills");
   const t = useTranslations("sidebar");
   const tCraftUpgrade = useTranslations("craft.upgrade");
   const moveChatErrorMessage = t("appSidebar.moveChatError.message");
@@ -687,6 +689,13 @@ export default function AppSidebar() {
             selected={activeSidebarTab.isPlugins()}
           >
             {t("appSidebar.plugins.label")}
+          </SidebarTab>
+          <SidebarTab
+            icon={SvgBlocks}
+            {...navigation.linkTo("/app/skills", { scroll: false })}
+            selected={activeSidebarTab.isSkills()}
+          >
+            {tSkills("page.header.title")}
           </SidebarTab>
           {/* Folded, the body's sections collapse into the header, in the
               unfolded order: Agents, then Projects. */}

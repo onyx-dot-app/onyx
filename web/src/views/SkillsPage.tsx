@@ -84,9 +84,13 @@ import SkillLimitUsers from "@/sections/skills/SkillLimitUsers";
 
 interface SkillsPageProps {
   admin?: boolean;
+  libraryPath?: "/app/skills" | "/craft/v1/skills";
 }
 
-export default function SkillsPage({ admin = false }: SkillsPageProps) {
+export default function SkillsPage({
+  admin = false,
+  libraryPath = admin ? "/app/skills" : "/craft/v1/skills",
+}: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
   const skillErrorToast = useSkillErrorToast();
@@ -237,7 +241,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   }
 
   function handleEdit(item: CustomSkillCardItem) {
-    navigation.go(`/craft/v1/skills/edit/${item.id}`);
+    navigation.go(`${libraryPath}/edit/${item.id}`);
   }
 
   async function updateSkillEnabled(
@@ -360,7 +364,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     const builtinItems: SkillCardItem[] = data.builtins
       .filter(
         (b): b is BuiltinSkill =>
-          !admin && b.source === "builtin" && b.is_available !== null
+          !admin &&
+          libraryPath === "/craft/v1/skills" &&
+          b.source === "builtin" &&
+          b.is_available !== null
       )
       .map((b) => ({
         id: b.id,
@@ -402,7 +409,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         groupRank(a) - groupRank(b) ||
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
     );
-  }, [data, optimisticEnabledById, admin]);
+  }, [data, optimisticEnabledById, admin, libraryPath]);
 
   const focusedAppName = useMemo(() => {
     if (focusedExternalAppId === null) return null;
@@ -784,7 +791,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         icon={admin && isMobile ? undefined : SvgBlocks}
         title={t("page.header.title")}
         description={
-          admin ? bulkCopy("adminDescription") : t("page.header.description")
+          admin
+            ? bulkCopy("adminDescription")
+            : t(
+                libraryPath === "/app/skills"
+                  ? "page.header.mainDescription"
+                  : "page.header.description"
+              )
         }
         actions={[
           <Dropdown
@@ -821,7 +834,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                   description: t("page.createMenu.scratch.description", {
                     appName,
                   }),
-                  onSelect: () => navigation.go("/craft/v1/skills/new"),
+                  onSelect: () => navigation.go(`${libraryPath}/new`),
                 },
                 {
                   kind: "action",
@@ -914,7 +927,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
               rightChildren={
                 <Button
                   prominence="secondary"
-                  {...navigation.linkTo("/craft/v1/skills")}
+                  {...navigation.linkTo(libraryPath)}
                 >
                   {t("page.focusedApp.showAll.label")}
                 </Button>
@@ -1121,7 +1134,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
-          navigation.go(`/craft/v1/skills/new?draft=${draftId}`);
+          navigation.go(`${libraryPath}/new?draft=${draftId}`);
         }}
       />
 

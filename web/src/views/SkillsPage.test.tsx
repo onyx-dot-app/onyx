@@ -375,6 +375,19 @@ describe("SkillsPage preference toggles", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("Skill instructions");
   });
 
+  it("exposes the main library without Craft-only built-ins", async () => {
+    skillsData.builtins = [builtinSkill()];
+    render(<SkillsPage libraryPath="/app/skills" />);
+    expect(screen.queryByText("Built-in skills (1)")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Preview first-skill" })
+    ).toBeVisible();
+    const user = setupUser();
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("menuitem", { name: /Create a skill/ }));
+    expect(window.location.pathname).toBe("/app/skills/new");
+  });
+
   it("keeps built-in skills collapsed until expanded", async () => {
     skillsData.builtins = [builtinSkill()];
     render(<SkillsPage />);
@@ -1752,7 +1765,7 @@ describe("SkillsPage preference toggles", () => {
       expect(mockToastError).toHaveBeenCalledWith("Skill size limit reached", {
         id: "skill-limit-refusal",
         description:
-          "This change would put your skills at 520 MB in 12 files. The limit is 500 MB and 5,000 files.",
+          "This change would put your skills at 520 MiB in 12 files. The limit is 500 MiB and 5,000 files.",
         duration: Infinity,
       })
     );

@@ -28,7 +28,8 @@ type AppPositionType =
         | "new-session"
         | "user-settings"
         | "shared-chat"
-        | "plugins";
+        | "plugins"
+        | "skills";
     };
 
 /** A row id, or null for a parameter that is absent or is not one. */
@@ -61,6 +62,8 @@ function hrefFor(value: AppPositionType): Route {
       });
     case "more-agents":
       return "/app/agents";
+    case "skills":
+      return "/app/skills";
     case "plugins":
       return "/app/plugins";
     case "user-settings":
@@ -189,6 +192,10 @@ class AppPosition {
     return this.value.location === "more-agents";
   }
 
+  isSkills(): boolean {
+    return this.value.location === "skills";
+  }
+
   isPlugins(): boolean {
     return this.value.location === "plugins";
   }
@@ -264,6 +271,9 @@ export function useAppPosition(): AppPosition {
     }
     if (pathname === "/app/plugins" || pathname.startsWith("/app/plugins/")) {
       return new AppPosition({ location: "plugins" }, navigation);
+    }
+    if (pathname === "/app/skills" || pathname.startsWith("/app/skills/")) {
+      return new AppPosition({ location: "skills" }, navigation);
     }
     if (pathname.startsWith("/app/agents")) {
       return new AppPosition({ location: "more-agents" }, navigation);

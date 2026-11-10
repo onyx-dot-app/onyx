@@ -5,7 +5,8 @@ ZipInfo for each entry, so a small archive with many entries, long names,
 extra fields or comments can use much more memory than its size.
 ZipIndex parses one central directory record at a time from the input bytes
 and keeps only each entry's name and offsets in an anonymous SQLite database,
-a temp file that the OS removes, as GroupedRowStore does.
+a temp file that the OS removes, as GroupedRowStore does. When the caller
+bounds metadata size, the index stays in memory instead.
 
 This module owns the parsing of the end records, the central directory records
 and the local headers, and zip_stream reads member data. Both use documented
@@ -249,7 +250,8 @@ class ZipIndex:
     """Read a ZIP from bytes with memory that does not grow with its entries.
 
     Callers keep the input bytes. ``max_metadata_bytes`` refuses a central
-    directory larger than that before any record is parsed.
+    directory larger than that before any record is parsed. Bounded indexes
+    stay in memory; unbounded indexes use temporary disk storage.
     """
 
     def __init__(self, data: bytes, *, max_metadata_bytes: int | None = None) -> None:
@@ -262,7 +264,7 @@ class ZipIndex:
         self._directory = memoryview(data)[
             directory.start : directory.start + directory.size
         ]
-        self._entries_store = ZipEntryStore()
+        self._entries_store = ZipEntryStore(in_memory=max_metadata_bytes is not None)
         try:
             self._entries_store.populate(
                 (

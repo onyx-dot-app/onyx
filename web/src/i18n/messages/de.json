@@ -2436,6 +2436,10 @@
           "description": "Ein GitHub-Repository untersuchen und Fragen zu seinem Code beantworten.",
           "title": "Coding-Agent"
         },
+        "skills": {
+          "title": "Skills",
+          "description": "Anweisungen aktivierter Skills finden und lesen. Skripte benötigen eine Craft-Sandbox."
+        },
         "description": "Tools und Funktionen, die der Chat verwenden kann. Dies gilt nicht für Agenten.",
         "pluginsNote": "Konfigurieren Sie MCP-Server und OpenAPI-Plugins für den Standard-Chat unter [Plugins]({url}).",
         "imageGeneration": {
@@ -11291,6 +11295,10 @@
           "description": "Untersuchen Sie ein GitHub-Repository und beantworten Sie Fragen zu dessen Code.",
           "title": "Coding-Agent"
         },
+        "skills": {
+          "title": "Skills",
+          "description": "Anweisungen aktivierter Skills finden und lesen. Skripte benötigen eine Craft-Sandbox."
+        },
         "description": "Tools und Fähigkeiten, die dieser Agent nutzen kann.",
         "imageGeneration": {
           "description": "Erstellen und bearbeiten Sie Bilder mit KI-gestützten Tools.",
@@ -17113,7 +17121,7 @@
         "pendingLabel": "Wird gelöscht..."
       },
       "details": {
-        "description": "Legen Sie fest, wann und wie Craft diesen Skill verwenden soll.",
+        "description": "Legen Sie fest, wann und wie dieser Skill verwendet werden soll.",
         "descriptionField": {
           "description": "Beschreiben Sie, wann dieser Skill verwendet werden soll.",
           "placeholder": "Wobei hilft dieser Skill?",
@@ -17168,7 +17176,7 @@
         "title": "Haben Sie bereits einen Skill?"
       },
       "instructions": {
-        "description": "Beschreiben Sie das Verhalten und den Workflow, den dieser Skill zu Craft hinzufügt.",
+        "description": "Beschreiben Sie das Verhalten und den Ablauf, die dieser Skill bereitstellt.",
         "emptyFallback": "Noch keine Anweisungen.",
         "placeholder": "Schreiben Sie die Skill-Anweisungen.",
         "title": "Anweisungen"
@@ -17435,7 +17443,8 @@
       },
       "header": {
         "description": "Fähigkeitspakete, auf die Ihr Craft-Agent zugreifen kann. Diese Seite zeigt integrierte Skills, mit Ihnen geteilte Skills und Ihre persönlichen Skills.",
-        "title": "Skills"
+        "title": "Skills",
+        "mainDescription": "Anweisungen für den Hauptchat. Aktivieren Sie eigene oder mit Ihnen geteilte Skills. Skripte benötigen eine Craft-Sandbox."
       },
       "loadError": {
         "description": "Prüfen Sie die Konsole für Details und versuchen Sie, die Seite zu aktualisieren.",
@@ -17594,6 +17603,9 @@
       "files": "Dateien",
       "noFiles": "Keine zusätzlichen Dateien."
     },
+    "table": {
+      "installationDefault": "Standardinstallation"
+    },
     "groups": {
       "columnTitle": "Gruppen",
       "marketplace": "Marketplace",
@@ -17614,7 +17626,7 @@
       },
       "admin": {
         "title": "{count, plural, one {# Benutzer überschreitet das Skill-Limit} other {# Benutzer überschreiten das Skill-Limit}}",
-        "description": "Die Skills dieser Benutzer umfassen mehr als {maxSize} oder {maxFiles, plural, one {# Datei} other {# Dateien}}. Sie können keine weiteren Skills hinzufügen oder aktivieren, bis sie unter dem Limit liegen, und Sitzungen können einige ihrer Skills auslassen.",
+        "description": "Die Skill-Nutzung überschreitet {maxSize} oder {maxFiles, plural, one {# Datei} other {# Dateien}}. Weitere Skills können erst hinzugefügt oder aktiviert werden, wenn die Nutzung unter dem Limit liegt. Sitzungen können einige Skills auslassen.",
         "tableLabel": "Benutzer über dem Skill-Limit",
         "columns": {
           "user": "Benutzer",

@@ -28,6 +28,8 @@ The interface is `tools/interface.py:Tool`, which returns
   [[internal-search]], [[web-search]], [[image-generation]],
   [[code-execution]], [[mcp-and-custom-tools]], [[chat-preferences]]
   (`MemoryTool`) and [[file-store-and-user-files]] (`read_file`).
+  [[skills]] owns `SkillTool` (`read_skill`), a read-only main-chat consumer.
+  It uses the same registration, constructor gates, and current tool restoration.
 - **[[core-chat-loop]]** calls `construct_tools` once per model response and
   gives the tools to `chat/agent.py:ChatAgent` or
   `deep_research/agent.py:DeepResearchAgent`. `ChatAgent` binds them with its

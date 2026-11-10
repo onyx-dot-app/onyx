@@ -62,7 +62,12 @@ export default function SkillGroupSummaries({
       {summaries.slice(0, VISIBLE_GROUPS).map((summary) => {
         const detail = groupDetail(summary);
         return (
-          <Section key={summary.group_id} height="auto" alignItems="stretch">
+          <Section
+            key={summary.group_id}
+            height="auto"
+            alignItems="stretch"
+            gap={0}
+          >
             <Text
               font="main-ui-body"
               color="text-04"

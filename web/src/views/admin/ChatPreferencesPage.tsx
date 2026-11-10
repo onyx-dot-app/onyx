@@ -58,6 +58,7 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
   CODING_AGENT_TOOL_ID,
+  SKILL_TOOL_ID,
 } from "@/lib/tools/constants";
 import {
   EmptyMessageCard,
@@ -680,6 +681,10 @@ export default function ChatPreferencesPage() {
     (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
   );
 
+  const skillTool = availableTools.find(
+    (t) => t.in_code_tool_id === SKILL_TOOL_ID
+  );
+
   // Connectors
   const { ccPairs } = useCCPairs();
   const uniqueSources = Array.from(new Set(ccPairs.map((p) => p.source)));
@@ -1122,6 +1127,28 @@ export default function ChatPreferencesPage() {
                                 void toggleTool(codingAgentTool.id, checked)
                               }
                               disabled={!codingAgentTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
+
+                      <Disabled disabled={!skillTool}>
+                        <Card border="solid" rounding={4}>
+                          <InputHorizontal
+                            title={t("tools.skills.title")}
+                            description={t("tools.skills.description")}
+                            disabled={!skillTool}
+                            withLabel
+                          >
+                            <InputSwitch
+                              checked={
+                                skillTool ? isToolEnabled(skillTool.id) : false
+                              }
+                              onCheckedChange={(checked) =>
+                                skillTool &&
+                                void toggleTool(skillTool.id, checked)
+                              }
+                              disabled={!skillTool}
                             />
                           </InputHorizontal>
                         </Card>

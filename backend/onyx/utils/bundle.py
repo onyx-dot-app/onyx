@@ -7,13 +7,16 @@ from onyx.file_store.models import BundleLimits, BundleMetadata, FileSizeLimitEx
 
 
 def compute_bundle_metadata(
-    bundle_bytes: bytes, *, limits: BundleLimits | None = None
+    bundle_bytes: bytes,
+    *,
+    limits: BundleLimits | None = None,
+    max_metadata_bytes: int | None = None,
 ) -> BundleMetadata:
     digest = hashlib.sha256()
     total = 0
     count = 0
-    # ZipIndex sorts on disk, so memory does not grow with the entry count.
-    with ZipIndex(bundle_bytes) as archive:
+    # Unbounded indexes sort on disk; bounded indexes can stay in memory.
+    with ZipIndex(bundle_bytes, max_metadata_bytes=max_metadata_bytes) as archive:
         for info in archive.sorted_infos():
             if info.is_dir():
                 continue

@@ -279,32 +279,45 @@ describe("SkillEditorPage", () => {
     }
   );
 
-  it("navigates after creation even when the skill-list refresh fails", async () => {
-    const user = setupUser();
-    const consoleError = jest.spyOn(console, "error").mockImplementation();
-    mockCreateCustomSkillFromEditor.mockResolvedValue({
-      id: "created-id",
-      name: "report-writer",
-      enabled: true,
-    } as SkillEditableDetail);
-    mockMutate.mockRejectedValue(new Error("Refresh failed"));
-
-    render(<SkillEditorPage />);
-    await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills")
-    );
-    await waitFor(() =>
-      expect(consoleError).toHaveBeenCalledWith(
-        "Failed to refresh skill data after creation",
-        expect.any(Error)
-      )
-    );
-    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
-    consoleError.mockRestore();
+  it("describes main-app authoring without requiring Craft", () => {
+    render(<SkillEditorPage libraryPath="/app/skills" />);
+    expect(
+      screen.getByText("Define when and how to use this skill.")
+    ).toBeVisible();
+    expect(
+      screen.getByText("Write the behavior and workflow this skill provides.")
+    ).toBeVisible();
   });
+
+  it.each(["/craft/v1/skills", "/app/skills"] as const)(
+    "returns to %s after creation when refresh fails",
+    async (libraryPath) => {
+      const user = setupUser();
+      const consoleError = jest.spyOn(console, "error").mockImplementation();
+      mockCreateCustomSkillFromEditor.mockResolvedValue({
+        id: "created-id",
+        name: "report-writer",
+        enabled: true,
+      } as SkillEditableDetail);
+      mockMutate.mockRejectedValue(new Error("Refresh failed"));
+
+      render(<SkillEditorPage libraryPath={libraryPath} />);
+      await fillRequiredFields(user);
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mockRouterReplace).toHaveBeenCalledWith(libraryPath)
+      );
+      await waitFor(() =>
+        expect(consoleError).toHaveBeenCalledWith(
+          "Failed to refresh skill data after creation",
+          expect.any(Error)
+        )
+      );
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
+      consoleError.mockRestore();
+    }
+  );
 
   it("prefills an uploaded draft without creating it until Save", async () => {
     const user = setupUser();
