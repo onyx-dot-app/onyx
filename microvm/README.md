@@ -21,7 +21,8 @@ Nothing deploys the agent yet. The Helm DaemonSet (ENG-4583) adds it behind `SAN
 | `Stop(sandbox_id, attempt, generation)` | Stops the VM only if all three match. A repeat Stop of the same instance succeeds with `already_stopped`. |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes every relay connection of the VM. New connections still work. Stop and VM exit also close them. |
 | `List()` | Every VM that the agent knows about, with its state (`STARTING`, `RUNNING`, `EXITED`). |
-| `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk, CPU model, Firecracker, host kernel and guest kernel versions. |
+| `NodeInfo()` | Total and free memory, free disk, VM count, templates on disk (with their key and `compatible`), CPU model, Firecracker, host kernel and guest kernel versions. |
+| `BuildTemplate()` | Builds the node's template from `--rootfs-dir` if no valid one for its key is there, then removes old templates (see Templates). |
 | `CloseConnections(sandbox_id, attempt, generation)` | Closes the VM's egress relay connections (see Egress relay). |
 | `Dial(sandbox_id, guest_port, generation)` | Byte stream to a guest vsock port (see below). |
 | `craft.sandboxd.v1.Sandboxd/*` | Any guest daemon call, forwarded to the VM named by `x-sandbox-id` (see Guest daemon pass-through). |
@@ -112,9 +113,14 @@ process. VMs and their programs keep running; callers retry.
 
 1. Admission: template, shape, scratch size, then memory (`MemAvailable >= mem_mib + --min-free-mem-mib`),
    disk (`--min-free-disk-gib`) and a free jailer UID. The full admission policy is ENG-4569.
-2. The chroot `<data-dir>/jail/firecracker/<sandbox_id>/root/` gets hard links to the template's
-   `rootfs.ext4`, `vmstate` and `mem` (shared, read-only, root-owned) and a reflink copy of `scratch.ext4`,
-   extended to `scratch_gib` and owned by the VM UID.
+   Firecracker checks nothing about a snapshot when it loads it. So before every restore the agent checks
+   that the template key fits the node and that the files match their SHA256 (see Templates). Otherwise
+   Create fails with `TEMPLATE_INCOMPATIBLE` and starts nothing.
+2. The chroot `<data-dir>/jail/firecracker/<sandbox_id>/root/` gets a reflink copy of each template file,
+   never a hard link: `snapshot/create` truncates its target in place, so a link would let one VM destroy
+   the template. The read-only files (`rootfs.ext4`, `managed.ext4`, `upload-a.ext4`, `upload-b.ext4`,
+   `vmstate`, `mem`) are root-owned, mode 0644. `scratch.ext4` is extended to `scratch_gib` and owned by
+   the VM UID. After the copy, the agent checks that no template file changed since its hash check.
 3. The agent runs
    `nsenter -t 1 -m -- systemd-run --scope --slice=fcvms.slice --unit=fcvm-<sandbox_id> -- jailer ... --new-pid-ns`.
    Each VM gets its own cgroup (the scope) in the host slice, outside the agent's container cgroup, so it
@@ -215,21 +221,98 @@ A VM has no network card. Its egress goes guest → vsock port 3128 → the agen
 - The data dir must be on XFS with reflink (the agent checks this at start-up). It must be mounted at
   the same path in the container and on the host, because the jailer runs in the host mount namespace.
   The path must be short enough for Unix socket paths (the agent checks this too).
-- `--artifacts-dir` has `firecracker` and `jailer` v1.17.0 (the `onyxdotapp/craft-fc-artifacts` layout).
-  The agent checks their SHA256 against `internal/binaries` and copies them to `<data-dir>/bin/<version>/`.
+- `--artifacts-dir` has `firecracker` and `jailer` v1.17.0 and the guest kernel `vmlinux` (the
+  `onyxdotapp/craft-fc-artifacts` layout). The agent checks the binaries' SHA256 against `internal/binaries`
+  and copies them to `<data-dir>/bin/<version>/`.
+- `mkfs.ext4` (e2fsprogs) in the agent's container, for the template's empty drives.
 
 ### Templates
 
-A template is `<data-dir>/templates/<version>/` with `manifest.json`, `rootfs.ext4`, `scratch.ext4`,
-`vmstate` and `mem`. The template pipeline (ENG-4566) must:
+A template is `<data-dir>/templates/<version>/`. The agent builds it on the node from a root drive
+(ENG-4566). Package `internal/template` reads and checks templates; `internal/tplbuild` builds them.
 
-- take the snapshot inside a jailer chroot, so that the drive paths are `/rootfs.ext4` (drive `rootfs`)
-  and `/scratch.ext4` (drive `scratch`), and the vsock is guest CID 3 with UDS `/v.sock`;
-- make every file root-owned and mode 0644;
-- write `manifest.json`: `version`, `vcpus`, `mem_mib`, `scratch_gib`, `guest_kernel`,
-  `firecracker_version`.
+| File | Drive (guest device) | Content |
+|---|---|---|
+| `rootfs.ext4` | `rootfs` (`/dev/vda`, root, read-only) | the root drive from `build-rootfs.sh` |
+| `scratch.ext4` | `scratch` (`/dev/vdb`) | empty ext4, `--template-scratch-gib`; never mounted in the template |
+| `managed.ext4` | `managed` (`/dev/vdc`, read-only) | empty ext4 (8 MiB); the managed drive slot |
+| `upload-a.ext4`, `upload-b.ext4` | `upload_a`, `upload_b` (`/dev/vdd`, `/dev/vde`, read-only) | 1 MiB placeholders for the later upload bundles; never mounted |
+| `vmstate`, `mem` | | full snapshot |
+| `manifest.json` | | see below |
 
-`internal/kvmtest/helpers_test.go` (`buildTemplate`) is a test version of this.
+Every file is root-owned, mode 0644, with one link.
+
+#### Root drive input: where the rootfs build runs
+
+`deployment/craft-fc/rootfs/build-rootfs.sh` needs Docker and the network (apt). The agent runs neither.
+The agent takes the build output as files: `--rootfs-dir` is a directory with `rootfs.ext4` and
+`manifest.json`. Put it on the data dir file system, so the copy into the template is a reflink.
+
+The design for deployments (not built yet, see the open points in `plans/craft-fc-track-agent.md`):
+
+- CI runs the rootfs build for each sandbox version and publishes the output as an image
+  (`onyxdotapp/craft-fc-rootfs:<sandbox version>`, files only, like `craft-fc-artifacts`). An init
+  container of the agent DaemonSet copies the two files into `<data-dir>/rootfs/`. An air-gapped install
+  mirrors the image like every other image. The nodes need no Docker and no network.
+- The egress CA is a build input, and each deployment has its own CA (sandbox-proxy makes it at first
+  start). CI cannot add it. `build-rootfs.sh` must therefore split into a CI step (pull, apt, convert) and a
+  CA step (add the CA, make the ext4) that the init container runs with the deployment CA (track C).
+- With `--egress-ca`, the agent refuses a root drive whose CA fingerprint differs, and a template whose key
+  has another CA. After a CA change, put a new root drive in `--rootfs-dir` and call `BuildTemplate`.
+
+#### Build
+
+At start-up (after recovery, while the API serves) and on `BuildTemplate`, the agent:
+
+1. Reads `--rootfs-dir`. It checks that the root drive expects the drives `rootfs`, `scratch` (writable)
+   and `managed` (read-only) in this order, and that its CA fits `--egress-ca`.
+2. Computes the key and the template name: `<image tag>-<first 12 hex of the key hash>`, for example
+   `v5.1.0-3fa91c0e7d22`. If a valid template with this name is there, it stops (and runs GC).
+3. Copies the root drive into a staging directory (`<templates>/.build-<name>`) and checks its SHA256
+   against the root drive manifest. It makes the empty scratch and managed drives (`mkfs.ext4`) and the
+   upload slots.
+4. Boots a VM in a jailer chroot (ID `tpl-<key hash[:12]>`, a UID from the pool) with the guest kernel,
+   the boot args of the root drive manifest plus `craft.scratch=defer` (init does not mount scratch or
+   managed), the five drives in the order above and the vsock (guest CID 3, `/v.sock`).
+5. Waits until the guest daemon answers `Health` on vsock `--daemon-port`, pauses the VM and takes a full
+   snapshot. It moves `vmstate` and `mem` into the staging directory and stops the VM.
+6. Hashes the files, writes `manifest.json` and renames the staging directory to its name.
+7. GC: keeps the `--template-keep` (default 2) newest templates and every template that a VM on the node
+   uses (also starting and exited VMs). It removes the others, also templates with a manifest of an older
+   layout. A staging directory left by an agent that stopped during a build is removed at start-up.
+
+One build runs at a time; a `BuildTemplate` call during a build waits for it. A template that fails its
+check is built again, unless a VM uses it.
+
+Flags: `--rootfs-dir`, `--egress-ca`, `--template-vcpus` (2), `--template-mem-mib` (4096),
+`--template-scratch-gib` (1), `--template-keep` (2), `--template-build-timeout` (5 min). The guest kernel
+is `<artifacts-dir>/vmlinux`; the agent copies it to `<data-dir>/kernel/vmlinux-<sha256[:16]>`.
+
+#### Manifest and checks
+
+`manifest.json` (schema = layout version 2):
+
+- `key`: `image_ref`, `image_digest`, `rootfs_sha256`, `rootfs_manifest_sha256`, `guest_kernel` (release),
+  `guest_kernel_sha256`, `firecracker_version`, `cpu_model`, `host_kernel`, `ca_fingerprint`,
+  `layout_version`, `boot_args`, `vcpus`, `mem_mib`, `scratch_gib`. The root drive is not byte-identical
+  between builds, so the key has both its SHA256 and the SHA256 of its manifest.
+- `key_sha256`: the SHA256 of the key.
+- `files`: the SHA256 of each file.
+- `snapshot_sha256`: a hash over the key hash and the file hashes, first `vmstate`, `mem` and `rootfs.ext4`.
+- `built_at`, `build_ms`.
+
+Before every restore, Create checks:
+
+1. The manifest: the schema, `key_sha256` over the key, `snapshot_sha256` over the file hashes. An edited
+   key or file hash fails here.
+2. The key against the node: layout version, Firecracker version, CPU model, host kernel release, guest
+   kernel SHA256 and (with `--egress-ca`) the CA. One mismatch is `TEMPLATE_INCOMPATIBLE` with the fields.
+3. The files against `files`. The first check of a template after an agent start hashes every file (about
+   8 GiB for a 4 GiB VM). The agent then keeps each file's fingerprint (inode, size, mtime, ctime). Later
+   checks compare the fingerprints and hash again only if one changed. A changed file is
+   `TEMPLATE_INCOMPATIBLE`.
+
+`internal/kvmtest/helpers_test.go` (`buildTemplate`) uses the same pipeline for the older KVM tests.
 
 ## Generated code
 
@@ -283,8 +366,14 @@ GOOS=linux GOARCH=amd64 go test -c -tags kvm -o hostagent-kvm.test ./internal/kv
 # Guest daemon pass-through, end to end: the agent binary in a --cgroupns=private container (KVM_CGROUPNS),
 # a template from the deployment/craft-fc/rootfs root drive (KVM_IMG_DIR) booted with craft.scratch=defer,
 # Init/Run/Start/Stream/Cancel over mTLS, egress through the proxy harness, agent restart, Stop order.
-KVM_IMG_DIR=/opt/craft-fc-test/img3 KVM_TEMPLATE=pt-1 ./hostagent-kvm.test -test.v -test.run TestPassthroughKVM
+KVM_IMG_DIR=/opt/craft-fc-test/img3 ./hostagent-kvm.test -test.v -test.run TestPassthroughKVM
+# Template pipeline (ENG-4566): the agent binary (KVM_AGENT_IMAGE needs e2fsprogs) builds from a
+# build-rootfs.sh output (KVM_TB_ROOTFS) with --egress-ca (KVM_TB_CA); 20 restores with Init + Run, a
+# tampered and a mismatched template, GC, agent restart.
+KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestTemplateBuildKVM
 ```
+
+The KVM tests take the template version from the build (`KVM_TEMPLATE` is no longer used).
 
 To check relay tokens against the proxy verifier on a dev machine:
 `RELAY_TOKENS_OUT=/tmp/tokens.json go test -run TestWriteTokensForProxyVerifier ./internal/relay/`, then run

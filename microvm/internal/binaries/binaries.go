@@ -3,6 +3,7 @@
 package binaries
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -118,4 +119,52 @@ func fileSHA256(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// Kernel is the installed guest kernel.
+type Kernel struct {
+	Path    string
+	SHA256  string
+	Release string
+}
+
+// InstallKernel copies the guest kernel src to <dir>/vmlinux-<sha256[:16]>
+// on the data dir file system (VM chroots get reflink copies of it) and
+// reads its release from the Linux banner. An existing copy is kept.
+func InstallKernel(src, dir string) (*Kernel, error) {
+	sum, err := fileSHA256(src)
+	if err != nil {
+		return nil, fmt.Errorf("guest kernel: %w", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	dst := filepath.Join(dir, "vmlinux-"+sum[:16])
+	if err := installOne(src, dst, sum); err != nil {
+		return nil, err
+	}
+	rel, err := KernelRelease(dst)
+	if err != nil {
+		return nil, err
+	}
+	return &Kernel{Path: dst, SHA256: sum, Release: rel}, nil
+}
+
+// KernelRelease returns the release in the "Linux version <release> " banner
+// of an uncompressed kernel image.
+func KernelRelease(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	const banner = "Linux version "
+	i := bytes.Index(raw, []byte(banner))
+	if i < 0 {
+		return "", fmt.Errorf("%s has no Linux version banner", path)
+	}
+	rest := raw[i+len(banner):]
+	if j := bytes.IndexAny(rest, " \x00\n"); j > 0 {
+		return string(rest[:j]), nil
+	}
+	return "", fmt.Errorf("%s has a bad Linux version banner", path)
 }

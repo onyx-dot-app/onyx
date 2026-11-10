@@ -34,6 +34,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
 	"github.com/onyx-dot-app/onyx/microvm/internal/server"
 	"github.com/onyx-dot-app/onyx/microvm/internal/template"
+	"github.com/onyx-dot-app/onyx/microvm/internal/tplbuild"
 )
 
 // version is set with -ldflags "-X main.version=...".
@@ -69,6 +70,13 @@ type flags struct {
 	clientSANs    string
 	dialMax       int
 	daemonPort    uint
+	rootfsDir     string
+	egressCA      string
+	tplVCPUs      uint
+	tplMemMiB     uint
+	tplScratchGiB uint
+	tplKeep       int
+	tplTimeout    time.Duration
 }
 
 func main() {
@@ -99,6 +107,13 @@ func main() {
 	flag.StringVar(&f.clientSANs, "client-allowed-sans", "", "comma-separated DNS or URI SANs; a client cert must have one (empty: any cert from --client-ca)")
 	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
 	flag.UintVar(&f.daemonPort, "daemon-port", server.DefaultDaemonPort, "guest vsock port of the guest daemon (craft.sandboxd.v1.Sandboxd pass-through)")
+	flag.StringVar(&f.rootfsDir, "rootfs-dir", "", "directory with rootfs.ext4 and manifest.json (build-rootfs.sh output); the agent builds its template from it at start and on BuildTemplate. Empty: no build")
+	flag.StringVar(&f.egressCA, "egress-ca", "", "egress CA certificate (PEM) of this deployment; templates whose root drive trusts another CA are refused. Empty: not checked")
+	flag.UintVar(&f.tplVCPUs, "template-vcpus", 2, "vCPUs of the built template (Create must ask for the same)")
+	flag.UintVar(&f.tplMemMiB, "template-mem-mib", 4096, "memory of the built template in MiB (Create must ask for the same)")
+	flag.UintVar(&f.tplScratchGiB, "template-scratch-gib", 1, "scratch disk of the built template in GiB (Create can grow it)")
+	flag.IntVar(&f.tplKeep, "template-keep", 2, "templates to keep; older ones are removed unless a VM uses them")
+	flag.DurationVar(&f.tplTimeout, "template-build-timeout", 5*time.Minute, "limit for one template build")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -134,6 +149,16 @@ func run(f flags, log *slog.Logger) error {
 	if err := checkListen(f); err != nil {
 		return err
 	}
+	kernel, err := binaries.InstallKernel(filepath.Join(f.artifactsDir, "vmlinux"), filepath.Join(f.dataDir, "kernel"))
+	if err != nil {
+		return err
+	}
+	caFP := ""
+	if f.egressCA != "" {
+		if caFP, err = tplbuild.CAFileFingerprint(f.egressCA); err != nil {
+			return fmt.Errorf("--egress-ca: %w", err)
+		}
+	}
 	uids, err := jailer.NewUIDPool(uint32(f.uidBase), uint32(f.uidCount))
 	if err != nil {
 		return err
@@ -146,6 +171,11 @@ func run(f flags, log *slog.Logger) error {
 		log.Info("private cgroup namespace: VM scopes are checked in the host cgroup tree", "host_cgroup_fs", cgroups.HostCgroupFS)
 	}
 	launcher := &fcvm.Launcher{Cmd: cmd, Log: log, Cgroups: cgroups}
+	store := &template.Store{Dir: filepath.Join(f.dataDir, "templates")}
+	versions := agent.Versions{
+		Firecracker: bins.Version, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(), Agent: version,
+		GuestKernel: kernel.Release, GuestKernelSHA256: kernel.SHA256, EgressCAFingerprint: caFP,
+	}
 	m := agent.NewManager(agent.Config{
 		MinFreeMemMiB:    f.minFreeMemMiB,
 		MinFreeDiskBytes: f.minFreeDiskGB * uint64(scratch.GiB),
@@ -154,11 +184,11 @@ func run(f flags, log *slog.Logger) error {
 		StopTimeout:      f.stopTimeout,
 		TombstoneTTL:     24 * time.Hour,
 	},
-		&template.Store{Dir: filepath.Join(f.dataDir, "templates")},
+		store,
 		launcher,
 		hostinfo.Stats{DataDir: f.dataDir},
 		uids,
-		agent.Versions{Firecracker: bins.Version, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(), Agent: version},
+		versions,
 		log,
 	)
 	m.UseJournal(&journal.Journal{Dir: filepath.Join(f.dataDir, "journal")})
@@ -186,7 +216,26 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	builder := &tplbuild.Builder{
+		Store: store, VMM: tplbuild.FirecrackerVMM{Launcher: launcher}, Slots: m, Node: versions.NodeKey(),
+		GuestKernel: kernel.Release, KernelPath: kernel.Path,
+		VCPUs: uint32(f.tplVCPUs), MemMiB: uint32(f.tplMemMiB), ScratchGiB: uint32(f.tplScratchGiB),
+		Keep: f.tplKeep, Ready: tplbuild.DaemonHealth(uint32(f.daemonPort)), Timeout: f.tplTimeout, Log: log,
+	}
+	if err := builder.CleanStaging(); err != nil {
+		return err
+	}
 	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt}
+	if f.rootfsDir != "" {
+		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
+			rf, err := tplbuild.LoadRootfs(f.rootfsDir)
+			if err != nil {
+				return tplbuild.Result{}, err
+			}
+			// A build goes on when its caller goes away.
+			return builder.Build(context.WithoutCancel(ctx), rf)
+		}
+	}
 	ln, err := server.ListenUnix(f.socket)
 	if err != nil {
 		return err
@@ -221,7 +270,27 @@ func run(f flags, log *slog.Logger) error {
 	for i := range servers {
 		go func(i int) { errs <- servers[i].Serve(listeners[i]) }(i)
 	}
+	go startupTemplates(svc, builder, log)
 	return <-errs
+}
+
+// startupTemplates builds the template from --rootfs-dir, or only removes
+// old templates when there is no root drive.
+func startupTemplates(svc *server.Service, b *tplbuild.Builder, log *slog.Logger) {
+	if svc.Builder == nil {
+		if removed, err := b.Store.GC(b.Keep, b.Slots.TemplatesInUse); err != nil {
+			log.Error("template GC", "err", err)
+		} else if len(removed) > 0 {
+			log.Info("template GC", "removed", removed)
+		}
+		return
+	}
+	r, err := svc.Builder(context.Background())
+	if err != nil {
+		log.Error("template build at start-up failed", "err", err)
+		return
+	}
+	log.Info("template ready", "template", r.Template.Version, "built", r.Built, "build_ms", r.BuildMS, "removed", r.Removed)
 }
 
 func parsePorts(s string) ([]uint32, error) {
@@ -292,7 +361,7 @@ func preflight(f flags, lay jailer.Layout) error {
 	if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
 		return fmt.Errorf("cgroup v2 is not mounted at /sys/fs/cgroup: %w", err)
 	}
-	for _, d := range []string{"templates", "jail", "bin", "run", "journal"} {
+	for _, d := range []string{"templates", "jail", "bin", "kernel", "run", "journal"} {
 		if err := os.MkdirAll(filepath.Join(f.dataDir, d), 0o700); err != nil {
 			return err
 		}
@@ -317,6 +386,11 @@ func checkRanges(f flags) error {
 	if f.uidBase == 0 || f.uidCount == 0 || uint64(f.uidBase)+uint64(f.uidCount) > math.MaxUint32 {
 		return fmt.Errorf("--uid-base %d and --uid-count %d must be more than 0 and end at or below %d",
 			f.uidBase, f.uidCount, uint64(math.MaxUint32))
+	}
+	if f.tplVCPUs == 0 || f.tplVCPUs > 32 || f.tplMemMiB < 128 || f.tplMemMiB > math.MaxUint32 ||
+		f.tplScratchGiB == 0 || f.tplScratchGiB > f.maxScratchGiB || f.tplKeep < 1 {
+		return fmt.Errorf("bad template shape --template-vcpus %d --template-mem-mib %d --template-scratch-gib %d --template-keep %d",
+			f.tplVCPUs, f.tplMemMiB, f.tplScratchGiB, f.tplKeep)
 	}
 	if f.maxScratchGiB > math.MaxUint32 {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)

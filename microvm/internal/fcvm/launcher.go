@@ -21,16 +21,19 @@ type Launcher struct {
 	Cgroups CgroupView
 }
 
-// FileSource is a file to put in a VM chroot.
+// FileSource is a file to put in a VM chroot. Every file is a reflink copy,
+// never a hard link: a snapshot/create truncates its target in place, so a
+// link would let one VM destroy a template.
 type FileSource struct {
 	// Name is the file name in the chroot root.
 	Name string
-	// Src is the host path of the source file.
+	// Src is the host path of the source file. It must be on the data dir
+	// file system.
 	Src string
-	// Link hard-links Src (shared, read-only). Otherwise Src is copied with
-	// a reflink and owned by the VM UID.
-	Link bool
-	// Size extends a reflink copy to this size. 0 keeps the source size.
+	// VMOwned makes the copy owned by the VM UID with mode 0600 (a writable
+	// drive). Otherwise it is root-owned with mode 0644 (read-only for the VM).
+	VMOwned bool
+	// Size extends a VMOwned copy to this size. 0 keeps the source size.
 	Size int64
 }
 

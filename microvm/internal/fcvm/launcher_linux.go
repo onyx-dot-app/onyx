@@ -64,15 +64,22 @@ func (p *Proc) API() *operations.Client {
 // Launch restores a VM from its template. It implements agent.Launcher.
 func (l *Launcher) Launch(ctx context.Context, s agent.LaunchSpec) (agent.Process, error) {
 	t := s.Template
-	files := []FileSource{
-		{Name: template.RootfsFile, Src: t.Path(template.RootfsFile), Link: true},
-		{Name: template.VMStateFile, Src: t.Path(template.VMStateFile), Link: true},
-		{Name: template.MemFile, Src: t.Path(template.MemFile), Link: true},
-		{Name: template.ScratchFile, Src: t.Path(template.ScratchFile), Size: s.ScratchBytes},
+	files := make([]FileSource, 0, len(template.Files))
+	for _, f := range template.Files {
+		fs := FileSource{Name: f, Src: t.Path(f)}
+		if f == template.ScratchFile {
+			fs.VMOwned, fs.Size = true, s.ScratchBytes
+		}
+		files = append(files, fs)
 	}
 	p, err := l.Spawn(ctx, s.ID, s.UID, files)
 	if err != nil {
 		return nil, err
+	}
+	// The copies share the blocks of the verified files only if no file
+	// changed between the hash check and the copy.
+	if err := t.CheckUnchanged(); err != nil {
+		return nil, l.abort(p, err, nil)
 	}
 	api := p.API()
 	if err := LoadSnapshot(ctx, api, "/"+template.VMStateFile, "/"+template.MemFile); err != nil {
@@ -108,9 +115,9 @@ func (l *Launcher) Spawn(ctx context.Context, id string, uid uint32, files []Fil
 	}()
 	for _, f := range files {
 		dst := filepath.Join(root, f.Name)
-		if f.Link {
-			if err := os.Link(f.Src, dst); err != nil {
-				return nil, fmt.Errorf("link %s: %w", f.Name, err)
+		if !f.VMOwned {
+			if err := scratch.Clone(f.Src, dst, 0o644, 0, 0); err != nil {
+				return nil, fmt.Errorf("copy %s: %w", f.Name, err)
 			}
 			continue
 		}

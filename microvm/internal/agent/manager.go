@@ -67,12 +67,26 @@ type HostStats interface {
 	DiskFreeBytes() (uint64, error)
 }
 
-// Versions are the static versions of the node, for NodeInfo.
+// Versions are the static versions of the node, for NodeInfo and the
+// template key check.
 type Versions struct {
 	Firecracker string
 	HostKernel  string
 	CPUModel    string
 	Agent       string
+	// GuestKernel is the release of the node's guest kernel (vmlinux).
+	GuestKernel       string
+	GuestKernelSHA256 string
+	// EgressCAFingerprint is the deployment's egress CA. Empty: not checked.
+	EgressCAFingerprint string
+}
+
+// NodeKey is the part of a template key that this node decides.
+func (v Versions) NodeKey() template.NodeKey {
+	return template.NodeKey{
+		FirecrackerVersion: v.Firecracker, CPUModel: v.CPUModel, HostKernel: v.HostKernel,
+		GuestKernelSHA256: v.GuestKernelSHA256, CAFingerprint: v.EgressCAFingerprint,
+	}
 }
 
 // Config holds the node limits.
@@ -167,6 +181,9 @@ type Manager struct {
 	// known, so Create waits for a scan that works.
 	doubt    map[string]*doubt
 	needScan bool
+	// building maps the jailer IDs of template build VMs (BuildSlot) to
+	// their guest memory in MiB.
+	building map[string]uint32
 }
 
 // NewManager returns a Manager with an empty VM table.
@@ -176,6 +193,7 @@ func NewManager(cfg Config, templates *template.Store, launcher Launcher, stats 
 		cfg: cfg, templates: templates, launcher: launcher, stats: stats, uids: uids,
 		versions: versions, log: log, now: time.Now,
 		vms: map[string]*entry{}, tombs: map[string]tombstone{}, doubt: map[string]*doubt{},
+		building: map[string]uint32{},
 	}
 }
 
@@ -319,6 +337,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		break
 	}
 
+	// The pin keeps template GC away until the VM is in the table.
+	unpin := m.templates.Pin(req.Template)
+	defer unpin()
 	tpl, err := m.admit(req)
 	if err != nil {
 		return VM{}, false, err
@@ -435,15 +456,20 @@ func (m *Manager) staleLocked(req CreateRequest) error {
 	return nil
 }
 
-// admit checks the template, the shape, the scratch size and the node capacity.
+// admit checks the template, the shape, the scratch size and the node
+// capacity. Firecracker checks nothing about a snapshot on load, so the
+// template key must fit this node and its files must match their hashes.
 func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 	tpl, err := m.templates.Get(req.Template)
 	if err != nil {
 		return nil, err
 	}
-	if tpl.FirecrackerVersion != m.versions.Firecracker {
-		return nil, apierr.New(pb.ErrorReason_TEMPLATE_INCOMPATIBLE,
-			"template %q was built with Firecracker %s, this node runs %s", tpl.Version, tpl.FirecrackerVersion, m.versions.Firecracker)
+	if err := tpl.CheckNode(m.versions.NodeKey()); err != nil {
+		return nil, err
+	}
+	if err := m.templates.Verify(tpl); err != nil {
+		m.log.Error("template failed its hash check", "template", tpl.Version, "err", err)
+		return nil, err
 	}
 	if req.VCPUs != tpl.VCPUs || req.MemMiB != tpl.MemMiB {
 		return nil, apierr.New(pb.ErrorReason_TEMPLATE_SHAPE_MISMATCH,
@@ -700,6 +726,63 @@ func (m *Manager) List() []VM {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SandboxID < out[j].SandboxID })
 	return out
+}
+
+// Versions returns the node versions.
+func (m *Manager) Versions() Versions { return m.versions }
+
+// TemplatesInUse returns the templates of every VM in the table, also
+// starting and exited ones. Template GC keeps them.
+func (m *Manager) TemplatesInUse() map[string]bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]bool{}
+	for _, e := range m.vms {
+		out[e.vm.Template] = true
+	}
+	return out
+}
+
+// BuildSlot gives a template build VM with jailer ID id and memMiB of guest
+// memory a jailer UID. It refuses the build when the node lacks the memory,
+// as Create does. The process scan does not count the VM as untracked while
+// it runs. Call done when the VM is gone; done(true) puts the VM in doubt
+// with its UID, for a VM that may still run, and a later scan frees the UID
+// once it is gone.
+func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), error) {
+	if err := m.checkDoubt(context.Background(), id, true); err != nil {
+		return 0, nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.building[id]; ok || m.vms[id] != nil || m.doubt[id] != nil {
+		return 0, nil, apierr.New(pb.ErrorReason_INTERNAL, "build VM %s already runs", id)
+	}
+	_, avail, err := m.stats.MemInfo()
+	if err != nil {
+		return 0, nil, fmt.Errorf("read memory info: %w", err)
+	}
+	if avail < uint64(memMiB)+m.cfg.MinFreeMemMiB {
+		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
+			"node has %d MiB available, the template build VM needs %d MiB plus a %d MiB reserve", avail, memMiB, m.cfg.MinFreeMemMiB)
+	}
+	uid, ok := m.uids.Get()
+	if !ok {
+		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS, "no free jailer UID for the template build")
+	}
+	m.building[id] = memMiB
+	done := func(left bool) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		delete(m.building, id)
+		if left {
+			m.log.Error("template build VM may still run; it is in doubt with its UID", "id", id, "uid", uid)
+			m.doubt[id] = &doubt{reason: "a template build VM may still run", uids: []uint32{uid}}
+			return
+		}
+		m.uids.Put(uid)
+	}
+	return uid, done, nil
 }
 
 // NodeInfo is the output of NodeInfo.

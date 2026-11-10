@@ -25,6 +25,7 @@ const (
 	HostAgent_NodeInfo_FullMethodName         = "/craft.hostagent.v1.HostAgent/NodeInfo"
 	HostAgent_CloseConnections_FullMethodName = "/craft.hostagent.v1.HostAgent/CloseConnections"
 	HostAgent_Dial_FullMethodName             = "/craft.hostagent.v1.HostAgent/Dial"
+	HostAgent_BuildTemplate_FullMethodName    = "/craft.hostagent.v1.HostAgent/BuildTemplate"
 )
 
 // HostAgentClient is the client API for HostAgent service.
@@ -65,6 +66,12 @@ type HostAgentClient interface {
 	// the connection. When the client ends its send side, the agent keeps
 	// reading until the guest closes (Firecracker vsock has no half-close).
 	Dial(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[DialFrame, DialFrame], error)
+	// BuildTemplate builds the template of this node from the root drive in
+	// the agent's --rootfs-dir, unless a valid template for its key is there,
+	// and then removes old templates (the agent keeps --template-keep and the
+	// ones that VMs use). The agent also does this at start-up. A call during
+	// a build waits for it.
+	BuildTemplate(ctx context.Context, in *BuildTemplateRequest, opts ...grpc.CallOption) (*BuildTemplateResponse, error)
 }
 
 type hostAgentClient struct {
@@ -138,6 +145,16 @@ func (c *hostAgentClient) Dial(ctx context.Context, opts ...grpc.CallOption) (gr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HostAgent_DialClient = grpc.BidiStreamingClient[DialFrame, DialFrame]
 
+func (c *hostAgentClient) BuildTemplate(ctx context.Context, in *BuildTemplateRequest, opts ...grpc.CallOption) (*BuildTemplateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BuildTemplateResponse)
+	err := c.cc.Invoke(ctx, HostAgent_BuildTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HostAgentServer is the server API for HostAgent service.
 // All implementations must embed UnimplementedHostAgentServer
 // for forward compatibility.
@@ -176,6 +193,12 @@ type HostAgentServer interface {
 	// the connection. When the client ends its send side, the agent keeps
 	// reading until the guest closes (Firecracker vsock has no half-close).
 	Dial(grpc.BidiStreamingServer[DialFrame, DialFrame]) error
+	// BuildTemplate builds the template of this node from the root drive in
+	// the agent's --rootfs-dir, unless a valid template for its key is there,
+	// and then removes old templates (the agent keeps --template-keep and the
+	// ones that VMs use). The agent also does this at start-up. A call during
+	// a build waits for it.
+	BuildTemplate(context.Context, *BuildTemplateRequest) (*BuildTemplateResponse, error)
 	mustEmbedUnimplementedHostAgentServer()
 }
 
@@ -203,6 +226,9 @@ func (UnimplementedHostAgentServer) CloseConnections(context.Context, *CloseConn
 }
 func (UnimplementedHostAgentServer) Dial(grpc.BidiStreamingServer[DialFrame, DialFrame]) error {
 	return status.Error(codes.Unimplemented, "method Dial not implemented")
+}
+func (UnimplementedHostAgentServer) BuildTemplate(context.Context, *BuildTemplateRequest) (*BuildTemplateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BuildTemplate not implemented")
 }
 func (UnimplementedHostAgentServer) mustEmbedUnimplementedHostAgentServer() {}
 func (UnimplementedHostAgentServer) testEmbeddedByValue()                   {}
@@ -322,6 +348,24 @@ func _HostAgent_Dial_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type HostAgent_DialServer = grpc.BidiStreamingServer[DialFrame, DialFrame]
 
+func _HostAgent_BuildTemplate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BuildTemplateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HostAgentServer).BuildTemplate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HostAgent_BuildTemplate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HostAgentServer).BuildTemplate(ctx, req.(*BuildTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HostAgent_ServiceDesc is the grpc.ServiceDesc for HostAgent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -348,6 +392,10 @@ var HostAgent_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CloseConnections",
 			Handler:    _HostAgent_CloseConnections_Handler,
+		},
+		{
+			MethodName: "BuildTemplate",
+			Handler:    _HostAgent_BuildTemplate_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
