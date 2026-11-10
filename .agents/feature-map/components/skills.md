@@ -27,8 +27,8 @@
   with vacant ownership. Synced skills keep their source ownership.
   Publishing requires global `MANAGE_SKILLS`.
 - **Global skill managers** set the installation policy of a custom skill: available (the user
-  opts in), installed by default (on until the user opts out), or required (on,
-  and the user cannot turn it off). Global manage-skills permission is required to delete a required skill.
+  opts in), installed by default (on until the user opts out), required (on,
+  and the user cannot turn it off), or Not available (hidden except from owners and direct recipients, and never loaded). Global manage-skills permission is required to delete a required skill.
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
@@ -309,9 +309,10 @@ still propagate unexpected storage errors.
    name resolution still delivers one winner. Low-level test fixtures can seed duplicates.
    Built-in app skills bypass this custom-library check. Older custom names must
    not block provider setup; new custom uploads still reject reserved built-in names.
-   `server/features/skill/models.py:SkillShareRequest` and
-   `db/skill.py:set_skill_installation_policy`
-   reject NOT_AVAILABLE until effective-policy resolution and write rules support it.
+   `db/skill.py:enable_new_skill_if_name_available__no_commit` resolves the effective
+   setting before writing a preference; Required keeps opt-outs, and Not available writes nothing.
+   Responses keep the company setting in `installation_policy` and return the
+   user's setting in `effective_installation_policy`, from the batched state query.
    Every write that enables a preference first
    takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
    lock on the user row. The lock orders concurrent enables of one name, so
@@ -326,7 +327,8 @@ still propagate unexpected storage errors.
    failures do not persist invalidity. Do not bypass the shared resolver.
 6. `name-immutable` **A skill name never changes.** The frontmatter `name`,
    `Skill.name` and the bundle's wrapper directory, when there is one, must
-   match (`skills/metadata.py:parse_skill_document`). Storage removes the
+   match (`skills/metadata.py:parse_skill_document`). The shared
+   `db/skill_version.py:save_skill_version` also rejects a different canonical name. Storage removes the
    wrapper. A rename is a delete and a new skill. Custom names cannot match a
    built-in.
 7. `validate-before-sandbox` **Validate before content reaches a sandbox.**
@@ -425,10 +427,11 @@ still propagate unexpected storage errors.
     Changed group grants and explicit group settings use `assert_within_scope`
     against stored groups and visibility. Group managers cannot change another
     group's settings or company settings. An omitted group setting preserves
-    its value; explicit NULL clears it. Group settings remain unused at runtime
-    until effective-policy resolution ships. NOT_AVAILABLE remains rejected.
+    its value; explicit NULL clears it. Removing a share with a non-null policy
+    requires the same management authority as changing that policy. Personal synced
+    owners keep audience rights for shares without policies. Not available is accepted through these guards.
     Bulk organization access shows Keep unchanged when the actor or selection cannot change it.
-    Bulk sharing adds or updates grants and preserves omitted grants. It reads
+    Bulk sharing adds or updates grants and preserves omitted grants and policies. It reads
     affected users in two batch queries and pushes once after commit. Expected
     failures roll back one skill's savepoint. Bulk toggles affect only the caller.
     Access and preference writes acquire the membership lock before resource/user locks.
@@ -482,7 +485,7 @@ still propagate unexpected storage errors.
     adapter function, not `db/skill.py:replace_skill_shares`.
     `POST /skills/custom/batch` and GitHub import create each bundle through
     `db/skill.py:create_skill_from_bundle__no_commit`, one savepoint per skill,
-    so a bad bundle or a name conflict under a DEFAULT or REQUIRED policy lands
+    so a bad bundle or a live name conflict in the destination library lands
     in `not_imported` and the other skills still import.
 13. `pptx-scripts-serve-previews` **The `pptx` skill's preview scripts also
     render Craft output previews.**
@@ -718,8 +721,10 @@ still propagate unexpected storage errors.
     unrelated tenant schemas do not contend for the same company name.
     New names conflict only within a library. Synced skills use marketplace ownership;
     public manual skills use the company library, private manual skills use their author.
-    Reconciliation locks incoming and live names in sorted order through
+    Reconciliation locks all incoming and live names in sorted order through
     `db/skill_library.py:lock_skill_library_names`, sharing the manual creation namespace.
+    Its namespace uses tenant context, not PostgreSQL search_path, because schema
+    translation can leave current_schema() identical across tenants.
     Sync ownership fences control job freshness. Retirement releases enabled preferences and automatic-policy names.
     Access materialization and audience
     capture share the reconciliation transaction without tier lookups or external I/O.
@@ -884,10 +889,15 @@ still propagate unexpected storage errors.
   stale with no list of inputs to maintain.
 - **A stale notice, not an automatic reload.** Reload disposes the live
   runtime, so the user chooses when. It refuses while a turn runs.
-- **App lifecycle keeps user intent.** Disconnecting an app deletes the user's
-  enabled selections for its skills and keeps opt-outs
-  (`db/external_app.py`). Deleting an app resets its custom skills to
-  available and deletes their preferences. Its built-in skill row is deleted.
+- **App lifecycle keeps user intent.** Disconnecting an app deletes enabled
+  choices except those hidden by effective Not available; opt-outs remain.
+  Deleting an app resets automatic company and group settings to Available,
+  preserves Not available settings and hidden choices, and keeps opt-outs.
+  Changed synced skills stop inheriting marketplace access. The built-in row is deleted.
+  `db/skill.py:clear_enabled_skill_preferences__no_commit` uses the grouped policy
+  resolver and user preference locks; `db/external_app.py` owns the lifecycle.
+  Deletion locks the app before its skills, matching association edits. Retired
+  skills keep their policy and history.
 
 ---
 

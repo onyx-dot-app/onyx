@@ -275,15 +275,22 @@ Users with global manage-skills permission set how a shared Skill is installed f
 | **Available to install** | Users can install or uninstall the Skill at any time. |
 | **Installed by default** | Onyx installs it automatically. Users can disable or uninstall it. |
 | **Required** | Onyx selects it automatically. Users cannot turn it off directly. Name conflicts still follow library priority below. Deleting it requires global manage-skills permission. |
+| **Not available** (API) | The Skill does not load and cannot be enabled. Owners and direct recipients can still see it. |
 
 The policy follows the current audience; changing who can access the Skill does not reset it.
 Bulk sharing preserves existing grants and group install settings that the request omits. In the sharing API,
 an omitted group `installation_policy` preserves its value; explicit `null` clears the override.
 Each group without an override inherits the organization setting. For users in several shared groups,
-**Required** takes precedence over **Installed by default**, then **Available to install**.
+**Required** takes precedence over **Installed by default**, then **Available to install**, then **Not available**.
 Users outside those groups use the organization setting.
 Changing installation settings keeps each user's saved on/off preference, but can change which same-name Skill loads.
 For example, an opt-out returns when a group changes from **Required** back to **Installed by default**.
+Not available keeps saved enabled choices for later policy changes.
+Explicitly enabling another same-name Skill clears the previous enabled choice.
+The Skills API returns the organization setting in `installation_policy` and your resolved setting in
+`effective_installation_policy`. Removing a group share also removes its setting.
+Removing a nonempty setting requires the same management authority as changing it.
+Personal synced owners can still change audience grants that have no setting.
 When you add users to a group or remove them, Onyx requires updated sandbox Skills before admitting another message.
 If Onyx cannot update a sandbox, the message fails and asks the user to try again.
 A message already admitted when membership changes can continue, even if its network send starts after the change.
@@ -306,6 +313,12 @@ If a bundle cannot load, Onyx tries the next eligible Skill in the same order.
 The Skills API identifies duplicates with `hidden_reason: "same_name"` and the selected Skill's `hidden_by_skill_id`.
 These fields use saved validity information.
 A temporary storage failure can change the delivered Skill without changing these fields.
+
+Disconnecting an App clears enabled choices for its Skills, except choices hidden by Not available.
+It keeps explicit opt-outs.
+Deleting an App detaches its custom Skills and changes automatic organization and group settings to Available.
+Not available settings and hidden choices remain. Opt-outs remain.
+Changed synced Skill settings stop following the marketplace defaults.
 
 ## Maintain a Skill
 

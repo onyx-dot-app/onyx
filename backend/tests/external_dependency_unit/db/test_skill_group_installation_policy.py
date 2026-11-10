@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic.migration import MigrationContext
@@ -8,140 +8,130 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, inspect, select, text
+from sqlalchemy import Engine, inspect, text
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import SkillInstallationPolicy
-from onyx.db.models import Skill, Skill__UserGroup
+from onyx.db.models import UserSkillPreference
 from onyx.db.skill import set_skill_installation_policy
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
+from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.server.features.skill.api import user_router
 from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
     make_group,
     make_skill,
     make_user,
 )
-
-
-@pytest.mark.usefixtures("tenant_context")
-@pytest.mark.parametrize("group_policy", [False, True], ids=["company", "group"])
-@pytest.mark.parametrize(
-    "route", ["share", "bulk", "editor", "batch", "import", "patch"]
+from tests.external_dependency_unit.db.test_skill_access_mutations import (
+    session as session,
 )
-def test_api_rejects_not_available(
-    db_session: Session, route: str, group_policy: bool
+from tests.external_dependency_unit.db.test_skill_version_writes import bundle
+
+
+@pytest.mark.usefixtures("tenant_context", "enable_ee")
+@pytest.mark.parametrize("group_policy", [False, True], ids=["company", "group"])
+@pytest.mark.parametrize("route", ["share", "bulk", "editor", "batch", "patch"])
+def test_api_accepts_not_available_through_sharing(
+    session: Session, route: str, group_policy: bool
 ) -> None:
-    """Exercise JSON and multipart parsing through the real skill router."""
-    try:
-        admin = make_user(db_session, is_admin=True)
-        skill = make_skill(db_session, author_user_id=admin.id)
-        group = make_group(db_session)
-        skill_ids_before = set(db_session.scalars(select(Skill.id)))
-        sharing: dict[str, object] = (
-            {
-                "group_shares": [
-                    {
-                        "group_id": group.id,
-                        "permission": "VIEWER",
-                        "installation_policy": "NOT_AVAILABLE",
-                    }
-                ]
-            }
-            if group_policy
-            else {"installation_policy": "NOT_AVAILABLE"}
-        )
-        app = FastAPI()
-        app.include_router(user_router)
-        register_onyx_exception_handlers(app)
-        app.dependency_overrides[current_user] = lambda: admin
-        app.dependency_overrides[get_session] = lambda: db_session
-        with TestClient(app) as client:
-            if route == "share":
-                response = client.patch(
-                    f"/skills/custom/{skill.id}/share", json=sharing
-                )
-            elif route == "patch":
-                response = client.patch(f"/skills/custom/{skill.id}", json=sharing)
-            elif route == "bulk":
-                response = client.post(
-                    "/skills/bulk",
-                    json={
-                        "skill_ids": [str(skill.id)],
-                        "action": "share",
-                        "sharing": sharing,
-                    },
-                )
-            elif route == "import":
-                response = client.post(
-                    "/skills/github/import",
-                    json={
-                        "repository": "example/skills",
-                        "revision": "a" * 40,
-                        "paths": ["test-skill"],
-                        "sharing": sharing,
-                    },
-                )
-            elif route == "editor":
-                response = client.post(
-                    "/skills/custom/editor",
-                    data={
-                        "name": "test-skill",
-                        "description": "Test skill",
-                        "instructions_markdown": "Test instructions",
-                        "sharing": json.dumps(sharing),
-                    },
-                )
-            else:
-                response = client.post(
-                    "/skills/custom/batch",
-                    files={"bundles": ("test.zip", b"not read", "application/zip")},
-                    data={"sharing": json.dumps(sharing)},
-                )
-        if route in ("editor", "batch"):
-            assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
-            assert response.json()["detail"] == "Invalid skill sharing settings."
+    admin = make_user(session, is_admin=True)
+    skill = make_skill(session, author_user_id=admin.id)
+    group = make_group(session)
+    add_user_to_group(session, admin, group)
+    sharing: dict[str, object] = (
+        {
+            "group_shares": [
+                {
+                    "group_id": group.id,
+                    "permission": "VIEWER",
+                    "installation_policy": "NOT_AVAILABLE",
+                }
+            ]
+        }
+        if group_policy
+        else {"installation_policy": "NOT_AVAILABLE"}
+    )
+    name = f"g3-api-{uuid4().hex}"
+    app = FastAPI()
+    app.include_router(user_router)
+    register_onyx_exception_handlers(app)
+    app.dependency_overrides[current_user] = lambda: admin
+    app.dependency_overrides[get_session] = lambda: session
+    with TestClient(app) as client:
+        if route == "share":
+            response = client.patch(f"/skills/custom/{skill.id}/share", json=sharing)
+        elif route == "patch":
+            response = client.patch(f"/skills/custom/{skill.id}", json=sharing)
+        elif route == "bulk":
+            response = client.post(
+                "/skills/bulk",
+                json={
+                    "skill_ids": [str(skill.id)],
+                    "action": "share",
+                    "sharing": sharing,
+                },
+            )
+        elif route == "editor":
+            response = client.post(
+                "/skills/custom/editor",
+                data={
+                    "name": name,
+                    "description": "Test skill",
+                    "instructions_markdown": "Test instructions",
+                    "sharing": json.dumps(sharing),
+                },
+            )
         else:
+            response = client.post(
+                "/skills/custom/batch",
+                files={"bundles": ("test.zip", bundle(name), "application/zip")},
+                data={"sharing": json.dumps(sharing)},
+            )
+        if route == "patch":
+            # Content patching still refuses sharing fields; use the sharing route.
             assert response.status_code == 422
-            assert "installation_policy" in response.text
-        db_session.refresh(skill)
-        assert skill.installation_policy == SkillInstallationPolicy.AVAILABLE
-        assert set(db_session.scalars(select(Skill.id))) == skill_ids_before
-        assert (
-            db_session.scalars(
-                select(Skill__UserGroup).where(Skill__UserGroup.skill_id == skill.id)
-            ).all()
-            == []
+            return
+        assert response.status_code == 200, response.text
+        if route == "batch":
+            imported = response.json()["imported"]
+            assert len(imported) == 1 and response.json()["not_imported"] == []
+            assert (
+                imported[0]["disabled_reason"] == "This skill is Not available for you."
+            )
+            skill_id = UUID(imported[0]["skill"]["id"])
+        elif route == "editor":
+            assert response.json()["effective_installation_policy"] == "NOT_AVAILABLE"
+            assert response.json()["enabled"] is False
+            skill_id = UUID(response.json()["id"])
+        else:
+            skill_id = skill.id
+        if route == "bulk":
+            assert response.json()["succeeded"] == [str(skill.id)]
+            assert not response.json()["failed"]
+        detail = client.get(f"/skills/{skill_id}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["effective_installation_policy"] == "NOT_AVAILABLE"
+        assert detail.json()["installation_policy"] == (
+            "AVAILABLE" if group_policy else "NOT_AVAILABLE"
         )
-    finally:
-        db_session.rollback()
+        assert (
+            detail.json()["enabled"] is False and detail.json()["can_toggle"] is False
+        )
+        assert session.get(UserSkillPreference, (admin.id, skill_id)) is None
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_database_setter_rejects_not_available_but_allows_duplicate_automatic_names(
+def test_database_setter_accepts_not_available_and_historical_duplicates(
     db_session: Session,
 ) -> None:
-    try:
-        automatic = make_skill(db_session, is_public=True)
-        duplicate = make_skill(db_session, name=automatic.name, is_public=True)
-        set_skill_installation_policy(
-            automatic, SkillInstallationPolicy.DEFAULT, db_session
-        )
-        with pytest.raises(OnyxError, match="not supported yet") as rejected:
-            set_skill_installation_policy(
-                duplicate, SkillInstallationPolicy.NOT_AVAILABLE, db_session
-            )
-        assert rejected.value.error_code == OnyxErrorCode.INVALID_INPUT
-        db_session.refresh(duplicate)
-        assert duplicate.installation_policy == SkillInstallationPolicy.AVAILABLE
-        set_skill_installation_policy(
-            duplicate, SkillInstallationPolicy.REQUIRED, db_session
-        )
-        assert duplicate.installation_policy == SkillInstallationPolicy.REQUIRED
-    finally:
-        db_session.rollback()
+    automatic = make_skill(db_session, is_public=True)
+    duplicate = make_skill(db_session, name=automatic.name, is_public=True)
+    for policy in SkillInstallationPolicy:
+        set_skill_installation_policy(automatic, policy, db_session)
+        set_skill_installation_policy(duplicate, policy, db_session)
+        assert automatic.installation_policy == duplicate.installation_policy == policy
 
 
 def test_group_policy_migration_preserves_shares(isolated_engine: Engine) -> None:

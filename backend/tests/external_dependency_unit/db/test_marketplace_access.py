@@ -538,3 +538,40 @@ def test_downgrade_serializes_with_marketplace_access(
         writer.rollback()
         writer.delete(marketplace)
         writer.commit()
+
+
+@pytest.mark.parametrize("tier", [Tier.BUSINESS, Tier.COMMUNITY])
+def test_not_available_defaults_materialize_with_tier_guards(
+    session: Session, marketplace: Marketplace, tier: Tier
+) -> None:
+    actor, group_id = manager(session, global_access=True)
+    apply(session, marketplace, catalog("policy-default"))
+    change = ResourceAccessChange(
+        installation_policy=Policy.NOT_AVAILABLE,
+        group_shares={group_id: Share.VIEWER},
+        group_installation_policies={group_id: Policy.NOT_AVAILABLE},
+    )
+    if tier == Tier.COMMUNITY:
+        with pytest.raises(OnyxError, match="paid tier"):
+            mutate_resource_access(
+                [marketplace.id], change, actor, session, MarketplaceAccessAdapter(tier)
+            )
+        return
+    mutate_resource_access(
+        [marketplace.id], change, actor, session, MarketplaceAccessAdapter(tier)
+    )
+    following = skills(session, marketplace)[0]
+    assert following.installation_policy == Policy.NOT_AVAILABLE
+    assert following.group_shares[0].installation_policy == Policy.NOT_AVAILABLE
+    assert following.follows_marketplace_access
+    mutate_resource_access(
+        [following.id],
+        ResourceAccessChange(installation_policy=Policy.AVAILABLE),
+        actor,
+        session,
+        SkillAccessAdapter(),
+    )
+    assert not following.follows_marketplace_access
+    reset_marketplace_skill_access__no_commit(following.id, actor, session)
+    assert following.installation_policy == Policy.NOT_AVAILABLE
+    assert following.follows_marketplace_access

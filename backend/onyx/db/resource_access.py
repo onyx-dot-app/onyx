@@ -134,6 +134,12 @@ def mutate_resource_access[Resource](
                     groups = dict(current.group_shares) | dict(groups)
                 policies = dict(current.group_installation_policies)
                 policies.update(change.group_installation_policies)
+                retained_groups = groups if groups is not None else current.group_shares
+                policies = {
+                    key: value
+                    for key, value in policies.items()
+                    if key in retained_groups
+                }
                 if (
                     change.group_installation_policies.keys()
                     - (groups if groups is not None else current.group_shares).keys()
@@ -145,9 +151,16 @@ def mutate_resource_access[Resource](
                 if (
                     groups is not None and groups != current.group_shares
                 ) or change.group_installation_policies:
-                    owner_grant = current.sharing_owner_id == user.id and all(
-                        current.group_installation_policies.get(group_id) == policy
-                        for group_id, policy in change.group_installation_policies.items()
+                    owner_grant = (
+                        current.sharing_owner_id == user.id
+                        and all(
+                            current.group_installation_policies.get(group_id) == policy
+                            for group_id, policy in change.group_installation_policies.items()
+                        )
+                        and all(
+                            policy is None or group_id in retained_groups
+                            for group_id, policy in current.group_installation_policies.items()
+                        )
                     )
                     if not owner_grant:
                         if not allow_management:

@@ -613,19 +613,21 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 </Section>
               ))}
             </Section>
-            <Text color="text-03" font="secondary-body" role="status">
-              {t(
-                `share.installation.${
-                  (
-                    {
-                      AVAILABLE: "availableDescription",
-                      DEFAULT: "defaultDescription",
-                      REQUIRED: "requiredDescription",
-                    } as const
-                  )[installationPolicy]
-                }`
-              )}
-            </Text>
+            {installationPolicy !== "NOT_AVAILABLE" && (
+              <Text color="text-03" font="secondary-body" role="status">
+                {t(
+                  `share.installation.${
+                    (
+                      {
+                        AVAILABLE: "availableDescription",
+                        DEFAULT: "defaultDescription",
+                        REQUIRED: "requiredDescription",
+                      } as const
+                    )[installationPolicy]
+                  }`
+                )}
+              </Text>
+            )}
           </Section>
         )}
 
