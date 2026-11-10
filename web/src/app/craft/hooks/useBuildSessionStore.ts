@@ -752,6 +752,7 @@ export interface BuildSessionData {
   skillsStale: boolean;
   /** Incremented only with skillsStale so async refreshes can reject stale responses. */
   skillsStaleRevision: number;
+  skillsReloadRevision: number | null;
   /** Skills left out of the sandbox. Set together with skillsStale. */
   skillRuntimeNotice: ApiSkillRuntimeNotice | null;
   /** Explicit dismissal survives same-session refetches and remounts. */
@@ -1393,6 +1394,7 @@ const createInitialSessionData = (
     agentModel: null,
     skillsStale: false,
     skillsStaleRevision: 0,
+    skillsReloadRevision: null,
     skillRuntimeNotice: null,
     skillRuntimeNoticeDismissed: false,
     origin: "INTERACTIVE",
@@ -2161,7 +2163,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
   refreshSessionSkills: async (sessionId) => {
     const owner = get().sessions.get(sessionId);
-    if (!owner) return;
+    if (!owner || owner.skillsReloadRevision !== null) return;
     // Fence older reads, including a history load begun before turn acceptance.
     get().updateSessionData(sessionId, { skillsStale: owner.skillsStale });
     const revision = owner.skillsStaleRevision + 1;
@@ -2223,9 +2225,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       );
     };
     const skillsStaleRevision: number = loadingSession.skillsStaleRevision;
-    const canApplySkillsStale: () => boolean = () =>
-      get().sessions.get(sessionId)?.skillsStaleRevision ===
-      skillsStaleRevision;
+    const canApplySkillsStale: () => boolean = () => {
+      const current = get().sessions.get(sessionId);
+      return (
+        current?.skillsReloadRevision === null &&
+        current.skillsStaleRevision === skillsStaleRevision
+      );
+    };
     let loadPhase: "history" | "runtime" = "history";
 
     try {
@@ -2405,11 +2411,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             status: mapApiSessionStatus(sessionData.status),
           }),
           sandbox: sessionData.sandbox,
-          ...(get().sessions.get(sessionId)?.skillsStaleRevision ===
-            skillsStaleRevisionBeforeRestore && {
-            skillsStale: sessionData.skills_stale,
-            skillRuntimeNotice: sessionData.skill_runtime_notice,
-          }),
+          ...(get().sessions.get(sessionId)?.skillsReloadRevision === null &&
+            get().sessions.get(sessionId)?.skillsStaleRevision ===
+              skillsStaleRevisionBeforeRestore && {
+              skillsStale: sessionData.skills_stale,
+              skillRuntimeNotice: sessionData.skill_runtime_notice,
+            }),
           filesNeedsRefresh:
             (get().sessions.get(sessionId)?.filesNeedsRefresh ?? 0) + 1,
           webappNeedsRefresh:
