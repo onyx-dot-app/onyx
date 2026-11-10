@@ -198,7 +198,11 @@ def test_entering_perm_sync_makes_syncs_due_and_sets_the_mark(
     pair = make_pair(from_type)
     if from_type == AccessType.PRIVATE:
         db_session.add(
-            UserGroup__CCPairDataAccess(user_group_id=groups[0].id, cc_pair_id=pair.id)
+            UserGroup__CCPairDataAccess(
+                user_group_id=groups[0].id,
+                cc_pair_id=pair.id,
+                access_type=pair.access_type,
+            )
         )
         db_session.commit()
     doc_id = _add_synced_document(db_session, pair)

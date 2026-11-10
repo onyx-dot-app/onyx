@@ -123,14 +123,14 @@ def test_acl_enforcement(
     privileged_user = UserManager.create()
     blocked_user = UserManager.create()
 
-    restricted_cc_pair = CCPairManager.create_from_scratch(
-        access_type=AccessType.PRIVATE,
+    user_group = UserGroupManager.create(
+        user_ids=[privileged_user.id],
         user_performing_action=admin_user,
     )
 
-    user_group = UserGroupManager.create(
-        user_ids=[privileged_user.id],
-        cc_pair_ids=[restricted_cc_pair.id],
+    restricted_cc_pair = CCPairManager.create_from_scratch(
+        access_type=AccessType.PRIVATE,
+        data_access=[user_group.id],
         user_performing_action=admin_user,
     )
     UserGroupManager.wait_for_sync(

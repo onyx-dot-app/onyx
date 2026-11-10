@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import AccessType, ConnectorManageRole
@@ -30,6 +30,14 @@ def _run_upgrade(db_session: Session) -> None:
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
+    # The migration predates the rows' access_type column and inserts without
+    # it. The test transaction rolls this back.
+    db_session.execute(
+        text(
+            "ALTER TABLE user_group__cc_pair_data_access "
+            "ALTER COLUMN access_type DROP NOT NULL"
+        )
+    )
     with Operations.context(MigrationContext.configure(db_session.connection())):
         migration.upgrade()
 
@@ -65,7 +73,9 @@ def test_copies_current_groups_of_private_pairs(
         # An existing row is kept, not duplicated.
         db_session.add(
             UserGroup__CCPairDataAccess(
-                user_group_id=copied_group.id, cc_pair_id=private_pair.id
+                user_group_id=copied_group.id,
+                cc_pair_id=private_pair.id,
+                access_type=private_pair.access_type,
             )
         )
         db_session.flush()

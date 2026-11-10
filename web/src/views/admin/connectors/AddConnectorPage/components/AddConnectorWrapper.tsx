@@ -21,7 +21,7 @@ import {
   isLoadState,
   splitCredentialBoundFields,
 } from "@/lib/connectors/utils";
-import { Formik, type FormikErrors } from "formik";
+import { Formik } from "formik";
 import * as Yup from "yup";
 import { useTranslations } from "next-intl";
 import { PageLoader, IconLoader } from "@opal/loaders";
@@ -89,6 +89,7 @@ import {
 } from "@/lib/credentials/hooks";
 import {
   NEW_ACCOUNT_FIELD,
+  SAVED_ACCOUNT_FIELD,
   initialNewAccountValues,
   newAccountSchema,
   typedAccountSpec,
@@ -282,12 +283,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   // Whether the source's checks can run on a schedule (Run Checks Every).
   const [hasNamedChecks, setHasNamedChecks] = useState(false);
 
-  // The picked saved account. Clicking a saved card picks it; typing into
-  // the new account drops the pick (see AuthenticationAccountSection). Edit
-  // mode starts on the pair's credential.
-  const [currentCredential, setCurrentCredential] =
-    useState<Credential<any> | null>(edit?.ccPair.credential ?? null);
-
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
   );
@@ -306,6 +301,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   // account, which Create sends as the credential.
   const formControlFieldNames = connectorFormControlFieldNames(configuration, [
     NEW_ACCOUNT_FIELD,
+    SAVED_ACCOUNT_FIELD,
   ]);
 
   // In edit mode, the file connector's files are a list of stored and
@@ -437,7 +433,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    currentCredential ||
+    savedAccountOf(values) ||
     typedDraft(connector, accountSchemaFor(values), values) ||
     null;
 
@@ -517,20 +513,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   if (typedSpec) {
     initialValues[NEW_ACCOUNT_FIELD] = initialNewAccountValues(typedSpec);
   }
+  // The picked saved account. Clicking a saved card picks it; typing into
+  // the new account drops the pick (see AuthenticationAccountSection). Edit
+  // mode starts on the pair's credential.
+  initialValues[SAVED_ACCOUNT_FIELD] = edit?.ccPair.credential ?? null;
 
   /**
    * The form's errors that block Create. A typed account's errors do not
    * while a saved account is picked: the typed one is not used then.
    */
-  const blockingErrors = (errors: FormikErrors<unknown>): FormikErrorTree[] =>
-    Object.entries<FormikErrorTree>(errors)
-      .filter(
-        ([key]) => key !== NEW_ACCOUNT_FIELD || currentCredential === null
-      )
-      .map(([, error]) => error);
-  const blockingErrorsEmpty = (errors: FormikErrors<unknown>): boolean =>
-    blockingErrors(errors).length === 0;
-
   const createConnectorFromForm = async (
     values: typeof initialValues
   ): Promise<void> => {
@@ -761,6 +752,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       initialValues={
         editValues ? { ...initialValues, ...editValues } : initialValues
       }
+      // Create is disabled while the form has errors, so they must exist
+      // before the first edit; fields still show theirs only once touched.
+      validateOnMount
       validationSchema={createConnectorValidationSchema(
         connector,
         // Edit mode leaves the manage groups alone, so it needs none.
@@ -791,27 +785,36 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           confluenceScopeRequired: t(
             "connectors.confluence.fields.space.required"
           ),
-          specificGroupsRequired: t(
-            "settings.documentAccess.specificGroups.required"
+          restrictionGroupsRequired: t(
+            "settings.documentAccess.sync.restrictionRequired"
           ),
           stringPairEmptyKey: keyValueT("emptyKey"),
           stringPairDuplicateKey: keyValueT("duplicateKey"),
         },
         configuration
       ).shape({
-        // Always checked, so its fields can show errors. With a saved pick
-        // the typed account is not used, and Create ignores its errors (see
-        // `blockingErrorsEmpty`).
-        [NEW_ACCOUNT_FIELD]: typedSpec
-          ? Yup.lazy(
-              (_value, { parent }) => accountSchemaFor(parent) ?? Yup.mixed()
-            )
-          : Yup.mixed(),
+        // The account choice is part of the form: a saved pick, or a valid
+        // typed account. A saved pick leaves the typed account unchecked.
+        [NEW_ACCOUNT_FIELD]: noCredentials
+          ? Yup.mixed()
+          : Yup.lazy((_value, { parent }) => {
+              if (savedAccountOf(parent) !== null) return Yup.mixed();
+              return (
+                accountSchemaFor(parent) ??
+                Yup.mixed().test(
+                  "account-required",
+                  selectAccountMessage ?? "",
+                  () => false
+                )
+              );
+            }),
       })}
       onSubmit={submitForm}
     >
       {(formikProps) => {
-        const busy = uploading || creatingConnector || planning;
+        // The submit (create, upload, edit plan) runs through Formik; staging
+        // edit-mode files uploads outside it.
+        const busy = formikProps.isSubmitting || uploading;
         const formCredential = accountFor(formikProps.values);
         const formCredentialId: number | null =
           formCredential !== null && !isDraftCredential(formCredential)
@@ -862,15 +865,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
               // form mounted across a lock toggle.
               const formLockReason: string | undefined =
                 selectAccountMessage ?? undefined;
-              // Non-required checks never block Create.
+              // The server checks: the credential binding and the required
+              // capability checks. Non-required checks never block Create.
               const createReady: boolean =
                 configUnlocked && (noCredentials || checks.createReady);
               const createLockReason: string | undefined = !configUnlocked
                 ? (gateMessage ?? undefined)
                 : !createReady
                   ? checksT("lockReason")
-                  : (firstFormikError(blockingErrors(formikProps.errors)) ??
-                    undefined);
+                  : (firstFormikError(formikProps.errors) ?? undefined);
               const hasContentFields: boolean =
                 visibleConnectorFields(
                   contentConfiguration,
@@ -881,14 +884,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 editsFileList;
               // The file source has no start date.
               const indexesFromStart: boolean = connector !== "file";
-              // Disabled while the credentials load or after they fail, since
-              // nothing can be connected then.
+              // The form decides field validity, the account included (none
+              // can be picked while the accounts load or after they fail).
+              // Only the server checks and a running submit or upload add to it.
               const createDisabled: boolean =
-                credentialsLoading ||
-                credentialsFailed ||
-                !blockingErrorsEmpty(formikProps.errors) ||
-                !createReady ||
-                busy;
+                !formikProps.isValid || !createReady || busy;
               return (
                 <SettingsLayouts.Root loading={credentialsLoading} width="sm">
                   <SettingsLayouts.Header
@@ -938,19 +938,16 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                         icon={busy ? IconLoader : undefined}
                         onClick={async () => {
                           const errors = await formikProps.validateForm();
-                          if (blockingErrorsEmpty(errors)) {
+                          if (Object.keys(errors).length === 0) {
                             // Edit mode's plan lists failed checks itself.
                             if (!edit && checks.optionalFailedCount > 0) {
                               advisoryModal.toggle(true);
                               return;
                             }
-                            // Formik's own submit stops at any error.
-                            await submitForm(formikProps.values);
+                            await formikProps.submitForm();
                           } else {
                             // The failing field can sit in a folded section, so name it.
-                            const message = firstFormikError(
-                              blockingErrors(errors)
-                            );
+                            const message = firstFormikError(errors);
                             if (message !== null) toast.error(message);
                             // Marks every field touched, so its error shows.
                             formikProps.handleSubmit();
@@ -1048,8 +1045,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                               <AuthenticationAccountSection
                                 connector={connector}
                                 accessType={formikProps.values.access_type}
-                                currentCredential={currentCredential}
-                                onCredentialChange={setCurrentCredential}
+                                currentCredential={savedAccountOf(
+                                  formikProps.values
+                                )}
+                                onCredentialChange={(credential) =>
+                                  void formikProps.setFieldValue(
+                                    SAVED_ACCOUNT_FIELD,
+                                    credential
+                                  )
+                                }
                                 newAccountReady={newAccountReady}
                                 checkedCredential={checkedCredential}
                                 // A typed account's binding waits for a run,
@@ -1171,7 +1175,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           }}
                           onProceed={async () => {
                             advisoryModal.toggle(false);
-                            await submitForm(formikProps.values);
+                            await formikProps.submitForm();
                           }}
                         />
                       )}
@@ -1212,6 +1216,16 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
 export interface AddConnectorWrapperProps {
   connector: ConfigurableSources;
+}
+
+/** The saved account picked in the form, or null. */
+function savedAccountOf(
+  values: Readonly<Record<string, unknown>>
+): Credential<any> | null {
+  const value = values[SAVED_ACCOUNT_FIELD];
+  // SAFETY: only the account picker writes this field, always a saved
+  // Credential or null.
+  return value && typeof value === "object" ? (value as Credential<any>) : null;
 }
 
 export default function AddConnectorWrapper({
