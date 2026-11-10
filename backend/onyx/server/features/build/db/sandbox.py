@@ -4,13 +4,17 @@ import datetime
 from typing import Literal
 from uuid import UUID
 
+from psycopg2.errors import LockNotAvailable
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
 from onyx.db.enums import BuildSessionStatus, PatType, Permission, SandboxStatus
 from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, Snapshot, User
 from onyx.db.pat import create_pat, revoke_pat
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.models import SandboxCleanupCheckpoint
 from onyx.utils.logger import setup_logger
 
@@ -159,6 +163,22 @@ def begin_recovery_attempt__no_commit(
     return expected_attempt_number + 1
 
 
+def provisioning_attempt_is_current(
+    db_session: Session, sandbox_id: UUID, attempt_number: int
+) -> bool:
+    """Check the delivery fence while the caller holds the sandbox row lock."""
+    return (
+        db_session.scalar(
+            select(Sandbox.id).where(
+                Sandbox.id == sandbox_id,
+                Sandbox.provisioning_attempt_number == attempt_number,
+                Sandbox.status == SandboxStatus.PROVISIONING,
+            )
+        )
+        is not None
+    )
+
+
 def finalize_provisioning_attempt__no_commit(
     db_session: Session,
     sandbox_id: UUID,
@@ -290,6 +310,47 @@ def lock_sandbox_skills_hashes(
         .with_for_update()
     )
     return {sandbox_id: skills_hash for sandbox_id, skills_hash in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
+
+
+def sandbox_skills_delivery_pending(db_session: Session, sandbox_id: UUID) -> bool:
+    """Whether the sandbox lacks a confirmed Skill delivery, read from the
+    latest committed row rather than the session's cached instance."""
+    skills_hash = db_session.scalar(
+        select(Sandbox.skills_hash).where(Sandbox.id == sandbox_id)
+    )
+    return skills_hash is None
+
+
+def mark_user_sandbox_skills_pending__no_commit(
+    db_session: Session,
+    user_ids: set[UUID],
+) -> None:
+    """Clear ``skills_hash`` for each user's sandbox: its pod can hold Skills the
+    change revokes until a delivery succeeds. Call it in the transaction that
+    changes Skill access, so the change cannot commit without it."""
+    if not user_ids:
+        return
+    try:
+        sandboxes = db_session.scalars(
+            select(Sandbox)
+            .where(Sandbox.user_id.in_(user_ids))
+            .order_by(Sandbox.id)
+            .with_for_update(nowait=True)
+            .execution_options(populate_existing=True)
+        ).all()
+    except OperationalError as exc:
+        if not isinstance(exc.orig, LockNotAvailable):
+            raise
+        # Roll back the whole membership request, including any earlier rows
+        # and its tenant lock. NOWAIT adds no per-sandbox wait or timeout state.
+        db_session.rollback()
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Skills are being delivered. Retry this membership request.",
+        ) from exc
+    for sandbox in sandboxes:
+        sandbox.skills_hash = None
+    db_session.flush()
 
 
 def update_sandbox_heartbeat(db_session: Session, sandbox_id: UUID) -> Sandbox:

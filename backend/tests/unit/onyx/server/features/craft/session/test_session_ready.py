@@ -26,8 +26,11 @@ def _session(status: BuildSessionStatus = BuildSessionStatus.ACTIVE) -> Any:
     return SimpleNamespace(id=uuid4(), status=status)
 
 
-def _sandbox(status: SandboxStatus = SandboxStatus.RUNNING) -> Any:
-    return SimpleNamespace(id=uuid4(), status=status)
+def _sandbox(
+    status: SandboxStatus = SandboxStatus.RUNNING,
+    skills_hash: str | None = "delivered",
+) -> Any:
+    return SimpleNamespace(id=uuid4(), status=status, skills_hash=skills_hash)
 
 
 @pytest.mark.parametrize(
@@ -36,10 +39,18 @@ def _sandbox(status: SandboxStatus = SandboxStatus.RUNNING) -> Any:
         (_session(), _sandbox(), True),
         (_session(BuildSessionStatus.IDLE), _sandbox(), False),
         (_session(), _sandbox(SandboxStatus.SLEEPING), False),
+        (_session(), _sandbox(skills_hash=None), False),
         (_session(), None, False),
         (None, _sandbox(), False),
     ],
-    ids=["settled", "session-idle", "sandbox-asleep", "no-sandbox", "no-session"],
+    ids=[
+        "settled",
+        "session-idle",
+        "sandbox-asleep",
+        "skills-pending",
+        "no-sandbox",
+        "no-session",
+    ],
 )
 def test_only_a_settled_session_skips_the_ensure(
     session: Any, sandbox: Any, intact: bool

@@ -98,6 +98,9 @@ def _drive_persisted_turn(
 ) -> None:
     sandbox = get_sandbox_by_user_id(db_session, user.id)
     assert sandbox is not None
+    # A turn only sends to a sandbox with a confirmed Skill delivery.
+    sandbox.skills_hash = sandbox.skills_hash or "delivered"
+    db_session.commit()
 
     turn_index = (
         db_session.query(BuildMessage)

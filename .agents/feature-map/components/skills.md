@@ -131,7 +131,10 @@ When it fails:
   conflict. The client can retry with `replace_conflict` to switch skills.
 - A required skill rejects a toggle.
 - If a push to a sandbox fails, the change still saves. The sandbox keeps its
-  old skills until the next push, session start or reload.
+  old skills until the next push, session start or reload. After a group
+  membership change, the sandbox has no confirmed skills until a push
+  succeeds. The next turn, restore or session create retries the push and
+  fails with a 502 while the push fails.
 - A reload while a turn runs is refused with a message to wait.
 
 ---
@@ -196,8 +199,15 @@ the saved preference remains, and applies again when the company candidate is of
 file path and its bytes, plus the connectable-apps text. `Sandbox.skills_hash`
 records what was last pushed to the sandbox. `BuildSession.skills_hash`
 records what the live runtime of a session loaded. A session is stale when the
-two differ
-(`server/features/build/db/build_session.py:session_runtime_stale`). A push
+two differ or when `Sandbox.skills_hash` is null
+(`server/features/build/db/build_session.py:session_runtime_stale`). A null
+sandbox hash means no push is confirmed, so the pod can still hold revoked
+skills. `server/features/build/session/sandbox_lifecycle.py:deliver_pending_skills`
+retries the push before a reload, a workspace restore or a session create,
+and refuses to continue while it fails. `SessionManager.yield_sandbox_events`
+checks the committed hash again before it sends a prompt, for every session
+origin. The stale check also covers every origin, because a scheduled session
+can take a later interactive turn. A push
 changes only the sandbox side. The runtime reads the skills directory once per
 instance, so only a reload (`SessionManager.reload_session_skills`) or a new
 session applies the change. The craft MCP set has its own `mcp_config_hash`
@@ -237,7 +247,19 @@ still propagate unexpected storage errors.
    or a disable still pushes to the users who had the skill. The delete route
    reads the audience before it deletes. The share, transfer and edit routes
    push to the union of the audience before and after. A new mutation must do
-   the same, or a user who loses access keeps the files.
+   the same, or a user who loses access keeps the files. Group membership
+   routes (user groups and SCIM) capture the delta under the membership lock,
+   clear `skills_hash` on the changed members' sandboxes in the same
+   transaction
+   (`server/features/build/db/sandbox.py:mark_user_sandbox_skills_pending__no_commit`),
+   then commit even no-op mutations and push to the changed members. Marking
+   uses `NOWAIT` across all target rows. Contention rolls back the entire request
+   and releases its membership lock. Admin requests return 409; SCIM requests
+   return a SCIM 503 error with `Retry-After: 1`. No timeout settings change.
+   The push from an earlier membership request can cause this contention too;
+   retries have no fairness guarantee while deliveries keep holding target rows.
+   A failed push leaves the hash null, so later admission requires a retry.
+   Never write the new hash before a push succeeds.
 3. `shared-read-predicates` **Every new read path must use the shared
    predicates.** Reads use `db/skill.py:skill_visible_to_user`. Edits use
    `db/skill.py:_is_editable_by_user`, through
@@ -247,6 +269,16 @@ still propagate unexpected storage errors.
    row.** Use `db/skill.py:_is_enabled_for_user`. Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
+   `db/skill.py:_skill_installation_policy_rows` resolves applicable group shares: null
+   inherits the company setting; Required wins over Default, Available, and
+   Not available, in that order. With no applicable shares, use the company setting.
+   `resolve_skill_installation_policies` resolves many user/skill pairs in one query.
+   Library, runtime and state queries join the grouped policy result once. Pass
+   that column into shared predicates; repeated scalar policy queries cause
+   expensive subplans and JIT compilation on large libraries.
+   Not available prevents runtime use and toggling without changing preferences.
+   Owners and direct recipients retain visibility; public and group access alone do not.
+   Management visibility still lets managers inspect these skills.
    An explicit enable clears saved choices for other skills with the same name,
    including hidden skills, after checking visible conflicts under the user lock.
 5. `name-uniqueness-in-db` **Resolve names after runtime eligibility.**
@@ -255,8 +287,8 @@ still propagate unexpected storage errors.
    win within a library; UUID breaks equal timestamps. `skill_library_owner`
    also defines marketplace reconciliation's library identity. A personal
    marketplace remains personal when one of its skills becomes public.
-   `SkillUserState.hidden_by_skill_id` names the winner for losing candidates.
-   Reads must resolve against
+   The library and detail response report `hidden_by_skill_id` and
+   `hidden_reason="same_name"` for losing candidates. Reads must resolve against
    all eligible skills, even when the caller requests one row.
    Invalid, unavailable, retired, disabled and disconnected-app skills cannot
    hide a usable competitor. `list_runtime_skills_for_user` returns only winners,
@@ -358,7 +390,13 @@ still propagate unexpected storage errors.
     uploaded skills before removing their owner.
 11. `push-holds-row-locks` **The push holds row locks during network I/O.**
     `skills/push.py:push_skills_for_users` locks the target `Sandbox` rows, then calls the
-    sandbox push while the transaction is open. The hash write is a savepoint,
+    sandbox push while the transaction is open. `sync_managed_content` and the
+    provisioning push lock the row before they build the payload and keep it
+    until the hash record commits. User-library assembly and delivery run outside
+    this transaction ([[craft-sandboxes]]). Without that lock, a membership change that
+    commits during the push gets its null hash overwritten with the old
+    payload's hash. Lock order is membership lock, then `Sandbox` rows; no
+    code holding a `Sandbox` row takes the membership lock. The hash write is a savepoint,
     and the caller commits. The push catches and logs every exception, so a
     failed push never fails the API call. The next push repairs it, because
     the hash of a failed sandbox is not written.
@@ -448,9 +486,10 @@ still propagate unexpected storage errors.
     those scripts changes PDF and PowerPoint thumbnails in the output panel
     ([[craft-sandboxes]]).
 14. `built-in-removal-needs-migration` **Removing a built-in needs a
-    migration that deletes its rows.** `_assemble_fileset` skips, with a
-    warning, a `skill` row whose `built_in_skill_id` is not in
-    `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
+    migration that deletes its rows.** User listings and runtime resolution exclude
+    unknown `built_in_skill_id` values, so stale rows cannot hide custom skills.
+    Management reads retain these rows until a migration deletes them.
+    `_assemble_fileset` also skips unknown definitions defensively.
 15. `version-rollout-reads` **Custom readers use `Skill.current_version`.**
     History rows and their current-version markers come from one SQL statement,
     so an edit after authorization cannot mark an older version as current.
@@ -846,6 +885,11 @@ still propagate unexpected storage errors.
 
 ## Known issues
 
+- **Other membership writers have marking gaps.** Admin-access toggles in
+  `db/users.py:set_user_admin_access` and Community downgrade in
+  `ee/onyx/db/community_downgrade.py` can remove group Skill access without
+  marking sandbox delivery pending. These paths need separate fixes.
+
 - **Marketplace browser acceptance remains pending.** Preview, management mutations and skill reset
   are available through the API. Plugin membership is not modeled yet; its access
   guard belongs in `SkillAccessAdapter.load`.
@@ -870,8 +914,6 @@ still propagate unexpected storage errors.
   drops every failure ([[#push-holds-row-locks]]), so the change commits
   anyway. If that commit fails, the sandboxes hold files that the database
   does not.
-- **Membership changes do not push.** A user added to a group that a skill is
-  shared with gets it at the next push, session start or reload.
 
 ---
 

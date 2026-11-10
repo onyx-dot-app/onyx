@@ -191,6 +191,10 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
 6. `scim-authenticates-token` **SCIM authenticates the token, not a user.**
    `ee/onyx/server/scim/auth.py:verify_scim_token` returns the `ScimToken` row
    and rejects an inactive token. Keep SCIM out of the `current_user` chain.
+   Group updates that contend with Skill delivery roll back and return a SCIM
+   503 error with `Retry-After: 1`.
+   `ee/onyx/server/scim/api.py:_mark_skills_pending` translates only that conflict.
+   Admin membership routes retain their 409 response.
 7. `oauth-provider-state` **OAuth-provider codes and consent requests are
    single-use, and each piece of state has one cache.**
    `oauth_provider/attempts.py:consume_authorization_code` and
