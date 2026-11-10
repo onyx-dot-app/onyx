@@ -2079,10 +2079,11 @@ jobs:
           fi
           gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}" -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
-      # A stale sandbox Chrome fails the gate with no finding for CVE Alerts to
-      # act on, so its own workflow opens that PR.
+      # The gate result does not say why it failed, and a stale sandbox Chrome
+      # leaves no finding for CVE Alerts, so every failure also runs the browser
+      # update. It does nothing when the pin is current.
       - name: Dispatch the sandbox browser update
-        if: needs.audit-gate.result == 'failure'
+        if: ${{ !cancelled() && needs.audit-gate.result == 'failure' }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}

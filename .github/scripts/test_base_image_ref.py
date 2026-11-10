@@ -1,4 +1,4 @@
-"""Check the boundary between CVE report collection and release gates."""
+"""Check the image resolver's report and gate boundary, and the sandbox browser pin update."""
 
 import hashlib
 import json
@@ -95,7 +95,7 @@ class BrowserUpdateTests(unittest.TestCase):
                 ],
             )
 
-            # The pin is now current, so a second run changes and prints nothing.
+            # A current pin is a no-op: nothing changes and nothing prints.
             result = update_browser(installer, "999.0.1.2")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout, "")

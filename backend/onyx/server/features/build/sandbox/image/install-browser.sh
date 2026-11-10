@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# .github/scripts/update-sandbox-browser.sh rewrites the version and both
-# archive hashes together.
+# update-sandbox-browser.sh rewrites these pins by line shape: keep `version=`
+# at column 0 and one `checksum=` in each architecture arm.
 version=157.0.8103.50
 case "$(dpkg --print-architecture)" in
   amd64)
