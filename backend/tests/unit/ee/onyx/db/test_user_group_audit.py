@@ -46,7 +46,9 @@ def _make_db_session(
     ],
 )
 @patch("ee.onyx.db.user_group._check_user_group_is_modifiable")
+@patch("ee.onyx.db.user_group.fetch_user_group_member_ids")
 def test_update_user_group_emits_on_membership_change(
+    _members: MagicMock,
     _modifiable: MagicMock,
     _fetch: MagicMock,
     _add_rel: MagicMock,
@@ -54,6 +56,7 @@ def test_update_user_group_emits_on_membership_change(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     existing = uuid4()
+    _members.return_value = {existing}
     added = uuid4()
     db_session = _make_db_session([existing], [10])
     admin = MagicMock(
@@ -93,7 +96,9 @@ def test_update_user_group_emits_on_membership_change(
     "ee.onyx.db.user_group._mark_user_group__cc_pair_relationships_outdated__no_commit"
 )
 @patch("ee.onyx.db.user_group._check_user_group_is_modifiable")
+@patch("ee.onyx.db.user_group.fetch_user_group_member_ids")
 def test_update_user_group_cc_pair_only_emits_nothing(
+    _members: MagicMock,
     _modifiable: MagicMock,
     _mark: MagicMock,
     _add_cc: MagicMock,
@@ -101,6 +106,7 @@ def test_update_user_group_cc_pair_only_emits_nothing(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     existing = uuid4()
+    _members.return_value = {existing}
     db_session = _make_db_session([existing], [10])
     admin = MagicMock(
         id="admin-1",

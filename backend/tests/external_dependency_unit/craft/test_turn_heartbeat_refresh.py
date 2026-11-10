@@ -35,6 +35,8 @@ def test_turn_start_refreshes_heartbeat(
 ) -> None:
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
+    sandbox.skills_hash = "delivered"
+    db_session.flush()
     db_session.execute(
         update(Sandbox)
         .where(Sandbox.id == sandbox.id)
@@ -79,6 +81,8 @@ def test_heartbeat_refreshed_per_event_when_interval_elapsed(
 ) -> None:
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
+    sandbox.skills_hash = "delivered"
+    db_session.flush()
 
     recorded_calls: list[UUID] = []
 
@@ -122,6 +126,8 @@ def test_heartbeat_not_refreshed_per_event_within_default_interval(
 ) -> None:
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
+    sandbox.skills_hash = "delivered"
+    db_session.flush()
 
     recorded_calls: list[UUID] = []
 

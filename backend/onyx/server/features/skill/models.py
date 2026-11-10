@@ -59,6 +59,8 @@ class SkillResponse(BaseModel):
 
     enabled: bool
     can_toggle: bool
+    hidden_by_skill_id: UUID | None = None
+    hidden_reason: Literal["same_name"] | None = None
     installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE
     author_user_id: UUID | None = None
     author_email: str | None = None
@@ -85,6 +87,7 @@ class SkillResponse(BaseModel):
         enabled: bool,
         can_toggle: bool,
         external_app: SkillExternalAppDependencyResponse | None = None,
+        hidden_by_skill_id: UUID | None = None,
     ) -> "SkillResponse":
         return cls(
             source="builtin",
@@ -95,6 +98,8 @@ class SkillResponse(BaseModel):
             unavailable_reason=definition.unavailable_reason,
             enabled=enabled,
             can_toggle=can_toggle,
+            hidden_by_skill_id=hidden_by_skill_id,
+            hidden_reason="same_name" if hidden_by_skill_id is not None else None,
             user_permission=SkillAccessLevel.VIEWER,
             external_app=external_app,
         )
@@ -110,6 +115,7 @@ class SkillResponse(BaseModel):
         include_share_details: bool = False,
         external_app: SkillExternalAppDependencyResponse | None = None,
         marketplace: SkillMarketplaceResponse | None = None,
+        hidden_by_skill_id: UUID | None = None,
     ) -> "SkillResponse":
         user_shares = [
             SkillUserShare(
@@ -139,6 +145,8 @@ class SkillResponse(BaseModel):
             installation_policy=skill.installation_policy,
             enabled=enabled,
             can_toggle=can_toggle,
+            hidden_by_skill_id=hidden_by_skill_id,
+            hidden_reason="same_name" if hidden_by_skill_id is not None else None,
             author_user_id=skill.author_user_id,
             author_email=skill.author.email if skill.author is not None else None,
             owner=(

@@ -143,6 +143,7 @@ def skill_response_for_user(
             db_session,
             enabled=state.enabled,
             can_toggle=state.can_toggle,
+            hidden_by_skill_id=state.hidden_by_skill_id,
             external_app=_dependency_response(state.external_app_dependency),
         )
 
@@ -202,6 +203,7 @@ def skill_response_for_user(
         skill,
         enabled=state.enabled,
         can_toggle=state.can_toggle,
+        hidden_by_skill_id=state.hidden_by_skill_id,
         user_permission=user_permission,
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),

@@ -279,6 +279,18 @@ Users with global manage-skills permission set how a shared Skill is installed f
 The policy follows the current audience; changing who can access the Skill does not reset it.
 Bulk sharing preserves existing grants and group install settings that the request omits. In the sharing API,
 an omitted group `installation_policy` preserves its value; explicit `null` clears the override.
+Each group without an override inherits the organization setting. For users in several shared groups,
+**Required** takes precedence over **Installed by default**, then **Available to install**.
+Users outside those groups use the organization setting.
+Changing installation settings keeps each user's saved on/off preference, but can change which same-name Skill loads.
+For example, an opt-out returns when a group changes from **Required** back to **Installed by default**.
+When you add users to a group or remove them, Onyx requires updated sandbox Skills before admitting another message.
+If Onyx cannot update a sandbox, the message fails and asks the user to try again.
+A message already admitted when membership changes can continue, even if its network send starts after the change.
+If a Skill delivery blocks the membership update, Onyx rejects the complete update with a retry message.
+This can occur while Onyx delivers Skills from your previous membership update. Admin requests return HTTP 409.
+SCIM requests return HTTP 503 in the SCIM error format, with a one-second `Retry-After` header.
+Retry the membership update after the delivery finishes. Repeated deliveries can require more than one retry.
 Retired Skills reject changes other than deletion.
 
 A new custom Skill cannot use a live Skill's name in the same library: the company library or one user's library.
@@ -287,9 +299,10 @@ Different libraries can use the same name. A sync blocks a conflicting new entry
 
 When enabled Skills share a name, Onyx loads one. A company Skill takes precedence over your own Skill,
 and your own Skill takes precedence over a Skill shared by another user. The oldest Skill wins a tie. Disabled Skills,
-invalid bundles, and Skills with disconnected apps do not hide a usable Skill.
+invalid bundles, removed built-ins, and Skills with disconnected apps do not hide a usable Skill.
 This order also applies to Required Skills and saved choices. A company Default can hide your explicitly enabled Skill.
 Your own enabled Skill can hide a Required Skill shared by another user. The saved choices remain in place.
+The Skills API identifies duplicates with `hidden_reason: "same_name"` and the selected Skill's `hidden_by_skill_id`.
 
 ## Maintain a Skill
 

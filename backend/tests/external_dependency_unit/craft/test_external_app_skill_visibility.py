@@ -376,7 +376,8 @@ def test_associated_builtin_stays_hidden_and_uses_app_readiness_without_preferen
     user = make_user(db_session)
     skill = make_built_in_skill_row(
         db_session,
-        built_in_skill_id="external-provider-system-skill",
+        built_in_skill_id="slack",
+        name="external-provider-system-skill",
     )
     app = make_external_app(
         db_session,

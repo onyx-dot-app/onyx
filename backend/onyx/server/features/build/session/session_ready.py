@@ -38,6 +38,7 @@ from onyx.server.features.build.session.manager import (
 from onyx.server.features.build.session.sandbox_lifecycle import (
     ProvisioningPolicy,
     SandboxReadyOutcome,
+    deliver_pending_skills,
     ensure_sandbox_ready,
     sync_managed_content,
 )
@@ -59,6 +60,8 @@ def session_runtime_intact(
         and sandbox is not None
         and session.status == BuildSessionStatus.ACTIVE
         and sandbox.status.is_active()
+        # Without a confirmed Skill delivery the pod can hold revoked Skills.
+        and sandbox.skills_hash is not None
     )
 
 
@@ -95,6 +98,7 @@ def ensure_session_ready(
         user.id,
         policy=ProvisioningPolicy.FAIL,
     )
+    skills_synced = deliver_pending_skills(db_session, sandbox_manager, sandbox, user)
 
     if sandbox_manager.session_workspace_exists(sandbox.id, session_id):
         session.status = BuildSessionStatus.ACTIVE
@@ -109,7 +113,7 @@ def ensure_session_ready(
         reserve_nextjs_port__no_commit(db_session, session)
         db_session.commit()
 
-    if outcome == SandboxReadyOutcome.ALREADY_RUNNING:
+    if outcome == SandboxReadyOutcome.ALREADY_RUNNING and not skills_synced:
         # A reused pod may be missing content pushed since it last synced;
         # fresh provisioning already pushed managed content.
         sync_managed_content(db_session, sandbox_manager, sandbox.id, user)

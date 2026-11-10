@@ -17,7 +17,9 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillInstallationPolicy as Policy
 from onyx.db.models import Marketplace, Skill, Skill__User, UserSkillPreference
 from onyx.db.skill import (
+    SkillManagementPolicy,
     list_runtime_skills_for_user,
+    list_skills,
     resolve_skill_runtime_names,
     set_skill_enabled_for_user,
     skill_user_states,
@@ -29,11 +31,16 @@ from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 from onyx.skills.marketplace.models import GitHubMarketplaceConfig, MarketplaceProvider
 from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_built_in_skill_row,
     make_external_app,
+    make_group,
     make_skill,
     make_user,
+    share_skill_with_group,
     share_skill_with_user,
 )
+from tests.external_dependency_unit.db.test_skill_access_mutations import client_for
 
 pytestmark = pytest.mark.usefixtures("tenant_context")
 
@@ -93,6 +100,55 @@ def test_company_own_shared_priority_and_retirement(
     assert not {row.id for row in rows}.intersection(
         resolve_skill_runtime_names(user, db_session)
     )
+
+
+@pytest.mark.parametrize("policy", [Policy.DEFAULT, Policy.REQUIRED])
+def test_group_duplicates_push_one_complete_bundle(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch, policy: Policy
+) -> None:
+    user = make_user(db_session, standard_account=True)
+    group = make_group(db_session)
+    add_user_to_group(db_session, user, group)
+    first = make_skill(db_session)
+    second = make_skill(db_session, name=first.name)
+    first.created_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    second.created_at = first.created_at + timedelta(days=1)
+    for skill in (first, second):
+        share_skill_with_group(db_session, skill, group).installation_policy = policy
+        assert skill.current_version is not None
+        skill.current_version.is_valid = True
+    db_session.flush()
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle:
+        bundle.writestr(
+            "SKILL.md", f"---\nname: {first.name}\ndescription: Test\n---\nWinner"
+        )
+        bundle.writestr("scripts/run.py", "print('winner')")
+    store = MagicMock(spec=FileStore)
+    store.read_file.side_effect = lambda *_args, **_kwargs: io.BytesIO(
+        output.getvalue()
+    )
+    monkeypatch.setattr(push, "get_default_file_store", lambda: store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+
+    files = push.build_skills_fileset_for_user(user, db_session)
+    assert {
+        path: content
+        for path, content in files.items()
+        if path.startswith(first.name + "/")
+    } == {
+        f"{first.name}/SKILL.md": f"---\nname: {first.name}\ndescription: Test\n---\nWinner".encode(),
+        f"{first.name}/scripts/run.py": b"print('winner')",
+    }
+    assert first.current_version is not None
+    store.read_file.assert_called_once()
+    assert store.read_file.call_args.args == (first.current_version.bundle_file_id,)
+    with client_for(user, db_session) as client:
+        response = client.get(f"/skills/{second.id}")
+    assert response.status_code == 200, response.text
+    assert response.json()["hidden_reason"] == "same_name"
+    assert response.json()["hidden_by_skill_id"] == str(first.id)
+    assert response.json()["enabled"] is False
 
 
 @pytest.mark.parametrize(
@@ -190,6 +246,92 @@ def test_name_index_migration_preserves_rows(isolated_engine: Engine) -> None:
             migration.module.downgrade()
             migration.module.upgrade()
             assert inspect(connection).get_indexes("skill") == []
+
+
+@pytest.mark.parametrize("empty_registry", [False, True])
+def test_unknown_builtin_does_not_hide_custom(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch, empty_registry: bool
+) -> None:
+    user = make_user(db_session, standard_account=True)
+    stale = make_built_in_skill_row(db_session, built_in_skill_id="removed-builtin")
+    own = make_skill(db_session, name=stale.name, author_user_id=user.id)
+    own.installation_policy = Policy.DEFAULT
+    db_session.flush()
+    if empty_registry:
+        monkeypatch.setattr("onyx.db.skill.BUILT_IN_SKILLS", {})
+    runtime = list_runtime_skills_for_user(user=user, db_session=db_session)
+    assert {row.id for row in runtime if row.name == own.name} == {own.id}
+    visible = list_skills(
+        policy=SkillManagementPolicy.VIEW, user=user, db_session=db_session
+    )
+    assert own.id in {row.id for row in visible}
+    assert stale.id not in {row.id for row in visible}
+    state = skill_user_states(user, [own.id], db_session)[own.id]
+    assert state.enabled
+    assert state.hidden_by_skill_id is None
+    with client_for(user, db_session) as client:
+        response = client.get(f"/skills/{own.id}")
+    assert response.status_code == 200, response.text
+    assert response.json()["hidden_by_skill_id"] is None
+    assert response.json()["hidden_reason"] is None
+    assert response.json()["enabled"] is True
+
+
+@pytest.mark.parametrize("group_required", [False, True])
+def test_own_enabled_skill_precedes_shared_required(
+    db_session: Session, group_required: bool
+) -> None:
+    user = make_user(db_session, standard_account=True)
+    other = make_user(db_session, standard_account=True)
+    shared = make_skill(db_session, author_user_id=other.id)
+    own = make_skill(db_session, name=shared.name, author_user_id=user.id)
+    group = make_group(db_session)
+    add_user_to_group(db_session, user, group)
+    grant = share_skill_with_group(db_session, shared, group)
+    if group_required:
+        grant.installation_policy = Policy.REQUIRED
+    else:
+        shared.installation_policy = Policy.REQUIRED
+    db_session.flush()
+    set_skill_enabled_for_user(
+        skill_id=own.id, enabled=True, user=user, db_session=db_session
+    )
+    states = skill_user_states(user, [own.id, shared.id], db_session)
+    assert states[own.id].enabled
+    assert not states[shared.id].enabled
+    assert states[shared.id].hidden_by_skill_id == own.id
+    assert {
+        row.id
+        for row in list_runtime_skills_for_user(user=user, db_session=db_session)
+        if row.name == own.name
+    } == {own.id}
+
+
+def test_company_default_hides_but_preserves_explicit_own_choice(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session, standard_account=True)
+    own = make_skill(db_session, author_user_id=user.id)
+    company = make_skill(db_session, name=own.name, is_public=True)
+    set_skill_enabled_for_user(
+        skill_id=own.id, enabled=True, user=user, db_session=db_session
+    )
+    company.installation_policy = Policy.DEFAULT
+    db_session.flush()
+    states = skill_user_states(user, [own.id, company.id], db_session)
+    assert states[company.id].enabled
+    assert states[own.id].hidden_by_skill_id == company.id
+    preference = (
+        db_session.query(UserSkillPreference)
+        .filter_by(user_id=user.id, skill_id=own.id)
+        .one()
+    )
+    assert preference.enabled
+    set_skill_enabled_for_user(
+        skill_id=company.id, enabled=False, user=user, db_session=db_session
+    )
+    assert skill_user_states(user, [own.id], db_session)[own.id].enabled
+    assert preference.enabled
 
 
 def _publish(session: Session, skill: Skill, bundle_file_id: str) -> None:

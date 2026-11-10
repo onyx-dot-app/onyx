@@ -110,16 +110,18 @@ def get_orphan_build_session_ids(
 def session_runtime_stale(session: BuildSession, sandbox: Sandbox | None) -> bool:
     """Whether a live runtime predates the sandbox's managed content — either the
     skill/app payload (``skills_hash``) or the craft MCP set (``mcp_config_hash``).
-    Both trigger the same reload (rewrite session config + dispose instance)."""
+    Both trigger the same reload (rewrite session config + dispose instance).
+    A sandbox without ``skills_hash`` has no confirmed Skill delivery, so its
+    runtime is stale until a delivery succeeds. Every origin counts: a
+    scheduled session can take a later interactive turn."""
     if not (
         session.status == BuildSessionStatus.ACTIVE
-        and session.origin == SessionOrigin.INTERACTIVE
         and session.opencode_session_id is not None
         and sandbox is not None
     ):
         return False
     skills_changed = (
-        sandbox.skills_hash is not None and session.skills_hash != sandbox.skills_hash
+        sandbox.skills_hash is None or session.skills_hash != sandbox.skills_hash
     )
     mcp_changed = (
         sandbox.mcp_config_hash is not None

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,6 +19,7 @@ from ee.onyx.db.user_group import (
     fetch_user_group,
     fetch_user_group_for_snapshot,
     fetch_user_group_member_counts,
+    fetch_user_group_member_ids,
     fetch_user_groups,
     fetch_user_groups_for_user,
     insert_user_group,
@@ -81,9 +84,11 @@ from onyx.db.user_group import (
     assert_group_permissions_editable,
     group_permission_toggles_allowed,
 )
+from onyx.db.users import lock_group_membership
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
+from onyx.skills.push import push_skills_for_users
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -102,6 +107,15 @@ _ACCESS_LEVEL_TO_GIVE_ROLE: dict[ConnectorManageRole, CCPairAccessLevel] = {
     ConnectorManageRole.EDITOR: CCPairAccessLevel.EDIT,
     ConnectorManageRole.OPERATOR: CCPairAccessLevel.OPERATE,
 }
+
+
+def _push_skills_for_membership_change(
+    db_session: Session, changed_members: set[UUID]
+) -> None:
+    """Release membership locks even when the mutation returned without a write."""
+    db_session.commit()
+    push_skills_for_users(changed_members, db_session)
+    db_session.commit()
 
 
 @router.get("/admin/user-group")
@@ -414,8 +428,10 @@ def patch_user_group(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    lock_group_membership(db_session)
+    members_before = fetch_user_group_member_ids(db_session, user_group_id)
     try:
-        return UserGroup.from_model(
+        updated = UserGroup.from_model(
             update_user_group(
                 db_session=db_session,
                 user=user,
@@ -426,6 +442,10 @@ def patch_user_group(
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    _push_skills_for_membership_change(
+        db_session, members_before ^ set(user_group_update.user_ids)
+    )
+    return updated
 
 
 @router.put("/admin/user-group/{user_group_id}/data-access-cc-pairs")
@@ -541,8 +561,10 @@ def add_users(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
+    lock_group_membership(db_session)
+    members_before = fetch_user_group_member_ids(db_session, user_group_id)
     try:
-        return UserGroup.from_model(
+        updated = UserGroup.from_model(
             add_users_to_user_group(
                 db_session=db_session,
                 user=user,
@@ -553,6 +575,10 @@ def add_users(
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+    _push_skills_for_membership_change(
+        db_session, set(add_users_request.user_ids) - members_before
+    )
+    return updated
 
 
 @router.delete("/admin/user-group/{user_group_id}")
@@ -567,7 +593,10 @@ def delete_user_group(
     # Deletion drops every membership, so capture the roster before it runs.
     existing = fetch_user_group(db_session, user_group_id)
     group_name = existing.name if existing else None
-    member_ids = [str(member.id) for member in existing.users] if existing else []
+    member_ids = [
+        str(member_id)
+        for member_id in fetch_user_group_member_ids(db_session, user_group_id)
+    ]
 
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
@@ -586,6 +615,9 @@ def delete_user_group(
             "member_count": len(member_ids),
         },
     )
+    # The memberships are committed and unlocked; refresh their Skills.
+    push_skills_for_users({UUID(member_id) for member_id in member_ids}, db_session)
+    db_session.commit()
 
     if DISABLE_VECTOR_DB:
         user_group = fetch_user_group(db_session, user_group_id)

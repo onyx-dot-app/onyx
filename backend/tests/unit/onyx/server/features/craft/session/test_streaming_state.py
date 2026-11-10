@@ -81,7 +81,12 @@ class _FakeQuery:
         return self._build_session
 
 
-class _FakePersistDb:
+class _DeliveredSkillsDb:
+    def scalar(self, _statement: object) -> str:
+        return "confirmed-skills"
+
+
+class _FakePersistDb(_DeliveredSkillsDb):
     def __init__(self, build_session: BuildSession | None) -> None:
         self.build_session = build_session
         self.commit_count = 0
@@ -283,7 +288,7 @@ def test_yield_sandbox_events_passes_existing_opencode_id() -> None:
 
     events = list(
         streaming.yield_sandbox_events(
-            cast(Any, object()),
+            cast(Any, _DeliveredSkillsDb()),
             cast(Any, sandbox_manager),
             sandbox_id,
             session_id,
@@ -349,7 +354,7 @@ def test_yield_sandbox_events_allows_non_empty_session_without_opencode_id() -> 
 
     events = list(
         streaming.yield_sandbox_events(
-            cast(Any, object()),
+            cast(Any, _DeliveredSkillsDb()),
             cast(Any, sandbox_manager),
             uuid4(),
             uuid4(),

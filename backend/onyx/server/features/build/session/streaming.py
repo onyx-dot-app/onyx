@@ -29,6 +29,8 @@ from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
@@ -42,6 +44,7 @@ from onyx.server.features.build.db.build_session import (
 )
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
+    sandbox_skills_delivery_pending,
     update_sandbox_heartbeat,
 )
 from onyx.server.features.build.packets import (
@@ -528,8 +531,8 @@ def yield_sandbox_events(
 ) -> Generator[Any, None, None]:
     """Drive the agent to completion, yielding raw sandbox events.
 
-    Thin pass-through to ``sandbox_manager.send_message`` — no DB reads,
-    no SSE formatting. Callers resolve the turn inputs first
+    Checks pending Skill delivery before prompt admission, with no SSE
+    formatting. Callers resolve the turn inputs first
     (interactive path off the session row it holds; headless via
     :func:`load_turn_session`), then compose the events with
     `persist_sandbox_event` and, in the SSE case, an SSE serializer.
@@ -549,6 +552,14 @@ def yield_sandbox_events(
     # The idle reaper keys off last_heartbeat; a turn can outlast the idle timeout.
     _refresh_sandbox_heartbeat_best_effort(sandbox_id)
     last_heartbeat_refresh = time.monotonic()
+    # Final admission check, after session preparation and heartbeat I/O.
+    # A membership commit after this read may still precede the network send:
+    # already-admitted turns can continue. No lock spans model execution.
+    if sandbox_skills_delivery_pending(db_session, sandbox_id):
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Could not update the Skills in your sandbox. Try again.",
+        )
     event_stream = sandbox_manager.send_message(
         sandbox_id,
         session_id,

@@ -35,6 +35,8 @@ from onyx.cache.interface import CacheLock
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
 from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.db.build_session import (
@@ -55,6 +57,8 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
     get_snapshots_for_session,
     has_active_craft_pat,
+    lock_sandbox_skills_hashes,
+    provisioning_attempt_is_current,
     record_cleanup_checkpoint__no_commit,
     set_sandbox_mcp_config_hashes__no_commit,
     set_sandbox_skills_hashes__no_commit,
@@ -148,14 +152,13 @@ class SandboxReservation:
 
 @dataclass(frozen=True)
 class ManagedContentPayload:
-    """Sandbox-level managed content, prebuilt from database state so the
-    external push runs without an open transaction."""
+    """Sandbox-level managed content, built from database state while the
+    sandbox row is locked for delivery."""
 
     connectable_apps_section: str
     skills_files: FileSet
     skills_hash: str
     mcp_fingerprint: str
-    library_files: FileSet
 
 
 def snapshot_opencode_history_before_recovery(
@@ -225,15 +228,17 @@ def create_session_snapshot_keep_latest(
 
 
 # =============================================================================
-# Managed content: build (DB reads) → push (external) → record (short tx)
+# Managed content: lock row → build (DB reads) → push (external) → record
 # =============================================================================
 
 
 def build_managed_content_payload(
     user: User, db_session: DBSession
 ) -> ManagedContentPayload:
-    """Read-only assembly of the skills/user-library payload and its hashes.
-    Callers must close the read transaction before pushing externally."""
+    """Read-only assembly of the Skill payload and its hashes.
+    Callers lock the sandbox row first (``lock_sandbox_skills_hashes``) and keep
+    it through the push and the record: a Skill change that commits between
+    the build and the record would otherwise get the old payload's hash."""
     connectable_apps_section, skills_files = build_user_skills_payload(user, db_session)
     return ManagedContentPayload(
         connectable_apps_section=connectable_apps_section,
@@ -242,17 +247,16 @@ def build_managed_content_payload(
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),
-        library_files=build_user_library_fileset(user.id, db_session),
     )
 
 
 @time_provision_phase(SandboxProvisionPhase.HYDRATE_MANAGED_CONTENT)
-def push_managed_content(
+def push_managed_skills(
     sandbox_manager: SandboxManager,
     sandbox_id: UUID,
     payload: ManagedContentPayload,
 ) -> bool:
-    """Push managed skills + user library into a sandbox. External I/O only —
+    """Push managed Skills into a sandbox. External I/O only —
     no database access.
 
     Runs (not necessarily succeeds) before the sandbox is reported RUNNING:
@@ -275,17 +279,25 @@ def push_managed_content(
         skills_hydrated = result.succeeded == result.targets
     except Exception:
         logger.warning("Failed to push skills to sandbox %s", sandbox_id, exc_info=True)
+    return skills_hydrated
+
+
+def push_user_library(
+    sandbox_manager: SandboxManager,
+    sandbox_id: UUID,
+    files: FileSet,
+) -> None:
+    """Deliver library files outside the Skill delivery transaction."""
     try:
         sandbox_manager.push_to_sandbox(
             sandbox_id=sandbox_id,
             mount_path=USER_LIBRARY_MOUNT_PATH,
-            files=payload.library_files,
+            files=files,
         )
     except Exception:
         logger.warning(
             "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
         )
-    return skills_hydrated
 
 
 def record_managed_content_hashes__no_commit(
@@ -312,15 +324,50 @@ def sync_managed_content(
     sandbox_id: UUID,
     user: User,
 ) -> None:
-    """Build → push → record for an already-RUNNING sandbox. Commits; callers
-    must be at a clean transaction boundary."""
+    """Lock → build → push → record for an already-RUNNING sandbox. The row
+    lock makes a concurrent membership change retry instead of letting this
+    payload overwrite its pending marker. Library delivery holds no row lock. Commits;
+    callers must be at a clean transaction boundary."""
+    lock_sandbox_skills_hashes(db_session, {sandbox_id})
     payload = build_managed_content_payload(user, db_session)
-    db_session.commit()
-    skills_hydrated = push_managed_content(sandbox_manager, sandbox_id, payload)
+    skills_hydrated = push_managed_skills(sandbox_manager, sandbox_id, payload)
     record_managed_content_hashes__no_commit(
         db_session, sandbox_id, payload, skills_hydrated
     )
     db_session.commit()
+    library_files = build_user_library_fileset(user.id, db_session)
+    db_session.commit()
+    push_user_library(sandbox_manager, sandbox_id, library_files)
+
+
+def deliver_pending_skills(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    sandbox: Sandbox,
+    user: User,
+) -> bool:
+    """Retry Skill delivery for a RUNNING sandbox without ``skills_hash``.
+
+    A sandbox loses its hash when a change may revoke Skills already in the pod
+    (for example a group membership change), and keeps no hash while a
+    delivery fails. Its files can then hold revoked Skills, so no runtime may
+    start there until a delivery succeeds. Returns whether it synced. Commits;
+    callers must be at a clean transaction boundary.
+
+    Raises:
+        OnyxError: The delivery failed again.
+    """
+    if sandbox.skills_hash is not None:
+        return False
+    sync_managed_content(db_session, sandbox_manager, sandbox.id, user)
+    db_session.refresh(sandbox)
+    if sandbox.skills_hash is None:
+        logger.warning("Skill delivery to sandbox %s is still pending", sandbox.id)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Could not update the Skills in your sandbox. Try again.",
+        )
+    return True
 
 
 # =============================================================================
@@ -640,9 +687,26 @@ def reconcile_sandbox(
     # until the stale-attempt threshold.
     try:
         _check_attempt_deadline(attempt_deadline, sandbox_id, attempt_number)
+        lock_sandbox_skills_hashes(db_session, {sandbox_id})
+        if not provisioning_attempt_is_current(db_session, sandbox_id, attempt_number):
+            db_session.rollback()
+            raise StaleProvisioningAttemptError(
+                f"Sandbox {sandbox_id} attempt {attempt_number} was superseded "
+                f"before Skill delivery"
+            )
         payload = build_managed_content_payload(user, db_session)
+        skills_hydrated = push_managed_skills(sandbox_manager, sandbox_id, payload)
+        record_managed_content_hashes__no_commit(
+            db_session, sandbox_id, payload, skills_hydrated
+        )
         db_session.commit()
-        skills_hydrated = push_managed_content(sandbox_manager, sandbox_id, payload)
+        # Remain PROVISIONING while the library is delivered without a row lock.
+        # A concurrent membership commit can clear the Skill hash here; finalizing
+        # RUNNING below must never record this older payload again.
+        library_files = build_user_library_fileset(user.id, db_session)
+        db_session.commit()
+        push_user_library(sandbox_manager, sandbox_id, library_files)
+        _check_attempt_deadline(attempt_deadline, sandbox_id, attempt_number)
 
         finalized = finalize_provisioning_attempt__no_commit(
             db_session, sandbox_id, attempt_number, SandboxStatus.RUNNING
@@ -653,9 +717,6 @@ def reconcile_sandbox(
                 f"Sandbox {sandbox_id} attempt {attempt_number} was superseded "
                 f"before finalization"
             )
-        record_managed_content_hashes__no_commit(
-            db_session, sandbox_id, payload, skills_hydrated
-        )
         db_session.commit()
     except StaleProvisioningAttemptError:
         raise

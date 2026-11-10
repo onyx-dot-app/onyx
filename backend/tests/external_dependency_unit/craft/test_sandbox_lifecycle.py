@@ -357,6 +357,7 @@ class TestRestoreFailureRecovery:
         # restore_snapshot left unconfigured -> raises, simulating a failed
         # workspace load after a successful provision.
         stub_sandbox_manager.cleanup_session_workspace_silent = True
+        stub_sandbox_manager.write_files_to_sandbox_silent = True
 
         monkeypatch.setattr(
             "onyx.server.features.build.session.api.get_sandbox_manager",

@@ -82,6 +82,9 @@ from onyx.db.users import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.db.sandbox import (
+    mark_user_sandbox_skills_pending__no_commit,
+)
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -235,6 +238,18 @@ def _cleanup_document_set__user_group_relationships__no_commit(
 def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | None:
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     return db_session.scalar(stmt)
+
+
+def fetch_user_group_member_ids(db_session: Session, user_group_id: int) -> set[UUID]:
+    return {
+        user_id
+        for user_id in db_session.scalars(
+            select(User__UserGroup.user_id).where(
+                User__UserGroup.user_group_id == user_group_id
+            )
+        )
+        if user_id is not None
+    }
 
 
 def _add_user_group_snapshot_eager_loads(
@@ -696,8 +711,8 @@ def add_users_to_user_group(
     # gate here too: the no-op early return below skips update_user_group's copy
     _assert_default_group_update_allowed(user, db_user_group, attaching_cc_pairs=False)
 
-    current_user_ids = [user.id for user in db_user_group.users]
-    current_user_ids_set = set(current_user_ids)
+    current_user_ids_set = fetch_user_group_member_ids(db_session, user_group_id)
+    current_user_ids = sorted(current_user_ids_set)
     new_user_ids = [
         user_id for user_id in user_ids if user_id not in current_user_ids_set
     ]
@@ -930,7 +945,7 @@ def update_user_group(
         access_level=CCPairAccessLevel.EDIT,
     )
 
-    current_user_ids = {user.id for user in db_user_group.users}
+    current_user_ids = fetch_user_group_member_ids(db_session, user_group_id)
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
@@ -1016,6 +1031,9 @@ def update_user_group(
 
     recompute_user_permissions__no_commit(
         list(set(added_user_ids) | set(removed_user_ids)), db_session
+    )
+    mark_user_sandbox_skills_pending__no_commit(
+        db_session, set(added_user_ids) | set(removed_user_ids)
     )
 
     db_session.commit()
@@ -1243,6 +1261,7 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
     # Recompute permissions for affected users now that their
     # membership in this group has been removed
     recompute_user_permissions__no_commit(affected_user_ids, db_session)
+    mark_user_sandbox_skills_pending__no_commit(db_session, set(affected_user_ids))
 
     db_user_group.is_up_to_date = False
     db_user_group.is_up_for_deletion = True
