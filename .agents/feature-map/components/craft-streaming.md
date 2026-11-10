@@ -70,6 +70,13 @@ opencode serve (in pod)          GET /event?directory=...   raw SSE
                  processSSEStream -> parsePacket -> store ([[craft-frontend]])
 ```
 
+**Prompt admission.** `server/features/build/session/streaming.py:yield_sandbox_events`
+checks committed pending Skill delivery after session preparation and heartbeat
+work, immediately before `send_message`. Pending delivery raises a `BAD_GATEWAY`
+error for interactive and scheduled turns, including direct streaming callers. This is
+an admission check. A membership commit after this read can precede the network
+send, and an already-admitted turn can continue. No lock spans model execution.
+
 **Two independent consumers.** The runner and each browser attach subscribe
 to the same bus. The runner posts the prompt, saves rows and decides when the
 turn ends, with or without a browser. The attach only renders. In

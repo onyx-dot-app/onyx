@@ -22,8 +22,7 @@ from onyx.server.features.build.sandbox.user_library import (
     sync_user_library_to_active_sandboxes,
 )
 from onyx.server.features.build.session.sandbox_lifecycle import (
-    build_managed_content_payload,
-    push_managed_content,
+    sync_managed_content,
 )
 from tests.common.craft.stubs import StubSandboxManager
 
@@ -104,16 +103,15 @@ class TestUserLibraryFileset:
         sandbox: Callable[..., Sandbox],
         stub_sandbox_manager: StubSandboxManager,
     ) -> None:
-        # Cold-start hydration path: the reconcile payload carries the user's
-        # current library fileset and pushes it to the sandbox's mount.
+        # Live hydration delivers the current library after Skill recording.
         sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
         _seed_file(db_session, test_user, "docs/readme.md", b"hello")
         stub_sandbox_manager.write_files_to_sandbox_silent = True
 
-        payload = build_managed_content_payload(test_user, db_session)
-        push_managed_content(stub_sandbox_manager, sandbox_row.id, payload)
-
-        assert payload.library_files == {"docs/readme.md": b"hello"}
+        db_session.commit()
+        sync_managed_content(
+            db_session, stub_sandbox_manager, sandbox_row.id, test_user
+        )
         assert stub_sandbox_manager.last_write_files_to_sandbox_payload == {
             "sandbox_id": sandbox_row.id,
             "mount_path": USER_LIBRARY_MOUNT_PATH,
