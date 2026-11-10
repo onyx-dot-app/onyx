@@ -4,17 +4,23 @@ import React, { FunctionComponent, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { StopReason } from "@/app/app/services/streamingModels";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
-import { TurnGroup, TransformedStep } from "./transformers";
+import {
+  TurnGroup,
+  TransformedStep,
+  toChatTimelineGroup,
+} from "@/app/app/message/messageComponents/timeline/transformers";
 import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import {
   TimelineRendererComponent,
   TimelineRendererOutput,
   TimelineRendererResult,
-} from "./TimelineRendererComponent";
-import { ParallelTimelineTabs } from "./ParallelTimelineTabs";
-import { StepContainer } from "./StepContainer";
-import { TimelineStepComposer } from "./TimelineStepComposer";
+} from "@/app/app/message/messageComponents/timeline/TimelineRendererComponent";
+import { ParallelTimelineTabs } from "@/app/app/message/messageComponents/timeline/ParallelTimelineTabs";
+import { StepContainer } from "@/lib/timeline/StepContainer";
+import { TimelineSteps } from "@/lib/timeline/TimelineSteps";
+import type { TimelineGroup } from "@/lib/timeline/types";
+import { TimelineStepComposer } from "@/app/app/message/messageComponents/timeline/TimelineStepComposer";
 import {
   isSearchToolPackets,
   isPythonToolPackets,
@@ -120,57 +126,61 @@ export const ExpandedTimelineContent = React.memo(
     hasDoneIndicator,
   }: ExpandedTimelineContentProps) {
     const t = useTranslations("chat.messages.timeline");
+    const groups = useMemo(
+      () => turnGroups.map(toChatTimelineGroup),
+      [turnGroups]
+    );
+    const turnGroupById = useMemo(
+      () =>
+        new Map(
+          turnGroups.map((turnGroup) => [
+            String(turnGroup.turnIndex),
+            turnGroup,
+          ])
+        ),
+      [turnGroups]
+    );
 
     return (
       <div className="w-full">
-        {/* One flat list keyed by step: code mode can insert a step before
-            others, and position keys would remount the later steps. */}
-        {turnGroups.flatMap((turnGroup, turnIdx) => {
+        <TimelineSteps
+          groups={groups}
           // Coding-agent groups always render via ParallelTimelineTabs so
           // their tab-pill chrome is consistent with the multi-agent case.
-          const renderAsParallelTabs =
-            turnGroup.isParallel ||
-            turnGroup.steps.some((step) => isCodingAgentPackets(step.packets));
-
-          return renderAsParallelTabs ? (
-            <ParallelTimelineTabs
-              key={turnGroup.steps[0]!.key}
-              turnGroup={turnGroup}
+          isTabbedGroup={(group: TimelineGroup<TransformedStep>) =>
+            group.isParallel ||
+            group.entries.some((entry) =>
+              isCodingAgentPackets(entry.payload.packets)
+            )
+          }
+          renderTabbedGroup={(group, position) => {
+            const turnGroup = turnGroupById.get(group.id);
+            return turnGroup ? (
+              <ParallelTimelineTabs
+                turnGroup={turnGroup}
+                chatState={chatState}
+                stopPacketSeen={stopPacketSeen}
+                stopReason={stopReason}
+                isLastTurnGroup={
+                  position.isLast && !showDoneStep && !showStoppedStep
+                }
+                isFirstTurnGroup={position.isFirst}
+              />
+            ) : null;
+          }}
+          renderEntry={(entry, position) => (
+            <TimelineStep
+              step={entry.payload}
               chatState={chatState}
               stopPacketSeen={stopPacketSeen}
               stopReason={stopReason}
-              isLastTurnGroup={
-                turnIdx === turnGroups.length - 1 &&
-                !showDoneStep &&
-                !showStoppedStep
-              }
-              isFirstTurnGroup={turnIdx === 0}
+              isLastStep={position.isLast && !hasDoneIndicator && !userStopped}
+              isFirstStep={position.isFirst}
+              isSingleStep={isSingleStep}
+              isStreaming={!stopPacketSeen && !userStopped}
             />
-          ) : (
-            turnGroup.steps.map((step, stepIdx) => {
-              const stepIsLast =
-                turnIdx === turnGroups.length - 1 &&
-                stepIdx === turnGroup.steps.length - 1 &&
-                !hasDoneIndicator &&
-                !userStopped;
-              const stepIsFirst = turnIdx === 0 && stepIdx === 0;
-
-              return (
-                <TimelineStep
-                  key={step.key}
-                  step={step}
-                  chatState={chatState}
-                  stopPacketSeen={stopPacketSeen}
-                  stopReason={stopReason}
-                  isLastStep={stepIsLast}
-                  isFirstStep={stepIsFirst}
-                  isSingleStep={isSingleStep}
-                  isStreaming={!stopPacketSeen && !userStopped}
-                />
-              );
-            })
-          );
-        })}
+          )}
+        />
 
         {/* Done indicator */}
         {showDoneStep && (

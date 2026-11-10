@@ -3,12 +3,14 @@ import { cn, richNodes } from "@opal/utils";
 import { SvgFold, SvgExpand, SvgXOctagon } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import { Button, Text } from "@opal/components";
-import { TimelineSurfaceBackground } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
+import { TimelineSurfaceBackground } from "@/lib/timeline/primitives/TimelineSurface";
 
 export interface TimelineStepContentProps {
   children?: React.ReactNode;
   header?: React.ReactNode;
   buttonTitle?: string;
+  /** Accessible name of the icon-only toggle (no `buttonTitle`). */
+  toggleLabel?: string;
   isExpanded?: boolean;
   onToggle?: () => void;
   collapsible?: boolean;
@@ -27,6 +29,7 @@ export function TimelineStepContent({
   children,
   header,
   buttonTitle,
+  toggleLabel,
   isExpanded = true,
   onToggle,
   collapsible = true,
@@ -66,6 +69,8 @@ export function TimelineStepContent({
                   prominence="tertiary"
                   size="md"
                   onClick={onToggle}
+                  aria-label={toggleLabel}
+                  aria-expanded={isExpanded}
                   icon={
                     isExpanded ? SvgFold : CollapsedIconComponent || SvgExpand
                   }

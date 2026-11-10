@@ -1,12 +1,12 @@
 import React, { FunctionComponent } from "react";
 import { cn } from "@opal/utils";
 import { IconProps } from "@opal/types";
-import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
+import { TimelineRow } from "@/lib/timeline/primitives/TimelineRow";
 import {
   TimelineSurface,
   TimelineSurfaceBackground,
-} from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
-import { TimelineStepContent } from "@/app/app/message/messageComponents/timeline/primitives/TimelineStepContent";
+} from "@/lib/timeline/primitives/TimelineSurface";
+import { TimelineStepContent } from "@/lib/timeline/primitives/TimelineStepContent";
 
 export interface StepContainerProps {
   /** Main content */
@@ -17,6 +17,8 @@ export interface StepContainerProps {
   header?: React.ReactNode;
   /** Button title for toggle */
   buttonTitle?: string;
+  /** Accessible name of the icon-only toggle */
+  toggleLabel?: string;
   /** Controlled expanded state */
   isExpanded?: boolean;
   /** Toggle callback */
@@ -49,6 +51,7 @@ export function StepContainer({
   stepIcon: StepIconComponent,
   header,
   buttonTitle,
+  toggleLabel,
   isExpanded = true,
   onToggle,
   collapsible = true,
@@ -81,6 +84,7 @@ export function StepContainer({
       <TimelineStepContent
         header={header}
         buttonTitle={buttonTitle}
+        toggleLabel={toggleLabel}
         isExpanded={isExpanded}
         onToggle={onToggle}
         collapsible={collapsible}
