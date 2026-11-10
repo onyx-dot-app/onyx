@@ -875,6 +875,11 @@ class Skill__User(Base):
         default=SkillSharePermission.VIEWER,
         server_default=SkillSharePermission.VIEWER.value,
     )
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True).evaluates_none(),
+        nullable=True,
+        server_default=func.clock_timestamp(),
+    )
 
     user: Mapped["User"] = relationship("User")
 
@@ -896,6 +901,9 @@ class UserSkillPreference(Base):
 
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    enabled_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     __table_args__ = (
@@ -5867,7 +5875,13 @@ class Skill__UserGroup(Base):
         server_default=SkillSharePermission.VIEWER.value,
     )
 
-    # NULL preserves the skill-wide policy; group overrides are not exposed yet.
+    created_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True).evaluates_none(),
+        nullable=True,
+        server_default=func.clock_timestamp(),
+    )
+
+    # NULL inherits the skill-wide policy.
     installation_policy: Mapped[SkillInstallationPolicy | None] = mapped_column(
         Enum(SkillInstallationPolicy, native_enum=False), nullable=True
     )

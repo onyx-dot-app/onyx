@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from uuid import uuid4
+from uuid import UUID, uuid4
+from weakref import ReferenceType, ref
 
 import pytest
 from sqlalchemy.orm import Session
@@ -12,12 +13,22 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.models import BuildSession, Skill, User
 from onyx.server.features.build.db.build_session import session_runtime_stale
-from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.skills.push import compute_skill_runtime_hash, push_skills_for_users
+from onyx.server.features.build.sandbox.models import (
+    FatalWriteError,
+    FileSet,
+    PushResult,
+)
+from onyx.skills import push as skill_push
+from onyx.skills.push import (
+    UserSkillsPayload,
+    compute_skill_runtime_hash,
+    push_skills_for_users,
+)
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
 
+@pytest.mark.parametrize("failure_stage", ["result", "build", "send"])
 def test_one_failing_sandbox_does_not_abort_push_to_others(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -25,6 +36,7 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
     failing_sandbox_manager: Callable[..., StubSandboxManager],
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
+    failure_stage: str,
 ) -> None:
     user_a = make_user(db_session)
     user_b = make_user(db_session)
@@ -72,10 +84,36 @@ def test_one_failing_sandbox_does_not_abort_push_to_others(
         bundle_files={"SKILL.md": "p\n"},
     )
 
+    monkeypatch.setattr(
+        skill_push,
+        "get_sandbox_user_map",
+        lambda _ids, _session: {
+            sandbox_a.id: user_a,
+            sandbox_b.id: user_b,
+            sandbox_c.id: user_c,
+        },
+    )
+    build_payload = skill_push.build_user_skills_payload
+
+    def build(user: User, session: Session) -> UserSkillsPayload:
+        if failure_stage == "build" and user.id == user_b.id:
+            raise ValueError("Unreadable saved credential")
+        return build_payload(user, session)
+
+    send_payload = stub.push_to_sandbox
+
+    def send(*, sandbox_id: UUID, mount_path: str, files: FileSet) -> PushResult:
+        if failure_stage == "send" and sandbox_id == sandbox_b.id:
+            raise RuntimeError("Unexpected transport failure")
+        return send_payload(sandbox_id=sandbox_id, mount_path=mount_path, files=files)
+
+    monkeypatch.setattr(skill_push, "build_user_skills_payload", build)
+    monkeypatch.setattr(stub, "push_to_sandbox", send)
+
     with caplog.at_level(logging.WARNING):
         push_skills_for_users({user_a.id, user_b.id, user_c.id}, db_session)
 
-    assert stub.write_files_to_sandbox_count == 3
+    assert stub.write_files_to_sandbox_count == (3 if failure_stage == "result" else 2)
     assert session_runtime_stale(sessions[user_a.id], sandbox_a)
     # No confirmed delivery: the runtime stays stale until a retry succeeds.
     assert session_runtime_stale(sessions[user_b.id], sandbox_b)
@@ -158,9 +196,10 @@ def test_connectable_app_change_pushes_and_hashes_self_heal(
     monkeypatch.setattr("onyx.skills.push.get_sandbox_manager", lambda: stub)
     monkeypatch.setattr(
         "onyx.skills.push.build_user_skills_payload",
-        lambda user, session: (
-            connectable_apps_sections[user.id],
-            files_for(user, session),
+        lambda user, session: UserSkillsPayload(
+            files=files_for(user, session),
+            omissions=(),
+            connectable_apps_section=connectable_apps_sections[user.id],
         ),
     )
 
@@ -180,3 +219,61 @@ def test_connectable_app_change_pushes_and_hashes_self_heal(
     db_session.refresh(changed_sandbox)
     assert stub.write_files_to_sandbox_count == 2
     assert not session_runtime_stale(changed_session, changed_sandbox)
+
+
+@pytest.mark.parametrize("unchanged", [False, True])
+def test_push_releases_each_payload_before_building_the_next(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    unchanged: bool,
+) -> None:
+    class TrackedFiles(dict[str, bytes]):
+        pass
+
+    users = [make_user(db_session) for _ in range(3)]
+    sandboxes = [
+        make_sandbox(db_session, user, status=SandboxStatus.RUNNING) for user in users
+    ]
+    if unchanged:
+        for sandbox in sandboxes:
+            sandbox.skills_hash = compute_skill_runtime_hash(
+                {"demo/SKILL.md": b"demo"}, ""
+            )
+    db_session.commit()
+    payload_refs: list[ReferenceType[object]] = []
+    live_at_build: list[int] = []
+    sent: list[UUID] = []
+
+    def build(_user: User, _session: Session) -> UserSkillsPayload:
+        live_at_build.append(sum(reference() is not None for reference in payload_refs))
+        files = TrackedFiles({"demo/SKILL.md": b"demo"})
+        payload = UserSkillsPayload(
+            files=files, omissions=(), connectable_apps_section=""
+        )
+        # Track the container itself, not only an alias to its files.
+        payload_refs.extend([ref(files), ref(payload)])
+        return payload
+
+    def send(
+        *, sandbox_id: UUID, mount_path: str, files: FileSet, timeout_s: float = 30.0
+    ) -> PushResult:
+        assert mount_path == "/workspace/managed/skills"
+        assert timeout_s > 0
+        assert files == {"demo/SKILL.md": b"demo"}
+        sent.append(sandbox_id)
+        return PushResult(targets=1, succeeded=1, failures=[])
+
+    manager = StubSandboxManager()
+    monkeypatch.setattr(manager, "push_to_sandbox", send)
+    monkeypatch.setattr("onyx.skills.push.get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr("onyx.skills.push.build_user_skills_payload", build)
+    push_skills_for_users({user.id for user in users}, db_session)
+
+    assert live_at_build == [0, 0, 0]
+    assert all(reference() is None for reference in payload_refs)
+    assert set(sent) == (set() if unchanged else {sandbox.id for sandbox in sandboxes})
+    for sandbox in sandboxes:
+        db_session.refresh(sandbox)
+        assert sandbox.skills_hash == compute_skill_runtime_hash(
+            {"demo/SKILL.md": b"demo"}, ""
+        )

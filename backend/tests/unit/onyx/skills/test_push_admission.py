@@ -189,6 +189,8 @@ def test_oversized_user_does_not_abort_batch_or_startup(
     skills = {users[0].id: [first, second], users[1].id: [normal]}
 
     def resolve(user: User, **_kwargs: object) -> list[Skill]:
+        if operation == "batch" and user.id == users[1].id:
+            assert next(iter(sandboxes)) in manager.delivered
         return skills[user.id]
 
     limit = 100 if all_omitted else 400
@@ -214,6 +216,7 @@ def test_oversized_user_does_not_abort_batch_or_startup(
         )
         payload = sandbox_lifecycle.build_managed_content_payload(users[0], db)
         assert set(payload.skills_files) == expected
+        assert payload.skill_omissions == ()
         assert payload.skills_hash == push.compute_skill_runtime_hash(
             payload.skills_files, apps_section
         )
@@ -232,6 +235,27 @@ def test_oversized_user_does_not_abort_batch_or_startup(
             for sandbox_id, files in manager.delivered.items()
         },
     )
+
+
+def test_payload_keeps_structured_api_after_size_refusal(
+    bundles: SkillBundles, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    oversized = bundles.add("large", files={"data": b"x" * 200})
+    fallback = bundles.add("large", b"Fallback")
+    monkeypatch.setattr(push, "MAX_BUNDLE_BYTES", 100)
+    monkeypatch.setattr(
+        push,
+        "list_runtime_skills_for_user",
+        lambda *_args, **_kwargs: [oversized, fallback],
+    )
+
+    payload = push.build_user_skills_payload(User(id=uuid4()), MagicMock(spec=Session))
+
+    assert isinstance(payload, push.UserSkillsPayload)
+    assert set(payload.files) == {"large/SKILL.md"}
+    assert payload.files["large/SKILL.md"].endswith(b"Fallback")
+    assert payload.omissions == ()
+    assert payload.connectable_apps_section == push.build_connectable_apps_list([])
 
 
 @pytest.fixture
