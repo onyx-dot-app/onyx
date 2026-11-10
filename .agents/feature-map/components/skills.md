@@ -1,6 +1,6 @@
 # Skills
 
-> Agent Skills for Craft: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, where the coding agent reads them. This component owns skill sharing, installation policy, per-user rendering and the hashed push; skills do not reach the chat product.
+> Agent Skills provide bounded, on-demand Markdown in main chat and rendered bundles in Craft sandboxes. This component owns sharing, installation policy, main-chat reads, per-user rendering, and the hashed push.
 
 **Verified against:** `73e0ae3c31` (2026-10-28)
 **Edition:** CE. Group shares need the EE group tables.
@@ -8,6 +8,13 @@
 ---
 
 ## User experience
+
+- **A main chat user** opens `/app/skills` from the main sidebar, enables custom or marketplace Skills, and keeps
+  the Skills tool selected. The model discovers names and reads Markdown on demand
+  without a sandbox. Current access gates every read; Craft built-ins are excluded.
+  The shared library and editor use `/app/skills/new` and `/app/skills/edit/[id]`
+  without Craft gating. Craft routes keep their built-ins and return paths.
+  Admin Skills appears under Agents & Actions even when Craft is disabled.
 
 - **A Craft user** opens the skills library and sees built-in skills and the
   custom skills they can see: their own, shared with them, or published to the
@@ -62,6 +69,7 @@
   and failures when it changes. A group that leaves the loaded summaries clears
   the filter permanently; a later share must not reactivate it. Every policy label and selector, including
   marketplace defaults, uses `useInstallationPolicyOptions` (Not available too).
+  Default installation shows the base policy; Groups shows group overrides.
   The Enable for me column controls personal use.
   Narrow tables use two lines for names without descriptions. Duplicate names use one line and keep their descriptions; warnings remain visible.
   Mobile Create stays beside the title, and the personal-use column is labeled For me.
@@ -138,7 +146,7 @@
 413 `PAYLOAD_TOO_LARGE` errors and usage responses with strict Yup schemas.
 `web/src/lib/skills/api.ts` retains the full error body and parses nullable per-item bulk and ZIP upload limits.
 Batch upload results show localized limit feedback beside each refused ZIP; ordinary failures retain their detail.
-`web/src/lib/skills/hooks.ts` formats charged totals, labels unknown sizes as estimates, and keeps
+`web/src/lib/skills/hooks.ts` formats charged totals with binary units (KiB, MiB, GiB), labels unknown sizes as estimates, and keeps
 ordinary errors unchanged. Repeated refusals replace one persistent toast.
 The own-usage hook reads `/api/skills/limit/me`; admin usage requires global
 Manage Skills and a user-bound SWR key. Any failed admin refetch hides cached rows.
@@ -188,7 +196,8 @@ This component owns the skill row and version snapshots, its shares,
 installation policy and user preferences; bundle parsing and validation;
 built-in skill definitions; per-user rendering of templates; marketplace
 storage and provider adapters;
-the push of a user's skill files into a sandbox; and the skills library UI.
+the push of a user's skill files into a sandbox; bounded main-chat Markdown reads;
+and the skills library UI.
 
 Neighbours own the rest:
 - [[craft-sandboxes]]: the sandbox, the managed volume and the push transport.
@@ -198,12 +207,56 @@ Neighbours own the rest:
   injection at call time. The sandbox proxy enforces policy, not the skill
   text.
 - [[file-store-and-user-files]]: stores custom bundles as blobs.
-- The chat product does not read skills. The chat loop has no reference to
-  them; a "skill" in a chat bug report is something else.
+- [[tools-framework]]: tool selection, construction, execution, and generic presentation.
+- [[core-chat-loop]]: new chat agents and restoration with the current tools.
 
 ---
 
 ## Architecture
+
+### Main chat Markdown delivery
+
+`tools/tool_implementations/skills/skill_tool.py:SkillTool` implements `read_skill`
+through the normal `Tool` interface. Migration `7b3f24d8a901` seeds it and attaches
+it to default chat. The Agent editor exposes a Skills action and preserves its
+selection on save. Chat Preferences exposes the default-chat switch through the
+existing default-assistant tools API.
+`tools/built_in_tools.py` registers it; `construct_tools` applies enabled state,
+persona selection, and `allowed_tool_ids` before construction. No prompt catalog
+or extra durable feature-state field is added.
+
+`chat/execution.py:create_chat_agent` receives the constructed tools.
+`chat/restoration.py:restore_chat_agent` and research children receive the current
+tools. Checkpoints retain the ordinary conversation, but never an additional
+Skill catalog in prompt settings or tool definitions. A removed tool cannot be
+recreated from Skill feature state. Prior tool results remain conversation content.
+
+Each call opens a fresh tenant DB session, reloads the user, requires current
+chat permission, and checks that the configured tool remains enabled. Only
+standard and service accounts qualify. The reader captures only IDs, not ORM
+users, Skill rows, or versions. Runtime access uses
+`db/skill.py:list_runtime_skills_for_user(include_fallbacks=True)`; it does not
+use management permissions. A chat-authorized PAT gets the same runtime audience
+as its user, without a management-scope bypass.
+
+Discovery returns at most 20 names, 160 description characters each, and 8 KiB
+per page. Loading uses `skills/content.py:read_custom_skill_bundle_instructions`
+with a separate 16 KiB source-Markdown limit and a 1 MiB ZIP metadata limit.
+Unreadable name winners fall back in the DAL's existing order. Size-limit refusals
+keep the selected identity and do not load a lower-priority Skill. Catalog names
+use Python string order for both sorting and cursors.
+Supporting `.md` reads use the winning bundle and never fall through to another
+bundle when a supporting path is missing. ZIP path and symlink validation applies.
+Bounded `ZipIndex` metadata stays in SQLite memory; the reader extracts no files.
+Stored/expanded byte limits remain in force, independent of model context limits.
+
+All current built-ins are excluded by an explicit capability gate: `pptx` needs
+mounted assets and scripts; search/image need `onyx-cli`; browser needs Craft's
+CLI/session; documentation uses `webfetch`; app templates need helpers, credentials
+and rendered action availability. Custom and marketplace instructions remain
+readable as reference text. Reading grants no tools, creates no sandbox, and
+does not treat Python as a mounted Skill sandbox. Existing sandbox execution
+keeps its own authorization. Real-model main-chat acceptance is a separate check.
 
 ```
 skill mutation (server/features/skill/api.py)   compute affected users BEFORE the change
@@ -231,7 +284,7 @@ session GET/list/restore/reload: SkillRuntimeNoticeResponse.for_owner
 ```
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
-a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
+a user can load. It combines visibility (`skill_visible_to_user`), enablement
 (`_is_enabled_for_user`), app readiness, bundle validity (`is_valid` not
 false) and built-in availability.
 These inputs stay independent. A required skill still needs a ready app and a
@@ -552,11 +605,12 @@ still propagate unexpected storage errors.
    Stored reads retain the existing per-file and expanded-total limits.
    Runtime selection checks expanded instruction sizes against both the configured per-file limit
    and the shared sidecar per-file limit. A refused winner is omitted whole; other names remain eligible.
-   New upload inputs have a 1 MiB central-directory cap before parsing. Stored reads
-   and edits read the saved input without this cap. Saves check the rewritten
+   New upload inputs have a 1 MiB central-directory cap before parsing. Library reads
+   and edits read the saved input without this cap. Main chat applies its own 1 MiB cap. Saves check the rewritten
    directory against the 1 MiB cap. `file_processing/zip_index.py:ZipIndex` parses
    one central directory record at a time and keeps entry names and offsets in an
-   anonymous SQLite file, preserving digest order.
+   anonymous SQLite file, preserving digest order. Indexes with a metadata cap stay
+   in SQLite memory.
    `db/zip_metadata.py` owns all entry-index, written-entry, and path-set queries.
    `file_processing/zip_index.py` owns the end record, central record, extra field and local
    header parsing; `file_processing/zip_stream.py` decompresses member data with
@@ -732,8 +786,8 @@ still propagate unexpected storage errors.
     Later writes allocate a new version ID. The version and pointer change in one
     transaction. Equal content digests keep the current version and stored-byte
     hash. `utils/bundle.py:compute_bundle_metadata` computes the digest without
-    application database or server imports. It uses only the temporary SQLite
-    store in `db/zip_metadata.py`; ZIP timestamps and entry order do not affect it. See
+    application database or server imports. It uses the SQLite store in `db/zip_metadata.py`
+    (temporary disk unless the caller bounds metadata); ZIP timestamps and entry order do not affect it. See
     [[#bundle-retention]] for which bundle files stay.
     V7 removes legacy bundle/hash/validity mappings and dual writes. Its migration
     appends deterministic recovery versions for pointerless or drifted old-writer rows,
@@ -792,9 +846,8 @@ still propagate unexpected storage errors.
     folder line and the relative-path rule itself, so the push adds neither.
     `backend/tests/unit/onyx/skills/test_skill_dir.py` fails when the sandbox
     `OPENCODE_VERSION` pin changes, so the next pin bump checks that OpenCode
-    still does this. A harness that loads skills in the API server must give the
-    model `skills/rendering.py:render_skill_for_model`, which resolves the
-    placeholder and adds the same two lines. No such harness is on main yet.
+    still does this. The main-chat reader returns bounded Markdown with a read-only
+    notice. It grants no sandbox mount and does not replace this placeholder.
 17. `marketplace-provider-boundary` **Only the provider adapter reads provider config for sync.**
     `skills/marketplace/provider.py:MarketplaceProviderAdapter` owns
     login checks, ref resolution, change checks and webhook capability. GitHub

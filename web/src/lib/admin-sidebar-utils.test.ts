@@ -3,7 +3,7 @@ import {
   matchAdminRoute,
   type FeatureFlags,
 } from "@/lib/admin-routes";
-import { buildItems } from "@/lib/admin-sidebar-utils";
+import { buildItems, groupBySection } from "@/lib/admin-sidebar-utils";
 import { Permission } from "@/lib/types";
 import { Tier } from "@/lib/tiers/types";
 
@@ -61,7 +61,11 @@ test("full admins see the canonical link and no legacy action links", () => {
   )
     .filter((item) => item.sectionId === "agentsAndActions")
     .map((item) => item.link);
-  expect(actionLinks).toEqual(["/admin/agents", "/admin/plugins"]);
+  expect(actionLinks).toEqual([
+    "/admin/skills",
+    "/admin/agents",
+    "/admin/plugins",
+  ]);
 });
 
 test("Craft-enabled admins have one Plugins entry and no separate Apps entry", () => {
@@ -101,16 +105,40 @@ test("matches canonical plugin details to the Plugins registry entry", () => {
   expect(matchAdminRoute("/admin/plugins/mcp/7")).toBe(ADMIN_ROUTES.PLUGINS);
 });
 
-test("shows Skills only to full admins when Craft is available", () => {
-  const craftFlags = { ...flags, craftAvailable: true };
-  expect(
-    buildItems([Permission.FULL_ADMIN_PANEL_ACCESS], craftFlags, null).map(
-      (item) => item.link
+test.each([true, false])(
+  "shows Skills only to full admins with Craft enabled: %s",
+  (craftAvailable) => {
+    const craftFlags = { ...flags, craftAvailable };
+    expect(
+      buildItems([Permission.FULL_ADMIN_PANEL_ACCESS], craftFlags, null).map(
+        (item) => item.link
+      )
+    ).toContain("/admin/skills");
+    expect(
+      buildItems([Permission.MANAGE_SKILLS], craftFlags, null).map(
+        (item) => item.link
+      )
+    ).not.toContain("/admin/skills");
+  }
+);
+
+test.each([true, false])(
+  "groups admin sections once with Craft enabled: %s",
+  (craftAvailable) => {
+    const sections = groupBySection(
+      buildItems(
+        [Permission.FULL_ADMIN_PANEL_ACCESS],
+        {
+          ...flags,
+          craftAvailable,
+          customAnalyticsEnabled: true,
+          tier: Tier.ENTERPRISE,
+        },
+        null
+      )
     )
-  ).toContain("/admin/skills");
-  expect(
-    buildItems([Permission.MANAGE_SKILLS], craftFlags, null).map(
-      (item) => item.link
-    )
-  ).not.toContain("/admin/skills");
-});
+      .map((group) => group.sectionId)
+      .filter((section) => section !== null);
+    expect(sections).toEqual([...new Set(sections)]);
+  }
+);

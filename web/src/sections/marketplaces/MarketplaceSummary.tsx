@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 import { Badge, MessageCard, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
@@ -13,11 +14,13 @@ export interface MarketplaceSummaryProps {
   marketplace: Marketplace;
   /** Undefined shows API skill counts; null hides counts. Never infer plugin counts. */
   countLabel?: string | RichStr | null;
+  action?: ReactNode;
 }
 
 export default function MarketplaceSummary({
   marketplace: row,
   countLabel,
+  action,
 }: MarketplaceSummaryProps) {
   const t = useTranslations("marketplaces");
   const format = useFormatter();
@@ -38,7 +41,7 @@ export default function MarketplaceSummary({
         })
       : countLabel;
   return (
-    <Section height="auto" alignItems="stretch" gap={2}>
+    <Section height="auto" alignItems="stretch" gap={1}>
       <Section
         height="auto"
         flexDirection="row"
@@ -53,6 +56,7 @@ export default function MarketplaceSummary({
           height="auto"
           width="fit"
           flexDirection="row"
+          justifyContent="start"
           gap={1}
           wrap
           className="max-w-full"
@@ -70,9 +74,10 @@ export default function MarketplaceSummary({
             }
             title={t(status)}
           />
+          {action}
         </Section>
       </Section>
-      <Text font="secondary-mono" wordWrap="wrap-anywhere">
+      <Text font="secondary-body" wordWrap="wrap-anywhere">
         {t("source", {
           owner: source.provider_config.owner,
           repo: source.provider_config.repo,
@@ -86,7 +91,7 @@ export default function MarketplaceSummary({
       </Text>
       {counts !== null && <Text font="secondary-body">{counts}</Text>}
       {row.last_synced_revision && (
-        <Text font="secondary-mono" wordWrap="wrap-anywhere">
+        <Text font="secondary-body" wordWrap="wrap-anywhere">
           {t("revision", { revision: row.last_synced_revision })}
         </Text>
       )}

@@ -2436,6 +2436,10 @@
           "description": "Explorez un dépôt GitHub et répondez à des questions sur son code.",
           "title": "Agent de code"
         },
+        "skills": {
+          "title": "Compétences",
+          "description": "Découvrez et lisez les instructions des compétences activées. Les scripts nécessitent un environnement isolé Craft."
+        },
         "description": "Outils et fonctionnalités que la discussion peut utiliser. Cela ne s'applique pas aux agents.",
         "pluginsNote": "Configurez les serveurs MCP et les plugins OpenAPI pour le chat par défaut dans [Plugins]({url}).",
         "imageGeneration": {
@@ -11291,6 +11295,10 @@
           "description": "Explorez un dépôt GitHub et répondez aux questions sur son code.",
           "title": "Agent de codage"
         },
+        "skills": {
+          "title": "Compétences",
+          "description": "Découvrez et lisez les instructions des compétences activées. Les scripts nécessitent un environnement isolé Craft."
+        },
         "description": "Outils et capacités que cet agent peut utiliser.",
         "imageGeneration": {
           "description": "Générez et manipulez des images à l'aide d'outils basés sur l'IA.",
@@ -17113,7 +17121,7 @@
         "pendingLabel": "Suppression..."
       },
       "details": {
-        "description": "Définissez quand et comment Craft doit utiliser cette compétence.",
+        "description": "Définissez quand et comment utiliser cette compétence.",
         "descriptionField": {
           "description": "Décrivez quand cette compétence doit être utilisée.",
           "placeholder": "À quoi sert cette compétence ?",
@@ -17168,7 +17176,7 @@
         "title": "Vous avez déjà une compétence ?"
       },
       "instructions": {
-        "description": "Décrivez le comportement et le flux de travail que cette compétence ajoute à Craft.",
+        "description": "Décrivez le comportement et le processus fournis par cette compétence.",
         "emptyFallback": "Pas encore d'instructions.",
         "placeholder": "Rédigez les instructions de la compétence.",
         "title": "Instructions"
@@ -17435,7 +17443,8 @@
       },
       "header": {
         "description": "Ensembles de capacités que votre agent Craft peut mobiliser. Cette page présente les compétences intégrées, celles partagées avec vous et vos compétences personnelles.",
-        "title": "Compétences"
+        "title": "Compétences",
+        "mainDescription": "Instructions pour le chat principal. Activez vos compétences ou celles partagées avec vous. Les scripts nécessitent un bac à sable Craft."
       },
       "loadError": {
         "description": "Consultez la console pour plus de détails et essayez d'actualiser la page.",
@@ -17594,6 +17603,9 @@
       "files": "Fichiers",
       "noFiles": "Aucun fichier supplémentaire."
     },
+    "table": {
+      "installationDefault": "Installation par défaut"
+    },
     "groups": {
       "columnTitle": "Groupes",
       "marketplace": "Marketplace",
@@ -17614,7 +17626,7 @@
       },
       "admin": {
         "title": "{count, plural, one {# utilisateur dépasse la limite des compétences} other {# utilisateurs dépassent la limite des compétences}}",
-        "description": "Les compétences de ces utilisateurs dépassent {maxSize} ou {maxFiles, plural, one {# fichier} other {# fichiers}}. Ils ne peuvent pas ajouter ni activer d’autres compétences tant qu’ils dépassent la limite, et les sessions peuvent omettre certaines de leurs compétences.",
+        "description": "L’utilisation des compétences dépasse {maxSize} ou {maxFiles, plural, one {# fichier} other {# fichiers}}. L’ajout ou l’activation de compétences est bloqué tant que l’utilisation dépasse la limite. Les sessions peuvent omettre certaines compétences.",
         "tableLabel": "Utilisateurs au-delà de la limite des compétences",
         "columns": {
           "user": "Utilisateur",

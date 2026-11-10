@@ -301,6 +301,48 @@ def test_placeholder_expansion_waits_for_runtime_admission(
         resolve.assert_not_called()
 
 
+@pytest.mark.parametrize("delta", [-1, 0, 1])
+def test_supporting_file_receiver_limit_preserves_selected_identity(
+    monkeypatch: pytest.MonkeyPatch, delta: int
+) -> None:
+    winner = _skill(name="report", is_valid=True)
+    duplicate = _skill(name="report", is_valid=True)
+    healthy = _skill(name="healthy", is_valid=True)
+    supporting = b"x" * (25 * 1024 * 1024 + delta)
+    rendered: list[Skill] = []
+
+    def render(skill: Skill, *_args: object) -> FileSet:
+        rendered.append(skill)
+        assert skill is not duplicate
+        if skill is winner:
+            return {"report/SKILL.md": b"report", "report/data.bin": supporting}
+        return {"healthy/SKILL.md": b"healthy"}
+
+    monkeypatch.setattr(push, "_render_candidate", render)
+    monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 32 * 1024 * 1024)
+    monkeypatch.setattr(push, "get_default_file_store", MagicMock())
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    result = push._assemble_fileset(
+        [
+            RuntimeSkillCandidate(skill, SkillRuntimePriority.ENABLED, None, rank)
+            for rank, skill in enumerate([winner, duplicate, healthy])
+        ],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+
+    assert rendered == [winner, healthy]
+    assert result.files["healthy/SKILL.md"] == b"healthy"
+    if delta > 0:
+        assert set(result.files) == {"healthy/SKILL.md"}
+        assert len(result.omissions) == 1
+        assert result.omissions[0].skill_id == winner.id
+        assert result.omissions[0].failed_limit == push.SkillRuntimeLimit.BYTES
+    else:
+        assert result.files["report/data.bin"] == supporting
+        assert result.omissions == ()
+
+
 def test_user_payload_returns_hydrated_files_and_connectable_apps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

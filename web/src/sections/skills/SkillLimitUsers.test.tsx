@@ -100,7 +100,7 @@ it("shows each user's measured or estimated usage and last-delivery omissions", 
     await screen.findByText("3 users are over the skill limit")
   ).toBeInTheDocument();
   expect(
-    screen.getByText(/more than 500 MB or 5,000 files of skills/)
+    screen.getByText(/Skill usage exceeds 500 MiB or 5,000 files/)
   ).toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledWith("/api/skills/limit/users");
 
@@ -112,14 +112,14 @@ it("shows each user's measured or estimated usage and last-delivery omissions", 
   expect(rows[0]).toHaveTextContent(
     "a-very-long-address-that-must-wrap@example.com"
   );
-  expect(rows[0]).toHaveTextContent("520 MB");
+  expect(rows[0]).toHaveTextContent("520 MiB");
   expect(rows[0]).toHaveTextContent("12");
   expect(rows[0]).toHaveTextContent("2 skills");
   expect(rows[1]).toHaveTextContent(
-    "About 550 MB (estimated: 1 skill not measured)"
+    "About 550 MiB (estimated: 1 skill not measured)"
   );
   expect(rows[1]).toHaveTextContent("About 530 (estimated)");
-  expect(rows[1]).not.toHaveTextContent("450 MB");
+  expect(rows[1]).not.toHaveTextContent("450 MiB");
   expect(rows[1]).toHaveTextContent("0 skills");
   expect(rows[2]).toHaveTextContent("5,001");
   expect(rows[2]).toHaveTextContent("No session yet");

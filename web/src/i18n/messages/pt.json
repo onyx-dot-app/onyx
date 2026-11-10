@@ -2436,6 +2436,10 @@
           "description": "Investiga um repositório do GitHub e responde a perguntas sobre o código dele.",
           "title": "Agente de código"
         },
+        "skills": {
+          "title": "Habilidades",
+          "description": "Encontre e leia as instruções das habilidades ativadas. Os scripts exigem um ambiente isolado do Craft."
+        },
         "description": "Ferramentas e recursos disponíveis para o chat usar. Isso não se aplica aos agentes.",
         "pluginsNote": "Configure servidores MCP e plugins OpenAPI para o chat padrão em [Plugins]({url}).",
         "imageGeneration": {
@@ -11291,6 +11295,10 @@
           "description": "Investigue um repositório do GitHub e responda perguntas sobre seu código.",
           "title": "Agente de programação"
         },
+        "skills": {
+          "title": "Habilidades",
+          "description": "Encontre e leia as instruções das habilidades ativadas. Os scripts exigem um ambiente isolado do Craft."
+        },
         "description": "Ferramentas e capacidades disponíveis para este agente usar.",
         "imageGeneration": {
           "description": "Gere e manipule imagens usando ferramentas com tecnologia de IA.",
@@ -17113,7 +17121,7 @@
         "pendingLabel": "Excluindo..."
       },
       "details": {
-        "description": "Defina quando e como o Craft deve usar esta habilidade.",
+        "description": "Defina quando e como usar esta habilidade.",
         "descriptionField": {
           "description": "Descreva quando esta habilidade deve ser usada.",
           "placeholder": "Com o que esta habilidade ajuda?",
@@ -17168,7 +17176,7 @@
         "title": "Já tem uma habilidade?"
       },
       "instructions": {
-        "description": "Escreva o comportamento e o fluxo de trabalho que esta habilidade adiciona ao Craft.",
+        "description": "Descreva o comportamento e o fluxo de trabalho que esta habilidade oferece.",
         "emptyFallback": "Ainda não há instruções.",
         "placeholder": "Escreva as instruções da habilidade.",
         "title": "Instruções"
@@ -17435,7 +17443,8 @@
       },
       "header": {
         "description": "Pacotes de capacidades que seu agente do Craft pode usar. Esta página mostra habilidades integradas, habilidades compartilhadas com você e suas habilidades pessoais.",
-        "title": "Habilidades"
+        "title": "Habilidades",
+        "mainDescription": "Instruções para o chat principal. Ative suas habilidades ou as compartilhadas com você. Os scripts exigem uma sandbox Craft."
       },
       "loadError": {
         "description": "Verifique o console para mais detalhes e tente atualizar a página.",
@@ -17594,6 +17603,9 @@
       "files": "Arquivos",
       "noFiles": "Nenhum arquivo adicional."
     },
+    "table": {
+      "installationDefault": "Instalação padrão"
+    },
     "groups": {
       "columnTitle": "Grupos",
       "marketplace": "Marketplace",
@@ -17614,7 +17626,7 @@
       },
       "admin": {
         "title": "{count, plural, one {# usuário está acima do limite de habilidades} other {# usuários estão acima do limite de habilidades}}",
-        "description": "Estes usuários têm mais de {maxSize} ou {maxFiles, plural, one {# arquivo} other {# arquivos}} em habilidades. Eles não podem adicionar nem ativar mais habilidades até ficarem dentro do limite, e as sessões podem deixar algumas de suas habilidades de fora.",
+        "description": "O uso de habilidades excede {maxSize} ou {maxFiles, plural, one {# arquivo} other {# arquivos}}. Não é possível adicionar ou ativar mais habilidades até que o uso fique abaixo do limite. As sessões podem omitir algumas habilidades.",
         "tableLabel": "Usuários acima do limite de habilidades",
         "columns": {
           "user": "Usuário",

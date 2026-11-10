@@ -71,6 +71,60 @@ const settings: AppSettings = {
 };
 
 describe("ChatPreferencesPage", () => {
+  test("Skills can be disabled in default chat without removing other tools", async () => {
+    const user = setupUser();
+    const fetchMock = jest.mocked(global.fetch);
+    const baseFetch = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input, init) => {
+      let data: unknown;
+      if (input === SWR_KEYS.tools) {
+        data = [
+          {
+            id: 2000000001,
+            name: "read_skill",
+            display_name: "Skills",
+            in_code_tool_id: "SkillTool",
+            enabled: true,
+          },
+        ];
+      } else if (input === SWR_KEYS.defaultAssistantConfig) {
+        data = {
+          tool_ids: [7, 2000000001],
+          system_prompt: null,
+          default_system_prompt: "",
+        };
+      } else if (
+        input === "/api/admin/default-assistant/tools" &&
+        init?.method === "PATCH"
+      ) {
+        data = {
+          tool_ids: [7],
+          system_prompt: null,
+          default_system_prompt: "",
+        };
+      } else {
+        if (!baseFetch) throw new Error("Missing fetch fixture");
+        return baseFetch(input, init);
+      }
+      return new Response(JSON.stringify(data), {
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    render(<ChatPreferencesPage />);
+    const toggle = await screen.findByRole("switch", { name: /Skills/ });
+    expect(toggle).toBeChecked();
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/admin/default-assistant/tools",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ tool_ids: [2000000001], enabled: false }),
+        })
+      )
+    );
+    await waitFor(() => expect(toggle).not.toBeChecked());
+  });
   beforeEach(() => {
     jest
       .mocked(usePermissionAuthority)

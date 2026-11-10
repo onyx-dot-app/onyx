@@ -4,6 +4,7 @@ from onyx.db.models import Skill
 from onyx.db.resource_version import read_version_bundle
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_limits import ZipMetadataLimitError
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.file_store.models import FileSizeLimitExceeded
 from onyx.skills.built_in import BuiltInSkillDefinition
@@ -11,6 +12,7 @@ from onyx.skills.bundle import (
     SKILL_MD_NAME,
     STORED_BUNDLE_LIMITS,
     TEMPLATE_SUFFIX,
+    _bundle_limit_error,
     read_custom_bundle_instructions,
     strip_skill_md_frontmatter,
 )
@@ -38,14 +40,27 @@ def read_builtin_skill_instructions(definition: BuiltInSkillDefinition) -> str:
 def read_custom_skill_bundle_instructions(
     skill: Skill,
     file_store: FileStore | None = None,
+    *,
+    path: str = SKILL_MD_NAME,
+    max_bytes: int | None = None,
+    max_metadata_bytes: int | None = None,
 ) -> str:
-    bundle_bytes = read_custom_skill_bundle_bytes(skill, file_store)
-    return read_custom_bundle_instructions(bundle_bytes)
+    bundle_bytes = read_custom_skill_bundle_bytes(
+        skill, file_store, max_metadata_bytes=max_metadata_bytes
+    )
+    return read_custom_bundle_instructions(
+        bundle_bytes,
+        path=path,
+        max_bytes=max_bytes,
+        max_metadata_bytes=max_metadata_bytes,
+    )
 
 
 def read_custom_skill_bundle_bytes(
     skill: Skill,
     file_store: FileStore | None = None,
+    *,
+    max_metadata_bytes: int | None = None,
 ) -> bytes:
     if skill.current_version is None:
         raise OnyxError(
@@ -65,7 +80,18 @@ def read_custom_skill_bundle_bytes(
                 f"Stored bundle for skill '{skill.name}' exceeds the "
                 f"{STORED_BUNDLE_LIMITS.max_stored_bytes}-byte read limit.",
             ) from exc
-        compute_bundle_metadata(bundle_bytes, limits=STORED_BUNDLE_LIMITS)
+        compute_bundle_metadata(
+            bundle_bytes,
+            limits=STORED_BUNDLE_LIMITS,
+            max_metadata_bytes=max_metadata_bytes,
+        )
+    except ZipMetadataLimitError as exc:
+        limit = max_metadata_bytes or 0
+        raise _bundle_limit_error(
+            "zip_metadata_bytes",
+            limit,
+            f"Skill bundle zip file list exceeds the {limit // (1024 * 1024)} MiB limit.",
+        ) from exc
     except (OnyxError, FileSizeLimitExceeded):
         raise
     except Exception as exc:

@@ -75,6 +75,7 @@ import { canDeleteSkill, canShareSkill } from "@/lib/skills/permissions";
 import SkillMarketplaceLabel from "@/sections/skills/SkillMarketplaceLabel";
 
 interface SkillEditorPageProps {
+  libraryPath?: "/app/skills" | "/craft/v1/skills";
   skillId?: string;
   draftId?: string;
   externalAppId?: number;
@@ -82,6 +83,7 @@ interface SkillEditorPageProps {
 }
 
 export default function SkillEditorPage({
+  libraryPath = "/craft/v1/skills",
   skillId,
   draftId,
   externalAppId,
@@ -225,7 +227,7 @@ export default function SkillEditorPage({
 
   function leaveEditor() {
     navigation.go(
-      hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
+      hasAppContext ? externalAppAdminUrl(externalAppId) : libraryPath
     );
   }
 
@@ -280,9 +282,7 @@ export default function SkillEditorPage({
         });
         toast.success(t("editor.toasts.created", { name: created.name }));
         navigation.go(
-          isCreatingForApp
-            ? externalAppAdminUrl(externalAppId)
-            : "/craft/v1/skills",
+          isCreatingForApp ? externalAppAdminUrl(externalAppId) : libraryPath,
           { replace: true }
         );
         return;

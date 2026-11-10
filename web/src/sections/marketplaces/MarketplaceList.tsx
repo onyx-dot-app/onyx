@@ -123,12 +123,10 @@ export default function MarketplaceList({
       ) : (
         rows.map((row) => (
           <Card key={row.id} border="solid" padding={3}>
-            <Section height="auto" alignItems="stretch" gap={3}>
-              <MarketplaceSummary
-                marketplace={row}
-                countLabel={getCountLabel?.(row)}
-              />
-              <Section height="auto" flexDirection="row" justifyContent="end">
+            <MarketplaceSummary
+              marketplace={row}
+              countLabel={getCountLabel?.(row)}
+              action={
                 <Button
                   prominence="secondary"
                   aria-label={t("detailsFor", { name: row.name })}
@@ -136,8 +134,8 @@ export default function MarketplaceList({
                 >
                   {t("details")}
                 </Button>
-              </Section>
-            </Section>
+              }
+            />
           </Card>
         ))
       )}

@@ -452,7 +452,7 @@ test.each([320, 1280])(
     ).toBeVisible();
     expect(
       await screen.findByText(
-        "Your skills use an estimated 200 MB of 500 MB and 5,490 files of 5,000. The estimate counts skills not yet measured at the largest allowed size."
+        "Your skills use an estimated 200 MiB of 500 MiB and 5,490 files of 5,000. The estimate counts skills not yet measured at the largest allowed size."
       )
     ).toBeVisible();
     expect(

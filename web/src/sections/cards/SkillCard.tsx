@@ -150,7 +150,7 @@ export default function SkillCard({
           alignItems="stretch"
           justifyContent="start"
           className={cn(
-            "min-h-24",
+            "min-h-24 flex-1",
             isSelectedDependencyUnavailable && "opacity-50"
           )}
         >
@@ -294,6 +294,7 @@ export default function SkillCard({
               font="secondary-body"
               icon={dependency ? SvgPlug : SvgUser}
               title={dependencyStatus ?? authorTitle}
+              titleMaxLines={1}
               titleColor="text-03"
             />
           </Section>
